@@ -184,13 +184,20 @@ test("one conversation leaves one 「做过的研究」 summary, keyed by the co
   assert.equal(summaries[0].scopeId, "cancer-2026", "scoped to the project it happened in");
 });
 
-test("an inference stays an inference, whatever the model calls it", async () => {
+test("an inference stays an inference, whatever the model calls it, and describes no one", async () => {
   const store = new StoreDouble();
   const result = await extractor(store, [
+    { scope: "project", kind: "project_fact", key: "project.fact.tables_first", value: "评审材料先看表格再看正文", summary: "先看表格", origin: "inferred" },
+    // 2026-10-14 probe: a request for a psycopg example became the inferred profile 「使用 Python 与 PostgreSQL 进行开发」, and the
+    // assistant's own practice an inferred preference. What describes the person is what the person said.
+    { scope: "user", kind: "profile", key: "profile.stack", value: "使用 Python 与 PostgreSQL 进行开发", summary: "Python 与 PostgreSQL 开发者", origin: "inferred" },
+    { scope: "user", kind: "preference", key: "preference.env_settings", value: "数据库连接信息从环境变量读取", summary: "连接信息读环境变量", origin: "inferred" },
     { scope: "user", kind: "behavior", key: "behavior.tables", value: "习惯先看表格再看正文", summary: "先看表格", origin: "inferred" },
+    { scope: "user", kind: "preference", key: "preference.tables", value: "先给表格，正文后面再看", summary: "先给表格", origin: "explicit" },
   ]).recordRun(project(), run(), [message("u1", "先给我表格，正文后面再看。")]);
-  assert.equal(result.extracted, 1);
-  const stored = [...store.records.values()].find((record) => record.kind === "behavior");
-  assert.equal(stored.origin, "inferred", "the platform's own observation is never the researcher's word");
-  assert.ok(stored.confidence < 1);
+  assert.equal(result.extracted, 2, result.rejectionReasons.join(" | "));
+  assert.equal(result.rejectionReasons.filter((reason) => /must be something the person stated \(origin explicit\), not an inference/.test(reason)).length, 3);
+  const stored = [...store.records.values()].filter((record) => record.kind !== "run_summary");
+  assert.deepEqual(stored.map((record) => [record.kind, record.origin]).sort(), [["preference", "explicit"], ["project_fact", "inferred"]]);
+  assert.ok(stored.find((record) => record.kind === "project_fact").confidence < 1, "the platform's own observation is never the researcher's word");
 });

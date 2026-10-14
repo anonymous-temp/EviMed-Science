@@ -304,14 +304,6 @@ export function runBookkeepingIn(text) {
   return found
 }
 
-/** GB 11643-1999: whether an 18-character resident ID number carries a valid check digit. @param {string} text */
-function residentIdValid(text) {
-  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
-  let sum = 0
-  for (let index = 0; index < 17; index += 1) sum += Number(text[index]) * weights[index]
-  return '10X98765432'[sum % 11] === text[17].toUpperCase()
-}
-
 /** Whether a run of digits passes the Luhn check a bank card carries. @param {string} digits */
 function luhnValid(digits) {
   let sum = 0
@@ -331,11 +323,16 @@ const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
 const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*\S{6,}/i
+// The same assignment, for masking: what is blanked is the value alone, and it is the run of printable ASCII after the label — a
+// password typed in a Chinese sentence ends where the sentence goes on, not at the next space (there may be none).
+const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*)[\x21-\x7E]{6,}(?<![,.;:!?)\]}])/gi
 const LONG_TOKEN = /(?<![A-Za-z0-9_-])[A-Fa-f0-9]{32,}(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{40,}(?![A-Za-z0-9_-])/g
 
 /**
  * The credentials and personal identifiers a text carries, by their shape: a
- * resident ID number with a valid check digit, a mobile number, a card number
+ * resident ID number (the structure of one — region, birth date, sequence —
+ * whether or not its check digit adds up: a number typed from memory or with
+ * a slip is still the person's number, 2026-10-14), a mobile number, a card number
  * that passes Luhn, an e-mail address, a provider key's format, a secret
  * assigned to a name, a long bare token. Format checks, like a DOI or a PMID —
  * decidable from the token itself (principle 5) — and the only part of 「never
@@ -349,7 +346,7 @@ export function identifierShapesIn(text) {
   const value = String(text ?? '')
   /** @type {string[]} */
   const found = []
-  if ([...value.matchAll(RESIDENT_ID)].some((match) => residentIdValid(match[0]))) found.push('resident_id')
+  if (new RegExp(RESIDENT_ID.source).test(value)) found.push('resident_id')
   if (new RegExp(MOBILE.source).test(value)) found.push('mobile')
   if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
   if (new RegExp(EMAIL.source).test(value)) found.push('email')
@@ -366,10 +363,11 @@ export function identifierShapesIn(text) {
 export function maskIdentifiers(text) {
   const masked = '[已省略]'
   return String(text ?? '')
-    .replace(RESIDENT_ID, (match) => (residentIdValid(match) ? masked : match))
+    .replace(RESIDENT_ID, masked)
     .replace(MOBILE, masked)
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
     .replace(EMAIL, masked)
     .replace(KEY_FORMAT, masked)
+    .replace(KEY_ASSIGNMENT_VALUE, (_match, label) => `${label}${masked}`)
     .replace(LONG_TOKEN, masked)
 }

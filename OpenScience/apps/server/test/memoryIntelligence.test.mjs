@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
@@ -507,11 +507,12 @@ test("one conversation leaves one 「做过的研究」 summary, however many ti
 
 test("an inference takes effect at once, stays labelled an inference, and fades unless it is seen again", async () => {
   // Owner ruling 2026-09-19: no confirmation step anywhere. What replaces it is
-  // a label that never changes, a revision history, and decay.
+  // a label that never changes, a revision history, and decay. Since 2026-10-14 only a project's facts, decisions and follow-ups
+  // are inferred: what describes the person is what they said (`validateCandidate`).
   const store = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence({ ...config, memoryInferredTtlDays: 30 }, store, {
     fetchImpl: modelFetch((sources) => [{
-      scope: "user", kind: "behavior", key: "workflow.requests_reproducibility",
+      scope: "project", kind: "project_fact", key: "project.fact.requests_reproducibility",
       value: "常要求保留可复现的分析脚本与参数", summary: "偏好可复现的分析流程",
       origin: "inferred", importance: 0.7, sensitive: false,
       sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
@@ -521,7 +522,7 @@ test("an inference takes effect at once, stays labelled an inference, and fades 
   const first = await intelligence.recordRun(project(), run("run_1", "2026-07-21T01:01:00.000Z"), [
     message("user_1", "第1次：请保留分析脚本、参数和可复现步骤。"),
   ]);
-  const behavior = () => [...store.records.values()].find((record) => record.kind === "behavior");
+  const behavior = () => [...store.records.values()].find((record) => record.key === "project.fact.requests_reproducibility");
   assert.equal(behavior().status, "active", "an inference is in force from its first observation");
   assert.equal(behavior().origin, "inferred", "and it is labelled as what it is");
   assert.equal(behavior().confidence, 0.6, "its weight follows from its origin, not from a number the model typed");
@@ -542,19 +543,19 @@ test("seeing a stated memory again by inference neither relabels it nor rewrites
   // replaced yesterday's, a new revision on every run for an unchanged fact.
   const store = new MemoryStoreDouble();
   await store.upsertRecord("user_1", {
-    scope: "user", scopeId: "", kind: "preference", key: "preference.output_language",
+    scope: "project", scopeId: project().id, kind: "project_fact", key: "project.fact.output_language",
     value: "回答请用中文", summary: "中文回答", origin: "explicit", status: "active",
     confidence: 1, importance: 0.8, sensitive: false, lastConfirmedAt: "2026-07-01T00:00:00Z",
   }, null, {});
   const result = await new MemoryIntelligence(config, store, {
     fetchImpl: modelFetch((sources) => [{
-      scope: "user", kind: "preference", key: "preference.output_language",
+      scope: "project", kind: "project_fact", key: "project.fact.output_language",
       value: "回答请用中文", summary: "Reinforced: 用户偏好中文", origin: "inferred",
       importance: 0.4, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
     }]),
   }).recordRun(project(), run("run_again"), [message("m1", "嗯，继续用中文。")]);
 
-  const stored = [...store.records.values()].find((record) => record.key === "preference.output_language");
+  const stored = [...store.records.values()].find((record) => record.key === "project.fact.output_language");
   assert.equal(stored.origin, "explicit", "the user's own word outranks an inference of the same fact");
   assert.equal(stored.confidence, 1);
   assert.equal(stored.summary, "中文回答", "the stored summary stays; the model's summary of the day does not replace it");
@@ -574,7 +575,7 @@ const upgradeCounter = () => memoryMetricFamilies().find((family) => family.name
 const sayingOf = (origin, value, ref) => (sources) => {
   const source = sources.find((item) => item.sourceRef.endsWith(`/${ref}`));
   return [{
-    scope: "user", kind: "preference", key: "preference.output_language", value, summary: value, origin,
+    scope: "project", kind: "project_fact", key: "project.fact.output_language", value, summary: value, origin,
     importance: 0.7, sensitive: false, sourceRef: source.sourceRef, evidenceQuote: source.text,
   }];
 };
@@ -584,7 +585,7 @@ async function storeWithInference() {
   const store = new MemoryStoreDouble();
   await new MemoryIntelligence({ ...config, memoryInferredTtlDays: 30 }, store, { fetchImpl: modelFetch(sayingOf("inferred", "回答请用中文", "u_old")) })
     .recordRun(project(), run("run_infer", "2026-08-01T01:01:00.000Z"), [message("u_old", "这份先看中文版。")]);
-  const record = () => [...store.records.values()].find((item) => item.key === "preference.output_language");
+  const record = () => [...store.records.values()].find((item) => item.key === "project.fact.output_language");
   assert.equal(record().origin, "inferred");
   assert.ok(record().expiresAt, "an inference fades");
   return { store, record };
@@ -644,7 +645,7 @@ test("nothing but the researcher's own new message upgrades an inference", async
   const assistant = await storeWithInference();
   const refused = await new MemoryIntelligence(config, assistant.store, {
     fetchImpl: modelFetch((sources) => [{
-      scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用中文", summary: "中文回答", origin: "explicit",
+      scope: "project", kind: "project_fact", key: "project.fact.output_language", value: "回答请用中文", summary: "中文回答", origin: "explicit",
       importance: 0.7, sensitive: false, sourceRef: sources.find((item) => item.role === "assistant").sourceRef, evidenceQuote: "好的，之后都用中文。",
     }]),
   }).recordRun(project(), run("run_assistant", "2026-08-06T01:01:00.000Z"), [
@@ -988,31 +989,35 @@ test("the notice's key names exactly what the notice says, so observing one chan
   }
 });
 
-test("a change the model inferred is a different notice from the same change the user stated", async () => {
-  // The notice names which of the two it was, so the key has to as well: a key
-  // that does not distinguish what its own text distinguishes is exactly the
-  // idempotency conflict, one turn later.
+test("a change to a confirmed memory is one notice however often it is told, and the change back is another", async () => {
+  // The notice names which change it was, so the key has to as well: a key that does not distinguish what its own text
+  // distinguishes is exactly the idempotency conflict, one turn later. (Until 2026-10-14 a third change, the model's own
+  // guess over the same memory, was told apart from the researcher's by the same key; extraction no longer infers what
+  // describes the person.)
   const store = new MemoryStoreDouble();
   const notifications = notificationsDouble();
   const audit = auditDouble();
   await seedConfirmed(store, { key: "preference.output_language", value: "回答请用中文" });
-  const say = (value, origin, id, at) => new MemoryIntelligence(config, store, {
+  const say = (value, id, at) => new MemoryIntelligence(config, store, {
     notifications,
     audit: audit.record,
-    fetchImpl: proposeValue("preference.output_language", value, "preference", origin),
+    fetchImpl: proposeValue("preference.output_language", value, "preference", "explicit"),
   }).recordRun(project(), run(id, at), [message(`m_${id}`, value)]);
 
-  await say("回答请用英文", "explicit", "run_said", "2026-08-02T01:01:00.000Z");
-  await say("回答请用中文", "explicit", "run_back", "2026-08-03T01:01:00.000Z");
-  await say("回答请用英文", "inferred", "run_guessed", "2026-08-04T01:01:00.000Z");
+  await say("回答请用英文", "run_said", "2026-08-02T01:01:00.000Z");
+  await say("回答请用中文", "run_back", "2026-08-03T01:01:00.000Z");
+  await say("回答请用英文", "run_again", "2026-08-04T01:01:00.000Z");
 
-  assert.equal(notifications.rows.size, 3);
+  // The same change told twice is one notice; the change back is another.
+  assert.equal(notifications.rows.size, 2);
   assert.deepEqual(audit.failures, []);
   // Neither carries a mark of whose words it was (review R13, owner ruling of 2026-10-10): that is for the model and the
-  // operator. The two stay two notices because the key still tells them apart.
+  // operator. The notices stay distinct because the key still tells them apart.
   assert.equal(notifications.attempts[0].body, "「回答请用中文」已改为「回答请用英文」");
+  assert.equal(notifications.attempts[1].body, "「回答请用英文」已改为「回答请用中文」");
   assert.equal(notifications.attempts.at(-1).body, "「回答请用中文」已改为「回答请用英文」");
-  assert.notEqual(notifications.attempts[0].idempotencyKey, notifications.attempts.at(-1).idempotencyKey);
+  assert.notEqual(notifications.attempts[0].idempotencyKey, notifications.attempts[1].idempotencyKey);
+  assert.equal(notifications.attempts[0].idempotencyKey, notifications.attempts.at(-1).idempotencyKey);
   for (const attempt of notifications.attempts) assert.doesNotMatch(`${attempt.title}${attempt.body}`, /推断|助手|模型|未经/);
 });
 
@@ -1030,16 +1035,13 @@ test("an inbox that refuses the notice costs the run neither its memory nor its 
   const result = await new MemoryIntelligence(config, store, {
     notifications: refusing,
     audit: audit.record,
-    // The model's own guess, over something the user confirmed. It still lands,
-    // exactly as it did before this feature existed — and it is the one case a
-    // future decision to hold such a write back could be argued from, which is
-    // why the notice names it as inferred.
-    fetchImpl: proposeValue("behavior.reporting_style", "报告先给方法", "behavior", "inferred"),
+    // The researcher changing their mind over something they confirmed. It lands, exactly as it did before this feature existed.
+    fetchImpl: proposeValue("behavior.reporting_style", "报告先给方法", "behavior", "explicit"),
   }).recordRun(project(), run("run_inbox_down", "2026-08-01T01:01:00.000Z"), [message("u1", "报告先给方法")]);
 
   assert.equal([...store.records.values()].find((record) => record.key === "behavior.reporting_style").value, "报告先给方法");
   assert.equal(result.conflicts.length, 1, "the run still reports the change it made");
-  assert.equal(result.conflicts[0].origin, "inferred");
+  assert.equal(result.conflicts[0].origin, "explicit");
   assert.deepEqual(audit.failures, [{ event: "notification.memory_conflict.create", code: "notification_unavailable" }],
     "an inbox that stopped accepting these must not be invisible");
 });
@@ -1689,17 +1691,17 @@ test("a supersession the store cannot verify is dropped, and the new fact is sti
 test("a memory the researcher removed is not inferred back; their own statement brings it back", async () => {
   const feedbackEvents = {
     async rejectedMemoryKeys(_userId, pairs) {
-      return new Set(pairs.filter((pair) => pair.kind === "behavior" && pair.key === "behavior.late_night").map((pair) => `${pair.kind}\u0000${pair.key}`));
+      return new Set(pairs.filter((pair) => pair.kind === "project_fact" && pair.key === "project.fact.late_night").map((pair) => `${pair.kind}\u0000${pair.key}`));
     },
   };
   const propose = (origin) => modelFetch((sources) => [{
-    scope: "user", kind: "behavior", key: "behavior.late_night", value: "常在深夜工作", summary: "深夜工作",
+    scope: "project", kind: "project_fact", key: "project.fact.late_night", value: "常在深夜工作", summary: "深夜工作",
     origin, importance: 0.3, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
   }]);
   const store = new MemoryStoreDouble();
   const inferred = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("inferred") })
     .recordRun(project(), run("run_again"), [message("m1", "又忙到深夜了")]);
-  assert.equal([...store.records.values()].filter((record) => record.kind === "behavior").length, 0);
+  assert.equal([...store.records.values()].filter((record) => record.key === "project.fact.late_night").length, 0);
   assert.ok(inferred.rejectionReasons.some((reason) => /removed by the researcher; only their own statement brings it back/.test(reason)));
 
   const stated = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("explicit") })
@@ -1711,7 +1713,7 @@ test("a memory the researcher removed long ago still blocks an inference, howeve
   // A ledger of 450 removals; the one that matters is the oldest. The reader that has the whole ledger is asked for the keys a
   // run is about to write; `list`, which is a newest-first page, only holds the 200 most recent and is honest about it.
   const removals = Array.from({ length: 450 }, (_, index) => ({ detail: index === 449
-    ? { kind: "behavior", key: "behavior.late_night", reason: "deleted" }
+    ? { kind: "project_fact", key: "project.fact.late_night", reason: "deleted" }
     : { kind: "preference", key: `preference.removed_${index}`, reason: "deleted" } }));
   const feedbackEvents = {
     async list(_userId, { trigger, limit = 50 }) {
@@ -1724,13 +1726,13 @@ test("a memory the researcher removed long ago still blocks an inference, howeve
     },
   };
   const propose = (origin) => modelFetch((sources) => [{
-    scope: "user", kind: "behavior", key: "behavior.late_night", value: "常在深夜工作", summary: "深夜工作",
+    scope: "project", kind: "project_fact", key: "project.fact.late_night", value: "常在深夜工作", summary: "深夜工作",
     origin, importance: 0.3, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
   }]);
   const store = new MemoryStoreDouble();
   const inferred = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("inferred") })
     .recordRun(project(), run("run_again"), [message("m1", "又忙到深夜了")]);
-  assert.equal([...store.records.values()].filter((record) => record.kind === "behavior").length, 0, "the oldest removal still holds");
+  assert.equal([...store.records.values()].filter((record) => record.key === "project.fact.late_night").length, 0, "the oldest removal still holds");
   assert.ok(inferred.rejectionReasons.some((reason) => /removed by the researcher; only their own statement brings it back/.test(reason)));
   const stated = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("explicit") })
     .recordRun(project(), run("run_said"), [message("m2", "记住，我习惯深夜工作")]);
@@ -1940,7 +1942,7 @@ function describe_window() {
 test("after a run's own writes, what it wrote is noted as read under today's rules and one batch of older memories is read again", async () => {
   const store = new MemoryStoreDouble();
   const old = await store.upsertRecord("user_1", { scope: "project", scopeId: "project_1", kind: "project_fact", key: "project.fact.packs",
-    value: "平台现有三份病种知识包。", summary: "平台现有三份病种知识包。", origin: "system", status: "active" });
+    value: "平台现有三份病种知识包。", summary: "平台现有三份病种知识包。", origin: "inferred", status: "active" });
   /** @type {any[]} */ const noted = [];
   Object.assign(store, {
     async unreviewedRecords() { return [...store.records.values()].filter((record) => record.id === old.id && record.status === "active"); },
@@ -1963,4 +1965,74 @@ test("after a run's own writes, what it wrote is noted as read under today's rul
   const preference = [...store.records.values()].find((record) => record.kind === "preference");
   assert.deepEqual(noted[0].verdicts, [{ id: preference.id, kept: true }], "what the run wrote needs no second reading");
   assert.deepEqual(noted[1].verdicts, [{ id: old.id, kept: false, reason: "platform" }]);
+});
+
+// ---------------------------------------------------------------------------
+// The episode a conversation leaves (2026-10-14 probe). Its question and answer are kept ninety days, shown as the
+// conversation's title and recalled into later prompts of the project; the never-kept rules had not reached them. A database
+// password typed in passing, a patient's name and ID number, one's own blood pressure and a colleague's name were all in it.
+
+test("the spans the model names are blanked from the stored episode only where they are verbatim, and never the whole of it", () => {
+  const asked = "我的数据库密码是 Xk9#mPq2Lz，患者张三，血压 168/100，帮我写个连接脚本";
+  assert.deepEqual(verifiedOmissions(["Xk9#mPq2Lz", "张三", "李四", "血压 168/100", "x", "", 7, null, "张三"], [asked, ""]), ["Xk9#mPq2Lz", "血压 168/100", "张三"],
+    "longest first; a span that is not in the text, one character, a duplicate and a non-string are dropped");
+  assert.deepEqual(verifiedOmissions("张三", [asked]), [], "not a list");
+  assert.deepEqual(verifiedOmissions(["a".repeat(201)], ["a".repeat(300)]), [], "a span is a name or a number, not a paragraph");
+  assert.equal(omitSpans(asked, ["血压 168/100", "Xk9#mPq2Lz", "张三"]), "我的数据库密码是 [已省略]，患者[已省略]，[已省略]，帮我写个连接脚本");
+  // A verdict that would empty the episode misread it: at most seven tenths of the text goes, the shortest spans first.
+  assert.equal(omitSpans("请把这份报告翻译成英文", ["请把这份报告翻译成英文"]), "请把这份报告翻译成英文");
+  assert.equal(omitSpans("给张三（住院号 ZY2026）出一份病历模板，要简洁", ["住院号 ZY2026", "张三", "一份病历模板，要简洁"]), "给[已省略]（[已省略]）出一份病历模板，要简洁");
+  assert.equal(omitSpans("甲乙甲乙甲乙 丙", ["甲乙"]), "甲乙甲乙甲乙 丙", "three occurrences of two characters in eight are more than seven tenths");
+});
+
+/** An extraction that returns what it is told to, and the messages of a one-question conversation. */
+function episodeRun(reply, { fail = false } = {}) {
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async () => (fail ? new Response("boom", { status: 500 }) : Response.json({ choices: [{ message: { content: JSON.stringify(reply) } }] })),
+  });
+  const summary = () => [...store.records.values()].find((record) => record.kind === "run_summary");
+  return { store, intelligence, summary };
+}
+
+const ASKED = "我的数据库密码是 Xk9#mPq2Lz，患者张三（身份证 110101199001011234），血压 168/100，同事王五的看法不同，帮我写个连接脚本";
+const REPLIED = "好的，下面是给张三用的连接脚本，密码用环境变量读取。";
+const conversation = [message("m1", ASKED), { info: { id: "m2", role: "assistant" }, parts: [{ type: "text", text: REPLIED }] }];
+
+test("the stored episode leaves out what the model names and what has the shape of a secret or an identifier", async () => {
+  const { intelligence, summary } = episodeRun({ candidates: [], omit: ["张三", "血压 168/100", "王五", "不在原文里的片段"] });
+  await intelligence.recordRun(project(), run("run_episode"), conversation);
+  const record = summary();
+  const stored = JSON.parse(record.value);
+  assert.equal(stored.question, "我的数据库密码是 [已省略]，患者[已省略]（身份证 [已省略]），[已省略]，同事[已省略]的看法不同，帮我写个连接脚本");
+  assert.equal(stored.answer, "好的，下面是给[已省略]用的连接脚本，密码用环境变量读取。");
+  assert.equal(record.summary, stored.question.slice(0, 240), "the title is the redacted question");
+  assert.equal(record.evidence[0].quote, stored.question);
+  for (const leaked of ["Xk9#mPq2Lz", "张三", "168/100", "王五", "110101199001011234"]) assert.ok(!record.value.includes(leaked) && !record.summary.includes(leaked), leaked);
+  assert.equal(record.sensitive, true, "a text with a credential or an identifier in it stays flagged and out of every recall path");
+});
+
+test("with no reading of the conversation, the shapes are still blanked from the episode, and the run is not failed", async () => {
+  for (const options of [{ fail: true }, { fail: false }]) {
+    const { intelligence, summary } = episodeRun(options.fail ? {} : { candidates: [] }, options);
+    const result = await intelligence.recordRun(project(), run("run_episode"), conversation);
+    const stored = JSON.parse(summary().value);
+    assert.ok(!stored.question.includes("Xk9#mPq2Lz") && !stored.question.includes("110101199001011234"), "a password and an ID number are blanked by their shape");
+    assert.ok(stored.question.includes("张三"), "a name is language: only the model's reading can leave it out");
+    assert.equal(Boolean(result.extractionError), options.fail);
+  }
+});
+
+test("the extraction is asked for the spans of the episode to leave out", async () => {
+  let system = "";
+  const intelligence = new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      system = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_omit"), [message("m1", "帮我写个连接脚本")]);
+  assert.match(system, /Also return \{"omit":\["\.\.\."\]\}/);
+  assert.match(system, /copied character for character and each as short as it can be/);
+  assert.match(system, /Never a whole question, and never ordinary words/);
 });

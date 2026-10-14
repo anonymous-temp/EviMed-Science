@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   PLATFORM_CONTEXT_TAGS,
   carriesPlatformContext,
+  identifierShapesIn,
+  maskIdentifiers,
   platformIdentifiersIn,
   stripPlatformTags,
   unwrapUserWrappers,
@@ -110,4 +112,20 @@ test("platform identifiers are found in every spelling, and research vocabulary 
   ]) {
     assert.deepEqual(platformIdentifiersIn(prose), [], prose);
   }
+});
+
+test("an identifier has the shape of one whether or not its check digit adds up, and a secret typed in a sentence is blanked where it ends", () => {
+  // 2026-10-14 probe: a patient's 18-digit ID did not pass GB 11643, was not masked and stood in the stored episode.
+  const wrongDigit = "110101199001011234";
+  assert.deepEqual(identifierShapesIn(`患者身份证 ${wrongDigit}，住院`), ["resident_id"]);
+  assert.equal(maskIdentifiers(`患者身份证 ${wrongDigit}，住院`), "患者身份证 [已省略]，住院");
+  assert.equal(maskIdentifiers("110101199001011237"), "[已省略]", "one with a valid check digit is masked as before");
+  // The shape is the structure of one: not a longer number, not a date that is no date.
+  assert.deepEqual(identifierShapesIn("订单号 1101011990010112345678"), []);
+  assert.deepEqual(identifierShapesIn("编号 110101199013011234"), []);
+  // The value after the label goes; the sentence around it stays, in either language.
+  assert.equal(maskIdentifiers("我的数据库密码是 Xk9#mPq2Lz，帮我写一个连接脚本"), "我的数据库密码是 [已省略]，帮我写一个连接脚本");
+  assert.equal(maskIdentifiers("the password: hunter2hunter, then run it"), "the password: [已省略], then run it");
+  assert.equal(maskIdentifiers("密码是abc"), "密码是abc", "too short to be one");
+  assert.deepEqual(identifierShapesIn("我的数据库密码是 Xk9#mPq2Lz，帮我写"), ["credential"]);
 });

@@ -4,6 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, evidenceProgrammeRouteReason } from "@evimed/domain";
+import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 import { dispatchedRequestIdsOf, isPlatformStartedRun } from "../src/memoryDispatch.mjs";
 
@@ -138,3 +140,39 @@ test("a ledger that cannot be read leaves the current run's own dispatch refused
   assert.deepEqual(result.excluded, [{ reason: "dispatched", count: 1 }]);
   assert.equal(runs.length, 2);
 });
+
+// An independent verification of a scheduled task's claims is dispatched by the platform with `automated` unset (production:
+// fourteen such runs on one account by 2026-10-14), so the route reason is the only structure there is. Every reason the
+// dispatchers can write is named here from the constants that mint it, so a renamed route breaks this test and not memory.
+const VERIFICATION_ROUTES = [VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON];
+const SCHEDULED_ROUTES = [...["routine", "literature-sentinel", "evidence-update", "data-prospecting"].map((type) => `autopilot:${type}`),
+  ...["evidence-update", "literature-sentinel"].map((type) => evidenceProgrammeRouteReason(type))];
+
+test("every route reason the autopilot and the evidence programme mint is a run the platform started", () => {
+  assert.equal(VERIFICATION_ROUTE_REASON, "autopilot-verify");
+  assert.ok(EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX.startsWith("autopilot:"));
+  for (const reason of [...VERIFICATION_ROUTES, ...SCHEDULED_ROUTES]) {
+    assert.equal(isPlatformStartedRun({ effectiveRouteReason: reason }), true, reason);
+    assert.equal(isPlatformStartedRun({ effectiveRouteReason: `adopted:runtime-ui:${reason}` }), false, "a person's turn adopted from the page is not a dispatch, whatever route it was given");
+  }
+});
+
+for (const reason of VERIFICATION_ROUTES) {
+  test(`a ${reason} run learns nothing from its dispatch: not through its request, not through its tag, and no model is asked`, async () => {
+    const BRIEF = "核对上一轮研究报告中的三条结论是否被所引文献支持。";
+    const messages = [
+      user("m1", `<evimed-autopilot-verification>ep_1</evimed-autopilot-verification>\n<evimed-budget-scope>a.b</evimed-budget-scope>\n${BRIEF}`, "req_unrecorded"),
+      assistant("m2", "三条结论均有出处。"),
+      user("m3", BRIEF, "req_verify"),
+      assistant("m4", "已复核。"),
+    ];
+    const current = { id: "run_verify", sessionId: "s", effectiveRouteReason: reason, kernelRequestIds: ["req_verify"] };
+    const store = new StoreDouble();
+    let called = 0;
+    const result = await extractor(store, { runs: [], onCall: () => { called += 1; } }).recordRun(project, { ...finished, ...current }, messages);
+    assert.equal(called, 0);
+    assert.equal(result.extracted, 0);
+    assert.deepEqual(kept(store), []);
+    assert.deepEqual(result.excluded.map((entry) => entry.reason).sort(), ["dispatched", "injected"]);
+  });
+}

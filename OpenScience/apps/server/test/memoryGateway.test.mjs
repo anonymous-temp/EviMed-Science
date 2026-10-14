@@ -6,7 +6,8 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext } from "@evimed/domain";
+import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, PLATFORM_CONTEXT_TAGS, carriesPlatformContext, evidenceProgrammeRouteReason } from "@evimed/domain";
+import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
   MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, createMemoryGatewayHandler, filterCapturedMessage, memoryGatewayRoutePattern, parseEventStream,
@@ -502,7 +503,10 @@ test("admission: who is learned from and who is read for, by reason", async () =
   const trial = await admit({ researchMemory: memoryDouble({ trial: sid }) });
   assert.deepEqual([trial.learn, trial.recall, trial.learnReason], [false, false, "trial"]);
 
-  for (const run of [{ automated: true }, { effectiveRouteReason: "autopilot:agenda-1" }, { effectiveRouteReason: "loopx-continuation" }, { effectiveRouteReason: "adopted:runtime-ui:loopx-continuation" }]) {
+  for (const run of [{ automated: true }, { effectiveRouteReason: "autopilot:agenda-1" }, { effectiveRouteReason: "loopx-continuation" }, { effectiveRouteReason: "adopted:runtime-ui:loopx-continuation" },
+    // An independent verification and the evidence programme's own episodes and verifications: dispatched with `automated` unset.
+    ...[VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, evidenceProgrammeRouteReason("evidence-update"), "geo:probe", "vcr:analysis", "platform-evolution"]
+      .map((effectiveRouteReason) => ({ effectiveRouteReason }))]) {
     const automated = await admit({ researchMemory: memoryDouble(), conversations: runs([{ id: "r1", sessionId: sid, status: "running", ...run }]) });
     assert.deepEqual([automated.learn, automated.recall, automated.learnReason], [false, true, "automated_run"], JSON.stringify(run));
     assert.equal(isPlatformStartedRun(run), true);
