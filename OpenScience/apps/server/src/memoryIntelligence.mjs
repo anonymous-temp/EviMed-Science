@@ -21,6 +21,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { MEMORY_REVIEW_RULES, MemoryReview } from "./memoryReview.mjs";
 import { recordInferenceUpgraded, recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset, memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
@@ -310,11 +311,12 @@ function turnEndingsByTurn(messages) {
  *
  * @param {readonly any[]} messages @param {string} sessionId
  * @param {{ dispatchedRequestIds?: ReadonlySet<string> | null }} [options]
- *   `dispatchedRequestIds`: the requests the control plane itself sent into this conversation for a scheduled task. What a
- *   scheduled execution shows as its first message is the task's own instruction, which the researcher did write — once, in
- *   the form. Read as their words on every execution it would be observed again each day (three runs, three "independent"
- *   observations, and an inferred record activates at three), so the dispatch is refused here by the request that carried it,
- *   not by any mark in its text: a correction typed into the same conversation has a request of its own and is kept.
+ *   `dispatchedRequestIds`: the requests the control plane itself sent into this conversation — every execution's, not only
+ *   the current run's (`memoryDispatch.mjs`). What a scheduled execution shows as its first message is the task's own
+ *   instruction, which the researcher did write — once, in the form — and which the conversation then keeps as user-role text
+ *   for as long as it is reused. Read as their words at every execution it would be observed again each day, so the dispatch
+ *   is refused here by the request that carried it, not by any mark in its text: a message typed into the same conversation
+ *   has a request of its own and is kept.
  * @returns {{sources: {sourceRef: string, role: string, text: string}[], excluded: {reason: string, count: number}[]}}
  */
 export function conversationMemorySources(messages, sessionId, { dispatchedRequestIds = null } = {}) {
@@ -998,9 +1000,12 @@ export function extractionEmptyCause(result) {
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
-   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any,canReuseRun?:any}} dependencies */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null, canReuseRun = null } = {}) {
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any,canReuseRun?:any,dispatchedRequests?:any}} dependencies
+   *  `dispatchedRequests(project, run)`: the kernel requests the platform itself sent into the run's conversation, across every
+   *  execution of it (`dispatchedRequestIdsOf` over the ledger's runs of that conversation). */
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null, canReuseRun = null, dispatchedRequests = null } = {}) {
     this.config = config;
+    this.dispatchedRequests = typeof dispatchedRequests === "function" ? dispatchedRequests : null;
     this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
     this.canReuseRun = canReuseRun;
@@ -1039,6 +1044,26 @@ export class MemoryIntelligence {
       : [];
   }
 
+  /**
+   * The requests of this conversation the platform sent, whoever started this run: the current run's own when the platform
+   * started it, and every earlier execution's (`dispatchedRequests`), because a reused conversation (a scheduled task) keeps
+   * each execution's instruction as user-role text. A ledger that cannot be read leaves the current run's own, audited.
+   * @param {any} project @param {any} run @returns {Promise<Set<string> | null>}
+   */
+  async #dispatchedRequestIds(project, run) {
+    /** @type {Set<string>} */
+    const ids = new Set();
+    if (isPlatformStartedRun(run)) for (const id of Array.isArray(run?.kernelRequestIds) ? run.kernelRequestIds : []) ids.add(id);
+    if (this.dispatchedRequests) {
+      try {
+        for (const id of await this.dispatchedRequests(project, run)) ids.add(id);
+      } catch (error) {
+        await this.audit("memory.dispatched_requests", error);
+      }
+    }
+    return ids.size ? ids : null;
+  }
+
   /** Whether extraction writes anything for this project. See the config key. */
   #excludedProject(project) {
     const id = String(project?.id ?? "");
@@ -1058,10 +1083,7 @@ export class MemoryIntelligence {
    * that is the whole reason the two paths differ.
    */
   async recordRun(project, run, messages = [], { holdForOwner = false } = {}) {
-    const { sources, excluded } = conversationMemorySources(messages, run.sessionId, {
-      dispatchedRequestIds: String(run?.effectiveRouteReason ?? "").startsWith("autopilot:") && Array.isArray(run?.kernelRequestIds)
-        ? new Set(run.kernelRequestIds) : null,
-    });
+    const { sources, excluded } = conversationMemorySources(messages, run.sessionId, { dispatchedRequestIds: await this.#dispatchedRequestIds(project, run) });
     // The switch covers this too.
     //
     // It did not, and the asymmetry was invisible from outside: `this.enabled`
@@ -1108,7 +1130,9 @@ export class MemoryIntelligence {
       return skippedResult("before_reset", excluded);
     }
     const runSummary = await this.#recordRunSummary(project, run, sources, holdForOwner);
-    if (sources.length === 0) return skippedResult("none", excluded, runSummary);
+    // Every memory rests on a message the person wrote (`validateCandidate`): a transcript with none — a scheduled execution
+    // whose only user text is its own dispatch, an assistant monologue — has nothing to extract, and costs no model call.
+    if (!sources.some((source) => source.role === "user")) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall
     // over the user's messages (「请记住」「我的偏好」…) that decided which kind a
     // message was and stored up to 1,200 characters of it whole. It is how ten

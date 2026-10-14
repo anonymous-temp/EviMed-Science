@@ -1,4 +1,5 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
+import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { platformSessionOf } from "./openVikingSessions.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
 
@@ -31,12 +32,7 @@ import { memoryPausedFor } from "./researchMemory.mjs";
  * @typedef {{ native: boolean, learn: boolean, recall: boolean, learnReason: string | null, recallReason: string | null, sessionId: string | null }} MemoryAdmission
  */
 
-/** A run the platform started, not the person: marked automated at dispatch, a LoopX continuation, a scheduled task. @param {any} run */
-export function isPlatformStartedRun(run) {
-  if (!run) return false;
-  const reason = String(run.effectiveRouteReason ?? run.routeReason ?? "");
-  return run.automated === true || reason.startsWith("autopilot:") || reason === "loopx-continuation" || reason.endsWith(":loopx-continuation");
-}
+export { isPlatformStartedRun };
 
 /**
  * @param {{

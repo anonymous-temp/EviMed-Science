@@ -394,6 +394,7 @@ import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
+import { dispatchedRequestIdsOf } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
@@ -2894,6 +2895,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // What the researcher removed or undid, so an inference cannot write it
     // straight back (memoryIntelligence.mjs #rejectedKeys).
     feedbackEvents,
+    // The requests the platform itself sent into a conversation, across every execution of it: a scheduled task reuses one
+    // conversation, so it keeps each execution's instruction as user-role text (memoryDispatch.mjs).
+    dispatchedRequests: async (/** @type {any} */ project, /** @type {any} */ run) => dispatchedRequestIdsOf(await agentRuns.conversationRuns(project, run.sessionId)),
   });
   // Registered after `memoryIntelligence` because the episodes endpoint feeds
   // it: an external agent posts turns and the same extractor decides what is
