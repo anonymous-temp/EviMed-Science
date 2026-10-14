@@ -862,25 +862,38 @@ export class LearningService {
   }
 
   /**
-   * The runs that taught a method, newest first: the one its current body was
-   * learnt from, then the ones each earlier body was (an amendment overwrites
-   * `provenance.runId`, so the saved revisions are where the older lessons
-   * are). Only names — `learningSources.mjs` turns them into conversations.
+   * The lessons that taught a method, newest first: the one its current body was learnt from, then the ones each earlier body was
+   * (an amendment overwrites `provenance.runId`, so the saved revisions are where the older lessons are). Each is the run that
+   * taught it and the trigger that queued the distillation (`delivered`, `repair_accepted`, `correction`, `routine`; null on a
+   * revision older than the field). Only names — a method's text is never read through this.
+   * @param {string} userId @param {string} methodId
+   * @returns {Promise<{ projectId: string, runId: string, trigger: string | null }[]>}
+   */
+  async sourceLessons(userId, methodId) {
+    const current = await this.getMethod(userId, methodId);
+    const saved = await this.#savedRevisions(userId, methodId);
+    /** @type {{ projectId: string, runId: string, trigger: string | null }[]} */
+    const lessons = [];
+    for (const payload of [current.payload, ...saved.map((entry) => entry.payload)]) {
+      const runId = payload?.provenance?.runId;
+      const projectId = payload?.provenance?.sourceProjectId;
+      const trigger = payload?.provenance?.trigger;
+      if (typeof runId === "string" && runId && typeof projectId === "string" && projectId
+        && !lessons.some((item) => item.runId === runId && item.projectId === projectId)) {
+        lessons.push({ projectId, runId, trigger: typeof trigger === "string" && trigger ? trigger : null });
+      }
+    }
+    return lessons;
+  }
+
+  /**
+   * The runs that taught a method, newest first (`sourceLessons` without the trigger). Only names —
+   * `learningSources.mjs` turns them into conversations.
    * @param {string} userId @param {string} methodId
    * @returns {Promise<{ projectId: string, runId: string }[]>}
    */
   async sourceRuns(userId, methodId) {
-    const current = await this.getMethod(userId, methodId);
-    const saved = await this.#savedRevisions(userId, methodId);
-    /** @type {{ projectId: string, runId: string }[]} */
-    const runs = [];
-    for (const payload of [current.payload, ...saved.map((entry) => entry.payload)]) {
-      const runId = payload?.provenance?.runId;
-      const projectId = payload?.provenance?.sourceProjectId;
-      if (typeof runId === "string" && runId && typeof projectId === "string" && projectId
-        && !runs.some((item) => item.runId === runId && item.projectId === projectId)) runs.push({ projectId, runId });
-    }
-    return runs;
+    return (await this.sourceLessons(userId, methodId)).map(({ projectId, runId }) => ({ projectId, runId }));
   }
 
   /**
