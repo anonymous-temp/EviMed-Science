@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/cn";
 import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from "@/lib/apiClient";
+import { isConversationRun } from "@/lib/conversations";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
@@ -197,7 +198,7 @@ export function SessionFrameHost() {
         if (resume((me as { lastSessionId?: unknown } | null)?.lastSessionId)) return null;
         return listWebAgentRuns().then((runs) => {
           if (!live) return;
-          const recent = runs.find((run) => chatPath(run.sessionId) !== "/app/chat");
+          const recent = runs.find((run) => isConversationRun(run) && chatPath(run.sessionId) !== "/app/chat");
           if (!recent || !resume(recent.sessionId)) setResolving(false);
         });
       })

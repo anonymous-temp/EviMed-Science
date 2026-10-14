@@ -7,7 +7,7 @@ import { useProjectStore } from "@/lib/projects";
 import { PROJECT_NAME_MAX, labelOf, projectErrorMessage, projectLabels, projectNameProblem } from "@/lib/projectNames";
 import { chatPath } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
-import { groupConversations, type Conversation } from "@/lib/conversations";
+import { groupConversations, isConversationRun, type Conversation } from "@/lib/conversations";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
@@ -356,6 +356,13 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     }
     return found.sort((a, b) => runMoment(b.conversation.lead) - runMoment(a.conversation.lead));
   }, [needle, listed, byProject]);
+  // The sessions of the current project that are the platform's own back office (a task's re-checks): the kernel's full-text search finds
+  // them as it finds any session, and they are not conversations to be offered.
+  const currentRuns = byProject[currentId];
+  const backOfficeSessionIds = useMemo(
+    () => new Set(currentRuns?.status === "ready" ? currentRuns.runs.filter((run) => !isConversationRun(run)).map((run) => run.sessionId) : []),
+    [currentRuns],
+  );
   // The search reads what has been loaded; the rest is one click away rather
   // than read behind the reader's back on every keystroke.
   const unsearched = listed.filter((project) => byProject[project.id]?.status !== "ready");
@@ -538,6 +545,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
             <ConversationMatches
               query={query}
               shownSessionIds={new Set(results.filter(({ project }) => project.id === currentId).map(({ conversation }) => conversation.sessionId))}
+              hiddenSessionIds={backOfficeSessionIds}
             />
           </>
         ) : (

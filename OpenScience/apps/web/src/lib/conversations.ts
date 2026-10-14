@@ -23,15 +23,26 @@ export interface Conversation {
   titleRun: WebAgentRun;
 }
 
+/**
+ * Whether a run is one of the person's conversations. A run with a `role` is the platform's own back office in the same ledger — today
+ * the independent re-check of a scheduled task's claim, whose conversation is a brief the platform wrote and a verdict it keeps — and no
+ * list of conversations draws it: not the sidebar's groups, not its search, not the count behind 「展开其余 N 条对话」, not the shelf, not
+ * the conversation a visit resumes. The mark is the server's (`role`, from the route reason it wrote), never the title.
+ */
+export function isConversationRun(run: Pick<WebAgentRun, "role">): boolean {
+  return run.role == null;
+}
+
 function started(run: WebAgentRun): number {
   const at = Date.parse(run.createdAt ?? run.startedAt ?? "");
   return Number.isNaN(at) ? 0 : at;
 }
 
-/** One entry per session, newest activity first. */
+/** One entry per session, newest activity first, of the person's own conversations (`isConversationRun`). */
 export function groupConversations(runs: readonly WebAgentRun[]): Conversation[] {
   const bySession = new Map<string, WebAgentRun[]>();
   for (const run of runs) {
+    if (!isConversationRun(run)) continue;
     const list = bySession.get(run.sessionId);
     if (list) list.push(run);
     else bySession.set(run.sessionId, [run]);

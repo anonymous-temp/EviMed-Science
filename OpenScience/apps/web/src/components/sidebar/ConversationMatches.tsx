@@ -20,7 +20,12 @@ const MAX_MATCHES = 6;
  * and this list is simply absent otherwise (`available` false), never an
  * error. Conversations already shown as a task row are not repeated.
  */
-export function ConversationMatches({ query, shownSessionIds }: { query: string; shownSessionIds: ReadonlySet<string> }) {
+export function ConversationMatches({ query, shownSessionIds, hiddenSessionIds }: {
+  query: string;
+  shownSessionIds: ReadonlySet<string>;
+  /** Sessions of runs that are not the person's conversations (`isConversationRun`): the kernel indexes them too, and a search is no way in. */
+  hiddenSessionIds?: ReadonlySet<string>;
+}) {
   const { available, search } = useRuntimeSessionSearch();
   const [matches, setMatches] = useState<FrameSessionSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
@@ -49,7 +54,7 @@ export function ConversationMatches({ query, shownSessionIds }: { query: string;
 
   if (!available || needle.length < 2) return null;
   const rows = matches
-    .filter((item) => /^[A-Za-z0-9_-]{1,160}$/.test(item.sessionId) && !shownSessionIds.has(item.sessionId))
+    .filter((item) => /^[A-Za-z0-9_-]{1,160}$/.test(item.sessionId) && !shownSessionIds.has(item.sessionId) && !hiddenSessionIds?.has(item.sessionId))
     .slice(0, MAX_MATCHES);
   if (!searching && rows.length === 0) return null;
 
