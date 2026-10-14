@@ -57,6 +57,10 @@ function makeSource(id: string, shown: Partial<SourceDisplay> = {}, payload: Rec
   } as SourceRecord;
 }
 const guideline = makeSource("src_guideline");
+/** The same document, read as the paper it is: only a paper's page carries 「研究信息」 and the paper's slots. */
+const paperOf = (source: SourceRecord): SourceRecord => ({
+  ...source, display: { ...source.display, docType: "published-paper", typeLabel: "已发表论文", typeShort: "论文" }, payload: { ...source.payload, docType: "published-paper" },
+}) as SourceRecord;
 const sheet = makeSource("src_sheet", { title: "疳证纳入研究提取表.xlsx", gist: "75 项研究的基线、干预、对照和总有效率。", docType: "dataset", typeShort: "数据表", kind: "table", origin: "conversation", format: "xlsx", pages: null, size: 48_000, shared: true },
   { paths: ["knowledge-base/chat/疳证纳入研究提取表-1a2b3c4d.xlsx"], fingerprint: { size: 48_000, sha256: "a".repeat(64) } });
 const policy = makeSource("src_policy", { title: "2026 医院药事管理制度汇编.docx", gist: null, docType: "policy-document", typeShort: "制度文件", kind: "document", origin: "drive", format: "docx", pages: 42 },
@@ -385,7 +389,7 @@ describe("a document's page", () => {
     it("go in the order of the plan: the gist, what the study is, the key points, what was not read, the tables and figures, then the folds", async () => {
       const materials = ledger({ pages: { status: "mapped", pageCount: 38, textLayerPages: 34, noTextLayerPages: [31, 32, 33, 34] },
         tables: { total: 3, structured: 2, unextracted: 1, failed: 0, continued: 0, continuedAmbiguous: 0 }, figures: { total: 2, captioned: 2, valuesKnown: 0 } });
-      mocks.getSource.mockResolvedValue({ ...withCoverage(guideline, { materials }), payload: { ...withCoverage(guideline, { materials }).payload, familyId: "fam_1", version: 2,
+      mocks.getSource.mockResolvedValue({ ...paperOf(withCoverage(guideline, { materials })), payload: { ...paperOf(withCoverage(guideline, { materials })).payload, familyId: "fam_1", version: 2,
         metadata: { authors: ["王一", "李二", "张三", "赵四"], source: "中华消化杂志", publicationDate: "2022-03-15" } } });
       const withStudy = understanding();
       withStudy.current.slots = { ...withStudy.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] }, doi: { state: "known", value: "10.1000/xyz", evidence: [] } } as never;
@@ -420,6 +424,48 @@ describe("a document's page", () => {
       expect(text()).not.toMatch(/研究信息|研究设计|尚不明确|原文未涉及|给出处理建议/);
       // There is nothing in the reading to put under these, and no record of who used the document: they are not on the page.
       expect(text()).not.toMatch(/包含什么|局限|用过它的对话|遗漏|抽查|查看历史|方法草稿/);
+    });
+
+    // 2026-10-14: an understanding read before the type-by-type slots keeps the paper's slots on its record for a document that is not
+    // a paper, and the page drew them under 「研究信息」 — on production, for a product test whose own summary says it is not a study.
+    it("draw no study slot for a document that is not a paper, whatever its stored reading carries — and name nothing 「研究信息」", async () => {
+      const product = makeSource("src_product", { title: "8.11 医学测评.pdf", gist: "这是一份产品测评记录，不是研究论文。", docType: "document", typeShort: "文档", kind: "document" }, { docType: "document" });
+      const stored = understanding({}, "src_product");
+      stored.current.slots = {
+        design: { state: "known", value: "本文档没有研究设计", evidence: [] }, population: { state: "known", value: "文档没有定义研究人群", evidence: [] },
+        interventionExposure: { state: "known", value: "被评价的干预是一个软件工具", evidence: [] }, outcomes: { state: "known", value: "测评结论", evidence: [] },
+        purpose: { state: "known", value: "记录一次测评", evidence: [] },
+      } as never;
+      mocks.getSource.mockResolvedValue(product);
+      mocks.getSourceUnderstanding.mockResolvedValue(stored);
+      renderReader(readerAt("src_product"));
+      await screen.findByRole("heading", { level: 1, name: product.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByRole("list");
+      expect(text()).toContain("这是一份产品测评记录，不是研究论文。");
+      expect(text()).not.toMatch(/研究信息|文献信息|研究设计|研究人群|干预或暴露|研究终点|本文档没有研究设计|被评价的干预/);
+    });
+
+    it("name the section for what it holds: a paper's 「研究信息」, the authors and place of any other literature under 「文献信息」", async () => {
+      const metadata = { authors: ["王一", "李二"], source: "中华消化杂志", publicationDate: "2022-03-15" };
+      mocks.getSource.mockResolvedValue({ ...guideline, payload: { ...guideline.payload, metadata } });
+      const stored = understanding();
+      stored.current.slots = { ...stored.current.slots, design: { state: "known", value: "随机对照试验", evidence: [] } } as never;
+      mocks.getSourceUnderstanding.mockResolvedValue(stored);
+      const guide = renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("王一、李二");
+      expect(text()).toContain("文献信息");
+      expect(text()).not.toMatch(/研究信息|随机对照试验/);
+      guide.unmount();
+      mocks.getSource.mockResolvedValue({ ...paperOf(guideline), payload: { ...paperOf(guideline).payload, metadata } });
+      renderReader();
+      await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      await within(columnOf("points")!).findByText("随机对照试验");
+      expect(text()).toContain("研究信息");
+      expect(text()).not.toContain("文献信息");
     });
 
     // N-16: the conversations that used the document, last in the column.
@@ -519,6 +565,7 @@ describe("a document's page", () => {
       (written.current as Record<string, unknown>).contents = ["表 3 推荐等级汇总", "合并糖尿病时的用药调整"];
       (written.current as Record<string, unknown>).limitations = ["仅纳入单中心回顾性病例", "随访不足一年"];
       mocks.getSourceUnderstanding.mockResolvedValue(written);
+      mocks.getSource.mockResolvedValue(paperOf(guideline));
       renderReader();
       await screen.findByRole("heading", { level: 1, name: guideline.display.title });
       resize(TWO_COLUMN_MIN_WIDTH);
