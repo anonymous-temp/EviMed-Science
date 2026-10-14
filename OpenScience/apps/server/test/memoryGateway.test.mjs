@@ -403,6 +403,77 @@ function memoryDouble({ engine = "native", settings = {}, trial = null } = {}) {
   };
 }
 
+test("admission: a captured message belongs to the turn it was spoken in, then to the turn in progress", async () => {
+  const sid = "session_0123456789abcdef0123456789abcdef";
+  const at = (hour, minute = 0) => Date.parse(`2026-10-14T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`);
+  const iso = (hour) => new Date(at(hour)).toISOString();
+  const admit = (runs, when) => createMemoryAdmission({ config: { memoryEnabled: true }, researchMemory: memoryDouble(),
+    conversations: { running: async () => runs.filter((run) => run.status === "running"), runsOf: async () => runs } })
+    .admit({ user: { id: USER }, project: { id: "p1", userId: USER }, engineSessionId: `dsh-${sid}`, at: when });
+  const ledger = [
+    { id: "r3", sessionId: sid, status: "running", startedAt: iso(12) },
+    { id: "r2", sessionId: sid, status: "succeeded", effectiveRouteReason: "autopilot:routine", startedAt: iso(8), finishedAt: iso(9) },
+  ];
+  assert.equal((await admit(ledger, at(8, 30))).learnReason, "automated_run", "spoken during the scheduled execution");
+  assert.equal((await admit(ledger, at(12, 30))).learn, true, "spoken during the person's turn");
+  assert.equal((await admit(ledger, at(10))).learn, true, "spoken between turns: the turn in progress decides");
+  assert.equal((await admit(ledger, null)).learn, true, "no time: the turn in progress decides");
+  // A message with no turn in progress and no time is the last turn's, as before.
+  const idle = [{ ...ledger[1] }];
+  assert.equal((await admit(idle, null)).learnReason, "automated_run");
+  assert.equal((await admit(idle, at(13))).learnReason, "automated_run", "after every recorded turn: the last one");
+  // Two turns at once: the platform's wins, and the person's message is withheld rather than the dispatch learned.
+  const both = [{ id: "r4", sessionId: sid, status: "running", startedAt: iso(8) }, { id: "r5", sessionId: sid, status: "running", effectiveRouteReason: "autopilot:routine", startedAt: iso(8) }];
+  assert.equal((await admit(both, at(9))).learnReason, "automated_run");
+});
+
+test("a scheduled execution's instruction never reaches the engine as the person's message: first, later, replayed, or beside the person's own turn", async (t) => {
+  // The wiring as it is: the real admission over a ledger of one reused task conversation, the real gateway, a stub engine that
+  // records what reached it. The unmodified plugin posts each message as the kernel emits it and posts again what it could not
+  // post (restart, dropped connection), so a dispatch can arrive while another turn is in progress.
+  const sid = "session_0123456789abcdef0123456789abcdef";
+  const INSTRUCTION = "每天早上检索新文献，按研究类型整理成简报，每次先列出新增数量。";
+  const at = (hour) => `2026-10-14T${String(hour).padStart(2, "0")}:00:00.000Z`;
+  const ledger = [
+    { id: "run_3", sessionId: sid, status: "running", effectiveRouteReason: "adopted:runtime-ui", kernelRequestIds: ["req_person"], startedAt: at(12) },
+    { id: "run_2", sessionId: sid, status: "succeeded", effectiveRouteReason: "autopilot:routine", kernelRequestIds: ["req_2"], startedAt: at(8), finishedAt: at(9) },
+    { id: "run_1", sessionId: sid, status: "succeeded", effectiveRouteReason: "autopilot:routine", kernelRequestIds: ["req_1"], startedAt: at(1), finishedAt: at(2) },
+  ];
+  const admission = createMemoryAdmission({
+    config: { memoryEnabled: true }, researchMemory: memoryDouble(),
+    conversations: { running: async () => ledger.filter((run) => run.status === "running"), runsOf: async (_project, id) => ledger.filter((run) => run.sessionId === id) },
+  });
+  const { stub, call } = await fixture(t, { admission });
+  const engineSession = `dsh-${sid}`;
+  await call("POST", "/api/v1/sessions", { session_id: engineSession });
+  const post = (body) => call("POST", `/api/v1/sessions/${engineSession}/messages`, body);
+  const reached = () => stub.sent("POST", `/api/v1/sessions/${engineSession}/messages`).map((request) => request.body.parts[0].text);
+
+  // The person's turn is in progress. The first execution's instruction, posted again late with the time it was spoken, and the
+  // second's, are the platform's: the engine hears neither.
+  assert.equal((await post({ role: "user", content: INSTRUCTION, created_at: at(1) })).status, 200);
+  assert.equal((await post({ role: "user", content: INSTRUCTION, created_at: at(8) })).status, 200);
+  assert.deepEqual(reached(), []);
+  // The assistant's answer to an execution is that turn's too.
+  await post({ role: "assistant", content: "今天新增 9 篇，其中 RCT 1 篇。", created_at: at(8) });
+  assert.deepEqual(reached(), []);
+  // What the person says in their own turn is theirs.
+  await post({ role: "user", content: "以后简报里的文献一律按发表日期倒序。", created_at: at(12) });
+  assert.deepEqual(reached(), ["以后简报里的文献一律按发表日期倒序。"]);
+  // The engine's session then holds the person's words and nothing the control plane sent: a commit archives exactly that.
+  const committed = await call("POST", `/api/v1/sessions/${engineSession}/commit`, { keep_recent_count: 0, wait: true });
+  assert.equal(committed.json.result.status, "accepted");
+  assert.ok(!stub.sent("POST", `/api/v1/sessions/${engineSession}/messages`).some((request) => JSON.stringify(request.body).includes("每天早上")));
+
+  // During an execution, the dispatch and the answer are withheld whether or not the message says when it was spoken.
+  ledger.splice(0, 1, { id: "run_4", sessionId: sid, status: "running", effectiveRouteReason: "autopilot:routine", kernelRequestIds: ["req_4"], startedAt: at(20) });
+  await post({ role: "user", content: INSTRUCTION });
+  await post({ role: "user", content: INSTRUCTION, created_at: at(20) });
+  await post({ role: "assistant", content: "今天新增 5 篇。", created_at: at(20) });
+  assert.deepEqual(reached(), ["以后简报里的文献一律按发表日期倒序。"]);
+  assert.equal(nativeMemoryCounters().messages.forwarded, 1);
+});
+
 test("admission: who is learned from and who is read for, by reason", async () => {
   const user = { id: USER };
   const project = { id: "p1", userId: USER };

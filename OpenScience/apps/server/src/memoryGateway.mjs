@@ -211,7 +211,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   runtimeManager: { assertActiveEviMedWorkloadToken: (token: string | undefined) => Promise<{ userId: string, projectId: string }> },
  *   store: { userById: (id: string) => Promise<any>, requireProject: (user: any, projectId: string) => Promise<any> },
  *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions | null,
- *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
+ *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string) => Promise<{ removed: boolean }> } | null,
  *   now?: () => number,
@@ -347,7 +347,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     async messageWrite(ctx) {
       const sessionId = ctx.match[1];
       const accepted = { status: 200, json: ok({ session_id: sessionId, message_count: 0, pending_tokens: 0 }) };
-      const admitted = await ctx.admit(sessionId);
+      // A message belongs to the turn it was spoken in, not to whichever turn is in progress when it arrives: the plugin
+      // replays what it could not post, and a replayed scheduled instruction must not be taken for the person's.
+      const spoken = typeof ctx.json?.created_at === "string" && ctx.json.created_at.length <= 40 ? Date.parse(ctx.json.created_at) : NaN;
+      const admitted = await ctx.admit(sessionId, Number.isFinite(spoken) ? spoken : null);
       if (!admitted.learn) {
         recordGatewayMessage("not_learning");
         recordGatewayWithheld(admitted.learnReason ?? "legacy_engine");
@@ -661,9 +664,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       let hiddenList = null;
       const ctx = {
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, account: /** @type {any} */ (sessions).client.account,
-        admit: (/** @type {string | null} */ engineSessionId) => {
-          const key = engineSessionId ?? "";
-          if (!admissions.has(key)) admissions.set(key, admission.admit({ user, project, engineSessionId }));
+        admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
+          const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
+          if (!admissions.has(key)) admissions.set(key, admission.admit({ user, project, engineSessionId, at }));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
