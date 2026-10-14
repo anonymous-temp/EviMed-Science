@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { Plus, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -11,26 +11,24 @@ import {
   type VcrRecruitTodo,
   type VcrStudySummary,
 } from "@/lib/vcrClient";
+import { useProjectStore } from "@/lib/projects";
+import { vcrChatPath } from "@/lib/studyLocation";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { Tabs } from "@/components/ui/Tabs";
-import { Tag } from "@/components/ui/Tag";
+import { List } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { VcrStepProgress } from "@/components/vcr/VcrStepProgress";
-import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
-import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
+import { announceVcrStudiesChanged, hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
 import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
 import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 import { tierLabel } from "@/components/vcr/vcrText";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
-
-/** What the module is for, said to a researcher who has not started one: the work, and what comes of it. */
-const EMPTY_SENTENCE = "在真实入组前，用已有证据和你的数据模拟人群与试验方案，估算样本量，再匹配合适的患者。";
 
 type HomeTab = "studies" | "models" | "precedents" | "definitions";
 
@@ -47,33 +45,53 @@ type Listing =
   | { kind: "error"; message: string }
   | { kind: "ready"; home: VcrHome };
 
+/** How a study stands, for the one filter and the one sort the list has. */
+type StudyState = "need" | "running" | "done" | "other";
+type StudyFilter = "all" | "need" | "running" | "done";
+type StudySort = "recent" | "state";
+
+const STATE_WORDS: Record<Exclude<StudyFilter, "all">, string> = { need: "需要你", running: "进行中", done: "已完成" };
+/** The order of the state sort: what asks for the reader first, what is finished last. */
+const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, other: 2, done: 3 };
+
+/**
+ * Where a study stands, read off what the row carries: a line the server marked as needing the reader (or a coordinator's todo) is
+ * 需要你; a step under way is 进行中; all seven done is 已完成. A study that is none of these is only listed under 全部.
+ */
+export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">, todos: readonly VcrRecruitTodo[] = []): StudyState {
+  const records = Object.values(study.steps);
+  if (todos.length > 0 || study.attention.some((line) => line.tone === "attention")) return "need";
+  if (records.some((record) => record?.status === "running" || record?.status === "queued")) return "running";
+  const steps = ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"] as const;
+  if (steps.every((step) => study.steps[step]?.status === "done" || study.steps[step]?.status === "minimal")) return "done";
+  return "other";
+}
+
 /**
  * 「虚拟临床研究」's home: the studies, and the libraries they draw on.
  *
- * One list and one way in. 「新建研究」 is the only entry: it makes a draft study
- * and opens its conversation with the module's chip and the six starting points
- * (plan §9.3 / R10 mockup v02), and the study appears here once the first thing
- * said in it has named it. The four action cards and the box of recent reviews
- * this page used to carry are gone — five ways in that all led to the same empty
- * composer, and a review box nobody could act on from here.
+ * One list and one way in. 「新建研究」 is the only entry: it makes a draft study and opens **its conversation view** with the study's
+ * step bar already above it (R19, plan §5.3) — the first thing said there names the study, the bar and the title follow, and the
+ * study stands at the top of the sidebar's group. It used to open the project's conversation in the chat surface, where nothing
+ * pointed back at the study.
  *
- * With no study yet the page says in one sentence what the module is for and offers 「新建研究」 in the empty state; the header has no
- * button then, so the page has one solid button, not two with the same name. While the list is read, or cannot be, and on the other
- * three views, the header's is the one.
- *
- * Each row says what the study asks, what it has found and how far it has come
- * in words; a study that needs somebody (a coordinator's confirmations, 招募待办)
- * says so on its own row, so there is one column and nothing to read twice.
+ * Each row says what the study asks, what it has found and how far it has come — **all seven steps in order, each a link to its
+ * tab**, how many are done and which is next — and a study that needs somebody (a failed step, a wait for the budget or the
+ * allowance, a coordinator's confirmations) says so on its own row with the thing to do about it, so there is one column and nothing
+ * to read twice. The toolbar holds the four views, the one filter (a state is not drawn when no study is in it), the sort and the
+ * search, above the list they act on.
  */
 export function VcrHomePage() {
   const feature = useVcrFeature();
-  const openConversation = useOpenVcrConversation();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
+  const [state, setState] = useState<StudyFilter>("all");
+  const [sort, setSort] = useState<StudySort>("recent");
 
   useEffect(() => {
     // `error`: `/api/me` could not be read. The list is asked anyway — the
@@ -94,21 +112,43 @@ export function VcrHomePage() {
   }, [feature, reloads]);
 
   const ready = listing.kind === "ready" ? listing.home : null;
+  const studies = useMemo(() => ready?.studies ?? [], [ready]);
+  const todosOf = useCallback((study: VcrStudySummary): VcrRecruitTodo[] => (ready?.todos ?? []).filter((todo) => todo.studyId === study.id), [ready]);
+  const stateOf = useCallback((study: VcrStudySummary) => studyStateOf(study, todosOf(study)), [todosOf]);
+
   const needle = query.trim().toLowerCase();
-  const shown = useMemo(() => (ready?.studies ?? []).filter((study) => !needle
-    || study.name.toLowerCase().includes(needle) || (study.question ?? "").toLowerCase().includes(needle)), [ready, needle]);
+  const counts = useMemo(() => {
+    const total = { all: studies.length, need: 0, running: 0, done: 0 } as Record<StudyFilter, number>;
+    for (const study of studies) {
+      const kind = stateOf(study);
+      if (kind !== "other") total[kind] += 1;
+    }
+    return total;
+  }, [studies, stateOf]);
+  const shown = useMemo(() => {
+    const matching = studies.filter((study) => (!needle || study.name.toLowerCase().includes(needle) || (study.question ?? "").toLowerCase().includes(needle))
+      && (state === "all" || stateOf(study) === state));
+    // The server lists newest first, and a stable sort keeps that order within a state.
+    return sort === "state" ? [...matching].sort((a, b) => STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)]) : matching;
+  }, [studies, needle, state, sort, stateOf]);
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
   const start = () => {
     if (creating) return;
     setCreating(true);
-    void createVcrStudy({})
-      .then((created) => {
-        // The project exists from this moment and the list that would call it a draft is a request away: the sidebar is told now.
-        hintVcrDraftProject(created.projectId);
-        return openConversation({ projectId: created.projectId, sessionId: created.sessionId });
-      })
+    void (async () => {
+      const created = await createVcrStudy({});
+      // The project exists from this moment and the list that would call it a draft is a request away: the sidebar is told now,
+      // and which study it is, so its row can open the study's conversation.
+      hintVcrDraftProject(created.projectId, created.id);
+      const store = useProjectStore.getState();
+      if (!store.projects.some((project) => project.id === created.projectId)) await store.load();
+      announceVcrStudiesChanged();
+      // The shell moves to the study's project and lands on its conversation in the same render: the page it lands on is the study's
+      // own, with its step bar, and the first sentence said there names it.
+      await useProjectStore.getState().select(created.projectId, () => navigate(vcrChatPath(created.id), { flushSync: true }));
+    })()
       .catch((error: unknown) => {
         if (isVcrOff(error)) setListing({ kind: "off" });
         else toast.error(webErrorMessage(error, { fallback: "无法新建研究，请稍后重试。" }));
@@ -122,79 +162,128 @@ export function VcrHomePage() {
       新建研究
     </Button>
   );
-  const todosOf = (study: VcrStudySummary): VcrRecruitTodo[] => (ready?.todos ?? []).filter((todo) => todo.studyId === study.id);
   // The empty state carries the button, so the header does not.
   const none = tab === "studies" && feature !== "loading" && ready !== null && ready.studies.length === 0;
 
-  return (
-    <PageShell title="虚拟临床研究" width="wide" actions={none ? undefined : newStudy}>
-      <Tabs
-        label="虚拟临床研究的视图"
-        items={TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready ? { count: ready.studies.length } : {}) }))}
-        value={tab}
-        onChange={(next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true })}
-        panelId="vcr-home-panel"
-        trailing={tab === "studies" && ready && ready.studies.length > 0
-          ? <SearchInput label="搜索研究" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} />
-          : undefined}
-      />
+  // A state with no study in it is not a chip: 0 is not a filter.
+  const filters: ToolbarFilter[] = [];
+  const stateOptions = (["need", "running", "done"] as const).filter((key) => counts[key] > 0);
+  if (stateOptions.length > 0) {
+    filters.push({
+      kind: "chips",
+      label: "状态",
+      value: state,
+      onChange: (next) => setState(next as StudyFilter),
+      options: [{ value: "all", label: "全部", count: counts.all }, ...stateOptions.map((key) => ({ value: key, label: STATE_WORDS[key], count: counts[key] }))],
+    });
+  }
+  if (studies.length > 1) {
+    filters.push({
+      kind: "select",
+      label: "排序",
+      allLabel: "最近更新",
+      value: sort === "state" ? "state" : null,
+      onChange: (next) => setSort(next === "state" ? "state" : "recent"),
+      options: [{ value: "state", label: "按状态" }],
+    });
+  }
+  const onStudies = tab === "studies" && ready !== null && studies.length > 0;
 
-      <div id="vcr-home-panel" role="tabpanel" aria-labelledby={`vcr-home-panel-tab-${tab}`} className="pt-6">
-        {tab === "models" ? <VcrModelsPanel />
-          : tab === "precedents" ? <VcrPrecedentsPanel />
-            : tab === "definitions" ? <VcrDefinitionsPanel />
-              : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
-                : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-                  : listing.home.studies.length === 0
-                    ? <EmptyState icon={UsersRound} title="还没有研究" description={EMPTY_SENTENCE} action={newStudy} />
-                    : shown.length === 0
-                      ? <EmptyState icon={UsersRound} title="没有匹配的研究" />
-                      : (
-                        <ul className="divide-y divide-border">
-                          {shown.map((study) => <StudyRow key={study.id} study={study} todos={todosOf(study)} />)}
-                        </ul>
+  return (
+    <PageShell
+      title="虚拟临床研究"
+      width="wide"
+      actions={none ? undefined : newStudy}
+      toolbar={{
+        views: {
+          label: "虚拟临床研究的视图",
+          items: TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready ? { count: ready.studies.length } : {}) })),
+          value: tab,
+          onChange: (next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true }),
+          panelId: "vcr-home-panel",
+        },
+        ...(onStudies ? {
+          filters,
+          search: { label: "搜索研究", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
+          onClear: () => { setQuery(""); setState("all"); },
+          summary: shown.length === studies.length ? `${studies.length} 项` : `${shown.length} / ${studies.length}`,
+        } : {}),
+      }}
+    >
+      {tab === "models" ? <VcrModelsPanel />
+        : tab === "precedents" ? <VcrPrecedentsPanel />
+          : tab === "definitions" ? <VcrDefinitionsPanel />
+            : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
+              : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
+                : listing.home.studies.length === 0
+                  ? (
+                    <EmptyState
+                      icon={UsersRound}
+                      title="还没有研究"
+                      description={(
+                        <>
+                          <p>用 已有证据和你的数据</p>
+                          <p>得到 模拟人群、试验方案和样本量，再匹配合适的患者</p>
+                        </>
                       )}
-      </div>
+                      action={newStudy}
+                    />
+                  )
+                  : shown.length === 0
+                    ? <EmptyState icon={UsersRound} title="没有匹配的研究" action={<Button variant="secondary" onClick={() => { setQuery(""); setState("all"); }}>清除筛选</Button>} />
+                    : (
+                      <List label="研究" divided>
+                        {shown.map((study) => <StudyRow key={study.id} study={study} todos={todosOf(study)} />)}
+                      </List>
+                    )}
     </PageShell>
   );
 }
 
 /**
- * One study: its name and data tier, the question it asks, what it has found, and how far it has come — and, when it waits for a
- * coordinator, the one thing to do about it.
+ * One study: its name and data tier, the question it asks, what it has found, how far it has come — and, when it waits for somebody,
+ * the one thing to do about it. The title is the row's link (stretched over it); the steps and the cue are links of their own, above it.
  */
 function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly VcrRecruitTodo[] }) {
   const need = todos[0] ?? null;
+  const line = study.attention.find((item) => item.tone === "attention") ?? null;
+  const described = Boolean(study.question) || ["done", "minimal", "stale"].includes(study.steps.definition?.status ?? "");
   return (
-    <li className="relative flex flex-col gap-3 px-2 py-5 hover:bg-surface-1 md:flex-row md:items-start md:gap-6">
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2">
-          <Link
-            to={vcrTabPath(study.id, "overview")}
-            data-row-title
-            className="min-w-0 text-body font-semibold text-text after:absolute after:inset-0 after:rounded after:content-['']"
-          >
-            {study.name}
-          </Link>
-          <Tag>{tierLabel(study.tier)}</Tag>
-        </p>
-        {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
-        {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
-        {need && (
-          // Above the stretched title, so the link stays a link.
-          <p data-vcr-todo="" className="relative z-sticky mt-2 flex flex-wrap items-baseline gap-x-3 text-caption text-warn-strong">
-            <span>{todos.length > 1 ? `${need.title}，另有 ${todos.length - 1} 件待办` : need.title}</span>
-            {need.action && (
-              <Link to={vcrTabPath(study.id, need.action.tab ?? "matching")} className="text-link hover:underline">{need.action.label}</Link>
-            )}
+    <li className="relative flex flex-col gap-3 px-2 py-5 hover:bg-surface-1">
+      <div className="flex items-start gap-6">
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <Link
+              to={vcrTabPath(study.id, "overview")}
+              data-row-title
+              className="min-w-0 text-body font-semibold text-text after:absolute after:inset-0 after:rounded after:content-['']"
+            >
+              {study.name}
+            </Link>
+            <span className="shrink-0 text-caption text-text-3">{tierLabel(study.tier)}</span>
           </p>
-        )}
+          {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
+          {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
+        </div>
+        <span className="shrink-0 text-caption tabular-nums text-text-3">{study.updatedAt}</span>
       </div>
-      {/* Below `md` the progress goes under the conclusion: a fixed 288 px column beside the text left a phone one character per line. */}
-      <div data-vcr-row-aside="" className="flex w-full flex-row flex-wrap items-center justify-between gap-2 md:w-72 md:shrink-0 md:flex-col md:items-end">
-        <VcrStepProgress steps={study.steps} className="justify-start md:justify-end" />
-        <span className="text-caption tabular-nums text-text-3">{study.updatedAt}</span>
-      </div>
+      <VcrStepProgress studyId={study.id} steps={study.steps} described={described} paused={study.status === "paused"} />
+      {(need || line) && (
+        // Above the stretched title, so its link stays a link.
+        <div data-vcr-need="" data-vcr-todo={need ? "" : undefined} className="relative z-sticky">
+          <Note
+            tone="warn"
+            action={(
+              <Link to={vcrTabPath(study.id, need ? need.action?.tab ?? "matching" : line?.tab ?? line?.action?.tab ?? "overview")} className="shrink-0 rounded text-link hover:underline">
+                {need ? need.action?.label ?? "去处理" : line?.action?.label ?? "去处理"}
+              </Link>
+            )}
+          >
+            <span className="font-medium">需要你</span>
+            {` · ${need ? (todos.length > 1 ? `${need.title}，另有 ${todos.length - 1} 件待办` : need.title) : line?.text}`}
+          </Note>
+        </div>
+      )}
     </li>
   );
 }

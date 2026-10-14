@@ -14,7 +14,7 @@ import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { DOT_WORDS, type TabItem } from "@/components/ui/Tabs";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { StudyFrameContext, type StudyFrameApi } from "./studyFrameContext";
+import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
 import { leadJob, isMoving, jobLabel, phaseWord, runCountsLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
 import { stepsOfTab, tabDot, VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
@@ -64,6 +64,8 @@ export interface StudyFrameProps {
   menu: readonly MenuEntry[];
   /** The way into the conversation, with a draft waiting in its composer. Navigation inside the page. */
   onChat: (draft?: string) => void;
+  /** Opens one of the page's panels (the menu's records and dialogs) for a tab that asks. */
+  onPanel: (panel: StudyPanelKey) => void;
   /** Opens the study's own address for a tab. */
   onView: (view: StudyView) => void;
   children: ReactNode;
@@ -129,7 +131,7 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
   return null;
 }
 
-export function StudyFrame({ studyId, study, view, reload, menu, onChat, onView, children }: StudyFrameProps) {
+export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
   const { run, busy } = useVcrRun(study, { refresh: reload });
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [cancelling, setCancelling] = useState(false);
@@ -152,8 +154,9 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onView,
     activity: study.activity,
     refresh: reload,
     openChat: onChat,
+    openPanel: onPanel,
     setToolbar,
-  }), [studyId, study, reload, onChat]);
+  }), [studyId, study, reload, onChat, onPanel]);
 
   // The primary action: the next step, in the header of every tab. While work goes on the strip under the header is what is said
   // and there is nothing to press for another step — it could only queue behind this one.

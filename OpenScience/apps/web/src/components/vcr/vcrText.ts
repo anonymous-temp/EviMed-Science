@@ -240,7 +240,35 @@ export const STALE_SENTENCE = "输入已变更，排队重算中";
 export const STALE_SENTENCE_NOT_QUEUED = "输入已变更，这些数字可能已过期";
 export const staleSentence = (queued: boolean | null | undefined) => (queued ? STALE_SENTENCE : STALE_SENTENCE_NOT_QUEUED);
 
-/** What a step produces, for a tab that has nothing yet. */
+/**
+ * What a step gives, as a noun phrase — the second half of an empty tab's recipe (「用 … 得到 …」, `StepState`), in the same block as
+ * the button that starts it. Not an explanation of the tab: the first half is what the step uses, each a link.
+ */
+export const VCR_STEP_GIVES: Readonly<Record<VcrStepKey, string>> = Object.freeze({
+  definition: "研究问题、对象、对照、终点和预期用途",
+  evidence: "一张张可追溯的假设卡",
+  population: "一批情景人群；接入数据（T1 及以上）后也可以筛出真实队列",
+  patients: "分组曲线和每个虚拟患者的个体记录",
+  comparator: "五条对照路线的诊断、效应或缺口清单",
+  trial: "方案对比、运行特征和成功把握",
+  matching: "逐条入排判定和补证建议",
+});
+
+/** What a step makes, as the empty tab's title says it (「还没有虚拟患者」). */
+export const VCR_STEP_NOUNS: Readonly<Record<VcrStepKey, string>> = Object.freeze({
+  definition: "研究定义",
+  evidence: "假设卡",
+  population: "人群",
+  patients: "虚拟患者",
+  comparator: "对照设计",
+  trial: "试验方案",
+  matching: "匹配评估",
+});
+
+/**
+ * What a step produces, for a tab that has nothing yet.
+ * @deprecated An empty tab is a recipe (`VCR_STEP_GIVES`, `StepState`); nothing draws this sentence any more.
+ */
 export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freeze({
   definition: "研究定义还没写：研究问题、PICO、估计目标和预期用途。",
   evidence: "还没有假设卡：检索试验登记和文献，把参数变成一张张可追溯的卡。",
@@ -271,15 +299,8 @@ export const patientTrialsNoneSentence = (subject: string): string => `还没有
 /** What a tab says when the study has no definition yet: the programme is not waiting for anything, the study is waiting to be described. */
 export const VCR_NO_DEFINITION = "先在对话里说一句要研究什么";
 
-/** What a step says when it was asked for and the programme has not started it yet. */
+/**
+ * What a step said when it was asked for and the programme had not started it yet.
+ * @deprecated A step in line is `StepState`'s queued state and the page's strip (「排队中 · 等「证据」做完」); nothing draws this.
+ */
 export const VCR_STEP_QUEUED = "已安排，开始后这里会显示进度。";
-
-/** What 「让 AI 做下一步」 asks for, by step: the verb phrase the button says (the step's own name reads as a noun). */
-export const VCR_NEXT_STEP_WORDS: Readonly<Partial<Record<VcrStepKey, string>>> = Object.freeze({
-  evidence: "找证据、整理假设卡",
-  population: "构建人群",
-  patients: "生成虚拟患者",
-  comparator: "设计对照",
-  trial: "模拟试验方案",
-  matching: "匹配患者",
-});

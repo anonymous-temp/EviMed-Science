@@ -259,7 +259,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   ), [Tab, tab, studyId, study, reload]);
 
   return (
-    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onView={openView}>
+    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
       {view === "chat" ? (
         <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
       ) : (

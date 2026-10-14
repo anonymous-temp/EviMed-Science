@@ -2,6 +2,9 @@ import { createContext, useContext, useLayoutEffect } from "react";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import type { VcrActivity } from "@/lib/vcrClient";
 
+/** The panels of the page that a tab may ask the frame to open: the header menu's records and dialogs. */
+export type StudyPanelKey = "intake" | "budget" | "changes" | "export" | "runs";
+
 /**
  * What the study's frame gives the tab it holds (R19, plan §5.3; `StudyFrame.tsx`).
  *
@@ -26,6 +29,8 @@ export interface StudyFrameApi {
    * `/app/chat`: the conversation is a view of the study page, with the step bar still above it.
    */
   openChat(draft?: string): void;
+  /** Open one of the page's own panels over the tab: the data intake, the budget, the change log, the export choice, the AI runs. */
+  openPanel(panel: StudyPanelKey): void;
   /** `useVcrToolbar`'s door; a tab does not call it. */
   setToolbar(toolbar: ToolbarProps | null | undefined): void;
 }
