@@ -288,9 +288,12 @@ must lay itself out takes `width="full"` and still shares the gutter: **16 px be
 there** (`px-4 md:px-6`), so the body is 358 wide at 390 px. A page that draws its own column (the
 answer page, the handoff page) wears the same two classes.
 
-**A page header is one line**: the title, optionally a grey count or update time, and at the
-right at most one primary button and two icon buttons or a search box. **No subtitle** — nothing
-under the title explains how the system works; `PageHeader` has no place to put it.
+**A page header is one line**: the title, optionally a grey count or update time and the page's
+scope (`scope`: a `ScopeMenu`), and at the right at most one primary button and two icon buttons or
+a search box. **No subtitle** — nothing under the title explains how the system works; `PageHeader`
+has no place to put it. The title takes the room the actions leave (two lines at most) and the
+actions never move under it; a reader's title (`titleVariant="document"`) is the serif
+`text-doc-title`.
 
 ### Radii
 
@@ -336,8 +339,8 @@ bordered pill or bordered `<button>` outside it:
 
 | Component | What it is |
 |---|---|
-| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle |
-| `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px |
+| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」) |
+| `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px; the open tab is always scrolled whole into its row |
 | `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
@@ -346,7 +349,20 @@ bordered pill or bordered `<button>` outside it:
 | `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` at 500 when current |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
-| `EmptyState` | an icon and one sentence; no button the header already has |
+| `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
+| `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle — drawn by the toolbar, folded into one 「筛选」 chip below 640 px), `search`, `summary`, `actions`. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
+| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined, a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
+| `StepState` | the body of a step's tab while it has nothing to show: `empty` (a recipe: what it uses, what it gives, one verb-and-object button), `queued`, `running`, `failed`, `credits`. Props are facts; the sentences are composed once |
+| `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
+| `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts. A bare string does not compile |
+| `Headline` | the data page's one sentence, each number a link to what it counts |
+| `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot |
+| `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
+| `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
+| `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below; read off the headings the page rendered |
+| `MasterDetail` | a list column (320–360 px) and one record; below the room for both, the record is a `Drawer` — or, for a conversation, replaces the list |
+| `ScopeMenu` | whose things the page shows (a project, a kind of project, everyone's), in the header after the title or as a chip in a toolbar |
+| `StateScreen` | a whole page's failure or wrong address: an icon, one sentence, one action, 「回到原处」 |
 
 Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`
 (its `footer` is the one bar stuck to the panel's bottom), `ConfirmDialog`, `FormDialog` (a form in a
@@ -401,6 +417,63 @@ pages after every release.
    says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end).
    The walk clicks the first row of each list on the rebuilt pages and fails a click that shows
    nothing; what a row's content holds is for unit tests, not the walk.
+
+Seven more, adopted with the owner-approved rectification of 2026-10-14 (R19; plan §2) and held by the
+page framework — the components above, `PageShell`'s slots, `layoutRules.test.ts`,
+`pageComposition.test.tsx` and the walk's composition checks:
+
+7. **Controls sit above the content they control, in one toolbar.** The views, filters and search of a
+   page are `PageShell`'s `toolbar` (or `tabs`) slot or, for one block, a `Section`'s: inside the sticky
+   band, above the body. A page has at most one row of views and one row of filters; a filter chip
+   written under its list, in the middle of a page or at its foot, is the defect this rule exists for.
+   A `Tag` is a label: it is never clickable and never inside a control.
+8. **A sentence carries an action or a number.** Every sentence that stands alone is a `Note` (with its
+   action, or a conclusion whose number opens what it counts), a `Headline`, an `EmptyState` or a
+   heading; there is no grey line for how a thing was made, what it may be used for, what the engine
+   did — those are the model's context, a log or an operator's view. `layoutRules.test.ts` counts the
+   hand-written ones and lets the count only fall.
+9. **A module's step rail is on every tab and sticky.** The rail, the tabs and the toolbar row are one
+   band at the top whose height does not depend on the tab (a tab without a toolbar reserves its row);
+   the steps the open tab is built from are underlined. The page never loses where the program is by
+   switching a tab.
+10. **Starting work never takes the person away.** The button starts the work; the page's
+    `ActivityStrip` says what is happening and how far, and the page updates itself when it ends. The
+    conversation is a view of the same page, not another place.
+11. **Every number opens what it counts, and a chart and its table share one selection.** A figure in a
+    sentence or a `StatTile` is a link or a button to the things counted (`to` / `onOpen`); a word that
+    stands in for a number opens nothing. Selecting a mark selects its row.
+12. **An empty state is a recipe.** What the step uses (each one clickable), what it gives, and one
+    button naming the work as a verb and its object (「生成虚拟患者」, not 「让 AI 做」). With no button
+    it says why (`reason`); an empty state never merely stops.
+13. **What a page lists as installed is generated from what is installed** — the plugins, skills and
+    tools of the image, not a hand-kept list; a package that is installed and not on the page is a red
+    test.
+
+**Six templates.** Every page is one of these; the template fixes the slots and their order, and a page
+fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.test.tsx` reads them.
+
+| Template | For | Slots, top to bottom | One kind of body | A record opens |
+|---|---|---|---|---|
+| T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
+| T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
+| T3 模块页 | 循证 GEO, 虚拟临床研究 | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
+| T4 数据页 | 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T5 阅读页 | a knowledge-base document, a report, an evidence card, an event, a GEO answer | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
+| T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
+
+**What each template forbids.** The walk reads the components' markers (`data-toolbar`, `data-step-rail`,
+`data-note`, `data-tag`, `data-outline`, `data-empty`, `data-chart-grid` — listed in `PageShell.tsx`), not
+the words on the page.
+
+| | Required | Forbidden |
+|---|---|---|
+| every page | one `PageShell`; at most one primary action in the header; a sentence is a `Note`, `Headline`, `EmptyState` or heading | a hand-drawn `<h1>`, back arrow or search box; a grey sentence with no action or number; a `Tag` that is pressed or sits in a control; a status word drawn as a button; a filter whose count is 0 |
+| T1 | the toolbar above the list, views and filters in one row | a second tab list in the body; chips under the list; a hand-written `ul divide-y` (`List`, `ListRow`) |
+| T2 | the record in the right-hand column on a wide page | a record in a drawer beside a list that has room; a conversation in a drawer |
+| T3 | `StepRail` on every tab with the same steps; the toolbar row reserved on a tab without one; the open tab's steps underlined | the rail on one tab only; a button that carries the person to the conversation; two kinds of object in one tab; the primary action in the body |
+| T4 | a `Headline` whose numbers open what they count; a `ChartGrid` whose rows are full; legend and replay controls in the card's header | a placeholder tile; a hole in the grid; a control under the canvas it controls |
+| T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |
+| T6 | settings sections only in the left rail | a link to another page (插件, 技能, 运维) drawn as a section |
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
@@ -546,6 +619,15 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 
 ## Known gaps
 
+- The page framework (R19) landed as components, slots and counts before the pages moved: the hand-written grey
+  sentences and divided lists are a per-file baseline (`apps/web/src/app/layout-baseline.json`) that only falls, the
+  lint rules that keep a page from drawing its own tabs, filters and search are off until `LAYOUT_RULES=1`, and
+  `StepPending`, `VcrStepPending`, `FilterRow`, `VcrToolbar`, `TabSection`, `VcrSection` and `KnowledgeScopeMenu` are
+  still in place. Each migration batch deletes what it replaces; the last turns the counts into zero and the rules into
+  errors.
+  The framework's components are drawn by `src/test/compositionFixtures.tsx` (one sample per template, in tests), not
+  in `/__gallery`: adding rows re-records both reference images, which CI re-diffs on its own environment, so the first
+  batch that re-records the gallery adds them.
 - `text-ui-sm` is an alias, not an error, until the page rewrites drop its call sites. The
   `max-w-content` family has none left (ESLint refuses it) but the preset still carries the names:
   removing a published name is a major release of the token package, for the Vue shell to adopt.

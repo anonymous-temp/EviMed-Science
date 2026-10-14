@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -19,6 +20,11 @@ import { Tooltip } from "@/components/ui/Tooltip";
  *
  * States: `loading` draws the tile's own skeleton; a number that does not
  * exist is its word (「—」「未测」「样本不足」) in `value`, never a zero.
+ *
+ * **A number opens what it counts** (`DESIGN.md` rules 6 and 11): `to` makes the
+ * figure a link to the things counted, `onOpen` a button that narrows the page to
+ * them. A word standing in for a number (`placeholder`) opens nothing — there is
+ * nothing it counts.
  *
  * A tile is data, not a section of the document: it is a named group, and its
  * label a paragraph. As an `<h3>` in a `<section>` every tile was a landmark and
@@ -43,6 +49,10 @@ export interface StatTileProps {
   hint?: string;
   /** A sparkline or a `BulletBar` under the number. */
   chart?: ReactNode;
+  /** The page that lists what the number counts. */
+  to?: string;
+  /** Or: opens it in place (a drawer, the list narrowed). */
+  onOpen?: () => void;
   /** The band's leading metric: the 40 px rung. */
   lead?: boolean;
   /** `safety`: the number itself is a clinical count, and is red. */
@@ -69,6 +79,8 @@ export function StatTile({
   note,
   hint,
   chart,
+  to,
+  onOpen,
   lead = false,
   tone = "default",
   placeholder = false,
@@ -85,6 +97,7 @@ export function StatTile({
       </div>
     );
   }
+  const opens = !placeholder && (to !== undefined || onOpen !== undefined);
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
       <p className="truncate text-compact text-text-3">{label}</p>
@@ -99,7 +112,7 @@ export function StatTile({
           !placeholder && (tone === "safety" ? "text-danger-strong" : "text-text"),
         )}
       >
-        {value}
+        {opens ? <OpenNumber label={label} value={value} to={to} onOpen={onOpen} /> : value}
         {unit != null && <span className="text-ui font-medium text-text-3">{unit}</span>}
         {rank != null && <Rank>{rank}</Rank>}
       </p>
@@ -115,6 +128,14 @@ export function StatTile({
   // The sample behind the number, for the pointer that asks; a screen reader
   // hears it as the tile's description.
   return hint ? <Tooltip content={hint}>{tile}</Tooltip> : tile;
+}
+
+/** The figure as a link or a button: its name is the tile's label and the figure, so a screen reader hears what it opens. */
+function OpenNumber({ label, value, to, onOpen }: { label: string; value: ReactNode; to?: string; onOpen?: () => void }) {
+  const name = typeof value === "string" || typeof value === "number" ? `${label} ${value}，查看` : undefined;
+  const look = "rounded hover:underline hover:decoration-border-control hover:underline-offset-4";
+  if (to !== undefined) return <Link to={to} aria-label={name} className={look}>{value}</Link>;
+  return <button type="button" aria-label={name} onClick={onOpen} className={look}>{value}</button>;
 }
 
 /** 「第 3 / 6」 beside a number: where it stands among comparable products. */

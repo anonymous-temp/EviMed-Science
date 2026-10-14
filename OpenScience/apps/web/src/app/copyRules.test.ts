@@ -19,7 +19,11 @@ import { EVIMED_DICTIONARIES } from "../../../../packages/harness-port/src/runti
  *    formatted date (“9月26日”);
  *  - 循证 GEO sets its Chinese at 400 or 600: no `font-medium`, no
  *    `font-bold` (the lead's 2026-09-27 GEO sweep; the rest of the shell
- *    still sets a field label at 500, spec §5.3 rule 2).
+ *    still sets a field label at 500, spec §5.3 rule 2);
+ *  - a step in progress is never an orphan 「正在进行」 (R19): `StepState` says
+ *    what is being done, how far, since when and where the conversation is.
+ *    The four sites that still say it the old way are listed below and may
+ *    only be removed, by the migration to `StepState`.
  *
  * Only strings are read — string and template literals and JSX text, parsed
  * with TypeScript — so a comment quoting old copy, a regular expression or an
@@ -70,6 +74,14 @@ const STATUS_ELLIPSIS = /(正在[^"'`\n…]{0,16}|[㐀-鿿]中)(…|\.\.\.)/;
 const IDLE_STATUS = /加载中|处理中|思考中/;
 const UNSPACED = /[㐀-鿿][A-Za-z0-9]|[A-Za-z0-9][㐀-鿿]/;
 const WEIGHT_500_OR_700 = /\bfont-(medium|bold)\b/;
+/** 「正在进行，做完会显示在这里」 and a lone 「正在进行：」 with the step's name behind it: what `StepState` replaces. */
+const ORPHAN_PROGRESS = /正在进行，做完|正在进行[：:]/;
+/** The files that still write it, with how many times. Migrating a page to `StepState` deletes its entry; nothing is added. */
+const ORPHAN_PROGRESS_KNOWN: Readonly<Record<string, number>> = {
+  "components/geo/tabs/geoTabKit.tsx": 1,
+  "components/vcr/VcrStates.tsx": 1,
+  "components/vcr/tabs/OverviewTab.tsx": 2,
+};
 /** A formatted date or ordinal keeps its digits tight: 9月26日, 2026年. */
 const DATE_PARTS = /\d+[年月日号]|[年月]\d+/g;
 
@@ -125,6 +137,18 @@ describe("copy follows the writing rules", () => {
     expect(jsxEllipsis).toEqual([]);
   });
 
+  it("writes no orphan 「正在进行」: the known ones may only be removed", () => {
+    const counts = new Map<string, number>();
+    for (const found of offenders((text) => ORPHAN_PROGRESS.test(text))) {
+      const file = found.slice(0, found.indexOf(":"));
+      counts.set(file, (counts.get(file) ?? 0) + 1);
+    }
+    const added = [...counts].filter(([file, n]) => n > (ORPHAN_PROGRESS_KNOWN[file] ?? 0)).map(([file, n]) => `${file}: ${n}`);
+    expect(added, "an orphan 「正在进行」 was written: use StepState, which says what is being done and where to look").toEqual([]);
+    const gone = Object.entries(ORPHAN_PROGRESS_KNOWN).filter(([file, n]) => (counts.get(file) ?? 0) < n).map(([file]) => file);
+    if (gone.length > 0) console.info(`ORPHAN_PROGRESS_KNOWN can be lowered: ${gone.join(", ")}`);
+  });
+
   it("types a space between Chinese and Latin letters or digits, except inside a date", () => {
     expect(offenders((text) => UNSPACED.test(text.replace(DATE_PARTS, "")))).toEqual([]);
   });
@@ -164,6 +188,9 @@ describe("copy follows the writing rules", () => {
     expect(IDLE_STATUS.test("加载中")).toBe(true);
     expect(WEIGHT_500_OR_700.test("text-ui font-medium text-text")).toBe(true);
     expect(WEIGHT_500_OR_700.test("text-ui font-semibold")).toBe(false);
+    expect(ORPHAN_PROGRESS.test("正在进行，做完会显示在这里。")).toBe(true);
+    expect(ORPHAN_PROGRESS.test("正在进行：证据")).toBe(true);
+    expect(ORPHAN_PROGRESS.test("暂停后将取消正在进行和排队中的研究")).toBe(false);
     expect(UNSPACED.test("共29条".replace(DATE_PARTS, ""))).toBe(true);
     expect(UNSPACED.test("9月26日".replace(DATE_PARTS, ""))).toBe(false);
   });

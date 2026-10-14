@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useRouteError } from "react-router";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { StateScreen } from "@/components/ui/StateScreen";
 import { isStaleChunkError, reloadForNewRelease, reloadingForNewRelease, reloadPage } from "@/lib/staleChunk";
 
 /**
@@ -34,12 +34,12 @@ export function RouteError() {
   return (
     // Opaque and clickable: on the conversation surface the page slot floats
     // over the frame and lets pointer events through (`AppShell`).
-    <div role={updating ? "status" : "alert"} className="pointer-events-auto flex h-full items-center justify-center bg-bg">
-      <EmptyState
-        icon={updating ? RefreshCw : AlertCircle}
-        title={updating ? "页面已更新，正在刷新" : "出了点问题"}
-        action={<Button variant="ghost" onClick={reloadPage}>重新载入</Button>}
-      />
-    </div>
+    <StateScreen
+      role={updating ? "status" : "alert"}
+      className="pointer-events-auto bg-bg"
+      icon={updating ? RefreshCw : AlertCircle}
+      title={updating ? "页面已更新，正在刷新" : "出了点问题"}
+      action={<Button variant="ghost" onClick={reloadPage}>重新载入</Button>}
+    />
   );
 }

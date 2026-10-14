@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type { ResultVersion } from "@/lib/resultProvenance";
 import type { FileRoot } from "@ai4s/shared";
-import { ArrowUp, Download, ListTree, Printer, ShieldAlert } from "lucide-react";
+import { Download, Printer, ShieldAlert } from "lucide-react";
 import type { WebAgentRun } from "@/lib/apiClient";
 import { downloadArtifact } from "@/lib/artifactFile";
 import { claimMatrixPathFor, claimStatuses, claimVerificationSummary } from "@/lib/claimCitations";
@@ -14,37 +14,12 @@ import { parseFailureMessage } from "@/lib/errorText";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ClaimEvidenceList, type ClaimReading } from "@/components/markdown-viewer/ClaimCitation";
 import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
+import { Outline, useOutline } from "@/components/ui/Outline";
 import { Tabs } from "@/components/ui/Tabs";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { useWide } from "@/lib/useMediaQuery";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
 import { SourceCardList } from "./SourceCards";
 import { useClaimMatrix } from "./useClaimMatrix";
-
-interface TocEntry {
-  id: string;
-  text: string;
-  level: 2 | 3;
-}
-
-/** Tailwind's `lg`: from here the contents have a column beside the report. */
-const WIDE_MEDIA = "(min-width: 1024px)";
-
-/**
- * Whether the page is wide enough for the contents column. A media query in
- * script rather than a CSS toggle, so the page holds one table of contents —
- * the column or the folded list above the report — and never both.
- */
-function useWide(): boolean {
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia(WIDE_MEDIA).matches);
-  useEffect(() => {
-    const media = window.matchMedia(WIDE_MEDIA);
-    const onChange = () => setWide(media.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-  return wide;
-}
 
 /**
  * A delivered report, read (plan §5 act 4, §8.3; appendix D §10.6–§10.8).
@@ -87,8 +62,6 @@ export function ReportReader({
 }) {
   const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
-  const [toc, setToc] = useState<TocEntry[]>([]);
-  const [active, setActive] = useState<string | null>(null);
   const wide = useWide();
   const articleRef = useRef<HTMLDivElement>(null);
   // Heading ids are the reader's own, so two readers on one page (a drawer
@@ -122,39 +95,13 @@ export function ReportReader({
     };
   }, []);
 
-  // Headings get their ids from the page as rendered, so the contents always
-  // match what is on screen, whatever the Markdown looked like.
-  useEffect(() => {
-    const article = articleRef.current;
-    if (!article || view !== "report") return;
-    const entries: TocEntry[] = [];
-    article.querySelectorAll<HTMLHeadingElement>("h2, h3").forEach((heading, index) => {
-      if (!heading.id) heading.id = `${idPrefix}-sec-${index + 1}`;
-      const label = heading.textContent?.trim() ?? "";
-      if (label) entries.push({ id: heading.id, text: label, level: heading.tagName === "H2" ? 2 : 3 });
-    });
-    setToc(entries);
-    // `reading` too: a change to it re-renders the document's marks, and the
-    // headings with them.
-  }, [text, matrix, verification, reading, view, idPrefix]);
-
-  // Which section is being read, for the contents' current mark.
-  useEffect(() => {
-    const article = articleRef.current;
-    if (!article || toc.length === 0 || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id);
-      },
-      { rootMargin: "0px 0px -70% 0px" },
-    );
-    for (const entry of toc) {
-      const heading = document.getElementById(entry.id);
-      if (heading && article.contains(heading)) observer.observe(heading);
-    }
-    return () => observer.disconnect();
-  }, [toc]);
+  // The contents are read off the page as rendered, so they always match what is on screen, whatever the Markdown looked like.
+  // `reading` re-renders the document's marks, and the headings with them.
+  const { entries: toc, active, select: scrollTo } = useOutline(articleRef, {
+    enabled: view === "report",
+    idPrefix,
+    refresh: [text, matrix, verification, reading],
+  });
 
   // A quotation named from a claim: find it in this source and mark it.
   useEffect(() => {
@@ -183,12 +130,6 @@ export function ReportReader({
 
   const facts = reportFacts({ meta: matrix?.meta ?? null, run });
 
-  const scrollTo = (id: string) => {
-    const element = document.getElementById(id);
-    if (element && typeof element.scrollIntoView === "function") element.scrollIntoView({ block: "start" });
-    setActive(id);
-  };
-
   const download = async () => {
     try {
       if (immutableVersion) {
@@ -199,30 +140,6 @@ export function ReportReader({
       toast.error(`无法下载 ${filename}：${parseFailureMessage(error, "该文件")}`);
     }
   };
-
-  const contents = toc.length > 0 && (
-    <nav aria-label="目录">
-      <ol className="space-y-0.5 text-ui">
-        {toc.map((entry) => (
-          <li key={entry.id} className={entry.level === 3 ? "pl-3" : undefined}>
-            <Tooltip content={entry.text} kind="label" whenTruncated>
-              <button
-                type="button"
-                onClick={() => scrollTo(entry.id)}
-                aria-current={active === entry.id ? "location" : undefined}
-                className={cn(
-                  "w-full truncate rounded px-2 py-1 text-left hover:bg-surface-2",
-                  active === entry.id ? "bg-accent-soft text-accent-strong" : entry.level === 2 ? "text-text" : "text-muted",
-                )}
-              >
-                {entry.text}
-              </button>
-            </Tooltip>
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2" data-print-hide="">
@@ -304,30 +221,21 @@ export function ReportReader({
     <>
       {layout === "page" ? (
         <div className="mx-auto flex w-full max-w-page gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
-          {wide && view === "report" && toc.length > 0 && (
-            <aside className="sticky top-4 max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto" data-print-hide="">
-              <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />目录</p>
-              {contents}
-              {/* A 60 KB report needs a way back up (appendix D §4.5). */}
-              <button
-                type="button"
-                onClick={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })}
-                className="mt-3 flex items-center gap-1 px-2 text-caption text-link hover:underline"
-              >
-                <ArrowUp size={16} aria-hidden="true" />回到顶部
-              </button>
-            </aside>
+          {wide && view === "report" && (
+            <Outline
+              layout="column"
+              entries={toc}
+              active={active}
+              onSelect={scrollTo}
+              onTop={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })}
+            />
           )}
           <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-read")}>
             <div className="space-y-3 max-sm:px-4">
               {toolbar}
               {/* No column for them on a narrower page: the contents fold
                 * above the report, as they do in the pane. */}
-              {!wide && view === "report" && toc.length > 0 && (
-                <Disclosure summary={<>目录 · {toc.length} 节</>} className="rounded-input border border-border bg-surface px-3 py-2">
-                  {contents}
-                </Disclosure>
-              )}
+              {!wide && view === "report" && <Outline layout="folded" entries={toc} active={active} onSelect={scrollTo} />}
             </div>
             {body}
           </div>
@@ -336,11 +244,7 @@ export function ReportReader({
         <div className="min-h-full space-y-4 px-6 py-6 max-sm:px-0 max-sm:py-3">
           <div className="mx-auto max-w-read space-y-3 max-sm:px-4">
             {toolbar}
-            {view === "report" && toc.length > 0 && (
-              <Disclosure summary={<>目录 · {toc.length} 节</>} className="rounded-input border border-border bg-surface px-3 py-2">
-                {contents}
-              </Disclosure>
-            )}
+            {view === "report" && <Outline layout="folded" entries={toc} active={active} onSelect={scrollTo} />}
           </div>
           <div className={cn("mx-auto", view === "report" ? "max-w-read" : "max-w-none")}>{body}</div>
         </div>

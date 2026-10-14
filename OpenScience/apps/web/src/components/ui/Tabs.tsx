@@ -86,6 +86,24 @@ export function Tabs<V extends string>({
       observer?.disconnect();
     };
   }, [items.length]);
+  // The tab that is open is always whole: a row wider than its box is scrolled to it when the open view changes and on arrival
+  // (a phone showed 「对照」 cut in half) — and only then: a reader who swiped the row away keeps it where it is while the page
+  // re-renders. Only the row scrolls sideways, never the page, which `scrollIntoView` would also move. Clear of the fade that marks
+  // more tabs ahead (2 rem), unless the open tab is the last and nothing is ahead.
+  const current = useRef(items);
+  current.current = items;
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const all = current.current;
+    const at = all.findIndex((item) => item.value === value);
+    const tab = refs.current[at];
+    if (!list || !tab) return;
+    const row = list.getBoundingClientRect();
+    const box = tab.getBoundingClientRect();
+    const end = row.right - (at === all.length - 1 ? 0 : 32);
+    const delta = box.left < row.left ? box.left - row.left : box.right > end ? box.right - end : 0;
+    if (delta !== 0) list.scrollBy?.({ left: delta });
+  }, [value]);
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const at = items.findIndex((item) => item.value === value);
     const next = event.key === "ArrowRight" ? (at + 1) % items.length

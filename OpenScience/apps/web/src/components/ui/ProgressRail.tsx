@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
+import { useNarrow } from "@/lib/useMediaQuery";
 import { Disclosure } from "@/components/ui/Disclosure";
 
 /**
@@ -18,6 +18,13 @@ import { Disclosure } from "@/components/ui/Disclosure";
  *    thing on the page a person must act on.
  *  - `todo` — a quiet ring.
  *
+ * Two more are for `StepRail`, the one-row version of this rail that stays at
+ * the top of a module's every tab: `partial` (the step is part done and
+ * nothing is running: an accent ring on a pale ground) and `attention` (a step
+ * that did not finish, or is out of date: an amber diamond). The marks, the
+ * words and the narrow-screen hook are exported so the one-row rail extends
+ * this file's vocabulary and does not restate it.
+ *
  * The rail is not a progress bar and there is never a second one: a percentage
  * on work an agent is doing is a number nobody can honour.
  *
@@ -27,12 +34,15 @@ import { Disclosure } from "@/components/ui/Disclosure";
  * always see the steps.
  */
 
-export type RailState = "done" | "active" | "waiting" | "todo";
+export type RailState = "done" | "active" | "waiting" | "partial" | "attention" | "todo";
 
-const STATE_WORDS: Record<RailState, string> = {
+/** Each state in the one word a screen reader and a tooltip say it with. */
+export const RAIL_STATE_WORDS: Record<RailState, string> = {
   done: "已完成",
   active: "进行中",
   waiting: "等你",
+  partial: "部分完成",
+  attention: "需要留意",
   todo: "未开始",
 };
 
@@ -45,22 +55,6 @@ export interface RailStep {
   state: RailState;
   /** Where the step's own result is read. */
   to?: string;
-}
-
-/** Whether the viewport is under the `sm` breakpoint (640 px); a test environment without a layout is never narrow. */
-function useNarrow(): boolean {
-  const query = "(max-width: 639px)";
-  const read = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
-  const [narrow, setNarrow] = useState(read);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
-    const media = window.matchMedia(query);
-    const update = () => setNarrow(media.matches);
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
-  return narrow;
 }
 
 export function ProgressRail({
@@ -118,7 +112,7 @@ function Body({ step }: { step: RailStep }) {
     <>
       <span className={cn("block truncate text-ui font-medium", step.state === "todo" ? "text-text-3" : "text-text")}>
         {step.name}
-        <span className="sr-only">{`，${STATE_WORDS[step.state]}`}</span>
+        <span className="sr-only">{`，${RAIL_STATE_WORDS[step.state]}`}</span>
       </span>
       {step.note && (
         <span className={cn("mt-0.5 block truncate text-caption", step.state === "waiting" ? "font-medium text-accent" : "text-text-3")}>
@@ -133,16 +127,19 @@ function Body({ step }: { step: RailStep }) {
 }
 
 /** The mark itself: drawn, because no icon fits inside a 14 px disc. */
-function RailMark({ state }: { state: RailState }) {
+export function RailMark({ state }: { state: RailState }) {
   return (
     <span
       aria-hidden="true"
       data-status-mark=""
       className={cn(
-        "relative z-sticky block h-3.5 w-3.5 rounded-full",
+        "relative z-sticky block h-3.5 w-3.5 shrink-0",
+        // An amber diamond is the one mark that is not a disc.
+        state === "attention" ? "grid place-items-center" : "rounded-full",
         state === "done" && "bg-accent",
         state === "active" && "border-2 border-accent bg-surface",
         state === "waiting" && "border-2 border-accent bg-surface ring-4 ring-accent-soft",
+        state === "partial" && "border-2 border-accent bg-accent-soft",
         state === "todo" && "border border-border-control bg-surface",
       )}
     >
@@ -151,6 +148,7 @@ function RailMark({ state }: { state: RailState }) {
           <path d="M4 7.2l2 2 4-4.4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
+      {state === "attention" && <span data-forced-colors="preserve" className="block h-2.5 w-2.5 rotate-45 bg-warn" />}
     </span>
   );
 }

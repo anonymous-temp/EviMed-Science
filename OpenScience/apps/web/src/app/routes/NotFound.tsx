@@ -1,8 +1,8 @@
 import { Link } from "react-router";
 import { Compass } from "lucide-react";
-import { EmptyState } from "@/components/cards/EmptyState";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { buttonClasses } from "@/components/ui/Button";
+import { StateScreen } from "@/components/ui/StateScreen";
 
 /**
  * A wrong address: what happened, and the way back — no sentence restating the
@@ -12,14 +12,13 @@ import { buttonClasses } from "@/components/ui/Button";
  */
 export function NotFound() {
   return (
-    <div className="flex h-full flex-col items-center justify-center">
+    <StateScreen
+      icon={Compass}
+      title="页面不存在"
+      titleAs="h1"
+      action={<Link to="/" className={buttonClasses({ variant: "secondary" })}>返回首页</Link>}
+    >
       <PageTitle page="页面不存在" />
-      <EmptyState
-        icon={Compass}
-        title="页面不存在"
-        titleAs="h1"
-        action={<Link to="/" className={buttonClasses({ variant: "secondary" })}>返回首页</Link>}
-      />
-    </div>
+    </StateScreen>
   );
 }

@@ -5,7 +5,11 @@ import { Tooltip } from "@/components/ui/Tooltip";
 /**
  * The one metadata tag: 22 px high (`h-tag`, spec §20.4 — it was 20), 12 px
  * text, a 6 px corner, a quiet ground and no border. It is not clickable — a
- * clickable chip is a filter (`FilterChips`).
+ * clickable chip is a filter (`FilterChips`). Its props have no handler and
+ * no role on purpose: `<Tag onClick>` does not compile, and the shape of a tag
+ * on a `<button>` (`tagClasses` outside this file) is what the layout lint
+ * names. `data-tag` is what the walk and `pageComposition.test.tsx` read: a
+ * tag inside a control, or with a role, is a control dressed as a label.
  *
  * Colour is for safety: `safety` is the only tone a page uses as a matter of
  * course. `accent` and `warn` exist for the two state badges of the frontier
@@ -42,6 +46,6 @@ export function Tag({
   className?: string;
   children: ReactNode;
 }) {
-  const tag = <span className={tagClasses({ tone, className })}>{children}</span>;
+  const tag = <span data-tag="" className={tagClasses({ tone, className })}>{children}</span>;
   return title ? <Tooltip content={title}>{tag}</Tooltip> : tag;
 }

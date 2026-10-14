@@ -133,6 +133,82 @@ const errorTextRules = [
   },
 ];
 
+
+// The page framework's rules (R19, plan §3 S2; audit D §4 S4) — **off unless `LAYOUT_RULES=1`**, because the pages are not
+// moved yet and `pnpm lint` must stay green. Each migration batch moves its pages onto the slots and the count falls; the last
+// batch makes this block unconditional and its severity `error`.
+//
+//   LAYOUT_RULES=1 pnpm lint                      # prints every site, exit 0 (what GUARDS reads for the counts)
+//   LAYOUT_RULES=1 pnpm --filter @ai4s/web exec eslint . --max-warnings 0   # the same as a failure
+//
+// What it says:
+//  - a page or tab component takes no `FilterChips`, `FilterSelect`, `SearchInput`, `SegmentedControl` or `Tabs`: its views,
+//    filters and search go through `PageShell`'s slots or a `Toolbar`, which draws them;
+//  - `tagClasses` is `Tag.tsx`'s: a control dressed as a label is a button that looks like a tag;
+//  - the 虚拟临床研究 components do not carry a person to the conversation: the button starts the work and the page's activity
+//    strip says how it goes (`navigate("/app/chat…")`, `useOpenVcrConversation`; two files are allowed later).
+const LAYOUT_RULES = process.env.LAYOUT_RULES === "1";
+
+const PAGE_FILES = [
+  "src/app/**/*.{ts,tsx}",
+  "src/components/{geo,vcr,memory,sources,frontier,inbox,autopilot,capsule,settings,skills}/**/*.{ts,tsx}",
+];
+const VCR_FILES = ["src/components/vcr/**/*.{ts,tsx}", "src/app/virtual-research/**/*.{ts,tsx}"];
+
+// `patterns` and not `paths`: a page may reach a primitive by its alias or by a relative path, and both are the same import.
+const atomPattern = (module, importNames) => ({
+  group: [`@/components/ui/${module}`, `**/ui/${module}`],
+  importNames,
+  message: "Use the page shell's slots (`PageShell` `toolbar` / `tabs`) or `Toolbar`: they draw the filters, the views and the search above the content they control. A control placed by hand in the body scrolls away and sinks.",
+});
+const TAG_PATTERN = {
+  group: ["@/components/ui/Tag", "**/ui/Tag"],
+  importNames: ["tagClasses"],
+  message: "`tagClasses` is Tag.tsx's: a label is `<Tag>`, which is not clickable. A control that looks like a tag is a filter chip (`FilterChip`) or a button.",
+};
+const ATOM_PATTERNS = [
+  atomPattern("FilterChips", ["FilterChips", "FilterSelect"]),
+  atomPattern("SearchInput", ["SearchInput"]),
+  atomPattern("SegmentedControl", ["SegmentedControl"]),
+  atomPattern("Tabs", ["Tabs"]),
+];
+const VCR_PATTERNS = [
+  {
+    group: ["**/useOpenVcrConversation"],
+    message: "Starting work does not take the person away: the button starts it and the page's activity strip says how it goes. The conversation is a view of the study page.",
+  },
+];
+const CHAT_NAVIGATION = [
+  {
+    selector: "CallExpression[callee.name='navigate'][arguments.0.value=/^\\/app\\/chat/]",
+    message: "A study page does not navigate to the conversation: the activity strip says how the work goes, and the conversation is a view of the same page.",
+  },
+  {
+    selector: "CallExpression[callee.name='navigate'][arguments.0.type='TemplateLiteral'] > TemplateLiteral > TemplateElement[value.raw=/^\\/app\\/chat/]",
+    message: "A study page does not navigate to the conversation: the activity strip says how the work goes, and the conversation is a view of the same page.",
+  },
+];
+
+/** The page framework's overrides: complete lists for each file group, because a later override replaces an earlier one's options. */
+const layoutOverrides = LAYOUT_RULES ? [
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    excludedFiles: ["src/components/ui/Tag.tsx"],
+    rules: { "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN] }] },
+  },
+  {
+    files: PAGE_FILES,
+    rules: { "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN, ...ATOM_PATTERNS] }] },
+  },
+  {
+    files: VCR_FILES,
+    rules: {
+      "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN, ...ATOM_PATTERNS, ...VCR_PATTERNS] }],
+      "no-restricted-syntax": ["warn", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION],
+    },
+  },
+] : [];
+
 module.exports = {
   root: true,
   env: { browser: true, es2020: true, node: true },
@@ -203,5 +279,6 @@ module.exports = {
         "no-restricted-syntax": ["error", ...errorTextRules],
       },
     },
+    ...layoutOverrides,
   ],
 };
