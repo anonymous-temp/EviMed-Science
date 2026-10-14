@@ -135,6 +135,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/dsh\/panel-remotes\.json$/,
+    why: "the host namespaces each browser package's bundle reaches, recorded from the published packages of this release; a test holds the recorded version equal to the pin and `verify-harness-seams` compares it with a fresh install, so moving the pin fails until `record-panel-remotes.mjs` is run again — the record is re-taken, never re-dated",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/packages\/design-tokens\/src\/kernel\.mjs$/,
     why: "the kernel-token mapping names which `--dsw-*` aliases read which ramp step, read off this exact client's stylesheets; the mapping is only true of the client it was read from, so it is re-read when the pin moves rather than moved with it",
   },
