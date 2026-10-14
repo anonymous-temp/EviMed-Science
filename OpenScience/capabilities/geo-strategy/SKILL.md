@@ -116,7 +116,8 @@ answered, and the write says so. An action is `{ gapId, what: { layer, title,
 channel }, engines[], sources: [{ domain, why }], promise, basis, reason,
 metricId }`:
 
-- `what.layer` is the article layer, `what.channel` where it is to be published:
+- `what.layer` is the article layer (`deep`, `card`, `popular`, `qa` or
+  `correction` — not a source's layer), `what.channel` where it is to be published:
   an owned platform's id (`wechat_mp`, `zhihu`, `xiaohongshu`, `toutiao`,
   `bilibili`, …) when the brand publishes it itself, `media_market` when it is
   to be placed in a professional outlet.
