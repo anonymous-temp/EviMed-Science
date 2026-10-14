@@ -174,6 +174,13 @@ per-project workspace + JSONL provenance.
   exception, `DESIGN.md` rule 1), detail opens in the right-hand drawer, the header is the title, the scope
   and at most one primary button, and nothing that looks clickable may be silent.
   `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
+  Since R19 (2026-10-14) a page is **composed from slots**, not drawn: `PageShell` takes `scope`, `steps`, `activity`,
+  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the steps, tabs and toolbar in one sticky band;
+  the pieces are `Toolbar`, `StepRail`, `StepState`, `ActivityStrip`, `Note`, `Headline`, `Section`, `FactList`,
+  `ChartGrid`, `Outline`, `MasterDetail`, `ScopeMenu` and `StateScreen` in `components/ui/`. A page does not write its own
+  filter row, step rail, tab bar or standalone grey sentence. `DESIGN.md` 「页面结构」 holds the six templates and rules 7–13;
+  `layoutRules.test.ts` (a count that may only fall) and `pageComposition.test.tsx` (document order, via
+  `expectComposed`) hold them; `LAYOUT_RULES=1 pnpm lint` lists the pages still drawing their own controls.
 - **Module names** (the owner's rulings of 2026-10-07): the product calls its two modules 「循证 GEO」
   (code `geo`; it was 「循证传播」 only from 2026-10-06) and 「虚拟临床研究」 (code `vcr`; it was
   「虚拟临研」) everywhere a reader or a model sees them — pages, notices, e-mails, error sentences,

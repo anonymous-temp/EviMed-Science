@@ -1,7 +1,8 @@
 /**
  * What the sticky band of `PageShell` publishes to the body, and the classes that read it.
  *
- * The band's height is written on the page's column as `--page-chrome-h` (0 where there is no band). A thing that sticks in the
+ * The band's height is written on the page's scroll container as `--page-chrome-h` (0 where there is no band), and the container takes it
+ * as its `scroll-padding-top`. A thing that sticks in the
  * body — a table of contents, a side panel, a table header that must be seen under the band — keeps its `top` below it by
  * adding its own offset to the variable, so it is not hidden behind the steps and the tabs it scrolls under.
  */

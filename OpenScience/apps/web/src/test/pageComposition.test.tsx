@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precedes } from "./compositionFixtures";
+import { expectComposed } from "./expectComposed";
 
 /**
  * The pages of the framework, composed (R19, plan §3 S10; audit D §4 S9): one representative page per template, rendered from
@@ -15,8 +16,9 @@ import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precede
  *  - a module's step rail is on **every** tab, with the same steps, in the band, and the band has the same rows on every tab;
  *  - a tag is never a control, and is never inside one.
  *
- * A page package that moves a real page onto the framework renders it here (`compositionFacts(container)`) and states these
- * the same way; `PAGES` in `compositionFixtures.tsx` is where its sample goes.
+ * A page package that moves a real page onto the framework renders it and calls `expectComposed(container)` (`expectComposed.ts`),
+ * which states all of these in one line, or reads `compositionFacts(container)` for its own; `PAGES` in
+ * `compositionFixtures.tsx` is where a sample of the page goes to be held by the same tests below.
  */
 
 afterEach(() => vi.restoreAllMocks());
@@ -118,6 +120,24 @@ describe("T3 the module page", () => {
     expect(precedes(facts.stepRails[0], strip)).toBe(true);
     expect(precedes(strip, facts.tablists[0])).toBe(true);
     expect(facts.chrome!.children.length).toBe(idleRows + 1);
+  });
+});
+
+describe("expectComposed, for a real page", () => {
+  it("holds every sample to the same assertions in one call", () => {
+    for (const sample of PAGES) {
+      const { container, unmount } = render(sample.element());
+      const facts = expectComposed(container, { toolbar: WITH_TOOLBAR.has(sample.id), tablists: WITH_TABLIST.has(sample.id) ? 1 : 0, stepRail: sample.id === "T3" });
+      expect(facts.body).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it("fails for a page that breaks one", () => {
+    const { container } = render(brokenPage("control-below-content"));
+    expect(() => expectComposed(container)).toThrow(/no toolbar stands under the content it controls/);
+    const second = render(brokenPage("tag-in-control"));
+    expect(() => expectComposed(second.container)).toThrow(/no tag is a control/);
   });
 });
 

@@ -128,12 +128,13 @@ describe("PageShell slots", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass("text-doc-title");
   });
 
-  it("publishes the band's height for what sticks below it, and takes it back with the band", () => {
+  it("publishes the band's height for what sticks below it, makes it the scroll padding, and takes it back with the band", () => {
     const { container, rerender, unmount } = render(<PageShell title="页" tabs={tabs}><p>x</p></PageShell>);
-    const column = container.querySelector(".mx-auto") as HTMLElement;
-    expect(column.style.getPropertyValue("--page-chrome-h")).toBe("0px");
+    const scroller = container.firstElementChild as HTMLElement;
+    expect(scroller).toHaveClass("overflow-y-auto", "scroll-pt-[var(--page-chrome-h,0px)]");
+    expect(scroller.style.getPropertyValue("--page-chrome-h")).toBe("0px");
     rerender(<PageShell title="页"><p>x</p></PageShell>);
-    expect(column.style.getPropertyValue("--page-chrome-h")).toBe("");
+    expect(scroller.style.getPropertyValue("--page-chrome-h")).toBe("");
     unmount();
   });
 

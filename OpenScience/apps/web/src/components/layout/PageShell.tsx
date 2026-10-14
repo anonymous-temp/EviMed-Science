@@ -74,9 +74,11 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * The band is sticky at `top-0` of the page's scroll container, covers the
  * gutters (`-mx-4 px-4 md:-mx-6 md:px-6`) so content does not show at its sides,
  * and draws a hairline under itself, as wide as the content, once the header has
- * scrolled away (`data-stuck`; a tab list that is the band's last row has its own). Its
- * height is published as `--page-chrome-h` on the column, so a sticky element in
- * the body (the `Outline` column, a table header) keeps below it.
+ * scrolled away (`data-stuck`; a tab list that is the band's last row has its own).
+ * Its height is published as `--page-chrome-h` on the scroll container, which also
+ * takes it as its `scroll-padding-top`: an anchor, a `scrollIntoView` and the
+ * browser's scroll to a focused control stop below the band, not under it. A
+ * sticky element in the body (the `Outline` column) adds its own offset to it.
  *
  * ## Markers
  *
@@ -189,7 +191,6 @@ export function PageShell<V extends string = string>({
   children,
 }: PageShellProps<V>) {
   const scroller = useRef<HTMLDivElement>(null);
-  const column = useRef<HTMLDivElement>(null);
   const band = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   // The band has a hairline under it once the header has scrolled out from over it.
@@ -198,7 +199,7 @@ export function PageShell<V extends string = string>({
 
   useEffect(() => {
     const element = band.current;
-    const holder = column.current;
+    const holder = scroller.current;
     if (!hasBand || !element || !holder) return undefined;
     const publish = () => holder.style.setProperty(PAGE_CHROME_VAR, `${element.offsetHeight}px`);
     publish();
@@ -232,10 +233,11 @@ export function PageShell<V extends string = string>({
   const panel = tabs ?? toolbar?.views;
 
   return (
-    <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg", className)}>
+    // `scroll-pt`: an anchor, a `scrollIntoView` and the browser's scroll to a focused control all stop below the band, not under it.
+    <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", className)}>
       {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
           the header and the body cannot disagree about where the left edge is. */}
-      <div ref={column} className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width])}>
+      <div className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width])}>
         {back && <div className="mb-2">{back}</div>}
         <PageHeader
           title={title}
