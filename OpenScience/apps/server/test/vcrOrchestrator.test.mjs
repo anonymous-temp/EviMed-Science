@@ -11,7 +11,7 @@ import {
   vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrEvidenceProduct, vcrExportBriefLines,
   vcrGapsForRule, vcrIdleStepStatus, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
   vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
-  vcrSupersededNodes, wantedVcrSteps,
+  vcrStepClosure, vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
@@ -22,6 +22,29 @@ import {
 
 /** @param {string[]} requested */
 const steps = (requested) => Object.fromEntries(VCR_STEPS.map((step) => [step, { status: "none", requested: requested.includes(step) }]));
+
+test("a step a person stopped is still requested and is not wanted again until it is asked for; one that is done is not held", () => {
+  const stored = steps([...VCR_STEPS]);
+  for (const step of ["evidence", "population", "patients", "comparator", "trial"]) /** @type {any} */ (stored)[step].held = true;
+  /** @type {any} */ (stored).definition.status = "done";
+  const plan = wantedVcrSteps(vcrProgramSteps(stored));
+  assert.deepEqual([...plan.want].sort(), ["definition", "matching"], "what the person stopped is out of what the programme goes on to");
+  assert.equal(plan.requested.has("trial"), true, "it is still requested: what its result reads as does not change");
+  assert.equal(plan.fidelity("trial"), "full");
+  // Everything held and the definition done: nothing is wanted but the finished step itself, and the whole-programme default does
+  // not bring the held steps back (it sets `requested`, which is not what a hold clears).
+  const idle = steps([]);
+  for (const step of VCR_STEPS.filter((name) => name !== "definition")) /** @type {any} */ (idle)[step].held = true;
+  /** @type {any} */ (idle).definition.status = "done";
+  assert.deepEqual([...wantedVcrSteps(vcrProgramSteps(idle)).want], ["definition"]);
+});
+
+test("a step's closure is the step and everything it needs upstream, in the programme's order", () => {
+  assert.deepEqual(vcrStepClosure("definition"), ["definition"]);
+  assert.deepEqual(vcrStepClosure("patients"), ["definition", "population", "patients"]);
+  assert.deepEqual(vcrStepClosure("trial"), ["definition", "trial"]);
+  for (const step of VCR_STEPS) assert.ok(vcrStepClosure(step).includes(step));
+});
 
 test("a full program wants every step; a single step wants its upstream as a minimal version", () => {
   const full = wantedVcrSteps(steps([...VCR_STEPS]));

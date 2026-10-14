@@ -725,7 +725,8 @@ export class VcrService {
       // A changed 起点 re-asks which steps run; a step already done stays done,
       // it is only no longer requested of the programme.
       const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action));
-      for (const step of VCR_STEPS) updated = await this.store.setStep(study.id, step, { requested: wanted.has(step) }) ?? updated;
+      // Re-asking which steps run is an instruction of its own: a hold a 「取消」 put on the programme ends with it.
+      for (const step of VCR_STEPS) updated = await this.store.setStep(study.id, step, { requested: wanted.has(step), held: false }) ?? updated;
     }
     return updated;
   }

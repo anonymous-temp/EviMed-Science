@@ -1500,6 +1500,72 @@ test("above T0 the matching step is sent a run once the criteria exist, and a ru
   assert.ok(asked.runId, "the answer names the run it started");
 });
 
+test("R3 a person's cancel holds the programme: the run's end is not followed by the next step, and asking for a step takes it and what it needs out of the hold", options, async () => {
+  const module = compose();
+  const study = await makeStudy("hold");
+  // Made from a question: the whole programme is asked for (`createStudy`), and the definition run is the first to go out.
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await module.orchestrator.advance(study.id);
+  assert.deepEqual(module.dispatched.map((/** @type {any} */ input) => input.capabilityId), ["vcr-protocol"]);
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  // The person stops what is going on. The hold goes first, as the route does it: the run's own end advances the programme.
+  const held = await module.orchestrator.holdProgramme(study.id);
+  assert.ok(held.held.includes("evidence") && held.held.includes("population"), "what the programme would have gone on to is held");
+  await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
+    { id: "run_1", dispatchId: module.dispatched[0].dispatchId, status: "canceled" });
+  await module.orchestrator.advance(study.id);
+  assert.equal(module.dispatched.length, 1, "a cancel is not followed by the next step of the programme, now or on the next pass");
+  const stopped = await store.studyById(study.id);
+  assert.equal(stopped.steps.evidence.held, true);
+  assert.equal(stopped.steps.evidence.requested, true, "still requested: the hold changes what is wanted, not what a result reads as");
+
+  // Asking for one step takes it and what it needs out of the hold, and only those.
+  await module.orchestrator.runStep({ id: study.userId }, study, "population");
+  assert.equal(module.dispatched.length, 2);
+  assert.equal(module.dispatched[1].capabilityId, "vcr-analysis");
+  assert.equal(module.dispatched[1].question, "构建人群", "the step that was asked for, not the rest of the programme");
+  const asked = await store.studyById(study.id);
+  assert.equal(asked.steps.population.held, false);
+  assert.equal(asked.steps.evidence.held, true, "a step nobody asked for stays held");
+  assert.equal(asked.steps.trial.held, true);
+});
+
+test("R3 re-asking which steps run ends a hold: the programme goes on with what was asked", options, async () => {
+  const module = compose();
+  const study = await makeStudy("rehold");
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await module.orchestrator.advance(study.id);
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  await module.orchestrator.holdProgramme(study.id);
+  await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
+    { id: "run_1", dispatchId: module.dispatched[0].dispatchId, status: "canceled" });
+  assert.equal(module.dispatched.length, 1);
+  // The 起点 is changed to the whole programme (`PATCH` with an action): that is an instruction of its own.
+  const service = module.service;
+  await service.updateStudy({ id: study.userId }, study.id, { action: "auto" });
+  const after = await store.studyById(study.id);
+  assert.ok(VCR_STEPS.every((step) => after.steps[step].held === false));
+  await module.orchestrator.advance(study.id);
+  assert.ok(module.dispatched.length > 1, "and the programme goes on");
+});
+
+test("R3 a held step that comes to read finished is not held any more: what changes under it is recomputed like any finished step's", options, async () => {
+  const module = compose();
+  const study = await makeStudy("holdreleased");
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await module.orchestrator.advance(study.id);
+  const stopped = await module.orchestrator.holdProgramme(study.id);
+  assert.ok(stopped.held.includes("definition"), "the definition had not been written when the person stopped the programme");
+  assert.equal((await store.studyById(study.id)).steps.definition.held, true);
+  // A conversation writes the definition meanwhile: the step reads finished on the next pass, and the hold goes with it.
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  await module.orchestrator.advance(study.id);
+  const after = await store.studyById(study.id);
+  assert.ok(["done", "minimal"].includes(after.steps.definition.status));
+  assert.equal(after.steps.definition.held, false);
+  assert.equal(after.steps.evidence.held, true, "the steps nobody has produced stay held");
+});
+
 test("a study that is paused dispatches nothing and queues nothing", options, async () => {
   const module = compose();
   const study = await makeStudy("paused");

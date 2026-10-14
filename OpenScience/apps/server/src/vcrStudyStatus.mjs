@@ -136,7 +136,9 @@ function countsOf(progress) {
 function runView(mark, ledger) {
   const detail = object(mark.detail);
   const steps = scopeOf(mark);
-  const placement = detail.placement === "open-runtime" ? "open-runtime" : "bounded";
+  // Where it took place is recorded when the run is sent. A mark that is only claimed (the run is being sent) or that predates the
+  // record has none, and says nothing of the project rather than that it is held — the 423 of a prompt that is refused says it.
+  const placement = VCR_RUN_PLACEMENTS.includes(detail.placement) ? /** @type {"open-runtime" | "bounded"} */ (detail.placement) : null;
   const progress = object(ledger?.progress);
   return {
     id: text(mark.run_id),
@@ -147,7 +149,7 @@ function runView(mark, ledger) {
     phase: text(progress.currentPhase),
     counts: countsOf(ledger?.progress),
     startedAt: iso(ledger?.startedAt) ?? iso(mark.created_at),
-    placement: VCR_RUN_PLACEMENTS.includes(placement) ? placement : "bounded",
+    placement,
     // A bounded runtime holds the project's own conversation while it works; the study's open runtime never does.
     locked: placement === "bounded",
   };

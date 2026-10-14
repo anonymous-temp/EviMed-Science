@@ -19,6 +19,7 @@
     "definition": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -28,6 +29,7 @@
     "evidence": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -37,6 +39,7 @@
     "population": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -46,6 +49,7 @@
     "patients": {
       "status": "failed",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -55,6 +59,7 @@
     "comparator": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -64,6 +69,7 @@
     "trial": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
@@ -73,6 +79,7 @@
     "matching": {
       "status": "done",
       "requested": true,
+      "held": false,
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
