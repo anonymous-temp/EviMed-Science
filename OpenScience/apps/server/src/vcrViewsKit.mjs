@@ -585,30 +585,25 @@ function runDetail({ label, measure, result, execution, mcse, tab }) {
 // --- counts ----------------------------------------------------------------------------------
 
 /**
- * The four counts, said apart (plan §3.5), plus the two optional ones when
- * their route was used. A count nobody has is `null`, never zero; a real zero
- * is a zero.
+ * The counts a result stands on, said apart (plan §3.5): only the ones that have a value. A count nobody has is absent — not zero, and
+ * not a column that says nothing; a real zero is a zero. At T0 there is no patient to count: a study that rests on public material has
+ * its generated records and nothing else on the band, and the real patients, the events and the effective sample size appear from T1
+ * (the platform's own old sentences — 「设计阶段：尚无真实患者」, 「模拟生成的记录，不是患者」 — were what filled the empty columns).
  * @param {Record<string, any> | null | undefined} counts
- * @param {{ tier?: string, scope?: string | null, note?: string | null }} [options]
+ * @param {{ tier?: string, scope?: string | null }} [options] `scope`: what the counts belong to (「方案 B」), a label and not a sentence
  */
 export function countsView(counts, options = {}) {
   const row = object(counts);
   /** @type {Record<string, any>} */
   const view = {};
-  for (const key of VCR_COUNT_KEYS) view[key] = row[key] == null ? null : numeric(row[key]);
+  const own = options.tier === "T0" ? ["generatedRecords"] : VCR_COUNT_KEYS;
+  for (const key of own) {
+    const value = row[key] == null ? null : numeric(row[key]);
+    if (value !== null) view[key] = value;
+  }
   for (const key of ["priorEffectiveSampleSize", "reconstructedPseudoPatients"]) {
     if (row[key] != null) view[key] = numeric(row[key]);
   }
-  /** @type {Record<string, string>} */
-  const notes = {};
-  if (options.tier === "T0" && view.realPatients === 0) view.note = "设计阶段：尚无真实患者";
-  if (options.tier === "T1" && view.events == null) notes.events = "T1 无结局记录";
-  // 「生成记录数」 of a simulation is replicates times patients per replicate — hundreds of millions that no reader should take for people.
-  if (typeof view.generatedRecords === "number" && Number.isFinite(view.generatedRecords) && view.generatedRecords > 0) {
-    notes.generatedRecords = "模拟生成的记录，不是患者";
-  }
-  if (options.note) view.note = options.note;
-  view.notes = Object.keys(notes).length ? notes : undefined;
   view.scope = options.scope ?? null;
   return view;
 }

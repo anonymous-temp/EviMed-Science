@@ -591,14 +591,7 @@
       }
     ],
     "counts": {
-      "realPatients": 0,
-      "events": 138,
-      "effectiveSampleSize": null,
       "generatedRecords": 6480000,
-      "note": "设计阶段：尚无真实患者",
-      "notes": {
-        "generatedRecords": "模拟生成的记录，不是患者"
-      },
       "scope": "方案 B"
     },
     "designs": [
@@ -829,8 +822,7 @@
           "analytic": 80,
           "simulated": 81,
           "differencePoints": 0.4,
-          "agrees": true,
-          "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+          "agrees": true
         }
       },
       {
@@ -1110,8 +1102,7 @@
           "analytic": 80,
           "simulated": 81,
           "differencePoints": 0.4,
-          "agrees": true,
-          "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+          "agrees": true
         }
       },
       {
@@ -1391,8 +1382,7 @@
           "analytic": 80,
           "simulated": 81,
           "differencePoints": 0.4,
-          "agrees": true,
-          "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
+          "agrees": true
         }
       },
       {

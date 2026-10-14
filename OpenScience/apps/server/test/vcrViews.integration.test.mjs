@@ -176,6 +176,48 @@ test("every one of the six data tabs answers the shape its component reads", opt
   }
 });
 
+/**
+ * Keys a payload used to carry that were the platform's sentences about itself — how a population was made and what it may be used for,
+ * the missing-profile request, the run card — and the notes under the counts. Gone as keys, not emptied, in every payload the pages
+ * read (2026-10-14, B §2.4): the check is on structure, never on a phrase.
+ */
+const REMOVED_KEYS = ["profileNote", "profileMissing", "allowedUses", "runRecord", "method:population", "notes:counts", "note:counts", "origin:example"];
+
+/** @param {unknown} value @param {string} where @param {string[]} found */
+function walkForRemoved(value, where, found, parent = "") {
+  if (Array.isArray(value)) { value.forEach((entry, index) => walkForRemoved(entry, `${where}[${index}]`, found, parent)); return; }
+  if (!value || typeof value !== "object") return;
+  const object = /** @type {Record<string, unknown>} */ (value);
+  const isCounts = "generatedRecords" in object || "realPatients" in object || "effectiveSampleSize" in object;
+  for (const [key, entry] of Object.entries(object)) {
+    if (["profileNote", "profileMissing", "allowedUses", "runRecord"].includes(key)) found.push(`${where}.${key}`);
+    if (isCounts && (key === "notes" || key === "note")) found.push(`${where}.${key}`);
+    if (parent === "example" && key === "origin") found.push(`${where}.${key}`);
+    walkForRemoved(entry, `${where}.${key}`, found, key);
+  }
+}
+
+test("no payload a page reads carries a sentence the platform wrote about itself: the keys are gone (R2, B §2.4)", options, async () => {
+  /** @type {string[]} */
+  const found = [];
+  const owner = { id: seeded.owner };
+  walkForRemoved(await service.studyView(owner, seeded.study.id), "study", found);
+  for (const tab of VCR_TABS.filter((entry) => entry !== "overview")) {
+    walkForRemoved(await service.tab(owner, seeded.study.id, tab), tab, found);
+    walkForRemoved(await service.tab(owner, seeded.empty.id, tab), `empty.${tab}`, found);
+  }
+  walkForRemoved(await service.listStudies(owner), "home", found);
+  assert.deepEqual(found, [], `payloads still carry removed keys: ${REMOVED_KEYS.join(", ")}`);
+  // The generated population's tab and the patients' carry facts where the sentences were.
+  const patients = await service.tab(owner, seeded.study.id, "patients");
+  assert.equal(patients.example.title, "示例患者 · 年龄 62 岁 · ECOG 1");
+  assert.equal(patients.example.record.id, "VP-0412");
+  assert.equal("origin" in patients.example, false);
+  const trial = await service.tab(owner, seeded.study.id, "trial");
+  assert.ok(trial.designs.every((/** @type {any} */ design) => design.record === null || typeof design.record === "object"));
+  assert.ok(trial.designs.some((/** @type {any} */ design) => design.record?.check?.agrees === true), "the closed form held against the simulation, as numbers");
+});
+
 test("the matching tab answers each view and the candidate it is asked for", options, async () => {
   const asked = await service.tab({ id: seeded.owner }, seeded.study.id, "matching", new URLSearchParams("view=matching&candidate=P-0201"));
   assert.equal(asked.selected.candidate.id, "P-0201");

@@ -513,8 +513,15 @@ export function presentPatientsTab(bundle) {
       xLabel: text(trajectories.xLabel), yLabel: text(trajectories.yLabel), ticks: list(trajectories.ticks).map(String), series: trajectorySeries,
     } : null,
     example: text(example.id) ? {
-      id: String(example.id), source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(example.source)) ? String(example.source) : "synthetic",
-      origin: text(example.origin),
+      // 「示例患者 · 年龄 62 岁 · ECOG 1」: the person is told who they are, not an identifier; the engine's own id and the line of how
+      // it was made are the record's (`record`, read by the drawer) and are not a line of the page.
+      title: ["示例患者", ...list(example.baseline).slice(0, 2).map((row) => [text(object(row).label), String(object(row).value ?? "")].filter(Boolean).join(" "))]
+        .filter(Boolean).join(" · "),
+      record: {
+        id: String(example.id),
+        source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(example.source)) ? String(example.source) : "synthetic",
+        origin: text(example.origin),
+      },
       baseline: list(example.baseline).map((row) => ({
         label: text(object(row).label) ?? "", value: String(object(row).value ?? ""),
         source: (/** @type {readonly string[]} */ (VCR_VALUE_SOURCES)).includes(String(object(row).source)) ? String(object(row).source) : "synthetic",
@@ -860,35 +867,33 @@ export function presentTrialTab(bundle) {
   // The curve's axis is a probability the page shows as a percentage, like every design measure.
   const powerSeries = (seriesList(powerRaw.series).length ? seriesList(powerRaw.series) : grids.powerSeries).map((series) => scaledSeries(series, 100));
   const marks = designRows.map((row) => row._stale).filter(Boolean);
-  const runRecord = designRows.filter((row) => row._result).map((row) => {
+  // What each design's last run was, as facts a record drawer reads — the method and its replicates, the seed, and the closed form held
+  // against the simulation — and not as a card's sentences. A closed-form value is exact for some methods and a first-order
+  // approximation for others (the log-rank power): the engine says which, and the tolerance it holds the simulation to — three
+  // Monte-Carlo errors plus the approximation's documented bias.
+  /** @param {Record<string, any>} row */
+  const recordOf = (row) => {
     const execution = executionOf(bundle, row._result);
-    const diagnostics = object(row._result.diagnostics);
-    const check = object(diagnostics.analyticCheck);
-    const differencePoints = numeric(check.difference) !== null ? roundTo(Math.abs(Number(check.difference)) * 100, 1) : null;
-    // A closed-form value is exact for some methods and a first-order approximation for others (the
-    // log-rank power): the engine says which, and the tolerance it holds the simulation to — three
-    // Monte-Carlo errors plus the approximation's documented bias. A run with many replicates has a
-    // tiny error, and comparing an approximation to it with the error alone reads 「不一致」 for a
-    // difference the approximation itself explains.
+    const check = object(object(row._result.diagnostics).analyticCheck);
+    const difference = numeric(check.difference);
     const within = check.withinTolerance ?? check.withinThreeMcse;
-    const approximate = numeric(check.approximationBias) !== null && Number(check.approximationBias) > 0;
-    const allowedPoints = numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null;
     return {
-      key: `run_${row.code}`,
-      title: `方案 ${row.code}：${execution ? `${METHOD_LABELS[String(execution.method)] ?? "已运行"}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
-      detail: [
-        execution?.seed != null ? `种子 ${execution.seed}` : null,
-        within === true && differencePoints !== null
-          ? (approximate
-            ? `解析值是一阶近似，与仿真值相差 ${differencePoints} 个百分点，在容许的 ${allowedPoints} 个百分点内（3 倍蒙特卡洛标准误加近似本身的偏差）`
-            : `解析值与仿真值一致（差 ${differencePoints} 个百分点，在 3 倍蒙特卡洛标准误内）`)
-          : within === false && differencePoints !== null
-            ? (approximate
-              ? `解析值与仿真值相差 ${differencePoints} 个百分点，超出容许的 ${allowedPoints} 个百分点（3 倍蒙特卡洛标准误加近似本身的偏差）`
-              : `解析值与仿真值相差 ${differencePoints} 个百分点，超出 3 倍蒙特卡洛标准误`) : null,
-      ].filter(Boolean).join(" · ") || null,
-      ok: within === true,
+      method: execution ? METHOD_LABELS[String(execution.method)] ?? null : null,
+      replicates: execution?.replicates != null ? Number(execution.replicates) : null,
+      seed: execution?.seed != null ? Number(execution.seed) : null,
+      check: difference === null ? null : {
+        analytic: numeric(check.value) !== null ? roundTo(Number(check.value) * 100, 1) : null,
+        simulated: numeric(check.simulated) !== null ? roundTo(Number(check.simulated) * 100, 1) : null,
+        differencePoints: roundTo(Math.abs(difference) * 100, 1),
+        allowedPoints: numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null,
+        approximate: numeric(check.approximationBias) !== null && Number(check.approximationBias) > 0,
+        agrees: typeof within === "boolean" ? within : null,
+      },
     };
+  };
+  const recorded = designs.map((design) => {
+    const row = designRows.find((entry) => entry.id === design.id);
+    return { ...design, record: row?._result ? recordOf(row) : null };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
   const milestones = designRows.filter((row) => !row.dominated && row.measures.duration_months).map((row) => ({
@@ -898,7 +903,7 @@ export function presentTrialTab(bundle) {
   return {
     headline: trialHeadline(designs),
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics)),
-    designs,
+    designs: recorded,
     columns,
     grid: grids.heat,
     footnotes: notRerunNotes(designRows),
@@ -914,7 +919,6 @@ export function presentTrialTab(bundle) {
       recordedAt: decision ? zhTime(decision.createdAt, now) : null,
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
     } : null,
-    runRecord,
     forecasts: forecastRows,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.

@@ -8,10 +8,6 @@
       "label": "人群 v2",
       "stale": true,
       "counts": {
-        "realPatients": 3412,
-        "events": null,
-        "effectiveSampleSize": null,
-        "generatedRecords": null,
         "scope": null
       }
     },
@@ -20,10 +16,6 @@
       "label": "人群 v1",
       "stale": false,
       "counts": {
-        "realPatients": 3390,
-        "events": null,
-        "effectiveSampleSize": null,
-        "generatedRecords": null,
         "scope": null
       }
     }
@@ -539,9 +531,6 @@
     "scope": null
   },
   "counts": {
-    "realPatients": 3412,
-    "events": null,
-    "effectiveSampleSize": null,
     "generatedRecords": 0,
     "scope": null
   },

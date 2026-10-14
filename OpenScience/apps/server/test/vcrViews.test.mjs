@@ -208,25 +208,20 @@ test("a number is printed to the precision it deserves, on the server as in the 
 
 // --- counts ------------------------------------------------------------------------------------------
 
-test("the four counts stay four: missing is null, a real zero is a zero, and a design-stage note is said once", () => {
-  const counts = countsView({ realPatients: 0, events: null, generatedRecords: 6_480_000 }, { tier: "T0", scope: "方案 B" });
-  assert.equal(counts.realPatients, 0);
-  assert.equal(counts.events, null);
-  assert.equal(counts.effectiveSampleSize, null);
-  assert.equal(counts.note, "设计阶段：尚无真实患者");
-  assert.equal(counts.scope, "方案 B");
+test("the counts are the ones that have a value: absent is absent, a real zero is a zero, and nothing on the band is a sentence (2026-10-14)", () => {
+  // T0 has no patient to count: the band is the generated records and nothing else, and says no sentence about it.
+  const t0 = countsView({ realPatients: 0, events: null, generatedRecords: 6_480_000 }, { tier: "T0", scope: "方案 B" });
+  assert.deepEqual(t0, { generatedRecords: 6_480_000, scope: "方案 B" });
+  assert.deepEqual(countsView({ realPatients: 0, events: 138, generatedRecords: 0 }, { tier: "T0" }), { generatedRecords: 0, scope: null });
+  // From T1 on the four are read apart: a count nobody has is not drawn, a count that is zero is.
+  assert.deepEqual(countsView({ realPatients: 0, events: null, effectiveSampleSize: null, generatedRecords: 2000 }, { tier: "T1" }),
+    { realPatients: 0, generatedRecords: 2000, scope: null });
+  assert.deepEqual(countsView({ realPatients: 3412 }, { tier: "T1" }), { realPatients: 3412, scope: null });
   assert.equal("reconstructedPseudoPatients" in countsView({}), false, "the optional two appear only when their route was used");
   assert.equal(countsView({ reconstructedPseudoPatients: 801 }).reconstructedPseudoPatients, 801);
-  assert.equal(countsView({ realPatients: 3412 }, { tier: "T1" }).notes?.events, "T1 无结局记录");
-});
-
-test("a simulation's records are said to be records, not patients — once, under the number, whenever there are any", () => {
-  assert.equal(countsView({ realPatients: 0, generatedRecords: 212_382_000 }, { tier: "T0" }).notes?.generatedRecords, "模拟生成的记录，不是患者");
-  assert.equal(countsView({ generatedRecords: 1000 }).notes?.generatedRecords, "模拟生成的记录，不是患者");
-  // Nothing generated says nothing about it; the other notes are not touched.
-  assert.equal(countsView({ generatedRecords: 0 }).notes, undefined);
-  assert.equal(countsView({ generatedRecords: null }).notes, undefined);
-  assert.deepEqual(countsView({ generatedRecords: 5, realPatients: 3412 }, { tier: "T1" }).notes, { events: "T1 无结局记录", generatedRecords: "模拟生成的记录，不是患者" });
+  for (const counts of [countsView({ generatedRecords: 5, realPatients: 3412 }, { tier: "T1" }), t0]) {
+    assert.equal("note" in counts || "notes" in counts, false, "no sentence rides on the counts");
+  }
 });
 
 // --- intervals and stale ---------------------------------------------------------------------------------
@@ -367,14 +362,15 @@ test("a design's numbers are its analytic size and its simulated power, merged f
     assert.equal(a.replicates, 5000);
     assert.equal(b.crossCheck.agrees, true);
     assert.equal(b.crossCheck.differencePoints, 0.3);
-    assert.match(b.crossCheck.text, /解析功效 91.2%，与模拟相差 0.3 个百分点，在容许范围内/);
+    assert.deepEqual([b.crossCheck.analytic, b.crossCheck.simulated, "text" in b.crossCheck], [91.2, 91.5, false], "the closed form beside the simulation, as numbers");
     assert.equal(c.note, "期中界值 z = 2.96", "a group-sequential design says where it stops at the first look");
     assert.equal(a.note, null);
     assert.deepEqual(tab.columns.map((column) => column.key).slice(0, 2), ["required_events", "sample_size"]);
     assert.equal(tab.headline, "方案 A 需要 950 例事件、13,764 名患者；方案 B 需要 845 例事件、11,799 名患者；方案 C 需要 847 例事件、11,840 名患者；已模拟 3 个方案，功效 90%～92%。");
-    // nothing of the run's own record on the page: no method id, no hash, no result id
-    assert.doesNotMatch(JSON.stringify(tab.runRecord), /design\.|f{12}|res_/);
-    assert.match(tab.runRecord[0].title, /方案 A：方案的模拟运行，5,000 次重复/);
+    // the run's own record is the design's, structured: no card of sentences, no method id, no hash, no result id
+    assert.equal("runRecord" in tab, false);
+    assert.doesNotMatch(JSON.stringify(tab.designs.map((design) => design.record)), /design\.|f{12}|res_/);
+    assert.deepEqual([a.record.method, a.record.replicates], ["方案的模拟运行", 5000]);
   }
 });
 
@@ -1189,21 +1185,21 @@ test("C2-4 an older result's assurance is not read back once the newest result d
   assert.equal(measures.assurance, undefined, "no prior to integrate over any more: the old assurance is not left beside the new numbers");
 });
 
-test("C3-11 the run record says an analytic value is an approximation and what tolerance the simulation was held to", () => {
+test("C3-11 the design's record says an analytic value is an approximation and what tolerance the simulation was held to, as facts the drawer reads", () => {
   const design = scenario("a", 1, "A", { resultId: "res_a" });
   /** @param {Record<string, any>} check */
   const withCheck = (check) => presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }],
-    allResults: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }] }).runRecord[0];
+    allResults: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }] }).designs[0].record.check;
   const approximate = withCheck({ difference: -0.011, mcse: 0.0004, withinThreeMcse: false, withinTolerance: true, approximationBias: 0.015, tolerance: 0.0162 });
-  assert.equal(approximate.ok, true, "1.1 points against an approximation documented to 1.5 is agreement");
-  assert.match(approximate.detail, /一阶近似.*相差 1\.1 个百分点.*容许的 1\.6 个百分点/);
+  assert.deepEqual([approximate.agrees, approximate.approximate, approximate.differencePoints, approximate.allowedPoints], [true, true, 1.1, 1.6],
+    "1.1 points against an approximation documented to 1.5 is agreement");
   const exact = withCheck({ difference: 0.0003, withinThreeMcse: true, approximationBias: 0, tolerance: 0.0012, withinTolerance: true });
-  assert.match(exact.detail, /解析值与仿真值一致/);
+  assert.deepEqual([exact.agrees, exact.approximate], [true, false]);
   const off = withCheck({ difference: 0.03, withinThreeMcse: false, withinTolerance: false, approximationBias: 0.015, tolerance: 0.0162 });
-  assert.equal(off.ok, false);
-  assert.match(off.detail, /超出容许/);
+  assert.equal(off.agrees, false);
   const older = withCheck({ difference: 0.001, withinThreeMcse: true });
-  assert.equal(older.ok, true, "a result written before the tolerance existed still reads");
+  assert.equal(older.agrees, true, "a result written before the tolerance existed still reads");
+  assert.equal(JSON.stringify(approximate).includes("近似"), false, "the words are the drawer's, not the payload's");
 });
 
 test("C2-8 the comparator page reads a two-arm reconstruction: both arms' quality checks, both medians, the RMST interval to the decimals it supports", () => {

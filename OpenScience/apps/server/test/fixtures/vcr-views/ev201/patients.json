@@ -537,9 +537,12 @@
     ]
   },
   "example": {
-    "id": "VP-0412",
-    "source": "synthetic",
-    "origin": "批量合成（人群 v2）· 种子已记录",
+    "title": "示例患者 · 年龄 62 岁 · ECOG 1",
+    "record": {
+      "id": "VP-0412",
+      "source": "synthetic",
+      "origin": "批量合成（人群 v2）· 种子已记录"
+    },
     "baseline": [
       {
         "label": "年龄",
@@ -805,14 +808,7 @@
     ]
   },
   "counts": {
-    "realPatients": 0,
-    "events": 1210,
-    "effectiveSampleSize": null,
     "generatedRecords": 2000,
-    "note": "设计阶段：尚无真实患者",
-    "notes": {
-      "generatedRecords": "模拟生成的记录，不是患者"
-    },
     "scope": "2000 名虚拟患者"
   },
   "stale": null,

@@ -959,10 +959,8 @@ function crossCheckOf(stages) {
   const name = String(check.name ?? "power");
   const agrees = typeof check.withinTolerance === "boolean" ? check.withinTolerance : typeof check.withinThreeMcse === "boolean" ? check.withinThreeMcse : null;
   const points = roundTo(Math.abs(difference) * 100, 1);
-  const word = measureLabel(name);
   return {
     name, analytic: roundTo(analytic * 100, 1), simulated: roundTo(simulated * 100, 1), differencePoints: points, agrees,
-    text: `解析${word} ${roundTo(analytic * 100, 1)}%，与模拟相差 ${points} 个百分点${agrees === true ? "，在容许范围内" : agrees === false ? "，超出容许范围" : ""}`,
   };
 }
 
