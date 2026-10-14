@@ -1,5 +1,6 @@
-// Renders ../memory-templates/*.yaml from the sources beside this file: the one never-kept block and the one language
-// block are written into every type, so each has a single source and each type's rules read complete on their own (the
+// Renders ../memory-templates/*.yaml from the sources beside this file: the one never-kept block (`@evimed/domain`'s
+// `MEMORY_NEVER_KEPT_TEXT`, which the legacy extraction states too) and the one language block (`_language.txt`) are
+// written into every type, so each has a single source and each type's rules read complete on their own (the
 // extractor shows a type's description under its own "Memory type rules", and its fixed instruction says nothing about
 // what not to keep). The language block exists because the examples and section labels below are partly Chinese: left
 // alone, the model copied them into an English user's memories (2 of 3 live runs, 2026-10-13).
@@ -9,15 +10,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { MEMORY_NEVER_KEPT_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
+
 const src = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(src, "..", "memory-templates");
 
 /** The rendered text of every type, by file name. */
 export function renderMemoryTemplates() {
-  const indented = (file) => fs.readFileSync(path.join(src, file), "utf8").trimEnd().split("\n")
+  const indented = (/** @type {string} */ text) => text.trimEnd().split("\n")
     .map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
-  const block = indented("_never-keep.txt");
-  const language = indented("_language.txt");
+  const block = indented(MEMORY_NEVER_KEPT_TEXT);
+  const language = indented(fs.readFileSync(path.join(src, "_language.txt"), "utf8"));
   /** @type {Record<string, string>} */
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {

@@ -26,6 +26,12 @@ import { callModelForControlPlane } from "./modelGateway.mjs";
  * (`ResearchMemory.unreviewedRecords`); nothing asks anyone to confirm anything
  * (owner rulings of 2026-09-19 and 2026-10-10).
  *
+ * Two classes are not a language judgement and are not put to the model. A memory extraction wrote from what the assistant or a
+ * tool said (origin `system`), and one that rests only on an instruction the platform dispatched (a scheduled task reuses one
+ * conversation, and its template was quoted as the person's habit), are decided from who wrote the quoted message — the role it
+ * carries and the request it came in (`memoryEvidenceProvenance.mjs`) — and forgotten the same way. Since 2026-10-14 extraction
+ * writes neither.
+ *
  * Deletable when the extractor no longer writes what the rules exclude and no
  * account holds a memory written before that.
  */
@@ -35,11 +41,27 @@ export const MEMORY_REVIEW_REASONS = Object.freeze([
   "report_content", "source_detail", "run_state", "platform", "task_condition", "personal_detail", "duplicate",
 ]);
 
+/** Why a memory is forgotten in code, from whose words it rests on and not from what it says. */
+export const MEMORY_REVIEW_STRUCTURAL_REASONS = Object.freeze(["assistant_text", "dispatched_instruction"]);
+
+/**
+ * The structural rules in words, part of the version of the rules a reading is made under: editing them reads every memory again.
+ *  - assistant_text: the memory rests on what the assistant or a tool said (origin `system`), or only on messages that were not the person's.
+ *  - dispatched_instruction: every message it rests on was dispatched by the platform (a scheduled execution's instruction, a platform brief).
+ *  Decided only when every observation of the memory is decided; one that rests on the person's words, or on a message nothing
+ *  can place, is never decided here.
+ */
+const STRUCTURAL_RULES = "assistant_text: origin system, or every observation an assistant or tool message; dispatched_instruction: every observation a dispatched or platform message, at least one dispatched; undecided observation keeps the memory";
+
 /** How many memories one reading takes: one model call, about 6,000 input tokens at the most. */
 export const MEMORY_REVIEW_BATCH = 24;
 
+/** Whose records are read: what the platform inferred or took from the assistant (the model's and code's), and what it read as the person's own (code's alone). */
+export const REVIEWED_ORIGINS = Object.freeze(["system", "inferred", "explicit"]);
+
 const INSTRUCTIONS = [
   "You read again memories a research platform wrote about one researcher and their projects. The platform wrote each of them, some under older rules; none was typed by the researcher.",
+  "Each memory shows the researcher's own words it rests on as quote. Keep a memory only when it says what those words say.",
   "Keep what will still be true and useful to the researcher's next conversations: who they are and what they work on; how they want work done and how they write; a correction they made; a project's standing shape — its question, population, data source, inclusion rule, comparator, the decisions taken and what the researcher still has open.",
   "List the memories not to keep, each with exactly one reason code:",
   "report_content — a number, a finding or a conclusion that belongs to a report or an answer: an effect estimate, a p-value, a count, a ranking, what a guideline or a trial concluded, what the evidence shows;",
@@ -54,7 +76,21 @@ const INSTRUCTIONS = [
 ].join(" ");
 
 /** The version of the rules a reading is made under: a memory is read again when they change, and only then. */
-export const MEMORY_REVIEW_RULES = createHash("sha256").update(INSTRUCTIONS).digest("hex").slice(0, 16);
+export const MEMORY_REVIEW_RULES = createHash("sha256").update(INSTRUCTIONS).update("\n").update(STRUCTURAL_RULES).digest("hex").slice(0, 16);
+
+/**
+ * The reason a memory is forgotten in code, or null when code does not decide it.
+ * @param {{ origin?: string, evidence?: readonly unknown[] }} record
+ * @param {readonly string[] | null} voices whose words each observation is, as `memoryEvidenceProvenance` answers (one per evidence entry)
+ * @returns {"assistant_text" | "dispatched_instruction" | null}
+ */
+export function structuralVerdict(record, voices) {
+  // Extraction wrote origin `system` only from an assistant or tool source: by construction nothing the person said.
+  if (record.origin === "system") return "assistant_text";
+  if (!voices?.length || voices.length !== (record.evidence ?? []).length) return null;
+  if (voices.some((voice) => voice !== "assistant" && voice !== "dispatched")) return null;
+  return voices.includes("dispatched") ? "dispatched_instruction" : "assistant_text";
+}
 
 /**
  * The memories the model said not to keep, by id, each with its reason — only ids it was shown and only reasons the rules name.
@@ -78,21 +114,26 @@ export function reviewVerdicts(content, batch) {
 /** What the model is shown of a memory: its kind, whether it is the account's or a project's, and its sentence. @param {any} record */
 function shownMemory(record) {
   const text = String(record.summary || record.value || "").replace(/\s+/g, " ").trim();
-  return { id: record.id, kind: record.kind, scope: record.scope === "user" ? "account" : "project", text: text.length > 400 ? `${text.slice(0, 400)}…` : text };
+  const quote = String(record.evidence?.[0]?.quote ?? "").replace(/\s+/g, " ").trim();
+  return { id: record.id, kind: record.kind, scope: record.scope === "user" ? "account" : "project", text: text.length > 400 ? `${text.slice(0, 400)}…` : text,
+    ...(quote ? { quote: quote.length > 200 ? `${quote.slice(0, 200)}…` : quote } : {}) };
 }
 
 export class MemoryReview {
   /**
    * @param {any} config
    * @param {any} memoryStore `ResearchMemory`: `unreviewedRecords`, `noteReviewed`, `upsertRecord`
-   * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, audit?: (event: string, error: unknown) => unknown }} [options]
+   * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, audit?: (event: string, error: unknown) => unknown,
+   *   evidenceProvenance?: (() => (userId: string, record: any) => Promise<string[]>) | null }} [options]
+   *   `evidenceProvenance`: makes one `createEvidenceProvenance` reader per reading; absent, only origin `system` is decided in code.
    */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, usageLedger = null, audit = () => {} } = {}) {
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, usageLedger = null, audit = () => {}, evidenceProvenance = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
     this.usageLedger = usageLedger;
     this.audit = audit;
+    this.evidenceProvenance = typeof evidenceProvenance === "function" ? evidenceProvenance : null;
     this.model = String(config.memoryExtractionModel || config.deepseekModel || "");
     this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config.memoryExtractionTimeoutMs ?? 30_000)));
   }
@@ -135,6 +176,33 @@ export class MemoryReview {
   }
 
   /**
+   * Why each of these memories is not kept, if it is not: first from whose words it rests on (code), then, for what the platform
+   * inferred, from what it says (the model). A memory the researcher stated outright (origin explicit) is only ever put to the
+   * first; a reader that fails keeps the memory.
+   * @param {string} userId @param {readonly any[]} batch at most `MEMORY_REVIEW_BATCH` memories
+   * @param {{ projectId: string, runId?: string | null }} options the project the model call is charged to
+   * @returns {Promise<Map<string, string>>}
+   */
+  async verdicts(userId, batch, { projectId, runId = null }) {
+    /** @type {Map<string, string>} */
+    const forget = new Map();
+    const provenance = this.evidenceProvenance ? this.evidenceProvenance() : null;
+    /** @type {any[]} */
+    const forModel = [];
+    for (const record of batch.slice(0, MEMORY_REVIEW_BATCH)) {
+      let voices = null;
+      if (provenance && record.origin !== "system") {
+        voices = await provenance(userId, record).catch(async (/** @type {unknown} */ error) => { await this.audit("memory.review.provenance", error); return null; });
+      }
+      const structural = structuralVerdict(record, voices);
+      if (structural) forget.set(record.id, structural);
+      else if (record.origin !== "explicit") forModel.push(record);
+    }
+    if (forModel.length) for (const [id, reason] of await this.judge(userId, forModel, { projectId, runId })) forget.set(id, reason);
+    return forget;
+  }
+
+  /**
    * Read one batch of the account's memories again; forget those the rules would not have written now.
    * `apply: false` reads and reports without changing a memory or noting a reading.
    * @param {string} userId
@@ -143,9 +211,9 @@ export class MemoryReview {
    */
   async review(userId, { projectId, runId = null, limit = MEMORY_REVIEW_BATCH, apply = true }) {
     if (!this.available) return { read: 0, forgotten: [] };
-    const batch = await this.memoryStore.unreviewedRecords(userId, MEMORY_REVIEW_RULES, { limit: Math.max(1, Math.min(MEMORY_REVIEW_BATCH, limit)) });
+    const batch = await this.memoryStore.unreviewedRecords(userId, MEMORY_REVIEW_RULES, { limit: Math.max(1, Math.min(MEMORY_REVIEW_BATCH, limit)), origins: REVIEWED_ORIGINS });
     if (batch.length === 0) return { read: 0, forgotten: [] };
-    const verdicts = await this.judge(userId, batch, { projectId, runId });
+    const verdicts = await this.verdicts(userId, batch, { projectId, runId });
     const forgotten = [];
     /** Memories that changed while they were read: neither forgotten nor noted, so they are read again next time. */
     const changed = new Set();

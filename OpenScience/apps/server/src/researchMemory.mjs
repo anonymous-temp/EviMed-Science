@@ -2485,19 +2485,24 @@ export class ResearchMemoryStore {
   /**
    * Memories the platform wrote, still in force and not yet read again under
    * `rules` (`memoryReview.mjs`), oldest first. Only the platform's own: a
-   * memory the researcher stated, wrote or ever changed is theirs (origin
-   * `explicit`/`manual`, or a revision `by` the user — a restore from
-   * 「已忘记的内容」 is one), and a review never reads it.
-   * @param {string} userId @param {string} rules @param {{ limit?: number }} [options]
+   * memory the researcher wrote or ever changed is theirs (origin `manual`, or a
+   * revision `by` the user — a restore from 「已忘记的内容」 is one), and a review
+   * never reads it. `origins` says which of the platform's own: by default what it
+   * inferred or took from the assistant (`system`, `inferred`); the review also asks
+   * for `explicit`, which the platform read as the researcher's own words and which
+   * code checks against who wrote the message it quoted.
+   * @param {string} userId @param {string} rules @param {{ limit?: number, origins?: readonly string[] }} [options]
    */
-  async unreviewedRecords(userId, rules, { limit = 24 } = {}) {
+  async unreviewedRecords(userId, rules, { limit = 24, origins = ["system", "inferred"] } = {}) {
     const owner = assertUserId(userId);
     if (!reviewRulesPattern.test(String(rules))) throw new HttpError(400, "memory_review_rules_invalid", "The review rules digest is invalid.");
+    const wanted = [...new Set(origins)].filter((origin) => ["system", "inferred", "explicit"].includes(origin));
+    if (wanted.length === 0) return [];
     const result = await this.#query(`SELECT r.* FROM evimed_memory.records r
-      WHERE r.user_id=$1 AND r.status='active' AND r.kind <> 'run_summary' AND r.origin IN ('system','inferred')
+      WHERE r.user_id=$1 AND r.status='active' AND r.kind <> 'run_summary' AND r.origin = ANY($4::text[])
         AND NOT (r.revisions @> '[{"by":"user"}]'::jsonb)
         AND NOT EXISTS (SELECT 1 FROM evimed_memory.record_reviews v WHERE v.user_id=r.user_id AND v.record_id=r.id AND v.rules=$2)
-      ORDER BY r.created_at, r.id LIMIT $3`, [owner, rules, Math.max(1, Math.min(100, Number(limit) || 24))]);
+      ORDER BY r.created_at, r.id LIMIT $3`, [owner, rules, Math.max(1, Math.min(100, Number(limit) || 24)), wanted]);
     return result.rows.map(publicRecord);
   }
 

@@ -394,6 +394,8 @@ import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
+import { dispatchedRequestIdsOf } from "./memoryDispatch.mjs";
+import { createEvidenceProvenance } from "./memoryEvidenceProvenance.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
@@ -2894,6 +2896,21 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // What the researcher removed or undid, so an inference cannot write it
     // straight back (memoryIntelligence.mjs #rejectedKeys).
     feedbackEvents,
+    // The requests the platform itself sent into a conversation, across every execution of it: a scheduled task reuses one
+    // conversation, so it keeps each execution's instruction as user-role text (memoryDispatch.mjs).
+    dispatchedRequests: async (/** @type {any} */ project, /** @type {any} */ run) => dispatchedRequestIdsOf(await agentRuns.conversationRuns(project, run.sessionId)),
+    // Reading older memories again asks whose words a memory's evidence is: the stored transcripts and the run ledger say.
+    evidenceProvenance: () => createEvidenceProvenance({
+      projectsFor: async (/** @type {string} */ userId, /** @type {string | null} */ scopeId) => {
+        const user = await store.userById(userId);
+        if (!user) return [];
+        const ids = scopeId ? [scopeId] : (await store.listProjects(user)).map((/** @type {any} */ project) => project.id);
+        const found = await Promise.all(ids.map((/** @type {string} */ id) => store.requireProject(user, id).catch(() => null)));
+        return found.filter(Boolean);
+      },
+      runIndex: (/** @type {any} */ project) => agentRuns.conversationIndex(project),
+      readTranscript: readRunTranscript,
+    }),
   });
   // Registered after `memoryIntelligence` because the episodes endpoint feeds
   // it: an external agent posts turns and the same extractor decides what is

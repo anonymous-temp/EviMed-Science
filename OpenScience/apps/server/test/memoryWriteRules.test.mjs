@@ -121,33 +121,40 @@ test("the catch-all project never gets a fact about itself, and a real project s
 // the researcher's to-do list. `evals/memory-write-quality` keeps the verbatims.
 test("the catch-all project gets no decision and no follow-up either, in any scope, and a real project still does", async () => {
   const candidates = [
-    { scope: "project", kind: "follow_up", key: "project.follow_up.methods_study", origin: "system",
+    { scope: "project", kind: "follow_up", key: "project.follow_up.methods_study", origin: "explicit",
       value: "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系", summary: "待开展的方法学研究方向" },
-    { scope: "session", kind: "follow_up", key: "session.follow_up.cure_endpoint", origin: "system",
+    { scope: "session", kind: "follow_up", key: "session.follow_up.cure_endpoint", origin: "explicit",
       value: "后续治愈研究终点设计需加入 HBsAg 来源特异性标志物", summary: "治愈终点待补标志物" },
-    { scope: "project", kind: "decision", key: "project.decision.design", origin: "system",
+    { scope: "project", kind: "decision", key: "project.decision.design", origin: "explicit",
       value: "决定采用注册双盲试验设计", summary: "试验设计" },
   ];
-  const conversation = [message("u1", "CRMA-1001 的证据链还缺什么？"), message("a1", "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系。", "assistant")];
-  /** Every candidate cites the assistant's reply, the way the five rows did. */
-  const assistantCited = (store) => new MemoryIntelligence(config, store, {
+  const said = "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系。后续治愈研究终点设计需加入 HBsAg 来源特异性标志物。决定采用注册双盲试验设计。";
+  /** Every candidate cites one message of the given role, the way the five rows cited the assistant's reply. */
+  const citing = (role) => (store) => new MemoryIntelligence(config, store, {
     fetchImpl: async (_input, init) => {
       const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
-      const reply = sources.find((source) => source.role === "assistant");
+      const cited = sources.find((source) => source.role === role);
       return Response.json({ choices: [{ message: { content: JSON.stringify({
         candidates: candidates.map((candidate) => ({ importance: 0.6, sensitive: false,
-          sourceRef: reply.sourceRef, evidenceQuote: reply.text.slice(0, 10), ...candidate })),
+          sourceRef: cited.sourceRef, evidenceQuote: cited.text.slice(0, 10), ...candidate })),
       }) } }] });
     },
   });
+  const conversation = [message("u1", said), message("a1", said, "assistant")];
 
-  const inDefault = await assistantCited(new StoreDouble()).recordRun(project("default"), run(), conversation);
+  const inDefault = await citing("user")(new StoreDouble()).recordRun(project("default"), run(), conversation);
   assert.equal(inDefault.extracted, 0);
   assert.equal(inDefault.rejectionReasons.filter((reason) => /catch-all project, which has no single subject/.test(reason)).length, 3,
     inDefault.rejectionReasons.join(" | "));
 
-  const inNamed = await assistantCited(new StoreDouble()).recordRun(project("crma-1001"), run(), conversation);
+  const inNamed = await citing("user")(new StoreDouble()).recordRun(project("crma-1001"), run(), conversation);
   assert.equal(inNamed.extracted, 3, inNamed.rejectionReasons.join(" | "));
+
+  // The direction an assistant floated is the assistant's, in any project: the five rows of the 2026-09-26 audit rested on its reply.
+  const floated = await citing("assistant")(new StoreDouble()).recordRun(project("crma-1001"), run(), conversation);
+  assert.equal(floated.extracted, 0);
+  assert.equal(floated.rejectionReasons.filter((reason) => /must cite a message the person wrote \(got role "assistant"\)/.test(reason)).length, 3,
+    floated.rejectionReasons.join(" | "));
 });
 
 test("the extraction instructions say what the catch-all project is, so the model is not refused blind", async () => {
@@ -177,13 +184,20 @@ test("one conversation leaves one 「做过的研究」 summary, keyed by the co
   assert.equal(summaries[0].scopeId, "cancer-2026", "scoped to the project it happened in");
 });
 
-test("an inference stays an inference, whatever the model calls it", async () => {
+test("an inference stays an inference, whatever the model calls it, and describes no one", async () => {
   const store = new StoreDouble();
   const result = await extractor(store, [
+    { scope: "project", kind: "project_fact", key: "project.fact.tables_first", value: "评审材料先看表格再看正文", summary: "先看表格", origin: "inferred" },
+    // 2026-10-14 probe: a request for a psycopg example became the inferred profile 「使用 Python 与 PostgreSQL 进行开发」, and the
+    // assistant's own practice an inferred preference. What describes the person is what the person said.
+    { scope: "user", kind: "profile", key: "profile.stack", value: "使用 Python 与 PostgreSQL 进行开发", summary: "Python 与 PostgreSQL 开发者", origin: "inferred" },
+    { scope: "user", kind: "preference", key: "preference.env_settings", value: "数据库连接信息从环境变量读取", summary: "连接信息读环境变量", origin: "inferred" },
     { scope: "user", kind: "behavior", key: "behavior.tables", value: "习惯先看表格再看正文", summary: "先看表格", origin: "inferred" },
+    { scope: "user", kind: "preference", key: "preference.tables", value: "先给表格，正文后面再看", summary: "先给表格", origin: "explicit" },
   ]).recordRun(project(), run(), [message("u1", "先给我表格，正文后面再看。")]);
-  assert.equal(result.extracted, 1);
-  const stored = [...store.records.values()].find((record) => record.kind === "behavior");
-  assert.equal(stored.origin, "inferred", "the platform's own observation is never the researcher's word");
-  assert.ok(stored.confidence < 1);
+  assert.equal(result.extracted, 2, result.rejectionReasons.join(" | "));
+  assert.equal(result.rejectionReasons.filter((reason) => /must be something the person stated \(origin explicit\), not an inference/.test(reason)).length, 3);
+  const stored = [...store.records.values()].filter((record) => record.kind !== "run_summary");
+  assert.deepEqual(stored.map((record) => [record.kind, record.origin]).sort(), [["preference", "explicit"], ["project_fact", "inferred"]]);
+  assert.ok(stored.find((record) => record.kind === "project_fact").confidence < 1, "the platform's own observation is never the researcher's word");
 });

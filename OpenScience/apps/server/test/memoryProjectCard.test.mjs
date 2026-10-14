@@ -145,19 +145,18 @@ test("an extension is checked for the shape of its name and the length of its va
   assert.match(result.rejectionReasons.join(" "), /longer than a card shows/);
 });
 
-test("only the researcher's own message fills a slot: a trial an assistant summarised stays under a key of its own", async () => {
+test("only the researcher's own message grounds a memory: a trial an assistant summarised is not kept under any key", async () => {
   const store = new StoreDouble();
   const conversation = [message("u1", "把 GLORY-1 的关键信息整理一下，后面写文章要用。"),
     message("a1", "GLORY-1 是玛仕度肽在中国成人超重或肥胖人群中的 3 期试验，每周一次皮下注射。", "assistant")];
   const { result } = await extract(store, [
-    { key: "project.population", value: "中国成人超重或肥胖人群", origin: "system", from: "assistant", quote: "中国成人超重或肥胖人群中的 3 期试验" },
-    { key: "project.ext.audience", value: "中国成人", origin: "system", from: "assistant", quote: "中国成人超重或肥胖人群" },
-    { key: "project.glory1.study_shape", value: "GLORY-1 为 3 期试验", origin: "system", from: "assistant", quote: "3 期试验" },
+    { key: "project.population", value: "中国成人超重或肥胖人群", origin: "inferred", from: "assistant", quote: "中国成人超重或肥胖人群中的 3 期试验" },
+    { key: "project.ext.audience", value: "中国成人", origin: "inferred", from: "assistant", quote: "中国成人超重或肥胖人群" },
+    { key: "project.glory1.study_shape", value: "GLORY-1 为 3 期试验", origin: "inferred", from: "assistant", quote: "3 期试验" },
   ], conversation);
-  assert.equal(result.extracted, 1, result.rejectionReasons.join(" | "));
-  assert.match(result.rejectionReasons.join(" "), /"project\.population" is a slot of the project card, which only the researcher's own message fills/);
-  assert.match(result.rejectionReasons.join(" "), /"project\.ext\.audience" is a slot of the project card/);
-  assert.deepEqual(written(store).map((record) => record.key), ["project.glory1.study_shape"]);
+  assert.equal(result.extracted, 0, result.rejectionReasons.join(" | "));
+  assert.equal((result.rejectionReasons.join(" ").match(/must cite a message the person wrote \(got role "assistant"\)/g) ?? []).length, 3);
+  assert.deepEqual(written(store).map((record) => record.key), []);
 });
 
 const seeded = (key, value, origin) => ({ scope: "project", scopeId: project.id, kind: "project_fact", key, value, summary: value, origin, seeded: true });
