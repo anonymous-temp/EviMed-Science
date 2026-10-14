@@ -133,6 +133,11 @@ function packageEntry(dir) {
 }
 
 const args = process.argv.slice(2);
+// `--candidate`: the closure under check is a release we have NOT pinned (`kernel-candidate-check.mjs`), so "equals the pin"
+// is not a question to ask of it; everything that is a question about its shipped code still is. `--json`: the verdict as
+// one JSON object on stdout (the lines go to stderr), for the script that reads it.
+const candidateMode = args.includes("--candidate");
+const jsonMode = args.includes("--json");
 const modulesArg = args.indexOf("--modules");
 // `--install` installs the closure the runtime image installs — npm, the pin,
 // and the image's `--before` cutoff (`kernel-install.mjs`). The `pnpm add` this
@@ -143,24 +148,33 @@ const modulesDir = modulesArg >= 0 ? path.resolve(String(args[modulesArg + 1])) 
 const installed = indexInstall(modulesDir);
 /** @type {string[]} */
 const failures = [];
+/** @type {{ label: string, ok: boolean, detail: string }[]} */
+const results = [];
 /** @param {string} label @param {boolean} ok @param {string} [detail] */
 function report(label, ok, detail = "") {
-  process.stdout.write(`${ok ? "ok  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}\n`);
+  (jsonMode ? process.stderr : process.stdout).write(`${ok ? "ok  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}\n`);
+  results.push({ label, ok, detail });
   if (!ok) failures.push(label);
 }
 
 const dsh = installed.get("@deepseek-ai/dsh");
 report("dsh installed", Boolean(dsh), dsh?.version ?? "not found");
-report("dsh version matches deps-version.json", dsh?.version === pins.dsh.version, `${dsh?.version} vs ${pins.dsh.version}`);
-report("dsh version matches seam-manifest", dsh?.version === seams.dsh, `${dsh?.version} vs ${seams.dsh}`);
+if (candidateMode) {
+  // The candidate is not the pin and is not meant to be: what is asked of it is the closure's own consistency and, below,
+  // the seams and the cordis the manifest says the port was written against (a moved cordis is a finding, by name).
+  report("dsh candidate version", Boolean(dsh?.version), `${dsh?.version} (pin ${pins.dsh.version})`);
+} else {
+  report("dsh version matches deps-version.json", dsh?.version === pins.dsh.version, `${dsh?.version} vs ${pins.dsh.version}`);
+  report("dsh version matches seam-manifest", dsh?.version === seams.dsh, `${dsh?.version} vs ${seams.dsh}`);
+}
 const cordis = installed.get("@deepseek-ai/cordis");
 report("cordis version matches seam-manifest", cordis?.version === seams.cordis, `${cordis?.version} vs ${seams.cordis}`);
-report("cordis version matches deps-version.json", cordis?.version === pins.dsh.cordis, `${cordis?.version} vs ${pins.dsh.cordis}`);
+if (!candidateMode) report("cordis version matches deps-version.json", cordis?.version === pins.dsh.cordis, `${cordis?.version} vs ${pins.dsh.cordis}`);
 // The whole closure, not only the root: the image asserts every kernel package
 // it installed is the pin, and a subpackage a range let drift is a kernel the
 // seams were never checked against.
-const drift = closureDrift(installed, pins);
-report(`every kernel package in the closure is the pin (${drift.count} packages)`, drift.count > 0 && drift.drifted.length === 0,
+const drift = closureDrift(installed, candidateMode ? { dsh: { version: dsh?.version } } : pins);
+report(`every kernel package in the closure is ${candidateMode ? "the candidate's version" : "the pin"} (${drift.count} packages)`, drift.count > 0 && drift.drifted.length === 0,
   drift.drifted.length ? drift.drifted.join(", ") : "");
 
 const missingPackages = Object.keys(seams.packages).filter((name) => !installed.has(name));
@@ -358,6 +372,8 @@ function declaredMethods() {
 }
 
 const methods = declaredMethods();
+/** The two lists of the wire check, kept for the JSON output (the lines say them in words). @type {{ unclassified: string[], phantom: string[] }} */
+let wireFindings = { unclassified: [], phantom: [] };
 // Prove the scan scanned. A rename upstream that empties this map would
 // otherwise leave every method "classified" and both checks green, which is the
 // precise failure this whole script exists to catch one level up.
@@ -376,6 +392,7 @@ if (methods.size) {
   const own = ownWireNamespaces(path.join(repoRoot, "packages/harness-port/src"));
   report("the platform's own wire namespaces were read", own.size >= 2, [...own].sort().join(", ") || "none found");
   const { unclassified, phantom } = wireSurfaceFindings({ declared, shipped: methods.keys(), streams, own });
+  wireFindings = { unclassified, phantom };
   report(
     `wire surface classified (${declared.size} declared, ${methods.size} shipped)`,
     unclassified.length === 0,
@@ -405,5 +422,8 @@ if (methods.size) {
         unreadable.length ? `no client bundle: ${unreadable.join(", ")}` : ""].filter(Boolean).join("; "));
 }
 
-process.stdout.write(`\n${failures.length ? `${failures.length} seam check(s) failed` : "every seam in the manifest matches the shipped harness"}\n`);
+(jsonMode ? process.stderr : process.stdout).write(`\n${failures.length ? `${failures.length} seam check(s) failed` : "every seam in the manifest matches the shipped harness"}\n`);
+if (jsonMode) {
+  process.stdout.write(`${JSON.stringify({ candidate: candidateMode, dsh: dsh?.version ?? null, cordis: cordis?.version ?? null, failures, checks: results, wire: wireFindings })}\n`);
+}
 process.exitCode = failures.length ? 1 : 0;

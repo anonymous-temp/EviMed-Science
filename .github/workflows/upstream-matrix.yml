@@ -82,3 +82,43 @@ jobs:
           path: |
             OpenScience/compat-matrix.json
             OpenScience/plugin-availability.json
+
+  # How far behind the pin is, and what moving it would touch. Report only.
+  #
+  # The matrix above tests the versions we pinned and says so ("it does not test latest"), so nothing said that the
+  # kernel had moved twenty days until a person looked. This job is the tier that was missing: it installs the
+  # candidates the dist-tags name (latest, next, alpha) with `--ignore-scripts`, diffs the web profile their CLI
+  # composes against ours, runs the seam check against their shipped code (an unclassified wire method is listed by
+  # name), checks the third-party bundles' peer ranges against what they install, and polls every other pin.
+  #
+  # It is a job of its own so that a crash here cannot hide the matrix's verdict and the matrix's cannot hide this one.
+  # It exits 0 for every verdict, "blocked" included — a blocked candidate is information, and a job that goes red on
+  # information gets ignored. It never opens a pull request and never writes to the repository.
+  candidates:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Check the kernel candidates and poll the pins
+        id: candidates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/ops/kernel-candidate-check.mjs --out candidate-check.json | tee candidate-check.txt
+          { echo '```'; cat candidate-check.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Uploaded, not committed, for the reason the matrix's own artifact is: it is an observation with a timestamp.
+      - name: Upload the candidate check
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-check
+          path: |
+            OpenScience/candidate-check.json
+            OpenScience/candidate-check.txt

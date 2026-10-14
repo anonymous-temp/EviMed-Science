@@ -98,7 +98,7 @@ for (const version of ["", "2.10.2 extra"]) {
 }
 
 test("GitHub discovers the workflows at repository root with monorepo tools and paths", async () => {
-  for (const name of ["web.yml", "upstream-matrix.yml"]) {
+  for (const name of ["web.yml", "upstream-matrix.yml", "kernel-seams.yml"]) {
     const value = await workflow(name);
     assert.equal(value.defaults.run["working-directory"], "OpenScience");
     for (const job of Object.values(value.jobs)) {
@@ -112,6 +112,39 @@ test("GitHub discovers the workflows at repository root with monorepo tools and 
       }
     }
   }
+});
+
+test("the seams are checked on the pull request that moves the pin or the manifest, not the night after", async () => {
+  // `verify-harness-seams.mjs` is the only check that reads the kernel's shipped code and reports a wire method nobody
+  // classified. It ran nightly and by hand, so the change that moved the pin was green and the next night red. The
+  // path filter is what puts it on that change.
+  const value = await workflow("kernel-seams.yml");
+  const paths = value.on.pull_request.paths;
+  for (const file of ["OpenScience/deps-version.json", "OpenScience/packages/harness-port/seam-manifest.json", "OpenScience/deploy/runtime-dsh/dump-config.baseline.json"]) {
+    assert.ok(paths.includes(file), `${file} does not trigger the seam check`);
+  }
+  const runs = value.jobs.seams.steps.map((step) => step.run).filter(Boolean).join("\n");
+  assert.match(runs, /scripts\/ops\/verify-harness-seams\.mjs --install/);
+  assert.match(runs, /scripts\/ops\/kernel-install\.mjs cutoff --check/);
+  // The nightly matrix keeps running it as well: a closure can move under an unchanged pin (a re-published subpackage).
+  const nightly = await workflow("upstream-matrix.yml");
+  assert.match(nightly.jobs.matrix.steps.map((step) => step.run).filter(Boolean).join("\n"), /verify-harness-seams\.mjs --install/);
+});
+
+test("the nightly workflow also asks how far behind the pin is, in a job that reports and never upgrades", async () => {
+  // `upstream-compat-matrix.mjs` tests the pinned versions and says it does not test `latest`; the candidate check is the
+  // tier that reads the dist-tags. It is its own job (a crash there must not hide the matrix's verdict), it passes the
+  // job's token so GitHub-hosted pins are polled with a rate limit worth the name, and it uploads what it found.
+  const value = await workflow("upstream-matrix.yml");
+  const job = value.jobs.candidates;
+  assert.ok(job, "upstream-matrix.yml has no candidates job");
+  const runs = shellScripts(job);
+  assert.match(runs, /scripts\/ops\/kernel-candidate-check\.mjs --out candidate-check\.json/);
+  assert.ok(job.steps.some((step) => step.uses?.startsWith("actions/upload-artifact@") && /candidate-check\.json/.test(String(step.with?.path))), "the report is not uploaded");
+  assert.ok(job.steps.some((step) => step.env?.GITHUB_TOKEN), "the poll of GitHub-hosted pins is unauthenticated");
+  // Report only: nothing in the job writes to the repository or opens a change.
+  assert.doesNotMatch(runs, /\bgit (?:commit|push|add)\b|\bgh pr\b|\bdeps-version\.json\b.*--write/);
+  assert.equal(value.permissions.contents, "read");
 });
 
 test("PostgreSQL auth and product tests execute against different disposable databases", async () => {
