@@ -49,7 +49,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
-import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
+import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
@@ -353,6 +353,8 @@ export class GeoService {
     /** @param {string} metricId */
     this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
     this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0, researchCapped: 0, declinedFields: 0, ignoredFields: 0 };
+    /** @type {Map<string, number>} what a runtime write did not keep, by `what` and outcome (`ignored`: told to the run; `declined`: on the platform's own list) */
+    this.fieldTotals = new Map();
     /**
      * The question group as the spine of the project: clusters, actions, the strategy read and what is asked of a person. The
      * composition gives it the market's read-only ranking (`spine.placementPreview`) when there is a market.
@@ -1720,6 +1722,44 @@ export class GeoService {
     return { key, skipped: stored?.skipped ?? false, sourceDomain: stored?.sourceDomain ?? null, updatedAt: stored?.updatedAt ?? null, cleared: stored === null };
   }
 
+  /**
+   * `POST …/:id/owned-links`: a person pastes the address of a page they published themselves. The registration is the run's
+   * (`geo_write owned_links`), through the same validator and the same rows, so the post-publication re-tests of its group and the
+   * citation match pick it up with no further step. The day it went live defaults to now; the article it belongs to gives its group
+   * and, unless the person says otherwise, its title.
+   * @param {{ id: string }} user @param {string} id
+   * @param {{ url: string, platform: string, title?: string | null, publishedAt?: string | null, articleId?: string | null, groupId?: string | null }} input
+   */
+  async registerOwnedLink(user, id, input) {
+    const project = await this.requireProject(user, id, "edit");
+    let title = typeof input.title === "string" && input.title.trim() ? input.title.trim() : null;
+    if (!title && input.articleId) title = (await this.store.listArticles(project.id)).find((article) => article.id === input.articleId)?.title ?? null;
+    const item = { url: input.url, platform: input.platform, title: title ?? undefined, publishedAt: input.publishedAt ?? this.now().toISOString(),
+      ...(input.articleId ? { articleId: input.articleId } : {}), ...(input.groupId ? { groupId: input.groupId } : {}) };
+    const result = await geoRuntimeWrite({ store: this.store, project, what: "owned_links", body: { items: [item] } });
+    if (!result.ok) {
+      const refusal = result.issues.find((issue) => issue.code !== "notice");
+      throw failure(400, "geo_owned_link_invalid", refusal ? `${refusal.field ? `${refusal.field}: ` : ""}${refusal.message}` : "The link was not registered.");
+    }
+    this.counters.writes += 1;
+    return { id: result.ids[0] ?? null, registered: result.registered ?? [], notices: result.issues.map((issue) => issue.message) };
+  }
+
+  /**
+   * What a runtime write answered about fields it did not keep, counted by the write's `what` (`/metrics`): fields the run wrote that
+   * the platform does not know (`ignored_fields`), and those it has said it does not keep (`declined`).
+   * @param {string} what @param {{ issues?: Array<{ code?: string, field?: string }>, declined?: number }} result
+   */
+  noteWriteFields(what, result) {
+    const ignored = (result.issues ?? []).filter((issue) => issue.code === "ignored_fields")
+      .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
+    const declined = Number(result.declined ?? 0) || 0;
+    if (ignored) this.fieldTotals.set(`${what}\u0000ignored`, (this.fieldTotals.get(`${what}\u0000ignored`) ?? 0) + ignored);
+    if (declined) this.fieldTotals.set(`${what}\u0000declined`, (this.fieldTotals.get(`${what}\u0000declined`) ?? 0) + declined);
+    this.counters.ignoredFields += ignored;
+    this.counters.declinedFields += declined;
+  }
+
   /** `GET …/:id/strategy`. @param {{ id: string }} user @param {string} id */
   async strategy(user, id) { return this.strategyOf(await this.requireProject(user, id)); }
 
@@ -1997,7 +2037,10 @@ export async function geoReadiness({ config, geo, database }) {
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
-  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
+  return { tables, service: { ...geo.service.counters }, writeFields: [...(geo.service.fieldTotals ?? new Map())].map(([key, value]) => {
+    const [what, outcome] = key.split("\u0000");
+    return { what, outcome, value };
+  }), social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
     cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
     questionBank: geo.questionBank?.metrics?.() ?? null, valueUpkeep: geo.valueUpkeep?.metrics?.() ?? null,
     imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
@@ -2033,6 +2076,15 @@ export function geoMetricFamilies(enabled, snapshot) {
   const service = snapshot.service ?? {};
   add("service_total", "What the service did since this process started (researchCapped: research requests over OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN, answered with a notice).", "counter",
     ["projectsCreated", "reads", "writes", "writeIssues", "notFound", "forbidden", "researchCapped"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
+  // Fields a run wrote that the platform does not keep, by the write (a closed list): the evidence for storing one, or for telling the
+  // capability not to write it. The import of a run's files counts under what it wrote through (`run_import`).
+  if (snapshot.writeFields?.length || snapshot.imports) {
+    const imports = snapshot.imports ?? {};
+    add("write_fields_total", "Fields of runs' writes the platform did not keep since this process started, by the write (`what`) and outcome: ignored (a key it does not know, told to the run) or declined (on its stated list of what it does not keep).", "counter",
+      [...(snapshot.writeFields ?? []).map((entry) => ({ labels: { what: entry.what, outcome: entry.outcome }, value: Number(entry.value) })),
+        { labels: { what: "run_files", outcome: "ignored" }, value: Number(/** @type {any} */ (imports).ignoredFields ?? 0) },
+        { labels: { what: "run_files", outcome: "declined" }, value: Number(/** @type {any} */ (imports).declinedFields ?? 0) }]);
+  }
   // The evidence chain (flywheel F21): the product zone's cards made from the claim table, and what was held back or refused.
   if (snapshot.cards) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",

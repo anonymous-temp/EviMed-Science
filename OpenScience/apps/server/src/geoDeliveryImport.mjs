@@ -192,7 +192,12 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   /** How often a run's import has been tried in this process. */
   const tries = new Map();
   /** What the imports did since this process started: runs imported whole, and attempts that lost a write or threw. */
-  const counters = { imported: 0, failed: 0 };
+  /** How many fields a write's issues say it did not keep: each `ignored_fields` issue names them in one comma-separated list. @param {Array<{ code?: string, field?: string }>} issues */
+  const ignoredIn = (issues) => issues.filter((issue) => issue.code === "ignored_fields")
+    .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
+  // `ignored` / `declined`: fields of a run's files the platform does not keep (`GEO_NOT_STORED`, and a key it does not know), counted
+  // for /metrics — what a run keeps writing that is never read is the evidence for storing it, or for telling the capability not to.
+  const counters = { imported: 0, failed: 0, ignoredFields: 0, declinedFields: 0 };
 
   /**
    * One attempt at one run. A write that fails is reported, the others go on, and its code is pushed on `failed`: the caller decides
@@ -361,10 +366,12 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       const { sources, ...data } = geoStrategyWriteOfFile(file);
       const coverage = geoStrategyFileCoverage(file);
       out.declined += Object.keys(coverage.declined).length;
+      counters.declinedFields += Object.keys(coverage.declined).length;
       out.dropped.push(...coverage.dropped.map((path) => `${id}:${path}`));
       try {
         if (Object.keys(data).length) {
           const written = await geoRuntimeWrite({ store, project: geoProject, what: "strategy", body: { data } });
+          counters.ignoredFields += ignoredIn(written.issues);
           out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
           out.gaps += Array.isArray(data.gaps) ? data.gaps.length : 0;
           out.actions += Array.isArray(data.actions) ? data.actions.length : 0;
@@ -372,6 +379,8 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         }
         for (const page of pagesOf(Array.isArray(sources) ? sources : [], GEO_WRITE_LIMITS.sources)) {
           const written = await geoRuntimeWrite({ store, project: geoProject, what: "sources", body: { items: page } });
+          counters.ignoredFields += ignoredIn(written.issues);
+          counters.declinedFields += written.declined ?? 0;
           out.sources += written.ids.length;
           out.refused += written.issues.filter((issue) => issue.code !== "notice" && issue.code !== "ignored_fields").length;
         }
@@ -390,6 +399,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         if (!file || typeof file !== "object") continue;
         const coverage = geoArticlesFileCoverage(file);
         out.declined += Object.keys(coverage.declined).length;
+        counters.declinedFields += Object.keys(coverage.declined).length;
         out.dropped.push(...coverage.dropped.map((path) => `${id}:${path}`));
         const entries = Array.isArray(file.articles) ? file.articles : Array.isArray(file) ? file : [];
         const held = await store.listArticles(geoProject.id);
@@ -412,6 +422,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
             const item = geoArticleItemOfFile(entry, { deliverableId: id, runId: String(run.id), claimIdByKey, contentSha256 });
             const written = await geoRuntimeWrite({ store, project: geoProject, what: "articles", body: { items: [item] }, articleGate,
               articleExists: async (_geo, path) => { try { await readFile(project.workspaceDir, path); return true; } catch { return false; } } });
+            counters.ignoredFields += ignoredIn(written.issues);
             if (written.ids.length) out.registered += 1;
             else out.skipped += 1;
           } catch (error) {

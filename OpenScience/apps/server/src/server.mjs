@@ -384,7 +384,8 @@ import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
 import { GeoMarketStore } from "./geoMarketStore.mjs";
 import { GeoMarketOperations } from "./geoMarketOperations.mjs";
 import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
-  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, resolveUnknownOrder as resolveGeoUnknownOrder, setBudget as setGeoBudget,
+  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, previewOutlets as previewGeoOutlets, resolveUnknownOrder as resolveGeoUnknownOrder,
+  setBudget as setGeoBudget,
   tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
   tickTopups as tickGeoTopups, tickVerify as tickGeoVerify } from "./geoMarket.mjs";
 import { createMediaMarketClient } from "./mediaMarketClient.mjs";
@@ -5075,6 +5076,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       judgeService,
       catalogueJudgeContext: () => ensureEvidenceProject(store),
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
+      // What a person's skips and swapped sources do to a plan: the project's derived actions' own verdicts, the page's.
+      placementChoices: (/** @type {any} */ geoProject) => geoParts.service.spine.choiceEffects(geoProject),
       // The bytes the delivery gate graded for an article's file, to hold a send to them (M-10); null where the receipt cannot say.
       gradedSha256: (/** @type {any} */ article, /** @type {any} */ geoProject) => geoParts.gradedSha256(geoProject,
         { runId: article?.runId ?? null, deliverableId: article?.deliverableId ?? null, path: article?.path ?? "" }),
@@ -5105,6 +5108,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
     };
     geoParts.measureState = measureDeps.state;
+    // The market's read-only ranking beside an action: the function the market places by, over the same rows (nothing is ordered by asking).
+    geoParts.service.spine.placementPreview = (/** @type {any} */ input) => previewGeoOutlets(marketDeps, input);
     // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's
     // own daily loop (below) and the topic selector's observed errors; with the lever off there is nothing of it.
     if (config.geoQuestionBankEnabled) {
@@ -5138,6 +5143,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       enqueueRound: (spec) => enqueueGeoRound(measureDeps, spec),
       noteCitation: (input) => noteGeoCitation(marketDeps, input),
+      // A group a person set aside and an error whose correction they skipped are not given to a batch.
+      placementChoices: (/** @type {any} */ geoProject) => geoParts.service.spine.choiceEffects(geoProject),
       report: (code) => process.stderr.write(`geo orchestrator: ${code}\n`),
     });
     const running = /** @type {GeoOrchestrator} */ (orchestrator);

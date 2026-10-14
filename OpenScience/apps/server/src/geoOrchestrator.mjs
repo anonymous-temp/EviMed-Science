@@ -1,5 +1,5 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
-import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoValueActive, geoValueList, geoValueText, stepWaitingFor } from "@evimed/domain";
+import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -105,7 +105,8 @@ export const GEO_SCHEDULE = Object.freeze({
   metricsGraceMinutes: 30,
   /** The rounds that measure the whole question set; only their rows choose sentinel engines. */
   fullRoundKinds: Object.freeze(["baseline", "weekly", "single_step"]),
-  stalePlacementWeeks: 8,
+  /** The domain's one number (`geoPlacementStale`): the actions' `stale` status reads the same. */
+  stalePlacementWeeks: GEO_STALE_PLACEMENT_WEEKS,
 });
 /** Runs: at most five articles a batch, two tries a run, a claim that stalls for ten minutes is retried. */
 export const GEO_RUN_RULES = Object.freeze({ batchMax: 5, firstBatchesMax: 6, attempts: 2, staleClaimMinutes: 10, projectsPerTick: 200,
@@ -521,6 +522,7 @@ export class GeoOrchestrator {
    *   enqueueRound?: ((spec: { geoProjectId: string, kind: string, questionIds?: string[], engines?: string[], repeat?: number,
    *     ref?: Record<string, any> }) => Promise<any>) | null,
    *   noteCitation?: ((input: { orderId: string, engine: string }) => Promise<any>) | null,
+   *   placementChoices?: ((project: any) => Promise<{ skippedGroupIds?: Set<string>, skippedErrorIds?: Set<string> }>) | null,
    *   projectsPerTick?: number, policies?: any, now?: () => Date, report?: (code: string) => void }} dependencies
    *   `enqueueRound` is the measurement package's, bound to its deps; absent,
    *   diagnosis and the schedules wait and `status()` says measurement is not wired.
@@ -528,9 +530,13 @@ export class GeoOrchestrator {
    *   `runStatus` answers the ledger's run (its `status`, and the rest of it when it has it). `importRun` is the end-of-run import
    *   of what a run delivered (claims, the value profile, research results — geoDeliveryImport.mjs): idempotent, and awaited before
    *   a run is folded into its steps, which read what it writes.
+   *   `placementChoices` is what a person's choices do to a batch (the project's derived actions' own verdicts, `geoChoiceEffects`): a
+   *   group whose content actions are all skipped and an error whose correction is skipped are left out of a new batch. Absent,
+   *   nothing is chosen; a read that fails fails the advance of that project, and the next tick reads it again.
    */
   constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, importRun = null, latestSessionId = null, enqueueRound = null,
-    noteCitation = null, projectsPerTick = GEO_RUN_RULES.projectsPerTick, policies = createModuleEvolutionPolicies(), now = () => new Date(), report = () => {} }) {
+    noteCitation = null, placementChoices = null, projectsPerTick = GEO_RUN_RULES.projectsPerTick, policies = createModuleEvolutionPolicies(), now = () => new Date(),
+    report = () => {} }) {
     if (!store) throw new TypeError("The GEO orchestrator needs the GEO store.");
     this.policies = policies;
     this.store = store;
@@ -542,6 +548,7 @@ export class GeoOrchestrator {
     this.latestSessionId = latestSessionId;
     this.enqueueRound = enqueueRound;
     this.noteCitation = noteCitation;
+    this.placementChoices = placementChoices;
     this.now = now;
     this.report = report;
     this.projectsPerTick = Number.isSafeInteger(projectsPerTick) && projectsPerTick > 0 ? projectsPerTick : GEO_RUN_RULES.projectsPerTick;
@@ -1294,8 +1301,8 @@ export class GeoOrchestrator {
    * @param {any} project @param {Set<string>} assigned @param {boolean} first
    */
   async #firstBatch(project, assigned, first) {
-    const [set, strategy, coverage] = await Promise.all([this.#lockedSet(project.id), this.store.latestStrategy(project.id), this.#coverage(project)]);
-    const groups = (set?.groups ?? []).filter((group) => !group.isControl);
+    const [set, strategy, coverage, choices] = await Promise.all([this.#lockedSet(project.id), this.store.latestStrategy(project.id), this.#coverage(project), this.#choices(project)]);
+    const groups = (set?.groups ?? []).filter((group) => !group.isControl && !choices.skippedGroupIds.has(group.id));
     const battlefield = Array.isArray(strategy?.battlefield?.groups) ? strategy.battlefield.groups.map(String) : [];
     const resolved = battlefield.length
       ? battlefield.map((entry) => groups.find((group) => group.id === entry || group.name === entry)).filter(Boolean)
@@ -1307,30 +1314,84 @@ export class GeoOrchestrator {
       chosen.push({ id: group.id, name: group.name, pool: group.pool, typicalQuestion: group.typicalQuestion });
       if (chosen.length >= GEO_RUN_RULES.batchMax) break;
     }
-    const errors = chosen.length < GEO_RUN_RULES.batchMax ? await this.#openErrors(project, assigned, GEO_RUN_RULES.batchMax - chosen.length) : [];
+    const errors = chosen.length < GEO_RUN_RULES.batchMax ? await this.#openErrors(project, assigned, GEO_RUN_RULES.batchMax - chosen.length, null, choices.skippedErrorIds) : [];
     if (!chosen.length && !errors.length) return first ? { groups: [], errors: [] } : null;
     return { groups: chosen, errors };
   }
 
-  /** Open 讲错我方 not yet in any batch, most severe first. @param {any} project @param {Set<string>} assigned @param {number} limit @param {string | null} [roundId] */
-  async #openErrors(project, assigned, limit, roundId = null) {
+  /**
+   * Open 讲错我方 not yet in any batch, most severe first. An error whose correction a person set aside is not given to one.
+   * @param {any} project @param {Set<string>} assigned @param {number} limit @param {string | null} [roundId] @param {Set<string>} [skipped]
+   */
+  async #openErrors(project, assigned, limit, roundId = null, skipped = new Set()) {
     const rows = (await this.store.query(`SELECT e.id, e.engine, e.statement FROM evimed_geo.errors e
       WHERE e.geo_project_id = $1 AND e.status IN ('open', 'acting')
         AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.id = e.last_snapshot_id AND s.round_id = $2))
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT 100`, [project.id, roundId])).rows;
-    return rows.filter((/** @type {any} */ row) => roundId || !assigned.has(String(row.id))).slice(0, limit)
+    return rows.filter((/** @type {any} */ row) => !skipped.has(String(row.id)) && (roundId || !assigned.has(String(row.id)))).slice(0, limit)
       .map((/** @type {any} */ row) => ({ id: String(row.id), engine: String(row.engine), statement: row.statement ?? null }));
+  }
+
+  /**
+   * What a person's choices do to a batch, as the project's derived actions say it. A read that fails fails the advance: a batch is a
+   * run, and writing for what a person set aside is the thing they asked not to have.
+   * @param {any} project
+   * @returns {Promise<{ skippedGroupIds: Set<string>, skippedErrorIds: Set<string> }>}
+   */
+  async #choices(project) {
+    const none = { skippedGroupIds: new Set(), skippedErrorIds: new Set() };
+    if (!this.placementChoices) return none;
+    const read = await this.placementChoices(project);
+    return { skippedGroupIds: read?.skippedGroupIds ?? none.skippedGroupIds, skippedErrorIds: read?.skippedErrorIds ?? none.skippedErrorIds };
+  }
+
+  /**
+   * The groups with something published that nobody cited in eight weeks — the domain's one criterion (`geoPlacementStale`) over what
+   * the project published (an order the market published, a link the brand published itself) and what was cited (the direct
+   * citations, and the order's own `cited` events). A group is named by the id its article carries; the caller finds it in the set.
+   * @param {any} project @returns {Promise<string[]>} group ids
+   */
+  async #staleGroupIds(project) {
+    const now = this.now();
+    const [orders, links, cited] = await Promise.all([
+      this.store.query(`SELECT o.id, a.id AS article_id, a.group_id, o.updated_at,
+          (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'published') AS published_at,
+          EXISTS (SELECT 1 FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.detail ->> 'phase' = 'cited') AS was_cited
+        FROM evimed_geo.orders o JOIN evimed_geo.articles a ON a.id = o.article_id
+        WHERE o.geo_project_id = $1 AND o.state IN ('published', 'verified', 'settled') AND a.group_id IS NOT NULL`, [project.id]),
+      this.store.ownedLinks(project.id),
+      this.store.citedArticles(project.id),
+    ]);
+    const citedIds = new Set(cited.map((entry) => String(entry.articleId)));
+    const groupOfArticle = new Map((await this.store.listArticles(project.id)).filter((article) => article.groupId).map((article) => [String(article.id), String(article.groupId)]));
+    /** @type {Set<string>} */
+    const stale = new Set();
+    for (const row of orders.rows) {
+      const wasCited = row.was_cited === true || citedIds.has(String(row.article_id));
+      if (geoPlacementStale({ publishedAt: row.published_at ?? row.updated_at, now, cited: wasCited })) stale.add(String(row.group_id));
+    }
+    for (const link of links) {
+      if (link.status === "retired") continue;
+      const groupId = link.groupId ?? (link.articleId ? groupOfArticle.get(String(link.articleId)) : null);
+      if (!groupId) continue;
+      const wasCited = (Array.isArray(link.citedBy) && link.citedBy.length > 0) || (link.articleId != null && citedIds.has(String(link.articleId)));
+      if (geoPlacementStale({ publishedAt: link.publishedAt, now, cited: wasCited })) stale.add(String(groupId));
+    }
+    return [...stale];
   }
 
   /**
    * The next round after a weekly re-measure (plan §3.8): groups still short
    * of the chosen tier's target, groups whose placed article was never cited
    * after eight weeks, and 讲错我方 the re-measure saw again — within budget.
+   * What a person set aside (a group whose content actions are all skipped, an
+   * error whose correction is skipped) is not given to the batch, and the
+   * target, the shortfall and the staleness are the domain's own functions.
    * @param {any} project @param {{ monday: string, roundId: string }} week @param {Set<string>} assigned
    */
   async #nextRoundBatch(project, week, assigned) {
-    const [set, targets, money] = await Promise.all([this.#lockedSet(project.id), this.store.latestTargets(project.id), this.#available(project)]);
-    const groups = (set?.groups ?? []).filter((group) => !group.isControl);
+    const [set, targets, money, choices] = await Promise.all([this.#lockedSet(project.id), this.store.latestTargets(project.id), this.#available(project), this.#choices(project)]);
+    const groups = (set?.groups ?? []).filter((group) => !group.isControl && !choices.skippedGroupIds.has(group.id));
     /** @type {any[]} */
     const chosen = [];
     const add = (/** @type {any} */ group) => {
@@ -1339,35 +1400,26 @@ export class GeoOrchestrator {
     };
     const room = money.available == null ? 0 : money.perArticle ? Math.floor(money.available / money.perArticle) : money.available > 0 ? GEO_RUN_RULES.batchMax : 0;
     if (room > 0) {
-      const tier = project.tier;
-      const target = (/** @type {string | null} */ pool) => {
-        const rows = targets?.rows.filter((row) => row.tier === tier && ["M-01", "M-01S"].includes(row.metricId)) ?? [];
-        return (rows.find((row) => row.pool === pool) ?? rows.find((row) => row.pool === "all"))?.target ?? null;
-      };
       const measured = (await this.store.query(`SELECT DISTINCT ON (coalesce(group_id, ''), coalesce(pool, '')) group_id, pool, value, status
         FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id = $2 AND metric_id = 'M-01' AND scope IN ('group', 'pool')
           AND variant IS NULL AND rival IS NULL AND arm IS NULL AND engine IS NULL
         ORDER BY coalesce(group_id, ''), coalesce(pool, ''), computed_at DESC`, [project.id, week.roundId])).rows;
+      /** @param {any} row */
+      const reading = (row) => (row ? { value: Number(row.value), status: String(row.status) } : null);
       for (const group of groups) {
-        const goal = target(group.pool);
-        if (goal == null) continue;
-        const own = measured.find((/** @type {any} */ row) => row.group_id === group.id && row.status === "ok")
-          ?? measured.find((/** @type {any} */ row) => row.group_id == null && row.pool === group.pool && row.status === "ok");
-        if (own && Number(own.value) < Number(goal)) add(group);
+        const goal = geoPoolTarget(targets?.rows, { tier: project.tier, pool: group.pool, metricIds: ["M-01", "M-01S"] })?.target ?? null;
+        const own = measured.find((/** @type {any} */ row) => row.group_id === group.id);
+        const proxy = measured.find((/** @type {any} */ row) => row.group_id == null && row.pool === group.pool);
+        if (geoGroupShort({ own: reading(own), proxy: reading(proxy), goal: goal == null ? null : Number(goal) }).short) add(group);
       }
-      const stale = (await this.store.query(`SELECT DISTINCT a.group_id FROM evimed_geo.orders o JOIN evimed_geo.articles a ON a.id = o.article_id
-        WHERE o.geo_project_id = $1 AND o.state IN ('published', 'verified', 'settled') AND a.group_id IS NOT NULL
-          AND o.updated_at < now() - make_interval(days => $2)
-          AND NOT EXISTS (SELECT 1 FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.detail ->> 'phase' = 'cited')`,
-      [project.id, GEO_SCHEDULE.stalePlacementWeeks * 7])).rows;
       const byId = new Map((await this.#coverage(project)).byId);
-      for (const row of stale) {
-        const old = byId.get(String(row.group_id));
-        add(groups.find((group) => group.id === row.group_id || (old?.name && group.name === old.name)));
+      for (const groupId of await this.#staleGroupIds(project)) {
+        const old = byId.get(groupId);
+        add(groups.find((group) => group.id === groupId || (old?.name && group.name === old.name)));
       }
       chosen.splice(Math.min(room, GEO_RUN_RULES.batchMax));
     }
-    const errors = await this.#openErrors(project, assigned, GEO_RUN_RULES.batchMax - chosen.length, week.roundId);
+    const errors = await this.#openErrors(project, assigned, GEO_RUN_RULES.batchMax - chosen.length, week.roundId, choices.skippedErrorIds);
     const reason = !chosen.length && !errors.length ? (money.available == null ? "no_budget" : room <= 0 ? "budget_spent" : "nothing_short") : null;
     return { groups: chosen, errors, reason };
   }

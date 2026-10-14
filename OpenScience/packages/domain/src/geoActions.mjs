@@ -19,9 +19,9 @@
  *   `rate` below the floor (its return type says so), and "did it work" is judged only on the arms — pilot groups together against
  *   control groups together, over rounds with the same engines and groups (`NET` rows, written by the measurement package).
  * - **A control group has no action.** It is measured and never worked on (writing for it takes it out of the control arm).
- * - **The status is the furthest stage reached**, and two words are flags: `stale` (published eight weeks, never cited — the
- *   criterion the orchestrator uses to put a group in the next batch, `geoPlacementStale`) and `skipped` (a person's reversible
- *   word). The order of the stages is `GEO_ACTION_STATUSES`.
+ * - **The status is the furthest stage reached**, and two words are flags: `stale` (the latest publication is eight weeks old and
+ *   nothing cited any — the criterion the orchestrator uses, per article, to put a group in the next batch, `geoPlacementStale`)
+ *   and `skipped` (a person's reversible word). The order of the stages is `GEO_ACTION_STATUSES`.
  * - **A key survives what rewrites around it**: a new strategy version with the same gap, and a question set copied under new
  *   group ids (a group keeps its name; `aliasIds` carry the ids it had), find the same choice. The key's first word is the kind the
  *   action was born with; `kind` itself becomes `correct_error` when a group is already at its target and errors are open.
@@ -352,43 +352,56 @@ export function geoActionEntry(entry) {
 
 /**
  * The sources an action lists: the person's swapped one first, then the outlets it was placed in, then the model's choice and the
- * candidates' own order — at most {@link GEO_ACTION_SOURCES}, each once.
+ * candidates' own order — at most {@link GEO_ACTION_SOURCES}, each once. A source is an address (`domain`) or, for the brand's own
+ * channel, a platform (`channel`, no domain): the person publishes there and pastes the link.
  *
- * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null, placed: ReadonlyArray<{ domain: string, orderId: string | null }>,
+ * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
+ *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
  *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }> }} choice
  */
 function rankedSources(candidates, { swapped, placed, modelSources }) {
   /** @type {Map<string, Record<string, any>>} */
-  const byDomain = new Map()
+  const byKey = new Map()
   for (const candidate of candidates) {
     const raw = text(candidate?.domain)
     const domain = raw ? bareDomain(raw) : null
-    if (domain && !byDomain.has(domain)) byDomain.set(domain, { ...candidate, domain })
+    const channel = text(candidate?.channel)
+    const key = domain ?? (channel ? `channel:${channel}` : null)
+    if (key && !byKey.has(key)) byKey.set(key, { ...candidate, domain })
   }
   /** @type {string[]} */
   const order = []
-  const take = (/** @type {string | null | undefined} */ domain) => { if (domain && !order.includes(domain)) order.push(domain) }
+  const take = (/** @type {string | null | undefined} */ key) => { if (key && !order.includes(key)) order.push(key) }
   take(swapped ? bareDomain(swapped) : null)
   for (const entry of placed) take(entry.domain)
   for (const entry of modelSources) take(entry.domain)
-  for (const domain of byDomain.keys()) take(domain)
-  return order.slice(0, GEO_ACTION_SOURCES).map((domain) => {
-    const candidate = byDomain.get(domain) ?? { domain }
-    const placedAs = placed.find((entry) => entry.domain === domain)
+  for (const key of byKey.keys()) take(key)
+  return order.slice(0, GEO_ACTION_SOURCES).map((key) => {
+    const domain = key.startsWith('channel:') ? null : key
+    const placedAs = domain ? placed.find((entry) => entry.domain === domain) : undefined
+    // An outlet the platform placed at is a placement whatever else is known of it: its own name and price fill what the lists lack.
+    const known = byKey.get(key) ?? { domain: key }
+    const candidate = placedAs
+      ? { ...known, name: known.name ?? placedAs.name, price: known.price ?? placedAs.price, route: 'market', origin: known.origin ?? 'placed' }
+      : known
     const swappedTo = swapped ? bareDomain(swapped) : null
     return {
       domain,
+      channel: text(candidate.channel),
       name: text(candidate.name),
       kind: text(candidate.kind),
       layer: text(candidate.layer),
-      why: modelSources.find((entry) => entry.domain === domain)?.why ?? null,
+      why: domain ? modelSources.find((entry) => entry.domain === domain)?.why ?? null : null,
       citedFor: record(candidate.citedFor),
       conditions: record(candidate.conditions),
       price: finite(candidate.price),
       available: candidate.available === true ? true : candidate.available === false ? false : null,
+      unavailableBecause: list(candidate.unavailableBecause).map(String),
+      route: text(candidate.route),
       origin: text(candidate.origin),
-      chosen: placedAs ? 'placed' : swappedTo === domain ? 'swapped' : 'recommended',
+      chosen: placedAs ? 'placed' : domain && swappedTo === domain ? 'swapped' : 'recommended',
       orderId: placedAs?.orderId ?? null,
+      articleIds: list(candidate.articleIds).map(String),
     }
   })
 }
@@ -482,8 +495,8 @@ export function deriveGeoActions(input) {
     ].filter((value) => value != null)
     const live = publishedAt.length > 0
     const isCited = facts.citations.length > 0
-    // Published, never cited, and the earliest publication is eight weeks old.
-    if (live && !isCited && geoPlacementStale({ publishedAt: Math.min(.../** @type {number[]} */ (publishedAt)), now, cited: false })) return 'stale'
+    // Published, never cited, and the latest publication is eight weeks old: a new publication starts the wait again.
+    if (live && !isCited && geoPlacementStale({ publishedAt: Math.max(.../** @type {number[]} */ (publishedAt)), now, cited: false })) return 'stale'
     if (isCited && (facts.reached === true || facts.armUp)) return 'verified'
     if (facts.errorsClosed) return 'verified'
     if (isCited) return 'cited'
@@ -607,7 +620,8 @@ export function deriveGeoActions(input) {
     const channel = entry?.what?.channel && GEO_ARTICLE_CHANNELS.includes(/** @type {any} */ (entry.what.channel)) ? entry.what.channel : text(latestArticle?.channel)
     const layer = entry?.what?.layer && GEO_ARTICLE_LAYERS.includes(/** @type {any} */ (entry.what.layer)) ? entry.what.layer : text(latestArticle?.layer)
     const placed = facts.orders.filter((order) => [...PLACED_ORDER_STATES, ...PUBLISHED_ORDER_STATES].includes(String(order.state)) && text(order.domain))
-      .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id) }))
+      .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id), name: text(order.mediaName),
+        price: finite(order.settledCny) ?? finite(order.priceCny) }))
     const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [] })
     // ---- what happened
     const citedBy = facts.citations.map((item) => ({ engine: text(item.engine), questionId: text(item.questionId), askedAt: text(item.firstSeen), articleId: text(item.articleId) }))

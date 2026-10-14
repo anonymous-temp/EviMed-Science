@@ -8,6 +8,8 @@ import http from "node:http";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, compactAction } from "../src/geoService.mjs";
+import { GeoMarketStore } from "../src/geoMarketStore.mjs";
+import { previewOutlets } from "../src/geoMarket.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -274,8 +276,13 @@ test("the actions are grouped by gap, with sources, the tier's target, k of n an
   assert.deepEqual([safety.expected.target, safety.expected.horizonWeeks, safety.expected.dataType, safety.expected.tier], [0, 12, "forecast", "2"]);
   assert.equal(safety.expected.promise, "coverage_complete");
   assert.equal(safety.need.expectedPoints.length, 1);
-  assert.deepEqual(safety.sources.map((/** @type {any} */ source) => [source.domain, source.chosen, source.available]), [["dayi.org.cn", "placed", true], ["nmpa.gov.cn", "recommended", null]],
-    "the outlet its article was placed in (the three conditions the strategy checked hold), then the layout's anchor that nobody has checked");
+  assert.deepEqual(safety.sources.map((/** @type {any} */ source) => [source.domain, source.channel, source.chosen, source.available, source.route]),
+    [["dayi.org.cn", null, "placed", true, "market"], [null, "wechat_mp", "recommended", true, "own"], ["nmpa.gov.cn", null, "recommended", null, "waiting_market"]],
+    "the outlet its article was placed in (the three conditions the strategy checked hold), the brand's own channel its article names, then the layout's anchor "
+    + "that nobody has checked and no market is connected to place at");
+  const own = safety.sources[1];
+  assert.deepEqual([own.name, own.kind, own.layer, own.price, own.origin, own.articleIds], ["微信公众号", "own_channel", "owned", null, "own_channel", safety.articleIds],
+    "the brand publishes there itself and pastes the link");
   assert.equal(safety.articleIds.length, 1);
   const brand = byKey[`fill_gap:${id("g3")}:missing_evidence`];
   assert.equal(brand.status, "cited", "the owned link of G3's article was cited by an engine — direct evidence, by the page's address");
@@ -389,4 +396,95 @@ test("the runtime reads the same verdicts as the page: numbers equal, one functi
   const compact = read.actions.find((/** @type {any} */ action) => action.key.startsWith("correct_error:") && action.key.includes(id("g1")));
   const full = page.actions.find((/** @type {any} */ action) => action.key === compact.key);
   assert.deepEqual([compact.expected.from, compact.expected.target], [full.expected.from, full.expected.target]);
+});
+
+test("a person pastes the address of a page the brand published: the run's own registration, so the re-tests that read the row pick it up", options, async () => {
+  const route = `/api/geo/projects/${geo.geoId}/owned-links`;
+  const created = await call("POST", route, { body: { url: "https://zhuanlan.zhihu.com/p/5551234?utm_source=x", platform: "zhihu", articleId: geo.a2 } });
+  assert.equal(created.status, 201);
+  const linkId = created.payload.data.id;
+  assert.match(linkId, /^[A-Za-z0-9_-]+$/);
+  const row = (await q(`SELECT platform, title, article_id, group_id, published_at, status, url_key FROM evimed_geo.owned_links WHERE id = $1`, [linkId])).rows[0];
+  assert.deepEqual([row.platform, row.title, row.article_id, row.group_id, row.status], ["zhihu", "哪些人不能用", geo.a2, id("g2"), "active"],
+    "the article gives its title and its group");
+  assert.equal(new Date(row.published_at).toISOString(), NOW.toISOString(), "the day it went live is today unless the person says another");
+  assert.equal(row.url_key.includes("utm_source"), false, "the page's key is the page's, not its tracking");
+
+  // The action of that group now counts it, and is no longer stale: a new publication starts the wait again.
+  const actions = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data.actions;
+  const safety = actions.find((/** @type {any} */ action) => action.key === `fill_gap:${id("g2")}:benefit_only`);
+  assert.deepEqual(safety.ownedLinkIds, [linkId]);
+  assert.equal(safety.status, "live");
+  // The orchestrator's post-publication rounds read exactly this row (an active link with a group and a day it went live): its own
+  // test registers through the same function this route calls and asserts the rounds (geoOrchestrator.integration.test.mjs).
+
+  // The same page again is an update, never a second row.
+  const again = await call("POST", route, { body: { url: "https://zhuanlan.zhihu.com/p/5551234", platform: "zhihu", articleId: geo.a2, title: "改了标题" } });
+  assert.equal(again.status, 201);
+  assert.equal((await q(`SELECT count(*)::int AS n FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND url_key LIKE 'zhuanlan.zhihu.com%'`, [geo.geoId])).rows[0].n, 1);
+
+  // What cannot be registered says why, and what is not the person's to do is refused.
+  assert.equal((await call("POST", route, { body: { url: "not a page", platform: "zhihu", title: "x" } })).payload.code, "geo_owned_link_invalid");
+  assert.equal((await call("POST", route, { body: { url: "https://baijiahao.baidu.com/s", platform: "baijiahao", title: "x" } })).payload.code, "geo_owned_link_invalid",
+    "an address that names no single page");
+  assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "nowhere", title: "x" } })).payload.code, "geo_owned_link_invalid");
+  assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "zhihu" } })).payload.code, "geo_owned_link_invalid", "a title, or an article that has one");
+  assert.equal((await call("POST", route, { body: { platform: "zhihu" } })).payload.code, "geo_owned_link_invalid");
+  assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "zhihu", title: "x", extra: 1 } })).status, 400);
+  assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "zhihu", title: "x" }, user: MALLORY })).status, 404);
+});
+
+test("what a person's choices do to the platform's choosers is the page's own verdict, read from the same actions", options, async () => {
+  const project = /** @type {any} */ (await store.getProject(ALICE, geo.geoId));
+  const key = `fill_gap:${id("g2")}:benefit_only`;
+  const effects = async () => service.spine.choiceEffects(project);
+  const before = await effects();
+  assert.equal(before.skippedGroupIds.size + before.skippedArticleIds.size + before.skippedErrorIds.size, 0);
+  // Skipped: the group's only content action, so the group and the article both its actions list are set aside.
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/skip`, { body: {} });
+  const skipped = await effects();
+  assert.equal(skipped.skippedGroupIds.has(id("g2")), true);
+  assert.equal(skipped.skippedArticleIds.has(geo.a2), true);
+  const page = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data.actions;
+  assert.equal(page.find((/** @type {any} */ action) => action.key === key).status, "skipped", "the page says what the choosers do");
+  // A source sent to: preferred for the article, and not once the action is skipped.
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/skip`, { body: { skipped: false } });
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/source`, { body: { domain: "kepuchina.cn" } });
+  assert.deepEqual((await effects()).preferredByArticle.get(geo.a2), ["kepuchina.cn"]);
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/skip`, { body: {} });
+  assert.equal((await effects()).preferredByArticle.has(geo.a2), false);
+  // Everything put back as it was.
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/skip`, { body: { skipped: false } });
+  await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/source`, { body: { domain: null } });
+  const restored = await effects();
+  assert.equal(restored.skippedArticleIds.size + restored.preferredByArticle.size, 0);
+});
+
+test("with a market the sources carry its word on them: price, whether it would place there, and why not — and looking orders nothing", options, async () => {
+  const market = new GeoMarketStore(database);
+  await q(`UPDATE evimed_geo.media SET domain_verified = true, flags = '{}'::jsonb WHERE resource_id = 'res1'`);
+  await q(`INSERT INTO evimed_geo.media (resource_id, media_type, name, domain, price_cny, available, domain_verified) VALUES ('res2', 'website', '科普中国', 'kepuchina.cn', 90, true, true)`);
+  const before = (await q(`SELECT count(*)::int AS n FROM evimed_geo.orders WHERE geo_project_id = $1`, [geo.geoId])).rows[0].n;
+  service.spine.placementPreview = (input) => previewOutlets({ store: market, market: { configured: true }, now: () => NOW, config: {} }, input);
+  const configuredBefore = service.spine.marketConfigured;
+  service.spine.marketConfigured = () => true;
+  try {
+    const key = `fill_gap:${id("g2")}:benefit_only`;
+    const view = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data.actions.find((/** @type {any} */ action) => action.key === key);
+    const byDomain = Object.fromEntries(view.sources.filter((/** @type {any} */ source) => source.domain).map((/** @type {any} */ source) => [source.domain, source]));
+    // dayi.org.cn is an outlet of the catalogue the three conditions hold for: placed there, its price is the market's.
+    assert.deepEqual([byDomain["dayi.org.cn"].route, byDomain["dayi.org.cn"].price, byDomain["dayi.org.cn"].available], ["market", 120, true]);
+    // nmpa.gov.cn is not an outlet of the catalogue: the platform cannot place there, and says so.
+    assert.deepEqual([byDomain["nmpa.gov.cn"].route, byDomain["nmpa.gov.cn"].available], ["not_in_market", false]);
+    assert.ok(byDomain["nmpa.gov.cn"].unavailableBecause.includes("not_in_catalogue"));
+    // A person who sends the action to an outlet of the catalogue sees it listed first with its price, as the plan would take it.
+    await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/source`, { body: { domain: "kepuchina.cn" } });
+    const swapped = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data.actions.find((/** @type {any} */ action) => action.key === key);
+    assert.deepEqual([swapped.sources[0].domain, swapped.sources[0].chosen, swapped.sources[0].price, swapped.sources[0].route], ["kepuchina.cn", "swapped", 90, "market"]);
+    await call("POST", `/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/source`, { body: { domain: null } });
+    assert.equal((await q(`SELECT count(*)::int AS n FROM evimed_geo.orders WHERE geo_project_id = $1`, [geo.geoId])).rows[0].n, before, "no order was created by looking");
+  } finally {
+    service.spine.placementPreview = null;
+    service.spine.marketConfigured = configuredBefore;
+  }
 });

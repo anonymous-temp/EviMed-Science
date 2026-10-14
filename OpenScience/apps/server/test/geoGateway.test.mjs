@@ -45,7 +45,10 @@ function geoDouble(config, { failRead = null, failStep = null, social = null } =
         },
       },
       service: {
-        counters: { writes: 0, writeIssues: 0 },
+        counters: { writes: 0, writeIssues: 0, ignoredFields: 0, declinedFields: 0 },
+        noteWriteFields(/** @type {string} */ what, /** @type {any} */ result) {
+          calls.push(["noteWriteFields", what, result.ok]);
+        },
         allows: (/** @type {any} */ user) => geoAudienceAllows(config, user),
         async runtimeRead(/** @type {any} */ target, /** @type {string} */ what, /** @type {any} */ filter) {
           if (failRead) throw failRead;
