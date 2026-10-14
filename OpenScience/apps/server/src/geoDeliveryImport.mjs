@@ -5,6 +5,77 @@ import { geoArticleItemOfFile, geoArticleReader, geoArticlesFileCoverage, geoRun
   GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { importGeoValue } from "./geoValueImport.mjs";
+import { canonicalJson } from "./geoStore.mjs";
+
+/** The parts of a strategy the import may add to. */
+const STRATEGY_PARTS = Object.freeze(["summary", "battlefield", "expectations", "gaps", "layout", "tiers", "noGo", "assumptions", "actions"]);
+/** What names an entry of a list of objects, in the order the platform's own lists use. */
+const IDENTITY_KEYS = Object.freeze(["gapId", "engine", "tier", "field", "item", "id", "name", "domain"]);
+
+/** @param {unknown} value */
+const isEmptyValue = (value) => value == null || value === "" || (Array.isArray(value) && value.length === 0)
+  || (typeof value === "object" && !Array.isArray(value) && Object.values(/** @type {object} */ (value)).every(isEmptyValue));
+/** @param {unknown} entry @returns {string | null} */
+const identityOf = (entry) => {
+  if (!entry || typeof entry !== "object") return null;
+  for (const key of IDENTITY_KEYS) {
+    const value = /** @type {Record<string, unknown>} */ (entry)[key];
+    if (typeof value === "string" && value.trim()) return `${key}:${value.trim()}`;
+    if (typeof value === "number") return `${key}:${value}`;
+  }
+  return null;
+};
+
+/**
+ * What a run's file adds to what the run itself wrote: a value the stored side holds stays, an empty one takes the file's, a list of
+ * objects is united by what names each entry, and an entry only one side has is kept. The file never replaces a field the run wrote
+ * through the platform (`geo_write` names the platform's own fields; the file's are the run's, and a poorer copy of the same plan
+ * must not take the richer one's place — the real-kernel check of 2026-10-14 lost a battlefield, expected points and evidence that way).
+ * @param {unknown} held @param {unknown} given @returns {unknown}
+ */
+export function fillValue(held, given) {
+  if (isEmptyValue(held)) return isEmptyValue(given) ? held : given;
+  if (isEmptyValue(given)) return held;
+  if (Array.isArray(held) && Array.isArray(given)) {
+    const named = held.every((entry) => identityOf(entry)) && given.every((entry) => identityOf(entry));
+    if (!named) return held;
+    const byIdentity = new Map(held.map((entry) => [identityOf(entry), entry]));
+    const merged = held.map((entry) => {
+      const other = given.find((candidate) => identityOf(candidate) === identityOf(entry));
+      return other === undefined ? entry : fillValue(entry, other);
+    });
+    for (const entry of given) if (!byIdentity.has(identityOf(entry))) merged.push(entry);
+    return merged;
+  }
+  if (typeof held === "object" && typeof given === "object" && !Array.isArray(held) && !Array.isArray(given)) {
+    /** @type {Record<string, unknown>} */
+    const out = { .../** @type {Record<string, unknown>} */ (held) };
+    for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (given))) out[key] = fillValue(out[key], value);
+    return out;
+  }
+  return held;
+}
+
+/**
+ * The parts of a strategy file worth writing over what the run wrote itself: only those where the file adds something.
+ * @param {Record<string, any> | null} stored the latest stored strategy @param {Record<string, any>} data the file, in write form
+ * @returns {Record<string, any>}
+ */
+export function fillStrategy(stored, data) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  const given = { ...data, ...(data.noGo === undefined && data.no_go !== undefined ? { noGo: data.no_go } : {}) };
+  if (given.secondary !== undefined && given.battlefield && typeof given.battlefield === "object") {
+    given.battlefield = { ...given.battlefield, secondary: given.battlefield.secondary ?? given.secondary };
+  }
+  for (const part of STRATEGY_PARTS) {
+    if (given[part] === undefined) continue;
+    const held = stored?.[part] ?? null;
+    const merged = fillValue(held, given[part]);
+    if (canonicalJson(merged) !== canonicalJson(held)) out[part] = merged;
+  }
+  return out;
+}
 
 /**
  * The claim library a finished `geo-insight` run delivered, registered in its
@@ -363,7 +434,13 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     for (const id of idsOf("geo-strategy")) {
       const file = await parsedFile(id, "strategy.json");
       if (!file || typeof file !== "object") continue;
-      const { sources, ...data } = geoStrategyWriteOfFile(file);
+      const { sources, ...fileData } = geoStrategyWriteOfFile(file);
+      // A run that wrote its strategy through the platform has written it in the platform's own words: its file only adds what the
+      // platform does not hold yet. A run that did not (the stored strategy is older than the run) is the file's to say.
+      const stored = await store.latestStrategy(geoProject.id);
+      const startedAt = Date.parse(String(run.startedAt ?? run.createdAt ?? ""));
+      const wroteItself = Boolean(stored) && Number.isFinite(startedAt) && Date.parse(String(stored.createdAt)) >= startedAt;
+      const data = wroteItself ? fillStrategy(stored, fileData) : fileData;
       const coverage = geoStrategyFileCoverage(file);
       out.declined += Object.keys(coverage.declined).length;
       counters.declinedFields += Object.keys(coverage.declined).length;
