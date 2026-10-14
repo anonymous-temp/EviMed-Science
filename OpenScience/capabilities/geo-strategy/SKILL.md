@@ -74,8 +74,11 @@ with this page.
     could not be checked), `checkedAt` (the day you checked), `impostor`,
     `blacklistReason`;
   - each engine's expectation: `engine`, `promise` (what this cycle can
-    promise, in a sentence), `layers` (which layers to place into),
-    `leverage`;
+    promise, in a sentence), `ceiling` (`mention_and_accuracy`,
+    `accuracy_only` or `undetermined`) with `ceilingBasis` (what it rests
+    on), `layers` (which layers to place into), `cites`, `leverage`,
+    `clusterLeverage`, `evidence`; its retrieval and sample cells are the
+    platform's own rows and are not written;
   - `battlefield`: `{ id, name, why[], action, groups, secondary }`; `gaps`:
     `{ gapId, class, groupId, judgment, rank, consequence: { band, basis },
     evidence: { metric, errors[] }, expectedPoints: [{ pointId, kind,
