@@ -6,7 +6,7 @@ import { MasterDetail } from "./MasterDetail";
 /** The page's own width as the layout measures it (jsdom has no layout). */
 let width = 0;
 beforeEach(() => {
-  width = 1000;
+  width = 1100;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     return { width: this.hasAttribute("data-master-detail") ? width : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
   });
@@ -25,8 +25,8 @@ describe("MasterDetail", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("opens the record in a drawer over the list when there is not room, and closing it is the page's", async () => {
-    width = 700;
+  it("opens the record in a drawer over the list when there is not room (under 1024 px of the page), and closing it is the page's", async () => {
+    width = 1000;
     const close = vi.fn();
     const { rerender } = render(<MasterDetail list={list} detail={detail} selected={false} listLabel="假设列表" detailLabel="假设" detailTitle="假设" onCloseDetail={close} />);
     expect(screen.getByRole("region", { name: "假设列表" })).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe("MasterDetail", () => {
   });
 
   it("hands each region whether the two are side by side", () => {
-    width = 1000;
+    width = 1100;
     render(<MasterDetail narrow="swap" list={({ split }) => <p>{split ? "并排" : "单列"}</p>} detail={({ split }) => <p>{split ? "详情并排" : "详情单列"}</p>} selected listLabel="列表" detailLabel="详情" />);
     expect(screen.getByText("并排")).toBeInTheDocument();
     expect(screen.getByText("详情并排")).toBeInTheDocument();

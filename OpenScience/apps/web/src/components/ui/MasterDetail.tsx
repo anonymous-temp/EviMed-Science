@@ -49,7 +49,7 @@ export function MasterDetail({
   listLabel,
   detailLabel,
   listWidth = 340,
-  detailMin = 640,
+  detailMin = 684,
   modeAttribute,
   listAttributes,
   detailAttributes,
@@ -64,7 +64,10 @@ export function MasterDetail({
   /** The two regions' accessible names. */
   listLabel: string;
   detailLabel: string;
-  /** The list column's width, 320–360 px; the detail is never narrower than `detailMin`. */
+  /**
+   * The list column's width, 320–360 px, and the least the detail is given: the two together are the page's own width from which
+   * they sit side by side — 340 + 684 = 1024 by default. (A conversation needs 640 beside a 300 list: `AutopilotPage` says so.)
+   */
   listWidth?: number;
   detailMin?: number;
   modeAttribute?: `data-${string}`;
