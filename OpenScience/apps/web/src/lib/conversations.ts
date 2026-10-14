@@ -24,10 +24,11 @@ export interface Conversation {
 }
 
 /**
- * Whether a run is one of the person's conversations. A run with a `role` is the platform's own back office in the same ledger — today
- * the independent re-check of a scheduled task's claim, whose conversation is a brief the platform wrote and a verdict it keeps — and no
- * list of conversations draws it: not the sidebar's groups, not its search, not the count behind 「展开其余 N 条对话」, not the shelf, not
- * the conversation a visit resumes. The mark is the server's (`role`, from the route reason it wrote), never the title.
+ * Whether a run is one of the person's conversations. A run with a `role` is the platform's own back office in the same ledger — the
+ * independent re-check of a scheduled task's claim (`verification`), and a step a module's programme dispatched, whose first message is
+ * the sentence of the work and not a conversation (`programme`: 虚拟临床研究's steps) — and no list of conversations draws it: not the
+ * sidebar's groups, not its search, not the count behind 「展开其余 N 条对话」, not the shelf, not the conversation a visit resumes. The
+ * mark is the server's (`role`, from the route reason it wrote), never the title.
  */
 export function isConversationRun(run: Pick<WebAgentRun, "role">): boolean {
   return run.role == null;
@@ -36,6 +37,14 @@ export function isConversationRun(run: Pick<WebAgentRun, "role">): boolean {
 function started(run: WebAgentRun): number {
   const at = Date.parse(run.createdAt ?? run.startedAt ?? "");
   return Number.isNaN(at) ? 0 : at;
+}
+
+/**
+ * When a conversation began: its first run's start. A project's first conversation is the oldest by this, which is how a study's own
+ * conversation is told from the ones started beside it (the server resolves it the same way for a study made before it recorded one).
+ */
+export function conversationBegan(conversation: Conversation): number {
+  return Math.min(...conversation.runs.map(started).filter((moment) => moment > 0), Number.POSITIVE_INFINITY);
 }
 
 /** One entry per session, newest activity first, of the person's own conversations (`isConversationRun`). */

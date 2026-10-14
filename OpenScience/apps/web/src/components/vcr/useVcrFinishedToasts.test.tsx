@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InboxItem } from "@/lib/inboxClient";
 import { studyOfPath, useVcrFinishedToasts, vcrNoticeTarget } from "./useVcrFinishedToasts";
+import { VCR_STUDY_REFRESH_EVENT } from "./useStudy";
 
 const inbox = vi.hoisted(() => ({
   fetchInboxUnreadCount: vi.fn(),
@@ -98,6 +99,26 @@ describe("a finished computation, said where the reader is looking", () => {
     act(() => action.onClick());
     expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/trial");
     expect(inbox.markInboxRead).toHaveBeenCalledWith("n1", 3);
+  });
+
+  // The reader is on the tab the result is on: going to it is no navigation, so the page is told to read the study again in place.
+  it("asks the study's page to read itself again when 查看结果 names the tab the reader is already on", async () => {
+    const refreshed = vi.fn();
+    window.addEventListener(VCR_STUDY_REFRESH_EVENT, refreshed);
+    try {
+      const held = holdInbox([]);
+      draw("/app/virtual-research/std_1/trial");
+      await tick(0);
+      held.set([notice("n1", "std_1/trial")]);
+      await tick();
+      const action = toasts.success.mock.calls[0][1].action;
+      act(() => action.onClick());
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/trial");
+      expect(refreshed).toHaveBeenCalledTimes(1);
+      expect((refreshed.mock.calls[0][0] as CustomEvent).detail).toEqual({ studyId: "std_1" });
+    } finally {
+      window.removeEventListener(VCR_STUDY_REFRESH_EVENT, refreshed);
+    }
   });
 
   it("says nothing of what was already unread when the reader arrived — that is the inbox's", async () => {

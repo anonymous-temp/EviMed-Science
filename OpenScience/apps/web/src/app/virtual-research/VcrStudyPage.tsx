@@ -14,6 +14,7 @@ import {
 } from "@/lib/vcrClient";
 import { useProjectStore } from "@/lib/projects";
 import { vcrChatPath } from "@/lib/studyLocation";
+import { announceOpenStudy } from "@/lib/studyPresence";
 import { toast } from "@/lib/toast";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -155,6 +156,11 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     // answer at once (`useStudy`); a project the account cannot open is left as it is and the conversation says so.
     void useProjectStore.getState().select(study.projectId).catch(() => setUnreachable(true));
   }, [study.projectId, currentProjectId]);
+
+  // The sidebar is told which study is open and which conversation is its own, so that conversation's row opens this page's view of
+  // it — and has a row before its first sentence.
+  const heldSession = study.conversation.sessionId;
+  useEffect(() => announceOpenStudy({ studyId, projectId: study.projectId, sessionId: heldSession }), [studyId, study.projectId, heldSession]);
 
   // --- a study named in its conversation: the project list and the sidebar are told -----------------------------------
   const seen = useRef({ name: study.name, status: study.status });

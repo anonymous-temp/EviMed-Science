@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, setWebProjectId, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
 import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
+import { announceOpenStudy } from "@/lib/studyPresence";
 import { ProjectBrowser } from "./ProjectBrowser";
 
 const PROJECTS = [
@@ -964,5 +966,163 @@ describe("ProjectBrowser — 虚拟临床研究 studies", () => {
     await screen.findByRole("button", { name: "心衰" });
     expect(mocks.getVcrHome).not.toHaveBeenCalled();
     expect(document.querySelector("svg.lucide-users-round")).toBeNull();
+  });
+});
+
+// R19 (2026-10-14), the owner's 「项目会话创建后，还不能自动置顶，还得往下找去」: the list is in the order of use, the project the reader is in
+// is first, a study named in its conversation appears without a reload, and the way back into a study is its conversation's row.
+describe("ProjectBrowser — the order of use", () => {
+  const withActivity = (...entries: Array<[string, string | null]>) => {
+    mocks.projects = PROJECTS.map((project) => {
+      const found = entries.find(([id]) => id === project.id);
+      return found ? { ...project, lastActiveAt: found[1] } : project;
+    });
+  };
+  const names = () => within(document.querySelector("section") as HTMLElement).getAllByRole("button", { expanded: false })
+    .map((button) => button.textContent?.replace(/（.*）/, "").trim());
+
+  it("lists the projects by what moved last, not by pinyin — the account's default project is not pinned above one used since", async () => {
+    withActivity(["default", "2026-09-01T00:00:00.000Z"], ["paper1", "2026-10-01T00:00:00.000Z"], ["p-heart", "2026-10-10T00:00:00.000Z"]);
+    mocks.projects = mocks.projects.map((project) => ({ ...project }));
+    useProjectStore.setState({ currentId: "default" });
+    setWebProjectId("default");
+    renderBrowser();
+    await screen.findByRole("button", { name: /^我的研究/ });
+    // The project the reader is in is first, whatever its use; the rest follow by use, newest first.
+    const rows = [...document.querySelectorAll("[data-project-id]")].map((row) => row.getAttribute("data-project-id"));
+    expect(rows).toEqual(["default", "p-heart", "paper1"]);
+  });
+
+  it("puts the project the reader moves to first, and the one they left second", async () => {
+    withActivity(["default", "2026-09-01T00:00:00.000Z"], ["paper1", "2026-10-01T00:00:00.000Z"], ["p-heart", "2026-10-10T00:00:00.000Z"]);
+    renderBrowser();
+    await screen.findByRole("button", { name: /^我的研究/ });
+    await act(async () => { await useProjectStore.getState().select("paper1"); });
+    const rows = () => [...document.querySelectorAll("[data-project-id]")].map((row) => row.getAttribute("data-project-id"));
+    await waitFor(() => expect(rows()[0]).toBe("paper1"));
+    await act(async () => { await useProjectStore.getState().select("default"); });
+    await waitFor(() => expect(rows()).toEqual(["default", "paper1", "p-heart"]));
+  });
+
+  it("moves a project up when a ledger it has read shows something newer than the list said", async () => {
+    withActivity(["default", "2026-09-01T00:00:00.000Z"], ["paper1", "2026-10-01T00:00:00.000Z"], ["p-heart", "2026-10-10T00:00:00.000Z"]);
+    renderBrowser();
+    await screen.findByRole("button", { name: /^我的研究/ });
+    // Opening Paper 1 reads its ledger, in which a conversation began a minute ago.
+    mocks.runs.paper1 = [run({ id: "p1-new", question: "刚开始的对话", createdAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: null, status: "running" })];
+    await userEvent.click(screen.getByRole("button", { name: "Paper 1" }));
+    await screen.findByText("刚开始的对话");
+    const rows = [...document.querySelectorAll("[data-project-id]")].map((row) => row.getAttribute("data-project-id"));
+    // The reader is still in 我的研究: it is first; Paper 1, which moved just now, is above 心衰.
+    expect(rows).toEqual(["default", "paper1", "p-heart"]);
+  });
+});
+
+describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
+  beforeEach(() => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201", status: "active" }], draftProjectIds: [] });
+    setWebProjectId("p-heart");
+    useProjectStore.setState({ currentId: "p-heart" });
+  });
+
+  it("opens its group and brings its row into view when the study is opened, once per visit to it", async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      window.localStorage.setItem("ai4s.sidebar.moduleGroups", JSON.stringify({ vcr: false }));
+      renderModules({ vcr: true }, "/app/virtual-research/std_1");
+      await waitFor(() => expect(screen.getByRole("button", { name: /虚拟临床研究/ })).toHaveAttribute("aria-expanded", "true"));
+      await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest" }));
+      const calls = scroll.mock.calls.length;
+      // Another tab of the same study is not another visit: the reader's own scrolling of the sidebar is left alone.
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+      expect(scroll.mock.calls.length).toBe(calls);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("shows a study named in its conversation without a reload: the list is read again when something says it changed", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
+    renderModules({ vcr: true }, "/app/virtual-research/std_1/chat");
+    await screen.findByRole("button", { name: "Paper 1" });
+    // The draft the reader is in is shown while they are in it, as a study of the group.
+    expect(await screen.findByRole("button", { name: /虚拟临床研究/ })).toBeInTheDocument();
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201 二线 NSCLC", status: "active" }], draftProjectIds: [] });
+    mocks.projects = PROJECTS.map((project) => (project.id === "p-heart" ? { ...project, name: "EV-201 二线 NSCLC" } : project));
+    const { announceVcrStudiesChanged } = await import("@/components/vcr/useVcrProjectIds");
+    act(() => { announceVcrStudiesChanged(); });
+    await waitFor(() => expect(mocks.getVcrHome.mock.calls.length).toBeGreaterThan(1), { timeout: 5_000 });
+  });
+
+  it("gives a conversation nobody has spoken in a row of its own, which is the study's conversation view", async () => {
+    mocks.runs["p-heart"] = [];
+    // The study's page says which conversation is its own while it is open.
+    const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: "ses-study" });
+    try {
+      renderModules({ vcr: true }, "/app/virtual-research/std_1/chat");
+      const placeholder = await waitFor(() => {
+        const found = document.querySelector("[data-conversation-placeholder]");
+        expect(found).not.toBeNull();
+        return found as HTMLElement;
+      });
+      expect(placeholder).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+      expect(placeholder).toHaveAttribute("aria-current", "page");
+      expect(placeholder).toHaveTextContent("新对话");
+      expect(screen.queryByText("还没有对话")).toBeNull();
+    } finally {
+      withdraw();
+    }
+  });
+
+  it("gives a conversation the reader has just begun in an ordinary project a row, until the ledger has it", async () => {
+    setWebProjectId("default");
+    useProjectStore.setState({ currentId: "default" });
+    mocks.runs.default = [run({ id: "old", question: "之前的对话" })];
+    const intent = newRuntimeUiIntent();
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/app/chat", state: { runtimeUiIntent: intent } }]}>
+        <ProjectBrowser />
+      </MemoryRouter>,
+    );
+    const placeholder = await waitFor(() => {
+      const found = document.querySelector("[data-conversation-placeholder]");
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(placeholder).toHaveTextContent("新对话");
+    expect(placeholder).toHaveAttribute("href", "/app/chat");
+    // The ledger's own conversations stay below it.
+    expect(screen.getByRole("link", { name: /之前的对话/ })).toBeInTheDocument();
+  });
+
+  it("makes no row of an address alone: only a conversation this list was told was begun", async () => {
+    setWebProjectId("default");
+    useProjectStore.setState({ currentId: "default" });
+    mocks.runs.default = [];
+    renderBrowser("/app/chat/ses-an-old-one");
+    await screen.findByRole("button", { name: /^我的研究/ });
+    expect(document.querySelector("[data-conversation-placeholder]")).toBeNull();
+  });
+
+  it("opens the study's own conversation from its row as the study's page, and a second conversation of the project as the chat surface", async () => {
+    mocks.runs["p-heart"] = [
+      run({ id: "later", question: "后来另开的对话", createdAt: "2026-10-02T00:00:00.000Z", startedAt: "2026-10-02T00:00:00.000Z", finishedAt: "2026-10-02T00:01:00.000Z" }),
+      run({ id: "first", question: "说明研究要做什么", createdAt: "2026-10-01T00:00:00.000Z", startedAt: "2026-10-01T00:00:00.000Z", finishedAt: "2026-10-01T00:01:00.000Z" }),
+    ];
+    renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
+    expect(await screen.findByRole("link", { name: /说明研究要做什么/ })).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+    expect(screen.getByRole("link", { name: /后来另开的对话/ })).toHaveAttribute("href", "/app/chat/ses-later");
+  });
+
+  it("does not list a step the programme dispatched as a conversation, and does not count it", async () => {
+    mocks.runs["p-heart"] = [
+      run({ id: "step", question: "生成虚拟患者", role: "programme", createdAt: "2026-10-03T00:00:00.000Z" }),
+      run({ id: "chat", question: "我自己的对话", createdAt: "2026-10-01T00:00:00.000Z" }),
+    ];
+    renderModules({ vcr: true }, "/app/virtual-research/std_1");
+    expect(await screen.findByRole("link", { name: /我自己的对话/ })).toBeInTheDocument();
+    expect(screen.queryByText("生成虚拟患者")).toBeNull();
   });
 });
