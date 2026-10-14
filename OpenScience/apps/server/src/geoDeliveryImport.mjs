@@ -64,6 +64,7 @@ export function fillValue(held, given) {
 export function fillStrategy(stored, data) {
   /** @type {Record<string, any>} */
   const out = {};
+  /** @type {Record<string, any>} */
   const given = { ...data, ...(data.noGo === undefined && data.no_go !== undefined ? { noGo: data.no_go } : {}) };
   if (given.secondary !== undefined && given.battlefield && typeof given.battlefield === "object") {
     given.battlefield = { ...given.battlefield, secondary: given.battlefield.secondary ?? given.secondary };
