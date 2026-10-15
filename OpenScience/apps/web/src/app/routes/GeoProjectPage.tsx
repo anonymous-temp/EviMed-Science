@@ -1,5 +1,5 @@
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { Outlet, useLocation, useNavigate, useParams } from "react-router";
+import { Outlet, useLocation, useNavigate, useNavigationType, useParams } from "react-router";
 import { FileDown, MessageSquare, MoreHorizontal, Radar } from "lucide-react";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
@@ -258,9 +258,12 @@ function GeoBand({
 
   // A destination with a block (`#geo-errors`) is scrolled to once it is on the page, below the band (the scroller's
   // `scroll-padding-top` is the band's height). A block that never comes leaves the tab at its top.
+  // It is each navigation's, not each address's: pressing 「诊断」 again after scrolling away brings the block back, while a filter
+  // chip (which rewrites the query in place) leaves the reader where they are.
+  const arrived = useNavigationType();
   useEffect(() => {
     const id = location.hash.slice(1);
-    if (!id) return undefined;
+    if (!id || arrived === "REPLACE") return undefined;
     let tries = 0;
     const find = () => {
       const element = document.getElementById(id);
@@ -273,7 +276,8 @@ function GeoBand({
     if (find()) return undefined;
     const timer = window.setInterval(() => { if (find()) window.clearInterval(timer); }, 120);
     return () => window.clearInterval(timer);
-  }, [location.hash, location.pathname, location.search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   /** Runs an action that ends in the project's conversation. */
   const act = (key: string, work: () => Promise<{ sessionId?: string | null } | void>, failure: string) => {

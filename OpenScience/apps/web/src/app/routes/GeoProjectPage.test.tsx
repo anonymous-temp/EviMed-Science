@@ -64,7 +64,14 @@ vi.mock("@/components/geo/tabs/EvidenceTab", async () => ({ EvidenceTab: marker(
 
 function Landed() {
   const location = useLocation();
-  return <p data-testid="landed">{`${location.pathname}${location.search}${location.hash}`}</p>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <p data-testid="landed">{`${location.pathname}${location.search}${location.hash}`}</p>
+      {/* What a filter chip does: the query is rewritten in place, the block's name stays in the address. */}
+      <button type="button" onClick={() => navigate({ search: "?show=open", hash: "#geo-errors" }, { replace: true })}>改写查询</button>
+    </>
+  );
 }
 
 /** The project the way the app mounts it: one layout over the tab routes and the answer. */
@@ -206,6 +213,26 @@ describe("a GEO project's page", () => {
       await screen.findByTestId("accuracy-tab");
       await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledWith(block));
       expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
+    } finally {
+      block.remove();
+    }
+  });
+
+  it("scrolls again when the same step is pressed again, and not when the query is only rewritten in place", async () => {
+    const block = Object.assign(document.createElement("div"), { id: "geo-errors" });
+    document.body.append(block);
+    try {
+      renderProject("/app/geo/geo_masi/accuracy#geo-errors");
+      await screen.findByTestId("accuracy-tab");
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1));
+      // A filter chip rewrites the query where it is: the reader stays where they scrolled to.
+      await userEvent.click(screen.getByRole("button", { name: "改写查询" }));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
+      // 「诊断」 again, from the same address, brings the block back.
+      const rail = document.querySelector("[data-step-rail]") as HTMLElement;
+      await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(2));
     } finally {
       block.remove();
     }
