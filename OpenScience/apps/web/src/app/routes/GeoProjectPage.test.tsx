@@ -40,6 +40,9 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
 
+const scroll = vi.hoisted(() => ({ scrollBlockToTop: vi.fn() }));
+vi.mock("@/components/geo/geoScroll", () => scroll);
+
 // The tabs other than 总览 have their own tests; here each is a marker that says the layout gave it the project — and, through the
 // toolbar hook, one filter, so what the band does with a tab's controls can be read.
 const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown) => void) => ({ geoId, project }: { geoId: string; project: { name: string } }) => {
@@ -47,7 +50,11 @@ const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown)
   return <div data-testid={`${name}-tab`}>{geoId}:{project.name}</div>;
 });
 const toolbarHook = vi.hoisted(() => async () => (await import("@/components/geo/geoFrame")).useGeoToolbar as (toolbar: unknown) => void);
-vi.mock("@/components/geo/tabs/VisibilityTab", async () => ({ VisibilityTab: marker("visibility", await toolbarHook()) }));
+// 总览 draws 可见度's ranking card (one implementation), so this module keeps its other exports.
+vi.mock("@/components/geo/tabs/VisibilityTab", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/geo/tabs/VisibilityTab")>()),
+  VisibilityTab: marker("visibility", await toolbarHook()),
+}));
 vi.mock("@/components/geo/tabs/AccuracyTab", async () => ({ AccuracyTab: marker("accuracy", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/QuestionsTab", async () => ({ QuestionsTab: marker("questions", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/SourcesTab", async () => ({ SourcesTab: marker("sources", await toolbarHook()) }));
@@ -181,11 +188,35 @@ describe("a GEO project's page", () => {
     expect(hrefOf("diagnosis")).toBe("/app/geo/geo_masi/accuracy#geo-errors");
     expect(hrefOf("sources")).toBe("/app/geo/geo_masi/sources");
     expect(hrefOf("content")).toBe("/app/geo/geo_masi/actions");
+    expect(hrefOf("distribution")).toBe("/app/geo/geo_masi/actions#geo-delivery");
     expect(hrefOf("monitoring")).toBe("/app/geo/geo_masi/visibility#geo-trend");
     // A click goes there, and the tab that holds it opens.
     await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
     expect(await screen.findByTestId("accuracy-tab")).toBeInTheDocument();
     expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/accuracy#geo-errors");
+  });
+
+  // The live walk: `scrollIntoView` also scrolls the app shell's clipped root and carried the sidebar and the band off the screen.
+  // The page's own ground is the only thing an address with a block scrolls, through `scrollBlockToTop`.
+  it("scrolls the block an address names through the page's ground, once it is on the page", async () => {
+    const block = Object.assign(document.createElement("div"), { id: "geo-errors" });
+    document.body.append(block);
+    try {
+      renderProject("/app/geo/geo_masi/accuracy#geo-errors");
+      await screen.findByTestId("accuracy-tab");
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledWith(block));
+      expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
+    } finally {
+      block.remove();
+    }
+  });
+
+  it("scrolls to nothing where the block is not on the tab, and leaves the tab at its top", async () => {
+    renderProject("/app/geo/geo_masi/visibility#geo-nowhere");
+    await screen.findByTestId("visibility-tab");
+    // The layout waits a moment for a block that may still be coming, then stops.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(scroll.scrollBlockToTop).not.toHaveBeenCalled();
   });
 
   it("draws the tab's controls in the band, above the body, and takes them away with the tab", async () => {
