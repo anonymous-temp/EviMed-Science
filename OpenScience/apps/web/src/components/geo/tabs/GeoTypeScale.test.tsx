@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { actionsFilled, clustersFilled, clusterViewFixture } from "../__fixtures__/geoSpine";
 import {
   articlesFilled,
   diagnosisFilled,
@@ -42,6 +43,9 @@ const client = vi.hoisted(() => ({
   getGeoDistribution: vi.fn(),
   getGeoMonitoring: vi.fn(),
   getGeoStrategy: vi.fn(),
+  getGeoActions: vi.fn(),
+  getGeoClusters: vi.fn(),
+  getGeoCluster: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -117,7 +121,7 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   准确与安全: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600", "40/600"],
   问题与回答: ["12/400", "13/400", "13/500", "14/400"],
   信源: ["12/400", "13/400", "13/500", "14/400"],
-  行动: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600"],
+  行动: ["12/400", "13/400", "13/500", "14/400", "18/600"],
   方案: ["12/400", "13/400", "13/500", "14/400", "14/600", "18/600"],
 });
 
@@ -133,6 +137,9 @@ beforeEach(() => {
   client.getGeoDistribution.mockResolvedValue(distributionFilled);
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
+  client.getGeoActions.mockResolvedValue(actionsFilled);
+  client.getGeoClusters.mockResolvedValue(clustersFilled);
+  client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
 });
 
 async function measured(tab: ReactElement, ready: string): Promise<string[]> {
@@ -151,7 +158,7 @@ describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
     ["准确与安全", () => <AccuracyTab {...props} />, "事实准确率"],
     ["问题与回答", () => <QuestionsTab {...props} />, "恶心呕吐与胃肠反应"],
     ["信源", () => <SourcesTab {...props} />, "丁香医生"],
-    ["行动", () => <ActionsTab {...props} />, "效果"],
+    ["行动", () => <ActionsTab {...props} />, "品牌身份、规格与厂家"],
     ["方案", () => <PlanTab {...props} />, "目标"],
   ] as const)("%s", async (name, tab, ready) => {
     const combos = await measured(tab(), ready);

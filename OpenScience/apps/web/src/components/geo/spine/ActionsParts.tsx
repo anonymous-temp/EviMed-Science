@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { agendaLocalDate, DISPLAY_TIME_ZONE } from "@evimed/domain";
 import type { GeoActionsView, GeoArticle, GeoClusterRow, GeoDistribution, GeoMonitoring } from "@/lib/geoClient";
 import { NetEffectBand, type NetEffectInput } from "@/components/charts/NetEffectBand";
@@ -6,7 +6,7 @@ import { ChartCard, LegendMark } from "@/components/ui/ChartCard";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { Note, NoteParts, type NotePart } from "@/components/ui/Note";
+import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { OWN_COLOR, rivalColor } from "@/components/charts/trendModel";
 import { geoSectionId } from "../geoTabs";
@@ -92,8 +92,21 @@ export function EffectCard({
   loading: boolean;
   onOpen: (target: "acted" | "waiting" | "effect") => void;
 }) {
-  const noted: NotePart[] = parts.map((part) => (typeof part === "string" ? part : { n: part.n, onOpen: () => onOpen(part.target) }));
-  const title = parts.length > 0 ? <NoteParts parts={noted} /> : "投放的语义群和对照组还没有可以比较的读数";
+  // The figures of a heading take the heading's own weight (a `Note`'s medium figure would be a type pair of its own at this size).
+  const title = parts.length > 0
+    ? parts.map((part, index) => (typeof part === "string"
+      ? <Fragment key={index}>{part}</Fragment>
+      : (
+        <button
+          key={index}
+          type="button"
+          onClick={() => onOpen(part.target)}
+          className="rounded tabular-nums text-link hover:underline hover:underline-offset-4"
+        >
+          {part.n}
+        </button>
+      )))
+    : "投放的语义群和对照组还没有可以比较的读数";
   return (
     <div id={geoSectionId("effect")} data-geo-effect="" data-headline="">
       <ChartCard

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
+import { actionsFilled, clustersFilled, clusterViewFixture } from "@/components/geo/__fixtures__/geoSpine";
 import {
   articlesFilled,
   diagnosisFilled,
@@ -34,6 +35,9 @@ const geo = vi.hoisted(() => ({
   getGeoSources: vi.fn(),
   getGeoArticles: vi.fn(),
   getGeoDistribution: vi.fn(),
+  getGeoActions: vi.fn(),
+  getGeoClusters: vi.fn(),
+  getGeoCluster: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...geo }));
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => vi.fn() }));
@@ -206,6 +210,9 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     geo.getGeoSources.mockResolvedValue(sourcesFilled);
     geo.getGeoArticles.mockResolvedValue(articlesFilled);
     geo.getGeoDistribution.mockResolvedValue(distributionFilled);
+    geo.getGeoActions.mockResolvedValue(actionsFilled);
+    geo.getGeoClusters.mockResolvedValue(clustersFilled);
+    geo.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   });
 
   function renderGeo(path: string) {
@@ -253,5 +260,52 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     const trend = container.querySelector("[data-chart='trend']") ?? screen.getByRole("heading", { name: /综合可见度指数/ });
     expect(precedes(facts.chrome!, headline)).toBe(true);
     for (const [earlier, later] of [[headline, stats], [stats, asked], [asked, trend]] as const) expect(precedes(earlier, later)).toBe(true);
+  });
+});
+
+/**
+ * 行动 is a list under a toolbar with one chart above it (R19, plan §5.5): the band carries the stages, the type, the group and the
+ * search; the result's picture comes first in the body; every row's group name is a link (the same drawer, from anywhere); and a
+ * control that filters is never under the rows it filters.
+ */
+describe("the GEO 行动 page as a list with a chart on top", () => {
+  beforeEach(() => {
+    geo.useGeoFeature.mockReturnValue("on");
+    geo.getGeoProject.mockResolvedValue(GEO_PROJECT);
+    geo.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    geo.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    geo.getGeoStrategy.mockResolvedValue(strategyFilled);
+    geo.getGeoEvidence.mockResolvedValue(evidenceFilled);
+    geo.getGeoValue.mockResolvedValue(valueFilled);
+    geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    geo.getGeoDistribution.mockResolvedValue({ ...distributionFilled, market: { configured: false }, budget: null, orders: [] });
+    geo.getGeoActions.mockResolvedValue(actionsFilled);
+    geo.getGeoClusters.mockResolvedValue(clustersFilled);
+    geo.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
+  });
+
+  it("reads band → toolbar → the result's chart → the work, with the filters above all of it and no control under a row", async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/app/geo/geo_masi/actions"]}>
+        <Routes>
+          <Route path="/app/geo/:geoId" element={<GeoProjectLayout />}>
+            <Route path=":tab" element={null} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(container.querySelector("[data-geo-actions]")).not.toBeNull(), { timeout: 4000 });
+    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const chart = container.querySelector("[data-geo-effect]") as HTMLElement;
+    const list = container.querySelector("[data-geo-actions]") as HTMLElement;
+    const toolbar = facts.toolbars[0];
+    for (const [earlier, later] of [[facts.chrome!, chart], [toolbar, chart], [chart, list]] as const) {
+      expect(precedes(earlier, later)).toBe(true);
+    }
+    // The group's name is a link on its row; the status chips are the toolbar's, in the band.
+    expect(list.querySelector("[data-geo-cluster-link]")).not.toBeNull();
+    expect(facts.chrome!.contains(toolbar)).toBe(true);
+    expect(list.querySelectorAll("[data-toolbar]")).toHaveLength(0);
+    expect(facts.clickableTags).toEqual([]);
   });
 });
