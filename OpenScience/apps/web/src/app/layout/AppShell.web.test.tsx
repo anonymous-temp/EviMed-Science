@@ -126,6 +126,18 @@ describe("AppShell hosted authentication gate", () => {
 
     expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
   });
+
+  // R19 live walk: `scrollIntoView` on a block near the end of a GEO page moved the whole shell — sidebar, header and band — up by
+  // the rest of the distance. A page's table caption (`sr-only`, absolute) below the fold lengthens a root that is only `hidden`,
+  // and a hidden root can still be scrolled by code. The shell is never a scroller: `clip` after `hidden` (the fallback).
+  it("is never a scroll container itself: clip, with hidden before it where clip is unknown", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    renderRoute();
+    await screen.findByText("Chat workspace");
+    const shell = document.getElementById("main")?.parentElement;
+    expect(shell).toHaveClass("h-dvh", "overflow-hidden", "overflow-clip");
+    expect(shell?.className.indexOf("overflow-hidden")).toBeLessThan(shell?.className.indexOf("overflow-clip") ?? -1);
+  });
   // 2026-10-07 audit (live A01): the rebuilt 定时任务 page kept the old own-shell hack and dropped the global sidebar, the expand
   // button and Ctrl+B — a dead end with no way to any other page. It is an ordinary page of the workbench.
   it.each(["/app/autopilot", "/app/autopilot/"])("keeps the workbench sidebar and its toggle on %s, as on every other page", async (path) => {

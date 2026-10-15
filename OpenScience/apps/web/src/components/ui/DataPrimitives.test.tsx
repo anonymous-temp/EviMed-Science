@@ -123,6 +123,19 @@ describe("StatTile", () => {
     expect(grid()).not.toHaveClass("grid-cols-1");
   });
 
+  // R19 live walk: two tiles of four columns drew the dividers' grey ground as a block where the tiles ran out. The lines are the
+  // tiles' own now, and a band of two or three has the columns of that many.
+  it("shows no ground where a row runs out of tiles, and spreads two or three tiles over two or three columns", () => {
+    const { rerender } = render(<StatBand label="本周" columns={2}><StatTile label="A" value="1" /><StatTile label="B" value="2" /></StatBand>);
+    const grid = () => screen.getByRole("region", { name: "本周" }).firstElementChild as HTMLElement;
+    expect(grid()).toHaveClass("bg-surface", "sm:grid-cols-2");
+    expect(grid()).not.toHaveClass("bg-border");
+    expect(grid()).not.toHaveClass("gap-px");
+    expect(grid().className).toContain("[&>*]:border-l");
+    rerender(<StatBand label="本周" columns={3}><StatTile label="A" value="1" /><StatTile label="B" value="2" /><StatTile label="C" value="3" /></StatBand>);
+    expect(grid()).toHaveClass("sm:grid-cols-3");
+  });
+
   it("declares the band's denominator once, under the band", () => {
     render(
       <StatBand label="本轮指标" columns={4} footnote="按 4 个引擎、264 次有效回答计算">

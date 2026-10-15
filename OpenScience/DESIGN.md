@@ -435,7 +435,10 @@ page framework — the components above, `PageShell`'s slots, `layoutRules.test.
 9. **A module's step rail is on every tab and sticky.** The rail, the tabs and the toolbar row are one
    band at the top whose height does not depend on the tab (a tab without a toolbar reserves its row);
    the steps the open tab is built from are underlined. The page never loses where the program is by
-   switching a tab.
+   switching a tab. A click on a step, and a to-do, goes to the step's block (`#geo-errors`): the page's
+   own ground scrolls to it, 12 px under the band — never `scrollIntoView`, which also scrolls the app
+   shell and carried the sidebar and the band off the screen — and the blocks a tab is promised are data
+   (`GEO_TAB_SECTIONS`), which `pageComposition.test.tsx` renders against.
 10. **Starting work never takes the person away.** The button starts the work; the page's
     `ActivityStrip` says what is happening and how far, and the page updates itself when it ends. The
     conversation is a view of the same page, not another place.

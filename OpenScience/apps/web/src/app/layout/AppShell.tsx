@@ -174,7 +174,10 @@ export function AppShell() {
   return (
     // `h-dvh`, not `h-screen`: on a phone `100vh` is the viewport without the
     // browser's own toolbars, so the last row of every page sat under them.
-    <div className="flex h-dvh w-screen overflow-hidden bg-bg text-text" data-embedded={embedded || undefined}>
+    // `overflow-clip` after `overflow-hidden`: the shell never scrolls. A hidden root still can be scrolled by code, and
+    // `scrollIntoView` does it whenever anything below the page's fold (a table's screen-reader caption) has lengthened it —
+    // the sidebar and the page's header then leave the screen. Where `clip` is unknown (Safari before 16) it stays `hidden`.
+    <div className="flex h-dvh w-screen overflow-hidden overflow-clip bg-bg text-text" data-embedded={embedded || undefined}>
       {/* The first thing Tab reaches on every page (spec §10.3, appendix E
           #3): invisible until focused, then top-left on the skip tier, above
           everything. It moves focus rather than the address — a `#main` hash

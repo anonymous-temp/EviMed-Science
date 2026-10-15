@@ -30,6 +30,7 @@ import {
   withCoverageMarker,
 } from "../geoOverviewModel";
 import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, type GeoUnit } from "../geoText";
+import { geoSectionId } from "../geoTabs";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
 import { CellLink, TabError, TabSkeleton } from "./geoTabKit";
 
@@ -119,22 +120,25 @@ function MetricTrend({
   const change = readingChange(points, { noise });
 
   return (
-    <ChartCard
-      title={trendConclusion(name, points.length ? latest : null, change, unit)}
-      legend={(
-        <>
-          <LegendMark series="own" color={OWN_COLOR}>{project.product?.brandName || project.name}</LegendMark>
-          {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
-        </>
-      )}
-      meta={chartDates(change, watch?.next?.date)}
-      state={loading ? "loading" : points.length === 0 ? "empty" : "content"}
-      emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
-      footnote={denominator}
-      height={260}
-    >
-      <TrendChart input={input} format={format} label={`${name}趋势`} height={260} integer bounds={[0, 100]} />
-    </ChartCard>
+    // The block the rail's 「监测」 scrolls to (`GEO_TAB_SECTIONS`).
+    <div id={geoSectionId("trend")}>
+      <ChartCard
+        title={trendConclusion(name, points.length ? latest : null, change, unit)}
+        legend={(
+          <>
+            <LegendMark series="own" color={OWN_COLOR}>{project.product?.brandName || project.name}</LegendMark>
+            {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
+          </>
+        )}
+        meta={chartDates(change, watch?.next?.date)}
+        state={loading ? "loading" : points.length === 0 ? "empty" : "content"}
+        emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
+        footnote={denominator}
+        height={260}
+      >
+        <TrendChart input={input} format={format} label={`${name}趋势`} height={260} integer bounds={[0, 100]} />
+      </ChartCard>
+    </div>
   );
 }
 
@@ -283,7 +287,12 @@ function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDi
 
 /* --------------------------------------------------------------- ranking */
 
-function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean }) {
+/**
+ * The same-class ranking: our mention rate against each rival's, and over which questions each was read. 总览 draws this card too —
+ * `compact`, in the third of a row it has, the scope under the name instead of a column of its own — so the two pages cannot
+ * disagree about who is ahead or on what.
+ */
+export function Ranking({ ranking, loading, compact = false }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean; compact?: boolean }) {
   // Nobody measured a rival: no empty card to say so.
   if (ranking.length === 0 && !loading) return null;
   const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
@@ -301,15 +310,27 @@ function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking
     >
       <DataTable
         label="同类药提及率"
+        minWidth={compact ? "min-w-0" : undefined}
         rows={ranking}
         rowKey={(row) => row.key}
         highlight={(row) => row.ours}
         rowAttrs={(row) => ({ "data-rank-row": row.key })}
         columns={[
-          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <>{row.name}{row.ours && <span className="ml-1.5 text-caption font-normal text-accent-strong">本品</span>}</> },
-          { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span>, isEmpty: () => scope !== null },
-          { key: "bar", header: "", width: "w-40", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
-          { key: "value", header: "提及率", align: "right", width: "w-20", cell: (row) => (row.value === null ? geoCellWord(null) : `${Math.round(row.value)}%`) },
+          {
+            key: "name",
+            header: "同类药",
+            rowHeader: true,
+            cell: (row) => (
+              <>
+                {row.name}
+                {row.ours && <span className="ml-1.5 text-caption font-normal text-accent-strong">本品</span>}
+                {compact && scope === null && <span className="block text-caption font-normal text-text-3">{row.scope}</span>}
+              </>
+            ),
+          },
+          { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span>, isEmpty: () => compact || scope !== null },
+          { key: "bar", header: "", width: compact ? "w-24" : "w-40", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
+          { key: "value", header: "提及率", align: "right", width: compact ? "w-16" : "w-20", cell: (row) => (row.value === null ? geoCellWord(null) : `${Math.round(row.value)}%`) },
         ]}
       />
     </ChartCard>

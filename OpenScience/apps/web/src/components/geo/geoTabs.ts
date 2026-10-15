@@ -90,7 +90,7 @@ export interface GeoDestination {
  *  - 旅程 → 问题与回答 · 按旅程, 问题 → 问题与回答 · 按问句池;
  *  - 诊断 → 准确与安全 (the wrong statements), seen as a measurement on 可见度;
  *  - 信源 → 信源 (who is cited), seen as a strategy on 方案;
- *  - 内容 and 投放 → 行动;
+ *  - 内容 → 行动 (the articles), 投放 → 行动 (the placing, a block of its own);
  *  - 监测 → 可见度 (the trend), seen as the work's effect on 行动.
  */
 export const GEO_STEP_HOME: Readonly<Record<GeoStepKey, GeoDestination>> = Object.freeze({
@@ -100,7 +100,7 @@ export const GEO_STEP_HOME: Readonly<Record<GeoStepKey, GeoDestination>> = Objec
   diagnosis: { tab: "accuracy", section: "errors" },
   sources: { tab: "sources" },
   content: { tab: "actions" },
-  distribution: { tab: "actions" },
+  distribution: { tab: "actions", section: "delivery" },
   monitoring: { tab: "visibility", section: "trend" },
 });
 
@@ -114,6 +114,27 @@ export const GEO_TAB_STEPS: Readonly<Record<GeoTabKey, readonly GeoStepKey[]>> =
   actions: ["content", "distribution", "monitoring"],
   plan: ["sources"],
   evidence: ["evidence"],
+});
+
+/**
+ * The blocks a tab is promised to have — what the rail's click, a 「需要你」 row and the server's `needsYou[].target.section` scroll
+ * to, by the id `geoSectionId(name)` gives them. A tab that is rebuilt keeps them: `pageComposition.test.tsx` renders every tab and
+ * reads this table, so a block that loses its id is a failing test and not a link that quietly lands at the top.
+ *
+ *  - 可见度 `trend` — the trend card (监测);
+ *  - 准确与安全 `errors` — the wrong-statement list (诊断, a severe error);
+ *  - 行动 `review` — the articles, the ones held for release among them; `delivery` — the placing (投放); `budget` — its budget line;
+ *  - 方案 `targets` (the three tiers), `battlefield`, `engines`, `client_actions` — the client's to-dos.
+ */
+export const GEO_TAB_SECTIONS: Readonly<Record<GeoTabKey, readonly string[]>> = Object.freeze({
+  overview: [],
+  visibility: ["trend"],
+  accuracy: ["errors"],
+  questions: [],
+  sources: [],
+  actions: ["review", "delivery", "budget"],
+  plan: ["targets", "battlefield", "engines", "client_actions"],
+  evidence: [],
 });
 
 /**

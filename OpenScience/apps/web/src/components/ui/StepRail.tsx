@@ -20,7 +20,8 @@ import { Tooltip } from "@/components/ui/Tooltip";
  *  - `activeSteps` underlines the steps the open tab is built from, in the accent (the geo's 「行动」 tab is made of the content
  *    and the delivery steps; the tab bar below says which tab, the rail says which steps).
  *  - `trailing` is the program's 「现在」 sentence at the right end: 「第 3 轮复测中」, 「下一批为 4 个问题群写稿（周一）」.
- *  - Under 640 px the row folds to 「已完成 7/8 步 ▾」, a chip that opens the steps as a menu; the row's height does not change.
+ *  - Under 640 px the row folds to 「已完成 7/8 步 ▾」, a chip that opens the steps as a menu, with the 「现在」 sentence after it on
+ *    the one line (cut where it does not fit); the row's height does not change.
  *
  * `data-step-rail` is what the walk and `pageComposition.test.tsx` read: it must be present, with the same step count, on
  * every tab of a module.
@@ -60,10 +61,12 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
       onSelect: () => (step.onSelect ? step.onSelect() : step.href ? navigate(step.href) : undefined),
     }));
     return (
-      <nav data-step-rail="" aria-label={label} className={cn("flex h-10 items-center", className)}>
+      <nav data-step-rail="" aria-label={label} className={cn("flex h-10 items-center gap-2", className)}>
         <Menu label={label} align="start" items={entries}>
-          <FilterChip menu className="-ml-3" aria-label={`${label}：已完成 ${done}/${steps.length} 步`}>{`已完成 ${done}/${steps.length} 步`}</FilterChip>
+          <FilterChip menu className="-ml-3 shrink-0" aria-label={`${label}：已完成 ${done}/${steps.length} 步`}>{`已完成 ${done}/${steps.length} 步`}</FilterChip>
         </Menu>
+        {/* The program's 「现在」 has the room the steps gave up: one line, cut at the edge where it is longer. */}
+        {trailing && <span className="min-w-0 flex-1 truncate text-caption text-text-3">{trailing}</span>}
       </nav>
     );
   }
