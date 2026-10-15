@@ -196,13 +196,18 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
   const latest = row.latest?.status === "ok" ? row.latest.value : null;
   const due = dueDay(baselineDay, row.tiers[tier]?.horizonWeeks);
   const scaled = unit === "percent" || unit === "index";
+  // A target the reading has already passed is not a deadline any more: 「12% 12月18日前」 beside a bar at 21% read as the page
+  // contradicting itself. Said the way 总览 says it (the head metrics are all ones that rise).
+  const reached = typeof target === "number" && latest !== null && latest >= target;
   return (
-    <li data-geo-target={row.metricId} className="min-w-0">
+    <li data-geo-target={row.metricId} data-geo-reached={reached || undefined} className="min-w-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-ui text-text">{targetRowName(row)}</span>
         <span className="shrink-0 text-ui font-semibold tabular-nums text-text">
           {typeof target === "number" ? formatGeoValue(target, unit) : "—"}
-          {due && typeof target === "number" && <span className="ml-1.5 text-caption font-normal text-text-3">{`${monthDay(due)}前`}</span>}
+          {reached
+            ? <span className="ml-1.5 text-caption font-normal text-accent-strong">已达到</span>
+            : due && typeof target === "number" && <span className="ml-1.5 text-caption font-normal text-text-3">{`${monthDay(due)}前`}</span>}
         </span>
       </div>
       {scaled && typeof target === "number" && (

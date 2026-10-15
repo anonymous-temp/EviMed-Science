@@ -83,4 +83,14 @@ describe("StepRail", () => {
     expect(items.map((item) => item.textContent)).toEqual(["证据 · 已完成", "旅程 · 已完成", "问题 · 进行中", "信源 · 需要留意", "投放 · 等你", "监测 · 未开始"]);
     expect(items[2]).toHaveAttribute("aria-checked", "true");
   });
+
+  it("keeps the 「现在」 sentence on a phone, after the chip, on the one line", () => {
+    narrow();
+    const { container } = render(rail({ trailing: "正在写稿、投放 · 下次复测 周二 10月20日" }));
+    const nav = container.querySelector("[data-step-rail]") as HTMLElement;
+    const sentence = screen.getByText("正在写稿、投放 · 下次复测 周二 10月20日");
+    expect(nav).toContainElement(sentence);
+    expect(sentence).toHaveClass("truncate");
+    expect(nav).toHaveClass("h-10");
+  });
 });

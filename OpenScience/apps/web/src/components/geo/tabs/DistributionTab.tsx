@@ -8,6 +8,7 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 import { GEO_ORDER_CANCELLABLE, engineName, layerName, monthDay, orderStateWord, ownedPlatformName } from "../geoText";
+import { geoSectionId } from "../geoTabs";
 import { BudgetDialog } from "./BudgetDialog";
 import { StepPending, TabSection, TD, TH } from "./geoTabKit";
 import { yuan } from "./geoTabText";
@@ -77,7 +78,7 @@ function BudgetLine({
   if (!budget) {
     if (!onEdit) return null;
     return (
-      <div data-geo-budget="unset" className="flex flex-wrap items-center gap-3 rounded-card bg-surface-1 px-5 py-4">
+      <div id={geoSectionId("budget")} data-geo-budget="unset" className="flex flex-wrap items-center gap-3 rounded-card bg-surface-1 px-5 py-4">
         <span className="min-w-0 flex-1 text-ui text-text">
           还没有设投放预算
           {typeof data.suggestedBudgetCny === "number" && data.suggestedBudgetCny > 0 && (
@@ -92,7 +93,7 @@ function BudgetLine({
   const reserved = typeof data.reservedCny === "number" ? data.reservedCny : 0;
   const share = (value: number) => `${Math.max(0, Math.min(100, (value / budget.totalCny) * 100))}%`;
   return (
-    <div data-geo-budget="set" className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-card bg-surface-1 px-5 py-4">
+    <div id={geoSectionId("budget")} data-geo-budget="set" className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-card bg-surface-1 px-5 py-4">
       <Figure label="预算" value={yuan(budget.totalCny)} />
       <Figure label="已花" value={yuan(spent)} />
       <Figure label="已预留" value={yuan(reserved)} />

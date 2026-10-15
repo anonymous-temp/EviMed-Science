@@ -34,6 +34,7 @@ import { RenameDialog } from "@/components/geo/RenameDialog";
 import { bandNow, bandSteps } from "@/components/geo/geoBand";
 import { GeoFrameContext, type GeoFrameApi, type GeoPanel } from "@/components/geo/geoFrame";
 import { GeoDataCache, useGeoMonitoring } from "@/components/geo/geoProjectData";
+import { scrollBlockToTop } from "@/components/geo/geoScroll";
 import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
 import {
   GEO_MONITORING_TABS,
@@ -255,8 +256,8 @@ function GeoBand({
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // A destination with a block (`#geo-errors`) is scrolled to once it is on the page; the band's height is the scroller's
-  // `scroll-padding-top`, so it stops below the band. A block that never comes leaves the tab at its top.
+  // A destination with a block (`#geo-errors`) is scrolled to once it is on the page, below the band (the scroller's
+  // `scroll-padding-top` is the band's height). A block that never comes leaves the tab at its top.
   useEffect(() => {
     const id = location.hash.slice(1);
     if (!id) return undefined;
@@ -264,7 +265,7 @@ function GeoBand({
     const find = () => {
       const element = document.getElementById(id);
       if (element) {
-        element.scrollIntoView({ block: "start" });
+        scrollBlockToTop(element);
         return true;
       }
       return ++tries > 25;

@@ -1,13 +1,13 @@
 import { useMemo } from "react";
-import { getGeoMonitoring, readGeoCell, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
+import { readGeoCell, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
 import { ChartCard, LegendMark } from "@/components/ui/ChartCard";
 import { DataTable } from "@/components/ui/DataTable";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, rivalColor } from "@/components/charts/trendModel";
 import { GeoCellText } from "../GeoCellText";
 import { engineName, monthDay } from "../geoText";
+import { useGeoMonitoring } from "../geoProjectData";
 import { signed } from "./geoTabText";
-import { useGeoLoad } from "./geoTabKit";
 
 /**
  * “投了有没有用”, measured rather than asserted: the question groups we
@@ -20,7 +20,8 @@ import { useGeoLoad } from "./geoTabKit";
  * two points of daily wobble as a win is worse than one that reports nothing.
  */
 export function EffectSection({ project }: { project: GeoProject }) {
-  const monitoring = useGeoLoad<GeoMonitoring>(`effect:${project.id}`, () => getGeoMonitoring(project.id));
+  // The project's own read: 可见度 and the band's 「现在」 draw from the same one.
+  const monitoring = useGeoMonitoring(project.id);
   const data = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const arms = useMemo(() => ({
     pilot: Array.isArray(data?.arms?.pilot) ? data.arms.pilot : [],
