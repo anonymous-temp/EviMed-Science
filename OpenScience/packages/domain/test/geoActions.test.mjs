@@ -234,6 +234,24 @@ test("the status is the furthest stage reached; skipped and stale are flags", ()
   assert.equal(status({ articles: [article({ status: "withdrawn" })] }), "proposed", "a withdrawn article is nothing");
 });
 
+test("a pasted link moves an action through the article it names; a link of a group alone is the group's and moves no action", () => {
+  // Live finding, 2026-10-15: a link registered with a group and no article was recorded (and is read by the post-publication
+  // re-tests and the cluster view) while the group's action stayed `proposed`. Attribution is by article: the same chain that
+  // carries orders and citations. The web sends `articleId` whenever the page's link is for one of the platform's articles.
+  const article = { id: "a1", groupId: "g-p4", layer: "qa", title: "安全问答", status: "publishable", gate: "passed", safety: "clear", createdAt: ago(10) };
+  const key = "fill_gap:g-p4:benefit_only";
+  const read = (/** @type {any} */ over) => byKey(deriveGeoActions({ ...base(), ...over }))[key];
+  const link = (/** @type {any} */ over) => ({ id: "l1", groupId: "g-p4", platform: "zhihu", publishedAt: ago(3), status: "active", ...over });
+  const named = read({ articles: [article], ownedLinks: [link({ articleId: "a1" })] });
+  assert.deepEqual([named.status, named.ownedLinkIds], ["live", ["l1"]]);
+  const byGroup = read({ articles: [article], ownedLinks: [link({ articleId: null })] });
+  assert.deepEqual([byGroup.status, byGroup.ownedLinkIds], ["ready", []], "no article named: nothing in the action's chain");
+  const alone = read({ ownedLinks: [link({ articleId: null })] });
+  assert.deepEqual([alone.status, alone.ownedLinkIds], ["proposed", []]);
+  const retired = read({ articles: [article], ownedLinks: [link({ articleId: "a1", status: "retired" })] });
+  assert.deepEqual([retired.status, retired.ownedLinkIds], ["ready", []], "a retired link is nothing");
+});
+
 test("a person's choices are found under the key a group had before its set was copied, and swap the first source", () => {
   const renamed = groups.map((group) => (group.id === "g-p4" ? { ...group, id: "g-p4-v2", aliasIds: ["g-p4"] } : group));
   const choices = [{ key: "fill_gap:g-p4:benefit_only", skipped: false, sourceDomain: "kepuchina.cn", updatedAt: ago(1) }];
