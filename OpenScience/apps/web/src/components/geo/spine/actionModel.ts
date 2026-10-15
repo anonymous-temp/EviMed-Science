@@ -17,9 +17,18 @@ import {
   geoMetricUnit,
   pythonRound,
 } from "@evimed/domain";
-import type { GeoAction, GeoActionKind, GeoActionSource, GeoActionStatus, GeoActionsView } from "@/lib/geoClient";
+import type { GeoAction, GeoActionKind, GeoActionSource, GeoActionStatus, GeoActionsView, GeoArticle } from "@/lib/geoClient";
 import { formatGeoValue } from "../GeoCellText";
-import { engineName, GEO_LAYER_NAMES, GEO_SOURCE_LAYER_WORDS } from "../geoText";
+import {
+  engineName,
+  GEO_ARTICLE_STALE_NOTE,
+  GEO_ARTICLE_STATUS_WORDS,
+  GEO_ARTICLE_UNRESOLVED_NOTE,
+  GEO_LAYER_NAMES,
+  GEO_PLACEMENT_LABEL_WORDS,
+  GEO_SOURCE_LAYER_WORDS,
+  layerName,
+} from "../geoText";
 import { sourceKindWord, yuan } from "../tabs/geoTabText";
 import { clusterName, readingText } from "./clusterModel";
 
@@ -129,6 +138,29 @@ export function articleLine(action: GeoAction): { kind: string | null; engines: 
   const engines = action.engines.length > 0 ? `针对 ${action.engines.map(engineName).join("、")}` : null;
   const channel = action.what.channel ? (GEO_ARTICLE_CHANNEL_LABELS_ZH as Readonly<Record<string, string>>)[action.what.channel] ?? null : null;
   return { kind: layer, engines, channel };
+}
+
+/* ---------------------------------------------------------------- articles */
+
+/**
+ * What the evidence chain says about an article, beside its kind: how many outlets it went to, the label a paid placement carries,
+ * a cited conclusion since corrected, a reference that does not resolve. A notice is a word, never a stop.
+ */
+export function articleMeta(article: GeoArticle): string {
+  return [
+    layerName(article.layer) === "—" ? null : layerName(article.layer),
+    article.title && article.question && article.question !== article.title ? article.question : null,
+    article.placements > 0 ? `投放 ${article.placements} 家` : null,
+    article.placementLabel ? GEO_PLACEMENT_LABEL_WORDS[article.placementLabel] ?? null : null,
+    (article.staleReferences?.length ?? 0) > 0 ? GEO_ARTICLE_STALE_NOTE : null,
+    article.referenceStatus === "unresolved" ? GEO_ARTICLE_UNRESOLVED_NOTE : null,
+  ].filter(Boolean).join(" · ");
+}
+
+/** 「已发布 · 已被 AI 引用」. */
+export function articleStatusLine(article: GeoArticle): string {
+  const word = GEO_ARTICLE_STATUS_WORDS[article.status] ?? "—";
+  return article.cited ? `${word} · 已被 AI 引用` : word;
 }
 
 /* ------------------------------------------------------------------ sources */

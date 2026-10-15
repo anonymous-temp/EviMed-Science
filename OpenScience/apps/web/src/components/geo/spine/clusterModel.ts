@@ -162,7 +162,7 @@ export function answerStance(answer: GeoClusterView["questions"][number]["answer
 /* ------------------------------------------------------------------ effect */
 
 /** One group's series of the pool's headline metric as the chart's points: a round's day, answers that named us, answers. */
-export function effectPoints(series: GeoClusterView["effect"]["series"] | null | undefined): EffectPoint[] {
+export function effectPoints(series: ReadonlyArray<{ date: string | null; k: number | null; n: number | null }> | null | undefined): EffectPoint[] {
   return (series ?? []).map((point) => ({ label: monthDay(point.date) ?? "", k: point.k, n: point.n }));
 }
 

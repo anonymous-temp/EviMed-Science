@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoProject } from "@/lib/geoClient";
 import { useToastStore } from "@/lib/toast";
 import {
-  articlesFilled,
   cell,
   diagnosisFilled,
   diagnosisWith,
@@ -24,8 +23,6 @@ import {
 } from "../__fixtures__/geoTabs";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
 import { AccuracyTab } from "./AccuracyTab";
-import { ContentTab } from "./ContentTab";
-import { EffectSection } from "./EffectSection";
 import { EvidenceTab } from "./EvidenceTab";
 import { JourneyTab } from "./JourneyTab";
 import { OverviewTab } from "./OverviewTab";
@@ -106,24 +103,6 @@ beforeEach(() => {
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
 });
 
-describe("内容: what the evidence cards wait for", () => {
-  it.each([
-    ["producer", "设置出品方后，已核实的结论会成为证据卡片。"],
-    ["reviewer", "添加审核医生后，已核实的结论会成为证据卡片。"],
-  ] as const)("says what to set when the cards wait for the %s", async (blockedBy, sentence) => {
-    client.getGeoArticles.mockResolvedValue(articlesFilled);
-    renderTab(<ContentTab {...props({ ...geoProject(), cards: { blockedBy } })} />);
-    expect(await screen.findByText(sentence)).toBeInTheDocument();
-  });
-
-  it("says nothing about cards once nothing holds them back", async () => {
-    client.getGeoArticles.mockResolvedValue(articlesFilled);
-    renderTab(<ContentTab {...props({ ...geoProject(), cards: { blockedBy: null } })} />);
-    expect(await screen.findByLabelText("搜索稿件")).toBeInTheDocument();
-    expect(screen.queryByText(/会成为证据卡片/)).not.toBeInTheDocument();
-  });
-});
-
 describe("a tab with nothing yet", () => {
   it("says what is being done while the step is being worked on, and offers nothing to press", async () => {
     client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] });
@@ -133,23 +112,12 @@ describe("a tab with nothing yet", () => {
     expect(screen.queryByRole("button", { name: "整理产品证据" })).not.toBeInTheDocument();
   });
 
-  it("says which step a step asked for early waits for, and offers nothing to press", async () => {
-    client.getGeoArticles.mockResolvedValue({ articles: [] });
-    const project = geoProject({});
-    project.steps.content = { status: "none", requested: true };
-    renderTab(<ContentTab {...props(project)} />);
-    expect(await screen.findByText("写第一批稿件，排队中")).toBeInTheDocument();
-    expect(screen.getByText("“信源”做完后自动开始。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
-  });
-
   // An empty state is a recipe (rule 8): what the step uses — each a way to the thing — what it gives, and one button naming the work.
   it.each([
     ["evidence", "整理产品证据", EvidenceTab, () => client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] })],
     ["journey", "绘制患者旅程", JourneyTab, () => client.getGeoJourney.mockResolvedValue({ subtypes: [], personas: [], stages: [], careNodes: [], files: [] })],
     ["questions", "列出测量问题", QuestionsTab, () => client.getGeoQuestions.mockResolvedValue({ sets: [], version: null, groups: [] })],
     ["sources", "分析引用的信源", SourcesTab, () => client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null })],
-    ["content", "写第一批稿件", ContentTab, () => client.getGeoArticles.mockResolvedValue({ articles: [] })],
   ] as const)("%s: a finished step with nothing to show is a recipe with one button, %s, which starts it and keeps the person here", async (step, verb, Tab, arrange) => {
     arrange();
     renderTab(<Tab {...props(geoProject({ [step]: "done" }))} />);
@@ -160,30 +128,6 @@ describe("a tab with nothing yet", () => {
     // Starting work takes nobody anywhere: no conversation is opened and the address does not change.
     expect(store.select).not.toHaveBeenCalled();
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
-  });
-
-  it("names what a step uses as links to where each is read, and what it gives", async () => {
-    client.getGeoArticles.mockResolvedValue({ articles: [] });
-    renderTab(<ContentTab {...props(geoProject({ content: "done" }))} />);
-    await screen.findByRole("button", { name: "写第一批稿件" });
-    expect(screen.getByRole("link", { name: "信源分析" })).toHaveAttribute("href", "/app/geo/geo_1/sources");
-    expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
-    expect(screen.getByText("得到 面向各问题群的稿件")).toBeInTheDocument();
-  });
-
-  it("says what it kept and offers to go on when a step did not finish", async () => {
-    client.getGeoArticles.mockResolvedValue({ articles: [] });
-    renderTab(<ContentTab {...props(geoProject({ content: "failed" }))} />);
-    expect(await screen.findByText("写第一批稿件没有完成")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "接着做" }));
-    await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", "content"));
-  });
-
-  it("shows a read that failed with 重试", async () => {
-    client.getGeoArticles.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(articlesFilled);
-    renderTab(<ContentTab {...props()} />);
-    await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("打了减重针一直恶心，要不要停药？")).toBeInTheDocument();
   });
 });
 
@@ -1238,59 +1182,6 @@ describe("可见度：每个引擎", () => {
     await screen.findByRole("table", { name: "按问句池的品牌提及率" });
     expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
     expect(screen.queryByText("这一轮还没有测到同类药的提及率。")).not.toBeInTheDocument();
-  });
-});
-
-describe("效果", () => {
-  it("compares the placed groups with the control, and never paints the control in the brand colour", async () => {
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<EffectSection project={geoProject()} />);
-    await screen.findByText(/投放的语义群比对照组多涨 12/);
-    const own = document.querySelector("[data-legend-mark='own']") as HTMLElement;
-    const control = document.querySelector("[data-legend-mark='rival-1']") as HTMLElement;
-    expect(own.style.background).toBe("var(--chart-own)");
-    expect(control.style.background).toBe("var(--chart-rival-1)");
-    expect(control.style.background).not.toBe(own.style.background);
-    expect(screen.getByText("豆包、元宝")).toBeInTheDocument();
-  });
-
-  it("a week measured on other engines than the baseline says so instead of a number", async () => {
-    client.getGeoMonitoring.mockResolvedValue({
-      ...monitoringFilled,
-      arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: null, status: "not_measurable", reason: "engines_differ" } },
-    });
-    renderTab(<EffectSection project={geoProject()} />);
-    expect(await screen.findByText("这次复测和基线测的引擎不同，净效应不可比")).toBeInTheDocument();
-    expect(screen.getByText("引擎不同，不可比")).toBeInTheDocument();
-  });
-
-  it("says when the fluctuation band is the platform's default and not a measured one (Q-2)", async () => {
-    const withBand = (netEffect: Record<string, unknown>) => client.getGeoMonitoring.mockResolvedValue({
-      ...monitoringFilled, arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: 12, noiseBand: 5, ...netEffect } },
-    });
-    withBand({ noiseMeasured: false });
-    const unmeasured = renderTab(<EffectSection project={geoProject()} />);
-    expect(await screen.findByText("波动范围 ±5（噪声阈值未实测）")).toBeInTheDocument();
-    unmeasured.unmount();
-    // A measured band, and a row written before the flag was kept, are not called unmeasured.
-    withBand({ noiseMeasured: true });
-    const measured = renderTab(<EffectSection project={geoProject()} />);
-    expect(await screen.findByText("波动范围 ±5")).toBeInTheDocument();
-    measured.unmount();
-    withBand({});
-    renderTab(<EffectSection project={geoProject()} />);
-    expect(await screen.findByText("波动范围 ±5")).toBeInTheDocument();
-    expect(screen.queryByText(/噪声阈值未实测/)).not.toBeInTheDocument();
-  });
-
-  it("a net effect inside the fluctuation band is 持平", async () => {
-    client.getGeoMonitoring.mockResolvedValue({
-      ...monitoringFilled,
-      arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: 2 } },
-    });
-    renderTab(<EffectSection project={geoProject()} />);
-    expect(await screen.findByText("持平")).toBeInTheDocument();
-    expect(screen.getByText(/还在波动范围内/)).toBeInTheDocument();
   });
 });
 
