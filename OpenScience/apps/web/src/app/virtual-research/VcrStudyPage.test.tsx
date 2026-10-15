@@ -345,8 +345,29 @@ describe("what the study is doing, in the strip under the header", () => {
     expect(line).toHaveAttribute("data-activity-state", "queued");
     expect(line).toHaveTextContent("生成虚拟患者 · 排队中");
     expect(line).toHaveTextContent("等“证据”做完");
-    // Nothing to stop: no run holds the slot.
-    expect(within(line).queryByRole("button", { name: "取消" })).toBeNull();
+    // Nothing is out, and a person may still stop what is waiting: the cancel holds the programme, so it is not taken up in its turn.
+    expect(within(line).getByRole("button", { name: "取消" })).toBeInTheDocument();
+  });
+
+  it("holds a step that is only in line with one request — a person who changed their mind has a way to say so", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET /vcr/studies/${STUDY_ID}`]: studyWith({ run: null, queue: [{ step: "evidence", waitingFor: null }], jobs: [], last: null }),
+      [`POST /vcr/studies/${STUDY_ID}/cancel`]: { canceled: { runId: null, jobs: 0, held: ["evidence"] } },
+    });
+    draw();
+    await heading();
+    await userEvent.click(within(strip()!).getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1");
+  });
+
+  it("offers a step that is only in line no 取消 to a reader who cannot run one", async () => {
+    server = installVcrServer(network.productRequest, {
+      [`GET /vcr/studies/${STUDY_ID}`]: studyWith({ run: null, queue: [{ step: "evidence", waitingFor: null }], jobs: [], last: null }, (study) => { study.abilities = ["read"]; }),
+    });
+    draw();
+    await heading();
+    expect(within(strip()!).queryByRole("button")).toBeNull();
   });
 
   it("says a job waits on an engine that is not answering as a state, in a few words and with nothing to press", async () => {

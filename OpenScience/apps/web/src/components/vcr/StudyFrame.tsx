@@ -104,6 +104,7 @@ function tabItems(study: VcrStudy): TabItem<StudyView>[] {
 /**
  * The strip's facts, from `activity`: the run that is out (its person's sentence, what phase it is in, what it has counted, for how
  * long), else the engine job that moves (its done of total), else the step in line and what it waits for. Null when nothing is.
+ * Each has 取消 for a reader who may run a step.
  */
 export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => void; cancelling?: boolean }): ActivityStripProps | null {
   const activity = study.activity;
@@ -126,8 +127,10 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
       ...cancel,
     };
   }
+  // A step in line with nothing out yet (behind the conversation's own turn, or for its tick) can be stopped too: the cancel holds the
+  // programme, so what is waiting is not taken up when its turn comes.
   const first = activity.queue[0];
-  if (first) return { label: stepAction(first.step), waiting: waitingSentence(first.waitingFor), queued: open - 1 || undefined };
+  if (first) return { label: stepAction(first.step), waiting: waitingSentence(first.waitingFor), queued: open - 1 || undefined, ...cancel };
   return null;
 }
 

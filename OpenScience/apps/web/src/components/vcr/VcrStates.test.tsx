@@ -223,6 +223,25 @@ describe("a step with nothing yet", () => {
     expect(screen.queryByText("已安排，开始后这里会显示进度。")).toBeNull();
   });
 
+  it("lets a person stop a step that is only in line — the cancel holds the programme, with nothing out to stop", async () => {
+    installVcrServer(network.productRequest);
+    const raw = fixture("ev201/study.json");
+    raw.steps.patients = { ...raw.steps.patients, status: "none", requested: true };
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="patients" />);
+    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/patients");
+  });
+
+  it("offers no 取消 on a step that is in line to a reader who may not run one", () => {
+    const raw = fixture("ev201/study.json");
+    raw.steps.patients = { ...raw.steps.patients, status: "none", requested: true };
+    raw.abilities = ["read"];
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="patients" />);
+    expect(document.querySelector("[data-step-state='queued']")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+  });
+
   // A cancel holds the programme: a held step is not in line — it was stopped, and only a person's press starts it again.
   it("offers a step a cancel held its start like one never asked for, and does not call it queued", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("patients", { status: "none", requested: true, held: true })} step="patients" />);

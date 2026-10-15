@@ -175,7 +175,7 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
   if (state?.status === "queued") {
     return (
       <div data-vcr-step-waiting={step}>
-        <StepState phase="queued" step={action} after={waitingNoun(here.queued?.waitingFor)} onStop={mayRun && activity?.run ? cancel : undefined} />
+        <StepState phase="queued" step={action} after={waitingNoun(here.queued?.waitingFor)} onStop={mayRun ? cancel : undefined} />
       </div>
     );
   }
@@ -187,7 +187,7 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
   if (state?.status === "none" && state.requested === true && state.held !== true) {
     return (
       <div data-vcr-step-waiting={step}>
-        <StepState phase="queued" step={action} />
+        <StepState phase="queued" step={action} onStop={mayRun ? cancel : undefined} />
       </div>
     );
   }
