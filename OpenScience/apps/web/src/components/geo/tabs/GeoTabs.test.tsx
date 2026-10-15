@@ -22,6 +22,7 @@ import {
   valueFilled,
   VALUE_TITLES,
 } from "../__fixtures__/geoTabs";
+import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
 import { AccuracyTab } from "./AccuracyTab";
 import { ContentTab } from "./ContentTab";
 import { EffectSection } from "./EffectSection";
@@ -82,11 +83,13 @@ function Probe() {
   );
 }
 
+/** The tab in the place the layout gives it: its toolbar above it, its reads through the project's cache. */
 function renderTab(tab: ReactElement) {
+  const project = (tab.props as { project?: GeoProject }).project ?? geoProject();
   return render(
     <MemoryRouter initialEntries={["/app/geo/geo_1/tab"]}>
       <Routes>
-        <Route path="/app/geo/geo_1/tab" element={<>{tab}<Probe /></>} />
+        <Route path="/app/geo/geo_1/tab" element={<><GeoFrameHarness project={project}>{tab}</GeoFrameHarness><Probe /></>} />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
@@ -122,35 +125,58 @@ describe("内容: what the evidence cards wait for", () => {
 });
 
 describe("a tab with nothing yet", () => {
-  it("says one quiet line while the step is being worked on", async () => {
+  it("says what is being done while the step is being worked on, and offers nothing to press", async () => {
     client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] });
     renderTab(<EvidenceTab {...props(geoProject({ evidence: "running" }))} />);
-    expect(await screen.findByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+    expect(await screen.findByText("正在整理产品证据")).toBeInTheDocument();
+    expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "整理产品证据" })).not.toBeInTheDocument();
   });
 
-  it("says when a step asked for but waiting on the one before it will start, and offers nothing to press", async () => {
+  it("says which step a step asked for early waits for, and offers nothing to press", async () => {
     client.getGeoArticles.mockResolvedValue({ articles: [] });
     const project = geoProject({});
     project.steps.content = { status: "none", requested: true };
     renderTab(<ContentTab {...props(project)} />);
-    expect(await screen.findByText("信源分析做完后开始写稿。")).toBeInTheDocument();
-    expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+    expect(await screen.findByText("写第一批稿件，排队中")).toBeInTheDocument();
+    expect(screen.getByText("“信源”做完后自动开始。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "写第一批稿件" })).not.toBeInTheDocument();
   });
 
+  // An empty state is a recipe (rule 8): what the step uses — each a way to the thing — what it gives, and one button naming the work.
   it.each([
-    ["evidence", EvidenceTab, () => client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] })],
-    ["journey", JourneyTab, () => client.getGeoJourney.mockResolvedValue({ subtypes: [], personas: [], stages: [], careNodes: [], files: [] })],
-    ["questions", QuestionsTab, () => client.getGeoQuestions.mockResolvedValue({ sets: [], version: null, groups: [] })],
-    ["sources", SourcesTab, () => client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null })],
-    ["content", ContentTab, () => client.getGeoArticles.mockResolvedValue({ articles: [] })],
-  ] as const)("%s: a finished step with nothing to show offers 让 AI 做", async (step, Tab, arrange) => {
+    ["evidence", "整理产品证据", EvidenceTab, () => client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] })],
+    ["journey", "绘制患者旅程", JourneyTab, () => client.getGeoJourney.mockResolvedValue({ subtypes: [], personas: [], stages: [], careNodes: [], files: [] })],
+    ["questions", "列出测量问题", QuestionsTab, () => client.getGeoQuestions.mockResolvedValue({ sets: [], version: null, groups: [] })],
+    ["sources", "分析引用的信源", SourcesTab, () => client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null })],
+    ["content", "写第一批稿件", ContentTab, () => client.getGeoArticles.mockResolvedValue({ articles: [] })],
+  ] as const)("%s: a finished step with nothing to show is a recipe with one button, %s, which starts it and keeps the person here", async (step, verb, Tab, arrange) => {
     arrange();
     renderTab(<Tab {...props(geoProject({ [step]: "done" }))} />);
-    const button = await screen.findByRole("button", { name: "让 AI 做" });
+    const button = await screen.findByRole("button", { name: verb });
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
     await userEvent.click(button);
     await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", step));
+    // Starting work takes nobody anywhere: no conversation is opened and the address does not change.
+    expect(store.select).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
+  });
+
+  it("names what a step uses as links to where each is read, and what it gives", async () => {
+    client.getGeoArticles.mockResolvedValue({ articles: [] });
+    renderTab(<ContentTab {...props(geoProject({ content: "done" }))} />);
+    await screen.findByRole("button", { name: "写第一批稿件" });
+    expect(screen.getByRole("link", { name: "信源分析" })).toHaveAttribute("href", "/app/geo/geo_1/sources");
+    expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
+    expect(screen.getByText("得到 面向各问题群的稿件")).toBeInTheDocument();
+  });
+
+  it("says what it kept and offers to go on when a step did not finish", async () => {
+    client.getGeoArticles.mockResolvedValue({ articles: [] });
+    renderTab(<ContentTab {...props(geoProject({ content: "failed" }))} />);
+    expect(await screen.findByText("写第一批稿件没有完成")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "接着做" }));
+    await waitFor(() => expect(client.runGeoStep).toHaveBeenCalledWith("geo_1", "content"));
   });
 
   it("shows a read that failed with 重试", async () => {
@@ -183,14 +209,18 @@ describe("证据", () => {
     expect(screen.queryByText("已过期")).not.toBeInTheDocument();
   });
 
-  it("filters by source kind and opens a claim's quote in place", async () => {
+  it("filters by source kind, and opens a claim in a drawer with its quotation and what it stands on", async () => {
     client.getGeoEvidence.mockResolvedValue(evidenceFilled);
     renderTab(<EvidenceTab {...props()} />);
     await userEvent.click(await screen.findByRole("button", { name: "临床试验" }));
     expect(screen.queryByText("每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "全部" }));
-    await userEvent.click(screen.getByRole("button", { name: "每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。" }));
-    expect(screen.getByText("本品每周注射一次。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。/ }));
+    const drawer = screen.getByRole("dialog", { name: "结论" });
+    expect(within(drawer).getByText("本品每周注射一次。")).toBeInTheDocument();
+    expect(within(drawer).getByText("出处类型")).toBeInTheDocument();
+    // The list under the drawer does not carry the quotation in place any more.
+    expect(screen.getAllByText("本品每周注射一次。")).toHaveLength(1);
   });
 
   it("shows 8 claims first, 显示更多 with how many are left, and finds one by a word of it", async () => {
@@ -791,7 +821,7 @@ describe("总览", () => {
     // The chart says which readings it compares and when the next is.
     expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
     // The mention rate moved two points inside its measured band of ±3: flat, on its tile.
-    expect(screen.getByRole("group", { name: "品牌提及率" }).querySelector("[data-delta='flat']")).not.toBeNull();
+    expect(screen.getByRole("group", { name: "品类问题可见率" }).querySelector("[data-delta='flat']")).not.toBeNull();
     overview.unmount();
 
     renderTab(<VisibilityTab {...props(fallingProject())} />);
@@ -815,7 +845,7 @@ describe("总览", () => {
     const band = screen.getByRole("region", { name: "本轮指标" });
     expect(band.textContent?.split(NOT_COMPARED).length).toBe(2);
     // A tile's line starts where the coverage changed: the one reading measured over what the latest was, not a line across the change.
-    expect(screen.getByRole("group", { name: "品牌提及率" }).querySelector("[data-geo-readings]")?.getAttribute("data-geo-readings")).toBe("1");
+    expect(screen.getByRole("group", { name: "品类问题可见率" }).querySelector("[data-geo-readings]")?.getAttribute("data-geo-readings")).toBe("1");
   });
 
   it("an engine-set change on 可见度 titles the chart with the statement, and no arrow is drawn", async () => {
@@ -825,8 +855,8 @@ describe("总览", () => {
     const title = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(title).toHaveTextContent(`综合可见度指数 44，${NOT_COMPARED}`);
     expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
-    await userEvent.click(screen.getByRole("button", { name: "品牌提及率" }));
-    expect(await screen.findByRole("heading", { name: `品牌提及率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "品类问题可见率" }));
+    expect(await screen.findByRole("heading", { name: `品类问题可见率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/[▲▼]/);
   });
 
@@ -846,8 +876,8 @@ describe("总览", () => {
     client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     await screen.findByRole("heading", { name: /综合可见度指数 44/ });
-    await userEvent.click(screen.getByRole("button", { name: "品牌提及率" }));
-    expect(await screen.findByRole("heading", { name: "品牌提及率 23%，与上次持平" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "品类问题可见率" }));
+    expect(await screen.findByRole("heading", { name: "品类问题可见率 23%，与上次持平" })).toBeInTheDocument();
   });
 
   it("draws no line for a tile that reads 样本不足 — the words and a falling line would say two things", async () => {
@@ -857,7 +887,7 @@ describe("总览", () => {
     const citation = await screen.findByRole("group", { name: "引用命中率" });
     expect(citation).toHaveTextContent("样本不足");
     expect(citation.querySelector("[data-geo-sparkline]")).toBeNull();
-    expect(screen.getByRole("group", { name: "品牌提及率" }).querySelector("[data-geo-sparkline]")).not.toBeNull();
+    expect(screen.getByRole("group", { name: "品类问题可见率" }).querySelector("[data-geo-sparkline]")).not.toBeNull();
   });
 
   it("holds the sentence's line until the open errors are counted, so no 「还有 N 条」 pops in under a quiet page", async () => {
@@ -872,18 +902,65 @@ describe("总览", () => {
     expect(screen.queryByRole("status", { name: "正在读取" })).not.toBeInTheDocument();
   });
 
-  it("puts the findings and the next step before the trend, and links the whole list when it is longer than three", async () => {
-    const many = Array.from({ length: 5 }, (_, index) => ({ ...diagnosisFilled.errors[0], id: `err_${index}`, status: "open" as const, severity: "S2" as const }));
-    // 104 errors against a list of 5 rows: the title and the link say the true count.
-    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisWith(many), errorCounts: { total: 104, open: 97, acting: 3, awaiting_remeasure: 0, closed: 4, severe: 11 } });
+  // R19 audit C 1.5: 「下一步」 listed what was DONE. 「需要你」 is what the server asks of the person — a verb and the object it opens.
+  it("lists what is asked of the person before the trend: the budget, the articles to release, the worst wrong statements, the client's to-dos", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    const asked = fallingProject();
+    asked.needsYou = [
+      { kind: "set_budget", key: "budget", verb: "set", object: { type: "budget", id: "geo_1" }, target: { tab: "actions", section: "budget" } },
+      { kind: "release_articles", key: "release", verb: "review", object: { type: "articles", ids: ["art_1", "art_2"] }, count: 2, target: { tab: "actions", section: "review" } },
+      { kind: "correct_severe_error", key: "error:err_9", verb: "correct", object: { type: "error", id: "err_9" }, severity: "S3", engine: "deepseek",
+        statement: "每天注射一次", target: { tab: "accuracy", errorId: "err_9", snapshotId: "snap_9" } },
+      { kind: "client_action", key: "client:0a1b2c3d", verb: "do", object: { type: "client_action" }, text: "开通并认证自有微信公众号", target: { tab: "plan", section: "client_actions" } },
+    ];
+    renderTab(<OverviewTab {...props(asked)} />);
+    const heading = await screen.findByRole("heading", { name: "需要你" });
+    const list = within(heading.closest("section") as HTMLElement).getByRole("list", { name: "需要你处理的事" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(list).getByRole("button", { name: /设置投放预算/ })).toBeInTheDocument();
+    expect(within(list).getByRole("link", { name: /放行 2 篇稿件/ })).toHaveAttribute("href", "/app/geo/geo_1/actions#geo-review");
+    expect(within(list).getByRole("link", { name: /每天注射一次/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_9");
+    expect(within(list).getByRole("link", { name: /开通并认证自有微信公众号/ })).toHaveAttribute("href", "/app/geo/geo_1/plan#geo-client-actions");
+    // Nothing that is done is listed: no 「已完成」, no 「下一步」.
+    expect(screen.queryByRole("heading", { name: "下一步" })).not.toBeInTheDocument();
+    expect(within(list).queryByText(/已完成/)).not.toBeInTheDocument();
+    // It comes before the trend.
+    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
+    await userEvent.click(within(list).getByRole("button", { name: "写纠错稿" }));
+    await waitFor(() => expect(store.select).toHaveBeenCalled());
+    expect(await screen.findByTestId("state")).toHaveTextContent("每天注射一次");
+  });
+
+  it("draws no 「需要你」 where nothing is asked, and no list of the wrong statements: those are 准确与安全's", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
     renderTab(<OverviewTab {...props(fallingProject())} />);
-    const list = await screen.findByRole("heading", { name: "100 条讲错还没处理" });
-    expect(within(list.parentElement!).getByRole("link", { name: "查看全部 100 条" })).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
-    expect(list.parentElement!.parentElement!.querySelectorAll("[data-geo-error]")).toHaveLength(3);
-    const trend = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
-    expect(list.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "下一步" }).compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
+    expect(screen.queryByRole("heading", { name: "需要你" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-geo-error]")).toBeNull();
+    // The engine matrix is 可见度's, and the value analysis is 依据's.
+    expect(document.querySelector("[data-heat-row]")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "药品价值与机会" })).not.toBeInTheDocument();
+  });
+
+  it("says each number as where it began, where it is and where it is meant to be — a target already passed reads as reached", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
+    const project = fallingProject();
+    // 品类问题可见率 stands at 21 against a target of 12.
+    project.overview.metrics = project.overview.metrics.map((metric) => (metric.key === "mention"
+      ? { ...metric, target: 12, cell: cell(21, 65, 310), trend: [{ date: "2026-09-25", value: 9, n: 310 }, { date: "2026-10-12", value: 21, n: 310 }] }
+      : metric));
+    renderTab(<OverviewTab {...props(project)} />);
+    const tile = await screen.findByRole("group", { name: "品类问题可见率" });
+    expect(tile).toHaveTextContent("基线 9% · 9月25日");
+    expect(tile).toHaveTextContent("已达到目标 12%");
+    // A figure opens the tab that holds what it counts.
+    expect(within(tile).getByRole("link", { name: /品类问题可见率 21，查看/ })).toHaveAttribute("href", "/app/geo/geo_1/visibility");
+    expect(within(screen.getByRole("group", { name: "事实准确率" })).getByRole("link")).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
   });
 
   it("draws no empty card for a ranking nobody measured, and gives the trend its width", async () => {
@@ -962,7 +1039,10 @@ describe("准确与安全：讲错清单", () => {
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
     const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    const group = within(list).getByRole("group", { name: "处置状态" });
+    // The filter is the band's toolbar, above the list and not in its card.
+    const group = screen.getByRole("group", { name: "处置状态" });
+    expect(list).not.toContainElement(group);
+    expect(group.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
     expect(within(group).getByRole("button", { name: /严重/ })).toHaveAttribute("aria-pressed", "true");
     // Three grave ones, and nothing else, to start with.
@@ -983,7 +1063,7 @@ describe("准确与安全：讲错清单", () => {
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
     const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    await userEvent.click(within(list).getByRole("button", { name: /^全部/ }));
+    await userEvent.click(within(screen.getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^全部/ }));
     expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(20);
     // The server counts 104 and sent 30: the other 74 are named, not hidden.
     expect(list).toHaveTextContent("这里列出了 30 条，还有 74 条没有列出。");
@@ -1001,7 +1081,7 @@ describe("准确与安全：讲错清单", () => {
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
     const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    await userEvent.click(within(list).getByRole("button", { name: /^处置中/ }));
+    await userEvent.click(within(screen.getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^处置中/ }));
     expect(screen.getByTestId("search")).toHaveTextContent("?show=acting");
     expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(5);
   });
@@ -1018,8 +1098,8 @@ describe("准确与安全：讲错清单", () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
-    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    const group = within(list).getByRole("group", { name: "处置状态" });
+    await screen.findByRole("heading", { name: "讲错清单，按严重度排序" });
+    const group = screen.getByRole("group", { name: "处置状态" });
     expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["处置中1", "全部1"]);
     expect(within(group).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
   });
@@ -1073,7 +1153,7 @@ describe("可见度", () => {
     });
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     renderTab(<VisibilityTab {...props()} />);
-    await screen.findByRole("heading", { name: /品牌提及率 21%/ });
+    await screen.findByRole("heading", { name: /品类问题可见率 21%/ });
     expect(document.querySelector("[data-chart='trend']")).toHaveAttribute("data-chart-rivals", "2");
   });
 
@@ -1214,96 +1294,100 @@ describe("效果", () => {
   });
 });
 
-describe("药品价值分析在页签里", () => {
+// R19 audit C 1.9: the drug-value analysis was a block in seven tabs, each with a title of its own. It is 依据's second view and
+// nowhere else; the other tabs link to it from the object it is about.
+describe("药品价值分析只在依据里", () => {
   const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
   const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
 
-  /** Each tab that carries a section of it, with the data its own tests give it and a sign that its own content is drawn. */
-  const TABS: ReadonlyArray<{ tab: string; title: string; render: () => ReactElement; ready: () => Promise<unknown> }> = [
+  /** Each of the other tabs, with the data its own tests give it and a sign that its own content is drawn. */
+  const TABS: ReadonlyArray<{ tab: string; render: () => ReactElement; ready: () => Promise<unknown> }> = [
     {
-      tab: "overview", title: "药品价值与机会",
+      tab: "overview",
       render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(fallingMonitoring); return <OverviewTab {...props(fallingProject())} />; },
       ready: () => screen.findByRole("heading", { name: /综合可见度指数 44，/ }),
     },
     {
-      tab: "visibility", title: "AI 如何表达药品价值",
+      tab: "visibility",
       render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(monitoringFilled); return <VisibilityTab {...props()} />; },
       ready: () => screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ }),
     },
     {
-      tab: "accuracy", title: "获益与风险",
+      tab: "accuracy",
       render: () => { client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled); client.getGeoMonitoring.mockResolvedValue(monitoringFilled); return <AccuracyTab {...props()} />; },
       ready: () => screen.findByRole("heading", { name: "讲错清单，按严重度排序" }),
     },
     {
-      tab: "questions", title: "问题背后的决策",
+      tab: "questions",
       render: () => { client.getGeoQuestions.mockResolvedValue(questionsFilled); return <QuestionsTab {...props()} />; },
       ready: () => screen.findByText("3 个语义群 · 2 问 · 2 条真实问法"),
     },
     {
-      tab: "sources", title: "依据与传播",
+      tab: "sources",
       render: () => { client.getGeoSources.mockResolvedValue(sourcesFilled); return <SourcesTab {...props()} />; },
       ready: () => screen.findByText("3 个信源"),
     },
   ];
 
-  it.each(TABS)("$tab: a project with no value analysis gets no box, no heading, no sentence and no button from it", async ({ render: arrange, ready }) => {
+  it.each(TABS)("$tab: draws none of it — not its sections, not a start for it — and does not read it", async ({ render: arrange, ready }) => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
     renderTab(arrange());
     await ready();
     await settle();
-    expect(client.getGeoValue).toHaveBeenCalledWith("geo_1");
     for (const title of VALUE_TITLES) expect(screen.queryByRole("heading", { name: title })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始药品价值分析" })).not.toBeInTheDocument();
+    expect(client.getGeoValue).not.toHaveBeenCalled();
+  });
+
+  /** 依据 at its second view, in the place the layout gives it. */
+  function renderEvidence(project: GeoProject = geoProject()) {
+    return render(
+      <MemoryRouter initialEntries={["/app/geo/geo_1/evidence?view=value"]}>
+        <Routes>
+          <Route path="/app/geo/geo_1/evidence" element={<><GeoFrameHarness project={project}><EvidenceTab geoId="geo_1" project={project} /></GeoFrameHarness><Probe /></>} />
+          <Route path="*" element={<Probe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("依据: with an analysis, its parts follow one another as the reader asks, and none of them has a 问 AI button", async () => {
+    client.getGeoEvidence.mockResolvedValue(evidenceFilled);
+    client.getGeoValue.mockResolvedValue(valueFilled);
+    renderEvidence();
+    const parts = ["药品价值分析", "问题背后的决策", "下一步研究与内容", "依据与传播", "AI 如何表达药品价值"];
+    const headings = await Promise.all(parts.map((name) => screen.findByRole("heading", { name })));
+    headings.slice(1).forEach((heading, index) => {
+      expect(headings[index].compareDocumentPosition(heading) & FOLLOWS, `${heading.textContent} follows ${headings[index].textContent}`).toBeTruthy();
+    });
     expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
-    expect(screen.queryByText(/可以先从已有资料/)).not.toBeInTheDocument();
+    // The identity comes first on the page: who the product is, then what may be said about it.
+    expect(screen.getByRole("heading", { name: "产品身份" }).compareDocumentPosition(headings[0]) & FOLLOWS).toBeTruthy();
   });
 
-  it.each(TABS)("$tab: with an analysis, its section is drawn and has no 问 AI button on it", async ({ title, render: arrange, ready }) => {
-    client.getGeoValue.mockResolvedValue(valueFilled);
-    renderTab(arrange());
-    await ready();
-    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
-    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
+  it("依据: a project with none gets one recipe with the one button that starts it, which opens the conversation with the brief, unsent", async () => {
+    client.getGeoEvidence.mockResolvedValue(evidenceFilled);
+    client.getGeoValue.mockResolvedValue({ version: 0, updatedAt: null, data: {}, research: [], impacts: [], observations: [],
+      coverage: { assessed: 0, represented: 0, partial: 0, contradicted: 0, notAddressed: 0, uncertain: 0, notApplicable: 0, value: null } });
+    renderEvidence();
+    await screen.findByText("还没有药品价值分析");
+    const start = screen.getAllByRole("button", { name: "开始药品价值分析" });
+    expect(start).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
+    expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
+    await userEvent.click(start[0]);
+    await waitFor(() => expect(store.select).toHaveBeenCalled());
+    expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析");
+    // Opened with the brief in the composer; nothing was sent.
+    expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
   });
 
-  it("信源: the changed sources are read before any engine's citation exists, above the step that makes them", async () => {
+  it("依据: reads the analysis once for all its parts", async () => {
+    client.getGeoEvidence.mockResolvedValue(evidenceFilled);
     client.getGeoValue.mockResolvedValue(valueFilled);
-    client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null });
-    renderTab(<SourcesTab {...props(geoProject({ sources: "done" }))} />);
-    const heading = await screen.findByRole("heading", { name: "依据与传播" });
-    const step = await screen.findByRole("button", { name: "让 AI 做" });
-    expect(screen.getByText("知识库资料已更新，可检查引用它的结论与内容。")).toBeInTheDocument();
-    expect(heading.compareDocumentPosition(step) & FOLLOWS).toBeTruthy();
-  });
-
-  it("总览: the headline and the metric band come first, and the analysis is the last thing on the tab", async () => {
-    client.getGeoValue.mockResolvedValue(valueFilled);
-    renderTab(TABS[0].render());
-    const heading = await screen.findByRole("heading", { name: "药品价值与机会" });
-    const sentence = await screen.findByText(/综合可见度 44，比上次低 2/);
-    const band = screen.getByRole("region", { name: "本轮指标" });
-    expect(sentence.compareDocumentPosition(band) & FOLLOWS).toBeTruthy();
-    expect(band.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
-    expect(document.querySelector("[data-geo-tab='overview']")?.lastElementChild).toBe(heading.closest("section"));
-  });
-
-  it("可见度: the trend comes first, and the analysis is the last thing on the tab", async () => {
-    client.getGeoValue.mockResolvedValue(valueFilled);
-    renderTab(TABS[1].render());
-    const heading = await screen.findByRole("heading", { name: "AI 如何表达药品价值" });
-    const trend = await screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ });
-    expect(trend.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
-    expect(document.querySelector("[data-geo-tab='visibility']")?.lastElementChild).toBe(heading.closest("section"));
-  });
-
-  it("准确与安全: the tiles and the list straight after them come first, and the analysis is the last thing on the tab", async () => {
-    client.getGeoValue.mockResolvedValue(valueFilled);
-    renderTab(TABS[2].render());
-    const heading = await screen.findByRole("heading", { name: "获益与风险" });
-    const tiles = await screen.findByRole("region", { name: "准确与安全" });
-    const list = screen.getByRole("heading", { name: "讲错清单，按严重度排序" });
-    expect(tiles.compareDocumentPosition(list) & FOLLOWS).toBeTruthy();
-    expect(list.compareDocumentPosition(heading) & FOLLOWS).toBeTruthy();
-    expect(document.querySelector("[data-geo-tab='accuracy']")?.lastElementChild).toBe(heading.closest("section"));
+    renderEvidence();
+    await screen.findByRole("heading", { name: "问题背后的决策" });
+    expect(client.getGeoValue).toHaveBeenCalledTimes(1);
   });
 });
 

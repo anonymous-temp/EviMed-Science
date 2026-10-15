@@ -89,6 +89,13 @@ export interface GeoStep {
   note?: string | null;
   /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
   waiting?: "allowance" | "simulated_allowance" | null;
+  /** What the step produced, as one short count for the rail (「86 条结论」); null when there is nothing to count. */
+  summary?: GeoStepSummary | null;
+}
+export interface GeoStepSummary {
+  text: string;
+  count: number;
+  unit: string;
 }
 export type GeoSteps = Partial<Record<GeoStepKey, GeoStep>>;
 
@@ -197,6 +204,8 @@ export interface GeoProject {
   overview: GeoOverview;
   /** Whether this deployment can place orders at all; without a market no page asks for a budget. */
   market?: { configured: boolean };
+  /** Engines the probe host can measure beyond the default five (e.g. `baidu`), when the server lists them. */
+  availableEngines?: GeoEngine[];
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -208,6 +217,36 @@ export interface GeoProject {
   cards?: { blockedBy: "producer" | "reviewer" | null } | null;
   /** Who is reading, and what their roles in the project allow (the owner has every ability). */
   access?: { roles: string[]; abilities: string[]; owner: boolean };
+  /**
+   * What the project really asks of its person — a budget not decided, articles to look at, the worst errors, the strategy's to-dos
+   * for the client, a step waiting on credits or one that failed. A to-do list, never a log of what is done; `[]` when nothing is asked.
+   */
+  needsYou: GeoNeedsYou[];
+}
+
+/** The kinds of to-do the project view lists (`GEO_NEEDS_YOU_KINDS`), each a verb and the object it opens. */
+export type GeoNeedsYouKind = "set_budget" | "release_articles" | "correct_severe_error" | "client_action" | "credits_waiting" | "step_failed";
+export interface GeoNeedsYou {
+  kind: GeoNeedsYouKind | (string & {});
+  /** Stable across reads: `budget`, `release`, `error:<id>`, `client:<hash>`, `waiting:<step>`, `failed:<step>`. */
+  key: string;
+  /** The server's word for the act (`set`, `review`, `correct`, `do`, `top_up`, `retry`); the page words it itself. */
+  verb: string;
+  object: { type: string; id?: string; ids?: string[] };
+  /** `release_articles`: how many articles wait. */
+  count?: number;
+  /** `client_action`: what the strategy asks the client to do, in the run's words. */
+  text?: string;
+  /** `correct_severe_error`: the wrong statement and where it was said. */
+  severity?: GeoSeverity;
+  engine?: GeoEngine;
+  statement?: string;
+  groupId?: string | null;
+  /** `credits_waiting`: which wallet refused the step, and the step's own note. */
+  waiting?: "allowance" | "simulated_allowance";
+  note?: string | null;
+  /** Where doing it is read: a tab, and the block or the record inside it. */
+  target: { tab: "actions" | "accuracy" | "plan" | "overview"; section?: string; errorId?: string; snapshotId?: string | null; step?: GeoStepKey };
 }
 
 export interface GeoClaim {
@@ -602,6 +641,313 @@ export interface GeoMonitoring {
   next: { date: string; kind: string } | null;
 }
 
+/* --------------------------------------------------------- the question group as the spine (R19) */
+
+export type GeoActionKind = "correct_error" | "fill_gap" | "win_cluster" | "maintain";
+export type GeoActionStatus = "proposed" | "writing" | "ready" | "placed" | "live" | "cited" | "verified" | "stale" | "skipped";
+export type GeoActionPromise = "enter_mention" | "raise_mention" | "accuracy_to_target" | "coverage_complete" | "hold";
+
+/**
+ * What the engines say about a group, as k of n and a state. **A rate exists only where `state` is `enough`** (n of at least the
+ * platform's floor of 30): under it the key is absent from the server's answer and from this type, so a page that wants to print a
+ * percentage for a thin group cannot — it writes `k / n` and the word 「样本不足」.
+ */
+export type GeoGroupReading = (
+  | { k: number; n: number; state: "enough"; rate: number }
+  | { k: number; n: number; state: "thin"; rate?: never }
+  | { k: null; n: null; state: "absent"; rate?: never }
+) & {
+  metricId?: string;
+  roundId?: string;
+  date?: string | null;
+  coverage?: string | null;
+};
+
+export interface GeoClusterRow {
+  id: string;
+  name: string;
+  pool: GeoPool | null;
+  journeyStage: string | null;
+  /** The stage's number in the journey, when the run wrote one; every group written before it has none (fall back to `journeyStage`). */
+  journeyStageNo: number | null;
+  audience: string | null;
+  weight: number | null;
+  isControl: boolean;
+  signal: string | null;
+  questionCount: number;
+  measuredCount: number;
+  realCount: number;
+  realPhrasings: Array<{ text: string; platform: string | null; sourceUrl: string | null; collectedAt: string | null }>;
+  /** The group's M-01 across engines in the latest full round. */
+  mention: GeoGroupReading | null;
+  /** Counted over the round's answers: facts, not a metric. */
+  byEngine: Record<string, { answered: number; mentioned: number; wrong: number }>;
+  errors: { open: number; severe: number; total: number };
+  actions: { total: number; byStatus: Partial<Record<GeoActionStatus, number>> };
+  articles: { total: number; byStatus: Partial<Record<GeoArticleStatus, number>> };
+}
+
+export interface GeoClustersView {
+  version: number | null;
+  locked: boolean;
+  /** The platform's floor: a rate is drawn only over this many answers. */
+  floor: number;
+  /** The latest full round the per-engine counts are from. */
+  round: { id: string; kind: string; sampleDate: string | null } | null;
+  engines: GeoEngine[];
+  groups: GeoClusterRow[];
+}
+
+export interface GeoActionSource {
+  domain: string;
+  name: string | null;
+  kind: string | null;
+  layer: GeoSourceLayer | null;
+  /** One sentence of why this site, written by the run; null where the platform alone ranked it. */
+  why: string | null;
+  citedFor: Record<string, number>;
+  conditions: { icp?: boolean | null; newsIndexed?: boolean | null; medical?: boolean | null };
+  price: number | null;
+  available: boolean | null;
+  origin: "cited" | "layout" | "market";
+  chosen: "recommended" | "swapped" | "placed";
+  orderId: string | null;
+}
+
+export type GeoActionEvidence =
+  | { kind: "reading"; metricId: string; k: number | null; n: number | null; state: "enough" | "thin" | "absent"; rate?: number; roundId: string | null; date: string | null; coverage: string | null; groupId: string | null }
+  | { kind: "error"; errorId: string; engine: GeoEngine; severity: GeoSeverity | null; statement: string | null; status: GeoErrorStatus | string };
+
+export interface GeoAction {
+  /** `<kind>:<groupId|->:<ref>`; the kind is the one the action was born with, and the key never changes. */
+  key: string;
+  kind: GeoActionKind;
+  group: { id: string; name: string; pool: GeoPool | null; journeyStage: string | null; journeyStageNo: number | null; weight: number | null; isControl: false } | null;
+  questions: Array<{ id: string; text: string }>;
+  need: {
+    gapId: string | null;
+    gapClass: string | null;
+    errorIds: string[];
+    judgment: string | null;
+    evidence: GeoActionEvidence[];
+    expectedPoints: Array<{ id: string; kind: string; statement: string; claimIds: string[] }>;
+    rank: number | null;
+    consequence: { band: string | null; basis: string | null } | null;
+    safetyPinned: boolean;
+    handoff: string | null;
+  };
+  what: { layer: GeoArticleLayer | null; title: string | null; channel: string | null; channelNote: string | null };
+  engines: GeoEngine[];
+  sources: GeoActionSource[];
+  expected: {
+    metricIds: string[];
+    primaryMetricId: string | null;
+    promise: GeoActionPromise | null;
+    /** The reading now, and the earliest full round's; null before there is one. */
+    from: GeoGroupReading | null;
+    baseline: GeoGroupReading | null;
+    /** The CHOSEN tier's row for the group's pool — never a run's own number. */
+    target: number | null;
+    /** Null while the reading is thin: no verdict is given on a thin group. */
+    reached: boolean | null;
+    dataType: "forecast";
+    horizonWeeks: number | null;
+    tier: GeoTierId | null;
+    basis: { tier: GeoTierId | null; metricId: string | null; pool: string | null; targetsVersion: number | null; source: "targets" | "none"; note: string | null };
+    closes: { errors: number; points: number };
+  };
+  status: GeoActionStatus;
+  articleIds: string[];
+  orderIds: string[];
+  ownedLinkIds: string[];
+  observed: {
+    citedBy: Array<{ engine: GeoEngine; questionId: string | null; askedAt: string | null; articleId: string | null }>;
+    series: Array<GeoGroupReading & { round: string; date: string | null; kind: string }>;
+    /** Arm level only (pilot groups against control groups); never a claim about one group. */
+    arm: { netEffect: number | null; verdict: "up" | "down" | "flat" | null; noiseBand: number | null; comparable: boolean; scope: "pool" | "project"; pool: string | null; reason?: string | null } | null;
+  };
+  choice: { skipped: boolean; sourceDomain: string | null; updatedAt: string | null } | null;
+  /** Annotations of the run's words against the platform's rows; never a refusal. */
+  checks: Array<{ code: string; message?: string; [key: string]: unknown }>;
+  reason: string | null;
+  rank: number | null;
+}
+
+export interface GeoActionsView {
+  version: number | null;
+  tier: GeoTierId;
+  round: { id: string; kind: string; sampleDate: string | null } | null;
+  floor: number;
+  /** The page's lead line, assembled by code from the arm-level result and the counts. */
+  headline: {
+    actedGroups: number;
+    gapGroupsNotActedOn: number;
+    arm: { netEffect: number | null; verdict: "up" | "down" | "flat" | null; noiseBand: number | null; comparable: boolean } | null;
+    sentence: string;
+  };
+  counts: { total: number; byKind: Partial<Record<GeoActionKind, number>>; byStatus: Partial<Record<GeoActionStatus, number>>; gapsWithoutEntry: number };
+  /** Ordered: the run's rank, then the group's weight; skipped last. */
+  actions: GeoAction[];
+  control: Array<{ id: string; name: string; pool: GeoPool | null; articles: number }>;
+  noAction: Array<{ gapId: string | null; groupId: string | null; reason: string | null }>;
+  unmatched: Array<Record<string, unknown>>;
+}
+
+export interface GeoClusterView {
+  group: GeoClusterRow;
+  questions: Array<{
+    id: string;
+    text: string;
+    kind: GeoQuestion["kind"];
+    isMeasured: boolean;
+    platform: string | null;
+    sourceUrl: string | null;
+    collectedAt: string | null;
+    /** The latest answer of each engine. */
+    answers: Array<{ engine: GeoEngine; snapshotId: string; status: string | null; askedAt: string | null; mentionsOurs: boolean | null; wrongOurs: boolean | null; citesOurs: boolean | null }>;
+  }>;
+  /** The five sites cited most in this group's answers. */
+  sources: Array<{
+    domain: string;
+    name: string | null;
+    kind: string | null;
+    layer: GeoSourceLayer | null;
+    cited: { total: number; byEngine: Record<string, number> };
+    mentionsOurs: number;
+    wrongOurs: number;
+    conditions: { icp: boolean | null; newsIndexed: boolean | null; medical: boolean | null } | null;
+    impostor: boolean;
+    price: number | null;
+  }>;
+  gaps: Array<{
+    gapId: string | null;
+    class: string | null;
+    judgment: string | null;
+    rank: number | null;
+    consequence: { band: string | null; basis: string | null } | null;
+    evidence: { metric?: string; errors?: unknown[] } | null;
+    expectedPoints: Array<{ pointId?: string; kind?: string; statement: string; refs?: Array<{ type: string; id: string }> }>;
+    handoff: string | null;
+    safetyPinned: boolean;
+  }>;
+  claims: Record<string, { id: string; claimKey?: string | null; statement: string; sourceLabel?: string | null; sourceKind?: string | null; status?: string }>;
+  actions: GeoAction[];
+  articles: Array<{ id: string; layer: GeoArticleLayer; title: string; status: GeoArticleStatus; gate: string | null; safety: string | null; channel: string | null; channelNote: string | null; audience: string | null; audienceNote: string | null; path: string | null; runId: string | null }>;
+  orders: Array<{ id: string; articleId: string | null; state: GeoOrderState; domain: string | null; publishedUrl: string | null; publishedAt: string | null; priceCny: number | null }>;
+  ownedLinks: Array<{ id: string; articleId: string | null; platform: string; url: string; title: string; publishedAt: string | null; status: "active" | "retired"; citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }> }>;
+  errors: Array<{ id: string; fingerprint: string | null; engine: GeoEngine; statement: string | null; severity: GeoSeverity | null; status: GeoErrorStatus; snapshotId: string | null; claimId: string | null; action: GeoErrorAction | null; createdAt: string | null }>;
+  effect: {
+    metricId: string;
+    series: Array<GeoGroupReading & { round: string; date: string | null; kind: string }>;
+    events: Array<{ kind: "article" | "published" | "cited" | "error_seen"; at: string | null; articleId?: string | null; orderId?: string | null; engine?: GeoEngine | null; errorId?: string | null }>;
+    arm: GeoAction["observed"]["arm"];
+  };
+}
+
+export interface GeoActionDetail {
+  action: GeoAction;
+  group: GeoClusterRow | null;
+  floor: number;
+  round: { id: string; kind: string; sampleDate: string | null } | null;
+}
+
+/** What a skip or a source swap leaves: `cleared` means nothing is decided any more (no row). */
+export interface GeoActionChoiceResult {
+  key: string;
+  skipped: boolean;
+  sourceDomain: string | null;
+  updatedAt: string | null;
+  cleared: boolean;
+}
+
+/** One cell of the plan: a reading with its date, or null where no round speaks for the metric (say 「未测」, never 0). */
+export type GeoStrategyCell = (GeoCell & { date?: string | null; roundId?: string | null }) | null;
+
+export interface GeoStrategyTargetRow {
+  metricId: string;
+  name: string;
+  unit: "percent" | "index" | "count";
+  pool: "all" | GeoPool;
+  tiers: Partial<Record<GeoTierId, {
+    target: number | null;
+    /** The number typed when the target was set. */
+    written: number | null;
+    horizonWeeks: number | null;
+    placements: number | null;
+    budgetCny: number | null;
+    dataType: GeoDataType | null;
+  }>>;
+  /** The chosen tier's. */
+  target: number | null;
+  horizonWeeks: number | null;
+  /** The baseline round's date plus the horizon. */
+  dueAt: string | null;
+  baseline: GeoStrategyCell;
+  latest: GeoStrategyCell;
+}
+
+export interface GeoStrategyEngine {
+  engine: GeoEngine;
+  retrieval: GeoCell | null;
+  promise: string | null;
+  ceiling: "mention_and_accuracy" | "accuracy_only" | "undetermined" | null;
+  ceilingBasis: string | null;
+  evidence: string | null;
+  layers: string[];
+  cites: unknown[];
+  leverage: string | null;
+  clusterLeverage: Array<{ track: string; note: string }>;
+  layout: { account: string | null; state: string | null; evidence: string | null } | null;
+}
+
+/** The plan page's one read (`GET …/strategy`): it replaces the page's use of the all-sources endpoint. */
+export interface GeoStrategyView {
+  version: number | null;
+  createdAt: string | null;
+  runId: string | null;
+  summary: string | null;
+  chosenTier: GeoTierId | null;
+  targets: {
+    tier: GeoTierId;
+    baselineRound: { id: string; kind: string; sampleDate: string | null } | null;
+    latestRound: { id: string; kind: string; sampleDate: string | null } | null;
+    targetsVersion: number | null;
+    rows: GeoStrategyTargetRow[];
+  };
+  tiers: Array<{
+    tier: GeoTierId;
+    chosen: boolean;
+    name: string | null;
+    summary: string | null;
+    buys: string | null;
+    notPromised: string[];
+    contentUnits: number | string | null;
+    placements: number | null;
+    budgetCny: number | null;
+    targetCount: number;
+  }>;
+  battlefield: {
+    id: string | null;
+    name: string | null;
+    why: string[];
+    action: string | null;
+    reason: string | null;
+    groups: Array<{ id: string | null; name: string }>;
+    secondary: Array<{ id: string | null; name: string | null; why: string[]; action: string | null; groups: Array<{ id: string | null; name: string }> }>;
+  } | null;
+  noGo: Array<{ item: string; reason: string | null }>;
+  engines: GeoStrategyEngine[];
+  layout: {
+    layers: { anchor?: string[]; coverage?: string[]; owned?: string[] } | null;
+    constraints: string[];
+    clientActions: Array<{ key: string; text: string; done: boolean }>;
+  };
+  /** What the plan took as given. `value` is whatever the run wrote (a number, a word, a list, a record): a page says the reason. */
+  assumptions: Array<{ field: string; value: unknown; basis: string | null; reason: string | null; howToChange: string | null; affects?: string | null }>;
+  gaps: { total: number; withoutAction: number };
+  actions: { total: number; byStatus: Partial<Record<GeoActionStatus, number>> };
+}
+
 /* ------------------------------------------------------------------- readers */
 
 const CELL_STATUSES: ReadonlySet<string> = new Set(["ok", "insufficient", "not_measurable", "absent"]);
@@ -670,6 +1016,7 @@ function readProject(raw: GeoProject): GeoProject {
     budget: raw?.budget ?? null,
     steps,
     sessionId: typeof raw?.sessionId === "string" && raw.sessionId ? raw.sessionId : null,
+    needsYou: Array.isArray(raw?.needsYou) ? raw.needsYou.filter((item) => item && typeof item.key === "string" && item.target) : [],
     // A server that does not say is one from before the market switch: it
     // offered the budget, and so does this page.
     market: { configured: raw?.market?.configured !== false },
@@ -830,6 +1177,43 @@ export function getGeoSource(geoId: string, sourceId: string, engine?: string | 
 
 export function setGeoTier(geoId: string, tier: GeoTierId) {
   return productRequest<unknown>(`${project(geoId)}/tier`, "POST", { tier });
+}
+
+/* ----------------------------------------------- the question group as the spine (R19) */
+
+/** Every question group with what the engines say about it, the errors against it, what is being done and what stands. */
+export function getGeoClusters(geoId: string) {
+  return productRequest<GeoClustersView>(`${project(geoId)}/clusters`);
+}
+
+/** One group in full: its questions with each engine's state, the sources its answers cite, its gaps, actions and effect. */
+export function getGeoCluster(geoId: string, groupId: string) {
+  return productRequest<GeoClusterView>(`${project(geoId)}/clusters/${id(groupId)}`);
+}
+
+/** The actions, each carrying its group, with the page's lead sentence. */
+export function getGeoActions(geoId: string) {
+  return productRequest<GeoActionsView>(`${project(geoId)}/actions`);
+}
+
+/** One action and its group row. The key holds colons: it is encoded here. */
+export function getGeoAction(geoId: string, key: string) {
+  return productRequest<GeoActionDetail>(`${project(geoId)}/actions/${id(key)}`);
+}
+
+/** A person skips an action, or takes the skip back. Reversible, and the only thing written. */
+export function skipGeoAction(geoId: string, key: string, skipped = true) {
+  return productRequest<GeoActionChoiceResult>(`${project(geoId)}/actions/${id(key)}/skip`, "POST", { skipped });
+}
+
+/** A person sends an action to another source (a domain); `null` goes back to the recommendation. */
+export function chooseGeoActionSource(geoId: string, key: string, domain: string | null) {
+  return productRequest<GeoActionChoiceResult>(`${project(geoId)}/actions/${id(key)}/source`, "POST", { domain });
+}
+
+/** The plan page's one read: targets as baseline → now → target with dates, battlefield, each engine's promise, the client's to-dos. */
+export function getGeoStrategy(geoId: string) {
+  return productRequest<GeoStrategyView>(`${project(geoId)}/strategy`);
 }
 
 export function getGeoArticles(geoId: string) {

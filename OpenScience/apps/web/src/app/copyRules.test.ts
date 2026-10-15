@@ -78,7 +78,6 @@ const WEIGHT_500_OR_700 = /\bfont-(medium|bold)\b/;
 const ORPHAN_PROGRESS = /正在进行，做完|正在进行[：:]/;
 /** The files that still write it, with how many times. Migrating a page to `StepState` deletes its entry; nothing is added. */
 const ORPHAN_PROGRESS_KNOWN: Readonly<Record<string, number>> = {
-  "components/geo/tabs/geoTabKit.tsx": 1,
   "components/vcr/VcrStates.tsx": 1,
   "components/vcr/tabs/OverviewTab.tsx": 2,
 };

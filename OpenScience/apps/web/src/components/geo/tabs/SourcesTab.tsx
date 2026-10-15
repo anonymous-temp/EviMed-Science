@@ -1,14 +1,13 @@
-import { ValueSection } from "./ValueSection";
 import { useMemo, useState } from "react";
 import { getGeoSources, type GeoProject, type GeoSourceRow } from "@/lib/geoClient";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
 import { List, ListHeader, ListRow, type ListColumn } from "@/components/ui/ListRow";
-import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
+import { useGeoToolbar } from "../geoFrame";
 import { engineName, GEO_SOURCE_LAYER_WORDS, zh } from "../geoText";
 import { sourceKindWord } from "./geoTabText";
-import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 import { GeoSourceDrawer } from "./GeoSourceDrawer";
 import { ShowMore, useShowMore } from "./showMore";
 
@@ -46,12 +45,10 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  // The changed sources of the drug-value analysis are the project's own: they are read here before the engines' citations exist.
-  if (sources.length === 0) return <><ValueSection geoId={geoId} project={project} mode="sources" className="mb-6" /><StepPending geoId={geoId} project={project} step="sources" /></>;
+  if (sources.length === 0) return <StepPending geoId={geoId} project={project} step="sources" />;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
-      <ValueSection geoId={geoId} project={project} mode="sources" className="mb-6" />
       <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}
@@ -128,18 +125,17 @@ function SourceList({ geoId, project, sources, engines }: { geoId: string; proje
   const drawerRow = opened ? sources.find((source) => (source.id || source.domain) === opened.key) ?? null : null;
   // Pressing the sorted column again turns it over; another column starts from the most.
   const sortBy = (key: string) => setSort((now) => (now.key === key ? { key: now.key, descending: !now.descending } : { key: key as SortKey, descending: true }));
+  useGeoToolbar({
+    filters: [
+      { kind: "chips", label: "引擎", options, value: current, onChange: setEngine },
+      { kind: "select", label: "只看", allLabel: "全部信源", options: ONLY_OPTIONS, value: only, onChange: (value) => setOnly(value as Only | null) },
+    ],
+    search: { label: "搜索信源", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
+    summary,
+  });
 
   return (
     <section aria-label="信源">
-      <FilterRow summary={summary}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
-          <FilterChips label="引擎" options={options} value={current} onChange={setEngine} />
-          <div className="flex min-w-0 items-center gap-2 max-sm:w-full">
-            <SearchInput label="搜索信源" size="sm" value={query} maxLength={80} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-52 max-sm:flex-1" />
-            <FilterSelect<Only> label="只看" options={ONLY_OPTIONS} value={only} onChange={setOnly} allLabel="全部信源" />
-          </div>
-        </div>
-      </FilterRow>
       {rows.length === 0 ? (
         <p className="py-10 text-center text-ui text-text-3">
           {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}

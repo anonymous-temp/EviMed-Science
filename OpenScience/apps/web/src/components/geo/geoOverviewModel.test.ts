@@ -12,11 +12,8 @@ import {
   engineTrendConclusion,
   engineMatrix,
   headlineSentence,
-  nextSteps,
   overviewCoverageNotice,
   overviewTiles,
-  railSteps,
-  railSummary,
   readingChange,
   rivalRanking,
   severeOpenErrors,
@@ -283,64 +280,6 @@ describe("the ranking", () => {
   });
 });
 
-describe("the rail and the next step", () => {
-  it("marks the budget as the step waiting on the reader", () => {
-    const waiting = geoProject({ sources: "done", distribution: "running" }, { budget: null });
-    const rail = railSteps(waiting, () => "/x");
-    expect(rail.find((step) => step.key === "distribution")).toMatchObject({ state: "waiting", note: "待你确认预算" });
-    expect(nextSteps(waiting)[0]).toMatchObject({ key: "budget", state: "waiting" });
-  });
-
-  it("never asks for a budget while no media market is connected (G20)", () => {
-    const off = geoProject({ sources: "done", distribution: "running" }, { budget: null, market: { configured: false } });
-    expect(railSteps(off, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "todo", note: "等媒介集市接通" });
-    const next = nextSteps(off);
-    expect(next[0]).toMatchObject({ key: "market", state: "held", text: "投放要等媒介集市接通" });
-    expect(next.some((step) => step.key === "budget" || step.state === "waiting")).toBe(false);
-  });
-
-  it("marks a step the allowance would not start as waiting on the reader, with the sentence and the wallet that refused", () => {
-    const refused = geoProject({ evidence: "queued", journey: "queued" });
-    refused.steps.evidence = { status: "queued", requested: true, waiting: "simulated_allowance", note: "等模拟额度" };
-    const rail = railSteps(refused, () => "/x");
-    expect(rail.find((step) => step.key === "evidence")).toMatchObject({ state: "waiting", note: "等模拟额度" });
-    expect(rail.find((step) => step.key === "journey")).toMatchObject({ state: "active" });
-    const next = nextSteps(refused);
-    expect(next.find((step) => step.key === "evidence")).toMatchObject({
-      state: "waiting", allowance: "simulated_allowance", text: "「证据」这一步在等模拟额度，模拟充值后会自动开始。",
-    });
-    // The step that merely queued is still under way.
-    expect(next.find((step) => step.key === "journey")).toMatchObject({ state: "active" });
-    // Started, it waits on nothing — whatever the record still carries.
-    refused.steps.evidence = { status: "running", requested: true, waiting: "simulated_allowance" };
-    expect(railSteps(refused, () => "/x").find((step) => step.key === "evidence")).toMatchObject({ state: "active" });
-    expect(nextSteps(refused).find((step) => step.key === "evidence")).toMatchObject({ state: "active" });
-  });
-
-  it("stops calling it a wait once the budget is set", () => {
-    const funded = geoProject({ distribution: "running" }, { budget: { totalCny: 8000, dailyCny: 800 } });
-    expect(railSteps(funded, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "active" });
-    expect(nextSteps(funded).some((step) => step.key === "budget")).toBe(false);
-  });
-
-  it("asks for nothing about a placement nobody asked for: the rail and 下一步 agree that it is not waiting on the reader", () => {
-    // The server sends every step; an untouched one is { status: "none", requested: false } (`normalizedSteps`).
-    const untouched = geoProject({ sources: "done" }, { budget: null });
-    const steps = { ...untouched.steps, distribution: { status: "none" as const, requested: false, updatedAt: null } };
-    const never = { ...untouched, steps, overview: { ...untouched.overview, steps } };
-    expect(railSteps(never, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "todo", note: null });
-    expect(nextSteps(never).some((step) => step.key === "budget" || step.key === "market" || step.state === "waiting")).toBe(false);
-  });
-
-  it("still asks for the budget once placement has been requested, before it has started", () => {
-    const asked = geoProject({ sources: "done" }, { budget: null });
-    const steps = { ...asked.steps, distribution: { status: "none" as const, requested: true, updatedAt: null } };
-    const requested = { ...asked, steps, overview: { ...asked.overview, steps } };
-    expect(railSteps(requested, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "waiting", note: "待你确认预算" });
-    expect(nextSteps(requested)[0]).toMatchObject({ key: "budget", state: "waiting" });
-  });
-});
-
 describe("a chart's heading", () => {
   it("is the conclusion, never the metric's bare name", () => {
     const cell = { value: 61, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok" as const, dataType: "measured" as const };
@@ -380,18 +319,6 @@ describe("a reading", () => {
     // Without a band the same two points are a change.
     expect(readingChange([{ date: "a", value: 21 }, { date: "b", value: 23 }])).toMatchObject({ delta: 2, flat: false });
     expect(shownDelta(readingChange([{ date: "a", value: 21 }]))).toBeNull();
-  });
-});
-
-describe("the rail on a phone", () => {
-  it("is one line: what is done and what the first stopped step waits for", () => {
-    const off = geoProject({ evidence: "done", journey: "done", questions: "done", diagnosis: "done", sources: "done", content: "done", monitoring: "done", distribution: "running" },
-      { budget: null, market: { configured: false } });
-    expect(railSummary(railSteps(off, () => "/x"))).toBe("已完成 7 / 8 步 · 投放等媒介集市接通");
-    const waiting = geoProject({ evidence: "done", sources: "done", distribution: "running" }, { budget: null });
-    expect(railSummary(railSteps(waiting, () => "/x"))).toBe("已完成 2 / 8 步 · 投放待你确认预算");
-    const clear = geoProject({ evidence: "done" });
-    expect(railSummary(railSteps(clear, () => "/x"))).toBe("已完成 1 / 8 步");
   });
 });
 

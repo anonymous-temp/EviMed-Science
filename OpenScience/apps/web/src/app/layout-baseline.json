@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 103,
+    "total": 102,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -22,7 +22,7 @@
       "components/frontier/PublishAsEvidenceCard.tsx": 2,
       "components/frontier/TopicRequests.tsx": 2,
       "components/geo/tabs/GeoSourceDrawer.tsx": 6,
-      "components/geo/tabs/ValueSection.tsx": 2,
+      "components/geo/tabs/ValueSection.tsx": 1,
       "components/memory/ProjectOverview.tsx": 1,
       "components/memory/map/ActivityView.tsx": 1,
       "components/memory/map/DimsView.tsx": 1,

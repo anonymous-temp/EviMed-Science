@@ -4,7 +4,6 @@ import { ArrowLeft, ExternalLink, Image as ImageIcon, Radar } from "lucide-react
 import {
   geoScreenshotUrl,
   getGeoAnswer,
-  getGeoEvidence,
   getGeoProject,
   type GeoAnswer,
   type GeoClaim,
@@ -13,8 +12,6 @@ import {
 import { safeWebHref } from "@/lib/readPages";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { PageTitle } from "@/components/layout/PageTitle";
-import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterSelect } from "@/components/ui/FilterChips";
@@ -24,9 +21,11 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
 import { AskAi } from "@/components/geo/AskAi";
+import { useGeoFrame } from "@/components/geo/geoFrame";
+import { useGeoEvidence } from "@/components/geo/geoProjectData";
 import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindings";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
-import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_MONITORING_TITLE, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
+import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
 import { answerPath, CITED_ATTRIBUTE_WORDS, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
@@ -48,11 +47,13 @@ export function GeoAnswerPage() {
   const answer = useGeoLoad(`answer:${geoId}:${snapshotId}`, () => getGeoAnswer(geoId, snapshotId));
   // Both only enrich the page: the project names the conversation “问 AI”
   // opens and our product's names; the claims say what is right and where.
-  const project = useGeoLoad(`project:${geoId}`, () => getGeoProject(geoId));
-  const evidence = useGeoLoad(`evidence:${geoId}`, () => getGeoEvidence(geoId));
+  // Inside a project's layout the project is the layout's, and the claims are the project's shared read.
+  const frame = useGeoFrame();
+  const fetched = useGeoLoad(`project:${geoId}`, () => (frame ? Promise.resolve(frame.project) : getGeoProject(geoId)));
+  const evidence = useGeoEvidence(geoId);
 
   if (answer.state.kind === "error" && answer.state.off) {
-    return <Shell title="循证 GEO" section="循证 GEO"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
+    return <Shell title="循证 GEO"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
   }
   if (answer.state.kind === "error" && answer.state.missing) {
     return (
@@ -70,25 +71,26 @@ export function GeoAnswerPage() {
   }
 
   const data = answer.state.data;
-  const loadedProject = project.state.kind === "ready" ? project.state.data : null;
+  const loadedProject = frame ? frame.project : fetched.state.kind === "ready" ? fetched.state.data : null;
   const claims = evidence.state.kind === "ready" && Array.isArray(evidence.state.data?.claims) ? evidence.state.data.claims : [];
   return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} />;
 }
 
-/** `section` is the browser tab's second part: the answer page is one of the module's measurement screens, 「AI 回答监测」. */
-function Shell({ title, section = GEO_MONITORING_TITLE, back, header, children }: { title: string; section?: string; back?: ReactNode; header?: ReactNode; children: ReactNode }) {
+/**
+ * The answer's place on the page. It is read inside the project's band (the layout draws the page, its scroll, its title and the
+ * steps, and keeps 问题与回答 selected), so this is only the answer's own heading and body: a second `h1` and a second scroll
+ * container here were the "page of its own" that took the band away.
+ */
+function Shell({ title, back, header, children }: { title: string; back?: ReactNode; header?: ReactNode; children: ReactNode }) {
   return (
-    <div className="h-full min-h-0 overflow-y-auto bg-bg">
-      <div className="mx-auto w-full max-w-page px-4 py-6 md:px-6">
-        <PageTitle page={title} section={section} />
-        {header ?? (
-          <header className="flex min-h-8 items-center gap-2">
-            {back}
-            <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
-          </header>
-        )}
-        <div className="mt-6">{children}</div>
-      </div>
+    <div data-geo-answer-page="">
+      {header ?? (
+        <header className="flex min-h-8 items-center gap-2">
+          {back}
+          <h2 className="min-w-0 text-section font-semibold text-text">{title}</h2>
+        </header>
+      )}
+      <div className="mt-6">{children}</div>
     </div>
   );
 }
@@ -157,7 +159,7 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
         <BackLink geoId={geoId} fallback={found.findings.length > 0 || found.elsewhere.length > 0 ? "accuracy" : "questions"} />
-        <h1 className={cn(PAGE_TITLE_CLASS, "min-w-0")}>{question}</h1>
+        <h2 className="min-w-0 text-section font-semibold text-text">{question}</h2>
         {pool && <span className="shrink-0 text-caption text-text-3">{pool}</span>}
       </div>
       <div className="flex items-center gap-2">

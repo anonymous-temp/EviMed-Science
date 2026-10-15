@@ -163,33 +163,38 @@ describe("虚拟临床研究's addresses", () => {
 });
 
 describe("循证 GEO's addresses", () => {
-  /** The leaf route an address resolves to, and its parameters. */
-  function leaf(path: string) {
+  /** The routes an address resolves to, outermost first, and its parameters. */
+  function chain(path: string) {
     const matches = matchRoutes(routes, path) ?? [];
-    const last = matches.at(-1);
-    return { path: last?.route.path, params: last?.params ?? {} };
+    return { paths: matches.map((match) => match.route.path), index: matches.at(-1)?.route.index === true, params: matches.at(-1)?.params ?? {} };
   }
 
-  it("names a project's tab in the address, and 概览 when none is named", () => {
-    expect(leaf("/app/geo")).toMatchObject({ path: "geo" });
-    expect(leaf("/app/geo/geo_1")).toMatchObject({ path: "geo/:geoId/:tab?", params: { geoId: "geo_1" } });
-    expect(leaf("/app/geo/geo_1").params.tab).toBeUndefined();
-    expect(leaf("/app/geo/geo_1/sources")).toMatchObject({ path: "geo/:geoId/:tab?", params: { geoId: "geo_1", tab: "sources" } });
+  it("makes a project one layout over its tabs: 概览 when none is named, a tab by its name in the address", () => {
+    expect(chain("/app/geo").paths.at(-1)).toBe("geo");
+    // The project is a layout route; the tab is its child, so the band above the tabs is one component for all eight.
+    expect(chain("/app/geo/geo_1")).toMatchObject({ paths: expect.arrayContaining(["geo/:geoId"]), index: true, params: { geoId: "geo_1" } });
+    expect(chain("/app/geo/geo_1").params.tab).toBeUndefined();
+    expect(chain("/app/geo/geo_1/sources")).toMatchObject({ paths: ["/app", undefined, "geo/:geoId", ":tab"], params: { geoId: "geo_1", tab: "sources" } });
+    expect(chain("/app/geo/geo_1/evidence").params).toMatchObject({ tab: "evidence" });
   });
 
-  it("opens one answer on its own page, not as a tab called 「answers」", () => {
-    expect(leaf("/app/geo/geo_1/answers/snap_9")).toMatchObject({
-      path: "geo/:geoId/answers/:snapshotId",
+  it("opens one answer inside the project's layout, not as a tab called 「answers」", () => {
+    expect(chain("/app/geo/geo_1/answers/snap_9")).toMatchObject({
+      paths: ["/app", undefined, "geo/:geoId", "answers/:snapshotId"],
       params: { geoId: "geo_1", snapshotId: "snap_9" },
     });
   });
 
-  it("loads each GEO page as its own chunk", () => {
-    const pages = ["geo", "geo/:geoId/:tab?", "geo/:geoId/answers/:snapshotId"].map((path) => {
-      const found = (matchRoutes(routes, `/app/${path.replace(":geoId", "g").replace(":tab?", "overview").replace(":snapshotId", "s")}`) ?? []).at(-1);
-      return (found?.route.element as ReactElement | undefined)?.type as { $$typeof?: symbol } | undefined;
-    });
-    for (const type of pages) expect(String(type?.$$typeof)).toBe("Symbol(react.lazy)");
+  it("loads the layout and the answer each as its own chunk", () => {
+    const element = (path: string) => {
+      const matches = matchRoutes(routes, path) ?? [];
+      return matches.map((match) => (match.route.element as ReactElement | null | undefined)?.type as { $$typeof?: symbol } | undefined);
+    };
+    const layout = element("/app/geo/g")[2];
+    expect(String(layout?.$$typeof)).toBe("Symbol(react.lazy)");
+    const answer = element("/app/geo/g/answers/s")[3];
+    expect(String(answer?.$$typeof)).toBe("Symbol(react.lazy)");
+    expect(String(element("/app/geo")[2]?.$$typeof)).toBe("Symbol(react.lazy)");
   });
 });
 

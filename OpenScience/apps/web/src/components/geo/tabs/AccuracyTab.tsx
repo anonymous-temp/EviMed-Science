@@ -1,14 +1,10 @@
-import { ValueSection } from "./ValueSection";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import {
-  getGeoDiagnosis,
-  getGeoMonitoring,
   readGeoCell,
   type GeoDiagnosis,
   type GeoErrorCounts,
   type GeoErrorRow,
-  type GeoMonitoring,
   type GeoProject,
 } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
@@ -16,16 +12,18 @@ import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { isSeverityLevel, SeverityBadge, type SeverityLevel } from "@/components/ui/SeverityBadge";
 import { ShareBar, type ShareSegment } from "@/components/charts/ShareBar";
 import { GeoErrorCard } from "../GeoErrorCard";
+import { useGeoToolbar } from "../geoFrame";
+import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
 import { coverageNotice, denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
 import { engineName, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
 import { metricName, metricUnit } from "./geoTabText";
-import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { TabError, TabSkeleton } from "./geoTabKit";
 
 /**
  * 准确与安全 — the part of this product no general AI-visibility tool has
@@ -49,8 +47,8 @@ const SAFETY_METRICS: ReadonlyArray<{ ids: readonly string[]; polarity: "up" | "
 ];
 
 export function AccuracyTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const diagnosis = useGeoLoad<GeoDiagnosis>(`accuracy:diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
-  const monitoring = useGeoLoad<GeoMonitoring>(`accuracy:monitoring:${geoId}`, () => getGeoMonitoring(geoId));
+  const diagnosis = useGeoDiagnosis(geoId);
+  const monitoring = useGeoMonitoring(geoId);
   if (diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={diagnosis.reload} />;
   const diag = diagnosis.state.data;
@@ -181,8 +179,6 @@ function Accuracy({
           <ByType errors={errors} />
         </div>
       </Disclosure>
-
-      <ValueSection geoId={geoId} project={project} mode="safety" />
     </div>
   );
 }
@@ -333,6 +329,9 @@ function ErrorList({
       return copy;
     }, { replace: true });
   };
+  useGeoToolbar(counts.total === 0 && errors.length === 0 ? null : {
+    filters: [{ kind: "chips", label: "处置状态", options, value: show, onChange: (value) => choose(value as Show) }],
+  });
   if (counts.total === 0 && errors.length === 0) return null;
   return (
     <ChartCard
@@ -342,7 +341,6 @@ function ErrorList({
       footnote={denominator}
       height={160}
     >
-      <FilterChips label="处置状态" options={options} value={show} onChange={choose} className="mb-2" />
       <div data-geo-error-list="">
         {visible.map((error) => (
           <GeoErrorCard key={error.id} geoId={geoId} project={project} error={error} />

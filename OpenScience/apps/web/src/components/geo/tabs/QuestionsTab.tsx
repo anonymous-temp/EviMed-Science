@@ -1,5 +1,5 @@
-import { ValueSection } from "./ValueSection";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronRight } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -15,14 +15,17 @@ import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
-import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
+import type { ToolbarChips } from "@/components/ui/Toolbar";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { SearchInput } from "@/components/ui/SearchInput";
 import { Tag } from "@/components/ui/Tag";
+import { useGeoToolbar } from "../geoFrame";
+import { geoQuestionsView, GEO_VIEW_PARAM, type GeoQuestionsView } from "../geoTabs";
 import { GEO_POOL_KINDS, GEO_POOL_NAMES, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
 import { answerPath } from "./geoTabText";
-import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { JourneyTab } from "./JourneyTab";
 
 type PoolFilter = "all" | GeoPool;
 
@@ -57,6 +60,23 @@ const PHRASINGS_SHOWN = 6;
 export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const [version, setVersion] = useState<number | null>(null);
   const { state, reload } = useGeoLoad(`questions:${geoId}:${version ?? "latest"}`, () => getGeoQuestions(geoId, version));
+  // The page's views are one switch of the toolbar and one word in the address (`?view=journey`), so a link — the rail's 旅程 — lands on
+  // the view it names. A view this page does not draw yet reads as the first.
+  const [params, setParams] = useSearchParams();
+  const view = geoQuestionsView(params.get(GEO_VIEW_PARAM));
+  const shown: GeoQuestionsView = view === "journey" ? "journey" : "pools";
+  const switcher = {
+    kind: "chips" as const,
+    label: "视图",
+    options: [{ value: "pools", label: "按问句池" }, { value: "journey", label: "按旅程" }],
+    value: shown,
+    onChange: (next: string) => setParams((previous) => {
+      const copy = new URLSearchParams(previous);
+      if (next === "pools") copy.delete(GEO_VIEW_PARAM); else copy.set(GEO_VIEW_PARAM, next);
+      return copy;
+    }, { replace: true }),
+  };
+  if (shown === "journey") return <JourneyTab geoId={geoId} project={project} toolbar={{ filters: [switcher] }} />;
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
@@ -64,8 +84,8 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   if (groups.length === 0) return <StepPending geoId={geoId} project={project} step="questions" />;
   return (
     <QuestionMap
-      project={project}
       geoId={geoId}
+      switcher={switcher}
       data={data}
       groups={groups}
       onVersion={setVersion}
@@ -79,15 +99,16 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
 }
 
 function QuestionMap({
-  project,
   geoId,
+  switcher,
   data,
   groups,
   onVersion,
   onChanged,
 }: {
   geoId: string;
-  project: GeoProject;
+  /** The page's view switch, the first of the toolbar's filters. */
+  switcher: ToolbarChips;
   data: GeoQuestions;
   groups: GeoQuestionGroup[];
   onVersion: (version: number | null) => void;
@@ -124,32 +145,27 @@ function QuestionMap({
     setQuery(value);
     setChosen(new Map());
   };
+  useGeoToolbar({
+    filters: [
+      switcher,
+      { kind: "chips", label: "问句池", options, value: pools.includes(pool as GeoPool) ? pool : "all", onChange: (value) => setPool(value as PoolFilter) },
+      ...(sets.length > 1 ? [{
+        kind: "select" as const,
+        label: "问句版本",
+        options: [...sets].sort((a, b) => b.version - a.version).map((set) => ({
+          value: String(set.version),
+          label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
+        })),
+        value: current === null ? null : String(current),
+        onChange: (value: string | null) => onVersion(value === null || Number(value) === latest ? null : Number(value)),
+      }] : []),
+    ],
+    search: { label: "搜索问题", value: query, maxLength: 80, onChange: search, onClear: () => search("") },
+    summary: needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`,
+  });
 
   return (
     <div data-geo-tab="questions">
-      <ValueSection geoId={geoId} project={project} mode="decisions" className="mb-6" />
-      <FilterRow summary={needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个语义群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 max-sm:w-full">
-          <FilterChips
-            label="问句池"
-            options={options}
-            value={pools.includes(pool as GeoPool) ? pool : "all"}
-            onChange={setPool}
-            trailing={sets.length > 1 ? (
-              <FilterSelect<string>
-                label="问句版本"
-                options={[...sets].sort((a, b) => b.version - a.version).map((set) => ({
-                  value: String(set.version),
-                  label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
-                }))}
-                value={current === null ? null : String(current)}
-                onChange={(value) => onVersion(value === null || Number(value) === latest ? null : Number(value))}
-              />
-            ) : undefined}
-          />
-          <SearchInput label="搜索问题" size="sm" value={query} maxLength={80} onChange={(event) => search(event.target.value)} onClear={() => search("")} className="w-52 max-sm:w-full" />
-        </div>
-      </FilterRow>
       {needle && found.length === 0 && (
         <p className="py-10 text-center text-ui text-text-3">{`没有包含“${query.trim()}”的问题。`}</p>
       )}

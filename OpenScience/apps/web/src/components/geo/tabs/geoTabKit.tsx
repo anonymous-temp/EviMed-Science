@@ -1,76 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { allowanceWaitingSentence } from "@evimed/domain";
-import { webErrorMessage, WebApiError } from "@/lib/apiClient";
+import { webErrorMessage } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
-import { isGeoOff, runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
+import { runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
-import { Button } from "@/components/ui/Button";
+import { Section } from "@/components/ui/Section";
+import { StepState, type StepInput } from "@/components/ui/StepState";
 import { GeoCellText } from "../GeoCellText";
-import { GEO_STEP_EMPTY, GEO_STEP_NAMES, GEO_STEP_WAITING, type GeoUnit } from "../geoText";
-import { useOpenGeoConversation } from "../useOpenGeoConversation";
+import { useGeoFrame } from "../geoFrame";
+import { GEO_STEP_RECIPES } from "../geoStepRecipes";
+import { geoDestinationPath, GEO_STEP_HOME } from "../geoTabs";
+import type { GeoUnit } from "../geoText";
 import { answerPath } from "./geoTabText";
 
 /**
- * What every step tab shares: reading its route, the four states (loading,
- * error with retry, a step still being worked on, content), a section heading
- * and a number that opens the answers behind it.
+ * What every tab shares: the four states (loading, error with retry, a step still being worked on, content), a section heading
+ * and a number that opens the answers behind it. A tab's controls are not here: they go through `useGeoToolbar`, which puts them
+ * in the fixed band, and the data a tab reads is the project's (`geoProjectData.ts`).
  */
 
 /* --------------------------------------------------------------------- load */
 
-export type GeoLoad<T> =
-  | { kind: "loading" }
-  /** `off`: the module is not open to this account; `missing`: nothing at that address. */
-  | { kind: "error"; message: string; off: boolean; missing: boolean }
-  | { kind: "ready"; data: T };
-
-/**
- * Reads a tab's route once per `key`, and again on `reload()`. While a reload
- * is in flight the last answer stays on screen, so an action's refresh does
- * not flash a skeleton; a first read that fails is an error with 重试.
- */
-export interface GeoLoadResult<T> {
-  state: GeoLoad<T>;
-  reload: () => void;
-}
-
-export function useGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResult<T> {
-  const [state, setState] = useState<GeoLoad<T>>({ kind: "loading" });
-  const [round, setRound] = useState(0);
-  const loader = useRef(load);
-  loader.current = load;
-  const shownKey = useRef(key);
-
-  useEffect(() => {
-    let live = true;
-    if (shownKey.current !== key) {
-      shownKey.current = key;
-      setState({ kind: "loading" });
-    }
-    Promise.resolve()
-      .then(() => loader.current())
-      .then(
-        (data) => { if (live) setState({ kind: "ready", data }); },
-        (error: unknown) => {
-          if (!live) return;
-          setState({
-            kind: "error",
-            message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }),
-            off: isGeoOff(error),
-            missing: error instanceof WebApiError && error.status === 404 && !isGeoOff(error),
-          });
-        },
-      );
-    return () => { live = false; };
-  }, [key, round]);
-
-  const reload = useCallback(() => setRound((value) => value + 1), []);
-  return { state, reload };
-}
+export { useGeoLoad, type GeoLoad, type GeoLoadResult } from "../geoProjectData";
 
 function Bar({ className }: { className: string }) {
   return <div className={cn("rounded bg-surface-2", className)} />;
@@ -115,59 +69,60 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
 }
 
 /**
- * What a tab shows while it has nothing to show. A step being worked on says
- * so in one quiet line; any other step with nothing yet — finished without a
- * result, or stopped — says what the step produces and offers “让 AI 做”,
- * which starts it in the project's conversation, as the shell does for a step
- * nobody has touched.
+ * What a tab shows while it has nothing to show — one body for a step's five states (`StepState`): a recipe where nobody has begun
+ * it (what it uses, each a way to the thing; what it gives; one button naming the work), the step it waits for, what is going on, what
+ * was kept when it did not finish, and where the allowance is put right.
+ *
+ * The button starts the work and keeps the person where they are: the step moves to 「进行中」, the band's sentence says so, and
+ * the page reads itself again when it finishes. The conversation is the header's 「对话」.
  */
 export function StepPending({ geoId, project, step }: { geoId: string; project: GeoProject; step: GeoStepKey }) {
-  const open = useOpenGeoConversation();
+  const frame = useGeoFrame();
   const [busy, setBusy] = useState(false);
+  const recipe = GEO_STEP_RECIPES[step];
+  const state = project.steps[step];
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
-  const allowanceWait = stepAllowanceWait(project.steps[step]);
-  if (allowanceWait) {
-    return (
-      <div data-geo-step-allowance={step} role="status" className="flex flex-col items-center gap-3 py-12 text-center">
-        <p className="max-w-measure text-ui text-text-2">{allowanceWaitingSentence(GEO_STEP_NAMES[step], allowanceWait)}</p>
-        <AllowanceTopUp waiting={allowanceWait} />
-      </div>
-    );
-  }
-  if (stepInProgress(project, step)) {
-    return (
-      <p data-geo-step-running={step} className="flex items-center justify-center gap-2 py-12 text-ui text-text-3">
-        <span aria-hidden="true" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />
-        正在进行，做完会显示在这里。
-      </p>
-    );
-  }
-  if (stepWaiting(project, step)) {
-    return <p data-geo-step-waiting={step} className="py-12 text-center text-ui text-text-3">{GEO_STEP_WAITING[step]}</p>;
-  }
-  const run = () => {
+  const allowanceWait = stepAllowanceWait(state);
+  const start = () => {
     setBusy(true);
     void runGeoStep(geoId, step)
-      .then((result) => open({ projectId: project.projectId, sessionId: result?.sessionId ?? project.sessionId }))
+      .then(() => frame?.reload())
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一步无法开始，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
+  const inputs: StepInput[] = recipe.uses.map((input) => ({ label: input.label, to: geoDestinationPath(geoId, GEO_STEP_HOME[input.step]) }));
+  if (allowanceWait) {
+    return <StepState phase="credits" step={recipe.verb} waiting={allowanceWait} topUp={<AllowanceTopUp waiting={allowanceWait} />} />;
+  }
+  if (stepInProgress(project, step)) {
+    return <StepState phase="running" step={recipe.verb} startedAt={state?.updatedAt ?? null} />;
+  }
+  if (stepWaiting(project, step)) {
+    return <StepState phase="queued" step={recipe.verb} after={recipe.after ?? undefined} />;
+  }
+  if (state?.status === "failed") {
+    return <StepState phase="failed" step={recipe.verb} onResume={start} resuming={busy} />;
+  }
   return (
-    <div data-geo-step-empty={step} className="flex flex-col items-center gap-4 py-12 text-center">
-      <p className="text-ui text-text-2">{GEO_STEP_EMPTY[step]}</p>
-      <Button onClick={run} loading={busy}>让 AI 做</Button>
-    </div>
+    <StepState
+      phase="empty"
+      step={recipe.verb}
+      noun={recipe.noun}
+      uses={inputs}
+      gives={recipe.gives}
+      onStart={project.access && !project.access.abilities.includes("run") ? undefined : start}
+      starting={busy}
+      reason={project.access && !project.access.abilities.includes("run") ? "你在这个项目里只有查看权限。" : undefined}
+    />
   );
 }
 
 /* ------------------------------------------------------------------ layout */
 
 /**
- * A section inside a tab: a heading, then its content. The heading takes the
- * title level the page already has — the card titles' 18/600 by default, the
- * panel title's 14/600 on a page whose titles are panels (方案) — so a
- * section never adds a type size of its own (spec §5.2: at most four size ×
- * weight pairs a page).
+ * A section inside a tab. It is FRAME's `Section` with the two levels this module used: the title's 18/600 (`section`), and the
+ * panel title's 14/600 (`ui`, `compact`) on a page whose blocks are panels — so a section never adds a type size of its own (spec
+ * §5.2: at most four size × weight pairs a page).
  */
 export function TabSection({
   title,
@@ -177,20 +132,19 @@ export function TabSection({
   className,
 }: {
   title: string;
-  /** A grey count at the heading's end. */
+  /** A count at the heading's end. */
   meta?: ReactNode;
   level?: "section" | "ui" | "compact";
   children: ReactNode;
   className?: string;
 }) {
+  // A count is the heading's own; anything else (a link to the whole list) goes where a block's controls go.
+  const count = typeof meta === "string" || typeof meta === "number" ? meta : undefined;
+  const toolbar = count === undefined && meta ? <span className="text-caption tabular-nums text-text-3">{meta}</span> : undefined;
   return (
-    <section className={cn("mt-10 first:mt-0", className)}>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className={cn(level === "compact" ? "text-compact font-normal" : level === "section" ? "text-section font-semibold" : "text-ui font-semibold", "text-text")}>{title}</h2>
-        {meta && <span className="text-caption tabular-nums text-text-3">{meta}</span>}
-      </div>
+    <Section title={title} count={count} toolbar={toolbar} level={level === "section" ? "section" : "sub"} className={className}>
       {children}
-    </section>
+    </Section>
   );
 }
 

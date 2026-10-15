@@ -6,56 +6,25 @@
  * Same rule as `geoText.ts`: an id this table does not know is never printed
  * — a code on screen is a code the reader has to learn.
  */
-import type { GeoCell, GeoClaim, GeoEngine, GeoOverviewMetricKey, GeoSeverity, GeoSnapshotStatus } from "@/lib/geoClient";
+import { geoMetricName, geoMetricUnit } from "@evimed/domain";
+import type { GeoCell, GeoClaim, GeoEngine, GeoSeverity, GeoSnapshotStatus } from "@/lib/geoClient";
 import { geoCellPhrase } from "../GeoCellText";
-import { engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, monthDay, zh, type GeoUnit } from "../geoText";
+import { engineName, monthDay, zh, type GeoUnit } from "../geoText";
 
 /* ------------------------------------------------------------------ metrics */
 
 /**
- * The metric catalogue's names (geo-skills `metrics.yaml`, as converted into
- * `packages/domain/src/geo/metrics.json`) and each one's scale. The overview
- * keys (`gvi`, `mention` …) are accepted too, because the monitoring series
- * and the tier targets may name a metric either way.
+ * A metric's reader name and scale, from the domain's one table (`geoMetricName`, `geoMetricUnit`): the pages, the weekly report and
+ * the runtime's tools read the same names, so no id has two names and no name two ids. The overview's keys (`gvi`, `mention` …) and
+ * `retrieval` are accepted too, because the monitoring series and the tier targets may name a metric either way. An id nobody named
+ * is never printed.
  */
-const METRICS: Readonly<Record<string, { name: string; unit: GeoUnit }>> = Object.freeze({
-  "M-01": { name: "品牌提及率", unit: "percent" },
-  "M-01S": { name: "品类问题可见率", unit: "percent" },
-  "M-02": { name: "首位提及率", unit: "percent" },
-  "M-03": { name: "推荐位提及率", unit: "percent" },
-  "M-04": { name: "品牌声量份额", unit: "percent" },
-  "M-04C": { name: "品牌登记覆盖率", unit: "percent" },
-  "M-05": { name: "平均出现位序", unit: "index" },
-  "M-06": { name: "事实准确率", unit: "percent" },
-  "M-07": { name: "错误陈述条数", unit: "count" },
-  "M-08": { name: "引用命中率", unit: "percent" },
-  "M-08B": { name: "正文引用命中率", unit: "percent" },
-  "M-08S": { name: "信源问题引用率", unit: "percent" },
-  "M-09": { name: "自有内容被引条数", unit: "count" },
-  "M-09S": { name: "信源数量引用率", unit: "percent" },
-  "M-10": { name: "检索触发率", unit: "percent" },
-  "M-11": { name: "就医红旗覆盖率", unit: "percent" },
-  "M-12": { name: "禁忌与特殊人群提示率", unit: "percent" },
-  "M-13": { name: "通用名到厂牌转化率", unit: "index" },
-  "M-14": { name: "泛症状可见度", unit: "percent" },
-  "M-15": { name: "风险问句被推荐率", unit: "percent" },
-  "M-16": { name: "竞品提及率", unit: "percent" },
-  "M-17": { name: "竞品声量份额", unit: "percent" },
-  "M-19": { name: "综合可见度指数", unit: "index" },
-  "M-20": { name: "回答有效率", unit: "percent" },
-  "M-21": { name: "发布稿件被引篇数", unit: "count" },
-  ...Object.fromEntries(
-    (Object.keys(GEO_METRIC_NAMES) as GeoOverviewMetricKey[]).map((key) => [key, { name: GEO_METRIC_NAMES[key], unit: GEO_METRIC_UNITS[key] }]),
-  ),
-  retrieval: { name: "检索触发率", unit: "percent" },
-});
-
 export function metricName(metricId: string | null | undefined): string | null {
-  return metricId && metricId in METRICS ? METRICS[metricId].name : null;
+  return geoMetricName(metricId);
 }
 
 export function metricUnit(metricId: string | null | undefined): GeoUnit {
-  return metricId && metricId in METRICS ? METRICS[metricId].unit : "percent";
+  return geoMetricUnit(metricId);
 }
 
 /* ------------------------------------------------------------------ engines */

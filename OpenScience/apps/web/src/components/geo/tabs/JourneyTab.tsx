@@ -6,7 +6,9 @@ import { getGeoJourney, type GeoJourney, type GeoProject } from "@/lib/geoClient
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
-import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
+import type { ToolbarProps } from "@/components/ui/Toolbar";
+import { useGeoToolbar } from "../geoFrame";
 import { GeoLineChart } from "./GeoCharts";
 import { StepPending, TabError, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
@@ -14,40 +16,52 @@ import { ScrollRegion } from "@/components/ui/ScrollRegion";
 type View = "journey" | "care" | "people";
 
 /**
- * 旅程 (plan §3.2, mockup g04). The full 12-stage × 15-line matrix is a file
- * the run wrote; the page carries only the four columns GEO uses — the
- * emotion, what the person is thinking, what they would ask an AI, where they
- * look for information — plus the care nodes with their red flags, and the
- * download of the full matrix.
+ * 旅程 (plan §3.2, mockup g04) — the view 「按旅程」 of 问题与回答 (R19 audit C A.2: step 2's home). The full 12-stage × 15-line
+ * matrix is a file the run wrote; the page carries only the four columns GEO uses — the emotion, what the person is thinking, what
+ * they would ask an AI, where they look for information — plus the care nodes with their red flags, and the download of the full
+ * matrix, which is the toolbar's.
+ *
+ * Its own switch (旅程 · 就医节点 · 人群) joins the toolbar the page above hands in (`toolbar`: the page's view switch and what else it
+ * has), so there is one row of controls and the journey's is the end of it.
  */
-export function JourneyTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project: GeoProject; toolbar?: ToolbarProps }) {
   const { state, reload } = useGeoLoad(`journey:${geoId}`, () => getGeoJourney(geoId));
   const [view, setView] = useState<View>("journey");
+  const journey = state.kind === "ready" ? normalise(state.data) : null;
+  const hasPeople = journey ? journey.subtypes.length > 0 || journey.personas.length > 0 : false;
+  const empty = journey ? journey.stages.length === 0 && journey.careNodes.length === 0 && !hasPeople : false;
+  const options: FilterOption<View>[] = journey
+    ? [
+      { value: "journey", label: "旅程" },
+      ...(journey.careNodes.length ? [{ value: "care" as const, label: "就医节点" }] : []),
+      ...(hasPeople ? [{ value: "people" as const, label: "人群" }] : []),
+    ]
+    : [];
+  const current = options.some((option) => option.value === view) ? view : "journey";
+  useGeoToolbar(journey && !empty
+    ? {
+      ...toolbar,
+      filters: [
+        ...(toolbar?.filters ?? []),
+        // One way of seeing the journey is not a switch.
+        ...(options.length > 1 ? [{ kind: "chips" as const, label: "旅程视图", options, value: current, onChange: (value: string) => setView(value as View) }] : []),
+      ],
+      actions: (
+        <>
+          {toolbar?.actions}
+          {journey.files.slice(0, 2).map((file) => (
+            <DownloadFile key={file.path} projectId={project.projectId} path={file.path} title={file.title || "完整旅程图"} />
+          ))}
+        </>
+      ),
+    }
+    : toolbar ?? null);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  const journey = normalise(state.data);
-  const hasPeople = journey.subtypes.length > 0 || journey.personas.length > 0;
-  if (journey.stages.length === 0 && journey.careNodes.length === 0 && !hasPeople) {
-    return <StepPending geoId={geoId} project={project} step="journey" />;
-  }
-  const options: FilterOption<View>[] = [
-    { value: "journey", label: "旅程" },
-    ...(journey.careNodes.length ? [{ value: "care" as const, label: "就医节点" }] : []),
-    ...(hasPeople ? [{ value: "people" as const, label: "人群" }] : []),
-  ];
-  const current = options.some((option) => option.value === view) ? view : "journey";
+  if (!journey || empty) return <StepPending geoId={geoId} project={project} step="journey" />;
   return (
     <div data-geo-tab="journey">
-      <FilterChips
-        label="旅程视图"
-        options={options}
-        value={current}
-        onChange={setView}
-        trailing={journey.files.slice(0, 2).map((file) => (
-          <DownloadFile key={file.path} projectId={project.projectId} path={file.path} title={file.title || "完整旅程图"} />
-        ))}
-      />
-      <div className="mt-6">
+      <div>
         {current === "journey" && <Stages stages={journey.stages} />}
         {current === "care" && <CareNodes nodes={journey.careNodes} />}
         {current === "people" && <People subtypes={journey.subtypes} personas={journey.personas} />}

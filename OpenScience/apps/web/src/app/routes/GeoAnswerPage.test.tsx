@@ -37,7 +37,7 @@ beforeEach(() => {
 describe("one answer", () => {
   it("heads the page with the way back, the question, the date switcher and the screenshot", async () => {
     renderAnswer();
-    expect(await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
     // Opened from a link, there is no list to go back to: the way back is the tab that holds the finding.
     expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveAttribute("href", "/app/geo/geo_1/accuracy");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveAttribute("href", expect.stringContaining(`/geo/projects/geo_1/screenshots/${"a".repeat(64)}`));
@@ -60,7 +60,7 @@ describe("one answer", () => {
       </MemoryRouter>,
     );
     await userEvent.click(screen.getByRole("link", { name: "看回答" }));
-    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     // Another engine's answer replaces this one in the history instead of piling on it.
     await userEvent.click(within(screen.getByRole("navigation", { name: "AI 引擎" })).getByRole("link", { name: /元宝/ }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_yuanbao");
@@ -74,10 +74,13 @@ describe("one answer", () => {
     expect(await screen.findByRole("link", { name: "返回问题与回答" })).toHaveAttribute("href", "/app/geo/geo_1/questions");
   });
 
-  it("is a measurement screen of the module: the browser tab says 「AI 回答监测」", async () => {
+  // The answer is read inside the project's band: the browser tab's name and the page's one `h1` are the layout's
+  // (`GeoProjectPage.test.tsx` holds them), so this page draws no title of its own.
+  it("draws no title of the document and no page-level heading: the layout's band is above it", async () => {
     renderAnswer();
-    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
-    await waitFor(() => expect(document.title).toBe("打了减重针一直恶心，要不要停药？ · AI 回答监测 · EviMed"));
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(document.title).not.toContain("AI 回答监测");
   });
 
   it("reads the judge's findings against the card claims in their order, as lines of text and never a stop", async () => {
@@ -109,7 +112,7 @@ describe("one answer", () => {
 
   it("draws nothing for an answer the judge has no findings about", async () => {
     renderAnswer();
-    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     expect(screen.queryByRole("region", { name: "对照卡片结论的核对" })).not.toBeInTheDocument();
   });
 
@@ -206,7 +209,7 @@ describe("one answer", () => {
   it("says nothing about a mark when the answer has no wrong sentence", async () => {
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
     renderAnswer();
-    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     expect(screen.queryByText(/标红处与说明书不一致/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "看第 1 处" })).not.toBeInTheDocument();
   });
@@ -229,7 +232,7 @@ describe("one answer", () => {
     };
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [stale] });
     renderAnswer();
-    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     const article = document.querySelector("[data-geo-answer]") as HTMLElement;
     // The answer's own wrong sentence is marked; the row about the same claim speaks for it and adds no second block or sentence.
     await waitFor(() => expect(article.querySelectorAll("[data-geo-wrong]")).toHaveLength(1));

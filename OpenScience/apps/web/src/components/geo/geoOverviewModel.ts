@@ -17,25 +17,23 @@
  *    ranking.
  */
 import {
-  GEO_STEP_KEYS,
   readGeoCell,
   type GeoCell,
   type GeoDiagnosis,
   type GeoMonitoring,
+  type GeoOverviewMetric,
   type GeoOverviewMetricKey,
   type GeoProject,
   type GeoSeriesPoint,
-  type GeoStep,
   type GeoStepKey,
+  type GeoStrategyView,
   type GeoWeekItem,
 } from "@/lib/geoClient";
-import { agendaLocalDate, allowanceWaitingSentence, DISPLAY_TIME_ZONE, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
-import { stepAllowanceWait, type AllowanceWaiting } from "@/lib/allowanceWait";
-import type { RailState, RailStep } from "@/components/ui/ProgressRail";
+import { agendaLocalDate, DISPLAY_TIME_ZONE, geoCoverageDifference, geoCoverageStatement } from "@evimed/domain";
 import type { DeltaPolarity } from "@/components/ui/Delta";
 import { formatGeoValue, geoCellPhrase, geoCellWord, GEO_LINKLESS_WORD } from "./GeoCellText";
-import { absentWord, engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, GEO_STEP_NAMES, monthDay, parseGeoDate, zh, type GeoUnit } from "./geoText";
-import { GEO_TAB_REDIRECTS, geoTabPath } from "./geoTabs";
+import { absentWord, engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, monthDay, parseGeoDate, zh, type GeoUnit } from "./geoText";
+import { GEO_STEP_HOME, geoDestinationPath, geoTabPath, type GeoTabKey } from "./geoTabs";
 import { MENTION_ONLY_WORD, mentionOnly, metricName, metricUnit } from "./tabs/geoTabText";
 
 /* ------------------------------------------------------------------- tiles */
@@ -65,6 +63,51 @@ export interface OverviewTile {
   rank: string | null;
   /** “司美格鲁肽 提及率 48%” — the leading rival, under the lead tile's bar. */
   rival: string | null;
+  /** The tab that holds what the number counts: the figure opens it. Null for a word standing in for a number. */
+  tab: GeoTabKey | null;
+  /** Where it started, where it is and where it is meant to be, each with its date (R19 A4). Null where there is no such metric. */
+  triple: MetricTriple | null;
+}
+
+/**
+ * 基线 → 现在 → 目标, with the dates (audit C class 4.2): a tile used to carry one of them and call it 「现状」, and three pages
+ * carried three different ones. The baseline is the first stated reading **of the run that was measured over the same thing as now**
+ * (a change of the engine set starts a new run: two readings of different things are not a before and an after); it is absent while
+ * there is only one reading, which is the baseline itself. The target is the chosen tier's, with the day it falls due when the plan
+ * says one; a target the reading has passed is 「已达到」, never a number the reader has to compare by eye.
+ */
+export interface MetricTriple {
+  baseline: { value: number; date: string | null } | null;
+  /** The date of the latest reading. */
+  now: { date: string | null };
+  target: number | null;
+  /** The day the target falls due (the baseline round's date plus the plan's horizon), when the plan says it. */
+  dueAt: string | null;
+  /** The latest reading is at or past the target. */
+  reached: boolean;
+}
+
+/** The tab each overview metric's figure opens. */
+const TILE_TABS: Record<string, GeoTabKey> = { gvi: "visibility", mention: "visibility", accuracy: "accuracy", citation: "visibility", share: "visibility", safety: "accuracy" };
+
+/** The metric id each overview key names, to find its row in the plan. */
+const TILE_METRIC_IDS: Record<string, string> = { gvi: "M-19", mention: "M-01S", accuracy: "M-06", citation: "M-08" };
+
+export function metricTriple(metric: GeoOverviewMetric | null, key: string, strategy: GeoStrategyView | null | undefined): MetricTriple | null {
+  if (!metric) return null;
+  const run = comparableRun(metric.trend).filter((point) => statedValue(point) !== null);
+  const first = run.length >= 2 ? run[0] : null;
+  const last = run[run.length - 1] ?? null;
+  const target = metric.target;
+  const row = strategy?.targets?.rows?.find((entry) => entry.metricId === TILE_METRIC_IDS[key] && entry.pool === "all") ?? null;
+  const value = metric.cell.status === "ok" ? metric.cell.value : null;
+  return {
+    baseline: first && first.value !== null ? { value: first.value, date: first.date ?? null } : null,
+    now: { date: last?.date ?? null },
+    target,
+    dueAt: row?.dueAt ?? null,
+    reached: target !== null && value !== null && value >= target,
+  };
 }
 
 const TILE_ORDER: readonly GeoOverviewMetricKey[] = ["gvi", "mention", "accuracy", "citation"];
@@ -243,7 +286,7 @@ export function standing(project: GeoProject, diagnosis: GeoDiagnosis | null): {
   };
 }
 
-export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | null): OverviewTile[] {
+export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | null, strategy?: GeoStrategyView | null): OverviewTile[] {
   const noise = typeof diagnosis?.noise?.band === "number" ? diagnosis.noise.band : null;
   const where = standing(project, diagnosis);
   const tiles: OverviewTile[] = [];
@@ -270,6 +313,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
       tone: "default",
       rank: key === "gvi" ? where.rank : null,
       rival: key === "gvi" ? where.rival : null,
+      tab: cell?.status === "ok" ? TILE_TABS[key] : null,
+      triple: metricTriple(metric, key, strategy),
     });
   }
   // 声量份额 sits between 提及率 and 准确率 when the round measured it.
@@ -289,6 +334,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
       tone: "default",
       rank: null,
       rival: null,
+      tab: TILE_TABS.share,
+      triple: null,
     });
   }
   // 用药安全 is the last cell and the only red one on the band.
@@ -309,6 +356,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     tone: severe > 0 ? "safety" : "default",
     rank: null,
     rival: null,
+    tab: diagnosis ? TILE_TABS.safety : null,
+    triple: null,
   });
   return tiles;
 }
@@ -398,134 +447,15 @@ export function denominatorLine(project: GeoProject, diagnosis: GeoDiagnosis | n
   return [parts.join("、") || null, ...missing].filter(Boolean).join(" · ") || null;
 }
 
-/* ------------------------------------------------------------------- rail */
-
-/**
- * The programme's steps. The overview carries its own copy and it is the one
- * to read — except when it is empty, which says nothing rather than saying
- * that nothing has been done.
- */
-function projectSteps(project: GeoProject): GeoProject["steps"] {
-  const overview = project.overview?.steps ?? {};
-  return Object.keys(overview).length > 0 ? overview : project.steps;
-}
-
-/** A step's note, when the server wrote a short one worth printing. */
-function railNote(note: string | null | undefined): string | null {
-  const text = (note ?? "").trim();
-  return text && text.length <= 12 ? text : null;
-}
+/* ------------------------------------------------------------------- market */
 
 /** Whether this deployment can place orders; a project from a server that does not say can. */
 export function marketConnected(project: GeoProject): boolean {
   return project.market?.configured !== false;
 }
 
-/** What the rail and 下一步 say about placing while no media market is connected (G20). */
+/** What the band and 行动 say about placing while no media market is connected (G20). */
 export const GEO_MARKET_OFF_NOTE = "等媒介集市接通";
-
-/**
- * Whether placing has been asked for: the reader requested the step, or it is already moving. The rail and 下一步 both read it here,
- * so they cannot disagree. A step nobody asked for is owed neither a budget nor a market — the server sends it untouched.
- */
-function placementAsked(step: GeoStep | undefined): boolean {
-  const status = step?.status ?? "none";
-  const done = status === "done" || status === "minimal";
-  const working = status === "running" || status === "queued" || status === "failed";
-  return !done && (step?.requested === true || working);
-}
-
-/**
- * The eight steps as the header rail. One of them may be `waiting`: the
- * program's single money stop — a placement budget only a person may set —
- * and it is drawn as the thing the reader owes. Without a market there is
- * nothing to owe: the step says it waits for the market, and nothing on the
- * page asks for a budget.
- */
-export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) => string): RailStep[] {
-  const steps = projectSteps(project);
-  const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
-  const market = marketConnected(project);
-  return GEO_STEP_KEYS.map((key) => {
-    const step = steps[key];
-    const status = step?.status ?? "none";
-    const done = status === "done" || status === "minimal";
-    const working = status === "running" || status === "queued" || status === "failed";
-    const asked = key === "distribution" && placementAsked(step);
-    const held = asked && !market;
-    const waiting = asked && market && needsBudget;
-    // A step the allowance would not start needs the reader as much as the budget does.
-    const allowanceWait = stepAllowanceWait(step);
-    const state: RailState = waiting || allowanceWait ? "waiting" : done ? "done" : held ? "todo" : working ? "active" : "todo";
-    return {
-      key,
-      name: GEO_STEP_NAMES[key],
-      note: waiting ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : railNote(step?.note),
-      state,
-      to: geoTabPathOf(key),
-    };
-  });
-}
-
-/**
- * The rail on a phone, in one line: how many steps are done and what the first one that cannot go on is waiting for —
- * 「已完成 7 / 8 步 · 投放等媒介集市接通」.
- */
-export function railSummary(steps: readonly RailStep[]): string {
-  const done = steps.filter((step) => step.state === "done").length;
-  const stopped = steps.find((step) => step.state === "waiting" || step.note === GEO_MARKET_OFF_NOTE) ?? null;
-  const head = `已完成 ${done} / ${steps.length} 步`;
-  return stopped ? `${head} · ${stopped.name}${stopped.note ?? "等你处理"}` : head;
-}
-
-/* --------------------------------------------------------------- next step */
-
-export interface NextStep {
-  key: string;
-  text: string;
-  /** `held`: it cannot start until something outside the project is in place (the media market). */
-  state: "waiting" | "active" | "done" | "held";
-  when: string | null;
-  /** Set on the row of a step the allowance would not start: which wallet refused, so the row can offer the right top-up. */
-  allowance?: AllowanceWaiting;
-}
-
-/** “下一步”: what is waiting on the reader first, then what is under way, then what is finished. */
-export function nextSteps(project: GeoProject): NextStep[] {
-  const steps = projectSteps(project);
-  const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
-  const market = marketConnected(project);
-  const rows: NextStep[] = [];
-  const placing = placementAsked(steps.distribution);
-  if (placing && !market) {
-    rows.push({ key: "market", text: "投放要等媒介集市接通", state: "held", when: null });
-  } else if (placing && needsBudget) {
-    rows.push({ key: "budget", text: "确认投放预算", state: "waiting", when: null });
-  }
-  for (const key of GEO_STEP_KEYS) {
-    const step = steps[key];
-    if (!step) continue;
-    // Without a market, placing is not under way whatever its status says.
-    if (key === "distribution" && !market) continue;
-    const note = railNote(step.note);
-    const name = GEO_STEP_NAMES[key];
-    const allowance = stepAllowanceWait(step);
-    if (allowance) {
-      // Queued, but not under way: the allowance would not start it, and the reader is who puts that right.
-      rows.push({ key, text: allowanceWaitingSentence(name, allowance), state: "waiting", when: null, allowance });
-    } else if (step.status === "running" || step.status === "queued") {
-      rows.push({ key, text: note ? `${name} ${note}` : `${name}进行中`, state: "active", when: null });
-    }
-  }
-  for (const key of [...GEO_STEP_KEYS].reverse()) {
-    const step = steps[key];
-    if (!step || (step.status !== "done" && step.status !== "minimal")) continue;
-    const note = railNote(step.note);
-    rows.push({ key: `done:${key}`, text: note ? `${GEO_STEP_NAMES[key]} ${note}` : `${GEO_STEP_NAMES[key]}已完成`, state: "done", when: monthDay(step.updatedAt) });
-    if (rows.length >= 5) break;
-  }
-  return rows.slice(0, 5);
-}
 
 /* ----------------------------------------------------------- engine matrix */
 
@@ -801,13 +731,14 @@ export function dayWord(value: string | null | undefined, now: Date = new Date()
 }
 
 /**
- * Where a “本周” line jumps. The old tabs are gone, so a line that named a
- * step resolves to the tab that now holds it — the same map an address uses.
+ * Where a “本周” line jumps. The line names a step (the server files a wrong statement under 诊断); the step's home is the tab that
+ * holds its result now — the same table the rail and an address use.
  */
 export function weekTarget(geoId: string, item: GeoWeekItem): string | null {
   const base = `/app/geo/${encodeURIComponent(geoId)}`;
   // A line that quotes an answer opens that answer, whichever tab the server files it under: a wrong statement is filed under 诊断.
   if (item.ref?.snapshotId) return `${base}/answers/${encodeURIComponent(item.ref.snapshotId)}`;
-  const tab = GEO_TAB_REDIRECTS[item.tab];
-  return tab ? geoTabPath(geoId, tab) : null;
+  if (item.tab === "overview") return geoTabPath(geoId, "overview");
+  const home = (GEO_STEP_HOME as Record<string, (typeof GEO_STEP_HOME)[GeoStepKey]>)[item.tab];
+  return home ? geoDestinationPath(geoId, home) : null;
 }

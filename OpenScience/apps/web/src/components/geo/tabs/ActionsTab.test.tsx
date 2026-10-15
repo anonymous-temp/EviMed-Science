@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoArticle, GeoProject } from "@/lib/geoClient";
 import { articlesFilled, distributionFilled, geoProject, monitoringFilled, valueFilled, VALUE_TITLES } from "../__fixtures__/geoTabs";
+import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
 import { ActionsTab } from "./ActionsTab";
 import { ContentTab } from "./ContentTab";
 import { Distribution, hasDistribution } from "./DistributionTab";
@@ -40,10 +41,11 @@ function Probe() {
 }
 
 function renderTab(tab: ReactElement) {
+  const project = (tab.props as { project?: GeoProject }).project ?? geoProject();
   return render(
     <MemoryRouter initialEntries={["/app/geo/geo_1/tab"]}>
       <Routes>
-        <Route path="/app/geo/geo_1/tab" element={<>{tab}<Probe /></>} />
+        <Route path="/app/geo/geo_1/tab" element={<><GeoFrameHarness project={project}>{tab}</GeoFrameHarness><Probe /></>} />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
@@ -150,50 +152,18 @@ describe("行动: the market", () => {
   });
 });
 
+// The drug-value analysis is 依据's, and nowhere else (R19 audit C 1.9): 行动 draws none of it whatever the project holds.
 describe("行动: the drug-value analysis", () => {
-  const FOLLOWS = Node.DOCUMENT_POSITION_FOLLOWING;
-
-  it("draws nothing of it for a project with no analysis", async () => {
+  it("draws nothing of it, with or without an analysis, and does not read it", async () => {
+    client.getGeoValue.mockResolvedValue(valueFilled);
     client.getGeoArticles.mockResolvedValue({ articles: [article(1)] });
     client.getGeoDistribution.mockResolvedValue(distributionFilled);
     renderTab(<ActionsTab {...props()} />);
     await screen.findByText("稿件1");
     await screen.findByRole("heading", { name: "效果" });
     for (const title of VALUE_TITLES) expect(screen.queryByRole("heading", { name: title })).not.toBeInTheDocument();
-    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
-  });
-
-  it("comes after the articles, the market sentence and the effect, so the sentence stays on the first screen", async () => {
-    client.getGeoValue.mockResolvedValue(valueFilled);
-    client.getGeoArticles.mockResolvedValue({ articles: [article(1), article(2)] });
-    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], ownedLinks: [], market: { configured: false } });
-    renderTab(<ActionsTab {...props()} />);
-    const heading = await screen.findByRole("heading", { name: "下一步研究与内容" });
-    const sentence = document.querySelector("[data-geo-market-off]") as HTMLElement;
-    const band = screen.getByRole("region", { name: "稿件流水线" });
-    const list = document.querySelector("[data-geo-tab='content'] ul") as HTMLElement;
-    const effect = screen.getByRole("heading", { name: "效果" });
-    // Counts, the market sentence under them, the articles, the effect — then what the analysis says to do next.
-    for (const [earlier, later] of [[band, sentence], [sentence, list], [list, effect], [effect, heading]]) {
-      expect(earlier.compareDocumentPosition(later) & FOLLOWS).toBeTruthy();
-    }
-    expect(document.querySelector("[data-geo-tab='actions']")?.lastElementChild).toBe(heading.closest("section"));
-    expect(document.querySelector("[data-geo-ask-ai]")).toBeNull();
-  });
-
-  it("shows three of a dozen next steps with the total and 显示更多 — the page does not grow by a dozen rows", async () => {
-    const opportunities = Array.from({ length: 12 }, (_, index) => ({ id: `o${index + 1}`, statement: `第 ${index + 1} 项下一步` }));
-    client.getGeoValue.mockResolvedValue({ ...valueFilled, data: { ...valueFilled.data, opportunities } });
-    client.getGeoArticles.mockResolvedValue({ articles: [article(1)] });
-    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], ownedLinks: [], market: { configured: false } });
-    renderTab(<ActionsTab {...props()} />);
-    const heading = await screen.findByRole("heading", { name: "下一步研究与内容" });
-    const section = heading.closest("section") as HTMLElement;
-    expect(heading.parentElement).toHaveTextContent("共 12 条");
-    expect(within(section).getAllByRole("listitem").filter((row) => /^第 \d+ 项下一步/.test(row.textContent ?? ""))).toHaveLength(3);
-    expect(within(section).getByRole("button", { name: "显示更多 · 还有 9 条" })).toBeInTheDocument();
-    // The sentence under the counts is still ahead of all of it.
-    expect((document.querySelector("[data-geo-market-off]") as HTMLElement).compareDocumentPosition(section) & FOLLOWS).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "开始药品价值分析" })).not.toBeInTheDocument();
+    expect(client.getGeoValue).not.toHaveBeenCalled();
   });
 });
 
