@@ -55,14 +55,13 @@
     }
   },
   "handwrittenLists": {
-    "total": 46,
+    "total": 42,
     "files": {
       "app/routes/CapsuleTransferPanel.tsx": 1,
       "app/routes/EvidenceAuthorPage.tsx": 2,
       "app/routes/EvidenceZonePage.tsx": 2,
       "app/routes/EvidenceZonesPage.tsx": 1,
       "app/routes/GeoAnswerPage.tsx": 2,
-      "app/virtual-research/VcrHomePage.tsx": 1,
       "components/capsule/CapsuleSharePanel.tsx": 2,
       "components/frontier/EvidenceChangeLog.tsx": 1,
       "components/frontier/EvidenceCommunityCards.tsx": 1,
@@ -80,12 +79,10 @@
       "components/vcr/VcrKnowledge.tsx": 3,
       "components/vcr/VcrMembersDialog.tsx": 1,
       "components/vcr/VcrRegulatoryLog.tsx": 1,
-      "components/vcr/VcrStudyDrawers.tsx": 1,
       "components/vcr/data/CloudDocuments.tsx": 2,
       "components/vcr/data/SourceCard.tsx": 3,
       "components/vcr/tabs/DataTab.tsx": 3,
       "components/vcr/tabs/MatchingTab.tsx": 2,
-      "components/vcr/tabs/OverviewTab.tsx": 2,
       "components/vcr/tabs/TrialTab.tsx": 1
     }
   }

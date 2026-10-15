@@ -35,6 +35,11 @@ export interface ActivityStripProps {
   startedAt?: string | number | Date | null;
   /** How many more are waiting behind this one. */
   queued?: number;
+  /**
+   * It is not going yet, and this is what it waits for (「等「证据」做完」): the strip then says 「排队中」 where it said 「正在」, the dot
+   * does not pulse, and there is no clock — nothing has started to be counted.
+   */
+  waiting?: string;
   /** The conversation (or the page of the work) behind it. */
   to?: string;
   onCancel?: () => void;
@@ -43,14 +48,16 @@ export interface ActivityStripProps {
   className?: string;
 }
 
-export function ActivityStrip({ label, phase, counts, startedAt, queued, to, onCancel, cancelling, variant = "strip", className }: ActivityStripProps) {
-  const elapsed = useElapsed(startedAt);
-  const dot = <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />;
+export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, variant = "strip", className }: ActivityStripProps) {
+  const elapsed = useElapsed(waiting ? null : startedAt);
+  const dot = waiting
+    ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-accent" />
+    : <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />;
   if (variant === "chip") {
     const body = (
       <>
         {dot}
-        <span className="min-w-0 truncate">{`正在${label}`}</span>
+        <span className="min-w-0 truncate">{waiting ? `${label}，排队中` : `正在${label}`}</span>
         {elapsed && <span className="shrink-0 tabular-nums text-text-3">{elapsed}</span>}
         {to && <span className="shrink-0 font-medium">查看进度</span>}
       </>
@@ -62,10 +69,10 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, to, onC
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-accent-soft px-3 py-1.5 text-ui text-accent-strong", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-accent-soft px-3 py-1.5 text-ui text-accent-strong", className)}>
       {dot}
-      <span className="min-w-0 truncate">{`正在${label}`}</span>
-      {detail && <span className="tabular-nums">{detail}</span>}
+      <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
+      {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}
       {elapsed && <span className="text-caption tabular-nums text-text-3">{elapsed}</span>}
       {queued !== undefined && queued > 0 && <span className="text-caption text-text-2">{`另有 ${queued} 项排队`}</span>}
       <span className="flex-1" />

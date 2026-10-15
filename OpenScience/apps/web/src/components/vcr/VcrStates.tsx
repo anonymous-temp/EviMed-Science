@@ -1,19 +1,21 @@
-import { useState, type ReactNode } from "react";
-import { CircleDashed, History, TriangleAlert, UsersRound } from "lucide-react";
-import { runVcrStep, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
+import { type ReactNode } from "react";
+import { useNavigate } from "react-router";
+import { CircleDashed, History, MessageSquare, TriangleAlert, UsersRound } from "lucide-react";
+import { VCR_STEP_NEEDS } from "@evimed/domain";
+import { cancelVcrStudy, runVcrStep, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
+import { vcrChatPath } from "@/lib/studyLocation";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
-import { allowanceWaitingSentence } from "@evimed/domain";
+import { StepState, type StepInput } from "@/components/ui/StepState";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
-import { webErrorMessage } from "@/lib/apiClient";
-import { toast } from "@/lib/toast";
-import { useOpenVcrConversation } from "./useOpenVcrConversation";
+import { useStudyFrame } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
-import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_EMPTY, VCR_STEP_QUEUED } from "./vcrText";
-import { hasDefinition } from "./vcrTabs";
+import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
+import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
+import { hasDefinition, VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
 /**
  * The states every 「虚拟临床研究」 surface shares.
@@ -104,51 +106,121 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
   );
 }
 
+/** What the strip and the tab say a step waits for, as the noun `StepState` puts in 「“…”做完后自动开始」. */
+function waitingNoun(waitingFor: string | null | undefined): string | undefined {
+  if (!waitingFor || waitingFor === "allowance" || waitingFor === "simulated_allowance") return undefined;
+  if (waitingFor === "run") return "这次运行";
+  return stepName(waitingFor as VcrStepKey);
+}
+
+/** What the activity says of one step: the run that covers it, the engine job that works on it, and where it waits in line. */
+function activityOfStep(activity: VcrActivity | null | undefined, step: VcrStepKey) {
+  const run = activity?.run && activity.run.steps.includes(step) ? activity.run : null;
+  const job = leadJob(activity && { ...activity, jobs: activity.jobs.filter((entry) => entry.step === step) });
+  const queued = activity?.queue.find((entry) => entry.step === step) ?? null;
+  return { run, job, queued };
+}
+
 /**
- * What a tab shows while it has nothing to show. A step being worked on says
- * so in one quiet line; a step that has not run offers 「让 AI 做」, which
- * starts it in the study's own conversation — the study page never grows a
- * second composer (plan §9.5). A step that failed with nothing to show says
- * so, and offers to go on from where it stopped rather than to begin again.
+ * What a step's tab shows while it has nothing to show — the one body for four states, drawn by `StepState` (R19): **the recipe**
+ * (what the step uses, each a way to the thing; what it gives; one button that names the work as a verb and its object) when it has
+ * not run; **where it waits** when it is in line; **what is being done, for how long, and 停止** while it runs; and the way to the
+ * allowance when that is what it waits for. A step that failed with nothing to show is `VcrStepFailed`'s.
+ *
+ * The button starts the step and **takes nobody anywhere**: the page's strip says what happens next, and this tab is the step's
+ * state, so it is a recipe, then a run, then — when the page has read the study again — the result.
  */
 export function VcrStepPending({ studyId, study, step, hint, start }: {
   studyId: string;
   study: VcrStudy;
   step: VcrStepKey;
-  /** What 「让 AI 做」 starts, when the step's own sentence does not fit this study (matching at T0). */
+  /** What the step gives, when the step's own sentence does not fit this study (matching at T0). */
   hint?: string;
-  /** Where the step can be started directly (an evaluation of protocol versions that already exist), this is the one button instead of 「让 AI 做」. */
+  /** Where the step can be started directly (an evaluation of protocol versions that already exist), this is the one button instead. */
   start?: VcrStepStart;
 }) {
+  const frame = useStudyFrame();
+  const { run, busy } = useVcrRun(study);
   const state = study.steps[step];
+  const mayRun = study.abilities.includes("run");
+  const activity = study.activity ?? frame?.activity ?? null;
+  const here = activityOfStep(activity, step);
+  const action = stepAction(step);
+  const cancel = () => { void cancelVcrStudy(studyId).then(() => frame?.refresh()).catch(() => undefined); };
+
   // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
   const allowanceWait = stepAllowanceWait(state);
   if (allowanceWait) {
     return (
-      <div data-vcr-step-allowance={step} role="status" className="flex flex-col items-center gap-3 py-12 text-center">
-        <p className="max-w-measure text-ui text-text-2">{allowanceWaitingSentence(stepLabel(step), allowanceWait)}</p>
-        <AllowanceTopUp waiting={allowanceWait} />
+      <div data-vcr-step-allowance={step}>
+        <StepState phase="credits" step={action} waiting={allowanceWait} topUp={<AllowanceTopUp waiting={allowanceWait} />} />
       </div>
     );
   }
-  if (state?.status === "running" || state?.status === "queued") {
+  if (state?.status === "running") {
+    const detail = here.run ? runDetailLine(here.run) : here.job?.total ? "计算" : "";
     return (
-      <p data-vcr-step-running={step} className="flex items-center justify-center gap-2 py-12 text-ui text-text-3">
-        <span aria-hidden="true" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />
-        正在进行，做完会显示在这里。
-      </p>
+      <div data-vcr-step-running={step}>
+        <StepState
+          phase="running"
+          step={here.run?.label || action}
+          phaseName={detail || undefined}
+          counts={here.job && here.job.done !== null && here.job.total ? { done: here.job.done, total: here.job.total } : undefined}
+          startedAt={here.run?.startedAt}
+          onStop={mayRun && (here.run || here.job) ? cancel : undefined}
+        />
+      </div>
+    );
+  }
+  if (state?.status === "queued") {
+    return (
+      <div data-vcr-step-waiting={step}>
+        <StepState phase="queued" step={action} after={waitingNoun(here.queued?.waitingFor)} onStop={mayRun ? cancel : undefined} />
+      </div>
     );
   }
   if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
   // Nothing waits in a queue for a study nobody has described: the one thing missing is the first sentence, and it is said that way.
   if (!hasDefinition(study)) return <VcrNoDefinition study={study} />;
-  if (state?.status === "none" && state.requested === true) {
-    return <p data-vcr-step-waiting={step} className="py-12 text-center text-ui text-text-3">{VCR_STEP_QUEUED}</p>;
+  // Asked for and not started by the programme yet: it is in line, whatever the strip has not heard of. A step a cancel held is not in
+  // line — it was stopped, and nothing starts it but a person's press — so it offers its start like a step never asked for.
+  if (state?.status === "none" && state.requested === true && state.held !== true) {
+    return (
+      <div data-vcr-step-waiting={step}>
+        <StepState phase="queued" step={action} onStop={mayRun ? cancel : undefined} />
+      </div>
+    );
   }
-  return <VcrStepAsk studyId={studyId} study={study} step={step} hint={hint} start={start} />;
+
+  // The recipe: each thing it uses is the tab it comes from, with what that tab found.
+  const uses: StepInput[] = [];
+  const needs = (VCR_STEP_NEEDS as Record<string, readonly string[]>)[step] ?? [];
+  for (const need of needs) {
+    const key = need as VcrStepKey;
+    const note = study.stepSummaries[key]?.note;
+    uses.push({ label: `${key === "definition" ? "研究定义" : stepName(key)}${note ? ` ${note}` : ""}`, to: vcrTabPath(studyId, VCR_STEP_TABS[key]) });
+  }
+  const cards = study.stepSummaries.evidence?.note;
+  if (cards && step !== "evidence" && step !== "definition") uses.push({ label: cards, to: vcrTabPath(studyId, "data") });
+  const startHere = start ? start.onStart : mayRun ? () => { void run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。"); } : undefined;
+  return (
+    <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4">
+      <StepState
+        phase="empty"
+        step={start?.label ?? action}
+        noun={VCR_STEP_NOUNS[step]}
+        uses={uses}
+        gives={hint ?? VCR_STEP_GIVES[step]}
+        onStart={startHere}
+        starting={start ? start.busy : busy}
+        reason={startHere ? undefined : "需要有运行权限的成员来开始这一步。"}
+      />
+      {start?.note}
+    </div>
+  );
 }
 
-/** A step started directly rather than by the conversation: the button's name, whether it is working, and what it said last. */
+/** A step started directly rather than by the programme: the button's name, whether it is working, and what it said last. */
 export interface VcrStepStart {
   label: string;
   busy: boolean;
@@ -158,46 +230,20 @@ export interface VcrStepStart {
 }
 
 /**
- * What every empty tab of a study with no definition says: the study is waiting for its first sentence, which is said in the
- * conversation — and a way into it. Not 「正在排队」: nothing is queued.
+ * What every empty tab of a study with no definition says: the study is waiting for its first sentence, which is said in its
+ * conversation — and the one button that goes there, as a view of this page. Not 「正在排队」: nothing is queued.
  */
-export function VcrNoDefinition({ study }: { study: Pick<VcrStudy, "projectId" | "sessionId" | "abilities"> }) {
-  const open = useOpenVcrConversation();
-  const [opening, setOpening] = useState(false);
-  const go = () => {
-    if (opening) return;
-    setOpening(true);
-    void open({ projectId: study.projectId, sessionId: study.sessionId })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" })))
-      .finally(() => setOpening(false));
-  };
+export function VcrNoDefinition({ study }: { study: Pick<VcrStudy, "id" | "abilities"> }) {
+  const frame = useStudyFrame();
+  const navigate = useNavigate();
+  const go = () => (frame ? frame.openChat() : navigate(vcrChatPath(study.id)));
   return (
-    <div data-vcr-no-definition="" className="flex flex-col items-center gap-4 py-12 text-center">
-      <p id="vcr-no-definition" className="max-w-measure text-ui text-text-2">{VCR_NO_DEFINITION}</p>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {/* There is nothing for the AI to start from yet: the button is there, and says why it is not pressable. */}
-        {study.abilities.includes("run") && <Button disabled aria-describedby="vcr-no-definition">让 AI 做</Button>}
-        <Button variant="secondary" onClick={go} loading={opening}>去对话</Button>
-      </div>
-    </div>
-  );
-}
-
-/** 「让 AI 做」: one sentence about the step and the button that starts it. */
-function VcrStepAsk({ studyId, study, step, hint, start }: { studyId: string; study: VcrStudy; step: VcrStepKey; hint?: string; start?: VcrStepStart }) {
-  const { run, busy } = useVcrRun(study);
-  return (
-    <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4 py-12 text-center">
-      <p className="max-w-measure text-ui text-text-2">{hint ?? VCR_STEP_EMPTY[step]}</p>
-      {start ? (
-        <>
-          <Button onClick={start.onStart} loading={start.busy}>{start.label}</Button>
-          {start.note}
-        </>
-      ) : study.abilities.includes("run") && (
-        // Starting a step is `run`'s: a reader who cannot start one is not offered the button.
-        <Button onClick={() => run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。")} loading={busy}>让 AI 做</Button>
-      )}
+    <div data-vcr-no-definition="">
+      <EmptyState
+        icon={MessageSquare}
+        title={VCR_NO_DEFINITION}
+        action={<Button onClick={go}>说明研究问题</Button>}
+      />
     </div>
   );
 }
@@ -343,7 +389,7 @@ export function PartialResultNote({ sentence, resume, className }: {
   );
 }
 
-/** 「续算」: the step asked for again — the failed marks are cleared and the computation goes on from its checkpoint — and the conversation opens at it. */
+/** 「续算」: the step asked for again — the failed marks are cleared and the computation goes on from its checkpoint; the page stays and the strip says so. */
 function ResumeStep({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
   const { run, busy } = useVcrRun(study);
   const status = study.steps[step]?.status;

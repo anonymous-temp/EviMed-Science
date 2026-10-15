@@ -1,7 +1,7 @@
 import { putConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { errorCodeMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
+import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
@@ -92,7 +92,7 @@ function refusedFrame(error: unknown): FrameFailure {
   // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
   // ended session and the shell moves to the login route — so a retry here
   // would race that, not fix it.
-  return failureFor(runtimeStartRecovery(error.code, error.status), text, error.code, error.status !== 401);
+  return failureFor(runtimeStartRecovery(error.code, error.status), text, error.code, error.status !== 401, error.reason);
 }
 
 /**
@@ -103,13 +103,17 @@ function refusedFrame(error: unknown): FrameFailure {
  * something this page does not offer or offers differently: the cleanup that
  * outlasted the wait, the autopilot hold, and the slot cap.
  */
-function failureFor(recovery: StartRecovery, text: string, code: string | null | undefined, retryable = true): FrameFailure {
+function failureFor(recovery: StartRecovery, text: string, code: string | null | undefined, retryable = true, reason?: string | null): FrameFailure {
   switch (recovery) {
     // A spending ceiling is lifted on the allowance page, not by asking again; the simulated
     // allowance has a page of its own (`SIMULATED_CREDITS_EXHAUSTED`).
     case "spend": return { text, retryable: false, recovery, code };
     case "wait": return { text: CLEANUP_GAVE_UP_TEXT, retryable, recovery, code };
-    case "autopilot": return { text: AUTOPILOT_HOLD_TEXT, retryable, recovery, code };
+    // Why the runtime is held decides the sentence and the way out (`RUNTIME_LOCK_REASONS`): only a scheduled task's hold ends on the
+    // tasks page. A step of a study (or the platform's own job) says what it is, and has nowhere to send the reader but the retry.
+    case "autopilot":
+      if (reason === "module-step" || reason === "platform-task") return { text: runtimeLockMessage(reason), retryable, code };
+      return { text: AUTOPILOT_HOLD_TEXT, retryable, recovery, code };
     case "slots": return { text: RUNTIME_SLOT_CAP_TEXT, retryable, recovery, code };
     default: return { text, retryable, recovery, code };
   }
@@ -207,7 +211,7 @@ function refusedStart(error: unknown): FrameFailure | null {
   // The opening goes on: the frame's own start waits for the apply (and the
   // notice page retries the opening if it does not end in time).
   if (recovery === "preparing" || recovery === "retry" || recovery === "room") return null;
-  return failureFor(recovery, webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" }), error.code);
+  return failureFor(recovery, webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" }), error.code, true, error.reason);
 }
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;

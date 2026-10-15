@@ -89,10 +89,12 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
       }
     }
     // A write answers what the routes answer: the row, an empty object here.
-    if (method === "POST" && /\/run$/.test(path)) return { sessionId: "ses_1", runId: "run_1" };
-    // 「为该患者找试验」 answers a run, like 「让 AI 做」, and how many verdicts the trials already held now have about the patient.
-    if (method === "POST" && /\/trial-search$/.test(path)) return { sessionId: "ses_1", runId: "run_3", deferred: null, evaluated: 0 };
-    if (method === "POST" && /\/export$/.test(path)) return { export: { id: "exp_9" }, sessionId: "ses_1", runId: "run_2", deferred: null };
+    // A press of a step answers that it was taken and what waits for what — there is no session in it, nothing to go to.
+    if (method === "POST" && /\/run$/.test(path)) return { accepted: true, runId: "run_1", step: (body as { step?: string } | undefined)?.step ?? null, queuedBehind: [] };
+    // 「为该患者找试验」 answers a run, like a step, and how many verdicts the trials already held now have about the patient.
+    if (method === "POST" && /\/trial-search$/.test(path)) return { accepted: true, runId: "run_3", step: null, queuedBehind: [], evaluated: 0 };
+    if (method === "POST" && /\/export$/.test(path)) return { export: { id: "exp_9" }, accepted: true, runId: "run_2", step: null, queuedBehind: [] };
+    if (method === "POST" && /\/cancel$/.test(path) && !/\/jobs\//.test(path)) return { canceled: { runId: null, jobs: 0 } };
     return {};
   });
   return { calls };

@@ -279,6 +279,59 @@ describe("project store", () => {
     expect(store.getState().projects.map((p) => p.id)).toEqual(["default", "alpha"]);
   });
 
+  // R19 (2026-10-14): the list is in the order of use, with the project the shell is in first.
+  describe("the order of use", () => {
+    const SET = [
+      { id: "default", name: "我的研究", lastActiveAt: "2026-09-01T00:00:00.000Z" },
+      { id: "p-old", name: "房颤", lastActiveAt: "2026-10-01T00:00:00.000Z" },
+      { id: "p-new", name: "心衰", lastActiveAt: "2026-10-12T00:00:00.000Z" },
+    ];
+
+    it("lists the most recently used first — the default project is not pinned above one used since — and the current one before all", async () => {
+      mocks.listWebProjects.mockResolvedValue([...SET].reverse());
+      const store = await freshStore();
+      await store.getState().load();
+      // The shell is in 默认's project: it is first whatever its use; the rest follow by use.
+      expect(store.getState().projects.map((p) => p.id)).toEqual(["default", "p-new", "p-old"]);
+
+      mocks.fetchWebMe.mockResolvedValue(me("p-old"));
+      await store.getState().select("p-old");
+      expect(store.getState().projects.map((p) => p.id)).toEqual(["p-old", "p-new", "default"]);
+    });
+
+    it("keeps a project the reader has just left second, rather than where the last read of the list put it", async () => {
+      mocks.listWebProjects.mockResolvedValue(SET);
+      const store = await freshStore();
+      await store.getState().load();
+      mocks.fetchWebMe.mockImplementation(async ({ projectId }: { projectId: string }) => me(projectId));
+      await store.getState().select("p-old");
+      await store.getState().select("p-new");
+      // p-old was used a moment ago (its row was opened), so it is above 默认's, which was used in September.
+      expect(store.getState().projects.map((p) => p.id)).toEqual(["p-new", "p-old", "default"]);
+    });
+
+    it("orders a server that sends no activity as it always did: the default first, then by name", async () => {
+      mocks.listWebProjects.mockResolvedValue([{ id: "p2", name: "心衰" }, { id: "p1", name: "房颤" }, { id: "default", name: "我的研究" }]);
+      const store = await freshStore();
+      await store.getState().load();
+      expect(store.getState().projects.map((p) => p.name)).toEqual(["我的研究", "房颤", "心衰"]);
+    });
+
+    it("puts a project that was just made at the top, whatever the server's answer carried", async () => {
+      mocks.listWebProjects.mockResolvedValue(SET);
+      mocks.createWebProject.mockResolvedValue({ id: "fresh", name: "新项目" });
+      const store = await freshStore();
+      await store.getState().load();
+      mocks.fetchWebMe.mockImplementation(async ({ projectId }: { projectId: string }) => me(projectId));
+      const created = await store.getState().create("新项目");
+      expect(created.id).toBe("fresh");
+      await store.getState().select("fresh");
+      expect(store.getState().projects[0].id).toBe("fresh");
+      await store.getState().select("default");
+      expect(store.getState().projects.map((p) => p.id)).toEqual(["default", "fresh", "p-new", "p-old"]);
+    });
+  });
+
   it("lists the account's own project first, then by name as a Chinese reader sorts", async () => {
     mocks.listWebProjects.mockResolvedValue([
       { id: "p2", name: "心衰" },

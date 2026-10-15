@@ -122,6 +122,18 @@ function parseWebApiErrorDetails(code: string | null, value: unknown): WebUsageB
 }
 
 /**
+ * The declared reason of a refusal (`ERROR_DETAIL_FIELDS[code].reason`), or null. Only a value of the closed set the domain declared
+ * for the code is kept: a string the wire holds beyond it is dropped rather than shown.
+ */
+function parseWebApiErrorReason(code: string | null, value: unknown): string | null {
+  const table = ERROR_DETAIL_FIELDS as unknown as Record<string, Record<string, "number" | readonly string[]> | undefined>;
+  const rule = code ? table[code]?.reason : undefined;
+  if (!rule || rule === "number" || !value || typeof value !== "object") return null;
+  const candidate = (value as Record<string, unknown>).reason;
+  return typeof candidate === "string" && rule.includes(candidate) ? candidate : null;
+}
+
+/**
  * How long the control plane says this refusal will keep refusing, in seconds.
  *
  * `Retry-After` is a header (`sendError` in `apps/server/src/security.mjs`) and
@@ -179,6 +191,12 @@ export class WebApiError extends Error {
   /** The machine-readable specifics the control plane declared for this code,
    *  or null for the codes that declare none — see `ERROR_DETAIL_FIELDS`. */
   readonly details: WebUsageBudgetDetails | null;
+  /**
+   * Why the refusal happened, when the code declares a closed set of reasons (`ERROR_DETAIL_FIELDS`): a held runtime says
+   * `scheduled-task`, `module-step` or `platform-task`, and the sentence a person reads says which. Null for every other refusal; a
+   * reason outside the declared set is dropped, never passed on.
+   */
+  readonly reason: string | null;
   /** Seconds until this refusal is worth attempting again, from the
    *  `Retry-After` header or from the declared details, or null when the
    *  control plane said nothing about time. Never invented: a hint nobody sent
@@ -198,6 +216,7 @@ export class WebApiError extends Error {
     this.code = envelope.code ?? null;
     this.requestId = envelope.requestId ?? null;
     this.details = parseWebApiErrorDetails(this.code, envelope.details);
+    this.reason = parseWebApiErrorReason(this.code, envelope.details);
     // The header first: it is what every refusal with a retryAfterSeconds
     // carries today, across all sixteen status classes, while the body detail
     // exists only for the two credits codes that declare it.
@@ -411,6 +430,11 @@ export interface WebProject {
   runCount?: number;
   /** The latest run's start in this project, or null for none yet. */
   lastActivityAt?: string | null;
+  /**
+   * When anything last happened in the project: the latest of its run ledger, its conversations' own last moments and the moment it was
+   * made. What the sidebar orders by — a project made a minute ago sorts above one worked in last week. Absent from an older server.
+   */
+  lastActiveAt?: string | null;
   /** When the project was made, when the control plane keeps it: what tells two projects of one name apart. */
   createdAt?: string | null;
 }
@@ -829,10 +853,11 @@ export interface WebAgentRun {
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   /**
    * What the platform's own bookkeeping calls this run, when it is not the person's conversation (`runRoleOf` in the domain, derived by the
-   * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim. A list of
-   * conversations leaves such a run out (`isConversationRun`); the ledger and the task's page still hold it. Absent on an ordinary run.
+   * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim,
+   * `programme` a step a module's programme dispatched (虚拟临床研究). A list of conversations leaves such a run out
+   * (`isConversationRun`); the ledger, the task's page and the study's 「AI 运行」 record still hold it. Absent on an ordinary run.
    */
-  role?: "verification";
+  role?: "verification" | "programme";
   /** Put away by the researcher; the lists leave it out. */
   archived?: boolean;
   /** Removed by the researcher; nothing lists it again. */

@@ -1,12 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy } from "@/lib/vcrClient";
 import {
   NotApplicableCard, NotEstimableCard, PartialResultNote, Stale, StaleBar, VcrOffPage, VcrStepFailed, VcrStepPending, VCR_OFF_SENTENCE,
 } from "./VcrStates";
-import { VCR_DEFERRED_SENTENCE } from "./useVcrRun";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
 
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
@@ -23,7 +23,11 @@ vi.mock("@/lib/projects", () => ({
   useProjectStore: { getState: () => ({ projects: [{ id: "prj_ev201" }, { id: "prj_empty" }], select: store.select, load: store.load }) },
 }));
 
-const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
+/** Where the page is, after a button was pressed: a start must leave it where it was. */
+function Where() {
+  return <p data-testid="where">{useLocation().pathname}</p>;
+}
+const draw = (node: React.ReactElement) => render(<MemoryRouter initialEntries={["/app/virtual-research/std_1/patients"]}>{node}<Where /></MemoryRouter>);
 /** The study as the readers turn the server's own answer into a page's props. */
 const emptyStudy = () => readVcrStudy(fixture("empty/study.json"));
 const ev201 = () => readVcrStudy(fixture("ev201/study.json"));
@@ -154,72 +158,136 @@ const evWithStep = (step: string, fields: Record<string, unknown>) => {
 };
 
 describe("a step with nothing yet", () => {
-  it("says one quiet line while it is being worked on, and offers nothing to press", () => {
+  it("says what is being done and offers to stop it, while the step runs — never a lone 「正在进行」", () => {
+    const raw = fixture("ev201/study.json");
+    raw.steps.trial = { ...raw.steps.trial, status: "running" };
+    raw.activity = null;
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="trial" />);
+    const state = document.querySelector("[data-step-state='running']") as HTMLElement;
+    expect(state).toHaveTextContent("正在模拟试验方案");
+    expect(screen.queryByText("正在进行，做完会显示在这里。")).toBeNull();
+    // Stopping is the run's: with no run or job the study reports, there is nothing to stop and no button for it.
+    expect(screen.queryByRole("button", { name: "停止" })).toBeNull();
+  });
+
+  it("shows the engine job that works on the step: its done of total, and the way to stop it", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("trial", { status: "running" })} step="trial" />);
-    expect(screen.getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+    const state = document.querySelector("[data-step-state='running']") as HTMLElement;
+    expect(state).toHaveTextContent("计算 3 / 10");
+    expect(screen.getByRole("button", { name: "停止" })).toBeInTheDocument();
+  });
+
+  it("names the run that covers the step, how far it has counted and for how long, and stops it from here", async () => {
+    installVcrServer(network.productRequest);
+    const raw = fixture("ev201/study.json");
+    raw.steps.trial = { ...raw.steps.trial, status: "running" };
+    raw.activity = {
+      run: { id: "run_9", step: "trial", steps: ["trial"], label: "模拟试验方案", phase: "search", counts: { search: 6, included: 23 },
+        startedAt: new Date(Date.now() - 125_000).toISOString(), placement: "open-runtime", locked: false },
+      queue: [], jobs: [], last: null,
+    };
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="trial" />);
+    const state = document.querySelector("[data-step-state='running']") as HTMLElement;
+    expect(state).toHaveTextContent("正在模拟试验方案");
+    expect(state).toHaveTextContent("检索 6 次 · 纳入 23 篇");
+    await userEvent.click(screen.getByRole("button", { name: "停止" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
   });
 
   // 「正在排队」 was a lie for a study nobody has described: nothing is queued, it waits for its first sentence.
   describe("on a study nobody has described", () => {
-    it("says so in the words of what is missing, with the way to the conversation — in every step's tab", async () => {
+    it("says so in the words of what is missing, with the one button to the conversation — in every step's tab", async () => {
       for (const step of ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"] as const) {
         const { unmount } = draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step={step} />);
         expect(screen.getByText("先在对话里说一句要研究什么")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
         expect(screen.queryByText(/正在排队|开始后|写好后/)).toBeNull();
+        // A step that cannot start yet is not offered a start that is pressed in vain.
+        expect(screen.queryByRole("button", { name: "让 AI 做" })).toBeNull();
         unmount();
       }
     });
 
-    it("keeps 让 AI 做 in view and not pressable until a definition exists, and 去对话 opens the study's conversation", async () => {
-      installVcrServer(network.productRequest);
+    it("opens the study's conversation view, in the same page, from that button", async () => {
       draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={emptyStudy()} step="evidence" />);
-      const ask = screen.getByRole("button", { name: "让 AI 做" });
-      expect(ask).toBeDisabled();
-      await userEvent.click(ask);
-      expect(network.productRequest.mock.calls.some(([path]) => String(path).endsWith("/run"))).toBe(false);
-      await userEvent.click(screen.getByRole("button", { name: "去对话" }));
-      await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_empty", expect.any(Function)));
-    });
-
-    it("shows a reader who cannot run a step no 让 AI 做 at all", () => {
-      const study = emptyStudy();
-      study.abilities = ["read"];
-      draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
-      expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "去对话" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "说明研究问题" }));
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_2/chat");
+      expect(store.select).not.toHaveBeenCalled();
     });
   });
 
-  it("says a step that was asked for on a described study is arranged, with no queue it could be stuck in", () => {
+  it("puts a step that was asked for on a described study in line, with no queue it could be stuck in and no sentence about it", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("patients", { status: "none", requested: true })} step="patients" />);
-    expect(screen.getByText("已安排，开始后这里会显示进度。")).toBeInTheDocument();
+    const state = document.querySelector("[data-step-state='queued']") as HTMLElement;
+    expect(state).toHaveTextContent("生成虚拟患者，排队中");
+    expect(screen.queryByText("已安排，开始后这里会显示进度。")).toBeNull();
   });
 
-  it("says what each step starts from: the empty population names what the AI will make and what T1 adds; a hint, where one is given, replaces the step's sentence", () => {
-    const { unmount } = draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("population", { status: "none", requested: false })} step="population" />);
-    expect(screen.getByText("还没有人群：AI 会按研究定义生成一批情景人群；接入你的数据（T1 及以上）后，也可以筛出真实队列。")).toBeInTheDocument();
+  it("lets a person stop a step that is only in line — the cancel holds the programme, with nothing out to stop", async () => {
+    installVcrServer(network.productRequest);
+    const raw = fixture("ev201/study.json");
+    raw.steps.patients = { ...raw.steps.patients, status: "none", requested: true };
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="patients" />);
+    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cancel`, "POST", {}));
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/patients");
+  });
+
+  it("offers no 取消 on a step that is in line to a reader who may not run one", () => {
+    const raw = fixture("ev201/study.json");
+    raw.steps.patients = { ...raw.steps.patients, status: "none", requested: true };
+    raw.abilities = ["read"];
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="patients" />);
+    expect(document.querySelector("[data-step-state='queued']")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+  });
+
+  // A cancel holds the programme: a held step is not in line — it was stopped, and only a person's press starts it again.
+  it("offers a step a cancel held its start like one never asked for, and does not call it queued", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("patients", { status: "none", requested: true, held: true })} step="patients" />);
+    expect(document.querySelector("[data-step-state='queued']")).toBeNull();
+    expect(document.querySelector("[data-step-state='empty']")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "生成虚拟患者" })).toBeInTheDocument();
+  });
+
+  it("says what a queued step waits for, from the study's own account of its queue", () => {
+    const raw = fixture("ev201/study.json");
+    raw.steps.patients = { ...raw.steps.patients, status: "queued", requested: true };
+    raw.activity = { run: { id: "run_1", step: "evidence", steps: ["evidence"], label: "找证据、整理假设卡", phase: null, counts: {}, startedAt: null, placement: "open-runtime", locked: false },
+      queue: [{ step: "patients", waitingFor: "evidence" }], jobs: [], last: null };
+    draw(<VcrStepPending studyId={STUDY_ID} study={readVcrStudy(raw)} step="patients" />);
+    expect(document.querySelector("[data-step-state='queued']")).toHaveTextContent("“证据”做完后自动开始");
+  });
+
+  it("is a recipe when nothing has been done: what the step uses, each a link to where it comes from, what it gives, and one button — verb and object", () => {
+    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("population", { status: "none", requested: false })} step="population" />);
+    const state = document.querySelector("[data-step-state='empty']") as HTMLElement;
+    expect(state).toHaveTextContent("还没有人群");
+    expect(state).toHaveTextContent("用 研究定义 v1 · 4 张假设卡");
+    expect(screen.getByRole("link", { name: "研究定义 v1" })).toHaveAttribute("href", "/app/virtual-research/std_1/data");
+    expect(state).toHaveTextContent("得到 一批情景人群；接入数据（T1 及以上）后也可以筛出真实队列");
+    expect(screen.getByRole("button", { name: "构建人群" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).toBeNull();
+  });
+
+  it("lets a hint replace what the step gives, and never stand in for a step's state: a running step says it is running", () => {
+    const { unmount } = draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("matching", { status: "none", requested: false })} step="matching" hint="只有公开资料时的一句话。" />);
+    expect(screen.getByText(/得到 只有公开资料时的一句话。/)).toBeInTheDocument();
+    expect(screen.queryByText(/逐条入排判定/)).toBeNull();
     unmount();
-    draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("matching", { status: "none", requested: false })} step="matching" hint="只有公开资料时的一句话。" />);
-    expect(screen.getByText("只有公开资料时的一句话。")).toBeInTheDocument();
-    expect(screen.queryByText(/还没有匹配评估/)).toBeNull();
-    // A hint never hides the button, and never replaces a state: a step that is running says so.
-  });
-
-  it("does not let a hint stand in for a step's state: a running step says it is running", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("matching", { status: "running" })} step="matching" hint="只有公开资料时的一句话。" />);
-    expect(screen.getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
-    expect(screen.queryByText("只有公开资料时的一句话。")).toBeNull();
+    expect(document.querySelector("[data-step-state='running']")).not.toBeNull();
+    expect(screen.queryByText(/只有公开资料时的一句话。/)).toBeNull();
   });
 
-  // 「让 AI 做」 starts the step in the study's own conversation: there is no
-  // second composer on the study page.
-  it("offers 让 AI 做, which starts the step in the study's conversation", async () => {
+  // The button starts the step and takes the reader nowhere: the page's strip says what happens next.
+  it("starts the step from its button and stays where it is — there is no conversation to be sent to", async () => {
     installVcrServer(network.productRequest);
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
-    await userEvent.click(screen.getByRole("button", { name: "让 AI 做" }));
+    await userEvent.click(screen.getByRole("button", { name: "找证据、整理假设卡" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "evidence" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/patients");
+    expect(store.select).not.toHaveBeenCalled();
   });
 
   // A step asked for twice is two runs: the second click does nothing (CW-18).
@@ -229,31 +297,37 @@ describe("a step with nothing yet", () => {
       [`POST /vcr/studies/${STUDY_ID}/run`]: () => new Promise((resolve) => { release = resolve; }),
     });
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
-    const button = screen.getByRole("button", { name: "让 AI 做" });
+    const button = screen.getByRole("button", { name: "找证据、整理假设卡" });
     await userEvent.click(button);
     await userEvent.click(button);
     expect(network.productRequest.mock.calls.filter(([path]) => String(path).endsWith("/run"))).toHaveLength(1);
-    release({ sessionId: "ses_1", runId: "run_1" });
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
+    release({ accepted: true, runId: "run_1", step: "evidence", queuedBehind: [] });
+    await waitFor(() => expect(button).not.toHaveAttribute("aria-busy", "true"));
   });
 
-  // Starting a step is `run`'s: a reader who cannot start one is told what the
-  // step needs, and is not offered a button the route would refuse.
-  it("offers no 让 AI 做 to a reader who cannot run a step", () => {
+  // Starting a step is `run`'s: a reader who cannot start one is told why, and is not offered a button the route would refuse.
+  it("offers no start to a reader who cannot run a step, and says whose it is", () => {
     const study = evWithStep("evidence", { status: "none", requested: false });
     study.abilities = ["read", "review_clinical", "export"];
     draw(<VcrStepPending studyId={STUDY_ID} study={study} step="evidence" />);
     expect(document.querySelector("[data-vcr-step-empty='evidence']")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "找证据、整理假设卡" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-empty][data-reason]")).not.toBeNull();
   });
 
-  // A run that could not start now stays on the page with one sentence (CW-19).
-  it("stays on the page and says the run is queued behind the previous one", async () => {
-    installVcrServer(network.productRequest, { [`POST /vcr/studies/${STUDY_ID}/run`]: { sessionId: null, runId: null, deferred: "another_run_active" } });
+  // A start that cannot be taken says the sentence of what holds the project, not 「定时任务」.
+  it("says what holds a project that cannot take the start — a study's own step is not a scheduled task", async () => {
+    installVcrServer(network.productRequest, {
+      [`POST /vcr/studies/${STUDY_ID}/run`]: () => {
+        throw new WebApiError("held", { status: 423, code: "runtime_reserved_for_autopilot", details: { reason: "module-step" } });
+      },
+    });
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
-    await userEvent.click(screen.getByRole("button", { name: "让 AI 做" }));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith(VCR_DEFERRED_SENTENCE));
-    expect(store.select).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "找证据、整理假设卡" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalledTimes(1));
+    const said = String(toasts.error.mock.calls[0][0]);
+    expect(said).toContain("研究里的一个步骤");
+    expect(said).not.toContain("定时任务");
   });
 });
 
@@ -290,6 +364,6 @@ describe("a step that did not finish", () => {
   it("is what a step with nothing to show says when it failed, instead of the empty offer", () => {
     draw(<VcrStepPending studyId={STUDY_ID} study={ev201()} step="patients" />);
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-step-state='empty']")).toBeNull();
   });
 });

@@ -67,12 +67,32 @@ let switchGeneration = 0;
 let loadGeneration = 0;
 
 /**
- * The order every project list shows: the account's own default project first,
- * then by name as a Chinese reader sorts (pinyin). The server's own order
- * depends on its database collation, which is not a reading order.
+ * The moment a project was last used, as a number, or `-Infinity` for a server that does not say. The sidebar's list is ordered by it:
+ * `lastActiveAt` is the latest of the project's run ledger, its conversations' own last moments and the moment it was made.
  */
-export function sortProjects(projects: WebProject[]): WebProject[] {
+export function projectActivity(project: Pick<WebProject, "lastActiveAt" | "lastActivityAt" | "createdAt">): number {
+  for (const at of [project.lastActiveAt, project.lastActivityAt, project.createdAt]) {
+    const moment = typeof at === "string" ? Date.parse(at) : Number.NaN;
+    if (Number.isFinite(moment)) return moment;
+  }
+  return Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * The order every project list shows: **the project the shell is in first**, then the most recently used, newest first (R19, 2026-10-14
+ * — the owner's 「项目会话创建后，还不能自动置顶，还得往下找去」: the list was by pinyin, so a project made a minute ago sat where its
+ * name put it, below fifty others). The account's default project is not pinned: it takes its place by use like any other, and is the
+ * first of the projects nothing is known about (a server that sends no activity orders as it always did — default, then pinyin, which
+ * is a reading order where the server's own depends on its database collation).
+ */
+export function sortProjects(projects: WebProject[], currentId?: string | null): WebProject[] {
   return [...projects].sort((a, b) => {
+    if (currentId && (a.id === currentId || b.id === currentId)) return a.id === currentId ? -1 : 1;
+    const used = projectActivity(b) - projectActivity(a);
+    if (Number.isFinite(used) && used !== 0) return used;
+    // Both unknown is `NaN` (−∞ − −∞); one unknown sorts after the one that is known.
+    const known = Number.isFinite(projectActivity(a)) !== Number.isFinite(projectActivity(b));
+    if (known) return Number.isFinite(projectActivity(a)) ? -1 : 1;
     if (a.id === "default" || b.id === "default") return a.id === "default" ? -1 : 1;
     return a.name.localeCompare(b.name, "zh") || a.id.localeCompare(b.id);
   });
@@ -90,17 +110,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const request = ++loadGeneration;
     set({ loading: true, error: null });
     try {
-      const projects = sortProjects(await listWebProjects());
+      const listed = await listWebProjects();
       if (request !== loadGeneration) return;
       // The selected id comes from this browser's memory, so it can name a
       // project that no longer exists. The list is the authority: fall back to
       // the one project that is always there — in place, like any switch —
       // rather than showing a list whose current entry is missing from it.
       const current = getWebProjectId();
-      const resolved = projects.some((p) => p.id === current) ? current : "default";
+      const resolved = listed.some((p) => p.id === current) ? current : "default";
       if (resolved !== current) setWebProjectId(resolved);
       if (resolved !== get().currentId) clearScrollMemory();
-      set({ projects, currentId: resolved, loading: false });
+      set({ projects: sortProjects(listed, resolved), currentId: resolved, loading: false });
     } catch (error) {
       if (request !== loadGeneration) return;
       set({ loading: false, error: webErrorMessage(error) });
@@ -145,22 +165,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // new project first — a task of project A opened in project B's runtime,
     // or B's knowledge base flashing before B's task — and fires its requests.
     flushSync(() => {
-      set({ currentId: projectId, switching: null });
+      // The project the shell is in is first in every list that reads this one, and it was used just now: when the shell moves on, it
+      // stays second rather than falling back to where the last read of the list put it.
+      const now = new Date().toISOString();
+      set((state) => ({
+        currentId: projectId,
+        switching: null,
+        projects: sortProjects(state.projects.map((p) => (p.id === projectId ? { ...p, lastActiveAt: now } : p)), projectId),
+      }));
       land?.();
     });
     warmWebRuntime(projectId);
   },
 
   create: async (name) => {
-    const project = await createWebProject(name.trim());
-    set((state) => ({ projects: sortProjects([...state.projects.filter((p) => p.id !== project.id), project]) }));
+    const created = await createWebProject(name.trim());
+    // Made just now: it is the newest thing the account has, whatever the server's answer carried.
+    const project = { ...created, lastActiveAt: created.lastActiveAt ?? created.createdAt ?? new Date().toISOString() };
+    set((state) => ({ projects: sortProjects([...state.projects.filter((p) => p.id !== project.id), project], state.currentId) }));
     return project;
   },
 
   rename: async (projectId, name) => {
     const renamed = await renameWebProject(projectId, name.trim());
     set((state) => ({
-      projects: sortProjects(state.projects.map((p) => (p.id === projectId ? { ...p, ...renamed } : p))),
+      projects: sortProjects(state.projects.map((p) => (p.id === projectId ? { ...p, ...renamed } : p)), state.currentId),
     }));
     return renamed;
   },

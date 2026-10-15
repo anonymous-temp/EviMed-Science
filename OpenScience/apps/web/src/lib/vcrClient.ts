@@ -206,6 +206,11 @@ export interface VcrCounts {
 export interface VcrStep {
   status: VcrStepStatus;
   requested?: boolean;
+  /**
+   * A person's cancel holds the programme: a step held is not taken up again until a person asks for it (`POST …/run`), whatever
+   * `requested` says — it is not in line, and an empty step that is held offers its start like one never asked for.
+   */
+  held?: boolean;
   /** What it produced, in the reader's words: 「12 张假设卡」「人群 v3」. */
   note?: string | null;
   /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
@@ -464,6 +469,67 @@ export interface VcrDefinitionCard {
 /** What the server knows of the engine (`VcrService.engineState`). */
 export type VcrEngineState = "missing" | "wired" | "answering" | "not_answering";
 
+/** Why a queued step waits: another step's run (its key), the research allowance, or a run that covers no step (an export, a patient's trials). */
+export type VcrWaitingFor = VcrStepKey | "allowance" | "simulated_allowance" | "run";
+
+/** The run a study's one slot holds right now (`activity.run`). */
+export interface VcrActivityRun {
+  id: string | null;
+  /** The first step it covers, or null for a run that covers none (an export). */
+  step: VcrStepKey | null;
+  steps: VcrStepKey[];
+  /** The person's sentence for it (「构建人群、生成虚拟患者」), never the instruction the model was briefed with. */
+  label: string;
+  /** What it is doing now, as the ledger observed it (`search` `screen` `fulltext` `claims` `write` `deliver`). */
+  phase: string | null;
+  /** Counts of what happened: `search`, `included`, `fullText`, `claims`, `claimsVerified`, `deliverables`, `deliverablesDone`. Odometers, never a share. */
+  counts: Partial<Record<"search" | "included" | "fullText" | "claims" | "claimsVerified" | "deliverables" | "deliverablesDone", number>>;
+  startedAt: string | null;
+  /** `open-runtime`: in the project's own runtime, the conversation is free; `bounded`: it holds the project's runtime; null: not known yet (a run being sent). */
+  placement: "open-runtime" | "bounded" | null;
+  /** The study's conversation cannot take a prompt until this ends. */
+  locked: boolean;
+}
+
+/** One engine job that is open (`activity.jobs`). */
+export interface VcrActivityJob {
+  id: string;
+  kind: string;
+  state: "queued" | "running" | "awaiting_budget";
+  step: VcrStepKey | null;
+  done: number | null;
+  total: number | null;
+}
+
+/** What a study is doing: `null` when nothing is. It stays for a few seconds after the last thing ends, with `last`, so a poller sees the end once. */
+export interface VcrActivity {
+  run: VcrActivityRun | null;
+  queue: Array<{ step: VcrStepKey; waitingFor: VcrWaitingFor | null }>;
+  jobs: VcrActivityJob[];
+  last: { step: VcrStepKey | null; endedAt: string; outcome: "succeeded" | "failed" | "canceled" } | null;
+}
+
+/** The step the study offers next. `reason`: `start` (never done), `retry` (the last attempt was not finished), `refresh` (its inputs changed). */
+export interface VcrNext {
+  step: VcrStepKey;
+  /** The step's verb and object: 「生成虚拟患者」. */
+  label: string;
+  reason: "start" | "retry" | "refresh";
+  /** 「上次没有做完」, 「输入已变更，结果已过期」, or empty for `start`. */
+  reasonText: string;
+}
+
+export interface VcrStepSummary {
+  note: string | null;
+  stale: boolean;
+}
+
+/** The study's conversation: `exists` once the kernel minted it; `sessionId` null for a read that could not (the next read tries again). */
+export interface VcrConversationRef {
+  sessionId: string | null;
+  exists: boolean;
+}
+
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
   id: string;
@@ -474,8 +540,16 @@ export interface VcrStudy {
   intendedUse: VcrIntendedUse;
   status: VcrStudyStatus;
   steps: VcrSteps;
-  /** The conversation the study was opened with (its 「对话」); null before there is one. */
+  /** The conversation the study was opened with (its 「对话」); null before there is one. Kept for readers that predate `conversation`. */
   sessionId: string | null;
+  /** The study's one conversation: the kernel's session the 「对话」 view shows, and whether the kernel knows it yet. */
+  conversation: VcrConversationRef;
+  /** What is going on right now, or null when nothing is: the page reads again while it is not null and stops when it is. */
+  activity: VcrActivity | null;
+  /** The step to offer as the primary action, computed once on the server (`vcrNext`); null when there is none to offer. */
+  next: VcrNext | null;
+  /** One finding with one number per step (≤ 12 characters); a step with nothing to say is absent. */
+  stepSummaries: Partial<Record<VcrStepKey, VcrStepSummary>>;
   /** What the definition says, as words; null until one has been written. */
   definition: VcrDefinitionCard | null;
   /** Whether the computation engine is there: `missing` and `not_answering` are the page's one line at the top. */
@@ -1521,10 +1595,84 @@ function readDefinitionCard(raw: unknown): VcrDefinitionCard | null {
   };
 }
 
+const WAITING_FOR = new Set<string>(["allowance", "simulated_allowance", "run", ...VCR_STEP_KEYS]);
+const ACTIVITY_COUNTS = ["search", "included", "fullText", "claims", "claimsVerified", "deliverables", "deliverablesDone"] as const;
+
+function stepKey(value: unknown): VcrStepKey | null {
+  return typeof value === "string" && (VCR_STEP_KEYS as readonly string[]).includes(value) ? value as VcrStepKey : null;
+}
+
+function readActivityRun(raw: unknown): VcrActivityRun | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  const counts: VcrActivityRun["counts"] = {};
+  for (const key of ACTIVITY_COUNTS) {
+    const n = finite(obj(value.counts)[key]);
+    if (n !== null && n >= 0) counts[key] = n;
+  }
+  return {
+    id: text(value.id),
+    step: stepKey(value.step),
+    steps: (Array.isArray(value.steps) ? value.steps : []).map(stepKey).filter((step): step is VcrStepKey => step !== null),
+    label: text(value.label) ?? "",
+    phase: text(value.phase),
+    counts,
+    startedAt: text(value.startedAt),
+    placement: value.placement === "open-runtime" ? "open-runtime" : value.placement === "bounded" ? "bounded" : null,
+    locked: value.locked === true,
+  };
+}
+
+/** The study's activity, or null when it says there is none. */
+export function readVcrActivity(raw: unknown): VcrActivity | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = obj(raw);
+  const last = obj(value.last);
+  const outcome = text(last.outcome);
+  return {
+    run: readActivityRun(value.run),
+    queue: arr(value.queue).flatMap((entry) => {
+      const step = stepKey(entry.step);
+      const waiting = text(entry.waitingFor);
+      return step ? [{ step, waitingFor: waiting && WAITING_FOR.has(waiting) ? waiting as VcrWaitingFor : null }] : [];
+    }),
+    jobs: arr(value.jobs).flatMap((job) => {
+      const state = text(job.state);
+      if (!text(job.id) || (state !== "queued" && state !== "running" && state !== "awaiting_budget")) return [];
+      return [{ id: String(job.id), kind: text(job.kind) ?? "", state, step: stepKey(job.step), done: finite(job.done), total: finite(job.total) } satisfies VcrActivityJob];
+    }),
+    last: text(last.endedAt) && (outcome === "succeeded" || outcome === "failed" || outcome === "canceled")
+      ? { step: stepKey(last.step), endedAt: String(last.endedAt), outcome } : null,
+  };
+}
+
+function readNext(raw: unknown): VcrNext | null {
+  const value = obj(raw);
+  const step = stepKey(value.step);
+  const reason = text(value.reason);
+  if (!step || (reason !== "start" && reason !== "retry" && reason !== "refresh")) return null;
+  return { step, label: text(value.label) ?? "", reason, reasonText: text(value.reasonText) ?? "" };
+}
+
+function readStepSummaries(raw: unknown): VcrStudy["stepSummaries"] {
+  const out: VcrStudy["stepSummaries"] = {};
+  for (const [key, entry] of Object.entries(obj(raw))) {
+    const step = stepKey(key);
+    if (!step || !entry || typeof entry !== "object") continue;
+    out[step] = { note: text((entry as Loose).note), stale: (entry as Loose).stale === true };
+  }
+  return out;
+}
+
 export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
+  const conversation = obj(value.conversation);
   return {
     ...(value as unknown as VcrStudy),
+    conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true },
+    activity: readVcrActivity(value.activity),
+    next: readNext(value.next),
+    stepSummaries: readStepSummaries(value.stepSummaries),
     steps: readSteps(value.steps),
     abilities: strings(value.abilities),
     tierOffer: readTierOffer(value.tierOffer),
@@ -2158,16 +2306,28 @@ export const getVcrMatching = tabReader("matching", readVcrMatching);
 export const getVcrData = tabReader("data", readVcrData);
 
 /**
- * 「为该患者找试验」: asks for a run of the matching capability that searches the registries for this patient. The answer is a run's, like
- * 「让 AI 做」 (a deferred one has no run); `evaluated` is how many verdicts the trials the study already holds now have about the patient.
+ * 「为该患者找试验」: asks for a run of the matching capability that searches the registries for this patient. The answer is a run's, like a
+ * step's (a deferred one has no run); `evaluated` is how many verdicts the trials the study already holds now have about the patient.
  */
 export function runVcrTrialSearch(studyId: string, subjectKey: string) {
-  return productRequest<VcrRunAnswer & { evaluated?: number | null }>(`${study(studyId)}/trial-search`, "POST", trialSearchBody(subjectKey));
+  return productRequest<VcrRunAnswer>(`${study(studyId)}/trial-search`, "POST", trialSearchBody(subjectKey));
 }
 
-/** 「让 AI 做」: dispatches one step now, in the study's own conversation. */
+/**
+ * Start one step, now or when its turn comes. The answer says what was taken and what waits (`VcrRunAnswer`); the page does not move,
+ * and the result appears in the tab that holds it.
+ */
 export function runVcrStep(studyId: string, step: VcrStepKey) {
   return productRequest<VcrRunAnswer>(`${study(studyId)}/run`, "POST", runBody(step));
+}
+
+/**
+ * 「取消」: stop what the study is doing — the run its one slot holds and every engine job that is open, and **hold the programme**: a
+ * cancel is not followed by the next step, and nothing starts by itself until a person asks for a step. The steps not done come back
+ * as `held`. Idempotent; nothing out answers `{ runId: null, jobs: 0, held }`.
+ */
+export function cancelVcrStudy(studyId: string) {
+  return productRequest<{ canceled: { runId: string | null; jobs: number; held?: string[] } }>(`${study(studyId)}/cancel`, "POST", {});
 }
 
 /** A deterministic computation, queued directly (contract §3.1, §4). */
@@ -2217,7 +2377,7 @@ export function addVcrRegulatoryContact(studyId: string, input: VcrRegulatoryCon
   return productRequest<VcrRegulatoryContact>(`${study(studyId)}/regulatory-contacts`, "POST", regulatoryContactBody(input));
 }
 
-/** 「导出」: the package is a run in the study's conversation; a deferred run answers `runId: null`. */
+/** 「导出」: the package is written by a run the page watches in its activity strip; a run that waits answers `runId: null`. */
 export function exportVcrStudy(studyId: string, kind: VcrExportKind) {
   return productRequest<VcrRunAnswer>(`${study(studyId)}/export`, "POST", exportBody(kind));
 }
@@ -2434,14 +2594,21 @@ export function reviewVcrAssessment(studyId: string, assessmentId: string) {
   return productRequest<unknown>(`${study(studyId)}/assessments/${id(assessmentId)}/review`, "POST", assessmentReviewBody());
 }
 
-/** What 「让 AI 做」 and an export answer: the conversation, and the run — or the sentence that it is queued behind another. */
+/**
+ * What a press of a step, an export or a patient's trial search answers: that the request was taken, the run it started now, and what
+ * waits for what. **There is no conversation in it and nothing to navigate to** — the page stays and reads `activity`.
+ */
 export interface VcrRunAnswer {
-  sessionId?: string | null;
+  accepted?: boolean;
+  /** The run this press started now; null when the step was taken and waits (the study's one slot is held, or the allowance does not cover it yet). */
   runId?: string | null;
-  /** Set when the run could not start now and waits for the one before it. */
-  deferred?: string | null;
+  step?: VcrStepKey | null;
+  /** Every step that is queued and not in the run that is out. */
+  queuedBehind?: Array<{ step: VcrStepKey; waitingFor: VcrWaitingFor | null }>;
   /** The package row of an export. */
   export?: { id?: string } | null;
+  /** 「为该患者找试验」: how many verdicts the trials the study already held now have about the patient. */
+  evaluated?: number | null;
 }
 
 /* -------------------------------------------------------------------- feature */
