@@ -34,6 +34,12 @@ export const SKILL_DISPLAY_GROUPS = Object.freeze([...table.groups])
 /** The group the proprietary 「循证 GEO」 method pack is listed under, where its folder is present. One of {@link SKILL_DISPLAY_GROUPS}. */
 export const SKILL_DISPLAY_GEO_GROUP = String(table.geoGroup)
 
+/**
+ * The group the LoopX entry skill is listed under (`loopx`, installed at image build and not in the table). Its words are the
+ * `loopx` item's in the runtime inventory. One of {@link SKILL_DISPLAY_GROUPS}.
+ */
+export const SKILL_DISPLAY_LOOPX_GROUP = String(table.loopxGroup)
+
 /** Every shipped skill's words by skill name, in the order each group lists them. @type {Readonly<Record<string, Readonly<SkillDisplay>>>} */
 export const SKILL_DISPLAY = Object.freeze(Object.fromEntries(
   Object.entries(/** @type {Record<string, SkillDisplay>} */ (table.skills)).map(([name, row]) => [name, Object.freeze({ ...row })]),

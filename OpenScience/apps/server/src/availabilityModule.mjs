@@ -40,7 +40,6 @@ const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
  *   usageLedger: any,
  *   connectorCredentials: any,
  *   vcrEngine?: (() => import("./vcrEngineProbe.mjs").VcrEngineReading | null) | null,
- *   vcrEngineRefresh?: (() => Promise<import("./vcrEngineProbe.mjs").VcrEngineReading | null>) | null,
  *   extensionService: any,
  *   mutation: (operation: () => Promise<any>) => Promise<any>,
  *   canRun?: () => boolean,
@@ -50,7 +49,7 @@ const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
  * }} dependencies
  */
 export function createAvailability({
-  config, authStore, registry, database, jobs, documents, agentRuns, usageLedger, connectorCredentials, vcrEngine = null, vcrEngineRefresh = null,
+  config, authStore, registry, database, jobs, documents, agentRuns, usageLedger, connectorCredentials, vcrEngine = null,
   extensionService, mutation, canRun = () => true, fetchImpl = globalThis.fetch, report = () => {}, skillSupply = null,
 }) {
   const collecting = Boolean(database && jobs) && config.availabilityEnabled !== false && config.runtimeMode !== "mock";
@@ -58,7 +57,7 @@ export function createAvailability({
   const engineProbe = new EngineHealthProbe({ config, fetchImpl });
 
   const service = new AvailabilityService({
-    config, registry, store: records, engineProbe, skillSupply, vcrEngine, vcrEngineRefresh,
+    config, registry, store: records, engineProbe, skillSupply, vcrEngine,
     connectorStatus: connectorCredentials ? (userId) => connectorCredentials.status(userId) : null,
     extensionViews: extensionService ? async (user) => {
       const [installations, catalogue] = await Promise.all([extensionService.list(user), extensionService.catalogue()]);

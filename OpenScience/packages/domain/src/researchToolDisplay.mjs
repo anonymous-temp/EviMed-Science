@@ -22,6 +22,13 @@ import table from './research-tools-zh.json' with { type: 'json' }
 /** The groups the tools are listed under, in the order the page lists them. */
 export const RESEARCH_TOOL_GROUPS = Object.freeze([...table.groups])
 
+/**
+ * The module a group of tools belongs to (`geo`, `vcr`): a tool of one is listed only for an account the module is open to.
+ * A group of the general set is not here.
+ * @type {Readonly<Record<string, 'geo' | 'vcr'>>}
+ */
+export const RESEARCH_TOOL_GROUP_MODULES = Object.freeze({ .../** @type {Record<string, 'geo' | 'vcr'>} */ (table.groupModules) })
+
 /** Every tool's sentence by base name. @type {Readonly<Record<string, Readonly<ResearchToolDisplay>>>} */
 export const RESEARCH_TOOL_DISPLAY = Object.freeze(Object.fromEntries(
   Object.entries(/** @type {Record<string, ResearchToolDisplay>} */ (table.tools)).map(([name, row]) => [name, Object.freeze({ ...row })]),
@@ -45,4 +52,15 @@ export function researchToolGroups({ without = [] } = {}) {
       tools: Object.entries(RESEARCH_TOOL_DISPLAY).filter(([name, row]) => row.group === title && !left.has(name)).map(([, row]) => row.use),
     }))
     .filter((group) => group.tools.length > 0)
+}
+
+/**
+ * The base names of the tools a module owns, for the account that is outside it.
+ * @param {'geo' | 'vcr'} module
+ * @returns {string[]}
+ */
+export function researchToolsOfModule(module) {
+  return Object.entries(RESEARCH_TOOL_DISPLAY)
+    .filter(([, row]) => RESEARCH_TOOL_GROUP_MODULES[row.group] === module)
+    .map(([name]) => name)
 }

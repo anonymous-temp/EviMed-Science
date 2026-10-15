@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
-import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS } from "@evimed/domain/skill-display";
+import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP } from "@evimed/domain/skill-display";
+import { RUNTIME_INVENTORY_WORDS } from "@evimed/domain/runtime-inventory";
 import { createPlatformSkillCatalogue, readSkillFolder, splitSkillText } from "../src/platformSkillCatalogue.mjs";
 import { createSkillLibraryRoutes } from "../src/skillLibraryRoutes.mjs";
 import { SkillLibraryService } from "../src/skillLibraryService.mjs";
@@ -86,6 +87,62 @@ test("the method pack is listed under its own group where its folder is present,
   await assert.rejects(catalogue.read("geo-private:geo-demo", reader), { status: 404, code: "skill_platform_not_found" });
   const without = await createPlatformSkillCatalogue({ rootDir: await tempRoot(), packAllowed: () => true }).list(member);
   assert.equal(without.items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0, "no folder, no group");
+});
+
+test("the web image's index lists the method pack where the folder is not, and a name that is not a skill folder is not a skill", async () => {
+  const root = await tempRoot();
+  await fs.mkdir(path.join(root, "runtime/skills/geo-private"), { recursive: true });
+  await fs.writeFile(path.join(root, "runtime/skills/geo-private/geo-pack-index.json"), JSON.stringify({
+    schemaVersion: 1, package: "geo-skills", version: "3.0.1",
+    skills: [
+      { name: "geo-care-nodes", title: "geo-care-nodes", use: "Maps the nodes of a care pathway." },
+      { name: "../escape", title: "x", use: "never" },
+      { name: "geo-verify-product-label", title: "Verify the label", use: "Checks the claim against the label." },
+    ],
+  }));
+  const member = { id: "member" };
+  const catalogue = createPlatformSkillCatalogue({ rootDir: root, packAllowed: (user) => user.id === "member" });
+  const geo = (await catalogue.list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP);
+  assert.deepEqual(geo.map((item) => [item.id, item.title, item.use, item.canCopy]), [
+    ["geo-private:geo-care-nodes", "geo-care-nodes", "Maps the nodes of a care pathway.", false],
+    ["geo-private:geo-verify-product-label", "Verify the label", "Checks the claim against the label.", false],
+  ]);
+  const detail = await catalogue.read("geo-private:geo-care-nodes", member);
+  assert.equal(detail.instructions, null, "the index holds no text: the drawer says so plainly");
+  await assert.rejects(catalogue.snapshot("geo-private:geo-care-nodes", member), { code: "skill_platform_not_copyable" });
+  assert.equal((await catalogue.list(reader)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0, "an account outside the module sees none");
+
+  // The folder, where there is one, wins: the text is there to read.
+  await skill(root, "runtime/skills/geo-private/skills/geo-demo", "---\nname: geo-demo\ndescription: Folder wins.\n---\n\nText\n");
+  catalogue.reset();
+  assert.deepEqual((await catalogue.list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).map((item) => item.name), ["geo-demo"]);
+});
+
+test("the long task's entry skill is a row of its own group where LoopX is on — the CLI's other skills are not rows — and is told in the item's words", async () => {
+  const off = createPlatformSkillCatalogue({ rootDir: repoRoot });
+  assert.equal((await off.list(reader)).items.filter((item) => item.group === SKILL_DISPLAY_LOOPX_GROUP).length, 0, "LoopX off: no row");
+  const on = createPlatformSkillCatalogue({ rootDir: repoRoot, loopxEnabled: true });
+  const listed = await on.list(reader);
+  assert.equal(listed.loopxGroup, SKILL_DISPLAY_LOOPX_GROUP);
+  const rows = listed.items.filter((item) => item.group === SKILL_DISPLAY_LOOPX_GROUP);
+  assert.deepEqual(rows.map((item) => [item.id, item.name, item.title, item.canCopy, item.source]), [["loopx:loopx", "loopx", "长任务", false, "platform"]]);
+  assert.equal(rows[0].use, RUNTIME_INVENTORY_WORDS.items.loopx.use, "the words are the inventory item's, not a second copy");
+  assert.equal(rows[0].when, undefined, "a list row carries no `when`");
+  const detail = await on.read("loopx:loopx", reader);
+  assert.equal(detail.when, RUNTIME_INVENTORY_WORDS.items.loopx.how);
+  assert.equal(detail.instructions, null);
+  await assert.rejects(on.read("loopx:loopx-pr-review", reader), { status: 404, code: "skill_platform_not_found" });
+  await assert.rejects(on.snapshot("loopx:loopx", reader), { status: 409, code: "skill_platform_not_copyable" });
+  // Groups are told in the order the page lists them: the long task's comes before the method pack's.
+  assert.ok(listed.groups.indexOf(SKILL_DISPLAY_LOOPX_GROUP) < listed.groups.indexOf(SKILL_DISPLAY_GEO_GROUP));
+});
+
+test("a skill is listed by what it is for: the community presentation skill is under 办公文档, still marked as the community's", async () => {
+  const { items } = await createPlatformSkillCatalogue({ rootDir: repoRoot }).list(reader);
+  const ppt = items.find((item) => item.name === "dsh-ppt");
+  assert.deepEqual([ppt?.group, ppt?.source], ["办公文档", "community"]);
+  assert.equal(items.find((item) => item.name === "deep-structural-analysis")?.group, "写作与核查");
+  assert.ok(items.every((item) => item.group !== "社区"));
 });
 
 test("a copy reads the whole folder and refuses links, odd names and anything past a limit", async () => {
