@@ -211,12 +211,15 @@ export function listInventory(facts = {}, words = RUNTIME_INVENTORY_WORDS) {
 }
 
 /**
- * The research tool set as one account's runtime has it: the tools grouped, one sentence each, without what it is not given.
+ * The research tool set as one account's runtime has it: the tools grouped, one sentence each, without what it is not given
+ * and without the tool that an item of its own already is (网页阅读 is `web_read`: said once, as its row).
  * @param {Iterable<string>} [declinedTools]
+ * @param {typeof RUNTIME_INVENTORY_WORDS} [words]
  * @returns {{ count: number, groups: { title: string, tools: string[] }[] }}
  */
-export function listResearchTools(declinedTools = []) {
-  const groups = researchToolGroups({ without: declinedTools })
+export function listResearchTools(declinedTools = [], words = RUNTIME_INVENTORY_WORDS) {
+  const itemTools = Object.values(words.items).flatMap((item) => (item.gate?.tool ? [item.gate.tool] : []))
+  const groups = researchToolGroups({ without: [...declinedTools, ...itemTools] })
   return { count: groups.reduce((sum, group) => sum + group.tools.length, 0), groups }
 }
 

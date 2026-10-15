@@ -1,10 +1,9 @@
 {
   "greySentences": {
-    "total": 103,
+    "total": 102,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
-      "app/extensions/SkillsList.tsx": 1,
       "app/routes/CapsuleTransferPanel.tsx": 2,
       "app/routes/GalleryPage.tsx": 1,
       "app/routes/MemoryMapPage.tsx": 1,

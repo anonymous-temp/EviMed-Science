@@ -154,8 +154,11 @@ test('the listed inventory: an item the deployment switched off or the account i
 
 test('the research tool set is the account\'s: the tools its runtime is not given are not listed, and the count is what is listed', () => {
   const all = listResearchTools()
-  assert.equal(all.count, MCP_TOOL_BASE_NAMES.length)
+  // Every tool the server publishes but `web_read`, which is the 网页阅读 row and is not said twice.
+  assert.equal(all.count, MCP_TOOL_BASE_NAMES.length - 1)
   assert.equal(all.groups.reduce((sum, group) => sum + group.tools.length, 0), all.count)
+  const web = all.groups.find((group) => group.title === '网页与资料')
+  assert.ok(web && web.tools.length > 0 && !web.tools.some((sentence) => /读取一个公开网页/.test(sentence)), 'the page-reading sentence is the item\'s')
   const fewer = listResearchTools(['geo_read', 'geo_write', 'vcr_read', 'not-a-tool'])
   assert.equal(fewer.count, all.count - 3)
   assert.ok(fewer.groups.every((group) => group.tools.length > 0))
