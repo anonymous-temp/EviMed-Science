@@ -70,7 +70,8 @@ describe("every address people already have still arrives", () => {
     ["/app/notebooks", "/app/files"],
     ["/app/capsules", "/app/memory?tab=capsules"],
     ["/app/settings", "/app/account?tab=appearance"],
-    ["/app/ops", "/app/account?tab=ops"],
+    // 运维 left 设置 for a page of its own (`AccountPage` sends the section's old address, `?tab=ops`, there: its own test).
+    ["/app/ops", "/app/ops"],
     ["/app/chat/session-7", "/app/chat/session-7"],
     ["/app/inbox", "/app/inbox"],
     // 知识库: the list with its scope, type and search in the address, and one document on a page of its own, which

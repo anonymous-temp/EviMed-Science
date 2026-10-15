@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -186,6 +186,20 @@ describe("Sidebar navigation", () => {
     expect(screen.getAllByRole("link", { name: "插件与技能" })).toHaveLength(1);
     // It opens on the first of the page's two tabs, 技能 — the one the page's own action belongs to — and stays lit on the other.
     expect(screen.getByRole("link", { name: "插件与技能" })).toHaveAttribute("href", "/app/extensions/skills");
+  });
+
+  // 运维 left 设置 for a page of its own (R19): the footer holds its entry for an operator, beside the gear, and for nobody else.
+  it("holds an entry to 运维 in the footer for an operator account only", async () => {
+    renderSidebar();
+    await screen.findByRole("link", { name: "设置" });
+    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: "运维" })).not.toBeInTheDocument();
+    cleanup();
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, operator: true, project: { id: "default", name: "我的研究" }, projects: [] });
+    renderSidebar();
+    const link = await screen.findByRole("link", { name: "运维" });
+    expect(link).toHaveAttribute("href", "/app/ops");
+    expect(link.parentElement).toBe(screen.getByRole("link", { name: "设置" }).parentElement);
   });
 
   // 「前沿动态」 is a row only where `/api/me` offers it to this account; a

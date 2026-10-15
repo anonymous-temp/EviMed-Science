@@ -46,6 +46,7 @@ const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => 
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
 const ExtensionsPage = lazy(() => import("./extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
+const OpsRoute = lazy(() => import("./routes/OpsRoute").then((m) => ({ default: m.OpsRoute })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -152,7 +153,8 @@ export const routes: RouteObject[] = [
         { path: "notebooks", element: <Navigate to="/app/files" replace /> },
         { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
         { path: "settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
-        { path: "ops", element: <Navigate to="/app/account?tab=ops" replace /> },
+        // 「运维」: the operators' console, on its own page; `/app/account?tab=ops` was its address as a section of 设置 and lands here.
+        { path: "ops", element: <OpsRoute /> },
         { path: "*", element: <NotFound /> },
       ],
     }],

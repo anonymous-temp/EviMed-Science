@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,7 +34,6 @@ vi.mock("@/components/settings/MonthlyUsage", () => ({ MonthlyUsage: () => <div>
 vi.mock("@/components/settings/ResearchAllowance", () => ({ ResearchAllowance: () => <div>额度分区</div> }));
 vi.mock("@/components/settings/ConnectorsSection", () => ({ ConnectorsSection: () => <div>数据源分区</div> }));
 vi.mock("@/components/settings/ProjectsSection", () => ({ ProjectsSection: () => <div>项目分区</div> }));
-vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>循证进化</p></div> }));
 
 const me = (operator = false) => ({
   user: { id: "alice", name: "Alice", tenantId: "alice" },
@@ -98,10 +97,9 @@ describe("设置", () => {
       open();
       expect(await screen.findByText("账户分区")).toBeInTheDocument();
       await answered();
-      expect(names()).toEqual(["账户", "外观", "通知", usage, "数据源", "项目", "插件", "技能"]);
+      // Only the settings: 插件 and 技能 have their own page, and 运维 its own route.
+      expect(names()).toEqual(["账户", "外观", "通知", usage, "数据源", "项目"]);
       expect(within(nav()).queryByRole("link", { name: other })).not.toBeInTheDocument();
-      expect(within(nav()).getByRole("link", { name: "插件" })).toHaveAttribute("href", "/app/extensions/plugins");
-      expect(within(nav()).getByRole("link", { name: "技能" })).toHaveAttribute("href", "/app/extensions/skills");
       expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
       // The address is the same under either name: links and the server's copy depend on it.
       expect(within(nav()).getByRole("link", { name: usage })).toHaveAttribute("href", "/app/account?tab=usage");
@@ -141,11 +139,11 @@ describe("设置", () => {
       const user = userEvent.setup();
       mocks.fetchWebMe.mockResolvedValue(me(true));
       open();
-      await within(nav()).findByRole("link", { name: "运维" });
+      await screen.findByText("账户分区");
       await answered();
       const labels = names();
-      expect(labels).toEqual(["账户", "外观", "通知", usage, "数据源", "项目", "运维", "插件", "技能"]);
-      for (const label of labels.filter(label => label !== "插件" && label !== "技能")) {
+      expect(labels).toEqual(["账户", "外观", "通知", usage, "数据源", "项目"]);
+      for (const label of labels) {
         await user.click(within(nav()).getByRole("link", { name: label ?? "" }));
         for (const gone of [/API Key/i, /审批模式/, /选择模型/, /添加 MCP/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
         expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
@@ -158,9 +156,9 @@ describe("设置", () => {
     mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
     open();
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
-    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "插件", "技能"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
     await act(async () => { answer(billing(true)); });
-    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "插件", "技能"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目"]);
     expect(within(nav()).getByRole("link", { name: "额度" })).toHaveAttribute("href", "/app/account?tab=usage");
   });
 
@@ -170,13 +168,13 @@ describe("设置", () => {
     mocks.allowance.mockResolvedValue(billing(true));
     open("/app/account?tab=usage");
     expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
-    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "插件", "技能"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
     expect(screen.queryByText("用量分区")).not.toBeInTheDocument();
     expect(screen.queryByText("额度分区")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("额度分区")).toBeInTheDocument();
     // The one read the retry made is the tab's answer too.
-    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "插件", "技能"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目"]);
   });
 
   it.each([
@@ -212,22 +210,21 @@ describe("设置", () => {
     expect(await screen.findByText("通知分区（含飞书）")).toBeInTheDocument();
   });
 
-  // 「循证进化」 is an operator's: a researcher has nothing to look at in it.
-  it("offers 运维, and the evolution panel in it, only to an operator account", async () => {
+  // 运维 is the operators' console and left 设置 (R19): no section for anyone, and the old address lands on its page.
+  it("has no 运维 section, for an operator either, and sends its old address to the page it moved to", async () => {
+    mocks.fetchWebMe.mockResolvedValue(me(true));
+    render(
+      <MemoryRouter initialEntries={["/app/account?tab=ops"]}>
+        <Routes>
+          <Route path="/app/account" element={<AccountPage />} />
+          <Route path="/app/ops" element={<p>运维页</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("运维页")).toBeInTheDocument();
     open("/app/account?tab=projects");
     expect(await screen.findByText("项目分区")).toBeInTheDocument();
-    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(within(nav()).queryByRole("link", { name: "运维" })).not.toBeInTheDocument();
-    expect(screen.queryByText("循证进化")).not.toBeInTheDocument();
-  });
-
-  it("offers 运维 when the control plane says this account is one", async () => {
-    const user = userEvent.setup();
-    mocks.fetchWebMe.mockResolvedValue(me(true));
-    open();
-    await user.click(await within(nav()).findByRole("link", { name: "运维" }));
-    expect(await screen.findByText("运维分区")).toBeInTheDocument();
-    expect(screen.getByText("循证进化")).toBeInTheDocument();
   });
 
   it("keeps 外观 to a theme, a language and the shortcuts, with no hint under any group", async () => {

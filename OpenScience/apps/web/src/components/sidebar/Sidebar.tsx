@@ -12,6 +12,7 @@ import {
   Settings,
   SquarePen,
   UsersRound,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fetchWebMe } from "@/lib/apiClient";
@@ -127,9 +128,12 @@ export function Sidebar() {
   // The module the tab's project belongs to, told by the project list below (a study or a GEO project, a draft included).
   const [projectModule, setProjectModule] = useState<"geo" | "vcr" | null>(null);
   const [accountName, setAccountName] = useState("");
+  // 运维 is the operators' console, on a page of its own since it left 设置 (R19): its entry is the one thing this footer holds
+  // for an operator beside the gear.
+  const [operator, setOperator] = useState(false);
   useEffect(() => {
     let live = true;
-    void fetchWebMe().then((me) => { if (live && me) setAccountName(me.user.name); }).catch(() => {});
+    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); } }).catch(() => {});
     return () => { live = false; };
   }, []);
   const rows = navRows({ frontier, vcr, geo });
@@ -224,6 +228,18 @@ export function Sidebar() {
             {(accountName.trim()[0] ?? "").toUpperCase()}
           </span>
           <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
+          {operator && (
+            <Tooltip content="运维" kind="label">
+              <Link
+                to="/app/ops"
+                aria-label="运维"
+                aria-current={location.pathname.startsWith("/app/ops") ? "page" : undefined}
+                className={iconButtonClasses({ active: location.pathname.startsWith("/app/ops") })}
+              >
+                <Wrench size={16} aria-hidden="true" />
+              </Link>
+            </Tooltip>
+          )}
           <Tooltip content="设置" kind="label">
             <Link
               to="/app/account"

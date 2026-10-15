@@ -10,10 +10,12 @@ import {
   Layers,
   Lightbulb,
   ListChecks,
+  Microscope,
   Network,
   PenLine,
   Pill,
   Scale,
+  Sigma,
   Stethoscope,
   type LucideIcon,
 } from "lucide-react";
@@ -24,8 +26,11 @@ import {
  * information in a Chinese interface and sat in the brand colour beside the
  * primary button. An icon is recognition, never identity: the name is always
  * printed beside it.
+ *
+ * A hand-written table of the catalogue's capabilities: `capabilityIcons.test.ts` holds it to the listed ones, so a workflow
+ * added to 科研工具 without a mark of its own — drawn as the fallback beaker — or an entry for one that is gone is red.
  */
-const ICONS: Record<string, LucideIcon> = {
+export const CAPABILITY_ICONS: Readonly<Record<string, LucideIcon>> = {
   "clinical-evidence-synthesis": Stethoscope,
   "evidence-appraisal": ClipboardCheck,
   "meta-analysis": Layers,
@@ -34,6 +39,8 @@ const ICONS: Record<string, LucideIcon> = {
   "comprehensive-drug-evaluation": Scale,
   "drug-selection": ListChecks,
   "dataset-research-scoping": Database,
+  "gene-expression-analysis": Microscope,
+  "statistical-analysis": Sigma,
   "research-topic-selection": Lightbulb,
   "mendelian-randomization": Dna,
   "bibliometric-analysis": Network,
@@ -44,5 +51,5 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function capabilityIcon(id: string): LucideIcon {
-  return ICONS[id] ?? FlaskConical;
+  return CAPABILITY_ICONS[id] ?? FlaskConical;
 }

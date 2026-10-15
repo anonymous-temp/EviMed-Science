@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import { BellRing, BookOpen, Folder, Gauge, Palette, Plug, UserRound, Wrench, type LucideIcon } from "lucide-react";
-import { fetchWebMe } from "@/lib/apiClient";
+import { Link, Navigate, useSearchParams } from "react-router";
+import { BellRing, Folder, Gauge, Palette, Plug, UserRound, type LucideIcon } from "lucide-react";
 import { fetchImStatus } from "@/lib/imClient";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { PageShell } from "@/components/layout/PageShell";
@@ -12,9 +11,8 @@ import { ConnectorsSection } from "@/components/settings/ConnectorsSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import { ProjectsSection } from "@/components/settings/ProjectsSection";
 import { UsageSection } from "@/components/settings/UsageSection";
-import { OpsPage } from "./OpsPage";
 
-type SectionKey = "account" | "appearance" | "notifications" | "usage" | "connectors" | "projects" | "ops";
+type SectionKey = "account" | "appearance" | "notifications" | "usage" | "connectors" | "projects";
 
 interface Section {
   /** The `?tab=` value. Stable: it is in links people keep and in the server's own copy. */
@@ -34,13 +32,16 @@ const SECTIONS: readonly Section[] = [
   { key: "projects", label: "项目", icon: Folder },
 ];
 
-const OPS: Section = { key: "ops", label: "运维", icon: Wrench };
-
 /**
  * 「设置」 (2026-09-23 plan §5.9, mockup m11): one page in the column every
  * page shares, a section column on its left — 账户 · 外观 · 通知 · 用量 · 数据源
- * · 项目, and 运维 for an operator — and the chosen section beside it, in
- * groups named outside one box, one item per row.
+ * · 项目 — and the chosen section beside it, in groups named outside one box,
+ * one item per row.
+ *
+ * The column holds the settings and nothing else (R19, audit D C4/C7): 插件 and
+ * 技能 have their own page (`/app/extensions`), reached from the sidebar, and
+ * 运维 left on its own route (`/app/ops`, operators only) — `?tab=ops` is its
+ * old address and lands there.
  *
  * It was 「账户与设置」: a title, a sentence reciting the tab names, and a
  * strip of underlined tabs over bodies in a narrower column than the header.
@@ -55,7 +56,6 @@ const OPS: Section = { key: "ops", label: "运维", icon: Wrench };
  */
 export function AccountPage() {
   const [params] = useSearchParams();
-  const [operator, setOperator] = useState(false);
   const { enabled: billing } = useResearchBilling();
   // Feishu exists only where the deployment runs the IM module (it is dealt
   // with under 通知): a row for a switched-off subsystem would offer a scan
@@ -65,19 +65,18 @@ export function AccountPage() {
   useEffect(() => {
     let active = true;
     void fetchImStatus().then((status) => { if (active) setImEnabled(status.enabled); }).catch(() => {});
-    void fetchWebMe().then((me) => { if (active) setOperator(me?.operator === true); }).catch(() => {});
     return () => { active = false; };
   }, []);
 
-  const sections = operator ? [...SECTIONS, OPS] : SECTIONS;
-  const active = sections.find((section) => section.key === params.get("tab")) ?? sections[0];
+  if (params.get("tab") === "ops") return <Navigate to="/app/ops" replace />;
+  const active = SECTIONS.find((section) => section.key === params.get("tab")) ?? SECTIONS[0];
 
   return (
     <PageShell title="设置">
       <div className="flex flex-col gap-6 md:flex-row md:gap-10">
         <nav aria-label="设置分区" className="md:w-40 md:shrink-0">
           <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-            {sections.map((section) => {
+            {SECTIONS.map((section) => {
               const selected = section.key === active.key;
               const Icon = section.icon;
               return (
@@ -96,8 +95,6 @@ export function AccountPage() {
                 </li>
               );
             })}
-            <li className="shrink-0"><Link to="/app/extensions/plugins" className={navItemClasses({ className: "whitespace-nowrap" })}><Plug size={16} aria-hidden="true" className="text-text-3" />插件</Link></li>
-            <li className="shrink-0"><Link to="/app/extensions/skills" className={navItemClasses({ className: "whitespace-nowrap" })}><BookOpen size={16} aria-hidden="true" className="text-text-3" />技能</Link></li>
           </ul>
         </nav>
         <div className="min-w-0 flex-1">
@@ -107,7 +104,6 @@ export function AccountPage() {
           {active.key === "usage" && <UsageSection />}
           {active.key === "connectors" && <ConnectorsSection />}
           {active.key === "projects" && <ProjectsSection />}
-          {active.key === "ops" && <OpsPage />}
         </div>
       </div>
     </PageShell>

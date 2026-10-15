@@ -12,10 +12,13 @@ import { Tag } from "@/components/ui/Tag";
  *
  * A deployment may bill research from a simulated wallet, so its owner can look
  * at the whole allowance experience before a real wallet exists. Nothing such a
- * wallet holds is money, and no reader may take it for money: every amount
- * drawn from it carries `SimulatedMark`, and a surface whose every amount is
- * simulated opens with `SimulatedDataLine`. A deployment whose allowance is not
- * simulated draws neither (`allowanceSimulated`).
+ * wallet holds is money, and no reader may take it for money: a surface whose
+ * every amount is simulated opens with `SimulatedDataLine`, once, and its
+ * amounts do not say it again (R19, plan §7.6: a mark beside every amount made
+ * the page read as a warning). `SimulatedMark` stays for the places that cannot
+ * lean on that line — a statement that mixes real lines with simulated ones,
+ * the prompt on a page with no amounts. A deployment whose allowance is not
+ * simulated draws none of it (`allowanceSimulated`).
  */
 
 /**
