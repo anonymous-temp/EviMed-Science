@@ -83,6 +83,12 @@
       "gate": {
         "project": "dsh-cite"
       },
+      "toolSentences": {
+        "cite_lookup": "按标题、DOI 或 PMID 查找文献书目",
+        "cite_format": "把参考文献排成 GB/T 7714 或 Vancouver 等格式",
+        "cite_bibtex": "导出 BibTeX",
+        "cite_check": "核对引用是否存在、信息是否一致"
+      },
       "bundles": [
         "dsh-cite"
       ],

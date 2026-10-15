@@ -98,7 +98,8 @@ test('every item has its words, a row fits one line, and the controls and links 
     for (const field of ['title', 'use', 'does', 'how', 'icon']) assert.ok(typeof item[field] === 'string' && item[field].trim() !== '', `${id}.${field}`)
     assert.ok([...item.use].length <= USE_MAX, `${id}.use is ${[...item.use].length} characters; a row carries ${USE_MAX} at most`)
     assert.match(item.icon, /^[A-Z][A-Za-z0-9]+$/, `${id}.icon is a name of the web's icon set`)
-    for (const text of [item.title, item.use, item.does, item.how, ...(item.parts ?? []).flatMap((/** @type {{ title: string, does: string }} */ part) => [part.title, part.does])]) {
+    const sentences = Object.values(item.toolSentences ?? {})
+    for (const text of [item.title, item.use, item.does, item.how, ...sentences, ...(item.parts ?? []).flatMap((/** @type {{ title: string, does: string }} */ part) => [part.title, part.does])]) {
       assert.ok(typeof text === 'string' && text.trim() !== '', `${id}: copy has words`)
       assert.ok(!CORNER_QUOTES.test(text), `${id}: ${text} — frontend copy quotes with “”`)
       assert.ok(!RETIRED.test(text), `${id}: ${text} — a state nobody can change, a back-office group and a count of tools are not copy`)
@@ -144,6 +145,8 @@ test('the listed inventory: an item the deployment switched off or the account i
   const [first] = listInventory({})
   const find = (/** @type {string} */ id) => /** @type {any} */ (first.items.find((item) => item.id === id))
   assert.equal(find('basics').parts.length, 6, 'the six basic abilities, one sentence each')
+  assert.deepEqual(first.items.filter((item) => item.showsTools).map((item) => item.id), ['research-tools'], 'one drawer lists the account\'s tools')
+  assert.deepEqual(Object.keys(find('citations').toolSentences).sort(), ['cite_bibtex', 'cite_check', 'cite_format', 'cite_lookup'], 'the plugin\'s tool sentences are the vocabulary\'s')
   assert.deepEqual(find('memory').opens, { kind: 'page', to: '/app/memory' }, 'memory is a page, never a drawer')
   assert.match(find('loopx').does, /消耗灵豆，可随时暂停/, 'the cost line lives in the long task drawer')
   for (const item of first.items.filter((entry) => entry.id !== 'loopx')) assert.doesNotMatch(item.use, /灵豆/, `${item.id}: the cost line is the long task's alone`)

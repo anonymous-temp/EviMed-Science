@@ -7,9 +7,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { Menu } from "@/components/ui/Menu";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { Tabs } from "@/components/ui/Tabs";
-import { extensionCatalogue, extensionInstallations, installExtension, pluginInventory, type CatalogueExtension } from "@/lib/extensionsClient";
+import { extensionCatalogue, extensionInstallations, installExtension, inventory as loadInventoryOf, type CatalogueExtension, type Inventory } from "@/lib/extensionsClient";
 import { capabilityListed } from "@evimed/domain";
 import { listWebResearchAgents } from "@/lib/apiClient";
 import { bindConversationCapability } from "@/lib/dispatch";
@@ -19,15 +17,14 @@ import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
-import { ENGINE_COPY, PLUGIN_COPY } from "./extensionCopy";
 import { ExtensionDrawer } from "./ExtensionDrawer";
-import { CitationDrawer, ENGINE_WHEN, engineKicker, InfoDrawer, ToolsDrawer } from "./PluginDrawers";
+import { InventoryList, countPlugins, type ExtensionRows } from "./InventoryList";
+import { CitationDrawer, InventoryDrawer } from "./PluginDrawers";
 import { PersonalSkillDrawer } from "./PersonalSkillDrawer";
 import { PlatformSkillDrawer } from "./PlatformSkillDrawer";
-import { PluginsList, countPlugins, type ExtensionRows, type PluginTarget } from "./PluginsList";
 import { SkillEditor } from "./SkillEditor";
 import { SkillImportForm } from "./SkillImport";
-import { SkillsList } from "./SkillsList";
+import { SkillsList, skillGroups } from "./SkillsList";
 import { useCitationPlugin } from "./useCitationPlugin";
 import { useLoad } from "./useLoad";
 
@@ -39,16 +36,17 @@ const loadFirstPersonal = () => listPersonalSkills();
 /** What the page has open on the right, besides the two that the address names (a personal skill, an extension). */
 type Open =
   | { kind: "platform"; skill: PlatformSkill } | { kind: "create" } | { kind: "import"; recovery?: PendingSkillTransfer }
-  | { kind: "plugin"; target: PluginTarget };
+  | { kind: "item"; id: string };
 
 /**
- * 插件与技能: one page, two tabs, each one list with its details in a drawer on the right.
+ * 插件与技能: one page, two tabs, each one list with its details in a drawer on the right, and one toolbar above them — the
+ * tabs, the group chips of the skills, the search.
  *
  * The page used to be two pages — 技能 listing only the reader's own skills with the platform's fifty-seven hidden in a
  * section below that needed a live runtime to read, and 插件 stacking the deployment's declarations, a settings card and a
  * discovery list that was always empty. Now both are answered from what the control plane already knows without a runtime
- * (the platform's skills from its packages, the plugins from the inventory), the tabs carry their counts, and a row opens a
- * drawer: what it does, when it is used, and what can be done with it.
+ * (the platform's skills from its packages, the plugins from the inventory generated from what the image carries), the tabs
+ * carry the number of rows they list, and a row opens a drawer: what it does, how it is used, and what can be done with it.
  *
  * The address still names the open item (`/app/extensions/skills/:skillId`, `/app/extensions/plugins/:extensionId`), so a
  * link a notice or an earlier page made keeps working.
@@ -58,7 +56,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   const skillId = tab === "skills" ? itemId : undefined, extensionId = tab === "plugins" ? itemId : undefined;
   const projectId = useProjectStore(state => state.currentId);
   const projectName = useProjectStore(state => state.projects.find(project => project.id === state.currentId)?.name);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(""), [chosenGroup, setChosenGroup] = useState<string | null>(null);
   const [open, setOpen] = useState<Open | null>(null), [importBusy, setImportBusy] = useState(false);
 
   const platform = useLoad(listPlatformSkills);
@@ -81,7 +79,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   };
   const reloadPersonal = () => { setMore(null); firstPersonal.reload(true); };
 
-  const loadInventory = useCallback(() => pluginInventory(projectId), [projectId]);
+  const loadInventory = useCallback(() => loadInventoryOf(projectId), [projectId]);
   const inventory = useLoad(loadInventory);
   const citation = useCitationPlugin(projectId);
   const loadExtensions = useCallback(async () => {
@@ -97,8 +95,13 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   }, [extensionData.state]);
 
   const inventoryReady = inventory.state.status === "ready" ? inventory.state.data : null;
-  const skillCount = platform.state.status === "ready" ? platform.state.data.items.length + personal.length + (curatedTools?.length ?? 0) : null;
+  const platformReady = platform.state.status === "ready" ? platform.state.data : null;
+  // A tab's number is the rows its list draws, whatever the search says.
+  const skillCount = platformReady ? skillGroups({ personal, platform: platformReady, tools: curatedTools, query: "" }).total : null;
   const pluginCount = inventoryReady ? countPlugins(inventoryReady, extensions) : null;
+  const groupsNow = skillGroups({ personal, platform: platformReady, tools: curatedTools, query });
+  // The chip the toolbar shows is a group the list can fill: one the search left empty is not offered, and falls back to all.
+  const group = groupsNow.list.some(entry => entry.name === chosenGroup) ? chosenGroup : null;
 
   // Which drawer is open: the address's own item first, then what a click opened.
   const root = `/app/extensions/${tab}`;
@@ -151,7 +154,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
     finally { saveRunning.current = false; setSaving(false); }
   };
 
-  const action = tab === "skills" ? (
+  const actions = tab === "skills" ? (
     <Menu label="新建技能" items={[
       { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
       { label: "导入", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
@@ -160,27 +163,41 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
     </Menu>
   ) : null;
 
+  const skillCountLabel = skillCount ?? undefined;
   return (
-    <PageShell title="插件与技能" actions={<><SearchInput label="搜索插件与技能" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery("")} />{action}</>}>
-      <Tabs label="插件与技能" className="mb-6" value={tab} onChange={next => { setQuery(""); setOpen(null); navigate(`/app/extensions/${next}`); }}
-        items={[{ value: "skills", label: "技能", count: skillCount ?? undefined }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }]} />
+    <PageShell title="插件与技能" actions={actions}
+      toolbar={{
+        label: "插件与技能",
+        views: {
+          label: "插件与技能", value: tab,
+          onChange: next => { setQuery(""); setChosenGroup(null); setOpen(null); navigate(`/app/extensions/${next}`); },
+          items: [{ value: "skills", label: "技能", count: skillCountLabel }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }],
+        },
+        filters: tab === "skills" && groupsNow.list.length > 1 ? [{
+          kind: "chips", label: "技能分类", value: group ?? "all", maxVisible: 12,
+          options: [{ value: "all", label: "全部", count: groupsNow.total }, ...groupsNow.list.map(entry => ({ value: entry.name, label: entry.name, count: entry.count }))],
+          onChange: next => setChosenGroup(next === "all" ? null : next),
+        }] : [],
+        search: { label: "搜索插件与技能", value: query, placeholder: "搜索插件与技能", onChange: setQuery, onClear: () => setQuery("") },
+      }}>
       {tab === "skills" ? (
         <>
           {platform.state.status === "error" && <LoadError className="mb-4" message={platform.state.message} onRetry={() => platform.reload()} />}
           {firstPersonal.state.status === "error" && <LoadError className="mb-4" message={firstPersonal.state.message} onRetry={() => firstPersonal.reload()} />}
           {tools.state.status === "error" && <LoadError className="mb-4" message={tools.state.message} onRetry={() => tools.reload()} />}
           {platform.state.status === "loading" && firstPersonal.state.status === "loading" ? <FilesSkeleton /> : (
-            <SkillsList personal={personal} platform={platform.state.status === "ready" ? platform.state.data : null} tools={curatedTools} onOpenTool={openTool} query={query}
+            <SkillsList personal={personal} platform={platformReady} tools={curatedTools} onOpenTool={openTool} query={query} group={group}
               hasMore={!!cursor} loadingMore={loadingMore} onMore={() => void loadMore()}
               onOpenPlatform={skill => { if (skillId) navigate(root, { replace: true }); setOpen({ kind: "platform", skill }); }}
               onOpenPersonal={skill => openSkill(skill.id)}
-              onResume={entry => setOpen({ kind: "import", recovery: entry })} />
+              onResume={entry => setOpen({ kind: "import", recovery: entry })}
+              onCreate={() => setOpen({ kind: "create" })} />
           )}
         </>
       ) : inventory.state.status === "error" ? <LoadError message={inventory.state.message} onRetry={() => inventory.reload()} />
         : !inventoryReady ? <FilesSkeleton />
-          : <PluginsList inventory={inventoryReady} citation={citation} extensions={extensions} allCatalogue={extensions?.all ?? []} query={query} busyId={installing}
-            onOpen={target => { if (target.kind === "extension") { setOpen(null); navigate(`/app/extensions/plugins/${encodeURIComponent(target.id)}`); } else { if (extensionId) navigate(root, { replace: true }); setOpen({ kind: "plugin", target }); } }}
+          : <InventoryList inventory={inventoryReady} citation={citation} extensions={extensions} allCatalogue={extensions?.all ?? []} query={query} busyId={installing}
+            onOpen={target => { if (target.kind === "extension") { setOpen(null); navigate(`/app/extensions/plugins/${encodeURIComponent(target.id)}`); } else { if (extensionId) navigate(root, { replace: true }); setOpen({ kind: "item", id: target.id }); } }}
             onInstall={entry => void install(entry)} />}
 
       {tab === "skills" && skillId && <PersonalSkillDrawer key={skillId} skillId={skillId} projectId={projectId} onClose={close}
@@ -201,28 +218,24 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
             onDone={id => { reloadPersonal(); if (id) openSkill(id); else close(); }} />
         </Drawer>
       )}
-      {open?.kind === "plugin" && <PluginTargetDrawer target={open.target} inventory={inventoryReady} citation={citation} projectName={projectName} onClose={close} />}
+      {open?.kind === "item" && <ItemDrawer id={open.id} inventory={inventoryReady} citation={citation} projectName={projectName} onClose={close} />}
     </PageShell>
   );
 }
 
-/** The drawer a plugin row opens: the citation settings, the tool set's list, or a plain description. */
-function PluginTargetDrawer({ target, inventory, citation, projectName, onClose }: {
-  target: PluginTarget; inventory: Awaited<ReturnType<typeof pluginInventory>> | null; citation: ReturnType<typeof useCitationPlugin>;
-  projectName: string | undefined; onClose: () => void;
+/** The drawer an item's row opens: the citation settings for the item that is the switch, the item's words for the rest. */
+function ItemDrawer({ id, inventory, citation, projectName, onClose }: {
+  id: string; inventory: Inventory | null; citation: ReturnType<typeof useCitationPlugin>; projectName: string | undefined; onClose: () => void;
 }) {
-  if (target.kind === "cite") return <CitationDrawer citation={citation} projectName={projectName} onClose={onClose} />;
-  if (target.kind === "tools") return inventory ? <ToolsDrawer tools={inventory.researchTools} onClose={onClose} /> : null;
-  if (target.kind === "info") {
-    const copy = PLUGIN_COPY[target.id];
-    return <InfoDrawer title={copy.title} kicker="对话里的工具 · 始终开启" does={copy.does} onClose={onClose} />;
+  const found = inventory?.groups.flatMap(group => group.items.map(item => ({ item, groupTitle: group.title }))).find(entry => entry.item.id === id);
+  if (!found) return null;
+  const { item, groupTitle } = found;
+  if (item.control.kind === "switch" && item.control.setting === "dsh-cite") {
+    return <CitationDrawer item={item} citation={citation} projectName={projectName} groupTitle={groupTitle} onClose={onClose} />;
   }
-  if (target.kind === "engine") {
-    const copy = ENGINE_COPY.find(engine => engine.id === target.id);
-    const available = inventory?.engines.find(state => state.id === target.id)?.available ?? false;
-    return copy ? <InfoDrawer title={copy.title} kicker={engineKicker(available)} does={copy.use} when={ENGINE_WHEN} onClose={onClose} /> : null;
-  }
-  return null;
+  // The item that is the tool set carries the account's tools; every other item has its own words alone.
+  const tools = item.showsTools ? inventory?.researchTools ?? null : null;
+  return <InventoryDrawer item={item} groupTitle={groupTitle} tools={tools} onClose={onClose} />;
 }
 
 /**

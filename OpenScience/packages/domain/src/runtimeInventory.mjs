@@ -56,6 +56,7 @@ import { researchToolGroups } from './researchToolDisplay.mjs'
  * @property {ItemOpens} opens
  * @property {ItemGate} gate
  * @property {{ title: string, does: string }[]} [parts]
+ * @property {Record<string, string>} [toolSentences] what each tool the item's plugin lists does, by the name the plugin reports
  * @property {string[]} bundles
  * @property {string[]} rows
  * @property {string[]} agentRows
@@ -171,6 +172,8 @@ export function unaccountedInventory(inventory = RUNTIME_INVENTORY, words = RUNT
  * @property {string} does
  * @property {string} how
  * @property {{ title: string, does: string }[]} [parts]
+ * @property {Record<string, string>} [toolSentences]
+ * @property {true} [showsTools] its drawer lists the account's research tools (`researchTools` of the same answer)
  */
 
 /**
@@ -199,6 +202,8 @@ export function listInventory(facts = {}, words = RUNTIME_INVENTORY_WORDS) {
         /** @type {ListedItem} */
         const listed = { id, title: item.title, use: item.use, icon: item.icon, state, control: item.control, opens: item.opens, does: item.does, how: item.how }
         if (item.parts) listed.parts = item.parts.map((part) => ({ ...part }))
+        if (item.toolSentences) listed.toolSentences = { ...item.toolSentences }
+        if (item.toolSets.includes('research')) listed.showsTools = true
         return [listed]
       }),
     }))
