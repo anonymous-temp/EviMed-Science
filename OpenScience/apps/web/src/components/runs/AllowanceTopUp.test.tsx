@@ -68,7 +68,8 @@ describe("a step waiting on the allowance", () => {
     const project = geoProject({ evidence: "queued" });
     project.steps.evidence = { status: "queued", requested: true, waiting: "allowance", note: "等额度" };
     draw(<StepPending geoId="geo_1" project={project} step="evidence" />);
-    expect(screen.getByText("「证据」这一步在等额度，充值后会自动开始。")).toBeInTheDocument();
+    // The step is named as the work a person would ask for (`GEO_STEP_RECIPES`), the way every empty state names it.
+    expect(screen.getByText("「整理产品证据」这一步在等额度，充值后会自动开始。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "去充值" })).toBeInTheDocument();
     expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
   });
