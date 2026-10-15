@@ -16,6 +16,7 @@
     "./entity-keys": "./src/entityKeys.mjs",
     "./method-records": "./src/methodRecords.mjs",
     "./research-tools": "./src/researchToolDisplay.mjs",
+    "./runtime-inventory": "./src/runtimeInventory.mjs",
     "./result-provenance": "./src/resultProvenance.mjs",
     "./skill-display": "./src/skillDisplay.mjs",
     "./skill-packages": "./src/skillPackages.mjs",

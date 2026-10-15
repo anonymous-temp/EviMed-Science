@@ -30,10 +30,19 @@ export const RESEARCH_TOOL_DISPLAY = Object.freeze(Object.fromEntries(
 /**
  * The tools grouped for display: each group's sentences in the order the table
  * lists them, groups in their own order, a group with no tool left out.
+ *
+ * `without` names the tools a reader's runtime is not given (a module their
+ * account is outside of, an engine nobody configured): they are not listed, so
+ * the page says what this account's conversation really has.
+ * @param {{ without?: Iterable<string> }} [options]
  * @returns {{ title: string, tools: string[] }[]}
  */
-export function researchToolGroups() {
+export function researchToolGroups({ without = [] } = {}) {
+  const left = new Set(without)
   return RESEARCH_TOOL_GROUPS
-    .map((title) => ({ title, tools: Object.values(RESEARCH_TOOL_DISPLAY).filter((row) => row.group === title).map((row) => row.use) }))
+    .map((title) => ({
+      title,
+      tools: Object.entries(RESEARCH_TOOL_DISPLAY).filter(([name, row]) => row.group === title && !left.has(name)).map(([, row]) => row.use),
+    }))
     .filter((group) => group.tools.length > 0)
 }
