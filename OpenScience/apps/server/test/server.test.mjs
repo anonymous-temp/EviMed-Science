@@ -6593,3 +6593,34 @@ test("an unclassified failure is recorded with the code underneath it and never 
   assert.equal(errorCause({ code: "has spaces and /paths" }), "unknown");
   assert.equal(errorCause(null), "unknown");
 });
+
+test("the composed app answers the plugins page's inventory in the platform's own words, and the old path with the old fields beside it", async () => {
+  await withAuthApp(async ({ base }) => {
+    // Anonymous: the inventory is an account's, and development auth is not a login for it.
+    assert.equal((await fetch(`${base}/api/projects/default/inventory`)).status, 401);
+    const loggedIn = await login(base);
+    const headers = { Cookie: loggedIn.cookie };
+    const me = (await (await fetch(`${base}/api/me`, { headers })).json()).data;
+    const project = encodeURIComponent(me.project.id);
+    const inventory = await fetch(`${base}/api/projects/${project}/inventory`, { headers });
+    assert.equal(inventory.status, 200);
+    assert.equal(inventory.headers.get("cache-control"), "no-store");
+    const { data } = await inventory.json();
+    assert.deepEqual(data.groups.map((group) => group.id), ["conversation"]);
+    const items = data.groups[0].items;
+    for (const id of ["loopx", "memory", "citations", "basics", "research-tools"]) assert.ok(items.some((item) => item.id === id), `${id} is a row`);
+    const loopx = items.find((item) => item.id === "loopx");
+    assert.equal(loopx.title, "长任务");
+    assert.match(loopx.does, /可随时暂停/);
+    assert.equal(items.find((item) => item.id === "memory").opens.to, "/app/memory");
+    assert.ok(data.researchTools.count > 0 && data.researchTools.groups.length > 0);
+    assert.equal(JSON.stringify(data).includes("计算引擎"), false);
+
+    const old = await fetch(`${base}/api/projects/${project}/plugin-inventory`, { headers });
+    assert.equal(old.status, 200);
+    const legacy = (await old.json()).data;
+    assert.deepEqual(Object.keys(legacy).sort(), ["engines", "groups", "items", "projectId", "researchTools", "webRead"]);
+    assert.deepEqual(legacy.groups, data.groups);
+    assert.deepEqual(legacy.engines, []);
+  });
+});
