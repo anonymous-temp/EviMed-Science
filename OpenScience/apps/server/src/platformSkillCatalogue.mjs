@@ -75,7 +75,7 @@ export function splitSkillText(text) {
 }
 
 /** The first sentence of a description, whole words, bounded. @param {unknown} description */
-function firstSentence(description) {
+export function firstSentence(description) {
   const flat = String(description ?? "").replace(/\s+/g, " ").trim();
   const end = flat.search(/[.。]\s|[.。]$/);
   const sentence = end > 0 ? flat.slice(0, end + 1) : flat;

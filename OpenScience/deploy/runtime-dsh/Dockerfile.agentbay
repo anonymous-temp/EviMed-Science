@@ -121,6 +121,7 @@ ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.11"
 ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.1"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
 COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mjs
+COPY packages/contracts/loopx/workflow-skills.json /usr/local/lib/evimed/loopx-workflow-skills.json
 COPY deploy/runtime-dsh/loopx-compat.mjs /usr/local/lib/evimed/loopx-compat.mjs
 COPY deploy/runtime-dsh/annotation-compat.mjs /usr/local/lib/evimed/annotation-compat.mjs
 ENV LOOPX_USAGE_PING=0 DO_NOT_TRACK=1 LOOPX_BIN=/opt/evimed/venv/bin/loopx

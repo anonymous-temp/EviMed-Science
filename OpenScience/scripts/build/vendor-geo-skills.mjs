@@ -23,8 +23,16 @@
  * Standard library only, including the unzip: the release is built on hosts
  * whose tools this cannot assume.
  *
+ * The pack's index — each skill's name and the first sentence of its
+ * description (`geo-pack-index.mjs`) — is written beside it, because the web
+ * image carries that file and none of the pack: the skills page lists the
+ * method pack from it. `--index` writes it for a root vendored by an earlier
+ * version of this script (the web image's build stage does), and writes an
+ * index of no skills where there is no pack.
+ *
  * Usage:
  *   node scripts/build/vendor-geo-skills.mjs [--dist <dir>] [--target <dir>] [--version <x.y.z>] [--force] [--check]
+ *   node scripts/build/vendor-geo-skills.mjs --index [--target <dir>]
  *
  *   --dist     where the archives and SHA256SUMS are (default: the workspace's
  *              .evimed-local/geo/dist, or EVIMED_GEO_SKILLS_DIST)
@@ -32,6 +40,8 @@
  *   --version  pin one version; by default the newest one SHA256SUMS lists and
  *              the directory holds
  *   --check    verify only: the archive's sha256, and whether the root holds it
+ *              (and its index)
+ *   --index    write the index of what the root holds, and nothing else
  */
 
 import { createHash } from "node:crypto";
@@ -198,8 +208,14 @@ export async function vendorGeoSkills({ dist, target, version = null, force = fa
   if (actual !== archive.sha256) fail(`${archive.name}: sha256 ${actual} does not match SHA256SUMS (${archive.sha256}); refusing to unpack`);
   const files = selectVendoredFiles(readZip(bytes));
   const current = await holds(target, archive, files);
-  if (check) return { status: current ? "verified" : "stale", archive: archive.name, version: archive.version, files: files.length };
-  if (current && !force) return { status: "unchanged", archive: archive.name, version: archive.version, files: files.length };
+  if (check) {
+    const indexed = current && await indexIsCurrent(target);
+    return { status: indexed ? "verified" : "stale", archive: archive.name, version: archive.version, files: files.length };
+  }
+  if (current && !force) {
+    await writeIndex(target);
+    return { status: "unchanged", archive: archive.name, version: archive.version, files: files.length };
+  }
 
   // Unpack beside the root, then swap: an interrupted run keeps the old pack.
   await fs.mkdir(target, { recursive: true });
@@ -219,7 +235,30 @@ export async function vendorGeoSkills({ dist, target, version = null, force = fa
   } finally {
     await fs.rm(staging, { recursive: true, force: true });
   }
+  await writeIndex(target);
   return { status: "vendored", archive: archive.name, version: archive.version, files: files.length };
+}
+
+/**
+ * The index is derived from what the root holds, so a root that was vendored and cannot have its index written (a checkout
+ * without its dependencies installed) is still vendored: the web image's build writes it again, where they are.
+ * @param {string} target
+ */
+async function writeIndex(target) {
+  try {
+    const { writeGeoPackIndex } = await import("./geo-pack-index.mjs");
+    await writeGeoPackIndex(target);
+  } catch (error) {
+    process.stderr.write(`vendor-geo-skills: the pack is in place; its index was not written (${error instanceof Error ? error.message : String(error)}); run \`node scripts/build/vendor-geo-skills.mjs --index\` where dependencies are installed\n`);
+  }
+}
+
+/** @param {string} target @returns {Promise<boolean>} */
+async function indexIsCurrent(target) {
+  try {
+    const { geoPackIndexIsCurrent } = await import("./geo-pack-index.mjs");
+    return await geoPackIndexIsCurrent(target);
+  } catch { return false; }
 }
 
 /** @param {string[]} argv @returns {Record<string, string | boolean>} */
@@ -239,6 +278,17 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const dist = path.resolve(String(args.dist ?? process.env.EVIMED_GEO_SKILLS_DIST ?? path.join(workspaceRoot, ".evimed-local/geo/dist")));
   const target = path.resolve(String(args.target ?? path.join(repoRoot, "runtime/skills/geo-private")));
+  if (args.index) {
+    try {
+      const { writeGeoPackIndex } = await import("./geo-pack-index.mjs");
+      const written = await writeGeoPackIndex(target);
+      process.stdout.write(`${written.status}: ${path.relative(repoRoot, written.file) || written.file} (${written.skills} skills)\n`);
+    } catch (error) {
+      process.stderr.write(`vendor-geo-skills: ${error instanceof Error ? error.message : String(error)}\n`);
+      process.exitCode = 1;
+    }
+    return;
+  }
   try {
     const result = await vendorGeoSkills({
       dist,

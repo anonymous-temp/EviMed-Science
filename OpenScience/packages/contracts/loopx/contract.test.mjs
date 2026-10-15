@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { verifyLoopxArchive } from '../../../deploy/runtime-dsh/install-loopx.mjs';
+import { verifyLoopxArchive, verifyLoopxWorkflowSkills } from '../../../deploy/runtime-dsh/install-loopx.mjs';
 import { verifyHostedLoopx, registerHostedLoopx } from '../../harness-port/src/loopxBootstrap.mjs';
 import { runtimeUiMethodFromPath } from '../../domain/src/runtimeUiSurface.mjs';
 import { isSuccessfulLoopxSkillResult } from '../../harness-port/src/loopxEvents.mjs';
@@ -152,4 +152,29 @@ test('build-time adaptation is idempotent and rejects any unreviewed bytes befor
   await writeFile(path.join(dir, pin.compatibility.goalbarFile), goalbar + '\n// unreviewed');
   assert.throws(() => adaptLoopxDriver(options), /GoalBar differs/);
   assert.equal(await readFile(path.join(dir, pin.compatibility.driverFile), 'utf8'), adaptedDriver);
+});
+
+// The folders the pinned CLI installs are a recorded fact, so the plugins page can list what the image carries and a CLI bump
+// that adds or drops one is a decision made at the build, by name (R19, runtime inventory).
+test('the recorded workflow skills are the pinned CLI\'s, the build holds the installed folders equal to them and names a difference', async () => {
+  const record = JSON.parse(await read('packages/contracts/loopx/workflow-skills.json'));
+  assert.equal(record.version, deps.loopx.version, 're-record workflow-skills.json when the CLI pin moves');
+  assert.equal(record.wheelSha256, deps.loopx.wheel.sha256);
+  assert.equal(record.entry, 'loopx');
+  assert.ok(record.installed.includes('loopx') && record.installed.includes('loopx-project'));
+  assert.deepEqual([...record.installed].sort(), record.installed, 'sorted, so a diff reads');
+  assert.ok(record.kept.every(name => record.installed.includes(name)), 'the catalogue keeps only what the CLI installed');
+  assert.ok(record.kept.includes('loopx'), 'the entry skill is never filtered out');
+  assert.ok(record.packagedNotInstalled.every(name => !record.installed.includes(name)));
+
+  assert.deepEqual(verifyLoopxWorkflowSkills([...record.installed].reverse(), record), record.installed);
+  assert.throws(() => verifyLoopxWorkflowSkills(record.installed.filter(name => name !== 'loopx-pr-review'), record), /missing: loopx-pr-review/);
+  assert.throws(() => verifyLoopxWorkflowSkills([...record.installed, 'loopx-change-quality'], record), /not recorded: loopx-change-quality/);
+  assert.throws(() => verifyLoopxWorkflowSkills([], { installed: [] }), /names no installed skill/);
+
+  for (const file of ['deploy/runtime-dsh/Dockerfile', 'deploy/runtime-dsh/Dockerfile.agentbay']) {
+    const body = await read(file);
+    assert.ok(body.includes('COPY packages/contracts/loopx/workflow-skills.json /usr/local/lib/evimed/loopx-workflow-skills.json'), `${file} carries the record to the build step that holds the folders to it`);
+    assert.ok(body.indexOf('loopx-workflow-skills.json') < body.indexOf('install-runtime.sh loopx'));
+  }
 });
