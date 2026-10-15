@@ -189,6 +189,23 @@ const CHAT_NAVIGATION = [
   },
 ];
 
+/**
+ * The plugins and skills page names nothing the platform carries (R19, audit A S1). What a plugin or a tool is called, the line
+ * its row carries, what it does and how it is used are `packages/domain/src/runtime-inventory-zh.json`, which the server hands the
+ * page: a table of them typed into the page is how 长任务, the memory plugin and the kernel's own step list stayed off it while
+ * seven engines nobody could choose were listed.
+ */
+const installedThingsRules = [
+  {
+    selector: "Property[key.name=/^(use|does|how)$/][value.type='Literal']",
+    message: "An installed thing's words are the platform's (runtime-inventory-zh.json, handed over by GET /api/projects/:id/inventory), never typed into the page: add the item there, with its bundle or row, and the test holds the page to it.",
+  },
+  {
+    selector: "VariableDeclarator[id.name=/_COPY$/]",
+    message: "A *_COPY table of installed things is the hand-written list the plugins page was built from: the words come from the inventory (runtime-inventory-zh.json).",
+  },
+];
+
 /** The page framework's overrides: complete lists for each file group, because a later override replaces an earlier one's options. */
 const layoutOverrides = LAYOUT_RULES ? [
   {
@@ -249,6 +266,14 @@ module.exports = {
       files: ["src/**/*.{ts,tsx}"],
       rules: {
         "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules],
+      },
+    },
+    {
+      // 插件与技能 holds the token rules above and the one that keeps its members the server's.
+      files: ["src/app/extensions/**/*.{ts,tsx}"],
+      excludedFiles: ["src/app/extensions/**/*.test.{ts,tsx}"],
+      rules: {
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...installedThingsRules],
       },
     },
     {

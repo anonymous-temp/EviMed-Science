@@ -56,6 +56,17 @@ import displayTable from './capability-display.json' with { type: 'json' }
  * @property {CapabilityEvaluation} [evaluation]
  */
 
+/**
+ * What the page of the medical professional workflows is called, in the sidebar, as the page's title and as the group the
+ * same cards form on 插件与技能.
+ *
+ * Hidden knowledge: it was 「科研工具」 until 2026-10-13, when a pass that made the shell general renamed it 「工具」 in 76 lines of 29
+ * files and put six general cards beside the sixteen professional ones (owner, 2026-10-14: 「文档那能当作一个成熟的工具吗，那都是后台
+ * 用的一些个工具」). The page lists professional workflows only — a contract, a deliverable, a category to pick them by — and
+ * the name is held in one place so the sidebar, the page and the skills group cannot drift apart again.
+ */
+export const RESEARCH_TOOLS_NAME = '科研工具'
+
 /** @type {Readonly<Record<string, CapabilityDisplay>>} */
 export const CAPABILITY_DISPLAY = Object.freeze(
   /** @type {Record<string, CapabilityDisplay>} */ (displayTable.capabilities),
@@ -73,7 +84,7 @@ export function capabilityTitle(id) {
 
 /**
  * Whether a capability belongs in the lists a researcher picks a tool from —
- * 工具 and the kernel frame's tool list.
+ * 科研工具 and the kernel frame's tool list.
  *
  * Everything is, except a capability whose display block says `listed: false`:
  * the 「循证 GEO」 capabilities are opened by their own module and bound to a

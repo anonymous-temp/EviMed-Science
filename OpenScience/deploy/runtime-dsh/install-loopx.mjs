@@ -1,9 +1,44 @@
 /** Install the complete upstream distribution at image build time, never during a research turn. */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const RECORD_BESIDE = path.join(HERE, 'loopx-workflow-skills.json');
+const RECORD_IN_CONTRACT = path.join(HERE, '..', '..', 'packages', 'contracts', 'loopx', 'workflow-skills.json');
+
+/**
+ * The folders the pinned CLI installs, as `packages/contracts/loopx/workflow-skills.json` records them (read off the pinned
+ * wheel). The image build copies that file beside this one; a checkout reads it from the contract directory.
+ */
+export const WORKFLOW_SKILLS_RECORD = existsSync(RECORD_BESIDE) ? RECORD_BESIDE : RECORD_IN_CONTRACT;
+
+/**
+ * Holds what `loopx workflow-skills --install` wrote equal to what the contract records for this CLI, and names the difference.
+ *
+ * Hidden knowledge: LoopX was installed whole and nothing said which skills that was. The plugins page lists what the image
+ * carries (`runtime-inventory.json`), so a skill a CLI bump adds — or one it stops writing — is a decision, and it is made
+ * here, at the build, where the folders are, instead of reaching a model's catalogue unlisted.
+ *
+ * @param {readonly string[]} found the skill folders the install left
+ * @param {{ installed?: unknown, version?: unknown }} record the contract
+ * @returns {string[]} the folders, sorted
+ */
+export function verifyLoopxWorkflowSkills(found, record) {
+  const expected = Array.isArray(record?.installed) ? record.installed.map(String) : [];
+  if (expected.length === 0) throw new Error('The LoopX workflow-skill record names no installed skill.');
+  const names = [...found].sort();
+  const missing = [...expected].sort().filter(name => !names.includes(name));
+  const unrecorded = names.filter(name => !expected.includes(name));
+  if (missing.length || unrecorded.length) {
+    throw new Error(`The LoopX CLI installed other skills than packages/contracts/loopx/workflow-skills.json records for ${record?.version ?? 'this version'}`
+      + `${missing.length ? `; missing: ${missing.join(', ')}` : ''}${unrecorded.length ? `; not recorded: ${unrecorded.join(', ')}` : ''}. `
+      + 'Re-record the file from the pinned wheel and list each new skill in packages/domain/src/runtime-inventory-zh.json.');
+  }
+  return names;
+}
 
 export function verifyLoopxArchive(file, expected) {
   const actual = createHash('sha256').update(readFileSync(file)).digest('hex');
@@ -12,7 +47,7 @@ export function verifyLoopxArchive(file, expected) {
 }
 
 export function installLoopx({ pins, root = '/opt/evimed/loopx', python = '/opt/evimed/venv/bin/python',
-  cli = '/opt/evimed/venv/bin/loopx', archives = root } = {}) {
+  cli = '/opt/evimed/venv/bin/loopx', archives = root, record = WORKFLOW_SKILLS_RECORD } = {}) {
   const pin = pins.loopx;
   mkdirSync(root, { recursive: true });
   mkdirSync(archives, { recursive: true });
@@ -44,6 +79,8 @@ export function installLoopx({ pins, root = '/opt/evimed/loopx', python = '/opt/
   if (!skills.some(skill => skill.name === 'loopx') || !skills.some(skill => skill.name === 'loopx-project')) {
     throw new Error('The native LoopX entry and lifecycle skills were not installed.');
   }
+  // What the CLI wrote is what the contract says it writes, for this version: a difference is a decision, named by skill.
+  verifyLoopxWorkflowSkills(skills.map(skill => skill.name), JSON.parse(readFileSync(record, 'utf8')));
   const receipt = { schemaVersion: 1, version: pin.version, pluginVersion: pin.plugin.version,
     wheelSha256: pin.wheel.sha256, pluginSha256: pin.plugin.sha256, skills };
   writeFileSync(path.join(root, 'installation.json'), `${JSON.stringify(receipt, null, 2)}\n`);

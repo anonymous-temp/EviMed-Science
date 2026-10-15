@@ -7,9 +7,8 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Switch } from "@/components/ui/Switch";
 import { formatClock, formatDay } from "@/lib/format";
 import type { WebPluginConfiguration } from "@/lib/apiClient";
-import type { PluginInventory } from "@/lib/extensionsClient";
+import type { Inventory, InventoryItem } from "@/lib/extensionsClient";
 import { DrawerSection } from "./PlatformSkillDrawer";
-import { CITATION_TOOL_COPY, PLUGIN_COPY } from "./extensionCopy";
 import type { useCitationPlugin } from "./useCitationPlugin";
 
 type Citation = ReturnType<typeof useCitationPlugin>;
@@ -25,9 +24,15 @@ const configurationText = (config: WebPluginConfiguration) =>
  * A save is applied when the project is idle, so the drawer says so in one line while one is waiting — and says nothing
  * about versions, states or identifiers: the reader's questions are whether it is on and whether it took.
  */
-export function CitationDrawer({ citation, projectName, onClose }: { citation: Citation; projectName: string | undefined; onClose: () => void }) {
+export function CitationDrawer({ item, citation, projectName, groupTitle, onClose }: {
+  /** The item the row is: its title, what it does and what each of its tools does, in the platform's words. */
+  item: InventoryItem;
+  citation: Citation;
+  projectName: string | undefined;
+  groupTitle: string;
+  onClose: () => void;
+}) {
   const { plugin, error, busy, save, retry, restore, history } = citation;
-  const copy = PLUGIN_COPY["dsh-cite"];
   const desired = plugin?.desired ?? null;
   // The field shows what was saved until the reader types; a save puts it back to what the server now holds.
   const [edit, setEdit] = useState<string | null>(null);
@@ -49,9 +54,10 @@ export function CitationDrawer({ citation, projectName, onClose }: { citation: C
   const dirty = seconds !== savedSeconds;
   const waiting = plugin?.phase === "pending" || plugin?.phase === "applying" || plugin?.phase === "saved";
   const failed = plugin?.phase === "rolled_back" || plugin?.phase === "unavailable" || plugin?.phase === "failed";
-  const tools = (plugin?.tools ?? []).map(name => CITATION_TOOL_COPY[name]).filter(Boolean);
+  // A tool the item has no sentence for is not shown: a name is not a description.
+  const tools = (plugin?.tools ?? []).map(name => item.toolSentences?.[name]).filter((sentence): sentence is string => Boolean(sentence));
   return (
-    <Drawer title={copy.title} description="对话里的工具" onClose={onClose}>
+    <Drawer title={item.title} description={groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between gap-3">
           <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
@@ -59,7 +65,7 @@ export function CitationDrawer({ citation, projectName, onClose }: { citation: C
         {waiting && <p role="status" className="text-ui text-text-2">保存后在下次对话生效</p>}
         {failed && <p role="status" className="flex items-center gap-2 text-ui text-text-2">这项设置没能生效。<Button size="sm" variant="text" disabled={busy} onClick={() => void retry()}>重试</Button></p>}
         {error && <p role="alert" className="text-ui text-error">{error}</p>}
-        <DrawerSection title="它会做什么"><p className="text-ui text-text">{copy.does}</p></DrawerSection>
+        <DrawerSection title="它会做什么"><p className="text-ui text-text">{item.does}</p></DrawerSection>
         {tools.length > 0 && (
           <DrawerSection title="提供的工具"><ul className="list-disc pl-5 text-ui text-text">{tools.map(sentence => <li key={sentence}>{sentence}</li>)}</ul></DrawerSection>
         )}
@@ -90,40 +96,48 @@ export function CitationDrawer({ citation, projectName, onClose }: { citation: C
   );
 }
 
-/** The research tool set, opened from its row: its tools by group, one sentence each — the reader's words, never a tool's name. */
-export function ToolsDrawer({ tools, onClose }: { tools: PluginInventory["researchTools"]; onClose: () => void }) {
-  const copy = PLUGIN_COPY["research-tools"];
+/**
+ * One of the platform's items, opened from its row: what it does and how it is used, its parts one sentence each where it is
+ * several abilities, and — for the research tool set — the tools by group, one sentence each, in the reader's words and never
+ * a tool's name. Nothing says that it is always on, how many tools there are or what version it is.
+ */
+export function InventoryDrawer({ item, groupTitle, tools, onClose }: {
+  item: InventoryItem;
+  groupTitle: string;
+  /** The account's research tool set, shown under the item that is the tool set. */
+  tools: Inventory["researchTools"] | null;
+  onClose: () => void;
+}) {
   return (
-    <Drawer title={copy.title} description="对话里的工具 · 始终开启" onClose={onClose}>
+    <Drawer title={item.title} description={groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
-        <DrawerSection title="它会做什么"><p className="text-ui text-text">{copy.does}</p></DrawerSection>
-        <DrawerSection title={`提供的工具 · ${tools.count} 个`}>
-          <div className="flex flex-col gap-5">
-            {tools.groups.map(group => (
-              <section key={group.title} aria-label={group.title}>
-                <h4 className="mb-1 text-ui font-medium text-text">{group.title}</h4>
-                <ul className="list-disc pl-5 text-ui text-text-2">{group.tools.map(sentence => <li key={sentence}>{sentence}</li>)}</ul>
-              </section>
-            ))}
-          </div>
-        </DrawerSection>
+        <DrawerSection title="它会做什么"><p className="text-ui text-text">{item.does}</p></DrawerSection>
+        <DrawerSection title="怎么用"><p className="text-ui text-text">{item.how}</p></DrawerSection>
+        {item.parts && item.parts.length > 0 && (
+          <DrawerSection title="包括">
+            <dl className="flex flex-col gap-3">
+              {item.parts.map(part => (
+                <div key={part.title} className="flex flex-col gap-0.5">
+                  <dt className="text-ui font-medium text-text">{part.title}</dt>
+                  <dd className="text-ui text-text-2">{part.does}</dd>
+                </div>
+              ))}
+            </dl>
+          </DrawerSection>
+        )}
+        {tools && tools.groups.length > 0 && (
+          <DrawerSection title="提供的工具">
+            <div className="flex flex-col gap-5">
+              {tools.groups.map(group => (
+                <section key={group.title} aria-label={group.title}>
+                  <h4 className="mb-1 text-ui font-medium text-text">{group.title}</h4>
+                  <ul className="list-disc pl-5 text-ui text-text-2">{group.tools.map(sentence => <li key={sentence}>{sentence}</li>)}</ul>
+                </section>
+              ))}
+            </div>
+          </DrawerSection>
+        )}
       </div>
     </Drawer>
   );
 }
-
-/** A plugin with nothing to set (web reading, annotation, diagrams) or a calculation engine: what it does and when it is used. */
-export function InfoDrawer({ title, kicker, does, when, onClose }: { title: string; kicker: string; does: string; when?: string; onClose: () => void }) {
-  return (
-    <Drawer title={title} description={kicker} onClose={onClose}>
-      <div className="flex flex-col gap-6">
-        <DrawerSection title="它会做什么"><p className="text-ui text-text">{does}</p></DrawerSection>
-        {when && <DrawerSection title="什么时候会用到"><p className="text-ui text-text">{when}</p></DrawerSection>}
-      </div>
-    </Drawer>
-  );
-}
-
-/** Where an engine's drawer says it is used from: the research tools, never the reader's own click. */
-export const ENGINE_WHEN = "你在工具页里选择对应的工具，或在对话里提出这类任务时，由工具在后台调用它。";
-export const engineKicker = (available: boolean) => `计算引擎 · ${available ? "可用" : "暂不可用"}`;

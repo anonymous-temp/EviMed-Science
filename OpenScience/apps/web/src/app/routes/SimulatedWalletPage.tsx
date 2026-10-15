@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
-import { AllowanceAmount, SimulatedDataLine, SimulatedMark, allowanceText } from "@/components/settings/SimulatedAllowance";
+import { AllowanceAmount, SimulatedDataLine, allowanceText } from "@/components/settings/SimulatedAllowance";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Panel, PanelRow } from "@/components/ui/Panel";
@@ -160,7 +160,6 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
     <>
       {toppedUp && (
         <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-ui text-text">
-          <SimulatedMark />
           <span>{toppedUp.duplicate ? "这笔模拟充值此前已经入账，没有重复入账。" : `模拟充值 ${allowanceText(toppedUp.order.amount, "nearest")}已入账。`}</span>
           <Link to={SIMULATED_WALLET_PAGES.orders} className={buttonClasses({ variant: "secondary", size: "sm" })}>查看模拟订单</Link>
         </div>
@@ -168,13 +167,10 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
       <Panel title="额度">
         {available === null
           ? <PanelRow label="额度暂不可用" />
-          : <PanelRow label="可用额度" control={<AllowanceAmount value={available} simulated className="text-title font-semibold" />} />}
+          : <PanelRow label="可用额度" control={<AllowanceAmount value={available} simulated mark={false} className="text-title font-semibold" />} />}
       </Panel>
       <section aria-labelledby="simulated-topup-packages">
-        <div className="mb-2 flex items-center gap-2">
-          <h2 id="simulated-topup-packages" className="text-ui font-semibold text-text">充值额度</h2>
-          <SimulatedMark />
-        </div>
+        <h2 id="simulated-topup-packages" className="mb-2 text-ui font-semibold text-text">充值额度</h2>
         <div className="flex flex-wrap gap-2">
           {SIMULATED_TOPUP_PACKAGES.map((item) => (
             <Button key={item.id} variant="secondary" loading={pending === item.id} disabled={pending !== null} onClick={() => topUp(item.id)}>
@@ -229,13 +225,10 @@ function Orders() {
                 title={order.title || "模拟充值"}
                 meta={orderTime(order.at)}
                 trailing={(
-                  <>
-                    <SimulatedMark />
-                    <div className="min-w-20 text-right text-ui">
-                      <span className="block text-text-2">已入账</span>
-                      <span className="tabular-nums">{allowanceText(order.amount, "nearest") || "暂不可用"}</span>
-                    </div>
-                  </>
+                  <div className="min-w-20 text-right text-ui">
+                    <span className="block text-text-2">已入账</span>
+                    <span className="tabular-nums">{allowanceText(order.amount, "nearest") || "暂不可用"}</span>
+                  </div>
                 )}
               />
             ))}

@@ -306,7 +306,7 @@ const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'liste
  * `[min, max]` budget estimate above, which the orchestrator plans with.
  *
  * `listed: false` keeps a public capability out of the lists a researcher picks
- * from — 工具 and the kernel frame's tool list — while it stays public, so
+ * from — 科研工具 and the kernel frame's tool list — while it stays public, so
  * a session can still be bound to it by id and its chip still has a name. The
  * four 「循证 GEO」 capabilities are opened by their own module (build spec
  * 2026-09-25 §6); `visibility: internal` would make that binding answer 403.

@@ -4,7 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { canonicalJson, canonicalPersonalSkillResourcePath } from "@evimed/domain";
-import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS } from "@evimed/domain/skill-display";
+import { RUNTIME_INVENTORY, inventorySkillWords } from "@evimed/domain/runtime-inventory";
+import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP } from "@evimed/domain/skill-display";
 import { SKILL_PACKAGES } from "@evimed/domain/skill-packages";
 import { HttpError } from "./security.mjs";
 
@@ -28,12 +29,22 @@ import { HttpError } from "./security.mjs";
  * The 「循证 GEO」 method pack is the one root the table cannot name: it is
  * proprietary and reaches an image only through a gitignored folder. Where
  * that folder is present it is listed under its own group, read from the
- * folder; where it is not, there is no such group. Its skills carry no Chinese
- * words of their own, so they are shown by the pack's names and the first
- * sentence of its descriptions, and they can be read but never copied (the
+ * folder; the web image carries the pack's index instead (each skill's name and
+ * first sentence, `geo-pack-index.json`, written beside the pack at vendoring
+ * and copied alone), and the group is listed from that; where neither is there,
+ * there is no such group. Its skills carry no Chinese words of their own, so
+ * they are shown by the pack's names and the first sentence of its
+ * descriptions, and they can be read where the folder is and never copied (the
  * pack is the owner's, not a template). Only an account the module is open to
  * is shown them (`packAllowed`): the pack is proprietary, and a folder that
  * reaches an image must not become something every signed-in account can read.
+ *
+ * The LoopX entry skill (`loopx`, 「长任务」) is the other one the table cannot
+ * name: the CLI installs it at image build, and the repository has no folder
+ * for it. Its words are the runtime inventory's item (`runtime-inventory-zh.json`),
+ * the skills the CLI installs besides it are accounted for there and are not
+ * rows (none of them is something a person starts), and the row follows the
+ * deployment's switch.
  *
  * A skill's id here is `<origin>:<name>` (`curated:survival-analysis`), the shape every other product id has, so it is one
  * path segment without an encoded slash a proxy might fold.
@@ -54,6 +65,8 @@ const ROOTS = Object.freeze({
   evimed: "runtime/skills/evimed",
 });
 const GEO_ROOT = "runtime/skills/geo-private/skills";
+/** The pack's index: written beside the pack at vendoring (`scripts/build/geo-pack-index.mjs`), the one file of the pack the web image carries. */
+const GEO_INDEX = "runtime/skills/geo-private/geo-pack-index.json";
 
 /** The limits a copy is held to, as the native snapshot's: files, bytes per file, bytes in all, entries visited. */
 const LIMITS = Object.freeze({ files: 128, fileBytes: 4 * 1024 * 1024, totalBytes: 16 * 1024 * 1024, entries: 512, instructions: 262144 });
@@ -75,7 +88,7 @@ export function splitSkillText(text) {
 }
 
 /** The first sentence of a description, whole words, bounded. @param {unknown} description */
-function firstSentence(description) {
+export function firstSentence(description) {
   const flat = String(description ?? "").replace(/\s+/g, " ").trim();
   const end = flat.search(/[.。]\s|[.。]$/);
   const sentence = end > 0 ? flat.slice(0, end + 1) : flat;
@@ -123,21 +136,25 @@ export async function readSkillFolder(directory) {
 
 /**
  * @param {{ rootDir: string, packages?: ReadonlyMap<string, any>, display?: typeof SKILL_DISPLAY, now?: () => number,
- *   packAllowed?: (user: any) => boolean }} options
+ *   packAllowed?: (user: any) => boolean, loopxEnabled?: boolean }} options
  */
-export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now(), packAllowed = () => false }) {
+export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now(), packAllowed = () => false, loopxEnabled = false }) {
   /** @type {{ at: number, rows: any[] } | null} */
   let cached = null;
 
   /** @param {string} directory */
   const present = (directory) => fs.access(path.join(directory, "SKILL.md")).then(() => true, () => false);
 
-  /** The pack's skills, when its folder is here. @returns {Promise<any[]>} */
+  /**
+   * The pack's skills: from its folder where this image carries it, otherwise from its index (the web image's one file of the
+   * pack), otherwise none.
+   * @returns {Promise<any[]>}
+   */
   async function geoRows() {
     const root = path.join(rootDir, GEO_ROOT);
     /** @type {import("node:fs").Dirent[]} */
     let folders = [];
-    try { folders = (await fs.readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()); } catch { return []; }
+    try { folders = (await fs.readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()); } catch { /* the pack's folder is not here */ }
     const found = [];
     for (const entry of folders.sort((left, right) => left.name.localeCompare(right.name))) {
       const directory = path.join(root, entry.name);
@@ -146,6 +163,30 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
         found.push({ id: `geo-private:${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
           group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory });
       } catch { /* a folder without a readable skill file is not a skill */ }
+    }
+    if (found.length > 0) return found;
+    try {
+      const index = JSON.parse(await fs.readFile(path.join(rootDir, GEO_INDEX), "utf8"));
+      for (const entry of Array.isArray(index?.skills) ? index.skills : []) {
+        const name = String(entry?.name ?? "");
+        // A name that is not one path segment is not a skill the pack has; the index is a file, not a trusted source.
+        if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) continue;
+        found.push({ id: `geo-private:${name}`, name, title: String(entry.title ?? name).slice(0, 120), use: firstSentence(entry.use),
+          group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory: null });
+      }
+    } catch { /* no index either: there is no such group */ }
+    return found;
+  }
+
+  /** The LoopX entry skill, where the deployment has LoopX on: its words are the inventory item's. @returns {any[]} */
+  function loopxRows() {
+    if (!loopxEnabled) return [];
+    const found = [];
+    for (const name of RUNTIME_INVENTORY.loopxSkills.kept) {
+      const words = inventorySkillWords(name);
+      if (!words) continue;
+      found.push({ id: `loopx:${name}`, name, title: words.title, use: words.use, when: words.how, group: SKILL_DISPLAY_LOOPX_GROUP,
+        source: "platform", canCopy: false, directory: null });
     }
     return found;
   }
@@ -167,7 +208,7 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
     const order = new Map(Object.keys(display).map((name, index) => [name, index]));
     listed.sort((left, right) => SKILL_DISPLAY_GROUPS.indexOf(left.group) - SKILL_DISPLAY_GROUPS.indexOf(right.group)
       || (order.get(left.name) ?? 0) - (order.get(right.name) ?? 0));
-    const all = [...listed, ...await geoRows()];
+    const all = [...listed, ...loopxRows(), ...await geoRows()];
     cached = { at: now(), rows: all };
     return all;
   }
@@ -182,13 +223,13 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
     return row;
   }
 
-  /** What a browser is given of a row: never the folder it was read from. @param {any} row */
-  const publicRow = ({ directory: _directory, ...row }) => row;
+  /** What a browser is given of a row: never the folder it was read from, and its `when` only through `read`. @param {any} row */
+  const publicRow = ({ directory: _directory, when: _when, ...row }) => row;
 
   return {
     /** Every skill a researcher is offered, in the groups' order (a group with no skill is simply not drawn). @param {any} user */
     async list(user) {
-      return { groups: [...SKILL_DISPLAY_GROUPS], geoGroup: SKILL_DISPLAY_GEO_GROUP, items: (await visible(user)).map(publicRow) };
+      return { groups: [...SKILL_DISPLAY_GROUPS], geoGroup: SKILL_DISPLAY_GEO_GROUP, loopxGroup: SKILL_DISPLAY_LOOPX_GROUP, items: (await visible(user)).map(publicRow) };
     },
     /** One skill: its words and, where this image carries the folder, its full text. @param {string} id @param {any} user */
     async read(id, user) {
@@ -200,7 +241,7 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
           instructions = Buffer.byteLength(body) <= LIMITS.instructions ? body : null;
         } catch { instructions = null; }
       }
-      return { ...publicRow(row), when: display[row.name]?.when ?? null, instructions };
+      return { ...publicRow(row), when: display[row.name]?.when ?? row.when ?? null, instructions };
     },
     /**
      * The folder of a copyable skill as the native importer takes it, with the

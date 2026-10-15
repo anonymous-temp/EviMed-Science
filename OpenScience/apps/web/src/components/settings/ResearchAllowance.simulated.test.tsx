@@ -85,12 +85,12 @@ describe("额度 on a deployment whose wallet is simulated", () => {
     await statementRows();
   });
 
-  // Eleven tags on one screen read as a warning, not as a label. The group says it once; its amounts are covered by it.
-  it("marks the allowance once, in the header of the group that holds its amounts, and not on each row", async () => {
+  // Eleven tags on one screen read as a warning, not as a label, and four more in the group headers still did (R19, plan §7.6):
+  // the page says it once, in its line at the top, and no amount, header or row says it again.
+  it("says 模拟 once, in the line at the top, and marks no group header and no amount", async () => {
     open(simulated);
-    const group = screen.getByRole("heading", { name: "额度" }).closest("section") as HTMLElement;
-    expect(within(group).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
-    expect(within(group.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
+    expect(marks()).toEqual([]);
     for (const [label, amount] of [["可用额度", "200.00 灵豆"], ["本月消费", "4.00 灵豆"], ["本月待结算", "2.00 灵豆"]] as const) {
       expect(within(row(label)).getByText(amount)).toBeInTheDocument();
       expect(within(row(label)).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
@@ -103,8 +103,9 @@ describe("额度 on a deployment whose wallet is simulated", () => {
   it("shows no line, no mark and no prompt where the wallet is not simulated", async () => {
     const first = open(simulated);
     await statementRows();
-    // One for the allowance, one for the commerce group and one for the statement list — and none on their rows.
-    expect(marks()).toHaveLength(3);
+    // The line at the top is the one place; the groups and rows carry no mark.
+    expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
+    expect(marks()).toEqual([]);
     first.unmount();
 
     mocks.statements.mockResolvedValue({ simulated: false, items: [{ ...charge, simulated: false }], nextCursor: null });
@@ -259,9 +260,9 @@ describe("the statement list", () => {
     expect(within(rows[2]).getByText("已入账")).toBeInTheDocument();
     expect(within(rows[2]).queryByRole("link")).not.toBeInTheDocument();
 
-    // The list says 「模拟」 once, in its header; its rows do not say it again.
+    // The page's line says 「模拟」 once; neither the list's header nor its rows say it again.
     const list = screen.getByRole("region", { name: "消费明细" });
-    expect(within(list.querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(list).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     for (const each of rows) expect(within(each).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });
 
@@ -293,12 +294,12 @@ describe("the statement list", () => {
     expect(within(rows[1]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     first.unmount();
 
-    // A list that says nothing either: the rows are this allowance's, and a list of them says 「模拟」 once in its header.
+    // A list that says nothing either: the rows are this allowance's, and the page's line says 「模拟」 for all of them.
     mocks.statements.mockResolvedValue({ items: [silentCharge], nextCursor: null });
     const second = open(simulated);
     rows = await statementRows();
     expect(within(rows[0]).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "消费明细" }).querySelector("h2")!.parentElement as HTMLElement).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "消费明细" })).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     second.unmount();
 
     // …and where nothing says so — an older control plane — it is a charge of a real wallet.

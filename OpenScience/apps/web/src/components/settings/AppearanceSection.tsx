@@ -78,7 +78,7 @@ function shortcuts(): { keys: string; description: string }[] {
     { keys: "Enter", description: "发送消息" },
     { keys: "Shift+Enter", description: "换行" },
     { keys: `${mod}Enter`, description: "运行中插话" },
-    { keys: "/", description: "调用指令或选择工具" },
+    { keys: "/", description: "调用指令或选择科研工具" },
     { keys: "@", description: "引用知识库里的资料或会话" },
     { keys: `${mod}B`, description: "收起 / 展开侧边栏" },
     { keys: "?", description: "打开 / 关闭快捷键清单" },

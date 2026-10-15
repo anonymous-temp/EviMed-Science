@@ -83,8 +83,11 @@ export interface PlatformSkill {
   /** Whether the control plane can copy this skill into the account's own skills. */
   canCopy: boolean;
 }
-/** `geoGroup` names the group the 循证 GEO method pack is listed under, so a page can mark it without spelling it. */
-export interface PlatformSkillList { groups: string[]; geoGroup: string; items: PlatformSkill[] }
+/**
+ * `geoGroup` names the group the 循证 GEO method pack is listed under and `loopxGroup` the one the long task's entry skill is,
+ * so a page can mark them without spelling them.
+ */
+export interface PlatformSkillList { groups: string[]; geoGroup: string; loopxGroup: string; items: PlatformSkill[] }
 export interface PlatformSkillDetail extends PlatformSkill {
   /** The sentence that says when the skill is used; null where there is none. */
   when: string | null;

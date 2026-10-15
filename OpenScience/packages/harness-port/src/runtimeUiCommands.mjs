@@ -1,6 +1,6 @@
 /**
  * The research tools, offered where the typing happens: a chip in the
- * composer's own toolbar for the one you picked (on 工具, or with `/工具`),
+ * composer's own toolbar for the one you picked (on 科研工具, or with `/工具`),
  * its example questions under the headline while the conversation is still
  * blank, a `/工具` command in the kernel's own slash menu, and `@` references to
  * the researcher's knowledge base.
@@ -45,7 +45,7 @@
  *    `popupSelect` opens the kernel's own searchable popup; its rows are a
  *    label and one line of detail, filtered by substring over both — so the
  *    category and the one-line summary go in the detail, and typing 「证据」
- *    finds rows by them. How long a tool usually takes is said once, on 工具
+ *    finds rows by them. How long a tool usually takes is said once, on 科研工具
  *    where it is chosen, and nowhere after (整改方案 §5.3). A contribution
  *    whose name collides with a host command fails loud at candidate synthesis
  *    and takes the whole menu with it; host commands are ASCII identifiers, and
@@ -70,7 +70,7 @@
  *
  * A 循证 GEO conversation (bound to any of the module's capabilities) reads
  * 「循证 GEO」 on its chip whether or not the catalogue lists the capability —
- * the module hides them from 工具 — and, once the shell has found the
+ * the module hides them from 科研工具 — and, once the shell has found the
  * GEO project this conversation belongs to (`geo`), carries two optional
  * settings in the chip's menu, 覆盖周期 and AI 引擎, which report a change back
  * (`geo-options`) for the shell to write to the project; its starters are the
@@ -127,12 +127,12 @@ export function capabilityOptions(capabilities, hidden = []) {
 /**
  * The tool this conversation runs, as the chip and the starters read it: its
  * name and three questions to start from. What it does, how long it takes,
- * what it hands back, needs and cannot do stays on 工具, where the tool
+ * what it hands back, needs and cannot do stays on 科研工具, where the tool
  * was chosen.
  *
  * A conversation bound to one of 循证 GEO's capabilities reads 「循证 GEO」
  * whichever of them it is, and whether or not the catalogue lists it: the
- * module hides its capabilities from 工具 with a display flag, and the
+ * module hides its capabilities from 科研工具 with a display flag, and the
  * chip must still say what the conversation runs.
  * @param {any[]} capabilities @param {unknown} id
  * @param {{ title?: string, capabilities?: readonly string[] } | null |
@@ -424,7 +424,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!options.length) return;
     scope.effect(() => scope.commandUi.register({
       name: '工具',
-      description: () => '选择工具',
+      description: () => '选择科研工具',
       available: () => true,
       ui: {
         kind: 'popupSelect',
@@ -546,7 +546,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      * The chip: which tool this conversation runs, the way out of it, and for
      * the two modules the menu of its settings. In a session the hero is gone,
      * so this is the only place that says it. The name alone: what the tool
-     * does and how long it takes were said on 工具, where it was chosen.
+     * does and how long it takes were said on 科研工具, where it was chosen.
      *
      * `placement` is where it is drawn: `bar` (the toolbar inside the composer
      * card, width held to what the row has left) or `hero` (the blank
@@ -751,7 +751,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      * session (`input !== undefined && sessionId !== undefined`); with one —
      * which is what a conversation the shell created has, blank or not — the
      * chip is in the toolbar and this seat holds the starters alone. Without
-     * one, a tool chosen on 工具 lands here, the chip with its menu (which
+     * one, a tool chosen on 科研工具 lands here, the chip with its menu (which
      * opens upward over the headline) and the starters beside it, held to the
      * composer's width and centred, so nothing there can stretch the composer
      * again. The hero seat renders only while the conversation is blank.

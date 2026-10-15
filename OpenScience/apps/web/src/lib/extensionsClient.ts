@@ -47,15 +47,35 @@ export function extensionStatus(item: Pick<ExtensionInstallation, "effective" | 
 }
 
 /**
- * What the plugins page lists for a project: what is on, the research tool set in Chinese, and one yes or no per
- * calculation engine. Nothing here is a version, a phase or a state the server cannot know.
+ * What the plugins page lists for a project: the items the platform's own words name (`runtime-inventory-zh.json`), each with
+ * its state for this account, and the research tool set in Chinese as this account's runtime has it. Nothing here is a
+ * version, a phase or a state the person cannot change.
  */
-export interface PluginInventory {
-  projectId: string;
-  items: Array<{ id: "dsh-cite" | "dsh-annotation" | "dsh-mermaid"; management: "project" | "deployment"; enabled: boolean | null }>;
-  webRead: boolean;
-  researchTools: { count: number; groups: Array<{ title: string; tools: string[] }> };
-  /** Empty where the deployment could not read them: the page then draws no engine rows. */
-  engines: Array<{ id: string; available: boolean }>;
+export interface InventoryItem {
+  id: string;
+  title: string;
+  /** The one line a row carries. */
+  use: string;
+  /** A name of the icon set (`inventoryIcons.ts`). */
+  icon: string;
+  /** `off` only for a project setting the person has switched off. */
+  state: "on" | "off";
+  control: { kind: "none" } | { kind: "switch"; setting: string };
+  /** A drawer on the page, or a page of its own (memory). */
+  opens: { kind: "drawer" } | { kind: "page"; to: string };
+  does: string;
+  how: string;
+  /** One sentence each, for an item that is several abilities (基础能力). */
+  parts?: Array<{ title: string; does: string }>;
+  /** What each tool of the item's plugin does, by the name the plugin reports. */
+  toolSentences?: Record<string, string>;
+  /** Its drawer lists the account's research tools (`researchTools` of the same answer). */
+  showsTools?: true;
 }
-export const pluginInventory = (projectId: string) => productRequest<PluginInventory>(`/projects/${encodeURIComponent(projectId)}/plugin-inventory`);
+export interface InventoryGroup { id: string; title: string; items: InventoryItem[] }
+export interface Inventory {
+  projectId: string;
+  groups: InventoryGroup[];
+  researchTools: { count: number; groups: Array<{ title: string; tools: string[] }> };
+}
+export const inventory = (projectId: string) => productRequest<Inventory>(`/projects/${encodeURIComponent(projectId)}/inventory`);

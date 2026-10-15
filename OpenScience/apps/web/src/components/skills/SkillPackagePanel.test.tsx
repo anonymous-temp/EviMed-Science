@@ -49,24 +49,29 @@ it("does not name a missing digest among the fields the record does not know", (
   expect(document.body.textContent).not.toMatch(/摘要|digest/);
 });
 
-// The panel draws a state by the capability page's rule: where the reader can act on it, and not how often it ran here or that
-// nothing could be proven (owner ruling 2026-10-10, R37).
+// The panel draws an availability by the capability page's rule, which is a rule about REASONS (R19, plan §5.6): where the reader
+// can act on it, and not how often it ran here, that nothing could be proven, or what the deployment declines to carry.
 it.each([
-  ["executable", "可运行", "1.0.0 版已在这个部署上成功运行过，最近一次是 2026-10-03。"],
-  ["installed", "已安装", "已安装，还没有在这个部署上成功运行过。"],
-  ["unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。"],
-] as const)("draws nothing about a package whose state is %s", (state, label, text) => {
-  render(<SkillPackagePanel view={view} availability={{ state, label, text, reason: { code: "x", source: "operation-record" }, notes: [] }} />);
+  ["executable", "可运行", "1.0.0 版已在这个部署上成功运行过，最近一次是 2026-10-03。", "succeeded-here"],
+  ["installed", "已安装", "已安装，还没有在这个部署上成功运行过。", "no-successful-operation"],
+  ["unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。", "mock-runtime"],
+  // The deployment's: a reader cannot mend any of these, whatever state they put the package in.
+  ["source-planned", "规划中", "目录里列了它，这个部署还没有安装。", "not-in-this-deployment"],
+  ["unavailable", "不可用", "它依赖的「文献检索」在这个部署上没有提供。", "required-tool-not-offered"],
+  ["limited", "受限", "最近一次运行没有成功（这次运行没有产出必须的文件）。", "last-operation-failed"],
+] as const)("draws nothing about a package whose availability is %s for the deployment's own reason", (state, label, text, code) => {
+  render(<SkillPackagePanel view={view} availability={{ state, label, text, reason: { code, source: "operation-record" }, notes: [] }} />);
   expect(screen.queryByText(label)).not.toBeInTheDocument();
   expect(screen.queryByText(text)).not.toBeInTheDocument();
   expect(screen.getByText("MIT")).toBeInTheDocument();
 });
 
 it.each([
-  ["source-planned", "规划中", "目录里列了它，这个部署还没有安装。"],
-  ["unavailable", "不可用", "它依赖的「文献检索」在这个部署上没有提供。"],
-] as const)("still says a package is %s, since the reader can act on that", (state, label, text) => {
-  render(<SkillPackagePanel view={view} availability={{ state, label, text, reason: { code: "x", source: "operation-record" }, notes: [] }} />);
+  ["limited", "受限", "它需要的数据或模型权重「esm2」这个部署没有提供；其余部分照常。", "dependency-data-missing"],
+  ["limited", "受限", "它指定「numpy」>=2，运行环境装的是 1.26；结果以运行环境的版本为准。", "dependency-version-differs"],
+  ["source-planned", "规划中", "目录里有，你还没有安装。", "not-installed"],
+] as const)("still says what the reader's own package needs or has not been installed (%s)", (state, label, text, code) => {
+  render(<SkillPackagePanel view={view} availability={{ state, label, text, reason: { code, source: "image-recipe" }, notes: [] }} />);
   expect(screen.getByText(label)).toBeInTheDocument();
   expect(screen.getByText(text)).toBeInTheDocument();
 });

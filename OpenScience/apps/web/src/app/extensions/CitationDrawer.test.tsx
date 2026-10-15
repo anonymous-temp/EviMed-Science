@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
+import type { InventoryItem } from "@/lib/extensionsClient";
 import { CitationDrawer } from "./PluginDrawers";
 import { useCitationPlugin } from "./useCitationPlugin";
 
@@ -13,9 +14,16 @@ const plugin = (over: object = {}) => ({
   desired: { revision: 2, enabled: true, settings: { timeoutMs: 15000 } }, effective: { revision: 2, enabled: true, settings: { timeoutMs: 15000 } },
   phase: "effective", error: null, removed: false, limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 }, ...over,
 });
+// The item as the server hands it: the platform's own words for the plugin and for each tool it lists.
+const item: InventoryItem = {
+  id: "citations", title: "文献引用核对", use: "核对参考文献的 DOI 和 PubMed 记录，并按所需格式排版。", icon: "Quote", state: "on",
+  control: { kind: "switch", setting: "dsh-cite" }, opens: { kind: "drawer" },
+  does: "回答或报告里出现参考文献时，按 DOI、PMID 查回原始书目记录，标出查不到或信息不一致的条目，再按你要的格式排版。", how: "在当前项目里打开开关即可。",
+  toolSentences: { cite_lookup: "按标题、DOI 或 PMID 查找文献书目", cite_bibtex: "导出 BibTeX" },
+};
 function Harness() {
   const citation = useCitationPlugin("project-1");
-  return <CitationDrawer citation={citation} projectName="我的研究" onClose={() => {}} />;
+  return <CitationDrawer item={item} citation={citation} projectName="我的研究" groupTitle="对话里的能力" onClose={() => {}} />;
 }
 const show = async () => { render(<Harness />); return screen.findByRole("dialog", { name: "文献引用核对" }); };
 beforeEach(() => {

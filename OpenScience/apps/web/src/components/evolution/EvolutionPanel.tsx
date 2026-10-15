@@ -39,7 +39,7 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
     <h2 className="text-body font-semibold text-text">{dataset ? "这份数据可用的工具" : "循证进化"}</h2>
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {tools === null ? <FilesSkeleton /> : tools.length === 0 ? !error && <EmptyState title={dataset ? "暂无已匹配的工具" : "暂无新工具"} /> : <ul className="space-y-3">{tools.map(tool => <li key={tool.id} className="rounded-card bg-surface-1 p-4">
-      <h3 className="text-ui font-medium text-text">{tool.name ?? tool.description ?? '工具'}</h3>
+      <h3 className="text-ui font-medium text-text">{tool.name ?? tool.description ?? '科研工具'}</h3>
       {tool.description && <p className="mt-1 text-ui text-text-2">{tool.description}</p>}
       <div className="mt-2 flex flex-wrap gap-2"><Tag>{tool.validationLevel === 'V4' && Number.isInteger(tool.usage?.runs) && (tool.usage?.runs ?? -1) >= 0 ? `已用于 ${tool.usage?.runs} 次研究` : VALIDATION[tool.validationLevel] ?? tool.validationLevel}</Tag><Tag>{DATA[tool.dataLevel] ?? tool.dataLevel}</Tag>{tool.maintenanceState === 'deprecating' && <Tag>待修复</Tag>}{access.operator && tool.status && <Tag>{{ staged: "待上线", active: "已上线", alias: "历史别名", retired: "已退役" }[tool.status]}</Tag>}</div>
       {tool.papers && tool.papers.length > 0 && <Disclosure summary="依据文献"><ul className="mt-2 space-y-2">{tool.papers.map(paper => <li key={paper.id}><a href={paper.url} target="_blank" rel="noreferrer" className="text-ui text-accent">{paper.title}</a></li>)}</ul></Disclosure>}

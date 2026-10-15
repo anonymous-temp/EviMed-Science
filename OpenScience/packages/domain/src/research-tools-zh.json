@@ -1,6 +1,7 @@
 {
   "description": "What each tool of the research tool set (the evimed MCP server, MCP_TOOL_BASE_NAMES) does, in one sentence a researcher can read, and the group the plugins page lists it under. The key is the tool's base name. researchToolDisplay.mjs reads this and a test holds it equal to the published tool list, so a tool added without a sentence fails there.",
   "groups": ["网页与资料", "公共数据", "文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "循证 GEO", "虚拟临床研究", "其他"],
+  "groupModules": { "循证 GEO": "geo", "虚拟临床研究": "vcr" },
   "tools": {
     "literature_search": { "group": "文献与指南检索", "use": "按关键词、检索式或关系在 PubMed 等文献库里查论文。" },
     "reference_list": { "group": "文献与指南检索", "use": "查一篇论文引用了哪些文献，或被哪些论文引用。" },

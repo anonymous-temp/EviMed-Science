@@ -50,6 +50,13 @@ function searchBoxes(path: string): { line: number; tag: string; clearable: bool
         found.push({ line, tag, clearable: /label="清除搜索"/.test(text) });
       }
     }
+    // A page that hands its search to the framework's toolbar (`toolbar={{ search: { … } }}`) has no `<SearchInput>` of its own to
+    // see: the box is the toolbar's, and its way out is the `onClear` in that object.
+    if (ts.isPropertyAssignment(node) && node.name.getText(source) === "search" && ts.isObjectLiteralExpression(node.initializer)) {
+      const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      const props = node.initializer.properties;
+      found.push({ line, tag: "toolbar search", clearable: props.some((prop) => ts.isSpreadAssignment(prop) || prop.name?.getText(source) === "onClear") });
+    }
     ts.forEachChild(node, visit);
   };
   visit(source);

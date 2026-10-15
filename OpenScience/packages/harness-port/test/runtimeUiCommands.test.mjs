@@ -57,7 +57,7 @@ test('the slash popup lists the public tools, with category and summary to searc
     { id: 'clinical-evidence-synthesis', label: '临床证据深度分析', detail: '临床证据 · 围绕一个临床问题检索并综合证据。' },
     { id: 'comprehensive-drug-evaluation', label: '综合药品评价', detail: '临床证据 · 多维度评价一个药品。' },
     { id: 'research-topic-selection', label: '科研选题', detail: '研究规划 · 提出可落地的选题。' },
-  ], 'how long a tool takes is said once, on 工具');
+  ], 'how long a tool takes is said once, on 科研工具');
 });
 
 test('a tool its own module opens is not a row in the popup, and still has a chip', () => {
@@ -88,7 +88,7 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(f.commands.length, 1);
   const command = f.commands[0];
   assert.equal(command.name, '工具');
-  assert.equal(command.description(), '选择工具');
+  assert.equal(command.description(), '选择科研工具');
   assert.equal(command.available({ sessionId: 'session-a' }), true);
   assert.equal(command.ui.kind, 'popupSelect');
   const options = await command.ui.options({ sessionId: 'session-a' }, new globalThis.AbortController().signal);
@@ -134,7 +134,7 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
   assert.match(drawn, /临床证据深度分析/);
-  // The tool's name alone: its duration and summary were said on 工具.
+  // The tool's name alone: its duration and summary were said on 科研工具.
   assert.doesNotMatch(drawn, /分钟|围绕一个临床问题|你会拿到|做不到/);
   // One click removes it; a native tooltip would be a second name for the same button.
   assert.match(drawn, /aria-label="移除“临床证据深度分析”"/);
@@ -232,7 +232,7 @@ test('references are read back strictly', () => {
   assert.deepEqual(knowledgeCandidates({ ok: false, items: [{ id: 'src_1', title: 'A' }] }), []);
 });
 
-// 循证 GEO: its capabilities are hidden from 工具, so the catalogue may not
+// 循证 GEO: its capabilities are hidden from 科研工具, so the catalogue may not
 // list them, and a conversation bound to any of them still says 「循证 GEO」.
 const GEO_OPTIONS = {
   sessionId: 'session-a', controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],

@@ -12,6 +12,7 @@ import {
   Settings,
   SquarePen,
   UsersRound,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fetchWebMe } from "@/lib/apiClient";
@@ -60,7 +61,7 @@ interface NavItem {
  */
 const NAV: NavItem[] = [
   { to: "/app/chat", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
-  { to: "/app/capabilities", label: "工具", icon: <Bot size={16} aria-hidden="true" /> },
+  { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
@@ -76,7 +77,7 @@ const NAV: NavItem[] = [
 const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon: <Newspaper size={16} aria-hidden="true" /> };
 
 /**
- * 「虚拟临床研究」 and 「循证 GEO」, in that order directly below 「工具」 — and,
+ * 「虚拟临床研究」 and 「循证 GEO」, in that order directly below 「科研工具」 — and,
  * like the frontier feed, only where `/api/me` offers the module to this
  * account (`features.vcr`, `features.geo`). A row that led to 「还没有开放」
  * would be a destination that is not one.
@@ -86,7 +87,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 
 /**
  * The rows in order: the frontier feed after 「新对话」, then 「虚拟临床研究」 and
- * 「循证 GEO」 after 「工具」, in that order — the two boards sit together,
+ * 「循证 GEO」 after 「科研工具」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
 function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo: boolean }): NavItem[] {
@@ -127,9 +128,12 @@ export function Sidebar() {
   // The module the tab's project belongs to, told by the project list below (a study or a GEO project, a draft included).
   const [projectModule, setProjectModule] = useState<"geo" | "vcr" | null>(null);
   const [accountName, setAccountName] = useState("");
+  // 运维 is the operators' console, on a page of its own since it left 设置 (R19): its entry is the one thing this footer holds
+  // for an operator beside the gear.
+  const [operator, setOperator] = useState(false);
   useEffect(() => {
     let live = true;
-    void fetchWebMe().then((me) => { if (live && me) setAccountName(me.user.name); }).catch(() => {});
+    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); } }).catch(() => {});
     return () => { live = false; };
   }, []);
   const rows = navRows({ frontier, vcr, geo });
@@ -224,6 +228,18 @@ export function Sidebar() {
             {(accountName.trim()[0] ?? "").toUpperCase()}
           </span>
           <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
+          {operator && (
+            <Tooltip content="运维" kind="label">
+              <Link
+                to="/app/ops"
+                aria-label="运维"
+                aria-current={location.pathname.startsWith("/app/ops") ? "page" : undefined}
+                className={iconButtonClasses({ active: location.pathname.startsWith("/app/ops") })}
+              >
+                <Wrench size={16} aria-hidden="true" />
+              </Link>
+            </Tooltip>
+          )}
           <Tooltip content="设置" kind="label">
             <Link
               to="/app/account"

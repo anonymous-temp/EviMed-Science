@@ -50,7 +50,7 @@ import { completeOwnedAutopilotRun, sweepAutopilotOrphans } from "./autopilotRun
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
-import { createPluginInventoryRoutes } from "./pluginInventoryRoutes.mjs";
+import { createInventoryRoutes } from "./inventoryRoutes.mjs";
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
@@ -1159,8 +1159,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  // The engines' readiness is read at request time: the availability service is composed further down.
-  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config, engines: user => availability.service.engineReadiness(user) });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -1225,7 +1224,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
     artifacts: skillArtifacts, supply: skillSupply,
     // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
-    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on" }),
+    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on", loopxEnabled: config.loopxEnabled !== false }),
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -3061,7 +3060,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
-    vcrEngineRefresh: () => vcr?.engineProbe?.refresh?.() ?? Promise.resolve(null),
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,
@@ -6181,7 +6179,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await evimedAuthRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
-      if (await pluginInventoryRoutes(req, res)) return;
+      if (await inventoryRoutes(req, res)) return;
       if (await extensionRoutes(req, res)) return;
       if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
