@@ -213,16 +213,17 @@ it("a search shows every match across the groups, unfolded", async () => {
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
 });
 
-it("the toolbar's chips are the groups the list can fill, with their counts; a chosen group shows all of its rows, and none is offered with nothing in it", async () => {
+it("the toolbar's chips are the groups the list can fill; a chosen group shows all of its rows, and none is offered with nothing in it", async () => {
   skills.listPersonalSkills.mockResolvedValue({ items: [mine], nextCursor: null });
   api.listWebResearchAgents.mockResolvedValue(catalogue);
   open("/app/extensions/skills");
   await screen.findByRole("region", { name: "科研分析" });
-  const bar = screen.getByRole("group", { name: "插件与技能" });
+  const bar = screen.getByRole("group", { name: "筛选与搜索" });
   const chips = within(bar).getByRole("group", { name: "技能分类" });
   const labels = within(chips).getAllByRole("button").map(chip => chip.textContent);
   // Every group that has rows, in the order the page lists them; 通用 and 长任务 and 循证 GEO have none here and are not drawn.
-  expect(labels).toEqual(["全部16", "我的技能1", "办公文档2", "科研分析6", "写作与核查1", "科研工具6"]);
+  // The headings carry the sizes, so a chip carries none until a search narrows the groups.
+  expect(labels).toEqual(["全部", "我的技能", "办公文档", "科研分析", "写作与核查", "科研工具"]);
   await userEvent.click(within(chips).getByRole("button", { name: /^科研分析/ }));
   const analysis = screen.getByRole("region", { name: "科研分析" });
   expect(within(analysis).getAllByRole("listitem")).toHaveLength(6);
@@ -231,10 +232,15 @@ it("the toolbar's chips are the groups the list can fill, with their counts; a c
   expect(screen.queryByRole("region", { name: "我的技能" })).not.toBeInTheDocument();
   await userEvent.click(within(chips).getByRole("button", { name: /^全部/ }));
   expect(screen.getByRole("region", { name: "办公文档" })).toBeInTheDocument();
+  // While a search narrows the groups each chip says what it would show.
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能");
+  const narrowed = within(screen.getByRole("group", { name: "技能分类" }));
+  expect(narrowed.getByRole("button", { name: /^办公文档\s*2$/ })).toBeInTheDocument();
+  expect(narrowed.getByRole("button", { name: /^科研分析\s*6$/ })).toBeInTheDocument();
   // A search the chosen group cannot answer falls back to all: the chip is not left selected over an empty list.
-  await userEvent.click(within(chips).getByRole("button", { name: /^办公文档/ }));
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能 a");
-  expect(screen.getByRole("region", { name: "科研分析" })).toBeInTheDocument();
+  await userEvent.click(narrowed.getByRole("button", { name: /^办公文档/ }));
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能 f");
   expect(within(screen.getByRole("region", { name: "科研分析" })).getAllByRole("listitem")).toHaveLength(1);
   // One group is left, so there is nothing to choose between: the chips are not drawn.
   expect(screen.queryByRole("group", { name: "技能分类" })).not.toBeInTheDocument();

@@ -100,6 +100,7 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
   const skillCount = platformReady ? skillGroups({ personal, platform: platformReady, tools: curatedTools, query: "" }).total : null;
   const pluginCount = inventoryReady ? countPlugins(inventoryReady, extensions) : null;
   const groupsNow = skillGroups({ personal, platform: platformReady, tools: curatedTools, query });
+  const searching = query.trim() !== "";
   // The chip the toolbar shows is a group the list can fill: one the search left empty is not offered, and falls back to all.
   const group = groupsNow.list.some(entry => entry.name === chosenGroup) ? chosenGroup : null;
 
@@ -163,21 +164,25 @@ function Extensions({ tab, itemId }: { tab: Tab; itemId: string | undefined }) {
     </Menu>
   ) : null;
 
-  const skillCountLabel = skillCount ?? undefined;
   return (
     <PageShell title="插件与技能" actions={actions}
+      // One row of views over one row of controls, the same two on both tabs so the band keeps its height: the groups of the
+      // skills as chips and the search, or the search alone.
+      tabs={{
+        label: "插件与技能", value: tab,
+        onChange: next => { setQuery(""); setChosenGroup(null); setOpen(null); navigate(`/app/extensions/${next}`); },
+        items: [{ value: "skills", label: "技能", count: skillCount ?? undefined }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }],
+      }}
       toolbar={{
-        label: "插件与技能",
-        views: {
-          label: "插件与技能", value: tab,
-          onChange: next => { setQuery(""); setChosenGroup(null); setOpen(null); navigate(`/app/extensions/${next}`); },
-          items: [{ value: "skills", label: "技能", count: skillCountLabel }, { value: "plugins", label: "插件", count: pluginCount ?? undefined }],
-        },
+        label: "筛选与搜索",
         filters: tab === "skills" && groupsNow.list.length > 1 ? [{
-          kind: "chips", label: "技能分类", value: group ?? "all", maxVisible: 12,
-          options: [{ value: "all", label: "全部", count: groupsNow.total }, ...groupsNow.list.map(entry => ({ value: entry.name, label: entry.name, count: entry.count }))],
+          kind: "chips", label: "技能分类", value: group ?? "all", maxVisible: 9,
+          // The groups' own headings carry their sizes; a chip carries one only while a search is narrowing them.
+          options: [{ value: "all", label: "全部", count: searching ? groupsNow.total : undefined },
+            ...groupsNow.list.map(entry => ({ value: entry.name, label: entry.name, count: searching ? entry.count : undefined }))],
           onChange: next => setChosenGroup(next === "all" ? null : next),
         }] : [],
+        onClear: () => { setQuery(""); setChosenGroup(null); },
         search: { label: "搜索插件与技能", value: query, placeholder: "搜索插件与技能", onChange: setQuery, onClear: () => setQuery("") },
       }}>
       {tab === "skills" ? (

@@ -73,7 +73,7 @@ export function InventoryList({ inventory, citation, extensions, allCatalogue, q
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div>
       {groups.map(group => (
         <Section key={group.id} title={group.title}>
           <List label={group.title} divided>{group.items.map(row)}</List>

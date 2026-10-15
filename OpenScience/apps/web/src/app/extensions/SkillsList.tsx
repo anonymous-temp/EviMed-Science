@@ -92,10 +92,11 @@ export function SkillsList({ personal, platform, tools, query, group, hasMore, l
   );
   const emptyLibrary = !needle && group === null && personal.length === 0 && !hasMore;
   return (
-    <div className="flex flex-col gap-6">
+    // The sections space themselves (`Section`'s top margin): a gap here would double it.
+    <div>
       <PendingSkillTransfers onResume={onResume} />
       {shows(MINE_GROUP) && (mine.length > 0 || emptyLibrary) && (
-        <Section title={MINE_GROUP} count={mine.length}>
+        <Section title={MINE_GROUP} count={mine.length > 0 ? mine.length : undefined}>
           {mine.length > 0 ? (
             <List label={MINE_GROUP} divided>
               {mine.map(skill => {
