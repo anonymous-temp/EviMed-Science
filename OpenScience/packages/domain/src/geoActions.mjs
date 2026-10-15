@@ -19,9 +19,9 @@
  *   `rate` below the floor (its return type says so), and "did it work" is judged only on the arms — pilot groups together against
  *   control groups together, over rounds with the same engines and groups (`NET` rows, written by the measurement package).
  * - **A control group has no action.** It is measured and never worked on (writing for it takes it out of the control arm).
- * - **The status is the furthest stage reached**, and two words are flags: `stale` (published eight weeks, never cited — the
- *   criterion the orchestrator uses to put a group in the next batch, `geoPlacementStale`) and `skipped` (a person's reversible
- *   word). The order of the stages is `GEO_ACTION_STATUSES`.
+ * - **The status is the furthest stage reached**, and two words are flags: `stale` (the latest publication is eight weeks old and
+ *   nothing cited any — the criterion the orchestrator uses, per article, to put a group in the next batch, `geoPlacementStale`)
+ *   and `skipped` (a person's reversible word). The order of the stages is `GEO_ACTION_STATUSES`.
  * - **A key survives what rewrites around it**: a new strategy version with the same gap, and a question set copied under new
  *   group ids (a group keeps its name; `aliasIds` carry the ids it had), find the same choice. The key's first word is the kind the
  *   action was born with; `kind` itself becomes `correct_error` when a group is already at its target and errors are open.
@@ -56,6 +56,8 @@ export const GEO_ACTION_SERIES_POINTS = 12
 const WEEK_MS = 7 * 86_400_000
 /** The rounds that measure the whole question set: a group's reading now is read from these only. */
 const HEADLINE_KINDS = Object.freeze(['baseline', 'weekly', 'single_step'])
+/** What an action that belongs to no group (a project-wide gap) is judged on: the index and mention over P2 and P3, the headline targets. */
+const PROJECT_ACTION_METRICS = Object.freeze(['M-19', 'M-01S'])
 /** The error states that still ask for work. */
 const OPEN_ERROR_STATUSES = Object.freeze(['open', 'acting', 'awaiting_remeasure'])
 /** Order states in which an article is being placed, and in which it is published. */
@@ -299,6 +301,8 @@ export function geoChoiceEffects(actions, { groups = null } = {}) {
  * @property {ReadonlyArray<{ key: string, state: string, groups?: string[], errors?: string[] }>} [batches] content batches the orchestrator dispatched
  * @property {ReadonlyArray<{ key: string, skipped?: boolean, sourceDomain?: string | null, updatedAt?: string | null }>} [choices]
  * @property {Record<string, ReadonlyArray<Record<string, any>>>} [candidates] sources the group could go to, by group id
+ * @property {Record<string, Record<string, any>>} [sourceInfo] what the project knows of a website by bare domain (its source table:
+ *   name, kind, layer, conditions, available, route) — for a source an action names that no candidate list holds
  * @property {Record<string, { netEffect: number | null, verdict: string | null, noiseBand: number | null, comparable: boolean, roundId?: string | null }>} [arms]
  *   the net effect rows by `<pool>|<metric>` (`all|M-19` for the index)
  */
@@ -352,43 +356,57 @@ export function geoActionEntry(entry) {
 
 /**
  * The sources an action lists: the person's swapped one first, then the outlets it was placed in, then the model's choice and the
- * candidates' own order — at most {@link GEO_ACTION_SOURCES}, each once.
+ * candidates' own order — at most {@link GEO_ACTION_SOURCES}, each once. A source is an address (`domain`) or, for the brand's own
+ * channel, a platform (`channel`, no domain): the person publishes there and pastes the link.
  *
- * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null, placed: ReadonlyArray<{ domain: string, orderId: string | null }>,
- *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }> }} choice
+ * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
+ *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
+ *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }>, info?: Record<string, Record<string, any>> }} choice
  */
-function rankedSources(candidates, { swapped, placed, modelSources }) {
+function rankedSources(candidates, { swapped, placed, modelSources, info = {} }) {
   /** @type {Map<string, Record<string, any>>} */
-  const byDomain = new Map()
+  const byKey = new Map()
   for (const candidate of candidates) {
     const raw = text(candidate?.domain)
     const domain = raw ? bareDomain(raw) : null
-    if (domain && !byDomain.has(domain)) byDomain.set(domain, { ...candidate, domain })
+    const channel = text(candidate?.channel)
+    const key = domain ?? (channel ? `channel:${channel}` : null)
+    if (key && !byKey.has(key)) byKey.set(key, { ...candidate, domain })
   }
   /** @type {string[]} */
   const order = []
-  const take = (/** @type {string | null | undefined} */ domain) => { if (domain && !order.includes(domain)) order.push(domain) }
+  const take = (/** @type {string | null | undefined} */ key) => { if (key && !order.includes(key)) order.push(key) }
   take(swapped ? bareDomain(swapped) : null)
   for (const entry of placed) take(entry.domain)
   for (const entry of modelSources) take(entry.domain)
-  for (const domain of byDomain.keys()) take(domain)
-  return order.slice(0, GEO_ACTION_SOURCES).map((domain) => {
-    const candidate = byDomain.get(domain) ?? { domain }
-    const placedAs = placed.find((entry) => entry.domain === domain)
+  for (const key of byKey.keys()) take(key)
+  return order.slice(0, GEO_ACTION_SOURCES).map((key) => {
+    const domain = key.startsWith('channel:') ? null : key
+    const placedAs = domain ? placed.find((entry) => entry.domain === domain) : undefined
+    // An outlet the platform placed at is a placement whatever else is known of it: its own name and price fill what the lists lack.
+    // A source no candidate list holds (the run's own pick, an outlet it was placed at) is described from the project's source table.
+    const known = byKey.get(key) ?? (domain && info[domain] ? { ...info[domain], domain } : { domain: key })
+    const candidate = placedAs
+      ? { ...known, name: known.name ?? placedAs.name, price: known.price ?? placedAs.price, route: 'market', origin: known.origin ?? 'placed' }
+      : known
     const swappedTo = swapped ? bareDomain(swapped) : null
     return {
       domain,
+      channel: text(candidate.channel),
       name: text(candidate.name),
       kind: text(candidate.kind),
       layer: text(candidate.layer),
-      why: modelSources.find((entry) => entry.domain === domain)?.why ?? null,
+      why: domain ? modelSources.find((entry) => entry.domain === domain)?.why ?? null : null,
       citedFor: record(candidate.citedFor),
       conditions: record(candidate.conditions),
       price: finite(candidate.price),
       available: candidate.available === true ? true : candidate.available === false ? false : null,
+      unavailableBecause: list(candidate.unavailableBecause).map(String),
+      route: text(candidate.route),
       origin: text(candidate.origin),
-      chosen: placedAs ? 'placed' : swappedTo === domain ? 'swapped' : 'recommended',
+      chosen: placedAs ? 'placed' : domain && swappedTo === domain ? 'swapped' : 'recommended',
       orderId: placedAs?.orderId ?? null,
+      articleIds: list(candidate.articleIds).map(String),
     }
   })
 }
@@ -408,16 +426,19 @@ export function deriveGeoActions(input) {
   const expectations = list(strategy.expectations)
   const modelEntries = list(strategy.actions).filter((entry) => entry && typeof entry === 'object').map(geoActionEntry)
   const targetRows = list(input.targets?.rows)
-  const readings = list(input.readings).slice().sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? ''))
+  /** The rows that are rows: the derivation reads the platform's tables and a hand-written input alike, and never throws on the odd one. @param {unknown} rows */
+  const rowsOf = (rows) => list(rows).filter((row) => row && typeof row === 'object')
+  const readings = rowsOf(input.readings).slice().sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? ''))
     || String(left.roundId ?? '').localeCompare(String(right.roundId ?? '')))
-  const errors = list(input.errors)
-  const articles = list(input.articles).filter((article) => article && article.status !== 'withdrawn')
-  const orders = list(input.orders)
-  const ownedLinks = list(input.ownedLinks).filter((link) => link && link.status !== 'retired')
-  const cited = list(input.cited)
-  const batches = list(input.batches)
-  const choices = list(input.choices)
+  const errors = rowsOf(input.errors)
+  const articles = rowsOf(input.articles).filter((article) => article.status !== 'withdrawn')
+  const orders = rowsOf(input.orders)
+  const ownedLinks = rowsOf(input.ownedLinks).filter((link) => link.status !== 'retired')
+  const cited = rowsOf(input.cited)
+  const batches = rowsOf(input.batches)
+  const choices = rowsOf(input.choices)
   const candidates = record(input.candidates)
+  const sourceInfo = Object.fromEntries(Object.entries(record(input.sourceInfo)).map(([domain, value]) => [bareDomain(domain), record(value)]))
   const arms = record(input.arms)
   const poolReadings = list(input.poolReadings)
 
@@ -482,8 +503,8 @@ export function deriveGeoActions(input) {
     ].filter((value) => value != null)
     const live = publishedAt.length > 0
     const isCited = facts.citations.length > 0
-    // Published, never cited, and the earliest publication is eight weeks old.
-    if (live && !isCited && geoPlacementStale({ publishedAt: Math.min(.../** @type {number[]} */ (publishedAt)), now, cited: false })) return 'stale'
+    // Published, never cited, and the latest publication is eight weeks old: a new publication starts the wait again.
+    if (live && !isCited && geoPlacementStale({ publishedAt: Math.max(.../** @type {number[]} */ (publishedAt)), now, cited: false })) return 'stale'
     if (isCited && (facts.reached === true || facts.armUp)) return 'verified'
     if (facts.errorsClosed) return 'verified'
     if (isCited) return 'cited'
@@ -531,14 +552,15 @@ export function deriveGeoActions(input) {
   /**
    * One action of a group.
    * @param {{ born: string, group: GeoActionGroup | null, ref: string, gap?: Record<string, any> | null, errorRows?: Array<Record<string, any>>,
-   *   entry?: ReturnType<typeof geoActionEntry> | null, extraMetricIds?: string[] }} spec
+   *   entry?: ReturnType<typeof geoActionEntry> | null, extraMetricIds?: string[], extraChecks?: Array<Record<string, any>> }} spec
    */
-  const build = ({ born, group, ref, gap = null, errorRows = [], entry = null, extraMetricIds = [] }) => {
+  const build = ({ born, group, ref, gap = null, errorRows = [], entry = null, extraMetricIds = [], extraChecks = [] }) => {
     const key = uniqueKey(geoActionKey({ kind: born, groupId: group?.id ?? null, ref }))
     const pool = text(group?.pool)
-    const metricIds = geoExpectedMetrics(pool)
+    // An action of no group is the project's: judged on the headline metrics, against the tier's project-wide row.
+    const metricIds = group ? geoExpectedMetrics(pool) : [...PROJECT_ACTION_METRICS]
     /** @type {Array<Record<string, any>>} */
-    const checks = []
+    const checks = [...extraChecks]
     // ---- the metric and the target (the owner's table and the chosen tier's row, never a run's number)
     const wantedMetric = entry?.metricId ?? null
     if (wantedMetric && !metricIds.includes(wantedMetric)) checks.push({ code: 'metric_not_in_pool', metricId: wantedMetric, pool })
@@ -607,8 +629,10 @@ export function deriveGeoActions(input) {
     const channel = entry?.what?.channel && GEO_ARTICLE_CHANNELS.includes(/** @type {any} */ (entry.what.channel)) ? entry.what.channel : text(latestArticle?.channel)
     const layer = entry?.what?.layer && GEO_ARTICLE_LAYERS.includes(/** @type {any} */ (entry.what.layer)) ? entry.what.layer : text(latestArticle?.layer)
     const placed = facts.orders.filter((order) => [...PLACED_ORDER_STATES, ...PUBLISHED_ORDER_STATES].includes(String(order.state)) && text(order.domain))
-      .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id) }))
-    const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [] })
+      .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id), name: text(order.mediaName),
+        price: finite(order.settledCny) ?? finite(order.priceCny) }))
+    const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [],
+      info: sourceInfo })
     // ---- what happened
     const citedBy = facts.citations.map((item) => ({ engine: text(item.engine), questionId: text(item.questionId), askedAt: text(item.firstSeen), articleId: text(item.articleId) }))
       .sort((left, right) => String(left.askedAt ?? '').localeCompare(String(right.askedAt ?? '')))
@@ -734,7 +758,26 @@ export function deriveGeoActions(input) {
     const handoff = text(gap.handoff ?? gap.handoffTo)
     const gapClass = text(gap.class)
     if (!group) {
-      issues.push({ code: 'group_unknown', gapId, message: 'The gap names a group the latest question set does not have.' })
+      // A gap that names no group (a project-wide one: no authoritative source anywhere) or one the latest question set does not
+      // have is the project's: listed with no group and noted, so nothing a run wrote is out of sight.
+      const written = text(gap.groupId) ?? text(gap.group ?? gap.groupName)
+      if (handoff === 'monitor_only') {
+        noAction.push({ gapId, groupId: null, reason: 'monitor_only' })
+        continue
+      }
+      const wrongGap = gapClass === 'wrong' || handoff === 'EC'
+      const named = gapErrorIds(gap)
+      const rowsOfNamed = errors.filter((row) => row && typeof row === 'object' && named.has(String(row.id)))
+      for (const row of rowsOfNamed) claimedErrors.add(String(row.id))
+      const projectEntry = entryFor({ gapId, group: null, gapClass, errorIds: rowsOfNamed.map((row) => String(row.id)) })
+      if (projectEntry && projectEntry.what === null && projectEntry.reason && !projectEntry.promise && !projectEntry.engines.length) {
+        noAction.push({ gapId, groupId: null, reason: projectEntry.reason })
+        continue
+      }
+      if (!projectEntry) gapsWithoutEntry += 1
+      build({ born: wrongGap ? 'correct_error' : 'fill_gap', group: null,
+        ref: (gapId ?? gapClass ?? 'gap').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100) || 'gap',
+        gap, errorRows: rowsOfNamed, entry: projectEntry, extraChecks: written ? [{ code: 'group_unknown', group: written }] : [] })
       continue
     }
     if (group.isControl === true || handoff === 'monitor_only') {

@@ -10,6 +10,7 @@ import { after, before, test } from "node:test";
 import { GEO_AUDIENCES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { brandRegistry } from "../src/geoParse.mjs";
+import { GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { GEO_MEASURED_RANGE, geoArticleGateBound, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -432,6 +433,28 @@ test("every article but a correction names its question group", options, async (
   assert.deepEqual((await store.listArticles(project.id)).map((row) => row.layer), ["correction"]);
 });
 
+test("an article written for a control group is registered with a notice: the group leaves the control arm, nothing is refused", options, async () => {
+  const project = await freshProject();
+  await write(project, "questions", { data: { groups: [
+    { pool: "P2", name: "试点群", questions: [{ text: "q1", isMeasured: true }] },
+    { pool: "P2", name: "对照群", isControl: true, questions: [{ text: "q2", isMeasured: true }] },
+  ] } });
+  const [pilot, control] = [...(await store.questionMap(project.id, 1))].sort((left, right) => Number(left.isControl) - Number(right.isControl));
+  const item = (/** @type {string} */ name, /** @type {string} */ groupId) => ({ path: `deliverables/geo-content/${name}.md`, layer: "popular", claimIds: [], groupId,
+    safety: "clear", contentSha256: "c".repeat(64) });
+  const result = await write(project, "articles", { items: [item("pilot", pilot.id), item("control", control.id)] }, null, ledgerPassed);
+  assert.equal(result.ok, true);
+  assert.equal(result.ids.length, 2, "both are registered: nothing is blocked");
+  const notices = result.issues.filter((/** @type {any} */ issue) => issue.code === "notice");
+  assert.deepEqual(notices.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[1, "groupId"]], "one notice, for the article of the control group");
+  assert.match(notices[0].message, /control group \(对照群\)/);
+  assert.match(notices[0].message, /control arm/);
+  // What the page reads says the same, so a person is told where they look.
+  const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [] } });
+  const view = await service.articlesOf(project);
+  assert.deepEqual(view.articles.map((/** @type {any} */ article) => [article.groupId === control.id, article.groupIsControl]).sort(), [[false, false], [true, true]]);
+});
+
 test("an article's gate is the run ledger's verdict, never the run's own claim", options, async () => {
   const project = await freshProject();
   await write(project, "questions", { data: { groups: [{ pool: "P2", name: "g", questions: [{ text: "q", isMeasured: true }] }] } });
@@ -537,6 +560,46 @@ test("journey, strategy and placement preferences are versions, and each refused
   assert.equal(plan.version, 1);
   assert.deepEqual(plan.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[1, "unknown_value"]]);
   assert.deepEqual((await store.latestPlacementPlan(project.id))?.data.avoid, ["fake-times.cn"]);
+});
+
+test("a write whose every entry is refused leaves what the project holds as it was; an empty list given is a clear", options, async () => {
+  const project = await measured(await freshProject());
+  const good = await write(project, "strategy", { data: {
+    gaps: [{ gapId: "A", class: "benefit_only", groupId: "g", judgment: "只讲获益" }],
+    battlefield: { id: "BF-01", name: "主战场", groups: ["品牌身份"] },
+    expectations: [{ engine: "deepseek", promise: "可以承诺被提及" }],
+    noGo: [{ item: "不承诺位次", reason: "无依据" }],
+  } });
+  assert.equal(good.ok, true, JSON.stringify(good.issues));
+  const held = (await store.latestStrategy(project.id));
+  // The same plan under names of the run's own: every entry refused, nothing replaced, no new version.
+  const own = await write(project, "strategy", { data: {
+    gaps: [{ title: "自拟", impact: "后果" }], battlefield: { primary: "某群" }, expectations: [{ label: "豆包" }], noGo: [{ what: "x" }],
+  } });
+  assert.equal(own.ok, false, "nothing was written, and it says so");
+  const after = await store.latestStrategy(project.id);
+  assert.equal(after.version, held.version);
+  assert.deepEqual([after.gaps.length, after.battlefield.groups, after.expectations.length, after.noGo.length], [1, ["品牌身份"], 1, 1]);
+  // An explicit empty list is the run clearing it.
+  const cleared = await write(project, "strategy", { data: { noGo: [] } });
+  assert.equal(cleared.ok, true);
+  assert.deepEqual((await store.latestStrategy(project.id)).noGo, []);
+});
+
+test("a field the platform does not know is one notice for the items that carry it, and it names what the object keeps", options, async () => {
+  const project = await measured(await freshProject());
+  const gap = (/** @type {string} */ id) => ({ gapId: id, class: "benefit_only", groupId: "g", judgment: "只讲获益", title: "自拟的名字", impact: "后果" });
+  const result = await write(project, "strategy", { data: { gaps: [gap("A"), gap("B"), gap("C")] } });
+  assert.equal(result.ok, true);
+  const ignored = result.issues.filter((/** @type {any} */ issue) => issue.code === "ignored_fields");
+  assert.equal(ignored.length, 1, "three items, one notice");
+  assert.deepEqual([ignored[0].field, ignored[0].count, ignored[0].indexes, ignored[0].index], ["gaps.title,impact", 3, [0, 1, 2], 0]);
+  assert.match(ignored[0].message, /This object keeps: /);
+  assert.ok(ignored[0].message.includes("gapId") && ignored[0].message.includes("judgment") && ignored[0].message.includes("expectedPoints"), ignored[0].message);
+  // a single item's notice is the plain one
+  const one = await write(project, "strategy", { data: { gaps: [gap("D")] } });
+  const single = one.issues.find((/** @type {any} */ issue) => issue.code === "ignored_fields");
+  assert.deepEqual([single.count, single.indexes, single.index], [undefined, undefined, 0]);
 });
 
 test("a claim keeps the reader's name for its source, from the method's sourceRefLabel", options, async () => {

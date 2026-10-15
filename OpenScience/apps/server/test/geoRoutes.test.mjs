@@ -123,7 +123,8 @@ test("metric families: one line off, the module's counts on", () => {
     service: { projectsCreated: 3, reads: 10, writes: 5, writeIssues: 2, notFound: 1, researchCapped: 4 },
     social: { configured: true, counters: { searches: 1, requests: 6, collected: 5, noResults: 0, failed: 1 }, lastError: null },
     inclusion: { submitted: 6, polled: 40, done: 4, failed: 1, expired: 1 },
-    imports: { imported: 9, failed: 2 },
+    imports: { imported: 9, failed: 2, ignoredFields: 7, declinedFields: 2 },
+    writeFields: [{ what: "strategy", outcome: "ignored", value: 3 }, { what: "articles", outcome: "declined", value: 1 }],
     valueUpkeep: { ticks: 7, projectsChecked: 3, versionsPruned: 41, projectsPruned: 2, failures: 1 },
   });
   const byName = new Map(families.map((family) => [family.name, family]));
@@ -137,6 +138,9 @@ test("metric families: one line off, the module's counts on", () => {
     "an inclusion check given up on after its age limit is counted (Q-7)");
   assert.deepEqual(byName.get("open_science_geo_run_import_total")?.series.map((series) => [series.labels?.outcome, series.value]), [["imported", 9], ["failed", 2]],
     "a run's import that lost a write is counted (D-24)");
+  assert.deepEqual(byName.get("open_science_geo_write_fields_total")?.series.map((series) => [series.labels?.what, series.labels?.outcome, series.value]),
+    [["strategy", "ignored", 3], ["articles", "declined", 1], ["run_files", "ignored", 7], ["run_files", "declined", 2]],
+    "fields a run wrote that the platform does not keep are counted by the write: the evidence for storing one");
   assert.equal(byName.get("open_science_geo_value_upkeep_total")?.series.find((series) => series.labels?.event === "versionsPruned")?.value, 41,
     "the versions the upkeep pruned are counted (G10c)");
   assert.equal(new Map(geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null, inclusion: {} }).map((family) => [family.name, family])).has("open_science_geo_value_upkeep_total"), false);

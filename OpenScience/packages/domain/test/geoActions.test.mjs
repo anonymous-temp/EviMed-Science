@@ -234,6 +234,24 @@ test("the status is the furthest stage reached; skipped and stale are flags", ()
   assert.equal(status({ articles: [article({ status: "withdrawn" })] }), "proposed", "a withdrawn article is nothing");
 });
 
+test("a pasted link moves an action through the article it names; a link of a group alone is the group's and moves no action", () => {
+  // Live finding, 2026-10-15: a link registered with a group and no article was recorded (and is read by the post-publication
+  // re-tests and the cluster view) while the group's action stayed `proposed`. Attribution is by article: the same chain that
+  // carries orders and citations. The web sends `articleId` whenever the page's link is for one of the platform's articles.
+  const article = { id: "a1", groupId: "g-p4", layer: "qa", title: "安全问答", status: "publishable", gate: "passed", safety: "clear", createdAt: ago(10) };
+  const key = "fill_gap:g-p4:benefit_only";
+  const read = (/** @type {any} */ over) => byKey(deriveGeoActions({ ...base(), ...over }))[key];
+  const link = (/** @type {any} */ over) => ({ id: "l1", groupId: "g-p4", platform: "zhihu", publishedAt: ago(3), status: "active", ...over });
+  const named = read({ articles: [article], ownedLinks: [link({ articleId: "a1" })] });
+  assert.deepEqual([named.status, named.ownedLinkIds], ["live", ["l1"]]);
+  const byGroup = read({ articles: [article], ownedLinks: [link({ articleId: null })] });
+  assert.deepEqual([byGroup.status, byGroup.ownedLinkIds], ["ready", []], "no article named: nothing in the action's chain");
+  const alone = read({ ownedLinks: [link({ articleId: null })] });
+  assert.deepEqual([alone.status, alone.ownedLinkIds], ["proposed", []]);
+  const retired = read({ articles: [article], ownedLinks: [link({ articleId: "a1", status: "retired" })] });
+  assert.deepEqual([retired.status, retired.ownedLinkIds], ["ready", []], "a retired link is nothing");
+});
+
 test("a person's choices are found under the key a group had before its set was copied, and swap the first source", () => {
   const renamed = groups.map((group) => (group.id === "g-p4" ? { ...group, id: "g-p4-v2", aliasIds: ["g-p4"] } : group));
   const choices = [{ key: "fill_gap:g-p4:benefit_only", skipped: false, sourceDomain: "kepuchina.cn", updatedAt: ago(1) }];
@@ -313,6 +331,38 @@ test("the net effect is the arms', stated with its band, and only when comparabl
   assert.equal(geoActionSentence({ actedGroups: 0, gapGroupsNotActedOn: 3, arm: null }), "另有 3 个群的缺口还没有行动");
   const action = byKey(result)["fill_gap:g-p4:benefit_only"];
   assert.deepEqual(action.observed.arm, { netEffect: 4.2, verdict: "up", noiseBand: 3, comparable: true, scope: "project", pool: null });
+});
+
+test("a gap that names no group is the project's: an action with no group, judged on the headline metrics; nothing a run wrote is out of sight", () => {
+  const projectGaps = [
+    { gapId: "gap-01", class: "weak_source", rank: 1, judgment: "引擎没有一个自有或权威来源可引" },
+    { gapId: "gap-02", class: "wrong", rank: 2, judgment: "给药频次被讲错", evidence: { errors: ["e-9"] } },
+    { gapId: "gap-03", class: "outdated", group: "已经不存在的语义群", judgment: "引用的页面过时" },
+    { gapId: "gap-04", class: "audience_mismatch", handoff: "monitor_only", judgment: "只监测" },
+    { gapId: "gap-05", class: "dropped_condition", judgment: "不做" },
+  ];
+  const targetsWithIndex = { version: 3, rows: [...targets.rows, { tier: "2", metricId: "M-19", pool: "all", target: 35, horizonWeeks: 12, dataType: "forecast" }] };
+  const result = deriveGeoActions({ ...base(), targets: targetsWithIndex, strategy: { ...base().strategy, gaps: projectGaps, actions: [
+    { gapId: "gap-01", what: { layer: "card", channel: "brand_site" }, metricId: "M-19", promise: "enter_mention", basis: "144 条回答的引用全是第三方" },
+    { gapId: "gap-05", reason: "已由 gap-01 的锚点覆盖" },
+  ] }, errors: [{ id: "e-9", fingerprint: "f9", engine: "doubao", groupId: "g-p1", severity: "S3", status: "open", statement: "错", createdAt: ago(3) }] });
+  const actions = byKey(result);
+  assert.deepEqual(Object.keys(actions).filter((key) => key.includes(":-:")).sort(), ["correct_error:-:gap-02", "fill_gap:-:gap-01", "fill_gap:-:gap-03"]);
+  const weak = actions["fill_gap:-:gap-01"];
+  assert.equal(weak.group, null);
+  assert.deepEqual(weak.expected.metricIds, ["M-19", "M-01S"]);
+  assert.equal(weak.expected.primaryMetricId, "M-19");
+  assert.equal(weak.expected.target, 35, "the tier's project-wide row");
+  assert.equal(weak.checks.length, 0);
+  assert.equal(weak.what.channel, "brand_site");
+  assert.equal(weak.status, "proposed");
+  assert.ok(actions["fill_gap:-:gap-03"].checks.some((/** @type {any} */ check) => check.code === "group_unknown" && check.group === "已经不存在的语义群"));
+  // the error the wrong gap names is that gap's: it is not also an action of its own
+  assert.deepEqual(actions["correct_error:-:gap-02"].need.errorIds, ["e-9"]);
+  assert.equal(Object.keys(actions).some((key) => key.startsWith("correct_error:g-p1:")), false);
+  // a monitor-only gap and a gap answered with a reason alone are listed as having none, never silently gone
+  assert.deepEqual(result.noAction.filter((entry) => entry.groupId === null).map((entry) => [entry.gapId, entry.reason]).sort(),
+    [["gap-04", "monitor_only"], ["gap-05", "已由 gap-01 的锚点覆盖"]]);
 });
 
 test("the derivation never throws on odd rows, and an empty project has no actions", () => {
@@ -406,7 +456,7 @@ test("a person's two words reach the choosers as the derived actions' verdicts: 
     { id: "a-fix", groupId: "g-p1", layer: "correction", status: "publishable", title: "更正", createdAt: ago(4) },
   ];
   const errors = [{ id: "e-1", fingerprint: "f1", engine: "doubao", groupId: "g-p1", severity: "S3", status: "open", statement: "错", materials: [{ articleId: "a-fix" }], createdAt: ago(9) }];
-  const derive = (/** @type {Array<Record<string, any>>} */ choices) => deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: twoGaps }, articles, errors, choices });
+  const derive = (/** @type {Array<{ key: string, skipped?: boolean, sourceDomain?: string | null }>} */ choices) => deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: twoGaps }, articles, errors, choices });
   const skip = (/** @type {string[]} */ ...keys) => keys.map((key) => ({ key, skipped: true }));
 
   const none = geoChoiceEffects(derive([]).actions);
@@ -440,5 +490,5 @@ test("a person's two words reach the choosers as the derived actions' verdicts: 
   // the verdict is the action's own: a skipped action's status is "skipped", and the effects hold nothing but what the page shows
   assert.equal(derive(skip("fill_gap:g-p2:benefit_only")).actions.find((action) => action.key === "fill_gap:g-p2:benefit_only")?.status, "skipped");
   assert.deepEqual(geoChoiceEffects(null).skippedGroupIds.size, 0);
-  assert.deepEqual(geoChoiceEffects([{ nonsense: true }, null]).preferredByArticle.size, 0);
+  assert.deepEqual(geoChoiceEffects(/** @type {any} */ ([{ nonsense: true }, null])).preferredByArticle.size, 0);
 });

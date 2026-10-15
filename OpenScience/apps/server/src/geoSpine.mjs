@@ -22,8 +22,8 @@
  */
 
 import {
-  GEO_ACTION_READ_METRICS, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES, GEO_VIEW_METRIC_IDS, deriveGeoActions, geoGroupReading, geoMetricName,
-  geoMetricUnit, geoNeedsYou, geoStepSummary, geoTextKey, parseGeoActionKey,
+  GEO_ACTION_READ_METRICS, GEO_ARTICLE_CHANNEL_LABELS_ZH, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_OWNED_LINK_PLATFORMS, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES,
+  GEO_VIEW_METRIC_IDS, deriveGeoActions, geoChoiceEffects, geoGroupReading, geoMetricName, geoMetricUnit, geoNeedsYou, geoStepSummary, geoTextKey, parseGeoActionKey,
 } from "@evimed/domain";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
@@ -82,8 +82,8 @@ function errorCountsOf(errors) {
 export class GeoSpine {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, now?: () => Date, marketConfigured?: () => boolean,
-   *   placementPreview?: ((input: { project: any, groups: any[], candidates: Map<string, Array<Record<string, any>>>, choices: any[] }) =>
-   *     Promise<Map<string, Array<Record<string, any>>>>) | null }} options
+   *   placementPreview?: ((input: { project: any, groups: any[], candidates: Map<string, Array<Record<string, any>>>, choices: any[],
+   *     articles: any[] }) => Promise<Map<string, Array<Record<string, any>>>>) | null }} options
    *   `placementPreview` is the market's read-only ranking of the outlets an article of the group could go to (`geoMarket.mjs`
    *   `previewOutlets`): the same function the market places by, and nothing is ordered by asking.
    */
@@ -100,8 +100,10 @@ export class GeoSpine {
   /**
    * Everything the views read, once.
    * @param {{ id: string, userId: string, tier: string, engines: string[], steps?: any, budget?: any }} project
+   * @param {{ answers?: boolean }} [options] `answers: false` leaves out the latest round's answers (they only feed the sources a
+   *   group's views list): what a chooser needs of the actions is everything else.
    */
-  async load(project) {
+  async load(project, { answers = true } = {}) {
     const geoId = project.id;
     const sets = await this.store.questionSets(geoId);
     const version = sets[0]?.version ?? null;
@@ -206,7 +208,7 @@ export class GeoSpine {
     // The latest full round's answers, by group: the per-engine counts and the sources each group's answers cite.
     /** @type {Map<string, Array<Awaited<ReturnType<typeof roundAnswers>>[number]>>} */
     const answersByGroup = new Map();
-    if (latestRound) {
+    if (latestRound && answers) {
       const questionGroup = new Map((await this.#query(`SELECT id, group_id FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2`,
         [geoId, latestRound.set_version])).rows.map((/** @type {any} */ row) => [String(row.id), String(row.group_id)]));
       for (const answer of await roundAnswers(this.store, String(latestRound.id))) {
@@ -229,8 +231,11 @@ export class GeoSpine {
   }
 
   /**
-   * The sources an action of a group could go to, ranked as the platform would place them: the market's own ranking when it can be
-   * read, then what the engines cite for this group, then the strategy's layout. An impostor is never one.
+   * The sources an action of a group could go to, in the order the platform would take them: the market's own ranking when there is
+   * a market (price, whether it would place there and why not), then the brand's own channels the group's articles name, then what
+   * the engines cite for the group, then the strategy's layout. An impostor is never one. Each source carries how an article would
+   * get there (`route`): `market` (the platform places it), `own` (the brand publishes it and pastes the link), `waiting_market`
+   * (a media outlet and no market is connected), `not_in_market` (a market is connected and does not list it).
    * @param {Awaited<ReturnType<GeoSpine["load"]>>} spine
    * @returns {Promise<Map<string, Array<Record<string, any>>>>}
    */
@@ -251,10 +256,27 @@ export class GeoSpine {
       if (flags.some((flag) => flag === false)) return false;
       return flags.every((flag) => flag === true) ? true : null;
     };
+    const marketOn = this.marketConfigured();
+    /** How an article gets to a source, before the market has been asked: the brand's own layer is published by the brand. @param {string | null} layer */
+    const routeOf = (layer) => (layer === "owned" ? "own" : marketOn ? "not_in_market" : "waiting_market");
     /** @type {Map<string, Array<Record<string, any>>>} */
     const out = new Map();
     for (const group of spine.groups) {
       if (group.isControl) continue;
+      const ids = new Set([group.id, ...group.aliasIds]);
+      // The brand's own channels the group's articles name: where each is to be published; the person publishes there and pastes the link.
+      /** @type {Map<string, string[]>} */
+      const channels = new Map();
+      for (const article of spine.articles) {
+        if (!article.groupId || !ids.has(article.groupId) || article.status === "withdrawn" || article.layer === "correction") continue;
+        if (!article.channel || !GEO_OWNED_LINK_PLATFORMS.includes(article.channel)) continue;
+        channels.set(article.channel, [...(channels.get(article.channel) ?? []), article.id]);
+      }
+      /** @type {Array<Record<string, any>>} */
+      const own = [...channels].map(([channel, articleIds]) => ({
+        domain: null, channel, name: /** @type {Record<string, string>} */ (GEO_ARTICLE_CHANNEL_LABELS_ZH)[channel] ?? channel, kind: "own_channel", layer: "owned", citedFor: {},
+        conditions: {}, price: null, available: true, unavailableBecause: [], route: "own", origin: "own_channel", cited: 0, articleIds,
+      }));
       const tally = tallySources(spine.answersByGroup.get(group.id) ?? []);
       /** @type {Array<Record<string, any>>} */
       const list = [...tally].map(([domain, entry]) => ({ domain, entry })).sort((left, right) => {
@@ -265,26 +287,61 @@ export class GeoSpine {
         return { domain, name: source?.name ?? null, kind: source?.kind ?? null, layer: source?.layer ?? null,
           citedFor: Object.fromEntries(Object.entries(entry.byEngine).map(([engine, count]) => [engine, count.cited])),
           mentionsOurs: entry.mentionsOurs, wrongOurs: entry.wrongOurs, conditions: conditionsOf(source), impostor: source?.impostor === true,
-          price: null, available: availableOf(source), origin: "cited", cited: Object.values(entry.byEngine).reduce((sum, count) => sum + count.cited, 0) };
+          price: null, available: availableOf(source), unavailableBecause: [], route: routeOf(source?.layer ?? null), origin: "cited",
+          cited: Object.values(entry.byEngine).reduce((sum, count) => sum + count.cited, 0) };
       }).filter((candidate) => !candidate.impostor);
       for (const { domain, layer } of layered) {
         if (list.some((candidate) => candidate.domain === domain)) continue;
         const source = bySource.get(domain) ?? null;
         if (source?.impostor) continue;
         list.push({ domain, name: source?.name ?? null, kind: source?.kind ?? null, layer, citedFor: {}, conditions: conditionsOf(source), impostor: false,
-          price: null, available: availableOf(source), origin: "layout", cited: 0 });
+          price: null, available: availableOf(source), unavailableBecause: [], route: routeOf(layer), origin: "layout", cited: 0 });
       }
-      out.set(group.id, list.slice(0, 12));
+      out.set(group.id, [...own, ...list].slice(0, 12));
     }
     if (this.placementPreview) {
       try {
-        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices });
+        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices, articles: spine.articles });
         for (const [groupId, list] of ranked) out.set(groupId, list);
       } catch {
         // The preview decorates: a market that cannot be read leaves the sources as they are, never the page.
       }
     }
     return out;
+  }
+
+  /**
+   * What the project's source table says of each website: how an action that names one the lists above do not hold describes it.
+   * @param {Awaited<ReturnType<GeoSpine["load"]>>} spine
+   * @returns {Record<string, Record<string, any>>}
+   */
+  sourceInfo(spine) {
+    const marketOn = this.marketConfigured();
+    /** @type {Record<string, Record<string, any>>} */
+    const out = {};
+    for (const source of spine.sources) {
+      const domain = String(source.domain ?? "").toLowerCase().replace(/^www\./, "");
+      if (!domain || source.impostor) continue;
+      const flags = [source.icpMatches, source.newsIndexed, source.medicalVertical];
+      const available = source.blacklistReason ? false : flags.some((flag) => flag === false) ? false : flags.every((flag) => flag === true) ? true : null;
+      out[domain] = { name: source.name ?? null, kind: source.kind ?? null, layer: source.layer ?? null,
+        conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical }, available, unavailableBecause: [],
+        // With a market connected the catalogue has not been asked about this domain: no route is claimed.
+        route: source.layer === "owned" ? "own" : marketOn ? null : "waiting_market", origin: "layout" };
+    }
+    return out;
+  }
+
+  /**
+   * What a person's choices do to the platform's choosers (the orchestrator's batches, the market's plans): the verdicts of the
+   * project's derived actions — the page's own — through the domain's `geoChoiceEffects`, so a chooser can never disagree with what
+   * the page says is skipped. Read without the answers of the latest round, which only the lists of sources need.
+   * @param {{ id: string, userId: string, tier: string, engines: string[] }} project
+   */
+  async choiceEffects(project) {
+    const spine = await this.load(project, { answers: false });
+    const derived = await this.actions(spine, { candidates: new Map() });
+    return geoChoiceEffects(derived.actions, { groups: spine.groups });
   }
 
   /**
@@ -310,6 +367,7 @@ export class GeoSpine {
       batches: spine.batches,
       choices: spine.choices,
       candidates: Object.fromEntries(ranked),
+      sourceInfo: this.sourceInfo(spine),
       arms: spine.arms,
     });
   }

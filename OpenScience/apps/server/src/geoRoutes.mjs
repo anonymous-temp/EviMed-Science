@@ -428,6 +428,20 @@ export function createGeoRoutes(dependencies) {
       await audit("geo.action.source", "completed", { userId: user.id, code: id, detail: result.sourceDomain ? "swapped" : "recommended" });
       return reply(result);
     }
+    // The address of a page the brand published itself, pasted by a person: the registration the run makes with `geo_write owned_links`,
+    // so the post-publication re-tests and the citation match pick it up with nothing more asked of anyone.
+    if (parts.length === 3 && method === "POST" && tab === "owned-links") {
+      const body = await bodyOf(req, maxJsonBytes, ["url", "platform", "title", "publishedAt", "articleId", "groupId"]);
+      for (const key of ["url", "platform"]) {
+        if (typeof body[key] !== "string" || !body[key].trim()) throw new HttpError(400, "geo_owned_link_invalid", `${key} is required.`);
+      }
+      for (const key of ["title", "publishedAt", "articleId", "groupId"]) {
+        if (body[key] != null && typeof body[key] !== "string") throw new HttpError(400, "geo_owned_link_invalid", `${key} must be text.`);
+      }
+      const result = await service.registerOwnedLink(user, id, body);
+      await audit("geo.owned_link.register", "completed", { userId: user.id, code: id, detail: String(result.id ?? "") });
+      return reply(result, 201);
+    }
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {
       if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");

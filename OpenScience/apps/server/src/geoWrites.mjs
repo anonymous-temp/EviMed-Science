@@ -55,7 +55,7 @@ import {
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { HttpError } from "./security.mjs";
 
-/** @typedef {{ index?: number, group?: number, field?: string, code: string, message: string }} GeoIssue */
+/** @typedef {{ index?: number, indexes?: number[], count?: number, path?: string, group?: number, field?: string, code: string, message: string }} GeoIssue */
 
 /** A deliverable id: one path segment. */
 const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
@@ -249,8 +249,12 @@ function fields(source, issues, where) {
       const left = extra.filter((key) => declined.includes(key));
       if (left.length) issues.push({ ...place, field: named(left.slice(0, 20).join(",")), code: "declined_fields", message: `Declined: ${left.join(", ")}.` });
       if (ignored.length) {
+        // The names the object does keep are said with the notice: a run that wrote a field under a name of its own has nothing else to
+        // go on, and went to read the platform's source for the answer (the real-kernel check of 2026-10-14).
+        const kept = allowed.filter((key) => !declined.includes(key));
         issues.push({ ...place, field: named(ignored.slice(0, 20).join(",")), code: "ignored_fields",
-          message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}.` });
+          message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}. `
+            + `This object keeps: ${kept.slice(0, 30).join(", ")}${kept.length > 30 ? " …" : ""}.` });
       }
     },
   };
@@ -708,6 +712,7 @@ export const GEO_NOT_STORED = Object.freeze({
     measuredQuestions: "derived from the group (its measured questions)",
     groupWeight: "derived from the group (question_groups.weight)",
     weightBand: "derived from the group's weight",
+    classId: "the class word is the platform's id (class); a second copy of it is derived",
   }),
   "expectations[]": Object.freeze({
     engineName: "derived from the engine id",
@@ -731,6 +736,8 @@ export const GEO_NOT_STORED = Object.freeze({
     price: "the market's own catalogue price (media.price_cny)",
     role: "a narrative about a source's part, kept in the report; an action's reason for a source is actions[].sources[].why",
     cited: "measured: the platform's own tally",
+    citedByEngine: "measured: the platform's own tally",
+    citedTotal: "measured: the platform's own tally",
     mentionsOurs: "measured: the platform's own tally",
     errorsAboutUs: "measured: the platform's own tally",
     layerNote: "why a layer was chosen is the report's; the layout keeps the layers' lists and the constraints",
@@ -833,6 +840,9 @@ function objectList(data, field, max, issues, parse) {
     const parsed = parse(/** @type {Record<string, any>} */ (entry), index);
     if (parsed) out.push(parsed);
   });
+  // A list every entry of which was refused is not a list to replace what the project holds with: the write is told what was refused,
+  // and what was stored stays (a run's file written under names of its own once emptied the stored plan). An empty list given is a clear.
+  if (value.length > 0 && out.length === 0) return undefined;
   return out;
 }
 
@@ -897,8 +907,11 @@ function validatedBattlefield(given, secondaryGiven, issues, parent) {
     action: read.text("action", 800, { multiline: true }), groups, reason: read.text("reason", 1000, { multiline: true }), secondary };
   if (read.refused) return undefined;
   // The groups are always there (the orchestrator reads them); the rest only when the run wrote it.
-  return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "groups"
+  const kept = Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "groups"
     || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
+  // Nothing of it recognised (the names were a run's own): not a battlefield to replace the stored one with.
+  if (Object.keys(kept).length === 1 && groups.length === 0) return undefined;
+  return kept;
 }
 
 /**
@@ -1112,6 +1125,8 @@ function validatedStrategy(data, issues) {
         const value = validatedExpectation(/** @type {Record<string, any>} */ (entry), index, issues);
         if (value) strategy.expectations.push(value);
       });
+      // Every entry refused is not a replacement (see objectList).
+      if (expectations.length > 0 && strategy.expectations.length === 0) delete strategy.expectations;
     }
   }
   if (data.gaps != null) {
@@ -1124,6 +1139,7 @@ function validatedStrategy(data, issues) {
         const value = validatedGap(/** @type {Record<string, any>} */ (entry), index, issues);
         if (value) strategy.gaps.push(value);
       });
+      if (data.gaps.length > 0 && strategy.gaps.length === 0) delete strategy.gaps;
     }
   }
   if (data.layout != null) {
@@ -1153,6 +1169,7 @@ function validatedStrategy(data, issues) {
         const value = Object.fromEntries(GEO_SOURCE_LAYERS.map((layer) => [layer, item.texts(layer, 50, 200)]));
         if (!item.refused) strategy.layout[engine] = value;
       }
+      if (Object.keys(strategy.layout).length === 0) delete strategy.layout;
     }
   }
   const noGo = objectList({ noGo: data.noGo ?? data.no_go }, "noGo", 20, issues, (entry, index) => {
@@ -1521,7 +1538,7 @@ function wordOrNote(value, words, noteMax) {
 
 /**
  * @param {unknown[]} items @param {GeoIssue[]} issues
- * @param {{ claimIds: Set<string>, groupIds: Set<string>, errorIds: Set<string> }} known
+ * @param {{ claimIds: Set<string>, groupIds: Set<string>, errorIds: Set<string>, controlGroups?: Map<string, string> }} known
  */
 function validatedArticles(items, issues, known) {
   const seen = new Set();
@@ -1553,6 +1570,14 @@ function validatedArticles(items, issues, known) {
     if (groupId && !known.groupIds.has(groupId)) read.refuse("groupId", "not_found", "groupId is not a question group of this project.");
     if (!groupId && layer && layer !== "correction") {
       read.refuse("groupId", "missing", "Every article but a correction names the question group it answers.");
+    }
+    // A control group is the comparison the net effect stands on, measured and never written for: an article for it is registered all
+    // the same (nothing is refused), and said so once — the group is no longer a clean control, and the market never places for it.
+    if (groupId && known.controlGroups?.has(groupId)) {
+      issues.push({ index, field: "groupId", code: "notice",
+        message: `This article is written for a control group${known.controlGroups.get(groupId) ? ` (${known.controlGroups.get(groupId)})` : ""}. `
+          + "The group is measured, never written for: an article for it takes it out of the control arm, and the platform does not place articles for it. "
+          + "If it was meant for a pilot group, register it with that group's id." });
     }
     // The platform reads the gate from its own record; the run's word is not asked for.
     if (item.gate != null && (typeof item.gate !== "string" || !GEO_ARTICLE_GATES.includes(item.gate))) {
@@ -1747,6 +1772,28 @@ async function writeToProject({ store, project, what, body, renameProject = null
     const declined = issues.filter((issue) => issue.code === "declined_fields")
       .reduce((total, issue) => total + String(issue.field ?? "").split(",").filter(Boolean).length, 0);
     for (let index = issues.length - 1; index >= 0; index -= 1) if (issues[index].code === "declined_fields") issues.splice(index, 1);
+    // The same fields ignored in each of twenty items is one notice naming the items, not twenty: a write answer is read by a run in
+    // its turn, and repetition buried the names it needed (the check of 2026-10-14: 72 notices, 23,000 characters). `count` keeps the tally.
+    /** @type {Map<string, GeoIssue>} */
+    const merged = new Map();
+    /** @type {GeoIssue[]} */
+    const compact = [];
+    for (const issue of issues) {
+      if (issue.code !== "ignored_fields") { compact.push(issue); continue; }
+      const key = `${issue.path ?? ""}\u0000${issue.field ?? ""}\u0000${issue.message}`;
+      const seen = merged.get(key);
+      if (!seen) {
+        /** @type {GeoIssue} */
+        const first = { ...issue };
+        merged.set(key, first);
+        compact.push(first);
+      } else {
+        // A repeat is told in the first one's own words: `index` stays the first item's, `indexes` lists every item, `count` is how many.
+        seen.count = (seen.count ?? 1) + 1;
+        if (typeof issue.index === "number") (seen.indexes ??= typeof seen.index === "number" ? [seen.index] : []).push(issue.index);
+      }
+    }
+    issues.splice(0, issues.length, ...compact);
     return { ok: ids.length > 0, ids, issues, ...(declined ? { declined } : {}), ...extra };
   };
   switch (what) {
@@ -1910,10 +1957,11 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const items = itemsOf(body, GEO_WRITE_LIMITS.articles);
       const [claimIds, groups, errors] = await Promise.all([
         store.claimIds(project.id),
-        store.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
+        store.query(`SELECT id, name, is_control FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
         store.query(`SELECT id FROM evimed_geo.errors WHERE geo_project_id = $1`, [project.id]),
       ]);
       const candidates = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
+        controlGroups: new Map(groups.rows.filter((/** @type {any} */ row) => row.is_control === true).map((/** @type {any} */ row) => [String(row.id), String(row.name ?? "")])),
         errorIds: new Set(errors.rows.map((/** @type {any} */ row) => String(row.id))) });
       const articles = [];
       for (const article of candidates) {

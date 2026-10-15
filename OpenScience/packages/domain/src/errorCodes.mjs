@@ -1703,6 +1703,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_cluster_not_found',
   'geo_action_not_found',
   'geo_action_choice_invalid',
+  'geo_owned_link_invalid',
 ])
 
 /**
@@ -2098,6 +2099,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_cluster_not_found: '找不到这个问题群，它可能已经随问题地图的新版本换掉了。',
   geo_action_not_found: '找不到这条行动，它可能已经完成或被新一版策略取代。',
   geo_action_choice_invalid: '这一步只能“跳过”或“换信源”，换信源要写明一个信源的网站域名。',
+  geo_owned_link_invalid: '这个发布链接没有登记成功：需要一个具体页面的网址和发布平台，并且不能和已登记的重复。',
   // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown

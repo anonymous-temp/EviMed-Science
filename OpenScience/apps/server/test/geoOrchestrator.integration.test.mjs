@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoStore, normalizedSteps } from "../src/geoStore.mjs";
-import { GeoOrchestrator } from "../src/geoOrchestrator.mjs";
+import { GEO_SCHEDULE, GeoOrchestrator } from "../src/geoOrchestrator.mjs";
 import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
 import { createGeoNotifier } from "../src/geoNotify.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -69,7 +69,7 @@ const q = async (sql, values = []) => (await database.query(sql, values)).rows;
  * refuses, once per queued failure), rounds are inserted as the measurement
  * would, notices and citations are recorded.
  */
-function harness({ at = null, geoStore = store, runStatus = null, importRun = null } = /** @type {{ at?: string | null, geoStore?: GeoStore, runStatus?: any, importRun?: any }} */ ({})) {
+function harness({ at = null, geoStore = store, runStatus = null, importRun = null, placementChoices = null } = /** @type {{ at?: string | null, geoStore?: GeoStore, runStatus?: any, importRun?: any, placementChoices?: any }} */ ({})) {
   /** @type {any[]} */ const dispatched = [];
   /** @type {any[]} */ const enqueued = [];
   /** @type {any[]} */ const notices = [];
@@ -91,6 +91,7 @@ function harness({ at = null, geoStore = store, runStatus = null, importRun = nu
     latestSessionId: async () => "session-latest",
     ...(runStatus ? { runStatus } : {}),
     ...(importRun ? { importRun } : {}),
+    ...(placementChoices ? { placementChoices } : {}),
     enqueueRound: async (spec) => {
       const project = (await q(`SELECT user_id, engines FROM evimed_geo.projects WHERE id = $1`, [spec.geoProjectId]))[0];
       const id = `gr_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
@@ -972,4 +973,131 @@ test("an import that throws is counted and never holds the fold back (D-24)", op
   assert.equal(world.orchestrator.status().counters.importFailed, 1);
   const [mark] = await q(`SELECT state FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`, [project.id]);
   assert.equal(mark.state, "done");
+});
+
+test("the next round takes the groups short of their pool's target and those with a publication nobody cited in eight weeks, by the domain's own criteria, and leaves out what a person set aside", options, async () => {
+  /** @type {{ groups: Set<string>, errors: Set<string> }} */
+  const aside = { groups: new Set(), errors: new Set() };
+  const world = harness({ placementChoices: async () => ({ skippedGroupIds: aside.groups, skippedErrorIds: aside.errors }) });
+  const { project, control, userId } = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) {
+    await store.setStep(project.id, step, { requested: true });
+  }
+  await world.orchestrator.advance(project.id);
+  await insightRunWrites(project);
+  await finishRun(world, control, 0);
+  await world.orchestrator.advance(project.id);
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  // The strategy: the chosen tier's targets — a project-wide row and one for the second pool — and a budget that can place.
+  const current = await store.getProject(userId, project.id);
+  await geoRuntimeWrite({ store, project: current, what: "strategy", body: { data: { battlefield: { groups: ["语义群1"], reason: "检索强" } } } });
+  const targetRows = ["1", "2", "3"].flatMap((tier) => [["all", 20], ["P2", 30]].map(([pool, target]) => ({ tier, metricId: "M-01", pool, baseline: 10,
+    target, placements: 4, budgetCny: 2000, dataType: "forecast" })));
+  assert.equal((await geoRuntimeWrite({ store, project: current, what: "targets", body: { items: targetRows } })).ok, true);
+  await finishRun(world, control, 1);
+
+  // The first round covers the whole pilot side, so what follows the weekly report is the next round.
+  await world.orchestrator.advance(project.id);
+  const claim = (await store.listClaims(project.id))[0];
+  const groups = new Map((await store.questionMap(project.id, 1)).map((group) => [group.name, group]));
+  const pilot = [...groups.values()].filter((group) => !group.isControl);
+  assert.equal(pilot.length, 9);
+  const written = await geoRuntimeWrite({ store, project: current, what: "articles", articleGate: passedGate, body: { items: pilot.map((group, index) => ({
+    path: `deliverables/c1/articles/a${index}.md`, layer: "popular", title: `稿件 ${index + 1}`, groupId: group.id, claimIds: [claim.id], gate: "passed",
+    safety: "clear", contentSha256: sha(`next-${index}`) })) } });
+  assert.equal(written.ok, true, JSON.stringify(written.issues));
+  await finishRun(world, control, 2);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 3, "nothing is left of the first round");
+
+  // The weekly round of Monday 2026-10-05, measured, its report written.
+  world.setClock("2026-10-04T19:10:00Z");
+  await world.orchestrator.tickSchedules();
+  const weekly = world.enqueued.find((round) => round.kind === "weekly");
+  await finishRound(weekly.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 4);
+  await finishRun(world, control, 3);
+
+  const gid = (/** @type {string} */ name) => /** @type {any} */ (groups.get(name)).id;
+  const reading = async (/** @type {string} */ id, /** @type {Record<string, any>} */ row) => {
+    await q(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, group_id, pool, metric_id, status, value)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'M-01', $8, $9)`,
+    [`m01-${id}`, userId, project.id, weekly.id, row.scope, row.groupId ?? null, row.pool ?? null, row.status ?? "ok", row.value]);
+  };
+  await reading("g1", { scope: "group", groupId: gid("语义群1"), pool: "P1", value: 5 }); // short of the project-wide 20
+  await reading("g2", { scope: "group", groupId: gid("语义群2"), pool: "P2", value: 35 }); // at the P2 row's 30
+  await reading("g4", { scope: "group", groupId: gid("语义群4"), pool: "P4", value: 1, status: "insufficient" }); // not a measurement: the pool's reading stands
+  await reading("p3", { scope: "pool", pool: "P3", value: 10 }); // the proxy of 语义群3 and 语义群7
+  await reading("p4", { scope: "pool", pool: "P4", value: 50 });
+  // Publications: one eight weeks old and never cited, one a month old, one old but cited; and a link the brand published itself.
+  const articleOf = async (/** @type {string} */ name) => (await store.listArticles(project.id)).find((article) => article.groupId === gid(name));
+  let orderIndex = 0;
+  const published = async (/** @type {string} */ name, /** @type {string} */ at, cited = false) => {
+    const article = await articleOf(name);
+    const id = `o-next-${orderIndex += 1}`;
+    await q(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id, state, reserve_cny, price_cny, published_url)
+      VALUES ($1, $2, $3, $4, 'website', $5, 'verified', 110, 100, $6)`, [id, userId, project.id, article?.id, `r-${id}`, `https://news.example.com/${id}.html`]);
+    await q(`INSERT INTO evimed_geo.order_events (id, order_id, at, from_state, to_state, detail) VALUES ($1, $2, $3, 'accepted', 'published', '{}'::jsonb)`, [`e-${id}`, id, at]);
+    if (cited) await q(`INSERT INTO evimed_geo.order_events (id, order_id, at, from_state, to_state, detail) VALUES ($1, $2, $3, 'verified', 'verified', '{"phase":"cited","engine":"deepseek"}'::jsonb)`,
+      [`c-${id}`, id, at]);
+  };
+  await published("语义群5", "2026-08-01T00:00:00Z"); // 64 days
+  await published("语义群8", "2026-09-04T00:00:00Z"); // 30 days
+  await published("语义群9", "2026-07-26T00:00:00Z", true); // old, cited
+  const linked = await geoRuntimeWrite({ store, project: current, what: "owned_links", body: { items: [{ url: "https://zhuanlan.zhihu.com/p/123456", platform: "zhihu",
+    title: "自己发的", publishedAt: "2026-07-26T00:00:00Z", groupId: gid("语义群6") }] } });
+  assert.equal(linked.ok, true, JSON.stringify(linked.issues));
+  await q(`UPDATE evimed_geo.projects SET budget = '{"totalCny": 5000, "dailyCny": 500}'::jsonb WHERE id = $1`, [project.id]);
+  // Two open errors the weekly round saw again; a person set the correction of one of them aside.
+  await q(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, statement, severity, status, last_snapshot_id) VALUES
+    ($1, $3, $4, 'fa', 'deepseek', '把某药说成可以随意加量', 'S3', 'open', $5), ($2, $3, $4, 'fb', 'doubao', '把某药说成不用处方', 'S3', 'open', $5)`,
+  [`err-skipped-${project.id}`, `err-wanted-${project.id}`, userId, project.id, `s-${weekly.id}-0`]);
+  // Both were given to an earlier correction batch (so the first round does not take them again); the re-measure saw them again.
+  await q(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail) VALUES ($1, 'run:content:w2026-09-28', $2, 'run', 'done', $3::jsonb)`,
+    [project.id, userId, JSON.stringify({ errorIds: [`err-skipped-${project.id}`, `err-wanted-${project.id}`] })]);
+  aside.groups.add(gid("语义群3"));
+  aside.errors.add(`err-skipped-${project.id}`);
+
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 5, "the next round is dispatched");
+  const brief = world.dispatched[4].brief;
+  const named = (/** @type {string} */ name) => brief.includes(`语义群“${name}”`);
+  assert.deepEqual(["语义群1", "语义群7", "语义群5", "语义群6"].map(named), [true, true, true, true],
+    "short on its own reading; short on the pool's (no reading of its own); published 64 days ago, never cited; a link of its own, never cited");
+  assert.deepEqual(["语义群2", "语义群3", "语义群4", "语义群8", "语义群9"].map(named), [false, false, false, false, false],
+    "at its target; set aside by a person; not a measurement and the pool is not short; a month old; old but cited");
+  assert.equal(brief.includes("把某药说成不用处方"), true, "an error the person left alone is corrected");
+  assert.equal(brief.includes("把某药说成可以随意加量"), false, "an error whose correction they skipped is not given to the batch");
+  // The stale rule is the domain's one number.
+  assert.equal(GEO_SCHEDULE.stalePlacementWeeks, 8);
+});
+
+test("the first round does not write for a group a person set aside, and its battlefield goes on without it", options, async () => {
+  /** @type {{ groups: Set<string>, errors: Set<string> }} */
+  const aside = { groups: new Set(), errors: new Set() };
+  const world = harness({ placementChoices: async () => ({ skippedGroupIds: aside.groups, skippedErrorIds: aside.errors }) });
+  const { project, control, userId } = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) {
+    await store.setStep(project.id, step, { requested: true });
+  }
+  await world.orchestrator.advance(project.id);
+  await insightRunWrites(project);
+  await finishRun(world, control, 0);
+  await world.orchestrator.advance(project.id);
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  const current = await store.getProject(userId, project.id);
+  await geoRuntimeWrite({ store, project: current, what: "strategy", body: { data: { battlefield: { groups: ["语义群1", "语义群2"], reason: "检索强" } } } });
+  await geoRuntimeWrite({ store, project: current, what: "targets", body: { items: ["1", "2", "3"].map((tier) => ({ tier, metricId: "M-01", pool: "all",
+    baseline: 10, target: 10 + Number(tier) * 10, placements: 4, budgetCny: 3000, dataType: "forecast" })) } });
+  await finishRun(world, control, 1);
+  const groups = new Map((await store.questionMap(project.id, 1)).map((group) => [group.name, group]));
+  aside.groups.add(/** @type {any} */ (groups.get("语义群1")).id);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 3);
+  const brief = world.dispatched[2].brief;
+  assert.equal(brief.includes("语义群“语义群1”"), false, "the group a person set aside is not written for");
+  assert.equal(brief.includes("语义群“语义群2”"), true, "the rest of the battlefield is");
 });

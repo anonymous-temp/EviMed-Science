@@ -8,6 +8,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
+import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { GEO_TABLES, migrateGeo } from "../src/geoPersistence.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { GEO_NOT_STORED, geoArticlesFileCoverage, geoStrategyDraft, geoStrategyFileCoverage, geoStrategyWriteOfFile } from "../src/geoWrites.mjs";
@@ -157,6 +158,49 @@ test("the same file again is not a version, and a changed file is", bothOptions,
   files.set("deliverables/geo-strategy/strategy.json", JSON.stringify(file));
   await importDelivery(control, { id: "run_d", status: "succeeded", deliverables: [{ id: "geo-content", capability: "geo-content" }] });
   assert.equal((await store.latestStrategy(geo.id))?.version, v1 + 1, "a run that is not the strategy run's reads no strategy file");
+});
+
+test("a run's file adds to what the run wrote through the platform and never takes the place of it; a run that wrote nothing is the file's to say", options, async () => {
+  const { geo, control } = await projectWithBaseline();
+  const before = new Date(Date.now() - 60_000).toISOString();
+  // The run wrote its plan in the platform's own words.
+  const written = await geoRuntimeWrite({ store, project: geo, what: "strategy", body: { data: {
+    summary: "一份完整的计划",
+    battlefield: { id: "BF-01", name: "主战场", why: ["提及已到位"], action: "先补锚点", groups: ["品牌身份"] },
+    gaps: [{ gapId: "GAP-01", class: "benefit_only", groupId: "g1", rank: 1, text: "只讲获益", judgment: "只讲获益不讲安全",
+      consequence: { band: "高", basis: "健康后果" }, expectedPoints: [{ pointId: "EP-1", kind: "safety", statement: "出现过敏及时就医", refs: [] }] }],
+    actions: [{ gapId: "GAP-01", what: { layer: "qa", channel: "wechat_mp" }, promise: "coverage_complete", reason: "补禁忌" }],
+  } } });
+  assert.equal(written.ok, true, JSON.stringify(written.issues));
+  const v1 = await store.latestStrategy(geo.id);
+  // Its file says less of the same plan, under fewer fields, and one gap more.
+  const file = { gaps: [{ gapId: "GAP-01", class: "只讲获益不讲安全", text: "文件里的措辞" }, { gapId: "GAP-02", class: "丢条件", text: "新增的缺口", groupId: "g2" }],
+    battlefield: { secondary: [{ id: "BF-02", name: "次要战场", why: "红旗覆盖不足" }] }, summary: "文件里的摘要" };
+  const files = new Map([["deliverables/geo-strategy/strategy.json", JSON.stringify(file)]]);
+  const { importDelivery } = importerOf(files);
+  const deliverables = [{ id: "geo-strategy", capability: "geo-strategy" }];
+  await importDelivery(control, { id: "run_own", status: "succeeded", startedAt: before, deliverables });
+  const after = await store.latestStrategy(geo.id);
+  assert.ok(after.version > v1.version, "the file added something");
+  const first = after.gaps.find((/** @type {any} */ gap) => gap.gapId === "GAP-01");
+  assert.equal(first.text, "只讲获益", "the run's own words stay");
+  assert.equal(first.rank, 1);
+  assert.equal(first.expectedPoints.length, 1);
+  assert.deepEqual(first.consequence, { band: "高", basis: "健康后果" });
+  assert.deepEqual(after.gaps.map((/** @type {any} */ gap) => gap.gapId), ["GAP-01", "GAP-02"], "a gap only the file has is added");
+  assert.equal(after.summary, "一份完整的计划");
+  assert.deepEqual([after.battlefield.id, after.battlefield.name, after.battlefield.groups], ["BF-01", "主战场", ["品牌身份"]], "the battlefield stays whole");
+  assert.equal(after.battlefield.secondary.length, 1, "what it lacked is added");
+  assert.equal(after.actions.length, 1);
+  // The same file again changes nothing.
+  await importDelivery(control, { id: "run_own", status: "succeeded", startedAt: before, deliverables });
+  assert.equal((await store.latestStrategy(geo.id)).version, after.version);
+
+  // A run that started after the stored strategy was written wrote nothing itself: its file is its statement.
+  const later = new Date(Date.now() + 60_000).toISOString();
+  files.set("deliverables/geo-strategy/strategy.json", JSON.stringify({ gaps: [{ gapId: "GAP-09", class: "过时", text: "新一轮的缺口", groupId: "g3" }] }));
+  await importDelivery(control, { id: "run_next", status: "succeeded", startedAt: later, deliverables });
+  assert.deepEqual((await store.latestStrategy(geo.id)).gaps.map((/** @type {any} */ gap) => gap.gapId), ["GAP-09"]);
 });
 
 test("a write that carries only the strategy's actions amends them and keeps the rest", options, async () => {

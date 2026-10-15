@@ -83,11 +83,10 @@ def tool_definitions():
             "name": "geo_read",
             "description": (
                 "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, "
-                "sources, strategy, targets, articles, orders and monitoring. Cards carry quote-checked evidence and "
+                "sources, strategy, targets, articles, orders and monitoring. Cards carry checked quotes and "
                 "citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. "
-                "clusters is every question group with what each engine says (k of n); actions is what is being done for each "
-                "group, its target and its status — read it before planning more work. "
-                "filter.version reads a prior value basis. Numeric cells retain denominators and status; unknown is never zero."
+                "clusters: groups, k of n; actions: per-gap work. "
+                "filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero."
             ),
             "inputSchema": {
                 "type": "object",
@@ -118,11 +117,10 @@ def tool_definitions():
             "description": (
                 "Write this 循证 GEO project; valid items survive individual refusals. "
                 "value merges findings; reuse ids to amend. "
-                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; existing answers are not required. "
+                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. "
                 "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
                 "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
-                "actions amends the strategy's action per gap: items[{gapId, what:{layer,title,channel}, engines, sources:[{domain,why}], "
-                "promise, basis, reason}]; an entry with only a reason says why a gap needs none."
+                "actions: per-gap strategy actions."
             ),
             "inputSchema": {
                 "type": "object",
@@ -282,8 +280,10 @@ def write(arguments: dict) -> dict:
             return _outside_a_project(error, what, "write")
         raise
     issues = [issue for issue in data.get("issues") or [] if isinstance(issue, dict)]
-    refused = [issue for issue in issues if issue.get("code") != "notice"]
-    notices = [issue for issue in issues if issue.get("code") == "notice"]
+    # An ignored field is a notice: the item was written, and the field is kept only in the file. Counting it as a refusal told a run
+    # that 72 items were refused when one object had been written with names of its own.
+    notices = [issue for issue in issues if issue.get("code") in ("notice", "ignored_fields")]
+    refused = [issue for issue in issues if issue.get("code") not in ("notice", "ignored_fields")]
     ids = data.get("ids") if isinstance(data.get("ids"), list) else []
     if not data.get("ok"):
         return {
@@ -294,12 +294,19 @@ def write(arguments: dict) -> dict:
             "next_actions": ["Correct the named items and write them again; nothing else changed."],
         }
     warnings = [_issue_line(issue) for issue in (refused + notices)[:20]]
+    ignored = [issue for issue in notices if issue.get("code") == "ignored_fields"]
+    next_actions = []
+    if refused:
+        next_actions.append("Correct the refused items and write only those again.")
+    if ignored:
+        next_actions.append("Fields kept only in the file are not on the page: write them under the names each notice lists.")
     return {
-        "status": "warning" if refused else "success",
-        "summary": "Wrote %s: %d written%s." % (what, len(ids), ", %d refused" % len(refused) if refused else ""),
+        "status": "warning" if refused or ignored else "success",
+        "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
+                                                 ", %d field name(s) not kept" % len(ignored) if ignored else ""),
         "data": data,
         "warnings": warnings,
-        "next_actions": ["Correct the refused items and write only those again."] if refused else [],
+        "next_actions": next_actions,
     }
 
 
