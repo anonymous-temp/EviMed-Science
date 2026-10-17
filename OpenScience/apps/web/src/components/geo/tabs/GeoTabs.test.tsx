@@ -369,7 +369,7 @@ describe("信源", () => {
     }
   });
 
-  it("lists the answers that cite a site nothing misstated, with its conditions after them", async () => {
+  it("lists the answers that cite a site nothing misstated, with its conditions before them: what an article there needs is the first screen", async () => {
     const dxy = sourcesFilled.sources[0];
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     client.getGeoSource.mockResolvedValue(sourceDetailOf(dxy));
@@ -383,6 +383,8 @@ describe("信源", () => {
     expect(dialog.querySelector("[data-geo-source-wrong]")).toBeNull();
     expect(dialog.querySelector("[data-geo-source-tier]")).toHaveTextContent("层级 覆盖");
     expect(dialog.querySelector("[data-geo-source-counts]")).toHaveTextContent("48 个回答引用了这个站，其中 0 个讲错了信尔美");
+    const conditions = dialog.querySelector("[data-geo-source-detail]") as HTMLElement;
+    expect(conditions.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says so when the latest round has no answer citing the site, and when nothing has been measured", async () => {

@@ -42,12 +42,13 @@ export function concentrationFacts(counts: ReadonlyArray<number>, top = 15): Con
 
 const percent = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
-/** The card's conclusion: 「前 15 个站占了 31% 的引用，66% 的站只被引用过一次」. */
+/**
+ * The card's conclusion: 「前 15 个站占了 31% 的引用」. How many sites were cited once is a fact of the legend under the second bar
+ * (「只被引用 1 次 628 个」), not a second sentence of the title: the title says one thing.
+ */
 export function concentrationTitle(facts: ConcentrationFacts): string {
   if (facts.sites === 0) return "这一轮还没有回答引用任何站点";
-  const share = percent(facts.topCitations, facts.citations);
-  const once = percent(facts.once, facts.sites);
-  return `前 ${facts.top} 个站占了 ${share}% 的引用，${once}% 的站只被引用过一次`;
+  return `前 ${facts.top} 个站占了 ${percent(facts.topCitations, facts.citations)}% 的引用`;
 }
 
 export function SourceConcentration({ facts, className }: { facts: ConcentrationFacts; className?: string }) {
