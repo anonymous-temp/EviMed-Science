@@ -37,7 +37,7 @@
 //   one classified recoverable or terminal.
 
 import {
-  GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
+  GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
@@ -51,7 +51,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "limit", "offset"]);
+const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "key", "limit", "offset"]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid"]);
 
@@ -119,7 +119,7 @@ function readRequest(body) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
-  /** @type {{ version?: number, audience?: string, round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, limit?: number, offset?: number }} */
+  /** @type {{ version?: number, audience?: string, round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, key?: string, limit?: number, offset?: number }} */
   const filter = {};
   for (const key of ["round", "groupId", "questionId"]) {
     if (raw[key] == null) continue;
@@ -129,6 +129,11 @@ function readRequest(body) {
   if (raw.version != null) {
     if (!Number.isSafeInteger(raw.version) || raw.version < 1) throw gatewayError(400, "geo_read_filter_invalid", "version must be a positive integer.");
     filter.version = raw.version;
+  }
+  // An action is named by its key (`kind:group:ref`, as the list shows it), not by an id: a key of another shape is not one.
+  if (raw.key != null) {
+    if (!parseGeoActionKey(raw.key)) throw gatewayError(400, "geo_read_filter_invalid", "filter.key is not an action key: copy it from the list (kind:group:ref).");
+    filter.key = raw.key;
   }
   if (typeof raw.audience === "string") filter.audience = raw.audience.slice(0, 120);
   if (raw.engine != null) {
@@ -316,6 +321,8 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
   };
 }
 
+/** The fields a read's filter takes: the tool's schema (`geo_platform.py`) offers exactly these, and a test holds the two equal. */
+export const GEO_READ_FILTER_FIELDS = readFilterFields;
 export const GEO_GATEWAY_PATH = gatewayPath;
 export const GEO_GATEWAY_OPERATIONS = operations;
 export const GEO_GATEWAY_WINDOW_LIMITS = windowLimits;

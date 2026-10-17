@@ -93,6 +93,14 @@ class GeoToolDefinitionTests(unittest.TestCase):
         self.assertIn("One platform per call", definitions["social_posts_search"]["description"])
         self.assertIn("never zero", definitions["social_posts_search"]["description"])
 
+    def test_the_actions_read_says_it_is_lean_and_how_to_read_one_whole(self):
+        read = {tool["name"]: tool for tool in geo_platform.tool_definitions()}["geo_read"]
+        self.assertIn("lean rows", read["description"])
+        self.assertIn("counts", read["description"])
+        self.assertIn("filter.key or groupId reads one whole", read["description"])
+        key = read["inputSchema"]["properties"]["filter"]["properties"]["key"]
+        self.assertEqual((key["type"], key["minLength"], key["maxLength"]), ("string", 1, 240))
+
     def test_without_a_route_every_tool_says_disabled_without_asking(self):
         with mock.patch.dict(os.environ, {"EVIMED_GEO_GATEWAY_URL": ""}):
             for call in (
@@ -118,6 +126,23 @@ class GeoReadTests(_GatewayCase):
         self.assertEqual(seen["path"], "/internal/geo/v1/read")
         self.assertEqual(seen["authorization"], "Bearer runtime-token-for-tests")
         self.assertEqual(seen["body"], {"what": "metrics", "filter": {"engine": "deepseek", "limit": 10}})
+
+    def test_a_lean_list_says_where_the_next_page_starts_and_how_to_read_one_action_whole(self):
+        _Gateway.answers["read"] = (200, {"data": {"what": "actions", "detail": "lean", "total": 40, "more": True, "nextOffset": 11, "omitted": 29,
+                                                    "counts": {"total": 40}, "actions": [{"key": "fill_gap:g:a"}]}})
+        result = self.server.call_tool("geo_read", {"what": "actions"})
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(any("filter.offset=11" in action for action in result["next_actions"]), result["next_actions"])
+        self.assertTrue(any("filter.key" in action and "whole" in action for action in result["next_actions"]), result["next_actions"])
+        self.assertEqual(result["data"]["counts"], {"total": 40}, "the sums reach the run untouched")
+        # a whole entry (a key or a group) is not told to be read whole again, and a list with nothing left has no cursor to follow
+        _Gateway.answers["read"] = (200, {"data": {"what": "actions", "detail": "whole", "total": 1, "more": False, "actions": [{"key": "fill_gap:g:a"}]}})
+        whole = self.server.call_tool("geo_read", {"what": "actions", "filter": {"key": "fill_gap:g:a"}})
+        self.assertEqual(whole["next_actions"], [])
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "actions", "filter": {"key": "fill_gap:g:a"}})
+        _Gateway.answers["read"] = (200, {"data": {"what": "claims", "items": [], "more": True}})
+        plain = self.server.call_tool("geo_read", {"what": "claims"})
+        self.assertEqual(plain["next_actions"], ["Call again with filter.offset to read the next page, or narrow the filter."])
 
     def test_the_gateway_s_own_codes_reach_the_run_and_nothing_else_does(self):
         _Gateway.answers["read"] = (429, {"error": "Too many GEO calls in a minute.", "code": "geo_gateway_rate_limited"})
