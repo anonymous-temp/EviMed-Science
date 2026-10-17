@@ -49,15 +49,14 @@
  * study counts are folded and not cut off, a record that is not there says so and goes back to its list, 关注 is one sentence and one
  * button, the memory page opens on a tab that holds something, a PDF's original opens wide and fit to width, the new-skill drawer
  * names an empty field in place, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
- * account's data or is a measure of taste is a NOTICE: a page more than twelve viewports tall, more rows on a first screen than the
- * page's ceiling, a headline below 520 px on a phone, the title column of a page against the others'. Pages no walk has measured
- * yet (`PROVISIONAL_PAGES`) report a number past their budget as a notice too. Nothing here writes: the steps that click only open a
- * menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
+ * account's data or is a measure of taste (more rows on a first screen than the page's ceiling, a headline below 520 px on a phone) is a
+ * finding with a rule and a number, which fails unless the baseline accepts it (R19, below). Nothing here writes: the steps that click
+ * only open a menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
  * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
  * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
  *
- * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added is a
- * NOTICE unless it replaces a failure of the same thing. The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
+ * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added was a
+ * notice until a walk had measured it (since R19 a notice is a finding, below). The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
  * scheduled task is a page (`/app/autopilot/:taskId`, read after the first row is clicked: the layout's hooks, which pane is on, the
  * kernel frame's rectangle against the pane's, no text box or dialog of the page's own), not a drawer with a spend cap in ¥; a document is
  * a page whose original column is not narrower than 560 px, not a drawer; the 核对 column of the evidence matrix is ✓, ⚠ or blank. The first
@@ -73,11 +72,34 @@
  *
  * It also records, without failing on them, small click targets, decorative
  * SVGs without aria-hidden, console errors and other HTTP errors — the things
- * that need a person to judge — and, as a NOTICE, a page that sets its text in
- * more than four font-size × font-weight pairs (design spec chapter 5 rule 1,
- * acceptance row 4). A notice is reported, never failed on (principle 4: a
- * check ships as a notice until its real distribution is known); the per-page
- * counts are in the report so a budget can be set from them.
+ * that need a person to judge. A page that sets its text in more than four
+ * font-size × font-weight pairs (design spec chapter 5 rule 1, acceptance row
+ * 4) is a finding (`type-pairs`) with its count.
+ *
+ * R19 (audit D, the walk that missed the 2026-10-14 pages: C8, §4 S6-S9) made the walk see composition and stopped it passing in silence:
+ *   - FINDINGS HAVE AN EXIT. There is no class of notice. Whatever the walk saw that is not a plain failure is a finding with a rule
+ *     (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `not-observable`, `not-walked`, and the composition rules below) and fails
+ *     unless an entry of `ui-walk-baseline.json` accepts it: a view, the rule up to a number or a literal part of the sentence, an owner, a
+ *     day and a reason. After its day an entry accepts nothing. The report prints the delta (accepted by entry, not accepted, expired, no
+ *     longer needed, can be lowered). The baseline is embedded in this file (`embed-walk-tables.mjs`); `OPEN_SCIENCE_WALK_BASELINE`
+ *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the release walk on the
+ *     owner-view account, the default; many pages hold no data, so a coverage gap — `not-observable`, `not-walked` — may be accepted) or
+ *     `fixture` (the local walk on the data-rich fixture, which accepts none).
+ *     `scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for.
+ *   - A STEP THAT CANNOT RUN FAILS. A step that throws, times out before its target or finds its element absent is a failure naming
+ *     what it did not reach (`STEP_TARGETS`); 18.1's `ReferenceError: drawerMarks is not defined` was a notice for a release. No baseline
+ *     entry accepts it. A test lints every function handed to the browser alone, with `no-undef`: they stand on their own text.
+ *   - COMPOSITION. `measureComposition` reads the framework's markers (PageShell.tsx's table) and `compositionFindings` judges them: a
+ *     control group after the content it controls, a toolbar below the window, more than one tab list / toolbar / view switch, a band
+ *     that is not sticky or does not hold when the page moves, a module page without its steps, a template's slots used against its
+ *     rule, a sentence standing alone (one allowed), a tag that can be pressed, a word that looks like a link, a primary action away
+ *     from the header, a tab or chip counting 0, a long page with no contents, a grid of charts with holes, an empty state with no way
+ *     forward; `familyFindings` compares a module's tabs (steps, band) and a family's title edge. The page table
+ *     (`page-templates.json`) says which template each page is.
+ *   - WHOLE PAGES. Every page view is photographed from its top to its end (one picture up to three windows, slices of a window and a
+ *     half above that, at most eight) as `<view>.jpg` and its make-up is written as `<view>.json`; `report.json` links them.
+ *   - Information that is not a finding (a retried load, what a guarded click refused, the axe line, the candidate check) is `report.info`.
+ *     `OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>` adds the kernel candidate check to it (report only).
  *
  * What it changes on the deployment: a session (it logs in and logs out), and
  * — only when asked for the chat page — the account's default runtime. The
@@ -113,10 +135,12 @@
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
  *   [OPEN_SCIENCE_WALK_CHAT=1] \
  *   [OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0] \
+ *   [OPEN_SCIENCE_WALK_PROFILE=owner|fixture] [OPEN_SCIENCE_WALK_BASELINE=<file>|none] \
+ *   [OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>] \
  *   node scripts/ops/ui-walk.mjs
  *
- * Exit 0 when every assertion holds, 1 when one does not (the report names
- * which), 2 when the walk could not run at all.
+ * Exit 0 when every assertion holds and the baseline accepts every finding, 1 when one does not (the report names which), 2 when the walk
+ * could not run at all (a login that fails, a baseline or a setting that is not valid).
  */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -127,72 +151,264 @@ import { fileURLToPath } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
 
 /**
- * The pages, by the name the report uses. 知识库 and 记忆胶囊 are one page each
- * since 2026-09-20; 设置 is walked section by section. The frontier feed's
- * views are walked only where the account is offered the feed.
+ * The embedded tables (written by `scripts/ops/embed-walk-tables.mjs` from `page-templates.json` and `ui-walk-baseline.json`; the walk is
+ * the one file the release switch mounts, so what it reads at run time is in it). Placed first because everything below derives from it.
  */
-export const ROUTES = [
-  ["frontier", "/app/frontier"],
-  ["frontier-hot", "/app/frontier?view=hot"],
-  ["frontier-daily", "/app/frontier?view=daily"],
-  ["frontier-all", "/app/frontier?view=all"],
-  // 关注 (R11): what an account that follows nothing sees — one sentence and one way to start — and what one that follows something does.
-  ["frontier-following", "/app/frontier?view=following"],
-  // The evidence zones' home (2026-10-01). A zone and a reading page are
-  // content addresses with ids; the home is the one every account can open.
-  ["frontier-zones", "/app/frontier/zones"],
-  // A day that has no issue (R13, A11): the page says which day and when issues come, and reads as an empty day and not as a failure. Its own
-  // read answers 404 by design, and the day is one nobody published (the feed did not exist in 2020).
-  ["frontier-daily-empty", "/app/frontier?view=daily&day=2020-01-01"],
-  ["capabilities", "/app/capabilities"],
-  // 循证 GEO's home — its one sentence where the account is not offered the
-  // module; one project's seven tabs (and an answer) are added when the
-  // account has one (`discoverRoutes`).
-  ["geo", "/app/geo"],
-  // 虚拟临床研究's home — its one sentence where the account is not offered
-  // the module; one study's seven tabs are added when the account has one.
-  ["virtual-research", "/app/virtual-research"],
-  // The home's three libraries (R11): the first live walk of R10 opened a study and never these tabs.
-  ["virtual-research-models", "/app/virtual-research?tab=models"],
-  ["virtual-research-precedents", "/app/virtual-research?tab=precedents"],
-  ["virtual-research-definitions", "/app/virtual-research?tab=definitions"],
-  ["files", "/app/files"],
-  // 知识页 (2026-10-13): the 知识页 filter of the knowledge base as a tree by type, and as a graph — a data view (DESIGN.md 「页面结构」,
-  // the data-page exception the memory map set), one canvas over the list of the same marks. Where the project has no compiled
-  // pages both read as the plain list and the graph walk says it could not be observed.
-  ["knowledge-pages", "/app/files?kind=wiki"],
-  ["knowledge-graph", "/app/files?kind=wiki&view=graph"],
-  ["memory", "/app/memory"],
-  // The memory page's other three tabs (R10): one list each, and the growth
-  // tab's curve over its timeline. The default tab was the only one walked.
-  ["memory-project", "/app/memory?tab=project"],
-  ["memory-methods", "/app/memory?tab=methods"],
-  ["memory-growth", "/app/memory?tab=growth"],
-  // 记忆地图 (2026-10-12): a data page of its own, one view at a time over one selection (DESIGN.md 「页面结构」, the data-page exception).
-  ["memory-map", "/app/memory/map"],
-  ["autopilot", "/app/autopilot"],
-  ["inbox", "/app/inbox"],
-  ["account", "/app/account"],
-  ["account-usage", "/app/account?tab=usage"],
-  ["account-connectors", "/app/account?tab=connectors"],
-  ["account-projects", "/app/account?tab=projects"],
-  // 通知 (where Feishu is bound) and 运维 (an operator's; any other account is shown the first section, and the checks on it say so).
-  ["account-notifications", "/app/account?tab=notifications"],
-  ["account-ops", "/app/account?tab=ops"],
-  // The simulated wallet has two pages; membership and refunds are not among them and answer the not-found page (R11).
-  ["account-simulated-membership", "/app/account/simulated/membership"],
-  ["account-simulated-refunds", "/app/account/simulated/refunds"],
-  // A share link that does not exist: the page says so and offers the way back, not a retry (R11). Its own read answers 4xx by design.
-  ["memory-shared-missing", "/app/memory/shared/impeccable-audit-missing"],
-  // The extension centre's two lists (2026-10-02), reached from 设置. Neither
-  // was walked until 2026-10-03: the list above was written before they were.
-  ["extensions-plugins", "/app/extensions/plugins"],
-  ["extensions-skills", "/app/extensions/skills"],
-  // A plugin and a skill that are not there (R11): the drawer says so and goes back to its list instead of advising a retry.
-  ["extensions-plugin-missing", "/app/extensions/plugins/impeccable-audit-missing"],
-  ["extensions-skill-missing", "/app/extensions/skills/impeccable-audit-missing"],
-  ["not-found", "/app/does-not-exist"],
-];
+// BEGIN EMBEDDED WALK TABLES (generated by scripts/ops/embed-walk-tables.mjs from page-templates.json, ui-walk-baseline.json and the domain's error codes; do not edit by hand)
+const WALK_TABLES = {
+  "pageTemplates": {
+    "version": 1,
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs.","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "templates": {
+      "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
+      "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
+      "T3": {"name":"module page","tablist":"allowed","toolbar":"allowed","stepRail":"every-tab","outline":"none","longViewports":12},
+      "T4": {"name":"data page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
+      "T5": {"name":"reader page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"when-long","orphans":"content","longViewports":6},
+      "T6": {"name":"settings page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
+      "screen": {"name":"state screen","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
+      "kernel": {"name":"the kernel's own conversation","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12}
+    },
+    "budgets": {
+      "frontier": {"controls":9,"colors":8},
+      "data": {"controls":10,"colors":7,"borders":3},
+      "geo": {"controls":10,"colors":7,"borders":6},
+      "extension": {"controls":9,"borders":5}
+    },
+    "views": [
+      {"view":"frontier","route":"/app/frontier","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
+      {"view":"frontier-hot","route":"/app/frontier?view=hot","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
+      {"view":"frontier-daily","route":"/app/frontier?view=daily","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"a published issue with a lead has both its 24px headline link and 16px row links","shapes":3,"rows":true},
+      {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
+      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
+      {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's field","shapes":3,"rows":true},
+      {"view":"frontier-daily-empty","route":"/app/frontier?view=daily&day=2020-01-01","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","rows":false},
+      {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","rows":false},
+      {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
+      {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
+      {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
+      {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
+      {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
+      {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
+      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
+      {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
+      {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
+      {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
+      {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
+      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
+      {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
+      {"view":"memory","route":"/app/memory","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
+      {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
+      {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
+      {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true},
+      {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":true},
+      {"view":"account-appearance","route":"/app/account?tab=appearance","pattern":"/app/account","family":"settings","template":"T6","rows":false},
+      {"view":"account-usage","route":"/app/account?tab=usage","pattern":"/app/account","family":"settings","template":"T6","rows":false},
+      {"view":"account-connectors","route":"/app/account?tab=connectors","pattern":"/app/account","family":"settings","template":"T6","rows":false},
+      {"view":"account-projects","route":"/app/account?tab=projects","pattern":"/app/account","family":"settings","template":"T6","rows":false},
+      {"view":"account-notifications","route":"/app/account?tab=notifications","pattern":"/app/account","family":"settings","template":"T6","rows":false},
+      {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","rows":false},
+      {"view":"extensions-plugins","route":"/app/extensions/plugins","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
+      {"view":"extensions-skills","route":"/app/extensions/skills","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
+      {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
+      {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
+      {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
+      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","budget":"geo","rows":false},
+      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
+      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
+      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
+      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
+      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
+      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
+      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","template":"T5","budget":"geo","rows":false},
+      {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-comparator","module":"vcr","tab":"/comparator","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-trial","module":"vcr","tab":"/trial","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-matching","module":"vcr","tab":"/matching","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-data","module":"vcr","tab":"/data","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
+    ],
+    "unwalked": [
+      {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
+      {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
+      {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
+      {"pattern":"/app/files/open","template":"screen","why":"a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks"},
+      {"pattern":"/app/memory/delivered/:deliveryId","template":"screen","why":"the same page as a share link (`memory-shared-missing` walks that component with an address that is not there)"},
+      {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"}
+    ]
+  },
+  "baseline": {
+    "version": 1,
+    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
+    "entries": []
+  },
+  "operatorSentences": [
+    "EviMed 主站账号登录没有启用，请检查登录配置。",
+    "OpenViking 数据卷已经超过约定时间没有新的已校验备份，请查看宿主机的备份定时器。",
+    "OpenViking 数据卷最近一次备份失败了，之前的备份仍在；请查看宿主机备份任务的日志。",
+    "OpenViking 数据卷的备份回执读不懂或不可信（格式、权限或内容不对），请查看宿主机的备份任务。",
+    "OpenViking 没有加载平台的记忆模板目录，原生记忆暂停；请检查模板目录的挂载和权限。",
+    "OpenViking 的编译请求没有经过身份转发程序，知识编译暂停；请检查它的配置和启动入口。",
+    "OpenViking 的编译身份转发程序没有应答，知识编译暂停；请查看该容器。",
+    "OpenViking 的记忆类型白名单和平台的不一致，原生记忆暂停；请重新生成它的配置文件。",
+    "OpenViking 还没有登记平台的账户（新数据卷首次启动后最多约五分钟），稍后会自动再查。",
+    "OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。",
+    "OpenViking 里的官方编译技能和本版本固定的内容不一致，知识编译暂停；请核对后重新安装。",
+    "OpenViking 里缺少官方编译技能，自动安装没有成功，知识编译暂停。",
+    "不允许用环境变量提供 Materials Project 的密钥，请改用密钥文件。",
+    "全部自动批准开着，生产环境必须关闭。",
+    "公开网址只能写到域名，不能带路径。",
+    "公开网址必须使用 https。",
+    "内置示例不可用，请联系管理员。",
+    "内置示例的内容无效，请联系管理员。",
+    "初始管理员密码太短，请加长。",
+    "初始管理员密码无效，请换一个。",
+    "初始管理员密码还是示例里的占位值，请换成真正的密码。",
+    "前沿动态使用的内部项目不存在。",
+    "前沿动态使用的运营账号读不到。",
+    "前沿动态模块没有就绪，请查看日志。",
+    "前沿动态没有配置运营账号。",
+    "前沿动态的后台循环没有启动。",
+    "前沿动态的数据库升级没有完成，请查看日志。",
+    "备份保留天数的配置无效。",
+    "备份健康检查的宽限时间配置无效。",
+    "备份存放在本机之外这件事还没有确认。",
+    "备份方式的配置值不被认可。",
+    "备份没有配置加密密钥，请配置后再启用。",
+    "备份状态文件是符号链接，不被允许。",
+    "备份状态文件的内容无效。",
+    "备份状态文件的路径无效。",
+    "备份状态文件读不到，请检查挂载和权限。",
+    "备份目录不存在，请先创建并挂载。",
+    "备份目录必须写成绝对路径。",
+    "备份目录放在了数据目录里，备份会和数据一起丢失，请改到数据目录之外。",
+    "备份目录是符号链接，不被允许，请指向真实目录。",
+    "备份目录的路径不是一个目录。",
+    "备份目录读不到或写不进，请检查挂载和权限。",
+    "备份还没有做过恢复演练，请完成一次并记录。",
+    "安全响应头被关闭了，生产环境必须开启。",
+    "官方编译技能还没有就绪，所以还没有检查编译身份转发程序。",
+    "定时备份在报告异常，请查看备份任务的日志。",
+    "定时备份已经很久没有成功运行，请查看备份任务。",
+    "宿主机命令行开着，生产环境必须关闭。",
+    "平台每周最多发布两张原创分析卡，这张顺延到下一周。",
+    "开发用的登录入口开着，生产环境必须关闭。",
+    "循证 GEO 有一个后台循环停住了，对应的步骤暂停推进；请联系管理员。",
+    "循证 GEO 有一个后台循环在反复出错，对应的步骤暂停推进；请联系管理员。",
+    "循证 GEO 有一个后台循环没有启动，对应的步骤不会自动推进；请联系管理员。",
+    "循证 GEO 没有配置媒体采买服务，下单这一步暂时用不了；其余步骤照常。",
+    "循证 GEO 没有配置社媒采集服务，读不到社媒帖子。",
+    "循证 GEO 的后台循环没有启动，监测和各步骤不会自动推进。",
+    "循证进化的依赖白名单配置有误，该模块暂未启用，其他研究不受影响。",
+    "循证进化的配置有误，该模块暂未启用，其他研究不受影响。",
+    "找不到前端静态文件，页面打不开。",
+    "找不到备份状态文件，备份可能从未运行过。",
+    "持久批准开着，生产环境必须关闭。",
+    "数据库的关系完整性还没有通过校验（有孤立记录或未校验的约束），请先修复。",
+    "数据目录是符号链接，不被允许，请指向真实目录。",
+    "数据目录的路径不是一个目录。",
+    "数据目录读不到或写不进，请检查挂载和权限。",
+    "检查编译身份转发程序时没有读到任务编号，知识编译暂停。",
+    "模型服务的地址配置无效。",
+    "模型网关的内部地址配置无效。",
+    "模型网关的地址配置无效。",
+    "模型网关的签名密钥无效或太短。",
+    "模型网关的运行时模式配置无效。",
+    "模型网关的限额配置无效。",
+    "正在运行的 OpenViking 不是本版本固定的那一版，请按发布清单更换镜像。",
+    "正在运行的版本和发布清单对不上，请重新部署。",
+    "没有任何可以登录的账号，请先创建一个。",
+    "没有找到配置的初始管理员账号，请检查初始账号的设置。",
+    "没有接入 OpenViking 数据卷的备份回执（备份叠加层没有挂载它的状态目录），无法确认原生记忆和知识页有没有备份。",
+    "没有配置 Materials Project 的密钥。",
+    "没有配置 OpenViking 调用模型网关的服务密钥，原生记忆和知识编译暂停；请重新运行 configure:production-state 并重建相关容器。",
+    "没有配置模型服务的密钥。",
+    "没有配置知识源插件，前沿动态没有内容来源。",
+    "没有配置运维指标的访问令牌。",
+    "状态变更不合法，已拒绝。",
+    "生产环境不允许用环境变量设置初始管理员密码，请改用密码文件。",
+    "生产环境必须配置可信代理。",
+    "生产环境的跨域来源必须使用 https。",
+    "生产环境的跨域白名单里不能有本机地址。",
+    "生产环境要求用共享数据库保存状态，现在用的是本机文件，请配置数据库。",
+    "登录方式的配置值不被认可，请检查部署的认证模式。",
+    "直连命令行开着，生产环境必须关闭。",
+    "知识源插件的版本和平台不匹配，前沿动态暂停读取。",
+    "知识源插件的访问令牌文件读不到。",
+    "知识源插件连不上，前沿动态暂时拿不到新内容；已有内容不受影响。",
+    "科研工具的数据要求需要补全。",
+    "要求启用收件箱，但收件箱没有接入。",
+    "要求启用文档解析，但没有配置解析服务的地址。",
+    "要求启用用量账本，但账本没有接入。",
+    "要求启用网盘接入，但没有配置网盘服务或访问令牌。",
+    "计量暂时不可用，本次用量稍后补记。",
+    "记不了 OpenViking 模型调用的账：平台账号或它的内部项目读不到；请查看数据库。",
+    "证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。",
+    "证据中心正在做另一项研究，这次排在它后面，不会丢。",
+    "证据中心的运行情况只有运营账号可以查看和手动运行。",
+    "评测因模型额度限制暂缓，现有进度已保留。",
+    "评测期间不提供原始文件下载，请改用已解析的来源。",
+    "评测的排除规则暂时无法读取，这次请求没有执行，请稍后重试。",
+    "资源限额之间互相矛盾（例如单个文件比整个项目还大），请核对。",
+    "跨域来源必须写成确切的域名，不能带路径或通配符。",
+    "跨域白名单里有不被允许的来源。",
+    "跨域白名单里有无法识别的来源。",
+    "运维指标的访问令牌太短，请加长。",
+    "运维指标的访问令牌无效。",
+    "运维指标的访问令牌还是示例里的占位值，请换掉。",
+    "运行时与控制面的契约版本不一致。",
+    "运行时协议与控制面不一致，请联系管理员升级。",
+    "运行时插座版本与镜像声明不一致。",
+    "运行时沙箱不可用，命令执行已整体关闭。",
+    "运行时的统一组合未装载，已拒绝启动。",
+    "运行时缺少必需组件，已拒绝启动。",
+    "还没有 OpenViking 数据卷的备份回执：宿主机的备份任务可能还没装好或从未运行，请查看备份定时器。",
+    "还没有读到 OpenViking 引擎的状态，稍后会自动再查。",
+    "这个来源在本次评测中被排除，请换用其他来源。",
+    "这个账号名或显示名留给平台出版方，请换一个。",
+    "这个部署没有开启证据中心的每日选题。",
+    "这个部署还没有配置备份。",
+    "这个项目调用平台工具过于频繁，请稍后重试。",
+    "这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。",
+    "这是平台出版方账号，不能删除或导出。",
+    "这条研究记录已变化，请刷新后重试。",
+    "这条裁决正在执行，稍后刷新再答复。",
+    "这条预测登记的内容不完整或格式不对：需要试验登记号、终点，以及估计值或成功概率。",
+    "这项操作仅运维账号可使用。",
+    "这项研究工作暂时无法完成，请稍后重试。",
+    "这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。",
+    "随版本发布的官方编译技能文件和固定的摘要对不上，没有安装；请核对发布内容。",
+    "预测登记模块没有启用，其他研究不受影响。",
+    "额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。",
+    "额度模块没有就绪（数据库或模块没有接入），请查看日志。",
+    "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
+  ]
+};
+// END EMBEDDED WALK TABLES
+
+/** The page table: every view the walk visits with its template, budgets and the kinds of check it is held to. @type {any} */
+export const PAGE_TEMPLATES = WALK_TABLES.pageTemplates;
+/** What the walk accepts for now, with an owner and a deadline for each entry. @type {any} */
+export const WALK_BASELINE = WALK_TABLES.baseline;
+/** The sentences of the error codes written for the operator (their audience in the domain): none of them is on a person's page. @type {string[]} */
+export const OPERATOR_SENTENCES = WALK_TABLES.operatorSentences;
+/** The pages that are the operator's own, where those sentences belong. */
+export const OPERATOR_PAGES = new Set(["ops"]);
+
+/**
+ * The pages, by the name the report uses, that have an address of their own (`page-templates.json`, the views with a `route`).
+ * 知识库 and 记忆胶囊 are one page each since 2026-09-20; 设置 is walked section by section. The frontier feed's views are walked only
+ * where the account is offered the feed. The pages whose address holds an id the deployment names — a GEO project, a study, a zone, a
+ * card, a document — are `discovered`, and a module's tabs hang off one (`module`, `tab`).
+ * @type {Array<[string, string]>}
+ */
+export const ROUTES = PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => typeof view.route === "string").map((/** @type {any} */ view) => [view.view, view.route]);
 // 1512 is the owner's screen (2026-09-23 plan §3: measured at that width).
 const VIEWPORTS = [["desktop", { width: 1512, height: 945 }], ["phone", { width: 390, height: 844 }]];
 const LEAKS = [
@@ -201,48 +417,25 @@ const LEAKS = [
 ];
 
 /**
- * The back office a page no longer describes (2026-09-23 plan §4, checklist
- * item 8). A closed list of the product's own phrases, not a pattern over
- * open prose: each is something this code base used to print. 「已交付」 is the
- * status label standing on its own; inside a run of Chinese text it is a word of
- * the researcher's content (a lesson titled 「修订已交付报告后重系引证与数值」
- * failed the 2026-10-07 walk of the memory page). 「已核对 41/72」 is the
- * ledger's count; the evidence card's own tag, 「引文已核对 1/2」 (R13, E-12), is
- * a label a reader weighs the card by and is not that.
+ * The shapes of the back office's own labels and runtime vocabulary that no page of a researcher shows (2026-09-23 plan §4, checklist item 8):
+ * a status label on its own (「已交付」, 「未验证」), a count the back office keeps (「核对 41 条」, 「用过 3 次」, 「起生效」), the runtime's
+ * units and names (tokens, tok/s, the cache, a generation, a receipt's engine and method), the router's English error page. Closed
+ * vocabulary — each is something this code base once printed — and not a guess at prose. 「已交付」 is the status label standing on its
+ * own; inside a run of Chinese text it is a word of the researcher's content (a lesson titled 「修订已交付报告后重系引证与数值」 failed the
+ * 2026-10-07 walk of the memory page). 「已核对 41/72」 is the ledger's count; the evidence card's own tag, 「引文已核对 1/2」 (R13, E-12), is a
+ * label a reader weighs the card by and is not that.
+ *
+ * R19 (S4, audit D C8) took the sentences out. Seventy-four entries went: 55 are phrases that `apps/web/src/app/retiredWords.test.ts` bans in
+ * the web source with the reason beside each (the same list in a second place), and 19 are sentences that no source file of the web app or
+ * the domain contains any more (the trust, receipt and sharing sentences of the evidence card, the capsule, the result inspector and the
+ * inventory). What stands in their place is structural: a sentence that stands alone is an `orphan-sentence`, a note must carry an action or a
+ * number (the `Note` type), and a sentence the control plane writes for the operator is matched exactly (`OPERATOR_SENTENCES`, generated
+ * from the domain's error codes by audience, `pageFindings`). A list of phrases cannot catch the next sentence; do not add to this one.
  */
 export const BACK_OFFICE = [
   /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /(?<![\p{Script=Han}\d])\d+月\d+日\s*起生效/u, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
-  // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
-  // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
-  /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
-  // What a shared file or a subscribed zone holds is not assured to the researcher.
-  /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
-  // The citation checker's own state under an answer: drawn only when it has a list to show.
-  /引文核对中/, /引文暂时无法核对/,
-  // The result inspector: no digest, no image, no list of what the platform did not record or observe about a version.
-  /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/, /引用均为来源原文片段/, /不由模型生成/,
-  // A run's verdict sentences: no gate sending work back, no chore for the reader, no word of a signing key.
-  /退回修复/, /未经校验的文件不会被当作交付物/, /请自行复核/, /用密钥验回执/,
-  // Why a request was routed as it was is the ledger's, not a sentence for the researcher.
-  /按问题内容交给/, /这个问题不需要交付报告/, /路由判断没有给出结论/,
-  // An evidence card: whether an AI reviewed it, and what the upkeep rounds kept from the last reading.
-  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /没有对上引擎回执/, /平台保存的回执/, /本卡由平台议程完成/, /证明哈希/, /留在平台的内部研究记录/,
-  /审查意见供参考/, /不代表实证验证/, /旧意见保留供参考/, /表中每个数都是这个研究的结果/, /平台不自动选定方案/,
-  /模型推断\s*\d+/, /你已确认\s*\d+/, /数据字典所述/, /确认以上推断/,
-  /导读由模型根据原文写成/, /引用前请阅读原文/,
-  // The model-only notes and the English binding sentence must never be a line of a page; the old partial-text finding of an upkeep round and a
-  // generic 「review not done」 announcement are the card pipeline's.
-  /不是操作指令/, /source support remains separately assessed/, /仅使用该来源的部分已保存正文/, /尚未完成复核/,
-  /证据卡是 EviMed 对来源的整理/, /请引用它列出的原始来源/, /不要引用这张卡/, /撤回的卡片保留这一页/, /不为它们背书/, /是平台还没核对这一项/, /三项都未核实/, /(?:未做|未安排)独立复核/,
-  /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
-  // 虚拟临床研究: who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are not marks on the
-  // value, the card or the cover. 「AI 设定」 stands on its own as the chip did; inside a sentence it is the headline's or the nag's.
-  /(?<![\p{Script=Han}\w])AI 设定(?![\p{Script=Han}\w])/u, /由 AI 设定/, /去复核/, /复核后有变更/, /AI 草拟/, /AI 写入/, /AI 最小版本/,
-  /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/,
-  // The skills and tools pages: no digest row, no verification state of an import, no trust sentence about a package, a method or
-  // a tool's result — not even for assistive technology, which the walk reads too.
-  /尚未完成原生验证/, /包摘要/, /按未验证的方法对待/, /需再对照最新的官方来源/, /不能证明真实可运行/, /无法确认能否运行/, /没有统计实际运行的情况/, /实际运行的情况暂时读不到/, /^未验证$/m,
+  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /模型推断\s*\d+/, /你已确认\s*\d+/, /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/, /^未验证$/,
 ];
 
 /**
@@ -256,124 +449,21 @@ export const BACK_OFFICE = [
 export const RETIRED_NAMES = [/循证传播/, /虚拟临研/]; // retired-word-ok
 
 /**
- * The style budget per page (2026-09-23 plan §7 gate 3). The frontier feed may
- * spend three more text colours — the safety red and the rank colours — and
- * one more kind of control: an item's headline is the link to its original
- * (owner, 2026-09-24).
+ * The style budget per page (2026-09-23 plan §7 gate 3): at most 8 kinds of control, 5 text colours and 3 kinds of border on a reading
+ * page. The page table (`page-templates.json`) names the other rows a view may be held to — the frontier feed's (three more colours and a
+ * control: an item's headline is the link to its original, owner 2026-09-24), the data page's (a metric band, a chart's legend, a severity
+ * scale and a table's header are more controls, fusion plan §6.3), a module page's (the data page's, with six kinds of border: the card
+ * frame, the rail's step dots, the tab underline, the row rule and the metric band's divider), the extension centre's — and a view's own
+ * `budgetOverride` with the measurement behind it. A budget is a wider allowance, not the absence of one.
  */
 const BUDGET = { controls: 8, colors: 5, borders: 3 };
-const FRONTIER_BUDGET = { controls: 9, colors: 8 };
-/**
- * The data-page budget (fusion plan §6.3): 10 controls, 7 text colours, 3
- * borders, against the reading page's 8 / 5 / 3. A dashboard legitimately
- * carries more — a metric band, a chart's legend and axis labels, a severity
- * scale, a table's own header — and it is a wider budget, not the absence of
- * one: 循证 GEO shipped inside the old budget and still looked cheap, which is
- * why the fix was its information architecture and not its allowance.
- *
- * 循证 GEO is the page it was written for (fusion plan §5.5, §5.9): it spends
- * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
- * chrome, and its header carries a rail of eight steps beside the tabs. The
- * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
- * them — so the control budget covers the rail, not a control per row.
- */
-const DATA_BUDGET = { controls: 10, colors: 7, borders: 3 };
-/**
- * A GEO project's tabs spend more kinds of border than any other page, and the
- * number is the measured one, not a wish: the 2026-09-26 walk of the rebuilt
- * pages counted 6 (总览), 6 (可见度) and 5 (准确与安全) — the card frame,
- * the rail's step dots, the tab underline, the table's row rule and the
- * metric band's divider — against the reading page's 3 (fusion audit F-G2).
- * The other four tabs were first walked by this script after that date; a tab
- * that goes past the measured six is a new kind of border, which is what this
- * budget is for. Colours and controls stay the data page's.
- */
-const GEO_BUDGET = { ...DATA_BUDGET, borders: 6 };
-/** The seven tabs of one GEO project, by the report's name and path segment. */
-export const GEO_TABS = [
-  ["geo-overview", ""], ["geo-visibility", "/visibility"], ["geo-accuracy", "/accuracy"],
-  ["geo-questions", "/questions"], ["geo-sources", "/sources"], ["geo-actions", "/actions"], ["geo-plan", "/plan"],
-];
-/**
- * The seven tabs of one 虚拟临床研究 study, by the report's name and path segment
- * (build plan 2026-09-28 §9.4). Walked like GEO's: the module's home page is
- * one sentence for an account it is not open to, and a study's own pages only
- * exist where that account has a study.
- */
-export const VCR_TABS_WALK = [
-  ["vcr-overview", ""], ["vcr-population", "/population"], ["vcr-patients", "/patients"],
-  ["vcr-comparator", "/comparator"], ["vcr-trial", "/trial"], ["vcr-matching", "/matching"], ["vcr-data", "/data"],
-];
-/**
- * The extension centre's two lists, first walked on 2026-10-03, a day after
- * they shipped. The numbers are the measured ones: 插件 draws five kinds of
- * border (the tab underline, the row rule, the project card, the saved-state
- * box inside it and the field) and 技能 four, against the reading page's 3.
- * With skills in the list, 技能 also draws nine kinds of control (the row's
- * own history action is the ninth) against the reading page's 8. Nobody has
- * ruled what a settings list may spend; this holds the pages where they are,
- * so one more kind of either fails, until someone does.
- */
-const EXTENSION_BUDGET = { controls: 9, borders: 5 };
-export const BUDGET_BY_PAGE = {
-  frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
-  // A published issue with a lead has both its 24px headline link and 16px row links. The live R14 issue measured ten;
-  // the empty fixture that established nine carried no lead. Keep this allowance local to the issue, not the other feed views.
-  "frontier-daily": { ...FRONTIER_BUDGET, controls: 10 },
-  // The zones' home is a frontier page: the same rail and tabs, measured at nine. It also draws four kinds of border where the feed
-  // draws two — the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's
-  // field — the measured number of the first live walk of R10 (2026-10-07), not a wish: the field is the page's one input, and the
-  // other three are the tabs' and the list's own. A fifth is a new kind of border, which is what this budget is for.
-  "frontier-zones": { ...FRONTIER_BUDGET, borders: 4 },
-  "frontier-daily-empty": FRONTIER_BUDGET,
-  "extensions-plugins": EXTENSION_BUDGET, "extensions-skills": EXTENSION_BUDGET,
-  geo: DATA_BUDGET,
-  ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
-  "virtual-research": DATA_BUDGET,
-  ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, GEO_BUDGET])),
-  // 记忆地图 (DESIGN.md 「页面结构」 rule 1: the data page of memory). The release-18 switch walked it under the reading page's eight and
-  // failed at eleven. Two of the eleven were a second look for the same job — the sentence's count and the replay button, now chips
-  // like the filters — and the nine that remain are the page's own: the shell's three, the view switch's two (the chosen view is a
-  // second kind), the chips, the search, the mark rows and the timeline scrubber. Measured on a local deployment on 2026-10-13.
-  "memory-map": DATA_BUDGET,
-  // The knowledge base became a data page when it grew its project-and-type
-  // rail. Its route is `files`: the key used to read `knowledge`, a page name
-  // no route has, so the page kept the reading budget and failed on its ninth
-  // control (2026-09-26 walk).
-  files: DATA_BUDGET,
-  // R11 pages, walked for the first time with the release that built them. Their numbers are the designed ones (the feed's, a data
-  // page's), so they are in PROVISIONAL_PAGES: a number they exceed is a notice until a walk has measured them.
-  "frontier-following": FRONTIER_BUDGET, "frontier-zone": FRONTIER_BUDGET, "frontier-evidence": FRONTIER_BUDGET,
-  "frontier-author": FRONTIER_BUDGET, "frontier-event": FRONTIER_BUDGET,
-  "geo-answer": GEO_BUDGET,
-  "virtual-research-models": DATA_BUDGET, "virtual-research-precedents": DATA_BUDGET, "virtual-research-definitions": DATA_BUDGET,
-  "evidence-matrix": DATA_BUDGET,
-  // R13 (E-19): a document has a page of its own, the original beside what it says; the first walk of it reports its numbers.
-  "files-reader": DATA_BUDGET,
-};
-
-/**
- * Pages that no walk has measured yet: the numbers above are designed, not observed. What a page of this list spends past its budget
- * — kinds of control, colour and border, left edges, kinds of section — is a NOTICE, with the page's numbers in the report; the
- * checks that do not depend on a number (vocabulary, names, titles, one primary action, overflow, a refused call) stay failures.
- * A page leaves the list when a walk has reported its numbers and the budget has been set from them (principle 4: a check ships as
- * a notice until it has a distribution).
- */
-export const PROVISIONAL_PAGES = new Set([
-  "frontier-following", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event",
-  "geo-answer",
-  "virtual-research-models", "virtual-research-precedents", "virtual-research-definitions",
-  "account-notifications", "account-ops", "memory-shared-missing", "extensions-plugin-missing", "extensions-skill-missing",
-  "evidence-matrix", "files-reader", "frontier-daily-empty",
-  // R13 (E-18): 定时任务 became a split page — a list column beside a task whose pane is the kernel's conversation — and no walk has measured
-  // it. The first walk of it, on an account with no task, found its two blocks on left edges 8 px apart (the list's empty sentence sits in a
-  // column padded 8 px, under a title padded 16): the number is a notice until the page's own is settled, and the report holds it.
-  "autopilot",
-  // R13 (E-15): a 信源 row is two lines and three sortable numbers with a header, and a red count that is a button of its own; the page then
-  // draws 11 kinds of control against the data page's 10 (the first walk of it, on the web app's own fixture of four sources). The page's
-  // number is a notice until a walk on a real project has reported it.
-  "geo-sources",
-]);
+/** The tabs of a module page, by the report's name and path segment (`module` in the page table): one GEO project's, and one study's (build plan 2026-09-28 §9.4). */
+export const GEO_TABS = PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.module === "geo").map((/** @type {any} */ view) => /** @type {[string, string]} */ ([view.view, view.tab]));
+export const VCR_TABS_WALK = PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.module === "vcr").map((/** @type {any} */ view) => /** @type {[string, string]} */ ([view.view, view.tab]));
+/** The numbers a view is held to beyond the reading page's: its `budget` row of the page table, then its own override. */
+export const BUDGET_BY_PAGE = Object.fromEntries(PAGE_TEMPLATES.views
+  .filter((/** @type {any} */ view) => view.budget || view.budgetOverride)
+  .map((/** @type {any} */ view) => [view.view, { ...(PAGE_TEMPLATES.budgets[view.budget] ?? {}), ...(view.budgetOverride ?? {}) }]));
 
 /**
  * The page a view is held to the budget of. The second study of the virtual-research walk is named `vcr-trial@2` and is the same
@@ -385,87 +475,20 @@ export function budgetKey(name) {
 }
 
 /**
- * What a page stacks (DESIGN.md 「页面结构」 rule 1: one page, one kind of
- * object; the 2026-10-07 plan's R1: two kinds of section one above the other,
- * on nineteen pages). `measure` reads the page body's top-level sections — a
- * `<section>`, a list of rows, a table, a chart — and names each by its shape
- * (its tag and its first two distinct kinds of child). Sections of one shape are one kind: the
- * skills page's five groups, the feed's one group per day and the memory page's
- * small headers each repeat a single shape however many the data has. What is
- * counted is the number of different shapes, so a page that gains a chart, a
- * statistics block or a second list of another kind beside its list passes a
- * budget of one fewer and fails this one.
- *
- * The numbers are the designed ones, the pages R10 rebuilt and nothing else:
- * one list is one shape, a banner or a hot list beside it two, and the feed's
- * safety strip, hot list and day groups three. They are not yet measured on a
- * live deployment — the first walk of R10 reports each page's shapes
- * (`sectionShapes`), and a number it contradicts is moved with that reason in
- * this table, not around it. A page not named here is not held to a budget.
+ * What a page stacks (DESIGN.md 「页面结构」 rule 1: one page, one kind of object). `measure` reads the page body's top-level sections —
+ * a `<section>`, a list of rows, a table, a chart — and names each by its shape (its tag and its first two distinct kinds of child).
+ * Sections of one shape are one kind: the skills page's groups, the feed's one group per day and the memory page's small headers each
+ * repeat a single shape however many the data has. What is counted is the number of different shapes, so a page that gains a chart, a
+ * statistics block or a second list of another kind beside its list passes a budget of one fewer and fails this one. The numbers are
+ * the `shapes` of the page table; a page it does not name is not held to a budget.
  */
-export const SECTION_SHAPES_BY_PAGE = {
-  files: 2,
-  memory: 2, "memory-project": 2, "memory-methods": 2, "memory-growth": 2,
-  // 记忆地图 is a data page: the sentence over its switch and filters, the one canvas of the view, and the list of the same marks.
-  "memory-map": 3,
-  // 知识页: the chips and the compile's line, the tree; the graph adds its canvas and the list of its marks.
-  "knowledge-pages": 2, "knowledge-graph": 3,
-  frontier: 3, "frontier-hot": 3, "frontier-daily": 3, "frontier-all": 3, "frontier-following": 3,
-  capabilities: 2,
-  "extensions-plugins": 2, "extensions-skills": 2,
-  "virtual-research": 2,
-  ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, 3])),
-  // R13 (V-7): the pages the reference named (design reference §21.3). The numbers are the designed ones — a pinned list over the list of the
-  // rest (the inbox), the project list beside its one sentence (循证 GEO's home), the zones of each kind and the topic request (the zones'
-  // home), a list column and a main area (the scheduled tasks), a settings page's own sections — and they are not measured: a page of
-  // `NOTICE_SECTION_PAGES` that stacks more says so as a notice, with its shapes, until a walk has reported them.
-  inbox: 2, geo: 2, "frontier-zones": 3, autopilot: 2, account: 3,
-};
-/**
- * The pages whose section budget is new in R13: stacking more kinds of section than the budget says is a notice there, with the shapes in
- * it, and not a failure (principle 4: a check ships as a notice until it has a distribution). The pages of the table above that are not
- * named here keep failing, as they have since R10.
- */
-export const NOTICE_SECTION_PAGES = new Set(["inbox", "geo", "frontier-zones", "autopilot", "account", "memory-map", "knowledge-pages", "knowledge-graph"]);
+export const SECTION_SHAPES_BY_PAGE = Object.fromEntries(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => Number.isInteger(view.shapes)).map((/** @type {any} */ view) => [view.view, view.shapes]));
 
 /**
- * The pages whose lists are clicked: the first row of each list must show
- * something where the reader is looking (DESIGN.md 「页面结构」 rule 6). The
- * same pages as the section budget, minus 工具, whose grid is cards that
- * start a conversation — a click there would write to the deployment — and
- * minus the study's own tabs, whose rows are results, not a place to go.
+ * The pages whose lists are clicked: the first row of each list must show something where the reader is looking (DESIGN.md 「页面结构」
+ * rule 6) — the `rows` of the page table. Not 科研工具 or the study's own tabs: a click on a card there writes, and their rows are results.
  */
-export const ROW_CLICK_PAGES = new Set([
-  "files", "memory", "memory-project", "memory-methods", "memory-growth", "memory-map", "knowledge-pages", "knowledge-graph",
-  "frontier", "frontier-hot", "frontier-daily", "frontier-all",
-  "extensions-plugins", "extensions-skills", "virtual-research",
-  // R11 (re-aimed in R13, V-11): a source row opens a drawer (it opened its three conditions in place), a scheduled-task row goes to the
-  // task's own page (it opened a drawer). Both read what the row holds and write nothing.
-  "geo-sources", "autopilot",
-  // R13 (V-11, V-7): the rows of 问题与回答 and the findings of 准确与安全 (the 看回答 link), and the pages the reference named for a
-  // first-row click (design reference §21.3): the inbox, settings, 循证 GEO's home and the evidence zones' home. New coverage, so a
-  // click that shows nothing there is a notice (`NOTICE_ROW_CLICK_PAGES`).
-  "geo-questions", "geo-accuracy", "inbox", "account", "geo", "frontier-zones",
-]);
-/**
- * The pages of `ROW_CLICK_PAGES` whose first-row click is new in R13: what it shows is reported, and a click that shows nothing is a
- * notice, not a failure, until a walk has reported how these pages behave (principle 4: a check ships as a notice first). The pages that
- * were clicked before R13 keep failing on a row that does nothing.
- */
-export const NOTICE_ROW_CLICK_PAGES = new Set(["geo-questions", "geo-accuracy", "inbox", "account", "geo", "frontier-zones"]);
-/**
- * Pages whose first rows are not on the page when it loads. 问题与回答 draws its groups closed, and a group's measured questions — the
- * rows — are inside it: the walk opens the groups (a click on a disclosure toggle, which only shows more of the page) before it looks
- * for a row. The selector names the toggles; at most `ROW_REVEAL_LIMIT` are opened.
- */
-export const ROW_REVEAL_BY_PAGE = { "geo-questions": "[data-geo-group] button[aria-expanded='false']" };
-const ROW_REVEAL_LIMIT = 12;
-/**
- * Pages whose findings are cards, not rows of a list: the one thing on a card that opens is its link. 准确与安全's 讲错清单 draws each
- * finding as an `<article>` with a 「看回答」 link to the answer that says it, in no list and with no row title, so the list probe finds
- * nothing there. The selector names those links; the first one is the page's first "row".
- */
-export const ROW_LINK_BY_PAGE = { "geo-accuracy": { label: "讲错清单", selector: "[data-geo-error-list] a[href*='/answers/']" } };
+export const ROW_CLICK_PAGES = new Set(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.rows).map((/** @type {any} */ view) => view.view));
 /** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
 const ROW_CLICK_LISTS_PER_PAGE = 8;
 
@@ -570,10 +593,23 @@ export function keylessTitles(connectors) {
     .map((item) => item.title);
 }
 
-/** Read one JSON `data` from the deployment, or null: a page whose id cannot be read is not walked, and the walk says so. */
-async function readData(context, base, pathname) {
-  const answer = await context.request.get(`${base}${pathname}`).catch(() => null);
-  if (!answer || !answer.ok()) return null;
+/**
+ * Read one JSON `data` from the deployment, or null: a page whose id cannot be read is not walked, and the walk says so. A list the
+ * deployment cannot answer (a server error, a read that never arrived) is a failure of its own, not an empty list: the pages it names would
+ * otherwise drop out of the walk as a coverage gap that looks like an account with nothing in it. A refusal (the module is not offered to
+ * this account, the account may not read it) is the account's, and is a coverage gap.
+ * @param {any} context @param {string} base @param {string} pathname @param {string[]} [failures]
+ */
+async function readData(context, base, pathname, failures) {
+  const answer = await context.request.get(`${base}${pathname}`).catch((/** @type {unknown} */ error) => error);
+  if (!answer || typeof /** @type {any} */ (answer).ok !== "function") {
+    failures?.push(`discovery: ${pathname} could not be read (${String(answer ?? "no answer").replace(/\s+/g, " ").slice(0, 80)}), so the pages it names were not found`);
+    return null;
+  }
+  if (!answer.ok()) {
+    if (answer.status() >= 500) failures?.push(`discovery: ${pathname} answered ${answer.status()}, so the pages it names were not found`);
+    return null;
+  }
   return (await answer.json().catch(() => null))?.data ?? null;
 }
 
@@ -582,25 +618,25 @@ async function readData(context, base, pathname) {
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
  * for want of an id is a notice, never a pass that looks like a walk.
- * @param {any} context a logged-in browser context @param {string} base @param {string[]} notices
+ * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures
  * @returns {Promise<{ routes: Array<[string, string]>, matrix: string | null, pdfTitle: string | null, keyless: string[] }>}
  */
-async function discoverRoutes(context, base, notices) {
+async function discoverRoutes(context, base, notices, failures) {
   /** @type {Array<[string, string]>} */
   const routes = [];
   const skip = (name, why) => notices.push(`${name}: not walked — ${why}`);
 
-  const geo = (await readData(context, base, "/api/geo/projects"))?.projects;
+  const geo = (await readData(context, base, "/api/geo/projects", failures))?.projects;
   const geoId = Array.isArray(geo) && typeof geo[0]?.id === "string" ? geo[0].id : null;
   if (geoId) {
     const at = `/app/geo/${encodeURIComponent(geoId)}`;
     routes.push(...GEO_TABS.map(([name, segment]) => /** @type {[string, string]} */ ([name, `${at}${segment}`])));
-    const snapshot = geoAnswerSnapshot(await readData(context, base, `/api/geo/projects/${encodeURIComponent(geoId)}/diagnosis`));
+    const snapshot = geoAnswerSnapshot(await readData(context, base, `/api/geo/projects/${encodeURIComponent(geoId)}/diagnosis`, failures));
     if (snapshot) routes.push(["geo-answer", `${at}/answers/${encodeURIComponent(snapshot)}`]);
     else skip("geo-answer", "the first project lists no wrong sentence with an answer");
   }
 
-  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies"))?.studies);
+  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies", failures))?.studies);
   for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
     if (!id) continue;
     const at = `/app/virtual-research/${encodeURIComponent(id)}`;
@@ -608,12 +644,12 @@ async function discoverRoutes(context, base, notices) {
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
 
-  const zones = await readData(context, base, "/api/frontier/zones");
-  const hot = await readData(context, base, "/api/frontier/hot");
+  const zones = await readData(context, base, "/api/frontier/zones", failures);
+  const hot = await readData(context, base, "/api/frontier/hot", failures);
   const first = frontierTargets({ zones, hot });
-  const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`) : null;
+  const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`, failures) : null;
   const cardId = frontierTargets({ cards }).cardId;
-  const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`) : null;
+  const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`, failures) : null;
   const targets = { ...first, cardId, authorId: frontierTargets({ links }).authorId };
   if (targets.zoneId) routes.push(["frontier-zone", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}`]);
   else skip("frontier-zone", "the evidence zones are not offered to this account or the list is empty");
@@ -624,16 +660,16 @@ async function discoverRoutes(context, base, notices) {
   if (targets.eventId) routes.push(["frontier-event", `/app/frontier/events/${encodeURIComponent(targets.eventId)}`]);
   else skip("frontier-event", "the hot list is empty or not offered");
 
-  const matrix = matrixRoute(await readData(context, base, "/api/agent-runs"));
+  const matrix = matrixRoute(await readData(context, base, "/api/agent-runs", failures));
   if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
-  const sources = await readData(context, base, "/api/sources?projectId=default&limit=50");
+  const sources = await readData(context, base, "/api/sources?projectId=default&limit=50", failures);
   const pdfTitle = pdfSourceTitle(sources);
   if (!pdfTitle) skip("files: the original of a PDF", "the knowledge base holds no finished PDF");
   // A document's own page (R13): the reader is a page of the knowledge base, found from its list like the other pages with an id.
   const reader = sourceReaderRoute(sources);
   if (reader) routes.push(["files-reader", reader]);
   else skip("files-reader", "the knowledge base holds no finished document");
-  return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors")) };
+  return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors", failures)) };
 }
 
 /**
@@ -654,27 +690,175 @@ function shoutedCapabilityKeys(ids) {
 }
 
 /**
- * At most four font-size × font-weight pairs per page (design spec chapter 5
- * rule 1). Reported as a NOTICE: the rule has no measured distribution yet
- * (the 2026-09-26 walk counted 4–16 per page), and a check ships as a notice
- * until it has one.
+ * A finding is everything the walk saw that is not a plain failure: a measure over a rule's number, a page it could not look at, a
+ * click that showed nothing. It names the rule that found it, the view it is about, the sentence the report prints and, for a measured
+ * rule, the value (the baseline accepts up to a `max`). It fails the walk unless the baseline accepts it (`applyBaseline`): there is
+ * no class of finding that is only reported, because a notice nobody owns is where a defect stays forgotten (audit D, C8 and §4 S8).
+ * @typedef {{ rule: string, view: string, text: string, value?: number }} Finding
+ */
+
+/**
+ * @param {string} rule @param {string} view @param {string} text @param {number} [value]
+ * @returns {Finding}
+ */
+export function finding(rule, view, text, value) {
+  return value === undefined ? { rule, view, text } : { rule, view, text, value };
+}
+
+/** The sentence of a finding, whichever form it has. @param {string | Finding} entry */
+export function findingText(entry) {
+  return typeof entry === "string" ? entry : entry.text;
+}
+
+/** What a page could not be looked at for want of data on the account: the owner walk may be given these by the baseline, a fixture walk never. */
+export const COVERAGE_RULES = new Set(["not-observable", "not-walked"]);
+/** A probe that did not run proves nothing about the page it was for; no baseline entry accepts it. */
+export const UNACCEPTABLE_RULES = new Set(["step-failed"]);
+/** The two walks the baseline tells apart: the release walk on the owner-view account (many pages hold no data) and the local walk on the data-rich fixture. */
+export const WALK_PROFILES = ["owner", "fixture"];
+
+/**
+ * The marker phrases the walk's own steps write when they could not look: a finding that is only a sentence is classified by them, so
+ * the dozens of sites that say "not observable" need no edit to carry a rule.
+ */
+const NOT_OBSERVABLE_MARKER = ": not observable: ";
+const NOT_WALKED_MARKER = ": not walked — ";
+
+/**
+ * The view a sentence is about: what stands before its first colon (`files@desktop`, `vcr-*@2`, `axe-core`), or `*`.
+ * @param {string} text @returns {string}
+ */
+export function viewOfSentence(text) {
+  const match = /^([^:\s]+):/.exec(String(text));
+  return match ? match[1] : "*";
+}
+
+/**
+ * A finding of whichever form a probe returned it in.
+ * @param {string | Finding} entry @returns {Finding}
+ */
+export function asFinding(entry) {
+  if (typeof entry !== "string") return entry;
+  const view = viewOfSentence(entry);
+  if (entry.includes(NOT_OBSERVABLE_MARKER)) return finding("not-observable", view, entry);
+  if (entry.includes(NOT_WALKED_MARKER)) return finding("not-walked", view, entry);
+  return finding("notice", view, entry);
+}
+
+/**
+ * What is wrong with a baseline file, as sentences (empty when it can be used). An entry says who owns the debt and the day it stops
+ * being accepted; the walk exits 2 on a file that does not, because a baseline that cannot be read would accept nothing silently.
+ * @param {any} baseline @returns {string[]}
+ */
+export function baselineProblems(baseline) {
+  /** @type {string[]} */ const problems = [];
+  if (!baseline || !Array.isArray(baseline.entries)) return ["the baseline has no `entries` list"];
+  baseline.entries.forEach((/** @type {any} */ entry, /** @type {number} */ index) => {
+    const at = `entry ${index + 1}${typeof entry?.view === "string" ? ` (${entry.view})` : ""}`;
+    if (!entry || typeof entry !== "object") { problems.push(`${at} is not an object`); return; }
+    if (typeof entry.view !== "string" || !/^\S+$/.test(entry.view)) problems.push(`${at}: \`view\` is \`*\`, \`<name>@*\`, \`<name>@desktop\`, \`<name>@phone\` or the name a finding gives`);
+    if (typeof entry.owner !== "string" || !entry.owner.trim()) problems.push(`${at}: no \`owner\``);
+    if (typeof entry.why !== "string" || !entry.why.trim()) problems.push(`${at}: no \`why\``);
+    if (typeof entry.until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.until) || Number.isNaN(Date.parse(entry.until))) problems.push(`${at}: \`until\` is a date (YYYY-MM-DD)`);
+    const hasRule = typeof entry.rule === "string" && entry.rule !== "";
+    const hasContains = typeof entry.contains === "string" && entry.contains !== "";
+    if (hasRule === hasContains) problems.push(`${at}: name the finding by either \`rule\` or \`contains\``);
+    if (entry.max !== undefined && (!hasRule || !Number.isFinite(entry.max))) problems.push(`${at}: \`max\` is a number and goes with \`rule\``);
+    if (hasRule && UNACCEPTABLE_RULES.has(entry.rule)) problems.push(`${at}: a finding of rule ${entry.rule} is never accepted`);
+    if (entry.profiles !== undefined && (!Array.isArray(entry.profiles) || entry.profiles.length === 0 || entry.profiles.some((/** @type {string} */ name) => !WALK_PROFILES.includes(name)))) problems.push(`${at}: \`profiles\` lists ${WALK_PROFILES.join(" and/or ")}`);
+    if (hasRule && COVERAGE_RULES.has(entry.rule) && !(Array.isArray(entry.profiles) && entry.profiles.every((/** @type {string} */ name) => name === "owner"))) problems.push(`${at}: a coverage gap (${entry.rule}) is accepted for the \`owner\` profile only`);
+  });
+  return problems;
+}
+
+/** Whether a baseline entry is about a finding's view. @param {string} entryView @param {string} view */
+function viewMatches(entryView, view) {
+  if (entryView === "*") return true;
+  if (entryView.endsWith("@*")) return view === entryView.slice(0, -2) || view.startsWith(entryView.slice(0, -1));
+  return entryView === view;
+}
+
+/**
+ * The baseline applied to the walk's findings: which it accepts (and under whose entry), which it does not (they fail the walk), which
+ * entries accepted nothing (delete them), and which have room above what was measured (lower them). An entry past its day accepts
+ * nothing, and the finding says so.
+ * @param {Array<string | Finding>} entries
+ * @param {{ entries: any[] }} baseline
+ * @param {{ profile: string, today: string }} context
+ * @returns {{ accepted: Array<{ finding: Finding, entry: any }>, unaccepted: Array<{ finding: Finding, why: string }>, unused: any[], expired: any[], lowerable: Array<{ entry: any, measured: number }> }}
+ */
+export function applyBaseline(entries, baseline, { profile, today }) {
+  const rules = baseline.entries.filter((/** @type {any} */ entry) => !entry.profiles || entry.profiles.includes(profile));
+  /** @type {Set<any>} */ const used = new Set();
+  /** @type {Map<any, number>} */ const measured = new Map();
+  /** @type {Array<{ finding: Finding, entry: any }>} */ const accepted = [];
+  /** @type {Array<{ finding: Finding, why: string }>} */ const unaccepted = [];
+  for (const raw of entries) {
+    const found = asFinding(raw);
+    if (UNACCEPTABLE_RULES.has(found.rule)) { unaccepted.push({ finding: found, why: "a step that did not run is never accepted" }); continue; }
+    if (COVERAGE_RULES.has(found.rule) && profile !== "owner") { unaccepted.push({ finding: found, why: `a ${profile} walk accepts no coverage gap` }); continue; }
+    const about = rules.filter((/** @type {any} */ entry) => viewMatches(entry.view, found.view)
+      && (entry.rule !== undefined ? entry.rule === found.rule && (entry.max === undefined || found.value === undefined || found.value <= entry.max) : found.text.includes(entry.contains)));
+    const live = about.filter((/** @type {any} */ entry) => entry.until >= today);
+    if (live.length) {
+      const entry = live[0];
+      used.add(entry);
+      if (found.value !== undefined) measured.set(entry, Math.max(measured.get(entry) ?? 0, found.value));
+      accepted.push({ finding: found, entry });
+    } else if (about.length) {
+      unaccepted.push({ finding: found, why: `the baseline entry of ${about[0].owner} expired on ${about[0].until}` });
+    } else {
+      unaccepted.push({ finding: found, why: "no baseline entry accepts it" });
+    }
+  }
+  return {
+    accepted, unaccepted,
+    unused: rules.filter((/** @type {any} */ entry) => !used.has(entry) && entry.until >= today),
+    expired: rules.filter((/** @type {any} */ entry) => entry.until < today),
+    lowerable: [...measured].filter(([entry, value]) => entry.max !== undefined && value < entry.max).map(([entry, value]) => ({ entry, measured: value })),
+  };
+}
+
+/**
+ * The baseline's delta as lines for the walk's output: what it accepted (by entry), what it did not, and what can be tidied.
+ * @param {ReturnType<typeof applyBaseline>} result @param {string} profile
+ * @returns {string[]}
+ */
+export function baselineDelta(result, profile) {
+  const entryName = (/** @type {any} */ entry) => `${entry.view} ${entry.rule ?? `“${entry.contains}”`}${entry.max !== undefined ? ` ≤ ${entry.max}` : ""} (${entry.owner}, until ${entry.until})`;
+  /** @type {Map<any, number>} */ const perEntry = new Map();
+  for (const { entry } of result.accepted) perEntry.set(entry, (perEntry.get(entry) ?? 0) + 1);
+  return [
+    `baseline (${profile} walk): ${result.accepted.length} finding(s) accepted by ${perEntry.size} entry(ies), ${result.unaccepted.length} not accepted`,
+    ...[...perEntry].map(([entry, count]) => `  accepted ${count} × ${entryName(entry)}`),
+    ...result.expired.map((entry) => `  EXPIRED ${entryName(entry)}`),
+    ...result.unused.map((entry) => `  no longer needed, delete: ${entryName(entry)}`),
+    ...result.lowerable.map(({ entry, measured }) => `  can be lowered to ${measured}: ${entryName(entry)}`),
+  ];
+}
+
+/**
+ * At most four font-size × font-weight pairs per page (design spec chapter 5 rule 1). It was a notice for want of a distribution
+ * (the 2026-09-26 walk counted 4–16 per page); the 2026-10-13 walk counted 53 pages over it and nobody owned them. A page over the number
+ * is a failure unless the baseline accepts its count, with an owner and a deadline (`type-pairs`), so the count can only fall.
  */
 export const TYPE_PAIR_NOTICE = 4;
 
 /**
- * What one measured page view fails on, and what it is only noticed for.
+ * What one measured page view fails on, and what is accepted only by the baseline.
  * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
  * @param {any} measured what `measure` returned for the page
  * @param {string[]} httpErrors `<status> <path>` of every response ≥ 400 the page drew
- * @returns {{ failures: string[], notices: string[] }}
+ * @returns {{ failures: string[], notices: Array<string | Finding> }}
  */
 export function pageFindings(name, viewportName, measured, httpErrors) {
   const current = `${name}@${viewportName}`;
   const key = budgetKey(name);
-  const failures = [];
-  const notices = [];
-  // What a page spends past a designed number: a failure, except on a page no walk has measured yet (`PROVISIONAL_PAGES`).
-  const budgetFindings = [];
+  /** @type {string[]} */ const failures = [];
+  /** @type {Array<string | Finding>} */ const notices = [];
+  // What a page spends past its budget is a failure. A page that has to spend more says so in the page table (`budgetOverride`, with
+  // the measure and the reason behind it), not in a list of pages nobody has measured.
+  /** @type {string[]} */ const budgetFindings = [];
   // A page whose own API call is refused shows an error state and otherwise
   // measures clean: the 主动科研 page answered every load with a 400 through
   // two walks that passed (2026-09-24).
@@ -682,6 +866,7 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
   if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
   if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
+  if (measured.operatorSentenceHits?.length && !OPERATOR_PAGES.has(key)) failures.push(`${current}: a sentence written for the operator is on a person's page: ${measured.operatorSentenceHits.map((sentence) => `“${sentence}”`).join(", ")}`);
   if (measured.retiredNameHits?.length) failures.push(`${current}: a retired module name on the page: ${measured.retiredNameHits.join(", ")}`);
   if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
   if (!measured.title || measured.title.trim() === "EviMed") failures.push(`${current}: the page has no title of its own`);
@@ -700,15 +885,12 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     const sectionBudget = SECTION_SHAPES_BY_PAGE[key];
     const shapes = measured.sectionShapes ?? [];
     if (sectionBudget !== undefined && shapes.length > sectionBudget) {
-      const finding = `${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`;
-      if (NOTICE_SECTION_PAGES.has(key)) notices.push(`${finding} — new in R13: reported, not failed, until a walk has measured this page`);
-      else budgetFindings.push(finding);
+      budgetFindings.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
     }
     const pairs = measured.sizeWeightPairs ?? [];
-    if (pairs.length > TYPE_PAIR_NOTICE) notices.push(`${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`);
+    if (pairs.length > TYPE_PAIR_NOTICE) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`, pairs.length));
   }
-  if (PROVISIONAL_PAGES.has(key)) notices.push(...budgetFindings.map((finding) => `${finding} — provisional: this page has not been measured by a walk yet`));
-  else failures.push(...budgetFindings);
+  failures.push(...budgetFindings);
   return { failures, notices };
 }
 
@@ -765,20 +947,19 @@ export function rowClickFindings(name, rows) {
 }
 
 /**
- * What the first-row clicks of a page come to: a row that shows nothing fails the pages that have been clicked since R10/R11, and is a
- * notice on the pages whose click is new in R13 (`NOTICE_ROW_CLICK_PAGES`). A page where nothing could be clicked — the account has no
- * row there, or the page draws none — says so, so that the absence of a failure is not read as a pass: the assertion has to prove it
- * reached its target.
+ * What the first-row clicks of a page come to: a row that shows nothing is a failure. A page where nothing could be clicked — the
+ * account has no row there, or the page draws none — says so as a finding of its own (`not observable`), which only the baseline accepts:
+ * the assertion has to prove it reached its target, and a walk that reached nothing is not a pass.
  * @param {string} name the report's page name
  * @param {Array<{ label: string, shown: boolean }>} rows one entry per list clicked
  * @returns {{ failures: string[], notices: string[] }}
  */
 export function rowClickVerdict(name, rows) {
-  const nothing = rowClickFindings(name, rows);
+  const failures = rowClickFindings(name, rows);
   const notices = rows.length === 0
     ? [`${name}@desktop: not observable: no list on the page has a first row that opens (an empty list, a page without rows, or an account with none), so no click was made`]
     : [];
-  return NOTICE_ROW_CLICK_PAGES.has(budgetKey(name)) ? { failures: [], notices: [...nothing, ...notices] } : { failures: nothing, notices };
+  return { failures, notices };
 }
 
 /**
@@ -885,26 +1066,25 @@ export function measureStructure() {
 
 /** The pages whose heading order was fixed in R11: a heading that skips a level there fails; elsewhere it is noticed. */
 export const HEADING_ORDER_PAGES = new Set(["geo-overview", "memory"]);
-/** Pages whose first screen of rows has a designed ceiling (R11: 准确与安全's cards, 信源's rows); more is noticed, since rows are data. */
-export const ROW_COUNT_NOTICE_BY_PAGE = { "geo-accuracy": 20, "geo-sources": 40 };
-/** A page this many viewports tall is noticed: GEO's answer page was 69,000 px (R11). */
-export const TALL_PAGE_VIEWPORTS = 12;
+/** Pages whose first screen of rows has a designed ceiling (R11: 准确与安全's cards, 信源's rows); more is a finding the baseline can accept, since rows are data. */
+export const ROW_COUNT_CEILING_BY_PAGE = { "geo-accuracy": 20, "geo-sources": 40 };
 /** The settings list in which two projects must not read alike. */
 export const PROJECT_LIST_PAGES = new Set(["account-projects"]);
 
 /**
- * What the page-wide structure fails on, and what it is only noticed for. The structure that guards a defect R11 fixed and that is
- * measured exactly (an element or an attribute is there or not) fails; the height and the row counts, which depend on the data, are
- * notices.
+ * What the page-wide structure fails on, and what only the baseline accepts. The structure that guards a defect R11 fixed and that is
+ * measured exactly (an element or an attribute is there or not) fails; the row counts, which depend on the data, are findings with a
+ * number (`rows-ceiling`). A page's height is judged against its template's number of viewports, and an outline or a fold is what
+ * excuses a long one (`compositionFindings`, `long-page`).
  * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
  * @param {ReturnType<typeof measureStructure> | null | undefined} s
- * @returns {{ failures: string[], notices: string[] }}
+ * @returns {{ failures: string[], notices: Array<string | Finding> }}
  */
 export function structureFindings(name, viewportName, s) {
   const current = `${name}@${viewportName}`;
   const key = budgetKey(name);
   /** @type {string[]} */ const failures = [];
-  /** @type {string[]} */ const notices = [];
+  /** @type {Array<string | Finding>} */ const notices = [];
   if (!s) return { failures, notices };
   const side = s.sidebar;
   if (side.landmarks !== 1) failures.push(`${current}: ${side.landmarks} sidebar landmarks named 侧栏 (exactly one)`);
@@ -918,16 +1098,507 @@ export function structureFindings(name, viewportName, s) {
   const unnamed = s.scrollers.filter((region) => region.stop && !region.named);
   if (unnamed.length) failures.push(`${current}: ${unnamed.length} focusable scrolling region(s) without a name: ${unnamed.map((region) => region.label).join(", ")}`);
   if (s.headingJumps.length) {
-    (HEADING_ORDER_PAGES.has(key) ? failures : notices).push(`${current}: heading levels skip: ${s.headingJumps.join(", ")}`);
+    const text = `${current}: heading levels skip: ${s.headingJumps.join(", ")}`;
+    if (HEADING_ORDER_PAGES.has(key)) failures.push(text);
+    else notices.push(finding("heading-order", current, text, s.headingJumps.length));
   }
-  if (s.viewport > 0 && s.height > TALL_PAGE_VIEWPORTS * s.viewport) {
-    notices.push(`${current}: the page is ${s.height} px tall, ${(s.height / s.viewport).toFixed(1)} viewports (notice above ${TALL_PAGE_VIEWPORTS})`);
-  }
-  const rowCeiling = ROW_COUNT_NOTICE_BY_PAGE[/** @type {keyof typeof ROW_COUNT_NOTICE_BY_PAGE} */ (key)];
-  if (viewportName === "desktop" && rowCeiling !== undefined && s.rows > rowCeiling) notices.push(`${current}: ${s.rows} rows on the first screen of data (notice above ${rowCeiling})`);
+  const rowCeiling = ROW_COUNT_CEILING_BY_PAGE[/** @type {keyof typeof ROW_COUNT_CEILING_BY_PAGE} */ (key)];
+  if (viewportName === "desktop" && rowCeiling !== undefined && s.rows > rowCeiling) notices.push(finding("rows-ceiling", current, `${current}: ${s.rows} rows on the first screen of data (ceiling ${rowCeiling})`, s.rows));
   if (PROJECT_LIST_PAGES.has(key) && s.duplicateTitles.length) failures.push(`${current}: two projects read alike in the list: ${s.duplicateTitles.join(", ")}`);
   if (viewportName === "phone" && s.truncatedCounts > 0) failures.push(`${current}: ${s.truncatedCounts} count label(s) of the study are cut off at 390 px`);
   return { failures, notices };
+}
+
+/* ------------------------------------------------------------------------- R19: composition */
+
+/**
+ * The composition of one page view, measured in the page (`page.evaluate`, so it reads nothing from this module) from the attributes the
+ * framework's components carry — `data-page-chrome`, `data-step-rail`, `data-toolbar`, `data-note`, `data-tag`, `data-outline`,
+ * `data-empty`, `data-chart-grid`, `data-prose`, `data-show-more` (the table is in PageShell.tsx) — and from the order and the boxes of
+ * what they mark. Attributes, never phrases: what a sentence says is not read, only whether it stands alone. The rules are
+ * `compositionFindings`; what the page packages did not have, and 18.1's pages had (a filter below the list it filters, a step bar on
+ * one tab, a grey sentence nobody can press), the walk could not see: it counted kinds of control and matched a list of old sentences.
+ *
+ * With `hold` the page's scroll container is moved by up to 480 px and put back, to see whether the sticky band stays where it is
+ * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0.
+ * @param {[{ hold?: boolean }?]} [args]
+ */
+export function measureComposition([options] = [{}]) {
+  const hold = Boolean(options && options.hold);
+  const cut = (/** @type {unknown} */ text, limit = 40) => String(text ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
+  const rendered = (/** @type {Element} */ el) => {
+    const cs = getComputedStyle(el);
+    return cs.display !== "none" && cs.visibility !== "hidden" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const visible = (/** @type {Element} */ el) => {
+    const r = el.getBoundingClientRect();
+    // A box of one or two pixels is the screen-reader-only text, not the page.
+    return r.width > 2 && r.height > 2 && rendered(el);
+  };
+  const box = (/** @type {Element} */ el) => {
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) };
+  };
+  const live = (/** @type {string} */ selector, /** @type {ParentNode} */ root = document) => [...root.querySelectorAll(selector)].filter((el) => visible(el) && !el.closest("[role='dialog']"));
+  const inSection = (/** @type {Element} */ el) => el.closest("section, article, [role='region']") !== null;
+  const nameOf = (/** @type {Element} */ el) => cut(el.getAttribute("aria-label") || el.textContent || el.tagName.toLowerCase(), 30);
+  const stickyAbove = (/** @type {Element} */ el) => {
+    for (let at = /** @type {Element | null} */ (el); at && at !== document.body; at = at.parentElement) {
+      const position = getComputedStyle(at).position;
+      if (position === "sticky" || position === "fixed") return true;
+    }
+    return false;
+  };
+  const scrollerOf = (/** @type {Element} */ el) => {
+    for (let at = el.parentElement; at && at !== document.body; at = at.parentElement) {
+      const overflow = getComputedStyle(at).overflowY;
+      if ((overflow === "auto" || overflow === "scroll") && at.scrollHeight > at.clientHeight + 1) return at;
+    }
+    return document.scrollingElement ?? document.documentElement;
+  };
+
+  // The page: its height (the tallest thing that scrolls), its title.
+  let height = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0);
+  for (const el of document.querySelectorAll("body *")) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && el.clientHeight > 0 && el.scrollHeight > height) height = el.scrollHeight;
+  }
+  const h1 = live("main h1, h1")[0] ?? null;
+  const title = h1 ? { text: cut(h1.textContent), ...box(h1) } : null;
+
+  // The band: the sticky rows under the header (steps, activity, tabs, toolbar), and whether it holds when the page moves.
+  const chromeEl = live("[data-page-chrome]")[0] ?? null;
+  /** @type {null | Record<string, any>} */ let chrome = null;
+  if (chromeEl) {
+    chrome = { ...box(chromeEl), position: getComputedStyle(chromeEl).position, sticky: stickyAbove(chromeEl), held: null };
+    const scroller = scrollerOf(chromeEl);
+    const room = scroller.scrollHeight - scroller.clientHeight;
+    if (hold && room >= 160) {
+      const before = Math.round(chromeEl.getBoundingClientRect().top);
+      const saved = scroller.scrollTop;
+      scroller.scrollTop = Math.min(room, 480);
+      const scrolled = Math.round(scroller.scrollTop - saved);
+      const after = Math.round(chromeEl.getBoundingClientRect().top);
+      scroller.scrollTop = saved;
+      chrome.held = { scrolled, before, after, scrollerTop: scroller === document.scrollingElement ? 0 : Math.round(scroller.getBoundingClientRect().top) };
+    }
+  }
+
+  // The module's rail: its steps (a phone folds them into one chip that says how many there are).
+  const railEl = live("[data-step-rail]")[0] ?? null;
+  /** @type {null | Record<string, any>} */ let stepRail = null;
+  if (railEl) {
+    const steps = [...railEl.querySelectorAll("[data-rail-step]")];
+    const folded = steps.length === 0;
+    const chip = railEl.querySelector("button[aria-label]");
+    const total = Number(/(\d+)\s*\/\s*(\d+)/.exec(chip?.getAttribute("aria-label") ?? "")?.[2] ?? 0);
+    stepRail = {
+      ...box(railEl), folded, count: folded ? total : steps.length, inChrome: railEl.closest("[data-page-chrome]") !== null,
+      steps: steps.map((el) => ({ id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
+    };
+  }
+
+  // The layers of switches: tab lists, view switches written as radio groups, toolbars.
+  const tablists = live("[role='tablist']").map((el) => ({ label: el.getAttribute("aria-label") ?? "", tabs: el.querySelectorAll("[role='tab']").length, dots: el.querySelectorAll("[role='tab'] [data-tab-dot]").length, inChrome: el.closest("[data-page-chrome]") !== null, inToolbar: el.closest("[data-toolbar]") !== null, inSection: inSection(el), ...box(el) }));
+  const viewGroups = live("[role='radiogroup']").filter((el) => /视图|切换/.test(el.getAttribute("aria-label") ?? ""))
+    .map((el) => ({ label: el.getAttribute("aria-label") ?? "", inSection: inSection(el), ...box(el) }));
+  const toolbars = live("[data-toolbar]").map((el) => ({
+    label: el.getAttribute("aria-label") ?? "", inChrome: el.closest("[data-page-chrome]") !== null, inSection: inSection(el), ...box(el),
+    controls: {
+      pressed: el.querySelectorAll("[aria-pressed]").length, menus: el.querySelectorAll("[aria-haspopup]").length, tabs: el.querySelectorAll("[role='tab']").length,
+      inputs: el.querySelectorAll("input, select, textarea").length, buttons: el.querySelectorAll("button, a[href]").length,
+    },
+  }));
+
+  // A control group that stands after the content it controls: the chips, sliders, radios and toolbars against the first table, chart
+  // or list of their block (the nearest section, or the page body). A group inside the content (a row's switch, a column's sort) is part of it.
+  const CONTENT = "canvas, [data-chart], [data-chart-grid], table, ul, ol";
+  const blockOf = (/** @type {Element} */ el) => el.closest("section, article, [role='region'], [data-page-body], main") ?? document.body;
+  const isContent = (/** @type {Element} */ el) => {
+    if (!visible(el) || el.closest("[role='dialog'], nav, aside, header, [data-toolbar], [data-page-chrome], [role='tablist'], [role='menu'], [role='listbox'], [data-outline], [data-note]")) return false;
+    const r = el.getBoundingClientRect();
+    if (el.matches("canvas, [data-chart], [data-chart-grid]")) return r.height >= 80;
+    if (el.matches("table")) return el.querySelectorAll("tr").length >= 2;
+    return el.querySelectorAll(":scope > li").length >= 2 && r.height >= 60 && !el.matches("[role='group'], [role='radiogroup'], [role='toolbar']");
+  };
+  const controlGroups = new Set(live("[data-toolbar]"));
+  for (const el of live("[aria-pressed]")) {
+    const group = el.closest("[role='group'], [role='radiogroup']") ?? el;
+    if (!group.closest("[data-toolbar]")) controlGroups.add(group);
+  }
+  for (const el of live("input[type='range'], [role='radio']")) controlGroups.add(el.closest("[role='radiogroup'], [role='group']") ?? el);
+  /** @type {Array<{ control: string, controlTop: number, content: string, contentTop: number }>} */ const controlsAfterContent = [];
+  for (const group of controlGroups) {
+    if (group.closest("table, ul, ol, [data-chart], canvas, [role='menu'], [role='listbox']")) continue;
+    const region = blockOf(group);
+    const first = [...region.querySelectorAll(CONTENT)].filter((el) => !el.parentElement?.closest(CONTENT) && isContent(el) && !el.contains(group))[0];
+    if (first && (first.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+      controlsAfterContent.push({ control: nameOf(group), controlTop: box(group).top, content: first.tagName.toLowerCase(), contentTop: box(first).top });
+    }
+  }
+
+  // Sentences that stand alone: a block of text with at least twelve Han characters that is not a row, a cell, a label, a heading, a note, an
+  // empty state, a document's own prose or a tag, and has nothing to press in it.
+  const AWAY = "li, tr, dt, dd, button, a, label, h1, h2, h3, h4, h5, h6, figcaption, summary, option, select, textarea, [data-note], [data-empty], [data-headline], [data-tag], [data-step-state], [data-prose], [data-fact-list], [data-chart], [data-chart-empty], [role='tab'], [role='dialog'], nav, aside, header, svg, canvas, pre, code, [aria-hidden='true']";
+  const PRESS = "a, button, input, select, textarea, summary, [role='button'], [role='link'], [role='tab'], [role='switch'], [role='checkbox'], [tabindex]";
+  const mainEl = document.querySelector("main") ?? document.body;
+  const han = /\p{Script=Han}/gu;
+  /** @type {Map<Element, number>} */ const inBlock = new Map();
+  const walker = document.createTreeWalker(mainEl, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const count = (node.nodeValue ?? "").match(han)?.length ?? 0;
+    if (!count) continue;
+    let el = node.parentElement;
+    while (el && el !== mainEl && ["inline", "contents"].includes(getComputedStyle(el).display)) el = el.parentElement;
+    if (el) inBlock.set(el, (inBlock.get(el) ?? 0) + count);
+  }
+  // A block that a control names (`aria-labelledby`, `aria-describedby`) is that control's own text, not a sentence by itself.
+  const named = new Set([...document.querySelectorAll("[aria-labelledby], [aria-describedby]")].flatMap((el) => `${el.getAttribute("aria-labelledby") ?? ""} ${el.getAttribute("aria-describedby") ?? ""}`.split(/\s+/)).filter(Boolean));
+  const namedBy = (/** @type {Element} */ el) => { for (let at = /** @type {Element | null} */ (el); at && at !== mainEl; at = at.parentElement) if (at.id && named.has(at.id)) return true; return false; };
+  // A description beside its switch or button in one row belongs to that control (a settings row: its name, what it does, the switch).
+  const inControlRow = (/** @type {Element} */ el) => {
+    let at = el.parentElement;
+    for (let up = 0; up < 3 && at && at !== mainEl; up += 1, at = at.parentElement) {
+      if (at.getBoundingClientRect().height <= 140 && at.querySelector(PRESS)) return true;
+    }
+    return false;
+  };
+  const orphans = [...inBlock].filter(([el, count]) => count >= 12 && !el.closest(AWAY) && visible(el) && !el.querySelector(PRESS) && !namedBy(el) && !inControlRow(el))
+    .map(([el]) => ({ text: cut(el.textContent), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // Tags and what dresses as a tag: a tag is a label (`data-tag`); one with a pointer, a role or a button around it is a control in a label's
+  // clothes, and a button as high as a tag, with its corner and its type size, is a tag that can be pressed.
+  const tagEls = live("[data-tag]");
+  const tagLook = tagEls[0] ? (() => { const cs = getComputedStyle(tagEls[0]); return { height: Math.round(tagEls[0].getBoundingClientRect().height), radius: cs.borderTopLeftRadius, size: cs.fontSize }; })() : { height: 22, radius: "6px", size: "12px" };
+  const tags = tagEls.map((el) => {
+    const control = el.parentElement?.closest("button, a, [role='button'], [role='tab'], [role='link'], [role='menuitem']");
+    // The cursor is inherited: a tag in a row that opens something has the row's pointer without asking for one. Only a tag that sets it itself is a tag dressed as a control.
+    const cursor = getComputedStyle(el).cursor;
+    const asksForIt = cursor === "pointer" && (el.parentElement ? getComputedStyle(el.parentElement).cursor !== "pointer" : true);
+    return { text: cut(el.textContent, 24), cursor: asksForIt ? "pointer" : cursor === "pointer" ? "inherited" : cursor, role: el.getAttribute("role"), insideControl: control ? control.tagName.toLowerCase() : null, ...box(el) };
+  });
+  const tagLike = live("button, a[href], [role='button']").filter((el) => {
+    if (el.closest("[data-tag]") || el.matches("[role='tab']")) return false;
+    const cs = getComputedStyle(el);
+    return Math.abs(el.getBoundingClientRect().height - tagLook.height) <= 1 && cs.borderTopLeftRadius === tagLook.radius && cs.fontSize === tagLook.size && cs.backgroundColor !== "rgba(0, 0, 0, 0)";
+  }).map((el) => ({ text: nameOf(el), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // A word that is the name of a tab or a step, written as plain text that looks pressable: underlined, or in the pointer's cursor.
+  const destinations = new Set([...live("[role='tab']"), ...live("[data-rail-step]")].map((el) => cut(el.textContent, 20).replace(/\s*\d+$/, "")).filter(Boolean));
+  const NOT_WORDS = "a, button, [role='tab'], [role='link'], [role='menuitem'], h1, h2, h3, h4, h5, h6, th, label, legend, option, summary, figcaption, [data-tag], [data-rail-step], [data-headline], [data-note], nav, aside, [role='tablist'], dt, caption, svg";
+  const words = destinations.size === 0 ? [] : [...mainEl.querySelectorAll("span, div, p, td, li")].filter((el) => {
+    if (el.children.length > 0 || !destinations.has(cut(el.textContent, 20)) || !visible(el) || el.closest(NOT_WORDS) || el.closest("[role='dialog']")) return false;
+    const cs = getComputedStyle(el);
+    return cs.cursor === "pointer" || cs.textDecorationLine.includes("underline");
+  }).map((el) => ({ text: cut(el.textContent, 20), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // The one primary action of a page stands on the header's row. Empty states, recipes and forms carry their own.
+  const titleBottom = title ? title.bottom : 0;
+  const primaries = live("button, a, [role='button']").filter((el) => el.classList.contains("bg-accent")).map((el) => {
+    const at = box(el);
+    return { text: nameOf(el), ...at, inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+  });
+
+  // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
+  const zeroCounts = live("[role='tab'], [aria-pressed]").filter((el) => {
+    if (/** @type {HTMLButtonElement} */ (el).disabled || el.getAttribute("aria-disabled") === "true") return false;
+    const last = el.lastElementChild;
+    return Boolean(last && /^0$/.test((last.textContent ?? "").trim()));
+  }).map((el) => ({ text: nameOf(el), role: el.getAttribute("role") ?? "chip" }));
+
+  // A long page has a way to get about in it: contents, or a list read a page at a time.
+  const outline = { outlines: live("[data-outline]").length, showMore: live("[data-show-more]").length };
+
+  // A grid of charts fills its box.
+  const chartGrids = live("[data-chart-grid]").map((grid) => {
+    const cells = [...grid.querySelectorAll("[data-chart-row] > *")].filter(visible);
+    if (cells.length === 0) return { cells: 0, rows: 0, ratio: 1, ...box(grid) };
+    const rects = cells.map((cell) => cell.getBoundingClientRect());
+    const area = rects.reduce((sum, r) => sum + r.width * r.height, 0);
+    const span = (Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left))) * (Math.max(...rects.map((r) => r.bottom)) - Math.min(...rects.map((r) => r.top)));
+    return { cells: cells.length, rows: grid.querySelectorAll("[data-chart-row]").length, ratio: span > 0 ? Math.round((area / span) * 1000) / 1000 : 1, ...box(grid) };
+  });
+
+  // An empty state is a recipe: a mark, a title, and a way forward (an action, or the reason there is none).
+  const empties = live("[data-empty]").map((el) => {
+    const heading = [...el.children].find((child) => child.tagName.toLowerCase() !== "svg" && (child.textContent ?? "").trim() !== "");
+    return {
+      title: cut(heading?.textContent), icon: [...el.children].some((child) => child.tagName.toLowerCase() === "svg"), hasTitle: Boolean(heading),
+      action: el.querySelector("button, a[href], [role='button']") !== null, reason: el.hasAttribute("data-reason"), ...box(el),
+    };
+  });
+
+  // What the report keeps of the page's make-up: its notes (with or without an action or a number) and its headline.
+  const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
+
+  return {
+    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
+    orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
+    activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
+  };
+}
+
+/** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
+export const CHART_GRID_FILL = 0.92;
+/** A toolbar starts above this many viewports' height from the top: a control group that begins further down is below the fold of the page it filters. */
+export const TOOLBAR_VIEWPORTS = 1.2;
+/** A band that moved this far (px) from where the scroller holds it has not held. */
+export const BAND_TOLERANCE_PX = 2;
+
+/**
+ * The page table's row for a view, and its template: what slots the template allows, and how many viewports a page may be before it
+ * needs contents.
+ * @param {string} name the report's page name
+ */
+export function templateOf(name) {
+  const view = PAGE_TEMPLATES.views.find((/** @type {any} */ entry) => entry.view === budgetKey(name)) ?? null;
+  return { view, template: view ? PAGE_TEMPLATES.templates[view.template] : null };
+}
+
+/**
+ * What the composition of one page view says about it (R19, audit D §4 S6): a control group after the content it controls, a second layer
+ * of switches, a band that does not hold, a module without its steps, a sentence standing alone, a tag that is pressed, a word that looks like
+ * a link, a primary action away from the header, a switch to nothing, a long page with no way about in it, a grid with holes, an empty
+ * state with no way forward. Every one is a finding of its own rule, so that a baseline can hold a page at what it has for a time, with an
+ * owner; none is a notice. A page whose composition could not be read says so (`not-observable`).
+ * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
+ * @param {any} c what `measureComposition` returned
+ * @returns {{ failures: string[], notices: Finding[] }}
+ */
+export function compositionFindings(name, viewportName, c) {
+  const current = `${name}@${viewportName}`;
+  /** @type {Finding[]} */ const found = [];
+  if (!c) return { failures: [], notices: [finding("not-observable", current, `${current}: not observable: the page's composition was not read`)] };
+  const { template } = templateOf(name);
+  const add = (/** @type {string} */ rule, /** @type {string} */ text, /** @type {number} */ value) => found.push(finding(rule, current, `${current}: [${rule}] ${text}`, value));
+  const pageLevel = (/** @type {Array<{ inSection: boolean }>} */ list) => list.filter((entry) => !entry.inSection);
+  const quote = (/** @type {string[]} */ list, limit = 3) => `${list.slice(0, limit).map((text) => `“${text}”`).join("、")}${list.length > limit ? ` and ${list.length - limit} more` : ""}`;
+
+  for (const group of c.controlsAfterContent) {
+    add("control-after-content", `“${group.control}” (at ${group.controlTop} px) stands after the ${group.content} it controls (at ${group.contentTop} px)`);
+  }
+  // A page's toolbar is above the fold of what it filters; a block's own (Section's `toolbar` slot) stands where its block does, further down a long page.
+  for (const toolbar of pageLevel(c.toolbars)) {
+    if (toolbar.top >= TOOLBAR_VIEWPORTS * c.viewport.height) add("toolbar-position", `the toolbar “${toolbar.label}” starts at ${toolbar.top} px, below ${Math.round(TOOLBAR_VIEWPORTS * c.viewport.height)} px (${TOOLBAR_VIEWPORTS} × the window)`, toolbar.top);
+  }
+
+  // One layer of each kind of switch on a page: one tab list, one view switch written as radios, one toolbar (a block's own is its block's).
+  const tablists = pageLevel(c.tablists);
+  const viewGroups = pageLevel(c.viewGroups);
+  const toolbars = pageLevel(c.toolbars);
+  if (tablists.length > 1) add("toggle-layers", `${tablists.length} tab lists on the page (one): ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
+  if (viewGroups.length > 1) add("toggle-layers", `${viewGroups.length} view switches written as radio groups (one): ${quote(viewGroups.map((entry) => entry.label))}`, viewGroups.length);
+  if (toolbars.length > 1) add("toggle-layers", `${toolbars.length} toolbars on the page (one in the band): ${quote(toolbars.map((entry) => `${entry.label} at ${entry.top} px`))}`, toolbars.length);
+
+  // The band holds still when the page moves, and a module has its steps in it on every tab.
+  if (c.chrome) {
+    if (!c.chrome.sticky) add("chrome", `the band (${c.chrome.height} px high) is not sticky (position ${c.chrome.position})`);
+    else if (c.chrome.held && Math.abs(c.chrome.held.after - c.chrome.held.scrollerTop) > BAND_TOLERANCE_PX) {
+      add("chrome", `the band is at ${c.chrome.held.after} px after the page moved ${c.chrome.held.scrolled} px; the scroll area starts at ${c.chrome.held.scrollerTop} px, where a band that holds stands`, Math.abs(c.chrome.held.after - c.chrome.held.scrollerTop));
+    }
+  }
+  for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
+  if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
+  if (template) {
+    // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
+    const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
+    if (template.stepRail === "every-tab") {
+      if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
+      if (!c.stepRail && !dotted) add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+    }
+    if (template.stepRail === "none" && c.stepRail) add("template-slot", `a ${template.name} has a step rail (only a module page does)`);
+    if (template.tablist === "none" && tablists.length > 0) add("template-slot", `a ${template.name} has a tab list: ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
+    if (template.toolbar === "none" && toolbars.length > 0) add("template-slot", `a ${template.name} has a toolbar at ${toolbars[0].top} px`, toolbars.length);
+  }
+
+  // Sentences standing alone, tags and words dressed as controls, the primary action away from the header, switches to nothing.
+  // A reading page is made of text: what stands alone on it is its content (an event's summary, a card's limits), not a caption nobody can press.
+  if (template?.orphans !== "content" && c.orphans.length > 1) add("orphan-sentence", `${c.orphans.length} sentences stand alone, with no action in them and no number (one is allowed): ${quote(c.orphans.map((entry) => entry.text))}`, c.orphans.length);
+  for (const tag of c.tags) {
+    if (tag.insideControl) add("tag-as-control", `the tag “${tag.text}” is inside a ${tag.insideControl} (a tag is a label)`);
+    else if (tag.role) add("tag-as-control", `the tag “${tag.text}” has the role ${tag.role}`);
+    else if (tag.cursor === "pointer") add("tag-as-control", `the tag “${tag.text}” shows the pointer's cursor`);
+  }
+  for (const control of c.tagLike) add("tag-as-control", `the ${control.tag} “${control.text}” is drawn as a tag (the tag's height, corner and type size) and can be pressed`);
+  for (const word of c.words) add("word-as-link", `“${word.text}” is plain text in a ${word.tag} that looks pressable, and is the name of a tab or a step`);
+  for (const primary of c.primaries) {
+    if (!primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+  }
+  for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
+
+  // A long page has contents (a reading page) or its list read a page at a time (anything else).
+  if (template && c.viewport.height > 0) {
+    const viewports = c.height / c.viewport.height;
+    const reader = template.outline === "when-long";
+    if (viewports > template.longViewports && c.outline.outlines === 0 && (reader || c.outline.showMore === 0)) {
+      add("long-page", `${viewports.toFixed(1)} windows tall (${c.height} px; more than ${template.longViewports}) with no contents ([data-outline])${reader ? "" : " and no 显示更多"}`, Math.round(viewports * 10) / 10);
+    }
+  }
+  for (const grid of c.chartGrids) {
+    if (grid.ratio < CHART_GRID_FILL) add("chart-grid", `a grid of ${grid.cells} charts in ${grid.rows} row(s) fills ${Math.round(grid.ratio * 100)}% of its box (at least ${Math.round(CHART_GRID_FILL * 100)}%): a row is not full`);
+  }
+  for (const empty of c.empties) {
+    const missing = [...(empty.icon ? [] : ["a mark"]), ...(empty.hasTitle ? [] : ["a title"]), ...(empty.action || empty.reason ? [] : ["an action or the reason there is none"])];
+    if (missing.length) add("empty-state", `the empty state “${empty.title}” has no ${missing.join(" and no ")}`);
+  }
+  return { failures: [], notices: found };
+}
+
+/**
+ * What the pages of a module or a route family say together, once all have been read: a module's tabs show the same number of steps and the
+ * band stands at the same height on each; the pages that share a tab strip (a family of the page table) start their title on one left edge.
+ * @param {Record<string, any>} pages the report's pages, by `name@viewport`
+ * @returns {Finding[]}
+ */
+export function familyFindings(pages) {
+  /** @type {Finding[]} */ const found = [];
+  /** @type {Map<string, Array<{ view: string, name: string, c: any, row: any }>>} */ const modules = new Map();
+  /** @type {Map<string, Array<{ view: string, left: number }>>} */ const families = new Map();
+  for (const [view, page] of Object.entries(pages)) {
+    const c = page?.composition;
+    if (!c) continue;
+    const [name, viewport] = [view.slice(0, view.lastIndexOf("@")), view.slice(view.lastIndexOf("@") + 1)];
+    const { view: row } = templateOf(name);
+    if (!row) continue;
+    // The second study of the module walk is `vcr-trial@2`, the same tabs of another study: its own group.
+    const study = /@\d+$/.test(name) ? name.slice(name.lastIndexOf("@")) : "";
+    if (row.module) {
+      const key = `${row.module}${study}@${viewport}`;
+      modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
+    }
+    if (viewport === "desktop" && c.title) {
+      const key = `${row.family}${study}`;
+      families.set(key, [...(families.get(key) ?? []), { view, left: c.title.left }]);
+    }
+  }
+  for (const [key, tabs] of modules) {
+    if (tabs.length < 2) continue;
+    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
+    const counts = tabs.map((tab) => steps(tab.c));
+    if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
+    const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const known = tops.filter((top) => top !== null);
+    if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
+      found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
+    }
+    const heights = tabs.map((tab) => tab.c.chrome?.height ?? null).filter((height) => height !== null);
+    if (heights.length > 1 && Math.max(...heights) - Math.min(...heights) > BAND_TOLERANCE_PX) {
+      found.push(finding("module-chrome", key, `${key}: the band is not the same height on every tab: ${tabs.map((tab) => `${tab.name} ${tab.c.chrome?.height ?? "none"} px`).join(", ")}`, Math.max(...heights) - Math.min(...heights)));
+    }
+  }
+  for (const [key, list] of families) {
+    const edges = [...new Set(list.map((entry) => entry.left))];
+    if (edges.length < 2) continue;
+    /** @type {Map<number, number>} */ const tally = new Map();
+    for (const { left } of list) tally.set(left, (tally.get(left) ?? 0) + 1);
+    const common = [...tally].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+    for (const { view, left } of list.filter((entry) => entry.left !== common)) {
+      found.push(finding("left-edge", view, `${view}: the title starts at ${left} px; the other pages of ${key} start at ${common} px`, Math.abs(left - common)));
+    }
+  }
+  return found;
+}
+
+/* ------------------------------------------------------------------------- R19: whole pages */
+
+/** A page up to this many windows tall is photographed whole, in one picture; a taller one in slices. */
+export const CAPTURE_MAX_SCREENS = 3;
+/** A slice of a tall page is this many windows high, so that the end of one is in the next. */
+export const CAPTURE_SLICE_SCREENS = 1.5;
+/** At most this many slices of one page view (twelve windows): a page taller than that has said so in `long-page`. */
+export const CAPTURE_MAX_SLICES = 8;
+/** The pictures are JPEG at this quality: a page is read for its make-up, and the report directory is not kept. */
+export const CAPTURE_QUALITY = 68;
+
+/**
+ * The page's scroll area, read or moved in the page (`page.evaluate`): the element that scrolls the page's content (the largest scroll
+ * height among the elements that scroll and are at least as tall as half the window; the document when none does).
+ * `["shape"]` says how tall the window is, how much of it the scroll area shows and how much it holds; `["to", px]` moves it and says where it is.
+ * @param {["shape" | "to", number?]} [args]
+ */
+export function scrollPage([action, value] = ["shape", 0]) {
+  const root = document.scrollingElement ?? document.documentElement;
+  let scroller = root;
+  for (const el of document.querySelectorAll("body *")) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && el.clientHeight >= window.innerHeight / 2 && el.scrollHeight > el.clientHeight + 1 && el.scrollHeight > scroller.scrollHeight) scroller = el;
+  }
+  if (action === "to") {
+    scroller.scrollTop = Number(value) || 0;
+    return { top: Math.round(scroller.scrollTop) };
+  }
+  return { viewportHeight: window.innerHeight, clientHeight: scroller === root ? window.innerHeight : scroller.clientHeight, scrollHeight: scroller.scrollHeight };
+}
+
+/**
+ * How a page view is photographed: whole in one picture when it is up to `CAPTURE_MAX_SCREENS` windows tall (the window stretched to the
+ * page for the picture, which is the only way to see a page whose content scrolls inside the app), otherwise in slices of
+ * `CAPTURE_SLICE_SCREENS` windows from the top, at most `CAPTURE_MAX_SLICES` of them (and the last one is the page's end when they all fit).
+ * @param {{ viewportHeight: number, clientHeight: number, scrollHeight: number }} shape
+ * @returns {{ kind: "single" } | { kind: "stretch", height: number } | { kind: "slices", tops: number[], truncated: boolean }}
+ */
+export function capturePlan({ viewportHeight, clientHeight, scrollHeight }) {
+  if (scrollHeight <= clientHeight + 4) return { kind: "single" };
+  if (scrollHeight <= CAPTURE_MAX_SCREENS * viewportHeight) return { kind: "stretch", height: Math.max(viewportHeight, viewportHeight - clientHeight + scrollHeight) };
+  const step = Math.max(1, Math.round(CAPTURE_SLICE_SCREENS * clientHeight));
+  const last = scrollHeight - clientHeight;
+  const needed = Math.ceil(last / step) + 1;
+  const tops = Array.from({ length: Math.min(needed, CAPTURE_MAX_SLICES) }, (_, index) => Math.min(index * step, last));
+  return { kind: "slices", tops, truncated: needed > CAPTURE_MAX_SLICES };
+}
+
+/**
+ * Photograph one page view in full and write what the composition read of it next to the pictures (R19 S5): the pictures are
+ * `<view>.jpg` (or `<view>.1.jpg` … for slices) and the facts `<view>.json`; the report links them.
+ * @param {any} page @param {string} out @param {string} view `name@viewport` @param {{ width: number, height: number }} viewport @param {string} route @param {any} composition
+ * @returns {Promise<{ screenshots: string[], capture: any, facts: string }>}
+ */
+async function capturePage(page, out, view, viewport, route, composition) {
+  // The pointer is where the last click left it: out of the picture's way, so that no tooltip or hover state is drawn over the page.
+  await page.mouse.move(1, 1);
+  const shape = await page.evaluate(scrollPage, ["shape"]);
+  const plan = capturePlan(shape);
+  /** @type {string[]} */ const screenshots = [];
+  const shoot = async (/** @type {string} */ file) => {
+    await page.screenshot({ path: path.join(out, file), type: "jpeg", quality: CAPTURE_QUALITY });
+    screenshots.push(file);
+  };
+  if (plan.kind === "single") await shoot(`${view}.jpg`);
+  else if (plan.kind === "stretch") {
+    // The window is as tall as the page for one picture, and put back.
+    await page.setViewportSize({ width: viewport.width, height: plan.height });
+    await page.waitForTimeout(400);
+    try { await shoot(`${view}.jpg`); } finally { await page.setViewportSize(viewport); await page.waitForTimeout(200); }
+  } else {
+    try {
+      for (const [index, top] of plan.tops.entries()) {
+        await page.evaluate(scrollPage, ["to", top]);
+        await page.waitForTimeout(150);
+        await shoot(`${view}.${index + 1}.jpg`);
+      }
+    } finally {
+      await page.evaluate(scrollPage, ["to", 0]);
+    }
+  }
+  const facts = `${view}.json`;
+  await writeFile(path.join(out, facts), `${JSON.stringify({ view, route, viewport, shape, capture: plan, ...composition }, null, 1)}\n`);
+  return { screenshots, capture: plan.kind === "slices" ? { kind: plan.kind, slices: plan.tops.length, truncated: plan.truncated } : { kind: plan.kind }, facts };
+}
+
+/**
+ * The app keeps the project a person is in under this key (`apiClient.ts`, `PROJECT_KEY`): in the tab's session storage, remembered in local
+ * storage. A click on a row of 循证 GEO's or 虚拟临床研究's home goes into a project, and the walk's one browser then read every page after it
+ * as that project — the memory page of a study's project, no scheduled task, a library with nothing in it — and said "not observable" of
+ * pages that had something. Every page the walk opens starts from the account's own project, as a person who opens it fresh does.
+ * Run by the browser at the start of every document (`addInitScript`), so it names nothing of this module.
+ */
+export function forgetProjectChoice() {
+  try {
+    window.sessionStorage.removeItem("openScience.projectId");
+    window.localStorage.removeItem("openScience.projectId");
+  } catch {
+    // A document with no storage (an error page) has no project to forget.
+  }
 }
 
 /** Where keyboard focus is: what it names and whether it is inside the sidebar. */
@@ -1008,11 +1679,6 @@ export function pageProbe([kind, arg]) {
   const all = (selector, root = main) => [...root.querySelectorAll(selector)];
   const outside = (el) => !el.closest("[role='dialog'], nav, aside");
 
-  if (kind === "geoRail") {
-    const folded = all("[data-rail-folded]");
-    const details = folded.flatMap((el) => all("details", el));
-    return { folded: folded.length, closed: details.length > 0 && details.every((el) => !el.open), steps: all("[data-rail-step]").filter(visible).length };
-  }
   if (kind === "geoMarketOff") {
     const el = all("[data-geo-market-off]")[0];
     return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
@@ -1045,14 +1711,14 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "memoryTabs") {
-    const names = ["关于你", "项目", "做法", "成长"];
+    // The page's tab list is the band's (关于你 · 项目 · 做法 · 地图); the growth tab and its sentence went into the map in R19.
+    const names = ["关于你", "项目", "做法", "地图"];
     const tabs = all("[role='tab']").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
       return { name, count: Number(/^\s*(\d+)/.exec(text.slice(name.length))?.[1] ?? 0), selected: el.getAttribute("aria-selected") === "true" };
     });
-    const headline = /现在有\s*(\d+)\s*条记忆，学会\s*(\d+)\s*种做法/.exec(words(main));
-    return { tabs, headline: headline ? { memories: Number(headline[1]), practices: Number(headline[2]) } : null };
+    return { tabs };
   }
   if (kind === "sharedMissing") {
     const text = words(main);
@@ -1062,7 +1728,7 @@ export function pageProbe([kind, arg]) {
   if (kind === "memoryMap") {
     const text = words(main);
     return {
-      radios: all("[role='radio']").filter(visible).map(words),
+      views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       thin: text.includes("再多聊几次，这里会长出你的地图"),
@@ -1075,7 +1741,8 @@ export function pageProbe([kind, arg]) {
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       legend: all("[role='group'][aria-label='图例']").some(visible),
-      views: all("[role='tab']").filter(visible).map(words),
+      // A tab says how many it holds once it holds some (资料 12, 知识页 66): the name is what the switch is checked by.
+      views: all("[role='tab']").filter(visible).map(words).map((label) => label.replace(/\s*\d[\d,]*$/, "")),
       engineAddress: text.includes("viking://"),
       empty: text.includes("还没有整理出页面") || text.includes("内容还少"),
     };
@@ -1141,7 +1808,6 @@ export function pageProbe([kind, arg]) {
 
 /** The pages R11 walks with a probe, by kind, and the viewports each is read at. */
 export const PAGE_PROBES = {
-  "geo-overview": [["geoRail", ["phone"]]],
   "geo-actions": [["geoMarketOff", ["desktop", "phone"]]],
   "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
   "frontier-event": [["eventGroups", ["desktop", "phone"]]],
@@ -1151,7 +1817,6 @@ export const PAGE_PROBES = {
   memory: [["memoryTabs", ["desktop"]]],
   "memory-project": [["memoryTabs", ["desktop"]]],
   "memory-methods": [["memoryTabs", ["desktop"]]],
-  "memory-growth": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
   "memory-map": [["memoryMap", ["desktop", "phone"]]],
   "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
@@ -1159,9 +1824,8 @@ export const PAGE_PROBES = {
   account: [["feishuRows", ["desktop"]]],
   "account-notifications": [["feishuRows", ["desktop"]]],
   "account-connectors": [["connectorRows", ["desktop"]]],
-  "account-ops": [["opsOrder", ["desktop"]]],
-  "account-simulated-membership": [["notFound", ["desktop", "phone"]]],
-  "account-simulated-refunds": [["notFound", ["desktop", "phone"]]],
+  ops: [["opsOrder", ["desktop"]]],
+  "not-found": [["notFound", ["desktop", "phone"]]],
   "extensions-plugin-missing": [["missingRecord", ["desktop"]]],
   "extensions-skill-missing": [["missingRecord", ["desktop"]]],
   "frontier-evidence": [["readingFolds", ["desktop"]]],
@@ -1176,8 +1840,8 @@ export const MISSING_RECORDS = {
 
 /** The five views of 记忆地图, in the order its one row of switches shows them. */
 export const MEMORY_MAP_VIEWS = Object.freeze(["关系", "主题", "维度", "时间", "活跃"]);
-/** The 知识页 filter's two views. */
-export const KNOWLEDGE_VIEWS = Object.freeze(["页面", "图谱"]);
+/** The knowledge base's tabs, in the order its band shows them (R19: 资料 · 知识页 · 图谱, one tab list; the graph is a tab and no longer a second switch). */
+export const KNOWLEDGE_VIEWS = Object.freeze(["资料", "知识页", "图谱"]);
 
 /**
  * What 记忆地图's first mark did, and what the drawer's closing did: the click opens the memory page's own drawer and writes the mark into
@@ -1281,7 +1945,7 @@ async function walkKnowledgeGraph(page, base, route) {
 }
 
 /** The tabs a memory address names, and the one it must open on. */
-const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法", "memory-growth": "成长" };
+const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法" };
 
 /**
  * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
@@ -1297,11 +1961,6 @@ export function probeFindings(name, viewportName, kind, r) {
   /** @type {string[]} */ const notices = [];
   if (!r) return { failures, notices };
   switch (kind) {
-    case "geoRail":
-      if (r.folded === 0) failures.push(`${current}: the progress rail is not folded into one line`);
-      else if (!r.closed) failures.push(`${current}: the folded progress rail is open at first sight`);
-      if (r.steps > 0) failures.push(`${current}: ${r.steps} step(s) of the progress rail are on the first screen`);
-      break;
     case "geoMarketOff":
       if (r.present && r.top >= r.viewport) failures.push(`${current}: the sentence about placing being off is below the first screen (${r.top} px)`);
       break;
@@ -1331,12 +1990,11 @@ export function probeFindings(name, viewportName, kind, r) {
       if (key === "memory" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
       }
-      if (r.headline && r.headline.practices !== count("做法")) failures.push(`${current}: the growth line counts ${r.headline.practices} 做法 and the tab ${count("做法")}`);
       break;
     }
     case "memoryMap": {
-      // The five views are one row of radios, every figure has a name, and a figure has the same marks as a list under it.
-      if (r.radios.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.radios.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
+      // The five views are one group of pressed buttons in the toolbar, every figure has a name, and a figure has the same marks as a list under it.
+      if (r.views.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.views.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
@@ -1542,22 +2200,6 @@ export function afterClickFindings(name, kind, r) {
   if (kind === "sourceDrawer" && r.drawers === 0) failures.push(`${current}: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)`);
   if (kind === "taskPage") return taskPageFindings(name, r);
   return { failures, notices };
-}
-
-/**
- * The title column of every desktop page, against the one most pages share. A page whose title starts on another left edge has lost
- * the sidebar or its column (the 定时任务 page began at 0 px beside a sidebar that was not there).
- * @param {Record<string, { pageLefts?: number[] }>} pages the report's pages
- * @returns {string[]} notices
- */
-export function leftEdgeNotices(pages) {
-  const edges = Object.entries(pages).filter(([view, page]) => view.endsWith("@desktop") && Array.isArray(page.pageLefts) && page.pageLefts.length > 0)
-    .map(([view, page]) => [view, /** @type {number[]} */ (page.pageLefts)[0]]);
-  const tally = new Map();
-  for (const [, left] of edges) tally.set(left, (tally.get(left) ?? 0) + 1);
-  const [common] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
-  if (common === undefined) return [];
-  return edges.filter(([, left]) => left !== common).map(([view, left]) => `${view}: the title starts at ${left} px; most pages start at ${common} px`);
 }
 
 /**
@@ -1829,7 +2471,7 @@ function required(name) {
  * (`page.evaluate`), so it reads nothing from this module; exported so a test
  * can run it over a page it describes.
  */
-export function measure([leakSources, backOfficeSources, retiredSources = []]) {
+export function measure([leakSources, backOfficeSources, retiredSources = [], operatorSentences = []]) {
   const leaks = leakSources.map(([source, flags]) => new RegExp(source, flags));
   const backOffice = backOfficeSources.map(([source, flags]) => new RegExp(source, flags));
   const retired = retiredSources.map(([source, flags]) => new RegExp(source, flags));
@@ -1900,7 +2542,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
       return around ? `text+${Math.round(around)}` : "text";
     }
     // A card whose CSS sets a minimum height and lets its text grow it past
-    // that is one kind at every height its text gives it: the tools of 工具
+    // that is one kind at every height its text gives it: the tools of 科研工具
     // (`min-h-32`) drew 136, 162 and 182 px for descriptions of three lengths
     // and failed the walk as three kinds (2026-10-06). At its minimum it is
     // measured like any other control.
@@ -1940,8 +2582,13 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
   const siblings = column ? [...column.children] : [];
   const at = header ? siblings.indexOf(header) : -1;
   const lead = at > 0 ? siblings.slice(0, at) : [];
-  const body = at >= 0 ? siblings[at + 1] ?? null : null;
-  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
+  // A page with a band (R19: steps, tabs and toolbar in one sticky row set under the header) has the band after its header and the body after
+  // the band: the body is `[data-page-body]`, and the band's rows are blocks of the page too (the band itself is wider than the column).
+  const band = document.querySelector("[data-page-chrome]");
+  const body = document.querySelector("[data-page-body]") ?? (at >= 0 ? siblings[at + 1] ?? null : null);
+  // A block that is laid over the page (a drawer's backdrop, a dialog's) is not a block of the page: it starts at the window's edge.
+  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])]
+    .filter((el) => el && visible(el) && !["fixed", "absolute"].includes(getComputedStyle(el).position));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
   for (const list of document.querySelectorAll("ul, ol")) {
@@ -1997,6 +2644,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
     backOfficeHits: backOffice.map((re) => unquoted.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    operatorSentenceHits: operatorSentences.filter((sentence) => unquoted.includes(sentence)).map((sentence) => sentence.slice(0, 60)),
     retiredNameHits: retired.map((re) => everything.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     headerPrimaryActions,
     sectionShapes,
@@ -2028,12 +2676,10 @@ export function routeReady() {
  * address, and how many rows are open in place. A row whose title is not a
  * control — a list of results, not a place to go — is not a target.
  *
- * R13: `["reveal", 0, { selector, limit }]` opens the disclosure toggles that hold
- * a page's rows (`ROW_REVEAL_BY_PAGE`) and says how many it opened; a third
- * argument `{ label, selector }` on the other actions adds the first link of a
- * page whose findings are cards (`ROW_LINK_BY_PAGE`) to the targets.
+ * R19: 循证 GEO's groups and findings are ordinary list rows that open a drawer, so the two ways round a page whose rows were not on it
+ * (opening closed groups first, clicking the first link of cards) are gone with the pages that needed them.
  */
-export function rowProbe([action, index = 0, option = null]) {
+export function rowProbe([action, index = 0]) {
   const visible = (el) => {
     const box = el.getBoundingClientRect();
     const style = getComputedStyle(el);
@@ -2046,13 +2692,6 @@ export function rowProbe([action, index = 0, option = null]) {
       expanded: document.querySelectorAll("main [aria-expanded='true']").length,
     };
   }
-  if (action === "reveal") {
-    // Opens the disclosure toggles that hold the page's rows (`ROW_REVEAL_BY_PAGE`): it only shows more of the page.
-    const { selector = "", limit = 0 } = option && typeof option === "object" ? option : {};
-    const toggles = selector ? [...document.querySelectorAll(selector)].filter((el) => visible(el) && !el.closest("[role='dialog'], nav, aside")).slice(0, limit) : [];
-    for (const toggle of toggles) toggle.click();
-    return toggles.length;
-  }
   const targets = [];
   for (const list of document.querySelectorAll("main ul, main ol")) {
     if (!visible(list) || list.closest("[role='dialog'], nav, aside")) continue;
@@ -2062,11 +2701,6 @@ export function rowProbe([action, index = 0, option = null]) {
     // A list that holds another list (问题与回答's groups hold their questions) finds the inner list's first row as its own: one row, one target.
     if (!control || targets.some((target) => target.control === control)) continue;
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
-  }
-  // A page whose findings are cards (`ROW_LINK_BY_PAGE`): the first link of the cards is its one first row.
-  if (option && typeof option === "object" && typeof option.selector === "string" && action !== "reveal") {
-    const link = [...document.querySelectorAll(option.selector)].find((el) => visible(el) && !el.closest("[role='dialog'], nav, aside"));
-    if (link) targets.push({ control: link, label: String(option.label ?? "").slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
   const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
@@ -2087,20 +2721,44 @@ export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "tas
 const CLEANUP_WALK_WAIT_MS = 135_000;
 
 /**
- * Run one step of the walk that clicks through a page, and keep what it found. A step that cannot run — the page it needs is not
- * there, a control did not answer — is a notice with the reason, never a failure of the release and never a silent pass.
- * @param {any} report @param {string[]} failures @param {string[]} notices @param {string} name
- * @param {() => Promise<{ failures: string[], notices?: string[], read?: any }>} step
+ * What each step of the walk exists to reach, in words: its report entry names it, and a step that throws, times out or finds its
+ * element absent fails the walk saying what it did not reach (R19 S3). A step whose name is not here cannot be run (`recordStep` throws),
+ * so a new step cannot be added without saying what it is for. Per-view steps (`evidence-matrix@desktop`) are looked up without the view.
+ */
+export const STEP_TARGETS = {
+  "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
+  "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
+  "extensions-skills-create": "the new-skill drawer, saved empty with every write refused",
+  "memory-map-drawer": "the first mark of 记忆地图's list, and the drawer it opens",
+  "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
+  "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
+  "address-state": "the choices of the inbox and the memory page in the address, kept through Back",
+  "frontier-event-handoff": "the event page's hand-off of 深入研究 to the conversation",
+  "chat-composer": "the composer inside the kernel's frame, at both widths",
+  "chat-cleanup-cover": "the answer the walk gives to a runtime start refused for a cleanup in progress",
+};
+
+/**
+ * Run one step of the walk that clicks through a page, and keep what it found. A step that cannot run — it throws, a wait runs out
+ * before its target, the element it needs is absent — is a FAILURE with the target it did not reach (`STEP_TARGETS`), never a notice:
+ * 18.1's memory-map step was a `ReferenceError` for a release and the walk stayed green, because a probe that did not run read as a pass.
+ * What the account's data cannot offer (no list, no document) is another thing and the step says so as a `not-observable` finding.
+ * @param {any} report @param {string[]} failures @param {Array<string | Finding>} notices @param {string} name
+ * @param {() => Promise<{ failures: string[], notices?: Array<string | Finding>, info?: string[], read?: any }>} step
  */
 async function recordStep(report, failures, notices, name, step) {
+  const target = STEP_TARGETS[/** @type {keyof typeof STEP_TARGETS} */ (name.replace(/@.*$/, ""))];
+  if (!target) throw new Error(`step ${name} names no target (STEP_TARGETS)`);
   try {
     const result = await step();
     failures.push(...result.failures);
     notices.push(...(result.notices ?? []));
-    (report.steps ||= {})[name] = result.read ?? { ok: result.failures.length === 0 };
+    (report.info ||= []).push(...(result.info ?? []));
+    (report.steps ||= {})[name] = { target, ...(result.read ?? { ok: result.failures.length === 0 }) };
   } catch (error) {
-    notices.push(`${name}: the step could not run (${String(error).slice(0, 140)})`);
-    (report.steps ||= {})[name] = { error: String(error).slice(0, 140) };
+    const why = String(error).replace(/\s+/g, " ").slice(0, 200);
+    failures.push(`${name}: the step could not run, so ${target} was not reached (${why})`);
+    (report.steps ||= {})[name] = { target, error: why };
   }
 }
 
@@ -2241,22 +2899,18 @@ export function knowledgeReturnFindings(title, read) {
 }
 
 /**
- * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`; a page
- * whose rows are inside closed groups has them opened first (`ROW_REVEAL_BY_PAGE`), and one whose findings are cards is clicked on its
- * first link (`ROW_LINK_BY_PAGE`). The first list's first row is read again with `afterClickProbe` while it is open. The pages that are
- * new to this check in R13 are clicked behind a guard that refuses every request that is not a read, so the walk's clicks write nothing
- * there even where a row marks itself read on the way (the inbox); what the guard refused is a notice.
+ * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`. The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
+ * behind a guard that refuses every request that is not a read, so the walk's clicks write nothing even where a row marks itself read on
+ * the way (the inbox); what the guard refused is information, not a finding (the walk is read-only by construction).
  * @param {any} page @param {string} base @param {string} route @param {string} name the report's page name
  * @param {{ count: number }} popups the tabs the page opened since the walk last zeroed it
- * @returns {Promise<{ rows: Array<{ label: string, shown: boolean, after?: any }>, failures: string[], notices: string[] }>}
+ * @returns {Promise<{ rows: Array<{ label: string, shown: boolean, after?: any }>, failures: string[], notices: Array<string | Finding>, info: string[] }>}
  */
 async function walkRowClicks(page, base, route, name, popups) {
   /** @type {string[]} */ const failures = [];
-  /** @type {string[]} */ const notices = [];
-  const guarded = NOTICE_ROW_CLICK_PAGES.has(name);
-  const selector = ROW_REVEAL_BY_PAGE[/** @type {keyof typeof ROW_REVEAL_BY_PAGE} */ (name)];
-  const reveal = selector ? { selector, limit: ROW_REVEAL_LIMIT } : null;
-  const link = ROW_LINK_BY_PAGE[/** @type {keyof typeof ROW_LINK_BY_PAGE} */ (name)] ?? null;
+  /** @type {Array<string | Finding>} */ const notices = [];
+  /** @type {string[]} */ const info = [];
+  const guarded = true;
   /** @type {string[]} */ const writes = [];
   const guard = (/** @type {any} */ request) => {
     const method = request.request().method();
@@ -2269,28 +2923,21 @@ async function walkRowClicks(page, base, route, name, popups) {
   if (guarded) await page.route("**/api/**", guard);
   /** @type {Array<{ label: string, shown: boolean, after?: any }>} */ const rows = [];
   try {
-    const prepare = async () => {
-      if (!reveal) return;
-      await page.evaluate(rowProbe, ["reveal", 0, reveal]);
-      await page.waitForTimeout(400);
-    };
-    await prepare();
-    const labels = ((await page.evaluate(rowProbe, ["targets", 0, link])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+    const labels = ((await page.evaluate(rowProbe, ["targets", 0])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
     for (let index = 0; index < labels.length; index += 1) {
       if (index > 0) {
         // The last click may have opened a drawer or left the page: start the next from the page as it loads.
         await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
         await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
         await page.waitForTimeout(1_500);
-        await prepare();
       }
       const before = await page.evaluate(rowProbe, ["state"]);
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
-      await page.waitForFunction(rowProbe, ["has", labels[index], link], { timeout: 30_000 });
-      const external = await page.evaluate(rowProbe, ["external", labels[index], link]);
+      await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
+      const external = await page.evaluate(rowProbe, ["external", labels[index]]);
       popups.count = 0;
-      await page.evaluate(rowProbe, ["click", labels[index], link]);
+      await page.evaluate(rowProbe, ["click", labels[index]]);
       await page.waitForTimeout(1_500);
       const after = await page.evaluate(rowProbe, ["state"]);
       rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });
@@ -2312,23 +2959,22 @@ async function walkRowClicks(page, base, route, name, popups) {
   const verdict = rowClickVerdict(name, rows);
   failures.push(...verdict.failures);
   notices.push(...verdict.notices);
-  if (writes.length) notices.push(`${name}@desktop: clicking the first row tried ${writes.length} write(s), refused in the browser: ${[...new Set(writes)].join(", ")}`);
-  return { rows, failures, notices };
+  if (writes.length) info.push(`${name}@desktop: clicking the first row tried ${writes.length} write(s), refused in the browser: ${[...new Set(writes)].join(", ")}`);
+  return { rows, failures, notices, info };
 }
 
-/** The marks of 记忆地图's list that open the drawer (a button; a document is a link to a page of its own, which is another walk's). */
-function drawerMarks() {
-  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
-}
-
-/** How many marks 记忆地图's list shows that open the drawer. */
+/**
+ * How many marks 记忆地图's list shows that open the drawer (a button; a document is a link to a page of its own, which is another walk's).
+ * Like every function the walk hands to the browser it is read there as source text, so it names nothing of this module: a helper
+ * shared with the next probe was the `ReferenceError: drawerMarks is not defined` of release 18.1, found by nobody for a release.
+ */
 export function markRowsProbe() {
-  return drawerMarks().length;
+  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']")).length;
 }
 
 /** Presses the first mark that opens the drawer. */
 export function clickFirstMarkProbe() {
-  const mark = drawerMarks()[0];
+  const mark = [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
   if (!mark) return false;
   mark.click();
   return true;
@@ -2462,21 +3108,27 @@ async function main() {
   const playwright = require(required("OPEN_SCIENCE_PLAYWRIGHT_CORE"));
   const out = process.env.OPEN_SCIENCE_WALK_OUT?.trim() || "/tmp/evimed-ui-walk";
   await mkdir(out, { recursive: true });
+  const setting = await walkSetting();
+  if (setting.problems.length) {
+    for (const problem of setting.problems) console.error(`the walk cannot start: ${problem}`);
+    return 2;
+  }
 
   const browser = await playwright.chromium.launch({
     headless: true,
     ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}),
     args: ["--no-sandbox"],
   });
-  const failures = [];
-  const notices = [];
-  const report = { base, startedAt: new Date().toISOString(), pages: {} };
+  /** @type {string[]} */ const failures = [];
+  /** @type {Array<string | Finding>} */ const notices = [];
+  const report = { base, startedAt: new Date().toISOString(), profile: setting.profile, pages: {}, info: /** @type {string[]} */ ([]) };
   /** Per page view, the `start_runtime` calls the browser refused. */
   const runtimeStartsRefused = {};
   let current = "";
   let allowRuntimeStart = false;
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
+    await context.addInitScript(forgetProjectChoice);
     // The walk starts no runtime (F-G20): the shell warms the account's
     // default runtime from every page. Refused here, before any page loads;
     // let through only for the chat page, which cannot load without one.
@@ -2506,11 +3158,14 @@ async function main() {
     // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
-    const found = await discoverRoutes(context, base, notices);
+    const found = await discoverRoutes(context, base, notices, failures);
     const routes = [...ROUTES, ...found.routes];
     // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
     const axe = await loadAxeSource();
-    if (!axe.source) notices.push(`axe-core not available in this image: ${axe.why}`);
+    if (!axe.source) {
+      if ((process.env.OPEN_SCIENCE_WALK_AXE ?? "").trim() === "off") report.info.push(`axe-core: ${axe.why}`);
+      else notices.push(finding("not-observable", "axe-core", `axe-core: not observable: axe-core is not available in this image (${axe.why})`));
+    }
     /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
     const page = await context.newPage();
@@ -2562,12 +3217,11 @@ async function main() {
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
         try {
-          await navigateForWalk(page, `${base}${route}`, () => notices.push(`${current}: retried once after Chromium reported a host network change`));
+          await navigateForWalk(page, `${base}${route}`, () => report.info.push(`${current}: retried once after Chromium reported a host network change`));
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
-          await page.screenshot({ path: path.join(out, `${current}.png`) });
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
-            RETIRED_NAMES.map((re) => [re.source, re.flags])]);
+            RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
@@ -2580,6 +3234,20 @@ async function main() {
           const shape = structureFindings(name, viewportName, structure);
           failures.push(...shape.failures);
           notices.push(...shape.notices);
+          // The composition (R19): what the framework's markers say about the order and the places of the page's parts. It moves the scroll
+          // area by a few hundred pixels and puts it back, so it is read before anything is clicked.
+          const composition = await page.evaluate(measureComposition, [{ hold: true }]);
+          report.pages[current].composition = composition;
+          const arranged = compositionFindings(name, viewportName, composition);
+          failures.push(...arranged.failures);
+          notices.push(...arranged.notices);
+          // The page as a reader meets it, from top to bottom: pictures, and what the composition read. Before the phone's two Tab presses, which leave a
+          // focus ring and a tooltip on the sidebar's button, and before anything is clicked.
+          try {
+            report.pages[current].files = await capturePage(page, out, current, viewport, route, composition);
+          } catch (error) {
+            failures.push(`${current}: the whole-page picture could not be taken (${String(error).replace(/\s+/g, " ").slice(0, 120)})`);
+          }
           if (viewportName === "phone") {
             // Focus order is read, never changed: two presses of Tab from the top of the page, and where each landed.
             const stops = [];
@@ -2625,6 +3293,7 @@ async function main() {
             report.pages[current].rowClicks = clicked.rows;
             failures.push(...clicked.failures);
             notices.push(...clicked.notices);
+            report.info.push(...clicked.info);
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
@@ -2642,8 +3311,10 @@ async function main() {
         await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
       }
     }
-    notices.push(...leftEdgeNotices(report.pages));
-    notices.push(...axeNotices(axeScans));
+    notices.push(...familyFindings(report.pages));
+    const axeRead = axeNotices(axeScans);
+    notices.push(...axeRead.findings);
+    if (axeRead.summary) report.info.push(axeRead.summary);
     report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
@@ -2667,7 +3338,7 @@ async function main() {
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
       report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
-      else if (chat.retriedAfterNetworkChange) notices.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
+      else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
@@ -2691,15 +3362,108 @@ async function main() {
   } finally {
     await browser.close();
   }
-  report.failures = failures;
-  report.notices = notices;
+  // Nothing the walk saw is only reported: a finding fails the walk unless the baseline accepts it, with an owner and a day (R19 S4).
+  const decided = applyBaseline(notices, setting.baseline, { profile: setting.profile, today: setting.today });
+  const unaccepted = decided.unaccepted.map(({ finding: found, why }) => `${found.text} [${found.rule}; ${why}]`);
+  report.failures = [...failures, ...unaccepted];
+  report.notices = notices.map(findingText);
+  report.findings = decided.accepted.map(({ finding: found, entry }) => ({ ...found, accepted: { owner: entry.owner, until: entry.until } }))
+    .concat(decided.unaccepted.map(({ finding: found, why }) => ({ ...found, accepted: null, why })));
+  report.baseline = { source: setting.baselineSource, profile: setting.profile, today: setting.today, accepted: decided.accepted.length, unaccepted: decided.unaccepted.length,
+    unused: decided.unused.map(describeEntry), expired: decided.expired.map(describeEntry), lowerable: decided.lowerable.map(({ entry, measured }) => ({ ...describeEntry(entry), measured })) };
   report.runtimeStartsRefused = Object.values(runtimeStartsRefused).reduce((sum, count) => sum + count, 0);
+  const candidate = await readCandidateCheck(process.env.OPEN_SCIENCE_WALK_CANDIDATE_CHECK);
+  if (candidate.summary) report.candidateCheck = candidate.summary;
+  report.info.push(...candidate.lines);
   await writeFile(path.join(out, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   for (const failure of failures) console.log(`FAIL ${failure}`);
-  for (const notice of notices) console.log(`NOTICE ${notice}`);
-  console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s), ${notices.length} notice(s), `
-    + `${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
-  return failures.length ? 1 : 0;
+  for (const line of unaccepted) console.log(`FAIL (not accepted by the baseline) ${line}`);
+  for (const line of report.info) console.log(`INFO ${line}`);
+  for (const line of baselineDelta(decided, setting.profile)) console.log(line);
+  console.log(`${Object.keys(report.pages).length} page views walked, ${report.failures.length} failure(s) (${failures.length} outright, ${unaccepted.length} findings not accepted), `
+    + `${decided.accepted.length} finding(s) accepted by the baseline, ${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
+  return report.failures.length ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------- R19: the upstream candidate check (S8) */
+
+/**
+ * The kernel's candidate check (`scripts/ops/kernel-candidate-check.mjs`, schema 1), told for the report: how far behind upstream the pin is,
+ * what moving it would touch, and the other pins that have moved. Report only, as the check is: nothing here fails a walk. The nightly job
+ * uploads `candidate-check.json`; a deployment that keeps a copy beside the walk names it with `OPEN_SCIENCE_WALK_CANDIDATE_CHECK`.
+ * @param {any} check what the file holds
+ * @returns {{ summary: any, lines: string[] }}
+ */
+export function candidateCheckSummary(check) {
+  if (!check || check.schemaVersion !== 1 || !Array.isArray(check.candidates)) return { summary: null, lines: ["candidate check: the file is not a candidate-check.json of schema 1, so it was not read"] };
+  const candidates = check.candidates.map((/** @type {any} */ entry) => ({
+    version: String(entry.version), tags: entry.tags ?? [], lagDays: entry.lagDays ?? null, ageDays: entry.ageDays ?? null, verdict: entry.verdict ?? null, reasons: (entry.reasons ?? []).slice(0, 6),
+  }));
+  const behind = (check.pins ?? []).filter((/** @type {any} */ pin) => pin.behind).map((/** @type {any} */ pin) => ({ id: pin.id, pinned: pin.pinned, latest: pin.latest, lagDays: pin.lagDays ?? null }));
+  const summary = { checkedAt: check.checkedAt ?? null, pin: check.pin?.dsh ?? null, candidates, pinsBehind: behind, unknown: (check.unknown ?? []).slice(0, 10) };
+  const lines = [`candidate check (${summary.checkedAt ?? "undated"}): the kernel is pinned at ${summary.pin ?? "an unknown version"}; ${candidates.length === 0 ? "no newer candidate" : `${candidates.length} candidate(s)`}`];
+  for (const entry of candidates) lines.push(`  ${entry.version}${entry.tags.length ? ` (${entry.tags.join("/")})` : ""}: ${entry.verdict ?? "no verdict"}${entry.lagDays !== null ? `, ${entry.lagDays} days after the pin` : ""}${entry.reasons.length ? ` — ${entry.reasons.slice(0, 3).join("; ")}` : ""}`);
+  if (behind.length) lines.push(`  ${behind.length} other pin(s) behind upstream: ${behind.slice(0, 5).map((pin) => `${pin.id} ${pin.pinned} → ${pin.latest}${pin.lagDays !== null ? ` (${pin.lagDays} days)` : ""}`).join(", ")}${behind.length > 5 ? ", …" : ""}`);
+  if (summary.unknown.length) lines.push(`  could not be learned: ${summary.unknown.slice(0, 3).join("; ")}`);
+  return { summary, lines };
+}
+
+/**
+ * The candidate check named by `OPEN_SCIENCE_WALK_CANDIDATE_CHECK`, if there is one: nothing when the variable is not set or the file is
+ * not there (the check is the nightly job's, and a walk is run without it), a line saying so when the file is there and is not what it should be.
+ * @param {string | undefined} file @param {(file: string) => Promise<string>} [read]
+ * @returns {Promise<{ summary: any, lines: string[] }>}
+ */
+export async function readCandidateCheck(file, read = (name) => readFile(name, "utf8")) {
+  const named = String(file ?? "").trim();
+  if (!named) return { summary: null, lines: [] };
+  /** @type {string} */ let text;
+  try {
+    text = await read(named);
+  } catch (error) {
+    return /** @type {any} */ (error)?.code === "ENOENT" ? { summary: null, lines: [] } : { summary: null, lines: [`candidate check: ${named} could not be read (${String(/** @type {any} */ (error)?.code ?? error).slice(0, 40)})`] };
+  }
+  try {
+    return candidateCheckSummary(JSON.parse(text));
+  } catch {
+    return { summary: null, lines: [`candidate check: ${named} is not JSON, so it was not read`] };
+  }
+}
+
+/** A baseline entry as the report names it. @param {any} entry */
+function describeEntry(entry) {
+  return { view: entry.view, ...(entry.rule !== undefined ? { rule: entry.rule } : { contains: entry.contains }), ...(entry.max !== undefined ? { max: entry.max } : {}), owner: entry.owner, until: entry.until };
+}
+
+/**
+ * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the owner-view release walk unless the local fixture walk says
+ * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
+ * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[] }>}
+ */
+export async function walkSetting(env = process.env) {
+  /** @type {string[]} */ const problems = [];
+  const profile = (env.OPEN_SCIENCE_WALK_PROFILE ?? "").trim() || "owner";
+  if (!WALK_PROFILES.includes(profile)) problems.push(`OPEN_SCIENCE_WALK_PROFILE is ${WALK_PROFILES.join(" or ")}, not ${profile}`);
+  const today = (env.OPEN_SCIENCE_WALK_TODAY ?? "").trim() || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) problems.push(`OPEN_SCIENCE_WALK_TODAY is a date (YYYY-MM-DD), not ${today}`);
+  let baselineSource = "embedded";
+  let baseline = WALK_BASELINE;
+  const named = (env.OPEN_SCIENCE_WALK_BASELINE ?? "").trim();
+  if (named === "none") {
+    baselineSource = "none";
+    baseline = { entries: [] };
+  } else if (named) {
+    baselineSource = named;
+    try {
+      baseline = JSON.parse(await readFile(named, "utf8"));
+    } catch (error) {
+      problems.push(`the baseline ${named} cannot be read (${String(error).slice(0, 100)})`);
+    }
+  }
+  problems.push(...baselineProblems(baseline).map((problem) => `baseline: ${problem}`));
+  return { profile, today, baseline, baselineSource, problems };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */
@@ -2806,15 +3570,17 @@ const IMPACT_RANK = { critical: 0, serious: 1, moderate: 2, minor: 3 };
 const impactRank = (impact) => IMPACT_RANK[/** @type {keyof typeof IMPACT_RANK} */ (impact)] ?? 4;
 
 /**
- * What axe found on each page view, as notices (V-6; a scan is never a failure): one line for each page that has something new to say —
- * the rules it violates by impact, with the nodes counted and the first one named by its selector — and one line for the walk. A
- * violation the walk already named on an earlier page view (the same rule at the same first node: the shell's own, which every page
- * carries) is counted, not named again. The report holds every page's whole list.
+ * What axe found on each page view (V-6): a finding for each page that has something new to say — the rules it violates by impact, with
+ * the nodes counted and the first one named by its selector; the number of rules is the finding's value, so a baseline can hold a page
+ * at the count it has and let it only fall — and one summary line for the walk, which is information. A violation the walk already named
+ * on an earlier page view (the same rule at the same first node: the shell's own, which every page carries) is counted, not named
+ * again. The report holds every page's whole list.
  * @param {Array<{ view: string, result: { version: string | null, violations: Array<{ id: string, impact: string | null, nodes: number, target: string, help: string }>, incomplete: number } | null }>} scans
- * @returns {string[]}
+ * @returns {{ findings: Finding[], summary: string | null }}
  */
 export function axeNotices(scans) {
-  /** @type {string[]} */ const notices = [];
+  /** @type {Finding[]} */ const notices = [];
+  /** @type {string | null} */ let summary = null;
   const seen = new Set();
   let scanned = 0;
   let withViolations = 0;
@@ -2823,7 +3589,7 @@ export function axeNotices(scans) {
   let version = null;
   for (const { view, result } of scans) {
     if (!result) {
-      notices.push(`${view}: axe-core could not scan this page`);
+      notices.push(finding("not-observable", view, `${view}: not observable: axe-core could not scan this page`));
       continue;
     }
     scanned += 1;
@@ -2840,13 +3606,13 @@ export function axeNotices(scans) {
     const named = fresh.slice(0, AXE_RULES_PER_NOTICE).map((violation) => `${violation.id} (${violation.impact ?? "unrated"}, ${violation.nodes} node${violation.nodes === 1 ? "" : "s"}, ${violation.target || "no selector"})`);
     const repeated = result.violations.length - fresh.length;
     const more = fresh.length - named.length;
-    notices.push(`${view}: axe-core: ${fresh.length} rule(s) violated: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}${repeated > 0 ? `; ${repeated} more as on an earlier page` : ""}`);
+    notices.push(finding("axe", view, `${view}: axe-core: ${fresh.length} rule(s) violated: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}${repeated > 0 ? `; ${repeated} more as on an earlier page` : ""}`, fresh.length));
   }
   if (scans.length) {
     const common = [...rules.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([id, pages]) => `${id} on ${pages}`);
-    notices.push(`axe-core${version ? ` ${version}` : ""}: ${scanned} page view(s) scanned, ${withViolations} with violations, ${total} node(s) in all${common.length ? ` (${common.join(", ")})` : ""}; never a failure, the whole list is in the report`);
+    summary = `axe-core${version ? ` ${version}` : ""}: ${scanned} page view(s) scanned, ${withViolations} with violations, ${total} node(s) in all${common.length ? ` (${common.join(", ")})` : ""}; the whole list is in the report`;
   }
-  return notices;
+  return { findings: notices, summary };
 }
 
 /**
@@ -2899,7 +3665,7 @@ export function addressAct([kind, first = "", second = ""]) {
 }
 
 /**
- * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's pressed chip, or the memory
+ * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
  * @param {["inbox" | "memory"]} args
  */
@@ -2911,12 +3677,15 @@ export function addressProbe([kind]) {
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
   const base = { path: location.pathname, search: location.search, dialog: [...document.querySelectorAll("[role='dialog']")].some(visible) };
   if (kind === "inbox") {
-    const group = [...document.querySelectorAll("[role='group']")].find((el) => el.getAttribute("aria-label") === "消息筛选" && visible(el));
-    const pressed = group ? [...group.querySelectorAll("button[aria-pressed='true']")].map(words) : [];
-    return { ...base, found: Boolean(group), pressed: pressed[0] ?? null };
+    // 全部 / 未读 is the toolbar's tab list since R19 (it was a group of pressed chips): the selected tab is the choice.
+    const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "消息视图" && visible(el));
+    const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
+    return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
   if (kind === "memory") {
-    const tabs = [...document.querySelectorAll("[role='tab']")].filter(visible);
+    // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
+    const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
+    const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
     const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
     return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
@@ -2930,7 +3699,7 @@ export function addressProbe([kind]) {
  * again. The choices only filter a list; nothing here writes. `state` values match by prefix, because a chip and a tab carry their count.
  */
 export const ADDRESS_CASES = [
-  { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["chip", "消息筛选", "未读"]], fill: null, search: { filter: "unread" }, state: { pressed: "未读" } },
+  { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
   { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
 ];
 
@@ -3225,7 +3994,7 @@ export function composerProbe([options] = [{}]) {
  * a conversation that runs a tool draws exactly one chip in the toolbar and none in the dock; a researcher sees neither the session
  * statistics nor the context ring; at 390 px the toolbar's row is one line and the page does not scroll sideways. Every verdict is a
  * NOTICE (new in R13). Each says "not observable" and why when what it looks at is not there: the walk's conversation runs no tool (a
- * tool is bound by the 工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
+ * tool is bound by the 科研工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
  * @param {"desktop" | "phone"} viewportName @param {any} r what `composerProbe` returned
  * @returns {{ failures: string[], notices: string[] }}
  */
@@ -3240,7 +4009,7 @@ export function composerFindings(viewportName, r) {
   if (r.hero) notices.push(`${current}: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged`);
   else if (r.gapLowest === null) notices.push(`${current}: not observable: the composer holds no control, so the room under it was not judged`);
   else if (r.gapLowest < COMPOSER_BOTTOM_PX) notices.push(`${current}: the lowest control of the composer is ${r.gapLowest} px above the bottom of the window (at least ${COMPOSER_BOTTOM_PX})`);
-  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)`);
+  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`);
   else {
     if (r.chips.bar !== 1) notices.push(`${current}: ${r.chips.bar} tool chip(s) are drawn in the toolbar (exactly one)`);
     if (r.chips.inTools !== r.chips.bar) notices.push(`${current}: ${r.chips.bar} chip(s) say they are in the toolbar and ${r.chips.inTools} are inside it`);

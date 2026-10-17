@@ -103,6 +103,8 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * | `data-fact-list` | `FactList` | the one key / value list |
  * | `data-state-screen` | `StateScreen` | a whole page's failure or wrong address |
  * | `data-master-detail` | `MasterDetail` | `split` or `single` |
+ * | `data-prose` | `MarkdownViewer` | a document's own text; the walk does not call it an orphan sentence |
+ * | `data-show-more` | `ShowMore` | a long list read a page at a time |
  *
  * ```tsx
  * <PageShell title="知识库" scope={…} actions={<Button…/>} toolbar={{ views, filters, search }}>

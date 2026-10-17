@@ -463,28 +463,67 @@ The password file is mounted read-only into the walk and never passed as a
 value. The walk refuses every `start_runtime` a page makes (the shell warms
 the account's default runtime from every page) and counts them in its report;
 only the chat page, walked when `OPEN_SCIENCE_WALK_CHAT=1`, may start the
-runtime it needs. Report and screenshots go to
-`/srv/evimed-science/shared/ui-walk/<release>/`; `NOTICE` lines (more than four
-font-size × weight pairs on a page, a page more than twelve viewports tall, a
-budget past by a page no walk has measured yet, a page that could not be walked
-for want of an id the account's lists do not name) are recorded, never failed
-on. With the chat page asked for, the walk also waits up to 135 s for the shell
-to give up on a cleanup the walk itself reports as unfinished
+runtime it needs. With the chat page asked for, the walk also waits up to 135 s
+for the shell to give up on a cleanup the walk itself reports as unfinished
 (`OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips the wait). The base URL
 must be the public origin — logout is checked against it — so if this host
 cannot reach its own public address, add that name to the host's `/etc/hosts`.
 
-Since release 13 the notices also carry what is new there: a line `<page>: not
-observable: <why>` is a check that could not reach its target (a throwaway account
-has no task, no document, no GEO data, and the walk's conversation runs no tool),
-which is different from a pass; an axe-core line per desktop page names the rules
-not yet named on an earlier page, and one line counts the walk (the whole list is
-`report.json`'s `axe` and each page's `axe`). The walk carries axe-core's build
-itself — the container it runs in has none, and only `ui-walk.mjs` is mounted into
-it — so there is nothing to install; `OPEN_SCIENCE_WALK_AXE=<path to axe.min.js>`
-in `ui-walk.env` names another build (the file must be readable in the container),
-and `OPEN_SCIENCE_WALK_AXE=off` skips the scan. To change the build the walk
-carries: `node scripts/ops/embed-axe-core.mjs [axe.min.js]` (`--check` compares).
+What the walk writes, and what it fails on (R19). Report, pictures and facts go
+to `/srv/evimed-science/shared/ui-walk/<release>/`: `report.json`, and for every
+page view `<view>.jpg` — the page from its top to its end, in one picture up to
+three windows tall and in slices of a window and a half above that (at most
+eight) — and `<view>.json`, what the page is made of (its band, steps, tabs,
+toolbars, notes, tags, empty states); the report links them. There is no
+`NOTICE` any more. Whatever the walk sees that is not a plain failure is a
+*finding* with a rule — `type-pairs`, `rows-ceiling`, `heading-order`, `axe`,
+the coverage gaps `not-observable` (a check that could not reach its target
+because the account has nothing there) and `not-walked` (a page whose id the
+account's lists do not name), and the composition rules (`control-after-content`,
+`toolbar-position`, `toggle-layers`, `chrome`, `step-rail`, `template-slot`,
+`orphan-sentence`, `tag-as-control`, `word-as-link`, `primary-action`,
+`zero-count`, `long-page`, `chart-grid`, `empty-state`, `module-steps`,
+`module-chrome`, `left-edge`) — and a finding fails the walk unless an entry of
+`scripts/ops/ui-walk-baseline.json` accepts it: the view, the rule up to a
+number (or a literal part of the sentence), an **owner**, a **day** and a reason.
+After its day an entry accepts nothing. The walk's last lines are the delta:
+findings accepted by entry, findings not accepted (each is a `FAIL` line), entries
+that expired, entries no longer needed (delete them) and entries whose number can
+be lowered. A step that throws, times out before its target or does not find its
+element (`memory-map-drawer: the step could not run, so the first mark … was not
+reached`) is a failure that no entry accepts. The baseline is carried inside
+`ui-walk.mjs` (only that file is mounted); `OPEN_SCIENCE_WALK_BASELINE=<file>`
+names another, `none` accepts nothing.
+
+The baseline has two sets of debts. `OPEN_SCIENCE_WALK_PROFILE=owner` (the
+default) is the release walk on the owner-view account, whose empty pages
+cannot be observed: an entry for `not-observable` or `not-walked` may be given
+to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
+harness control plane), which accepts no coverage gap. **Rehearse before a
+candidate that changes the walk or the pages is switched**: the host's
+`rewalk.sh <tag> <candidate ui-walk.mjs>` (a host script, not in this
+repository) walks the live release with the candidate's file, then on a copy of
+the repository `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner <who>
+--until <day> --why "<reason>" [--write]` writes the entries the report asks for
+(`--write` merges them into the file and re-embeds it); the owner, the day and
+the reason are the person's, there is no default. `node
+scripts/ops/ui-walk-baseline.mjs check` validates the file and lists entries that
+run out within thirty days. Information that is not a finding (a retried load, a
+write the walk's guard refused, the axe line) is `report.json`'s `info`;
+`OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>` adds the nightly
+kernel candidate check to it (report only).
+
+The walk carries axe-core's build itself — the container it runs in has none, and
+only `ui-walk.mjs` is mounted into it — so there is nothing to install; each desktop
+page's new rules are a finding of rule `axe` with their count (the whole list is
+`report.json`'s `axe` and each page's `axe`), `OPEN_SCIENCE_WALK_AXE=<path to
+axe.min.js>` in `ui-walk.env` names another build (the file must be readable in
+the container), and `OPEN_SCIENCE_WALK_AXE=off` skips the scan. To change the build
+the walk carries: `node scripts/ops/embed-axe-core.mjs [axe.min.js]` (`--check`
+compares). The other tables the walk carries are `node scripts/ops/embed-walk-tables.mjs`
+(`--check` compares): the page table `page-templates.json`, the baseline, and the
+sentences of the domain's error codes written for the operator, which no
+researcher's page says.
 
 ## Alert Response
 
