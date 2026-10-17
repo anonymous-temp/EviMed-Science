@@ -591,6 +591,14 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
         (error) => error?.status === 400 && error?.code === "runtime_controller_source_gateway_invalid",
       );
     }
+    // The GEO method pack flag is a boolean or absent. Anything else is refused before Docker, and a string is not read as a yes.
+    for (const geoSkills of [1, 0, "1", "true", "", {}, []]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, geoSkills }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_geo_skills_invalid",
+        `geoSkills ${JSON.stringify(geoSkills)} is not a boolean`,
+      );
+    }
     for (const extra of [{ modelGatewayTokenFile: "/arbitrary/token" }, { image: "attacker" }, { mounts: ["/:/host"] }, { args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
       await assert.rejects(
         client.request("POST", "/v1/runtime/start", { ...payload, ...extra }),
@@ -616,6 +624,62 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_LOG;
+    await removeTree(tmp);
+  }
+});
+
+test("a 循证 GEO project's runtime is launched with the method pack, any other without it, through the isolated controller", async (t) => {
+  // The whole chain on a fake Docker: the manager reads the project's kind (`geoSkillsFor`), the client sends it as protocol 14's
+  // one optional field, the controller validates it and builds the launch plan itself, and the container's environment says it.
+  const tmp = await shortTempDir("osrg-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const dockerLog = path.join(tmp, "docker.log");
+  const project = await projectTree(dataDir);
+  if (await skipUnsupportedRuntimeSocket(t, project)) {
+    await removeTree(tmp);
+    return;
+  }
+  const previous = { state: process.env.FAKE_DOCKER_STATE, volume: process.env.FAKE_VOLUME_ROOT, log: process.env.FAKE_DOCKER_LOG };
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  process.env.FAKE_DOCKER_LOG = dockerLog;
+  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  /** @type {any} */
+  let manager = null;
+  try {
+    await controller.listen();
+    manager = new RuntimeManager(loadConfig({
+      ...controllerConfig({ dataDir, socketPath, dockerBin }),
+      runtimeControllerMode: "socket", runtimeControllerTimeoutMs: 2_000, runtimeControllerPollMs: 100, allowDirectDockerControl: false,
+      runtimeProxyConnectTimeoutMs: 3_000, runtimeSkillDirs: [], maxProjectBytes: 1024 * 1024, maxProjectUsageScanEntries: 1_000,
+      runtimeIdleTimeoutMs: 0, runtimeQuotaCheckIntervalMs: 0, maxLogFileBytes: 1024 * 1024,
+      geoEnabled: true, geoAudience: "all",
+    }));
+    const launches = async () => (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((args) => args[0] === "run");
+    let isGeo = true;
+    manager.geoProjectOf = async (userId, projectId) => { assert.deepEqual([userId, projectId], [project.userId, project.id]); return isGeo; };
+    const first = await manager.start(project);
+    assert.equal(first.geoSkills, true, "the runtime record says what it was launched with");
+    await manager.stop(project);
+    isGeo = false;
+    const second = await manager.start(project);
+    assert.equal(second.geoSkills, false);
+    const runs = await launches();
+    assert.equal(runs.length, 2);
+    assert.ok(runs[0].includes("EVIMED_GEO_SKILLS=1"), "the GEO project's container is given the pack's switch on");
+    assert.equal(runs[0].includes("EVIMED_GEO_SKILLS=0"), false);
+    assert.ok(runs[1].includes("EVIMED_GEO_SKILLS=0"), "the same project, no longer a GEO project, is given it off");
+    assert.equal(runs[1].includes("EVIMED_GEO_SKILLS=1"), false);
+    await manager.stop(project);
+  } finally {
+    await manager?.closeAll().catch(() => {});
+    await controller.close().catch(() => {});
+    for (const [key, value] of [["FAKE_DOCKER_STATE", previous.state], ["FAKE_VOLUME_ROOT", previous.volume], ["FAKE_DOCKER_LOG", previous.log]]) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
     await removeTree(tmp);
   }
 });

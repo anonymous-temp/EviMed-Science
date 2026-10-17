@@ -74,7 +74,8 @@ Operations, release and acceptance tooling for hosted deployments, by purpose.
 - Kernel and upstream pins: `kernel-install.mjs`, `verify-harness-seams.mjs`,
   `verify-composition-references.mjs`, `wire-surface.mjs`, `record-dsh-golden-frames.mjs`,
   `upstream-compat-matrix.mjs`, `deepseek-compatibility-preflight.mjs`,
-  `deepseek-kernel-release-gate.mjs`.
+  `deepseek-kernel-release-gate.mjs`; `skill-catalogue-size.mjs` measures what the model's skill
+  catalogue costs per root, for a GEO project's runtime and for every other.
 - Release and host deployment: `generate-release-manifest.mjs`, `release-images.mjs`,
   `release-full-build.mjs`, `release-retention.mjs`, `release-receipt-scheduler.mjs`,
   `host-delta-release.sh`, `host-release-switch.sh`, `host-engine-delta.sh`,

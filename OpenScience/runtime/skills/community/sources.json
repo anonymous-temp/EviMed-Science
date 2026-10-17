@@ -43,6 +43,11 @@
       "name": "translation",
       "repo": "863683348/dsh-plugin-translation",
       "reason": "Registers a translation tool. Try-install lane. Tried 2026-10-13 at 0.3.2: boots on the pinned kernel; not taken (plugin-support.json)."
+    },
+    {
+      "name": "dsh-data-quality",
+      "repo": "PerryLink/dsh-data-quality",
+      "reason": "Tool bundle, not a vendored skill. Tried 2026-09-15 at 0.3.10 and again 2026-10-17 at 0.3.19: boots on the pinned kernel; not taken (plugin-support.json, try-install.json dataQualityRetest). What it adds over the model's own pandas is small, its number-in-a-document check is a service for other plugins, and its dependencies carry about 100 MB of toolchain."
     }
   ]
 }

@@ -146,6 +146,9 @@ export EVIMED_BUNDLE_VERSION="${SOCKET_VERSION:-0.1.0}"
 export EVIMED_ASK_USER=0 EVIMED_CAPSULE_ACTIVE=0 EVIMED_REVIEW_ENABLED=1
 export EVIMED_CITE_ENABLED=1 EVIMED_CITE_TIMEOUT_MS=15000 EVIMED_CITE_CONFIG_REVISION=0
 export EVIMED_LOOPX_ENABLED=1 EVIMED_LOOPX_ROOT=/opt/evimed/loopx
+# A 「循证 GEO」 project's runtime: the smoke boots with the method pack mounted as a skill root, the way the longer of the two
+# compositions a run can have is composed (an ordinary runtime mounts a path that is not there instead).
+export EVIMED_GEO_SKILLS=1
 export LOOPX_BIN=/opt/evimed/venv/bin/loopx LOOPX_USAGE_PING=0 DO_NOT_TRACK=1
 export EVIMED_DELIVERY_ATTEMPT_LIMIT=3 EVIMED_MAX_CHILDREN_TOTAL=30 EVIMED_MAX_CONCURRENT_CHILDREN=30
 export EVIMED_MAX_STEPS=0 EVIMED_MAX_TOKENS=0

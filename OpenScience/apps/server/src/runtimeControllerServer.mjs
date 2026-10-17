@@ -574,6 +574,12 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     if (typeof memoryGatewayUrl !== "string" || (memoryGatewayUrl !== "" && memoryGatewayUrl !== memoryGatewayEndpointUrl(config))) {
       throw controllerFailure(400, "runtime_controller_memory_gateway_invalid", "Runtime controller memory gateway must match its configured gateway endpoint or be absent.");
     }
+    // Whether the project is a 「循证 GEO」 one is the control plane's to say as well (it holds the database); what this process
+    // accepts is a boolean, and all it chooses is whether the image's own GEO method pack is among the session's skill roots.
+    const geoSkills = payload.geoSkills ?? false;
+    if (typeof geoSkills !== "boolean") {
+      throw controllerFailure(400, "runtime_controller_geo_skills_invalid", "Runtime controller GEO method pack flag must be a boolean or absent.");
+    }
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
@@ -594,7 +600,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
@@ -904,7 +910,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);

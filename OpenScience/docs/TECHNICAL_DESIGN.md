@@ -245,7 +245,11 @@ its switch is on; the rest are changes inside existing layers.
   AI engines are measured server side through the probe host and the metrics computed from
   `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities
   inside the project; media orders are placed and settled in code. The owner's proprietary
-  skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`.
+  skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`,
+  and the preset mounts it as a skill root in the runtime of a GEO project alone
+  (`EVIMED_GEO_SKILLS`, sent per project through the runtime controller since protocol 14):
+  its 51 skills were 59% of the model's skill catalogue in every session before
+  (`scripts/ops/skill-catalogue-size.mjs`).
 - **「虚拟临床研究」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
   account): one row per study on top of an ordinary project, `/api/vcr/*` with abilities
   checked per operation; the seven-step programme runs the five vcr capabilities inside the

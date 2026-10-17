@@ -88,9 +88,13 @@ test("a community skill is bound to the exact repository and commit its source r
 });
 
 test("the platform's own packages say they came with the release and name a licence only where their own frontmatter declares one", async () => {
+  // Two core skills are vendored verbatim from an upstream repository; `core/sources.json` pins them and their record says where from.
+  const vendored = new Map(JSON.parse(await read("runtime/skills/core/sources.json")).skills.map((/** @type {{ name: string }} */ skill) => [`core/${skill.name}`, skill]));
   for (const entry of SKILL_PACKAGES.values()) {
     if (!["core", "capability", "capability-skill", "evimed"].includes(entry.origin)) continue;
-    assert.equal(entry.source.kind, "release", entry.id);
+    const upstream = vendored.get(entry.id);
+    if (upstream) assert.deepEqual({ kind: entry.source.kind, repository: entry.source.repository, commit: entry.source.commit }, { kind: "repository", repository: upstream.repo, commit: upstream.commit }, entry.id);
+    else assert.equal(entry.source.kind, "release", entry.id);
     // A licence name appears only where the package's own frontmatter declares one; a bare LICENSE file is not "MIT".
     if (entry.licence?.id) assert.equal(entry.licence.basis, "declared", `${entry.id}: a licence name is declared only where a source declares one`);
     else if (entry.licence) assert.equal(entry.licence.basis, "file-present", entry.id);

@@ -2534,6 +2534,10 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   // The account's memory engine, as an address: the memory gateway's base for an account on the native engine, empty for
   // one on the legacy path. Never a default — only the caller that read the account's engine knows it.
   memoryGatewayUrl = "",
+  // Whether the project is a 「循证 GEO」 project, and so mounts the GEO method pack as a skill root (`EVIMED_GEO_SKILLS`).
+  // Never a default either way: only the caller that read the project's kind knows it, and a runtime launched without it
+  // carries no pack (the catalogue it would put in front of the model is 51 skills shorter).
+  geoSkills = false,
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
   platformSkillGeneration = null,
   personalSkillGeneration = null,
@@ -2797,6 +2801,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // sent either way (`SOCKET_PLUGIN_SWITCHES`).
           disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
           loopxEnabled: config.loopxEnabled !== false,
+          geoSkills: geoSkills === true,
           // `retainTokens` is a port-level option with no row to read it, so it
           // never crosses the boundary. Sending it would put a name on the
           // container's env that nothing reads, which is the same defect as a
@@ -2829,6 +2834,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       proxyWorkspaceDir: "/workspace",
       // The other half of the `--env` above, for the profile patch (`dshProfileInput` reads the plan).
       memoryGatewayUrl,
+      geoSkills: geoSkills === true,
       runtimeUrl: `http://${RUNTIME_AUTHORITY}`,
       socketPath,
       socketTrustRoot: isolatedControlMount ? config.dataDir : project.rootDir,
@@ -3167,7 +3173,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3227,8 +3233,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "" }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
     const manager = this.manager;
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
@@ -3246,7 +3252,7 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl });
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
@@ -3323,6 +3329,7 @@ export class DockerRuntimeProvider {
         plan.extensionGeneration?.reference ?? null,
         plan.platformSkillGeneration?.reference ?? null,
         String(plan.memoryGatewayUrl ?? ""),
+        plan.geoSkills === true,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3482,6 +3489,10 @@ export class RuntimeManager {
     /** Which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`); assigned by the composition root.
      *  @type {((userId: string) => Promise<"legacy" | "native">) | null} */
     this.memoryEngineOf = null;
+    /** Whether a control-plane project is a 「循证 GEO」 project (`GeoStore.projectByControlProject`): decides whether its runtime
+     *  mounts the GEO method pack; assigned by the composition root, null where the module is off.
+     *  @type {((userId: string, projectId: string) => Promise<boolean>) | null} */
+    this.geoProjectOf = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
@@ -3674,6 +3685,20 @@ export class RuntimeManager {
     if (!base || typeof this.memoryEngineOf !== "function") return "";
     try { return await this.memoryEngineOf(String(project.userId)) === "native" ? base : ""; }
     catch { return ""; }
+  }
+
+  /**
+   * Whether this project's runtime mounts the GEO method pack: the project is a 「循证 GEO」 project and the module is open
+   * to the account that owns it, the same admission the module's tools are given an address on. A lookup that fails reads as
+   * no — the pack is 51 skills of instruction text, a capability run without it says so and carries on with its own short
+   * method, and a conversation that waits on a store it could do without is the worse outcome.
+   * @param {any} project @returns {Promise<boolean>}
+   */
+  async geoSkillsFor(project) {
+    if (typeof this.geoProjectOf !== "function") return false;
+    if (!geoAudienceAllows(this.config, { id: String(project.userId ?? "") })) return false;
+    try { return (await this.geoProjectOf(String(project.userId), String(project.id))) === true; }
+    catch { return false; }
   }
 
   /**
@@ -4386,7 +4411,9 @@ export class RuntimeManager {
     // engine. An engine that cannot be read launches the runtime on the legacy path — the gateway withholds from an
     // account it finds on the other engine, so the worst of a wrong guess is a conversation without memory, never two.
     const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl });
+    // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
+    const geoSkills = await this.geoSkillsFor(project);
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -4532,6 +4559,8 @@ export class RuntimeManager {
       extensionGeneration,
       // The memory engine this runtime was launched for, as the address it was given (`releaseMemoryEngineRuntimes`).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
+      // Whether it was launched with the GEO method pack mounted.
+      geoSkills: plan.geoSkills === true,
       // The kernel that is actually running, from one binding. This was once
       // the literal `opencode` written out in twelve places, so every `exited`,
       // `cleaned_orphan` and state record a DSH container produced was labelled

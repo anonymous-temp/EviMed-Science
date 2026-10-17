@@ -212,6 +212,14 @@
       "reason": "Installs and boots; a 128 KB instruction-only skill (data-insight-runbook) with a CSV profiling script. Not taken without a measured gain: it overlaps exploratory-data-analysis and dataset-research-scoping, and principle 11 asks for a paired run before a second skill for the same request is mounted."
     },
     {
+      "name": "dsh-data-quality",
+      "version": "0.3.19",
+      "status": "not-adopted",
+      "testedOn": "2026-10-17",
+      "license": "Apache-2.0",
+      "reason": "Installs and boots on the pinned kernel (one composition row, four tools: data_profile, data_clean, data_verify, data_report). Not taken: data_verify is declarative rule checking over one table, which the model already does with pandas, the quoted-number check the candidate was queued for (verifyCitations) is a service seam and not a tool, its peers name the alpha line (cordis ^4.0.5-alpha.1), and typescript and tsdown arrive as runtime dependencies (about 100 MB). Retest 2026-10-17 at 0.3.19; the 2026-09-15 boot was at 0.3.10 (try-install.json dataQualityRetest)."
+    },
+    {
       "name": "dsh-ppt",
       "version": "0.9.0",
       "status": "not-adopted",

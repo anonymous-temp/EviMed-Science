@@ -11,7 +11,8 @@
  *     dependencies, artifacts, review state and (for the curated pack) the
  *     upstream it was derived from and its licence file's digest;
  *   - `runtime/skills/community/sources.json` knows the exact repository and
- *     commit a vendored skill came from;
+ *     commit a vendored skill came from, and `runtime/skills/core/sources.json`
+ *     does the same for the two core skills that are vendored verbatim;
  *   - `capabilities/<id>/capability.yaml` knows a capability's version and the
  *     platform tools it declares;
  *   - the package's own files know what its scripts import, and which flags they
@@ -251,6 +252,7 @@ export async function collectSkillPackages(root = repoRoot) {
   const inventory = await readJson(path.join(curatedRoot, "inventory.json"));
   const office = await readJson(path.join(officeRoot, "inventory.json"));
   const sources = await readJson(path.join(communityRoot, "sources.json"));
+  const coreSources = await readJson(path.join(skills, "core", "sources.json"));
   const capabilityNames = await skillDirectories(path.join(root, "capabilities"));
 
   // Every module a package's own scripts ship, so one script importing its sibling is not a dependency.
@@ -279,9 +281,14 @@ export async function collectSkillPackages(root = repoRoot) {
     packages.push(record);
   }
 
-  // core: the platform's own skills.
+  // core: the platform's own skills, and the ones it vendors verbatim, which `core/sources.json` pins to the commit they were
+  // taken at (the same record the community pack keeps, written beside the skills it describes).
   for (const name of await skillDirectories(path.join(skills, "core"))) {
-    await add({ origin: "core", name, dir: path.join(skills, "core", name), source: { kind: "release" } });
+    const vendored = coreSources.skills.find((/** @type {any} */ entry) => entry.name === name);
+    await add({
+      origin: "core", name, dir: path.join(skills, "core", name),
+      source: vendored ? { kind: "repository", repository: vendored.repo, commit: vendored.commit, path: vendored.subpath ?? null } : { kind: "release" },
+    });
   }
 
   // curated: derived from a reviewed upstream pack; the executor's flags are read from the executor.

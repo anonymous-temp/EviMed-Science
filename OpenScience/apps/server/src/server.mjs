@@ -3294,6 +3294,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Which engine keeps an account's memory decides what its runtime is launched with (`RuntimeManager.memoryGatewayUrlFor`).
   runtimeManager.memoryEngineOf = researchMemory.configured && typeof researchMemory.memoryEngine === "function"
     ? (userId) => researchMemory.memoryEngine(userId) : null;
+  // And whether a project is a 「循证 GEO」 project decides whether its runtime mounts the GEO method pack (`RuntimeManager.geoSkillsFor`).
+  // Null where the module is off: no GEO project exists there, and no runtime carries the pack.
+  runtimeManager.geoProjectOf = geo ? async (userId, projectId) => Boolean(await geo.store.projectByControlProject(userId, projectId)) : null;
   // And the other source of mountable methods. Without this assignment
   // `materializeCapsuleMethods` writes only capsule entries, which is what the
   // deployment did until 2026-09-10: approving a learned method changed nothing
