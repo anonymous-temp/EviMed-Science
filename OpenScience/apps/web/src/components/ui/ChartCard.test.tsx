@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ChartCard } from "./ChartCard";
-import { Section } from "./Section";
+import { BlockHeading, Section } from "./Section";
 
 describe("a chart card's heading takes the level of where it stands", () => {
   afterEach(cleanup);
@@ -20,5 +20,16 @@ describe("a chart card's heading takes the level of where it stands", () => {
     expect(screen.getByRole("heading", { name: "与本研究人群的可比性" }).tagName).toBe("H3");
     expect(screen.getByRole("heading", { name: "权重" }).tagName).toBe("H4");
     expect(screen.getByRole("heading", { name: "指定为三级" }).tagName).toBe("H3");
+  });
+
+  it("puts the headings inside a card one level below the card's own", () => {
+    // 质量报告's groups said h4 under a card that became h2 (axe heading-order on 人群, r19-guards2).
+    render(<>
+      <h1>研究</h1>
+      <ChartCard title="质量报告"><BlockHeading>保真度</BlockHeading></ChartCard>
+      <Section title="可比性"><ChartCard title="平衡"><BlockHeading>年龄</BlockHeading></ChartCard></Section>
+    </>);
+    expect(screen.getByRole("heading", { name: "保真度" }).tagName).toBe("H3");
+    expect(screen.getByRole("heading", { name: "年龄" }).tagName).toBe("H4");
   });
 });

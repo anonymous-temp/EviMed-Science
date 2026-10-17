@@ -369,8 +369,9 @@ function AnswerBody({
     return finding ? <Correction key={key} finding={finding} claims={claims} onOpen={onOpen} /> : null;
   };
 
+  // The engine's answer as it was given, and the drugs it named: the record's content (`data-prose`), not sentences of the page's.
   return (
-    <div className="flex max-w-read flex-col gap-4 text-body text-text">
+    <div data-prose="" className="flex max-w-read flex-col gap-4 text-body text-text">
       {snapshot.status === "refusal" && <p><Tag>{SNAPSHOT_STATUS_WORDS.refusal}</Tag></p>}
       {marked.paragraphs.map((paragraph, index) => (
         <Fragment key={index}>

@@ -123,6 +123,9 @@ async function main() {
     documentParserFetch: parserStandIn, sourceMetadataFetch: async () => new Response("{}", { status: 404 }),
     memoryIndexProvider: "builtin", ovKnowledgeEnabled: true, openVikingClient: client, knowledgePagesDebounceMs: 0, knowledgePagesMinSources: 2, knowledgePagesPollMs: 200,
     kbSearchEnabled: false,
+    // The kernel's window, as production has it (the shell places its frame over a conversation's pane: 定时任务's task page). The origin
+    // answers nothing — port 9, nothing listens — so a frame is minted and placed and never loads: no walk starts a runtime anyway.
+    runtimeUiProxyEnabled: true, runtimeUiPublicOrigin: "http://127.0.0.1:9",
     // The key the account's own data-source credentials are sealed under (random, kept nowhere): without it 设置 → 数据源 answers 503.
     modelGatewaySigningSecret: randomBytes(36).toString("base64url"),
   });

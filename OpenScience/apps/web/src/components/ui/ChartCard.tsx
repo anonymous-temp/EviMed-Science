@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { useBlockHeadingLevel } from "@/components/ui/Section";
+import { HeadingLevelScope, useBlockHeadingLevel } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
 
 /**
@@ -38,7 +38,7 @@ export function ChartCard({
   /** The conclusion this chart shows, as a sentence. */
   title: ReactNode;
   /** The heading level of the title; by default where the card stands (`useBlockHeadingLevel`): 2 at the page's level, 3 in a `Section`. */
-  level?: 2 | 3 | 4;
+  level?: 2 | 3 | 4 | 5 | 6;
   /** A count or a link at the heading's right end. */
   meta?: ReactNode;
   /** The series legend, under the heading on a narrow screen and beside it otherwise. */
@@ -56,7 +56,8 @@ export function ChartCard({
   children?: ReactNode;
 }) {
   const standing = useBlockHeadingLevel();
-  const Heading = (`h${level ?? standing}`) as "h2" | "h3" | "h4";
+  const own = level ?? standing;
+  const Heading = (`h${own}`) as "h2" | "h3" | "h4" | "h5" | "h6";
   return (
     <section className={cn("flex min-w-0 flex-col rounded-card border border-border bg-surface p-4", className)}>
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -78,7 +79,7 @@ export function ChartCard({
           </div>
         ) : state === "empty" ? (
           <p data-chart-empty="" className="py-6 text-ui text-text-3">{emptyText ?? "还没有可以画出来的测量。"}</p>
-        ) : children}
+        ) : <HeadingLevelScope level={own}>{children}</HeadingLevelScope>}
       </div>
       {footnote != null && state === "content" && <p className="mt-3 text-caption text-text-3">{footnote}</p>}
     </section>
