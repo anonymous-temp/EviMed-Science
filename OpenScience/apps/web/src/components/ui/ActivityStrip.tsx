@@ -62,14 +62,14 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
         {to && <span className="shrink-0 font-medium">查看进度</span>}
       </>
     );
-    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-accent-soft px-3 text-compact text-accent-strong", className);
+    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-accent-soft px-3 text-compact text-accent", className);
     return to
       ? <Link to={to} data-activity="chip" className={cn(look, "hover:bg-surface-3")}>{body}</Link>
       : <span data-activity="chip" className={look}>{body}</span>;
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-accent-soft px-3 py-1.5 text-ui text-accent-strong", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-accent-soft px-3 py-1.5 text-ui text-accent", className)}>
       {dot}
       <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
       {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}

@@ -128,7 +128,8 @@ export function ListHeader({
                 aria-pressed={active}
                 aria-label={name}
                 onClick={() => onSort(column.key)}
-                className={cn("inline-flex items-center gap-0.5 rounded px-1 hover:bg-surface-2", active && "text-text")}
+                // 20 high whether or not the arrow is drawn: a sort button is one kind of control, sorted or not.
+                className={cn("inline-flex h-5 items-center gap-0.5 rounded px-1 hover:bg-surface-2", active && "text-text")}
               >
                 {column.label}
                 {active && <Arrow size={16} aria-hidden="true" />}
@@ -211,8 +212,10 @@ export function ListRow({
   // The global focus ring stays on the title itself; the stretched pseudo
   // element only widens where a pointer can press it.
   const stretched = "after:absolute after:inset-0 after:rounded after:content-['']";
+  // `rounded`: a text control's corner is the one every other link and button of the page has (8), so a row's title is not a second kind
+  // of text control beside the links of its own meta line, and the focus ring follows the same corner.
   const titleClass = cn(
-    "min-w-0 text-left text-ui",
+    "min-w-0 rounded text-left text-ui",
     unread ? "font-semibold text-text" : muted ? "text-text-2" : "text-text",
   );
   // `aria-current` follows `selected`; an explicit one in `titleProps` (a page that says `page`) wins.

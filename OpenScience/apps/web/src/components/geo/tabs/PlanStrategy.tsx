@@ -127,7 +127,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                 <header className="flex items-start justify-between gap-3">
                   <h3 className="min-w-0 text-ui font-semibold text-text">{tierTitle(tier.tier, tier.name)}</h3>
                   {chosen ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 text-ui font-semibold text-accent-strong">
+                    <span className="inline-flex shrink-0 items-center gap-1 text-ui font-semibold text-accent">
                       <Check size={16} aria-hidden="true" />
                       这一档
                     </span>
@@ -206,7 +206,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
         <span className="shrink-0 text-ui font-semibold tabular-nums text-text">
           {typeof target === "number" ? formatGeoValue(target, unit) : "—"}
           {reached
-            ? <span className="ml-1.5 text-caption font-normal text-accent-strong">已达到</span>
+            ? <span className="ml-1.5 text-caption font-normal text-accent">已达到</span>
             : due && typeof target === "number" && <span className="ml-1.5 text-caption font-normal text-text-3">{`${monthDay(due)}前`}</span>}
         </span>
       </div>

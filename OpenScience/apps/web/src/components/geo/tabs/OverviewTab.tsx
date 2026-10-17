@@ -167,7 +167,7 @@ function TripleLine({ triple, unit }: { triple: MetricTriple; unit: "index" | "p
     <p data-geo-triple="" className="mt-2 flex flex-wrap items-baseline gap-x-1.5 text-caption tabular-nums text-text-3">
       {base && <span>{base}</span>}
       {base && target && <span aria-hidden="true">→</span>}
-      {target && <span className={triple.reached ? "text-accent-strong" : undefined}>{target}</span>}
+      {target && <span className={triple.reached ? "text-accent" : undefined}>{target}</span>}
     </p>
   );
 }

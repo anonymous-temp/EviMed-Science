@@ -317,7 +317,7 @@ function ActionBody({
                       <span className="text-text-2">{ownedPlatformName(link.platform)}</span>
                       <span className="min-w-0 flex-1">{href ? <a href={href} target="_blank" rel="noreferrer" className="hover:underline">{link.title || link.url}</a> : link.title || "—"}</span>
                       {link.status === "retired" ? <span className="text-caption text-text-3">已下线</span>
-                        : cited.length > 0 ? <span className="text-caption text-accent-strong">{`被 ${cited.join("、")} 引用`}</span>
+                        : cited.length > 0 ? <span className="text-caption text-accent">{`被 ${cited.join("、")} 引用`}</span>
                           : <span className="text-caption text-text-3">还没有被引用</span>}
                     </li>
                   );
@@ -453,7 +453,7 @@ function SourceRow({
       </div>
       {source.why && <p className="max-w-measure-body text-ui text-text-2">{source.why}</p>}
       <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-caption text-text-3">
-        {conditions && <span className={cn(conditions.met ? "text-accent-strong" : "text-warn-strong")}>{`${conditions.met ? "✓" : "✗"} ${conditions.text}`}</span>}
+        {conditions && <span className={cn(conditions.met ? "text-accent" : "text-warn-strong")}>{`${conditions.met ? "✓" : "✗"} ${conditions.text}`}</span>}
         {price && <span className="tabular-nums">{`单篇 ${price}`}</span>}
         {Object.keys(source.citedFor).length > 0 && (
           <span>{`被引用：${Object.entries(source.citedFor).map(([engine, count]) => `${engineName(engine)} ${count}`).join("、")}`}</span>

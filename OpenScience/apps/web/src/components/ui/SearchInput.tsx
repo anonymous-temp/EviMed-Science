@@ -25,7 +25,9 @@ import { IconButton } from "@/components/ui/IconButton";
  * empties its own state; focus returns to the box.
  *
  * Focus is the border turning `--focus`; the outline stays transparent (the
- * global text-field rule), which is what forced-colours mode paints.
+ * global text-field rule), which is what forced-colours mode paints. The 28 px
+ * one in a toolbar row has no border: it is a pill, and its focus is a 2 px
+ * outline inside it.
  */
 export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> & {
   label: string;
@@ -36,7 +38,8 @@ export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes
   /** Empties the query. Present: the box offers a clear button and clears on Escape. */
   onClear?: () => void;
 }>(function SearchInput({ label, size = "md", className, placeholder, onClear, onKeyDown, ...rest }, ref) {
-  const height = size === "sm" ? "h-sm" : "h-control";
+  const pill = size === "sm";
+  const height = pill ? "h-sm" : "h-control";
   const input = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => input.current as HTMLInputElement);
   const filled = onClear !== undefined && rest.value !== undefined && String(rest.value) !== "";
@@ -57,8 +60,13 @@ export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes
         aria-label={label}
         placeholder={placeholder ?? label}
         className={cn(
-          "w-full rounded border border-transparent bg-surface-2 pl-8 pr-3 text-ui text-text outline-none transition-colors duration-fast max-md:text-body",
-          "placeholder:text-text-3 hover:bg-surface-3 focus:border-focus focus:bg-surface",
+          "w-full bg-surface-2 pl-8 pr-3 text-text outline-none transition-colors duration-fast max-md:text-body",
+          pill
+            // In a toolbar row it is a pill like the chips beside it — 28 high, 13 px, grey, no border: the look of a selected chip, so the
+            // row's filled controls are one kind. Focus is a 2 px line inside the pill (an outline, which forced colours keep).
+            ? "rounded-full text-compact focus:outline-2 focus:-outline-offset-2 focus:outline-focus"
+            : "rounded border border-transparent text-ui focus:border-focus",
+          "placeholder:text-text-3 hover:bg-surface-3 focus:bg-surface",
           "[&::-webkit-search-cancel-button]:hidden",
           height,
           filled && "pr-9",

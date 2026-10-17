@@ -394,7 +394,7 @@ export function Ranking({ ranking, loading, compact = false }: { ranking: Return
             cell: (row) => (
               <>
                 {row.name}
-                {row.ours && <span className="ml-1.5 text-caption font-normal text-accent-strong">本品</span>}
+                {row.ours && <span className="ml-1.5 text-caption font-normal text-accent">本品</span>}
                 {compact && scope === null && <span className="block text-caption font-normal text-text-3">{row.scope}</span>}
               </>
             ),

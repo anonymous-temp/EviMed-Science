@@ -35,7 +35,7 @@ function Radar({ dimension, selected, onAxis }: { dimension: MapDimension; selec
             <button
               key={axis.id} type="button" aria-pressed={selected === axis.id}
               onClick={() => onAxis(selected === axis.id ? null : axis.id)}
-              className={`rounded px-1 py-0.5 hover:bg-surface-2 ${selected === axis.id ? "bg-accent-soft text-accent-strong" : ""}`}
+              className={`rounded px-1 py-0.5 hover:bg-surface-2 ${selected === axis.id ? "bg-accent-soft text-accent" : ""}`}
             >
               {`${axis.label} ${radarValue(dimension.scale, axis.value)}`}
             </button>

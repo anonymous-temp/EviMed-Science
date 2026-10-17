@@ -262,15 +262,17 @@ export function VcrTrajectoryChart({
     <VcrPlot x={x} y={y} xLabels={xLabels} xLabel={xLabel} yLabel={yLabel} formatY={formatY} height={height} className={className}
       overlay={(
         <>
-          {series.map((line, index) => {
+          {series.map((line) => {
             const last = [...line.points].reverse().find((point) => typeof point.y === "number" && Number.isFinite(point.y));
             if (!last || !line.endLabel) return null;
             return (
               <span
                 key={`end-${line.key}`}
                 data-vcr-series-end={line.key}
-                className="absolute -translate-y-1/2 whitespace-nowrap pl-2 text-caption font-medium"
-                style={{ left: `${posX(last.x, x)}%`, top: `${posY(last.y as number, y)}%`, color: seriesColor(Boolean(line.ours), index) }}
+                // The name is text, so it wears a text colour — the brand for our line, the metadata grey for a rival's — and not its line's
+                // grey, which is a graphic's (4.2:1 at best) and one more text colour on a page that has five.
+                className={cn("absolute -translate-y-1/2 whitespace-nowrap pl-2 text-caption font-medium", line.ours ? "text-accent" : "text-text-3")}
+                style={{ left: `${posX(last.x, x)}%`, top: `${posY(last.y as number, y)}%` }}
               >
                 {line.endLabel}
                 {line.endNote && <span className="ml-1 font-normal text-text-3">{line.endNote}</span>}
@@ -374,7 +376,7 @@ export function VcrSurvivalChart({
           <span
             data-vcr-tau=""
             className={cn(
-              "absolute top-0 whitespace-nowrap text-meta text-accent-strong",
+              "absolute top-0 whitespace-nowrap text-meta text-accent",
               posX(rmst.tau, x) > 60 ? "-translate-x-full pr-1" : "pl-1",
             )}
             style={{ left: `${posX(rmst.tau, x)}%` }}

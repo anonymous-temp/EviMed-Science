@@ -34,7 +34,7 @@ const SHAPE_ICON: Record<StatusShape, { icon: typeof Circle; tone: string }> = {
   hollow: { icon: Circle, tone: "text-text-3" },
   half: { icon: CircleDot, tone: "text-accent" },
   filled: { icon: CircleCheck, tone: "text-accent" },
-  cited: { icon: BadgeCheck, tone: "text-accent-strong" },
+  cited: { icon: BadgeCheck, tone: "text-accent" },
   stale: { icon: Clock, tone: "text-warn-strong" },
   skipped: { icon: CircleSlash, tone: "text-text-3" },
 };
@@ -120,7 +120,7 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
             onClick={onOpen}
             data-geo-action-open=""
             className={cn(
-              "min-w-0 flex-1 truncate text-left text-ui after:absolute after:inset-0 after:content-[''] max-sm:basis-full max-sm:line-clamp-2 max-sm:whitespace-normal",
+              "min-w-0 flex-1 truncate rounded text-left text-ui after:absolute after:inset-0 after:content-[''] max-sm:basis-full max-sm:line-clamp-2 max-sm:whitespace-normal",
               skipped ? "text-text-3" : "text-text",
             )}
           >
@@ -138,7 +138,7 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
             {lead ? (
               <>
                 <span className="min-w-0 truncate">{sourceName(lead)}</span>
-                {conditions && <span className={cn("shrink-0 text-caption", conditions.met ? "text-accent-strong" : "text-warn-strong")}>{conditions.met ? "✓" : "✗"}<span className="sr-only">{conditions.text}</span></span>}
+                {conditions && <span className={cn("shrink-0 text-caption", conditions.met ? "text-accent" : "text-warn-strong")}>{conditions.met ? "✓" : "✗"}<span className="sr-only">{conditions.text}</span></span>}
                 {route && lead.route !== "market" && <Tag>{route === "自有渠道，发布后贴链接" ? "自有渠道" : route}</Tag>}
                 {others > 0 && <span className="shrink-0 text-caption tabular-nums text-text-3">{`+${others}`}</span>}
               </>

@@ -509,8 +509,8 @@ export function VcrTradeoffScatter({
           const mcse = mcseText(measure?.mcse);
           return (
             <span key={design.id} data-vcr-scatter-label={design.code} className="flex flex-wrap items-baseline gap-x-2">
-              <span className={cn("font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>{design.code}</span>
-              <span className={cn(design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>{design.name || design.code}</span>
+              <span className={cn("font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent" : "text-text-2")}>{design.code}</span>
+              <span className={cn(design.dominated ? "text-text-3" : design.chosen ? "text-accent" : "text-text-2")}>{design.name || design.code}</span>
               {design.dominated
                 ? <span>{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>
                 : (
@@ -579,7 +579,7 @@ export function VcrMilestoneTimeline({
             // Three columns need 23rem before the time axis has any width; on a phone the axis takes the row under the name and the date.
             <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr_11rem]">
               <div className="min-w-0">
-                <p className={cn("truncate text-caption", ours ? "font-medium text-accent-strong" : "text-text-2")}>{row.name || row.design}</p>
+                <p className={cn("truncate text-caption", ours ? "font-medium text-accent" : "text-text-2")}>{row.name || row.design}</p>
                 <p className="truncate text-meta text-text-3">{item.label}</p>
               </div>
               <span
