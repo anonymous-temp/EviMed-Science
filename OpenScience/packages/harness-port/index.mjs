@@ -1082,7 +1082,7 @@ export function interruptSubagent(ctx, childId, parentSessionId) {
  * The background jobs one agent owns, as the kernel's job registry lists them
  * (`ctx.jobs`, an optional seam: a composition without the jobs rows has none,
  * and that is an empty list). A job outlives the turn that started it: the
- * person's cancel stops the turn and leaves every job running (0.2.1-rc.2,
+ * person's cancel stops the turn and leaves every job running (from 0.2.1,
  * `session/cancel` → `agent.cancel({ kind: 'user' }, { keepInbox: true })`).
  * Only the agent's own jobs; the registry also lists unowned ones to everyone.
  * @param {any} ctx @param {string} ownerId the agent id (an agent and its session share one)

@@ -2339,7 +2339,7 @@ test("a sub-agent the kernel started is counted once, holds the root's turn open
 
 // ---- background jobs and the person's cancel ---------------------------------------------------------------------
 //
-// 0.2.1-rc.2: `session/cancel` stops the turn and nothing else (`agent.cancel({ kind: 'user' }, { keepInbox: true })`);
+// From 0.2.1: `session/cancel` stops the turn and nothing else (`agent.cancel({ kind: 'user' }, { keepInbox: true })`);
 // a background job works on, and when it settles `tool-jobs` writes a completion notice — injected into a running turn,
 // followed up as a NEW turn on an idle agent (`completionDelivery: 'wakeup'`) — unless the settlement was awaited or the
 // model killed it with `job_kill`; a kill on anyone else's behalf still notifies. This double keeps exactly those rules
