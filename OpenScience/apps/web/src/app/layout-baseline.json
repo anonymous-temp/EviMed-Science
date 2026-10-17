@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 102,
+    "total": 101,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
