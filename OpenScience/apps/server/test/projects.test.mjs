@@ -50,7 +50,7 @@ test("a project is created from a name in any language, renamed by name, and arc
     const chinese = await call("POST", "/api/projects", { name: "阿司匹林一级预防" });
     assert.equal(chinese.status, 200, JSON.stringify(chinese.body));
     assert.match(chinese.body.data.id, /^p-[0-9a-f]{8}$/);
-    assert.deepEqual({ ...chinese.body.data, id: "p" }, { id: "p", name: "阿司匹林一级预防", archivedAt: null, runCount: 0, lastActivityAt: null });
+    assert.deepEqual({ ...chinese.body.data, id: "p" }, { id: "p", name: "阿司匹林一级预防", archivedAt: null, runCount: 0, lastActivityAt: null, lastActiveAt: chinese.body.data.lastActiveAt });
     const english = await call("POST", "/api/projects", { name: "Metformin & Lactic Acidosis" });
     assert.equal(english.body.data.id, "metformin-lactic-acidosis");
     const again = await call("POST", "/api/projects", { name: "Metformin & Lactic Acidosis" });
