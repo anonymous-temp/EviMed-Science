@@ -172,9 +172,15 @@ describe("知识库", () => {
       const second = screen.getByRole("checkbox", { name: `选择“${sheet.display.title}”` });
       await user.click(first);
       await user.click(second);
-      expect(screen.getByText("已选 2 份资料")).toBeInTheDocument();
+      // The selection takes the place of the one row of controls — nothing is drawn at the bottom of the page.
+      const selection = screen.getByRole("group", { name: "所选资料" });
+      expect(selection).toHaveTextContent("已选 2 份");
+      expect(selection.hasAttribute("data-toolbar")).toBe(true);
+      expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
+      expect(screen.queryByRole("searchbox", { name: "搜索资料和内容" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "所选资料" })).toBeNull();
       await user.click(first);
-      await user.click(screen.getByRole("button", { name: "在对话中使用" }));
+      await user.click(within(screen.getByRole("group", { name: "所选资料" })).getByRole("button", { name: "在对话中使用" }));
       const location = screen.getByTestId("location");
       await waitFor(() => expect(location).toHaveTextContent("/app/chat"));
       const intent = JSON.parse(location.dataset.state!).runtimeUiIntent;
@@ -409,62 +415,151 @@ describe("知识库", () => {
       expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部11", "文献与指南4", "数据表2", "文档2", "网页1", "笔记1", "图片1"]);
     });
 
-    it("list 知识页 as a type of its own, with the compile's state under the header and 重新整理 where the deployment compiles them", async () => {
+    it("has 资料 · 知识页 · 图谱 as three tabs where the deployment compiles pages, and leaves the platform's own files out of the documents", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 7, literature: 3, table: 2, wiki: 2 }) });
+      renderPage();
+      const tabs = await screen.findByRole("tablist", { name: "知识库" });
+      expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["资料5", "知识页", "图谱"].map((name, index) => (index === 1 ? expect.stringMatching(/^知识页\d*$/u) : name)));
+      expect(within(tabs).getByRole("tab", { name: /^资料/ })).toHaveAttribute("aria-selected", "true");
+      // 知识页 is a tab, not a type of document: the chips are what was put in, and the two compiled files are not counted among it.
+      const chips = within(screen.getByRole("group", { name: "资料类型" }));
+      expect(chips.getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部5", "文献与指南3", "数据表2"]);
+      expect(chips.queryByRole("button", { name: /知识页/ })).toBeNull();
+    });
+
+    it("drops the compiled files from the documents' list and follows pages until it holds documents", async () => {
+      context.features = { knowledgePages: true };
+      const compiled = (id: string) => makeSource(id, { title: `编译页 ${id}`, kind: "wiki", origin: "wiki", typeShort: "知识页" });
+      mocks.listSources.mockImplementation(async (_scope, options) => options?.cursor === "cursor-2"
+        ? { items: [guideline], nextCursor: null, counts: counts({ all: 3, literature: 1, wiki: 2 }) }
+        : { items: [compiled("src_w1"), compiled("src_w2")], nextCursor: "cursor-2", counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      renderPage();
+      expect(await screen.findByText(guideline.display.title)).toBeInTheDocument();
+      expect(screen.queryByText("编译页 src_w1")).toBeNull();
+      expect(mocks.listSources).toHaveBeenCalledWith({ kind: "project", projectId: "default" }, { q: "", cursor: "cursor-2", limit: 50 });
+    });
+
+    it("is one row of controls over the content, in the band the page's tabs are in: the types, the search and the count", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline, sheet]), counts: counts({ all: 2, literature: 1, table: 1 }) });
+      renderPage();
+      await screen.findByText(guideline.display.title);
+      const toolbars = document.querySelectorAll("[data-toolbar]");
+      expect(toolbars).toHaveLength(1);
+      const band = document.querySelector("[data-page-chrome]")!;
+      expect(band).toContainElement(screen.getByRole("tablist", { name: "知识库" }));
+      expect(band).toContainElement(toolbars[0] as HTMLElement);
+      expect(toolbars[0]).toContainElement(screen.getByRole("group", { name: "资料类型" }));
+      expect(toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索资料和内容" }));
+      expect(toolbars[0]).toHaveTextContent("2 份");
+      // …and it is before the list, which is the body.
+      const list = screen.getByRole("list", { name: "资料" });
+      expect(toolbars[0]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(document.querySelector("[data-page-body]")).toContainElement(list);
+      expect(screen.queryByRole("tablist", { name: "知识页的视图" })).toBeNull();
+    });
+
+    it("says nothing of the compile while it is no trouble: the dot is for a fault, and 重新整理 is in the header's menu", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
       mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();
-      const chips = await screen.findByRole("group", { name: "资料类型" });
-      expect(within(chips).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部3", "文献与指南1", "知识页2"]);
-      const line = await screen.findByRole("status", { name: "知识页的整理情况" });
-      expect(line).toHaveTextContent(/已整理 · 上次整理于 .+ · 13 页，53 个实体/);
-      await userEvent.click(within(line).getByRole("button", { name: "重新整理" }));
+      await screen.findByText(guideline.display.title);
+      await waitFor(() => expect(mocks.getKnowledgeStatus).toHaveBeenCalledWith("default"));
+      expect(document.querySelector("[data-knowledge-status]")).toBeNull();
+      expect(screen.queryByText(/已整理 · 上次整理于/u)).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "更多" }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "重新整理知识页" }));
       await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
       await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
-      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("整理中 · 正在整理页面");
-      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
+      // The round that was asked for is said where the person is looking: a strip in the band, over the tabs, not a line in the list.
+      const strip = await screen.findByText("正在整理知识页");
+      expect(strip.closest("[data-activity='strip']")).not.toBeNull();
+      expect(document.querySelector("[data-page-chrome]")).toContainElement(strip);
+      expect(strip.closest("[data-activity='strip']")).toHaveTextContent("已有 13 页，53 个实体");
     });
 
-    it("say the page limit and a project short of documents in plain words, and a deployment without compiling says nothing", async () => {
+    it("draws one dot beside the title when the page limit is reached, with the sentence and nothing to press; a failed round offers 重新整理 from the dot", async () => {
       context.features = { knowledgePages: true };
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "page_limit" });
       renderPage();
-      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("页数已到上限，不再整理新的内容");
+      const dot = await screen.findByRole("img", { name: /页数已到上限，不再整理新的内容/u });
+      expect(dot.closest("[data-page-header]")).not.toBeNull();
+      expect(screen.queryByRole("button", { name: /重新整理/ })).toBeNull();
       cleanup();
-      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "below_threshold", readable: 1, minSources: 3, pages: 0 });
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "failed" });
+      mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();
-      expect(await screen.findByRole("status", { name: "知识页的整理情况" })).toHaveTextContent("资料还不够：再加 2 份就会开始整理");
-      cleanup();
+      await userEvent.click(await screen.findByRole("button", { name: /上次整理没有完成/u }));
+      expect(await screen.findByText(/上次整理没有完成/u, { selector: "[role=menu] *" })).toBeInTheDocument();
+      await userEvent.click(await screen.findByRole("menuitem", { name: "重新整理" }));
+      await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
+    });
+
+    it("tells a project short of documents what to do on the 知识页 tab — what it uses, what it gives, the number it lacks and 添加资料 — and not under the header", async () => {
+      context.features = { knowledgePages: true };
+      mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "below_threshold", readable: 1, minSources: 3, pages: 0 });
+      mocks.getKnowledgeTree.mockResolvedValue({ pages: [], counts: { wiki: 0, kg: 0 } });
+      mocks.pickFiles.mockResolvedValue([]);
+      renderPage("/app/files?kind=wiki");
+      expect(await screen.findByText("还没有知识页")).toBeInTheDocument();
+      const recipe = document.querySelector("[data-step-state='empty']")!;
+      expect(recipe).toHaveTextContent("用 你的 1 份资料");
+      expect(recipe).toHaveTextContent("再加 2 份资料就会开始整理");
+      // The sentence that used to stand under the header is gone, and no dot is drawn for a project that merely has too few documents.
+      expect(screen.queryByText(/资料还不够：再加 2 份就会开始整理/u)).toBeNull();
+      expect(document.querySelector("[data-knowledge-status]")).toBeNull();
+      await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: "添加资料" }));
+      await waitFor(() => expect(mocks.pickFiles).toHaveBeenCalled());
+      // 「你的 1 份资料」 is the way to them.
+      await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: "你的 1 份资料" }));
+      await waitFor(() => expect(addressOf()).toBe("/app/files"));
+    });
+
+    it("offers no tabs, no dot and no 重新整理 where the deployment compiles no pages", async () => {
       context.features = { openList: true };
       renderPage();
       await screen.findByText(guideline.display.title);
-      expect(screen.queryByRole("status", { name: "知识页的整理情况" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tablist", { name: "知识库" })).toBeNull();
+      expect(document.querySelector("[data-knowledge-status]")).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "更多" }));
+      expect(screen.queryByRole("menuitem", { name: "重新整理知识页" })).toBeNull();
     });
 
-    it("browse the compiled files as a tree by type on the 知识页 filter, each opening in the reader, and fall back to the list where the tree cannot be read", async () => {
+    it("browses the compiled files as a tree by type on the 知识页 tab, each opening in the reader, and falls back to the list where the tree cannot be read", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
       renderPage("/app/files?kind=wiki");
-      const tree = await screen.findByRole("tablist", { name: "知识页的视图" });
-      expect(within(tree).getByRole("tab", { name: "页面" })).toHaveAttribute("aria-selected", "true");
+      const tabs = await screen.findByRole("tablist", { name: "知识库" });
+      expect(within(tabs).getByRole("tab", { name: /^知识页/ })).toHaveAttribute("aria-selected", "true");
       expect(await screen.findByText("概念")).toBeInTheDocument();
       const opener = (await screen.findAllByRole("link", { name: "盘点差异率" }))[0]!;
       expect(opener).toHaveAttribute("href", expect.stringMatching(/^\/app\/files\/src_[a-f0-9]{32}\?kind=wiki$/));
       expect(screen.getAllByText("来源已更改").length).toBeGreaterThanOrEqual(3);
+      // The toolbar over the tree is the search and the count of pages — no types, which belong to documents.
+      expect(screen.queryByRole("group", { name: "资料类型" })).toBeNull();
+      expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toBeInTheDocument();
       cleanup();
       mocks.getKnowledgeTree.mockRejectedValue(new Error("down"));
       renderPage("/app/files?kind=wiki");
       expect(await screen.findByText(/知识页的目录暂时没能读取/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
       expect(screen.getByText(guideline.display.title)).toBeInTheDocument();
     });
 
-    it("switch the 知识页 filter to its graph, the pages or the entities, and keep that in the address", async () => {
+    it("switches to the graph tab, whose kind of graph is the first chip group of the same toolbar, and keeps that in the address", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
       renderPage("/app/files?kind=wiki");
       await userEvent.click(await screen.findByRole("tab", { name: "图谱" }));
       await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph"));
       await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "wiki"));
+      const toolbar = document.querySelector("[data-toolbar]")!;
+      expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
+      expect(toolbar).toContainElement(screen.getByRole("group", { name: "图谱的类型" }));
+      expect(document.querySelector("[data-page-chrome]")).toContainElement(screen.getByRole("tablist", { name: "知识库" }));
+      expect(screen.queryByRole("tablist", { name: "知识页的视图" })).toBeNull();
       await userEvent.click(await screen.findByRole("button", { name: "实体和关系" }));
       await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph&graph=kg"));
       await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "kg"));
@@ -473,12 +568,15 @@ describe("知识库", () => {
       expect(row).toHaveAttribute("href", "/app/files/src_c52267a68a26fb6c418a9e7a990cc89a?kind=wiki&view=graph&graph=kg");
     });
 
-    it("do not offer 重新整理 where the deployment does not compile them", async () => {
-      context.features = { openList: true };
+    it("keeps old addresses working: the 知识页 type is the 知识页 tab, its graph view is the 图谱 tab, anything else is 资料", async () => {
+      context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      renderPage("/app/files?kind=wiki");
-      await screen.findByRole("group", { name: "资料类型" });
-      expect(screen.queryByRole("button", { name: "重新整理" })).not.toBeInTheDocument();
+      for (const [address, name] of [["/app/files?kind=wiki", "知识页"], ["/app/files?kind=wiki&view=graph", "图谱"], ["/app/files?kind=wiki&view=graph&graph=kg", "图谱"], ["/app/files?kind=literature", "资料"], ["/app/files", "资料"]] as const) {
+        renderPage(address);
+        const tabs = await screen.findByRole("tablist", { name: "知识库" });
+        expect(within(tabs).getByRole("tab", { name: new RegExp(`^${name}`, "u") })).toHaveAttribute("aria-selected", "true");
+        cleanup();
+      }
     });
 
     it("are left out when only one type is there, and are not asked to count reading state", async () => {
@@ -521,11 +619,12 @@ describe("知识库", () => {
         .mockResolvedValueOnce(listing([guideline, second], { counts: { all: 60, literature: 60 } }));
       renderPage();
       await screen.findByText(guideline.display.title);
-      await userEvent.click(screen.getByRole("button", { name: "加载更多" }));
+      // A bare 「加载更多」 is the shared 「显示更多」, which says how many are left.
+      await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 59 份" }));
       expect(await screen.findByText("第二页的资料")).toBeInTheDocument();
       expect(mocks.listSources).toHaveBeenLastCalledWith({ kind: "project", projectId: "default" }, { q: "", cursor: "cursor-2", limit: 50 });
       expect(screen.getAllByText(guideline.display.title)).toHaveLength(1);
-      expect(screen.queryByRole("button", { name: "加载更多" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
     });
   });
 
@@ -533,7 +632,7 @@ describe("知识库", () => {
     it("groups the account's projects as the sidebar does, and ends with the documents every project shares", async () => {
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
-      const menu = await screen.findByRole("menu", { name: "选择范围" });
+      const menu = await screen.findByRole("menu", { name: "范围" });
       await waitFor(() => expect(within(menu).getByText("虚拟临床研究")).toBeInTheDocument());
       expect(within(menu).getByText("我的项目")).toBeInTheDocument();
       expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
@@ -569,7 +668,11 @@ describe("知识库", () => {
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
       expect(await screen.findByText("还没有资料设为所有项目可用。")).toBeInTheDocument();
-      expect(screen.getByText("在资料的“⋯”菜单里选“设为所有项目可用”。")).toBeInTheDocument();
+      expect(screen.getByText("在项目的资料里，用资料的“⋯”菜单选“设为所有项目可用”。")).toBeInTheDocument();
+      // Where the sentence points is one press away.
+      await userEvent.click(screen.getByRole("button", { name: "回到项目的资料" }));
+      expect(await screen.findByText(guideline.display.title)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
     });
   });
 
@@ -709,7 +812,7 @@ describe("知识库", () => {
       // What was typed is marked inside the line, so the line is read as text, not as one element's.
       const said = () => document.body.textContent ?? "";
       await waitFor(() => expect(said()).toContain("第一页的匹配"));
-      await userEvent.click(screen.getByRole("button", { name: "加载更多" }));
+      await userEvent.click(screen.getByRole("button", { name: /显示更多/ }));
       await waitFor(() => expect(said()).toContain("第二页的匹配"));
       expect(said()).toContain("第一页的匹配");
       // A new search starts again from what it found.
@@ -828,8 +931,10 @@ describe("知识库", () => {
       const fold = await screen.findByText("资料组成");
       expect(fold.closest("details")).not.toHaveAttribute("open");
       expect(mocks.getSourceComposition).toHaveBeenCalledWith("default");
-      // Above the types and the list, under the header.
-      expect(fold.compareDocumentPosition(await screen.findByRole("group", { name: "资料类型" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Under the one row of controls and over the list: it is the first thing of the body.
+      const types = await screen.findByRole("group", { name: "资料类型" });
+      expect(types.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(fold.compareDocumentPosition(screen.getByRole("list", { name: "资料" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       await userEvent.click(fold);
       const years = screen.getByRole("table", { name: "按发表年份的资料数" });
       expect(within(years).getAllByRole("row").map((row) => row.textContent)).toEqual(["发表年份数量份数", "20213", "20191"]);
