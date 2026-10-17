@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
-import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { activeAgenda, executionLabel, needsMaterial, pauseNotes, runState, scheduleLine, scheduleOf } from "./taskPresentation";
 
 /** The executions the switcher lists: the newest, so a task that has run for a year does not open a menu a screen tall. */
@@ -59,36 +59,49 @@ export function TaskBar({ agenda, executions, selected, running, stopping = fals
     checked: episode.id === selected?.id,
     onSelect: () => actions.selectExecution(episode.id),
   }));
-  const Heading = backTo ? "h1" : "h2";
-  return <header className="shrink-0 border-b border-border px-6 py-3" data-task-bar="">
-    {backTo && <Link to={backTo} className="-ml-1 mb-1 inline-flex items-center gap-0.5 text-caption text-text-3 hover:text-text"><ChevronLeft size={16} aria-hidden="true" />定时任务</Link>}
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0 flex-1">
-        <Heading className={backTo ? PAGE_TITLE_CLASS : "truncate text-section font-semibold text-text"}>{agenda.payload.title}</Heading>
-        <p className="mt-0.5 text-caption text-text-3">{scheduleLine(agenda)}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        {latestResultHref && <Link to={latestResultHref} onClick={onResultOpened} className={buttonClasses({ variant: "text", size: "sm" })}>最新结果</Link>}
-        {executions.length > 0 && selected && <Menu label="切换执行" align="end" items={switcher}>
-          <Button variant="text" size="sm">{executionLabel(selected, ordinal(selected), zone)}<ChevronDown size={16} aria-hidden="true" /></Button>
-        </Menu>}
-        {running
-          ? <Button variant="secondary" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
-          : <Button disabled={busy || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
-        <Menu label="更多" items={[
-          // The record of what research found and left open: an ordinary job (nothing but routine) has none.
-          ...(agenda.payload.taskTypes.every(type => type === "routine") ? [] : [{ label: "研究进展", onSelect: actions.openProgress }]),
-          { label: "编辑", disabled: busy, onSelect: actions.edit },
-          ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: busy, onSelect: actions.togglePause }]),
-          "separator" as const,
-          { label: "删除", destructive: true, disabled: busy, onSelect: actions.remove },
-        ]} />
-      </div>
+  const controls = (
+    <div className="flex flex-wrap items-center gap-1">
+      {latestResultHref && <Link to={latestResultHref} onClick={onResultOpened} className={buttonClasses({ variant: "text", size: "sm" })}>最新结果</Link>}
+      {executions.length > 0 && selected && <Menu label="切换执行" align="end" items={switcher}>
+        <Button variant="text" size="sm">{executionLabel(selected, ordinal(selected), zone)}<ChevronDown size={16} aria-hidden="true" /></Button>
+      </Menu>}
+      {running
+        ? <Button variant="secondary" disabled={busy || stopping} onClick={actions.stop}>{stopping ? "正在停止" : "停止本次"}</Button>
+        : <Button disabled={busy || !activeAgenda(agenda)} onClick={actions.run}>立即运行</Button>}
+      <Menu label="更多" items={[
+        // The record of what research found and left open: an ordinary job (nothing but routine) has none.
+        ...(agenda.payload.taskTypes.every(type => type === "routine") ? [] : [{ label: "研究进展", onSelect: actions.openProgress }]),
+        { label: "编辑", disabled: busy, onSelect: actions.edit },
+        ...(completed ? [] : [{ label: activeAgenda(agenda) ? "暂停" : "启用", disabled: busy, onSelect: actions.togglePause }]),
+        "separator" as const,
+        { label: "删除", destructive: true, disabled: busy, onSelect: actions.remove },
+      ]} />
     </div>
+  );
+  const footer = <>
     {notes.map(note => <p key={note} className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-pre-wrap break-words text-ui text-text-2">
       {note}
       {waiting && note.startsWith("需要你补充：") && <Button variant="secondary" size="sm" disabled={busy} onClick={actions.supply}>补充材料并继续</Button>}
     </p>)}
     {error && <div role="alert" className="mt-2 text-ui text-error">{error.message}{error.retry && <Button variant="text" disabled={busy} onClick={error.retry}>重试操作</Button>}</div>}
+  </>;
+  // Where the task is the whole page (no list beside it) its header is the page's standard one, with the way back over it; beside the
+  // list it is the pane's own heading (R19, audit D C5: it drew the page's title class by hand).
+  if (backTo) {
+    return <div className="shrink-0 border-b border-border px-6 py-3" data-task-bar="">
+      <Link to={backTo} className="-ml-1 mb-1 inline-flex items-center gap-0.5 text-caption text-text-3 hover:text-text"><ChevronLeft size={16} aria-hidden="true" />定时任务</Link>
+      <PageHeader title={agenda.payload.title} documentTitle={false} meta={scheduleLine(agenda)} actions={controls} />
+      {footer}
+    </div>;
+  }
+  return <header className="shrink-0 border-b border-border px-6 py-3" data-task-bar="">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-section font-semibold text-text">{agenda.payload.title}</h2>
+        <p className="mt-0.5 text-caption text-text-3">{scheduleLine(agenda)}</p>
+      </div>
+      {controls}
+    </div>
+    {footer}
   </header>;
 }

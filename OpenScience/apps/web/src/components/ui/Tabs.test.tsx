@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Tabs } from "./Tabs";
 
 function Example() {
@@ -110,5 +110,65 @@ describe("Tabs", () => {
         expect(screen.getByRole("tablist", { name: "适合" })).not.toHaveAttribute("style");
       });
     });
+  });
+});
+
+// R19 (audit D C1d): `vcr-overview@phone` opened with 「对照」 selected and cut in half. The open tab is whole on arrival, when the view
+// changes and by keyboard — in the row, never by moving the page — and a tab that already shows is left alone.
+describe("the open tab of a row wider than its box is whole", () => {
+  const scrollBy = vi.fn();
+  const items = [{ value: "a", label: "总览" }, { value: "b", label: "对照" }, { value: "c", label: "试验" }];
+  /** The row is 0..360 and the tab named is where `places` says; every other tab is whole at 0..80. */
+  function layout(places: Record<string, [number, number]>) {
+    Object.defineProperty(HTMLElement.prototype, "scrollBy", { configurable: true, value: scrollBy });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const [left, right] = this.getAttribute("role") === "tablist" ? [0, 360] : places[this.textContent ?? ""] ?? [0, 80];
+      return { left, right, top: 0, bottom: 40, width: right - left, height: 40, x: left, y: 0, toJSON: () => ({}) };
+    });
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+    scrollBy.mockReset();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollBy;
+  });
+
+  it("is scrolled to on arrival, when a page opens with the cut tab already selected", () => {
+    layout({ "对照": [330, 420] });
+    render(<Tabs label="视图" items={items} value="b" onChange={() => {}} />);
+    expect(scrollBy).toHaveBeenCalledWith({ left: 92 });
+  });
+
+  it("is scrolled back to when the open tab is out of the row's start, and left alone when it already shows", () => {
+    layout({ "总览": [-40, 40] });
+    const { unmount } = render(<Tabs label="视图" items={items} value="a" onChange={() => {}} />);
+    expect(scrollBy).toHaveBeenCalledWith({ left: -40 });
+    unmount();
+    scrollBy.mockReset();
+    layout({});
+    render(<Tabs label="视图" items={items} value="b" onChange={() => {}} />);
+    expect(scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the last tab to the row's end, with no fade reserved after it", () => {
+    layout({ "试验": [300, 380] });
+    render(<Tabs label="视图" items={items} value="c" onChange={() => {}} />);
+    expect(scrollBy).toHaveBeenCalledWith({ left: 20 });
+  });
+
+  it("follows the keyboard: an arrow selects the next tab, focuses it, and brings it whole — without scrolling the page", async () => {
+    layout({ "对照": [330, 420] });
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    function Controlled() {
+      const [value, setValue] = useState("a");
+      return <Tabs label="视图" items={items} value={value} onChange={setValue} />;
+    }
+    render(<Controlled />);
+    expect(scrollBy).not.toHaveBeenCalled();
+    screen.getByRole("tab", { name: "总览" }).focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "对照" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "对照" })).toHaveFocus();
+    expect(scrollBy).toHaveBeenCalledWith({ left: 92 });
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });

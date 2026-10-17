@@ -19,12 +19,16 @@ export function useShowMore<T>(rows: readonly T[], { first, step, resetKey }: { 
   };
 }
 
-/** The button under a paged list; nothing when everything is shown. `unit` is the counter word (个, 篇, 条). */
-export function ShowMore({ remaining, unit, onMore }: { remaining: number; unit: string; onMore: () => void }) {
-  if (remaining <= 0) return null;
+/**
+ * The button under a paged list; nothing when everything is shown. `unit` is the counter word (个, 篇, 条). A list read from the
+ * server a page at a time knows there is more but not how much: `remaining={null}` is then 「显示更多」 and no number, which
+ * is true where 「还有 1 个」 would not be (R19: the inbox and the zone lists had a bare 「加载更多」 each).
+ */
+export function ShowMore({ remaining, unit, onMore, loading = false }: { remaining: number | null; unit: string; onMore: () => void; loading?: boolean }) {
+  if (remaining !== null && remaining <= 0) return null;
   return (
     <div className="mt-2 flex justify-center">
-      <Button variant="text" size="sm" onClick={onMore}>{`显示更多 · 还有 ${remaining.toLocaleString("zh-CN")} ${unit}`}</Button>
+      <Button variant="text" size="sm" loading={loading} onClick={onMore}>{remaining === null ? "显示更多" : `显示更多 · 还有 ${remaining.toLocaleString("zh-CN")} ${unit}`}</Button>
     </div>
   );
 }

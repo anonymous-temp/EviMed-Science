@@ -92,9 +92,9 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
       <span className="text-caption text-text-2">{pdf ? `${displayedPage} / ${pdf.numPages}` : "正在打开 PDF"}</span>
       <Button variant="text" size="sm" disabled={!pdf || locating || displayedPage >= pdf.numPages} onClick={() => setPage(displayedPage + 1)}>下一页</Button>
     </div>
-    {error && <p role="alert" className="p-3 text-caption text-text-2">PDF 暂时无法显示，可下载原件核对上方引文。</p>}
+    {error && <p role="alert" className="p-3 text-caption text-text-2">PDF 暂时无法显示</p>}
     {locating && <p role="status" className="p-3 text-caption text-text-2">正在定位 PDF 中的引文</p>}
-    {!error && !locating && marked === false && <p className="p-3 text-caption text-text-2">这一页未能标出引文，请对照上方原文摘录。</p>}
+    {!error && !locating && marked === false && <p className="p-3 text-caption text-text-2">这一页没有标出引文</p>}
     <div ref={root} className="relative w-full" />
   </div>;
 }

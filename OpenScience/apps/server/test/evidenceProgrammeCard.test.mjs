@@ -106,6 +106,28 @@ test("the first sentence is a claim digestPlacement would headline; a synthesize
   assert.match(reproduced.card.content.answer, /把握度：中/);
 });
 
+test("with no headline claim the list line is the card's first conclusion, so two cards never read alike (R19 audit D C3)", () => {
+  // Neither claim was graded, so neither is a headline and both cards open with the same neutral sentence: that sentence is the card's
+  // answer, and it is the same words on every such card — which is why it cannot also be the line every list shows in place of the card.
+  const a = buildProgrammeCard(input(evaluate([directA], [])));
+  const b = buildProgrammeCard(input(evaluate([directB], [])));
+  assert.equal(a.headlineClaimId, null);
+  assert.equal(b.headlineClaimId, null);
+  assert.equal(a.card.content.answer, b.card.content.answer, "the neutral answer is one sentence for both");
+  assert.notEqual(a.card.summary, b.card.summary, "the list line is not");
+  assert.equal(a.card.summary, directA.claim);
+  assert.equal(b.card.summary, directB.claim);
+  assert.notEqual(a.card.summary, a.card.content.answer);
+  // A synthesis that opens a card keeps its confidence label on the line, as it does in the answer of a card that has a headline.
+  const lead = buildProgrammeCard(input(evaluate([synthesis], [graded("CLM-003", { type: "synthesized" })])));
+  assert.equal(lead.headlineClaimId, null);
+  assert.equal(lead.card.summary, `${synthesis.claim}（综合判断，把握度：中）`);
+  assert.doesNotMatch(lead.card.summary, /这张卡汇总了/);
+  // The line is clipped to the column's limit like the answer was.
+  const long = buildProgrammeCard(input(evaluate([{ ...directA, claim: `${"很长的结论".repeat(200)}。` }], [])));
+  assert.equal(long.card.summary.length, 600);
+});
+
 test("the card satisfies the domain's contract: lineage, producer, disclosure, claims over its own sources", () => {
   const built = buildProgrammeCard(input(evaluate([directA, directB, synthesis], [graded("CLM-001"), graded("CLM-002"), graded("CLM-003", { type: "synthesized" })])));
   assert.equal(built.status, "card");

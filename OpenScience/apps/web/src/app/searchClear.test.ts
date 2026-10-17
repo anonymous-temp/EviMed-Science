@@ -84,7 +84,7 @@ describe("search boxes can be cleared", () => {
       "components/geo/tabs/EvidenceTab.tsx",
       "components/geo/tabs/QuestionsTab.tsx",
       "components/geo/tabs/SourcesTab.tsx",
-      "components/geo/tabs/ContentTab.tsx",
+      "components/geo/tabs/ActionsTab.tsx",
     ]));
     expect(all.map((box) => box.path)).toEqual(expect.arrayContaining([
       "app/routes/MemoryHubPage.tsx",

@@ -58,7 +58,8 @@ export function SimulatedWalletPage() {
   const page = walletPageNamed(useParams().page);
   // Keyed: each page is opened for itself, with its own read of the allowance
   // and nothing left over from the page before it.
-  return page ? <WalletPage key={page} page={page} /> : <NotFound />;
+  // 模拟会员 and 模拟退款 are gone; an old link to either is not found, and says the way back to what it was for.
+  return page ? <WalletPage key={page} page={page} /> : <NotFound lead={{ to: ALLOWANCE_PATH, label: "回到额度" }} />;
 }
 
 function WalletPage({ page }: { page: WalletPageName }) {

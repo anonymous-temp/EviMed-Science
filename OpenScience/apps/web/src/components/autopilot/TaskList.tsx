@@ -6,10 +6,11 @@ import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
+// eslint-disable-next-line no-restricted-imports -- the list column of a split view has no band to hold a toolbar; its search stands over its rows.
 import { SearchInput } from "@/components/ui/SearchInput";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
-import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/cn";
 import { TaskGroup } from "./TaskGroup";
 import { activeAgenda, inFlight, rowLine, TASK_GROUPS, taskGroupOf } from "./taskPresentation";
@@ -79,13 +80,14 @@ export function TaskList({ agendas, episodes, selectedId, search, onSearch, proj
   // that holds the title and the rows; beside a conversation it is a column of its own and pads itself.
   const inset = !singleColumn;
   return <div className={cn("flex min-h-0 flex-1 flex-col", singleColumn && "mx-auto w-full max-w-page px-4 md:px-6")}>
-    <header className={cn("flex min-h-8 shrink-0 items-center justify-between gap-3 pb-3 pt-5", inset && "px-4")}>
-      <div className="flex min-w-0 items-baseline gap-2">
-        <h1 className={PAGE_TITLE_CLASS}>定时任务</h1>
-        {projectName && <span className="min-w-0 truncate text-caption text-text-3">{projectName}</span>}
-      </div>
-      <IconButton icon={Plus} label="新建" onClick={onCreate} />
-    </header>
+    {/* The page's standard header (R19, audit D C5): the title, the project the tasks are of in the scope's place, and the one quiet action. */}
+    <PageHeader
+      title="定时任务"
+      documentTitle={false}
+      scope={projectName ? <span className="block max-w-56 truncate text-caption text-text-3">{projectName}</span> : undefined}
+      actions={<IconButton icon={Plus} label="新建" onClick={onCreate} />}
+      className={cn("shrink-0 pb-3 pt-5", inset && "px-4")}
+    />
     {/* A search box over nothing to search is not drawn. */}
     {(agendas?.length ?? 0) > 0 && <div className={cn("shrink-0 pb-3", inset && "px-4")}><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
     <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-2")}>

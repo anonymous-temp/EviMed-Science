@@ -84,7 +84,9 @@ describe("DatasetMeaningPanel", () => {
     expect(screen.getByText(/同一观察出现了完全相同的重复行 · visits\.csv · patient_id\+visit_no · 3/)).toBeInTheDocument();
     expect(screen.getByText(/取值分布超出了设定的变化范围 · visits\.csv · sbp · 1/)).toBeInTheDocument();
     expect(screen.getByText("需要决定")).toBeInTheDocument();
-    expect(screen.getByText("1 项检查没有运行：没有给出截止时间列。没有运行不等于没有问题。")).toBeInTheDocument();
+    expect(screen.getByText("项检查没有运行：没有给出截止时间列。", { exact: false })).toBeInTheDocument();
+    // The sentence says which checks did not run and why; it does not assure the reader of what that leaves.
+    expect(document.body.textContent).not.toMatch(/没有运行不等于没有问题/);
   });
 
   it("warns when the file is not the version the meaning was read from", async () => {

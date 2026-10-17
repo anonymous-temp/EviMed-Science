@@ -4,9 +4,22 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { answerFilled, evidenceFilled, geoProject } from "@/components/geo/__fixtures__/geoTabs";
+import { GeoFrameHarness } from "@/components/geo/__fixtures__/geoFrameHarness";
+import { actionFixture, actionsFilled, clustersFilled, clusterViewFixture, G_BRAND, questionSetFixture } from "@/components/geo/__fixtures__/geoSpine";
 import { GeoAnswerPage } from "./GeoAnswerPage";
 
-const client = vi.hoisted(() => ({ getGeoAnswer: vi.fn(), getGeoEvidence: vi.fn(), getGeoProject: vi.fn() }));
+const client = vi.hoisted(() => ({
+  getGeoAnswer: vi.fn(),
+  getGeoEvidence: vi.fn(),
+  getGeoProject: vi.fn(),
+  getGeoActions: vi.fn(),
+  getGeoQuestions: vi.fn(),
+  getGeoClusters: vi.fn(),
+  getGeoCluster: vi.fn(),
+  getGeoArticles: vi.fn(),
+}));
+const conversation = vi.hoisted(() => ({ open: vi.fn(async () => true) }));
+vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => conversation.open }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
@@ -17,11 +30,12 @@ function Probe() {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
-function renderAnswer(snapshotId = "snap_deepseek") {
+/** The answer in the place the layout gives it: the band's toolbar above it, the project's cache under it. */
+function renderAnswer(snapshotId = "snap_deepseek", search = "") {
   return render(
-    <MemoryRouter initialEntries={[`/app/geo/geo_1/answers/${snapshotId}`]}>
+    <MemoryRouter initialEntries={[`/app/geo/geo_1/answers/${snapshotId}${search}`]}>
       <Routes>
-        <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoAnswerPage /><Probe /></>} />
+        <Route path="/app/geo/:geoId/answers/:snapshotId" element={<><GeoFrameHarness project={geoProject()} tab="questions"><GeoAnswerPage /></GeoFrameHarness><Probe /></>} />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
@@ -32,10 +46,16 @@ beforeEach(() => {
   client.getGeoAnswer.mockReset().mockResolvedValue(answerFilled);
   client.getGeoEvidence.mockReset().mockResolvedValue(evidenceFilled);
   client.getGeoProject.mockReset().mockResolvedValue(geoProject());
+  client.getGeoActions.mockReset().mockResolvedValue({ ...actionsFilled, actions: [] });
+  client.getGeoQuestions.mockReset().mockResolvedValue(questionSetFixture());
+  client.getGeoClusters.mockReset().mockResolvedValue(clustersFilled);
+  client.getGeoCluster.mockReset().mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
+  client.getGeoArticles.mockReset().mockResolvedValue({ articles: [] });
+  conversation.open.mockClear();
 });
 
 describe("one answer", () => {
-  it("heads the page with the way back, the question, the date switcher and the screenshot", async () => {
+  it("heads the page with the way back, the question and its one action; the date switcher and the screenshot are the band's toolbar", async () => {
     renderAnswer();
     expect(await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
     // Opened from a link, there is no list to go back to: the way back is the tab that holds the finding.
@@ -45,6 +65,13 @@ describe("one answer", () => {
     // 36 px icon button, 截图 the 28 px text button beside the 28 px chip.
     expect(screen.getByRole("link", { name: "返回准确与安全" })).toHaveClass("h-control", "w-9");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveClass("h-sm");
+    // the controls above what they control: both are in the toolbar, not in the page's body
+    const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
+    expect(toolbar).toContainElement(screen.getByRole("link", { name: /截图/ }));
+    expect(toolbar).toContainElement(screen.getByRole("button", { name: /测量日期/ }));
+    // the page has one primary action: with a wrong sentence in the answer it is the correction
+    expect(screen.getAllByRole("button").filter((button) => button.hasAttribute("data-geo-answer-primary"))).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "写纠错稿" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
@@ -126,7 +153,7 @@ describe("one answer", () => {
     expect(within(nav).getByText("未测")).toBeInTheDocument();
   });
 
-  it("marks the wrong sentence with a wavy red line and says beneath it what is right, per which label, from which source, and what was done", async () => {
+  it("marks the wrong sentence with a wavy red line and says beneath it, in one line, what is right and where the handling stands", async () => {
     renderAnswer();
     const wrong = await waitFor(() => {
       const found = document.querySelector("[data-geo-wrong]");
@@ -141,9 +168,25 @@ describe("one answer", () => {
     // The correction sits right under the paragraph that says it.
     expect(wrong.closest("p")?.nextElementSibling).toBe(correction);
     await waitFor(() => expect(correction).toHaveTextContent("讲错我方：对的是每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。"));
-    expect(correction).toHaveTextContent("依据：玛仕度肽注射液说明书（国家药监局 2025）");
-    expect(correction).toHaveTextContent("出处：[3] 玛仕度肽（百科词条）");
-    expect(correction).toHaveTextContent("处置：修改百科词条 · 处置中");
+    expect(correction).toHaveTextContent("处置中");
+    // The detail is the claim's record, not a block of the answer's text
+    expect(correction).not.toHaveTextContent("依据：");
+    expect(correction).not.toHaveTextContent("出处：");
+  });
+
+  it("opens the claim's record from that line, with the label, the basis, each engine's words, where this one took it from and the handling", async () => {
+    renderAnswer();
+    const open = await screen.findByRole("button", { name: /对的是每周一次/ });
+    await userEvent.click(open);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("?error="));
+    const drawer = await screen.findByRole("dialog");
+    const record = drawer.querySelector("[data-geo-error-drawer]") as HTMLElement;
+    expect(record).toHaveTextContent("它需要每天注射一次");
+    expect(record.querySelector("[data-geo-error-basis]")).toHaveTextContent("依据：玛仕度肽注射液说明书（国家药监局 2025）");
+    expect(record.querySelector("[data-geo-error-source='baike.baidu.com']")).not.toBeNull();
+    expect(record).toHaveTextContent("修改百科词条");
+    // the engines' words are the way to the answers; the one on this page leads back here
+    expect(within(record).getByRole("link", { name: /它需要每天注射一次/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
   });
 
   it("names a claim's source in the reader's words, never by its internal address (G14)", async () => {
@@ -151,14 +194,49 @@ describe("one answer", () => {
       ...evidenceFilled,
       claims: evidenceFilled.claims.map((claim) => (claim.id === "clm_1" ? { ...claim, sourceRef: "web-page:e1edc04a1ac28750", sourceLabel: null } : claim)),
     });
+    renderAnswer("snap_deepseek", "?error=err_1");
+    const drawer = await screen.findByRole("dialog");
+    await waitFor(() => expect(drawer.querySelector("[data-geo-error-drawer]")).not.toBeNull());
+    expect(drawer).not.toHaveTextContent("web-page:");
+    expect(drawer.querySelector("[data-geo-error-basis]")).toBeNull();
+  });
+
+  it("offers the correction as the page's action, with the brief in the conversation unsent", async () => {
     renderAnswer();
-    const correction = await waitFor(() => {
-      const found = document.querySelector("[data-geo-correction]") as HTMLElement | null;
-      if (!found || !found.textContent?.includes("对的是每周一次")) throw new Error("not yet");
-      return found;
+    await userEvent.click(await screen.findByRole("button", { name: "写纠错稿" }));
+    await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+    const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
+    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: null });
+    expect(brief).toContain("它需要每天注射一次");
+  });
+
+  it("with nothing wrong in the answer, the one action is to talk it over", async () => {
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [], facts: { ...answerFilled.facts!, statements: [] } });
+    renderAnswer();
+    await userEvent.click(await screen.findByRole("button", { name: "在对话中处理" }));
+    await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "写纠错稿" })).not.toBeInTheDocument();
+  });
+
+  it("names the question's group as a link that opens the group's record in place", async () => {
+    // the answer's question is one the question set holds under the brand group
+    client.getGeoAnswer.mockResolvedValue({ ...answerFilled, question: { ...answerFilled.question, id: "q_brand_1" } });
+    renderAnswer();
+    const link = await screen.findByRole("link", { name: "品牌身份、规格与厂家" });
+    expect(link).toHaveAttribute("data-geo-cluster-link", G_BRAND);
+    await userEvent.click(link);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`group=${G_BRAND}`));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("the actions that name the claim's rows are its correction in the record", async () => {
+    client.getGeoActions.mockResolvedValue({
+      ...actionsFilled,
+      actions: [actionFixture({ key: "correct_error:g:a", kind: "correct_error", need: { ...actionFixture({ key: "k", kind: "maintain" }).need, errorIds: ["err_1"] }, status: "writing" })],
     });
-    expect(correction).not.toHaveTextContent("web-page:");
-    expect(correction).not.toHaveTextContent("依据：");
+    renderAnswer("snap_deepseek", "?error=err_1");
+    const drawer = await screen.findByRole("dialog");
+    await waitFor(() => expect(drawer.querySelector("[data-geo-error-action]")).not.toBeNull());
   });
 
   it("lists a citation that came back without a link, and says it has none (G8)", async () => {
@@ -193,13 +271,14 @@ describe("one answer", () => {
     expect(await screen.findByText("只测提及：回答里提到了我们的产品。")).toBeInTheDocument();
   });
 
-  it("opens on the sentence it is about: says whose answer it is, brings the wrong one to the middle, and can do it again", async () => {
+  it("opens on the sentence it is about: says whose answer it is, brings the wrong one to the top of the page, and can do it again", async () => {
     const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     scroll.mockClear();
     renderAnswer();
     expect(await screen.findByText("DeepSeek 的原回答，标红处与说明书不一致。")).toBeInTheDocument();
     await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
-    expect(scroll).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+    // outside a layout there is no page ground to move: the browser's own scroll is the fallback (`scrollBlockToTop`)
+    expect(scroll).toHaveBeenCalledWith({ block: "start" });
     expect(scroll.mock.contexts[0]).toBe(document.querySelector("[data-geo-wrong]"));
     await userEvent.click(screen.getByRole("button", { name: "看第 1 处" }));
     expect(scroll).toHaveBeenCalledTimes(2);

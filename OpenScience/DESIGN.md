@@ -109,16 +109,14 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
-  look cheap, and un-banning them without a budget is how a product gets loud. **One list page
-  carries one chart:** 记忆胶囊's growth line (2026-09-28, `CapsuleGrowth`) — the owner's timeline
-  of how the capsule grew, which the list cannot show. Since 2026-10-07 it lives in the 成长 tab, the
-  fourth of the page's four tabs (关于你 · 项目 · 做法 · 成长), above the list of what was learned each
-  day, and no longer at the top of the page: every tab but that one is a list and nothing else. It is
-  a single brand line whose heading is the sentence it proves, with at most three moments; it has no
-  tile, legend or metric rung, and it is not drawn until the history spans two weeks. No peer's
-  memory page has a chart, so a second chart there, or a first on another list page, needs the same
-  argument. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
-  rule 1), reached from the memory page's last tab, 「地图」 (its page carries the same tab bar with that tab selected, so the two read as one page: a map behind a menu item was not found, 2026-10-14); it draws in the brand blue, the warn amber and one grey, tells a
+  look cheap, and un-banning them without a budget is how a product gets loud. **A list page carries no
+  chart.** 记忆胶囊 had the one exception (2026-09-28, `CapsuleGrowth`, from 2026-10-07 in a 成长 tab): the owner's timeline of how
+  the capsule grew. It drew the stock — a line that rose to 75 and fell to 42, under a heading that began on another day than its
+  first point — and could not say what happened. It is gone (2026-10-17): what happened to the memories is the time view of the
+  map, the weekly bars of 记下 / 合并 / 忘记 counted from the same events as the list under them, with the window's one slider in the
+  card's header, and `?tab=growth` arrives there. Every tab of the memory page is a list and nothing else; no peer's memory page has a
+  chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
+  rule 1), reached from the memory page's last tab, 「地图」 (its page is drawn by the same `MemoryFrame` — one title, one column, the same four tabs in the sticky band — so the two read as one page: a map behind a menu item was not found, 2026-10-14; and its five views are one chip group of the one toolbar row, not a second row of tabs); it draws in the brand blue, the warn amber and one grey, tells a
   mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
@@ -625,7 +623,7 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 - The page framework (R19) landed as components, slots and counts before the pages moved: the hand-written grey
   sentences and divided lists are a per-file baseline (`apps/web/src/app/layout-baseline.json`) that only falls, the
   lint rules that keep a page from drawing its own tabs, filters and search are off until `LAYOUT_RULES=1`, and
-  `StepPending`, `VcrStepPending`, `FilterRow`, `VcrToolbar`, `TabSection`, `VcrSection` and `KnowledgeScopeMenu` are
+  `StepPending`, `VcrStepPending`, `FilterRow`, `VcrToolbar`, `TabSection` and `VcrSection` are
   still in place. Each migration batch deletes what it replaces; the last turns the counts into zero and the rules into
   errors.
   The framework's components are drawn by `src/test/compositionFixtures.tsx` (one sample per template, in tests), not

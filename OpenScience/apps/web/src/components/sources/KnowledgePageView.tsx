@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { Pencil } from "lucide-react";
 import { knowledgePageTypeLabel } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { Textarea } from "@/components/ui/Input";
 import { LoadError } from "@/components/cards/LoadError";
@@ -107,9 +108,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
         </div>
       )}
       {page.restored && page.restored.count > 0 && (
-        <p role="status" className="text-caption text-text-3">
-          上一次重新整理时丢掉了你写的 {page.restored.count} 处补充，已经放回原处。
-        </p>
+        <Note className="text-caption" result={["上一次重新整理时丢掉了你写的 ", { n: page.restored.count }, " 处补充，已经放回原处。"]} />
       )}
       {counts && counts.present + counts.absent > 0 && (
         <p className="text-caption text-text-3">

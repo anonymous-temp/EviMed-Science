@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapEvent, MapLane } from "@/lib/memoryMapClient";
 import { TEST_PALETTE } from "./palette";
-import { barShape, eventSymbol, eventTooltip, rangeOfWindow, segmentTooltip, timeExtent, timeOption, timeRows, windowFromZoom, windowOfRange } from "./timeOption";
+import { barShape, eventSymbol, eventTooltip, segmentTooltip, timeExtent, timeOption, timeRows } from "./timeOption";
 import { dayEndMs, dayIn, dayStartMs } from "./zone";
 
 const lane = (id: string, label: string, segments: MapLane["segments"]): MapLane => ({ id, label, projectId: "p", segments });
@@ -46,18 +46,6 @@ describe("the axis and the shared window", () => {
     expect(timeExtent({ since: "2026-10-12", lanes: [], events: [], today: "2026-10-12" }, "UTC").from).toBe("2026-09-12");
     expect(timeExtent({ since: null, lanes: [], events: [], today: "2026-10-12" }, "UTC")).toEqual({ from: "2026-09-12", to: "2026-10-12" });
   });
-  it("turns what the slider chose into the range the whole page reads, and the whole span into all", () => {
-    const extent = { from: "2026-07-01", to: "2026-10-09" };
-    const chosen = windowFromZoom({ start: 0, end: 50 }, extent, "UTC");
-    expect(chosen).toEqual({ from: "2026-07-01", to: "2026-08-20" });
-    expect(rangeOfWindow(chosen)).toBe("2026-07-01..2026-08-20");
-    expect(windowFromZoom({ batch: [{ start: 50, end: 100 }] }, extent, "UTC")?.to).toBe("2026-10-09");
-    expect(windowFromZoom({ start: 0, end: 100 }, extent, "UTC")).toBeNull();
-    expect(rangeOfWindow(null)).toBe("all");
-    expect(windowFromZoom({}, extent, "UTC")).toBeNull();
-    expect(windowOfRange("2026-07-01..2026-08-20")).toEqual({ from: "2026-07-01", to: "2026-08-20" });
-    expect(windowOfRange("30d")).toBeNull();
-  });
 });
 
 describe("the option", () => {
@@ -74,15 +62,13 @@ describe("the option", () => {
     expect(option.yAxis.data).toEqual(["纳入 ≥18 岁", "心衰随访", "你自己"]);
     expect(option.yAxis.inverse).toBe(true);
   });
-  it("sets the slider to the window and the axis to the whole span", () => {
+  it("has no slider of its own, and its axis is the window the page is narrowed to — the whole span when there is none", () => {
+    expect(option.dataZoom).toBeUndefined();
     expect(option.xAxis.min).toBe(Date.parse("2026-07-01T00:00:00Z"));
-    expect(option.dataZoom.every((zoom: any) => zoom.startValue === option.xAxis.min)).toBe(true);
+    expect(option.xAxis.max).toBe(Date.parse("2026-10-12T23:59:59.999Z"));
     const windowed: any = timeOption({ ...input, window: { from: "2026-09-01", to: "2026-09-30" } });
-    expect(windowed.dataZoom[1].startValue).toBe(Date.parse("2026-09-01T00:00:00Z"));
-    expect(windowed.dataZoom[1].endValue).toBe(Date.parse("2026-09-30T23:59:59.999Z"));
-    expect(windowed.xAxis.min).toBe(option.xAxis.min);
-    expect(option.dataZoom[1].type).toBe("slider");
-    expect(option.dataZoom[1].labelFormatter(Date.parse("2026-09-30T16:30:00Z"))).toBe("2026-09-30");
+    expect(windowed.xAxis.min).toBe(Date.parse("2026-09-01T00:00:00Z"));
+    expect(windowed.xAxis.max).toBe(Date.parse("2026-09-30T23:59:59.999Z"));
   });
   it("draws a bar inside the plot, at least as wide as a sliver", () => {
     const plot = { x: 100, y: 0, width: 400, height: 200 };

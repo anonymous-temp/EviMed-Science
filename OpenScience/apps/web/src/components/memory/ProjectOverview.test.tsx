@@ -7,11 +7,11 @@ import { ProjectOverview, monthHeading, workPath } from "./ProjectOverview";
 import { validitySpan } from "./ValidityBar";
 
 const base: Overview = { projectId: "prj_1", paused: false, card: [], capabilities: [], works: [], timeZone: "UTC" };
-function show(patch: Partial<Overview>, props: { canOpen?: (id: string) => boolean; onOpen?: (id: string) => void; hasMemories?: boolean } = {}) {
+function show(patch: Partial<Overview>, props: { canOpen?: (id: string) => boolean; onOpen?: (id: string) => void; onSpeak?: () => void; hasMemories?: boolean } = {}) {
   return render(
     <MemoryRouter>
       <ProjectOverview overview={{ ...base, ...patch }} canOpen={props.canOpen ?? (() => true)} onOpen={props.onOpen ?? (() => undefined)}
-        hasMemories={props.hasMemories} />
+        onSpeak={props.onSpeak} hasMemories={props.hasMemories} />
     </MemoryRouter>,
   );
 }
@@ -45,27 +45,34 @@ describe("the top of a project", () => {
     const works = [{ month: "2026-10", items: [{ runId: "run_1", title: "随访方案", path: "outputs/plan.docx", name: "plan.docx", at: "2026-10-03T08:00:00Z" }] }];
     const capabilities = [{ id: "a", title: "文献检索", count: 5 }];
     // The quiet line, the ranking and the works: a line, a table and months of rows.
-    expect(shapes(show({ capabilities, works }, { hasMemories: true }).container)).toEqual(["section>h2+div"]);
+    expect(shapes(show({ capabilities, works }, { hasMemories: true, onSpeak: () => undefined }).container)).toEqual(["section>h2+div"]);
     cleanup();
     // The card's rows, the ranking and the works: a list, a table and months of rows.
     expect(shapes(show({ card: [{ slot: "goal", label: "目标", recordId: "rec_1", text: "比较两种抗凝药", updatedAt: null }], capabilities, works }).container)).toEqual(["section>h2+div"]);
   });
 
-  it("says in one quiet line that a project with memories has no card yet, and never draws a grid of empty slots", () => {
-    show({}, { hasMemories: true });
+  it("says in one line, with the one thing to do about it, that a project with memories has no card yet, and never draws a grid of empty slots", async () => {
+    const onSpeak = vi.fn();
+    show({}, { hasMemories: true, onSpeak });
     expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();
     expect(screen.getByText("还没有记下这个项目的目标、资料和进展。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "在对话里说说这个项目" }));
+    expect(onSpeak).toHaveBeenCalledTimes(1);
     // No slot is named, and no clinical element is listed as a gap.
     expect(screen.queryByRole("list")).toBeNull();
     for (const label of ["领域", "目标", "范围或对象", "材料与数据", "阶段", "约束", "人群", "干预或暴露", "对照", "结局", "设计"]) {
       expect(screen.queryByText(label)).toBeNull();
     }
     cleanup();
-    // Not when the project's memory is off (that line speaks), and not when the card has something.
-    show({ paused: true }, { hasMemories: true });
+    // A sentence nobody can act on is not written: a project with no conversation to open says nothing here.
+    show({}, { hasMemories: true });
     expect(screen.queryByText("还没有记下这个项目的目标、资料和进展。")).toBeNull();
     cleanup();
-    show({ card: [{ slot: "goal", label: "目标", recordId: "rec_g", text: "把单体拆成三个服务", updatedAt: null }] }, { hasMemories: true });
+    // Not when the project's memory is off (that line speaks), and not when the card has something.
+    show({ paused: true }, { hasMemories: true, onSpeak });
+    expect(screen.queryByText("还没有记下这个项目的目标、资料和进展。")).toBeNull();
+    cleanup();
+    show({ card: [{ slot: "goal", label: "目标", recordId: "rec_g", text: "把单体拆成三个服务", updatedAt: null }] }, { hasMemories: true, onSpeak });
     expect(screen.queryByText("还没有记下这个项目的目标、资料和进展。")).toBeNull();
   });
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
 import { Input, Select } from "@/components/ui/Input";
 import {
   fileTopicRequest,
@@ -171,31 +172,30 @@ export function TopicRequests({ zones = [], initialTitle = "" }: { zones?: { id:
         <p className="mt-4 text-caption text-text-3">还没有人申请选题。</p>
       ) : (
         <>
-          <ul className="mt-4 divide-y divide-border" aria-label="选题申请">
+          <List divided label="选题申请" className="mt-4">
             {shown.map((item) => {
               const done = seconded.has(item.id);
               return (
-                <li key={item.id} className="flex items-center justify-between gap-4 py-3">
-                  <div className="min-w-0">
-                    <p className="break-words text-ui text-text">{item.title}</p>
-                    <p className="mt-1 text-caption text-text-3">
-                      {item.requesters} 人申请{item.zoneTitle ? ` · ${item.zoneTitle}` : ""}
-                    </p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    loading={busy === item.id}
-                    disabled={done}
-                    aria-label={done ? `已附议：${item.title}` : `附议：${item.title}`}
-                    onClick={() => void second(item)}
-                  >
-                    {done ? "已附议" : "附议"}
-                  </Button>
-                </li>
+                <ListRow
+                  key={item.id}
+                  title={<span className="break-words">{item.title}</span>}
+                  meta={`${item.requesters} 人申请${item.zoneTitle ? ` · ${item.zoneTitle}` : ""}`}
+                  actions={(
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={busy === item.id}
+                      disabled={done}
+                      aria-label={done ? `已附议：${item.title}` : `附议：${item.title}`}
+                      onClick={() => void second(item)}
+                    >
+                      {done ? "已附议" : "附议"}
+                    </Button>
+                  )}
+                />
               );
             })}
-          </ul>
+          </List>
           {items.length > SHOWN && (
             <Button className="mt-2" variant="text" size="sm" onClick={() => setAll((value) => !value)}>
               {all ? "收起" : `显示全部 ${items.length} 条`}

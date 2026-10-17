@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { EVIDENCE_PRODUCER_KIND_LABELS_ZH, EVIDENCE_PRODUCER_RELATION_LABELS_ZH, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { FrontierBack, evidenceFromState } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { FactList, type Fact } from "@/components/ui/FactList";
+import { List, ListRow } from "@/components/ui/ListRow";
+import type { TabItem } from "@/components/ui/Tabs";
+import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { evidenceDay } from "@/components/frontier/evidenceDate";
 import { evidenceErrorMessage, fetchEvidenceAuthor, type EvidenceAuthorPage as Author } from "@/lib/evidenceZoneClient";
@@ -70,11 +72,38 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
         author.totals.runsFromCards > 0 ? `${author.totals.runsFromCards} 次研究从这里开始` : null,
       ].filter(Boolean)
     : [];
+  // What the page knows of the author, as the one key / value list: the producer, the people their cards name, and the record in numbers.
+  const facts: Fact[] = author
+    ? [
+        ...(author.producer ? [{
+          label: "出品方",
+          value: [
+            `${EVIDENCE_PRODUCER_KIND_LABELS_ZH[author.producer.kind]} ${author.producer.name}`,
+            (EVIDENCE_PRODUCER_RELATION_LABELS_ZH as Record<string, string>)[author.producer.relation],
+            author.producer.products.length > 0 ? `（${author.producer.products.join("、")}）` : null,
+          ].filter(Boolean).join(" · ").replace(" · （", "（"),
+        }] : []),
+        ...(author.people && author.people.length > 0 ? [{
+          label: "署名",
+          value: author.people.map((person) => [person.name, person.affiliation, person.title].filter(Boolean).join("，")).join("；"),
+        }] : []),
+        ...(stats.length > 0 ? [{ label: "概况", value: stats.join(" · ") }] : []),
+      ]
+    : [];
+  const ready = !loading && !error && author;
   return (
     <PageShell
       title={author?.author.name ?? "作者"}
       meta={author?.author.platform ? <Tag>平台出版方</Tag> : undefined}
       back={<FrontierBack to={from?.to} label={from?.label} />}
+      // The author's three views and the card search are the page's one row of controls, over what they switch.
+      toolbar={ready ? {
+        label: "作者内容",
+        views: { label: "作者的内容", panelId: "author-panel", items: tabs, value: view, onChange: (next) => setView(next as View) },
+        search: view === "cards" && cards.length > FILTER_FROM
+          ? { label: "搜索证据卡", value: filter, maxLength: 200, onChange: setFilter, onClear: () => setFilter("") }
+          : undefined,
+      } : undefined}
     >
       {loading ? (
         <FrontierSkeleton />
@@ -86,92 +115,62 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
       ) : (
         author && (
           <div className="space-y-6">
-            <header className="space-y-2">
-              {author.producer && (
-                <p className="text-ui text-text-2">
-                  出品方：{EVIDENCE_PRODUCER_KIND_LABELS_ZH[author.producer.kind]} {author.producer.name}
-                  {(EVIDENCE_PRODUCER_RELATION_LABELS_ZH as Record<string, string>)[author.producer.relation] && `。${(EVIDENCE_PRODUCER_RELATION_LABELS_ZH as Record<string, string>)[author.producer.relation]}`}
-                  {author.producer.products.length > 0 && `（${author.producer.products.join("、")}）`}
-                </p>
-              )}
-              {author.people && author.people.length > 0 && (
-                <p className="text-ui text-text-2">
-                  卡片里署名的作者和审核人：{author.people.map((person) => [person.name, person.affiliation, person.title].filter(Boolean).join("，")).join("；")}
-                </p>
-              )}
-              {stats.length > 0 && <p className="text-ui text-text-2">{stats.join(" · ")}</p>}
-            </header>
-            <div>
-              <Tabs
-                label="作者的内容"
-                panelId="author-panel"
-                items={tabs}
-                value={view}
-                onChange={setView}
-                trailing={
-                  view === "cards" && cards.length > FILTER_FROM ? (
-                    <SearchInput
-                      label="搜索证据卡"
-                      size="sm"
-                      value={filter}
-                      maxLength={200}
-                      onChange={(event) => setFilter(event.target.value)}
-                      onClear={() => setFilter("")}
-                    />
-                  ) : undefined
-                }
-              />
-              <div id="author-panel" role="tabpanel" className="mt-2">
-                {view === "cards" && (
-                  cards.length === 0 ? (
-                    <p className="py-4 text-ui text-text-3">暂无已发布的证据卡。</p>
-                  ) : shown.length === 0 ? (
-                    <p className="py-4 text-ui text-text-3">没有找到匹配的证据卡。</p>
-                  ) : (
-                    <>
-                      <ul className="divide-y divide-border">
-                        {shown.map((card) => (
-                          <li key={card.id} className="py-3">
-                            <Link className="text-ui font-medium text-text hover:text-accent" to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}>{card.title}</Link>
-                            {card.summary && <p className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
-                            <p className="mt-1 text-caption text-text-3">{[card.claimCount > 0 ? `${card.claimCount} 条结论` : null, `更新于 ${evidenceDay(card.updatedAt)}`].filter(Boolean).join(" · ")}</p>
-                          </li>
-                        ))}
-                      </ul>
-                      {author.totals.cards > cards.length && !filter.trim() && (
-                        <p className="pt-3 text-caption text-text-3">共 {author.totals.cards} 张，这里列出最近的 {cards.length} 张。</p>
-                      )}
-                    </>
-                  )
-                )}
-                {view === "zones" && (
-                  author.zones.length === 0 ? (
-                    <p className="py-4 text-ui text-text-3">暂无公开的专区。</p>
-                  ) : (
-                    <ul className="divide-y divide-border">
-                      {author.zones.map((zone) => (
-                        <li key={zone.id} className="py-3">
-                          <Link className="text-ui font-medium text-text hover:text-accent" to={`/app/frontier/zones/${encodeURIComponent(zone.id)}`}>{zone.title}</Link>
-                          <p className="mt-1 text-caption text-text-3">
-                            {[EVIDENCE_ZONE_KIND_LABELS_ZH[zone.kind], zone.evidenceCount > 0 ? `${zone.evidenceCount} 条证据` : "暂无证据", zone.follows > 0 ? `${zone.follows} 人关注` : null].filter(Boolean).join(" · ")}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                )}
-                {view === "changes" && (
-                  <ul className="space-y-1 py-2">
-                    {(author.changes ?? []).map((change, index) => (
-                      <li key={change.id ?? index} className="text-ui text-text-2">
-                        {change.occurredAt && <span className="text-text-3">{evidenceDay(change.occurredAt)} · </span>}
-                        {change.summary ?? change.categoryLabel}
-                      </li>
+            {facts.length > 0 && <FactList rows={facts} />}
+            {view === "cards" && (
+              cards.length === 0 ? (
+                <EmptyState title="暂无已发布的证据卡" />
+              ) : shown.length === 0 ? (
+                <EmptyState title="没有找到匹配的证据卡" action={<Button variant="secondary" onClick={() => setFilter("")}>显示全部证据卡</Button>} />
+              ) : (
+                <>
+                  <List divided label="证据卡">
+                    {shown.map((card) => (
+                      <ListRow
+                        key={card.id}
+                        to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}
+                        title={card.title}
+                        meta={(
+                          <>
+                            {card.summary && <span className="line-clamp-2 max-w-measure text-ui leading-relaxed text-text-2">{card.summary}</span>}
+                            <span className={card.summary ? "mt-1 block" : "block"}>{[card.claimCount > 0 ? `${card.claimCount} 条结论` : null, `更新于 ${evidenceDay(card.updatedAt)}`].filter(Boolean).join(" · ")}</span>
+                          </>
+                        )}
+                      />
                     ))}
-                  </ul>
-                )}
-              </div>
-            </div>
+                  </List>
+                  {author.totals.cards > cards.length && !filter.trim() && (
+                    <Note result={[`共 `, { n: author.totals.cards }, ` 张，这里列出最近的 `, { n: cards.length }, ` 张。`]} className="pt-3" />
+                  )}
+                </>
+              )
+            )}
+            {view === "zones" && (
+              author.zones.length === 0 ? (
+                <EmptyState title="暂无公开的专区" />
+              ) : (
+                <List divided label="专区">
+                  {author.zones.map((zone) => (
+                    <ListRow
+                      key={zone.id}
+                      to={`/app/frontier/zones/${encodeURIComponent(zone.id)}`}
+                      title={zone.title}
+                      meta={[EVIDENCE_ZONE_KIND_LABELS_ZH[zone.kind], zone.evidenceCount > 0 ? `${zone.evidenceCount} 条证据` : "暂无证据", zone.follows > 0 ? `${zone.follows} 人关注` : null].filter(Boolean).join(" · ")}
+                    />
+                  ))}
+                </List>
+              )
+            )}
+            {view === "changes" && (
+              <List divided label="最近变更">
+                {(author.changes ?? []).map((change, index) => (
+                  <ListRow
+                    key={change.id ?? index}
+                    title={<span className="font-normal text-text-2">{change.summary ?? change.categoryLabel}</span>}
+                    meta={change.occurredAt ? evidenceDay(change.occurredAt) : undefined}
+                  />
+                ))}
+              </List>
+            )}
           </div>
         )
       )}

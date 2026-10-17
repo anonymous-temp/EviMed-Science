@@ -95,6 +95,38 @@ describe("Toolbar", () => {
     expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toBeInTheDocument();
   });
 
+  it("keeps a pinned group of chips on the row on a phone — the page's own views — and folds the rest", async () => {
+    narrow();
+    const changed = vi.fn();
+    const { container } = render(
+      <Toolbar
+        filters={[
+          { kind: "chips", label: "地图的视图", neutral: "graph", options: [{ value: "graph", label: "关系" }, { value: "time", label: "时间" }], value: "graph", onChange: changed, pinned: true },
+          { kind: "select", label: "种类", allLabel: "全部种类", options: LANES, value: null, onChange: () => {} },
+        ]}
+        onClear={() => {}}
+      />,
+    );
+    const toolbar = container.querySelector("[data-toolbar]") as HTMLElement;
+    // The views are on the row; the kind of memory is behind the one chip, which counts what is on among what it holds.
+    expect(within(toolbar).getByRole("group", { name: "地图的视图" })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: "时间" })).toBeInTheDocument();
+    expect(within(toolbar).queryByRole("button", { name: "种类" })).toBeNull();
+    expect(within(toolbar).getByRole("button", { name: "筛选" })).toBeInTheDocument();
+    await userEvent.click(within(toolbar).getByRole("button", { name: "时间" }));
+    expect(changed).toHaveBeenCalledWith("time");
+    // A pinned chip group that is on still counts for 「清除筛选」, though not for the number on the folded chip.
+    expect(within(toolbar).queryByRole("button", { name: "清除筛选" })).toBeNull();
+  });
+
+  it("draws a pinned group like any other where the window is wide", () => {
+    const { container } = render(
+      <Toolbar filters={[{ kind: "chips", label: "地图的视图", options: [{ value: "graph", label: "关系" }], value: "graph", onChange: () => {}, pinned: true }]} />,
+    );
+    expect(within(container.querySelector("[data-toolbar]") as HTMLElement).getByRole("group", { name: "地图的视图" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "筛选" })).toBeNull();
+  });
+
   it("is a row of its own without views, so a section can carry one", () => {
     const { container } = render(<Toolbar filters={[{ kind: "toggle", label: "只看需要看一眼的", pressed: false, onChange: () => {} }]} summary="12 项" />);
     expect(container.querySelector("[data-toolbar]")).not.toBeNull();

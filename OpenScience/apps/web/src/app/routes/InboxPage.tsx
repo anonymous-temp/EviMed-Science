@@ -1,6 +1,6 @@
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref, shareNoticeHref } from "@evimed/domain";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -8,10 +8,11 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
+import { ShowMore } from "@/components/ui/ShowMore";
 import { Tag } from "@/components/ui/Tag";
 import { InboxBody } from "@/components/inbox/InboxBody";
 import {
@@ -24,7 +25,8 @@ import {
   type InboxAction,
   type InboxItem,
 } from "@/lib/inboxClient";
-import { inboxWhen, orderInbox, severityOf } from "@/lib/inboxGroups";
+import { groupInbox, inboxGroupTitle, inboxSourceOf, inboxWhen, INBOX_SOURCE_WORDS, orderInbox, severityOf, type InboxEntry, type InboxGroup } from "@/lib/inboxGroups";
+import { useProjectStore } from "@/lib/projects";
 import { splitNoticeBody } from "@/lib/qualityNotices";
 import { withParam } from "@/lib/addressState";
 import { usePageScroll } from "@/lib/pageScroll";
@@ -77,6 +79,10 @@ export function InboxPage() {
   const [params, setParams] = useSearchParams();
   const filter: Filter = params.get("filter") === "unread" ? "unread" : "all";
   const openId = params.get("open");
+  /** The one source the reader narrowed the list to, and the folded group they have open. */
+  const sourceParam = params.get("source");
+  const groupKey = params.get("group");
+  const projects = useProjectStore((state) => state.projects);
   /** Pages the address asks for; read when a load starts, so a page brought in by 「加载更多」 does not start another. */
   const wantedPages = useRef(1);
   wantedPages.current = pagesOf(params.get("pages"));
@@ -92,6 +98,7 @@ export function InboxPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const generation = useRef(0);
   const mutationGeneration = useRef(0);
 
@@ -203,6 +210,23 @@ export function InboxPage() {
     }
   };
 
+  /** Every unread notice of a folded group read at once — not a clinical-safety group, whose findings are opened one by one. */
+  const readGroup = async (group: InboxGroup) => {
+    if (group.safety || busyGroup) return;
+    const current = generation.current;
+    setBusyGroup(group.key);
+    setError(null);
+    const results = await Promise.allSettled(group.items.filter((item) => !item.readAt).map((item) => markInboxRead(item.id, item.revision)));
+    if (current !== generation.current) return;
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      applySaved(result.value, filter);
+      noteRead(result.value);
+    }
+    if (results.some((result) => result.status === "rejected")) setError("有几条没有标为已读，请重试。");
+    setBusyGroup(null);
+  };
+
   const loadMore = async () => {
     if (!cursor || loadingMore) return;
     const requestedCursor = cursor;
@@ -255,12 +279,38 @@ export function InboxPage() {
   // 「全部已读」 leaves the safety findings unread, so it is only offered while something else is.
   const hasUnread = unreadTotal != null ? unreadTotal - safetyUnread > 0 : (items ?? []).some((item) => !item.readAt && severityOf(item) !== "safety");
 
+  // The sources the loaded notices come from, each once with how many it has: a chip for a source with none is not drawn.
+  const sources = useMemo(() => {
+    const counts = new Map<string, number>();
+    // A pinned finding is also on the loaded page when it is recent enough: each notice counts once.
+    const seen = new Set<string>();
+    for (const item of [...(items ?? []), ...(safety?.items ?? [])]) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      counts.set(inboxSourceOf(item), (counts.get(inboxSourceOf(item)) ?? 0) + 1);
+    }
+    return Object.keys(INBOX_SOURCE_WORDS).filter((type) => counts.has(type)).map((type) => ({ type, count: counts.get(type)! }));
+  }, [items, safety]);
+  const source = sourceParam && sources.some((entry) => entry.type === sourceParam) ? sourceParam : "";
+  const fromSource = (list: readonly InboxItem[]) => (source ? list.filter((item) => inboxSourceOf(item) === source) : list);
+  const pinnedEntries = order ? groupInbox(fromSource(order.pinned)) : [];
+  const restEntries = order ? groupInbox(fromSource(order.rest)) : [];
+  const openGroupEntry = [...pinnedEntries, ...restEntries].find((entry): entry is Extract<InboxEntry, { kind: "group" }> => entry.kind === "group" && entry.group.key === groupKey);
+
   const setOpen = (id: string | null) => setParams((existing) => withParam(existing, "open", id), { replace: true });
+  const setGroup = (key: string | null) => setParams((existing) => withParam(existing, "group", key), { replace: true });
   /** A filter starts the list again: from its first page, with nothing open. */
   const chooseFilter = (next: Filter) => setParams((existing) => {
     const updated = withParam(existing, "filter", next === "unread" ? "unread" : null);
     updated.delete("pages");
     updated.delete("open");
+    updated.delete("group");
+    return updated;
+  }, { replace: true });
+  const chooseSource = (next: string) => setParams((existing) => {
+    const updated = withParam(existing, "source", next || null);
+    updated.delete("open");
+    updated.delete("group");
     return updated;
   }, { replace: true });
 
@@ -277,6 +327,16 @@ export function InboxPage() {
       onOpened={readOnOpen}
     />
   );
+  const entryRow = (entry: InboxEntry) => entry.kind === "item" ? row(entry.item) : (
+    <InboxGroupRow
+      key={entry.group.key}
+      group={entry.group}
+      name={projects.find((project) => project.id === entry.group.projectId)?.name ?? null}
+      busy={busyGroup === entry.group.key}
+      onOpen={() => setGroup(entry.group.key)}
+      onRead={() => void readGroup(entry.group)}
+    />
+  );
 
   return (
     <PageShell
@@ -286,42 +346,77 @@ export function InboxPage() {
           {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
         </Button>
       )}
+      // The page's one row of controls, over the list they narrow (R19, audit D C1): 全部 / 未读 are its views, as the tabs of every list
+      // page; and, when the notices come from more than one place, which place — chips for the sources that have any.
+      toolbar={{
+        label: "收件箱筛选",
+        views: {
+          label: "消息视图", value: filter, onChange: (next) => chooseFilter(next as Filter), panelId: "inbox-list",
+          items: [{ value: "all", label: "全部" }, { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) }],
+        },
+        filters: sources.length > 1 ? [{
+          kind: "chips" as const, label: "消息来源", value: source, neutral: "", onChange: chooseSource,
+          options: [{ value: "", label: "全部来源" }, ...sources.map((entry) => ({ value: entry.type, label: INBOX_SOURCE_WORDS[entry.type], count: entry.count }))],
+        }] : [],
+      }}
     >
       <span ref={scrollAnchor} hidden />
-      <FilterChips
-        label="消息筛选"
-        value={filter}
-        onChange={chooseFilter}
-        options={[
-          { value: "all", label: "全部" },
-          { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) },
-        ]}
-      />
-      {error && <LoadError className="mt-4" message={error} onRetry={() => void reload()} />}
-      <div className="mt-4">
+      {error && <LoadError className="mb-4" message={error} onRetry={() => void reload()} />}
+      <div>
         {items === null || order === null ? <RunsSkeleton filter={false} />
           : items.length === 0 && order.pinned.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"} />)
             : (
               <>
-                {order.pinned.length > 0 && (
+                {pinnedEntries.length > 0 && (
                   <section aria-labelledby="inbox-pinned" className="mb-4">
                     <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
                       <ShieldAlert size={16} aria-hidden="true" />需要优先查看 · 未读 {safetyUnread} 条
                     </h2>
-                    <List label="需要优先查看">{order.pinned.map(row)}</List>
-                    {safety?.cursor && (
-                      <Button variant="text" className="mt-1" loading={loadingSafety} onClick={() => void loadMoreSafety()}>显示更多需要优先查看的消息</Button>
-                    )}
+                    <List label="需要优先查看">{pinnedEntries.map(entryRow)}</List>
+                    {safety?.cursor && !source && <ShowMore remaining={null} unit="条" loading={loadingSafety} onMore={() => void loadMoreSafety()} />}
                   </section>
                 )}
-                {order.rest.length > 0 && <List label="消息">{order.rest.map(row)}</List>}
-                {cursor && (
-                  <Button variant="text" className="mt-4" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
-                )}
+                {restEntries.length > 0 && <List label="消息">{restEntries.map(entryRow)}</List>}
+                {cursor && <ShowMore remaining={null} unit="条" loading={loadingMore} onMore={() => void loadMore()} />}
               </>
             )}
       </div>
+      {openGroupEntry && (
+        <Drawer
+          title={inboxGroupTitle(openGroupEntry.group, projects.find((project) => project.id === openGroupEntry.group.projectId)?.name)}
+          description={`${openGroupEntry.group.items.length} 条${openGroupEntry.group.unread > 0 ? `，${openGroupEntry.group.unread} 条未读` : ""}`}
+          onClose={() => setGroup(null)}
+          widthClassName="max-w-2xl"
+          actions={!openGroupEntry.group.safety && openGroupEntry.group.unread > 0 ? (
+            <Button variant="text" size="sm" loading={busyGroup === openGroupEntry.group.key} onClick={() => void readGroup(openGroupEntry.group)}>全部标为已读</Button>
+          ) : undefined}
+        >
+          <List label="这一组的消息">{openGroupEntry.group.items.map(row)}</List>
+        </Drawer>
+      )}
     </PageShell>
+  );
+}
+
+/** A folded group's row: the subject and the count, the newest notice under it, and the way to read them all at once. */
+function InboxGroupRow({ group, name, busy, onOpen, onRead }: { group: InboxGroup; name: string | null; busy: boolean; onOpen: () => void; onRead: () => void }) {
+  const unread = group.unread > 0;
+  return (
+    <ListRow
+      leading={<span aria-hidden="true" className={cn("mt-2 h-1.5 w-1.5 self-start rounded-full", unread && (group.safety ? "bg-danger" : "bg-accent"))} />}
+      title={<span className="block line-clamp-2">{inboxGroupTitle(group, name)}{unread && <span className="sr-only">（有未读）</span>}</span>}
+      onOpen={onOpen}
+      unread={unread}
+      muted={!unread}
+      meta={(
+        <span className="block truncate">
+          {unread && <span className={group.safety ? "text-danger-strong" : "text-text-2"}>{`${group.unread} 条未读 · `}</span>}
+          {group.latest.title}
+        </span>
+      )}
+      trailing={<time dateTime={group.latest.createdAt} className="tabular-nums">{inboxWhen(group.latest.createdAt)}</time>}
+      actions={unread && !group.safety ? <IconButton icon={Check} label="全部标为已读" size="sm" disabled={busy} onClick={onRead} /> : undefined}
+    />
   );
 }
 

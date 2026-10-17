@@ -24,7 +24,8 @@ const KEY_POINTS = 8;
 const MATERIALS_SHOWN = 6;
 
 /**
- * The slots of a paper, as a researcher names them, in the order they are shown. A paper is read the same way in any discipline
+ * The slots of a paper, as a researcher names them, in the order they are shown. (A document's limits are not a slot: the reading writes them as a list, 「局限」 below.)
+ * A paper is read the same way in any discipline
  * (its question, method, data or subjects, main results); the clinical elements are there only when the reading judged it a
  * clinical study. An understanding stored before the discipline-neutral slots has only the clinical ones and is shown with them:
  * a slot a record does not carry is not drawn. Only the ones a paper states are shown — and only for a paper: an understanding read
@@ -34,7 +35,7 @@ const MATERIALS_SHOWN = 6;
 const SLOT_LABELS: Record<string, string> = {
   question: "研究问题", method: "方法", dataOrSubjects: "数据或对象", mainResults: "主要结果",
   design: "研究设计", population: "研究人群", interventionExposure: "干预或暴露", outcomes: "研究终点",
-  effectEstimates: "效应估计", doi: "DOI", limitations: "局限",
+  effectEstimates: "效应估计", doi: "DOI",
 };
 const PAPER_SLOTS = ["question", "method", "dataOrSubjects", "mainResults", "design", "population", "interventionExposure", "outcomes", "effectEstimates", "doi"];
 
@@ -65,6 +66,8 @@ const flat = (text: string) => text.replace(/\s+/g, " ").trim();
  *
  * A table has its data's meaning (`DatasetMeaningPanel`) where the key points would be. A sentence cut out of the summary
  * is never put in for 「包含什么」 or 「局限」: where the reading has none, the page has none, and 「重新读取」 produces them.
+ * The column draws what the reading has and nothing about what it has not: a slot with no content is not a row, and is not a row
+ * that says it has none (「本文档没有研究设计」); a document the reading has nothing on leaves the column without a sentence.
  */
 export function SourceKeyPoints(props: {
   source: SourceRecord;
@@ -158,7 +161,7 @@ function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
     const gap = coverageGap(source.payload.coverage);
     return (
       <div className="space-y-6">
-        {meaning ?? <p className="text-ui text-text-3">没有可以显示的内容。</p>}
+        {meaning}
         {gap && <Gap>{gap}</Gap>}
         {versions}
       </div>

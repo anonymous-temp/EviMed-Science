@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
 import { EvidenceReferences } from "./EvidenceContent";
 import { evidenceDay } from "./evidenceDate";
@@ -84,24 +85,20 @@ export function EvidenceDiscussionList({
     <section>
       <h3 className="mb-2 text-ui font-medium text-text">讨论</h3>
       {evidence.discussion.length ? (
-        <ul className="divide-y divide-border">
+        <List divided label="讨论">
           {evidence.discussion.map((entry, index) => (
-            <li key={index} className="py-3">
-              <p className="text-caption text-text-3">
-                {entry.author}
-                {entry.createdAt && (
-                  <span className="ml-3">{evidenceDay(entry.createdAt)}</span>
-                )}
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-ui text-text-2">{entry.text}</p>
-              {entry.canDelete && entry.id && onDeleteComment && (
+            <ListRow
+              key={index}
+              title={<span className="whitespace-pre-wrap font-normal text-text-2">{entry.text}</span>}
+              meta={`${entry.author}${entry.createdAt ? ` · ${evidenceDay(entry.createdAt)}` : ""}`}
+              actions={entry.canDelete && entry.id && onDeleteComment ? (
                 <Button variant="text" size="sm" onClick={() => onDeleteComment(entry.id!)}>
                   删除我的讨论
                 </Button>
-              )}
-            </li>
+              ) : undefined}
+            />
           ))}
-        </ul>
+        </List>
       ) : (
         <p className="text-ui text-text-3">暂无讨论</p>
       )}
