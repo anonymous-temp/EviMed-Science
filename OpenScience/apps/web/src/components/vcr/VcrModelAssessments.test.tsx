@@ -94,7 +94,12 @@ describe("模型评估", () => {
     raw.model = null;
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/patients`]: raw });
     const { container, spies } = draw(<PatientsTab studyId={STUDY_ID} study={study()} />);
-    const note = await waitFor(() => { const node = container.querySelector("[data-note]"); if (!node) throw new Error("no note"); return node as HTMLElement; });
+    // The result of this fixture also stopped part-way, which is a note of its own: this one is the note that holds the way to a model.
+    const note = await waitFor(() => {
+      const node = [...container.querySelectorAll("[data-note]")].find((entry) => entry.textContent?.includes("没有选定的模型"));
+      if (!node) throw new Error("no note");
+      return node as HTMLElement;
+    });
     expect(note).toHaveTextContent("这些结果没有选定的模型");
     await userEvent.click(within(note).getByRole("button", { name: "换一个模型" }));
     expect(spies.openChat).toHaveBeenCalled();

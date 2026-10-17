@@ -33,8 +33,8 @@ export function EmptyState({
       {(description || reason) && (
         <div className="mt-2 max-w-sm text-caption text-muted">
           {description}
-          {/* The reason is why there is no button; with a recipe above it, it stands under it and is not swallowed by it. */}
-          {reason && <p className={description ? "mt-2" : undefined}>{reason}</p>}
+          {/* The reason is why there is no button; with a recipe above it, it stands under it and is not swallowed by it. Alone it is the description, as it always was. */}
+          {reason && (description ? <p className="mt-2">{reason}</p> : reason)}
         </div>
       )}
       {action && <div className="mt-6">{action}</div>}
