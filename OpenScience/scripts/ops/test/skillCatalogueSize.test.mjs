@@ -36,10 +36,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
  * Measured 2026-10-17 with the humanizer pair at v3.1.0 and f4518a8e: 57 skills, 17 494 characters of catalogue lines (the kernel's
  * message for such a session was 18 177 characters with the frame, checked on a real kernel at the pin). Before the GEO pack
  * became per-project the same figure was 43 903 for 108 skills.
+ * Raised the same day to 17 520 for the four curated skills that carry upstream text (matplotlib, statistical-power,
+ * pathway-enrichment, markdown-mermaid-writing; scientific-agent-skills v2.72.0): 17 515 characters, +21 (18 198 with the frame,
+ * by this script). The markdown-mermaid-writing description grew by 63 because it now says when not to use the skill (no
+ * longer "any scientific document, report, analysis, or visualization"); the matplotlib one is 42 shorter.
  * To raise it: run `node scripts/ops/skill-catalogue-size.mjs`, read the table, change the number here and say in the commit
  * what the extra characters buy. To lower it, lower it: a budget that is not tight is not read.
  */
-const NON_GEO_BUDGET = Object.freeze({ skills: 57, lineChars: 17_500 });
+const NON_GEO_BUDGET = Object.freeze({ skills: 57, lineChars: 17_520 });
 
 const withTree = (build) => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "catalogue-size-"));

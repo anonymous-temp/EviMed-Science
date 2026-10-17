@@ -430,8 +430,8 @@ office_smoke() {
   set -x
   export MPLBACKEND=Agg
   tmp="$(mktemp -d)"
-  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.png"
-  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.svg"
+  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.png" --no-show
+  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.svg" --no-show
   test -s "${tmp}/figure.png"
   test -s "${tmp}/figure.svg"
   python3 /usr/local/share/evimed/skills/curated-scientific/statistical-power/scripts/export_power_analysis.py --output-dir "${tmp}/power"

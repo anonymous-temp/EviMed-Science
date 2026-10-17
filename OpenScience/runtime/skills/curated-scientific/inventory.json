@@ -796,7 +796,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/markdown-mermaid-writing",
-      "digest": "sha256:11b97f2c10208ffd1b3f88a57487d2aa34eb3d00377e1039409c7da403a36bcd",
+      "digest": "sha256:7f841586849b5fa08dce5fb5579a750134c70578d554fceff58d2f1d75fbd3e0",
       "fills": "Accessible source-controlled scientific diagrams"
     },
     {
@@ -804,7 +804,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/matplotlib",
-      "digest": "sha256:0040c311493fa995d0e0405c58393b6c8a2c0109a581d08c590fa304840ef5e0",
+      "digest": "sha256:78ea8d4dec9bbbc08296d27f64bd19da2057e04c1d71a31abff70240d33c8d76",
       "fills": "Fine-grained publication figure implementation"
     },
     {
@@ -820,7 +820,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/pathway-enrichment",
-      "digest": "sha256:8086feba42946bdd95f56a3c8c72fdb1185ea26fe8e37bed3b4958e65a4ab940",
+      "digest": "sha256:2c0923c885f85a6802a8d67a6aea5e53349bb940f09a2e266d143b906afc5195",
       "fills": "Traceable pathway and gene-set enrichment analysis"
     },
     {
@@ -844,7 +844,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/statistical-power",
-      "digest": "sha256:28a393ebc231769ae85e91284bb086679382f00a5996f1942b0f485c0531cec9",
+      "digest": "sha256:d1b9881fd4328d6a4a0b002cdeba71ef73ae948f0daf4e0e5b652362257c3c71",
       "fills": "Reproducible sample-size, MDE, and simulation-based power analysis"
     },
     {
