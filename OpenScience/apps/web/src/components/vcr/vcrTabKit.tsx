@@ -3,6 +3,7 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { isVcrMissing, isVcrOff } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
+import type { ChartGridCell } from "@/components/ui/ChartGrid";
 import { StudyFrameContext } from "./studyFrameContext";
 
 /**
@@ -178,4 +179,28 @@ export function VcrFacts({ rows, className }: { rows: ReadonlyArray<{ label: str
       ))}
     </dl>
   );
+}
+
+/**
+ * Cells laid out two to a row, a last one alone taking the row: a `ChartGrid` row must be full, and a page that has three charts
+ * today and four tomorrow should not need to be told where the hole would be. A cell that asks for the whole row (`span: 2`: a grid
+ * with five columns does not fit in half a page) gets its own row and closes the one before it.
+ */
+export function pairRows(cells: readonly ChartGridCell[]): ChartGridCell[][] {
+  const rows: ChartGridCell[][] = [];
+  let waiting: ChartGridCell | null = null;
+  const lone = (cell: ChartGridCell): ChartGridCell[] => [{ ...cell, span: 2 as const }];
+  for (const cell of cells) {
+    if (cell.span === 2) {
+      if (waiting) { rows.push(lone(waiting)); waiting = null; }
+      rows.push(lone(cell));
+    } else if (waiting) {
+      rows.push([{ ...waiting, span: 1 as const }, { ...cell, span: 1 as const }]);
+      waiting = null;
+    } else {
+      waiting = cell;
+    }
+  }
+  if (waiting) rows.push(lone(waiting));
+  return rows;
 }

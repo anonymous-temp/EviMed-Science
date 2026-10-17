@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClinicalTimeline, MatchingPanelControls } from './ClinicalMatchingDetails';
+import { ClinicalTimeline, useMatchingControls } from './ClinicalMatchingDetails';
+import { Toolbar } from '@/components/ui/Toolbar';
+import { VcrToolbarActions } from './VcrToolbarActions';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
@@ -8,16 +11,37 @@ const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn()
 vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
+/**
+ * The matching tab's controls as the tab draws them (R19): the hook's filters and actions in the band's one row, its notes and its
+ * folded comparison at the top of the body. Nothing here is a row of the controls' own.
+ */
+type ControlsProps = Parameters<typeof useMatchingControls>[0];
+function Controls(props: Partial<ControlsProps> & { data: VcrMatchingTab | null }) {
+  const controls = useMatchingControls({ studyId: 's1', canRun: true, onProtocol: () => {}, onCandidate: () => {}, onReload: () => {}, ...props });
+  if (!controls) return null;
+  return <>
+    <Toolbar filters={controls.filters} actions={<VcrToolbarActions actions={controls.actions} />} />
+    {controls.notes}
+    {controls.compare}
+  </>;
+}
+/** A chip that opens a menu, opened, and one of its items pressed. */
+const choose = async (chip: string | RegExp, item: string | RegExp) => {
+  await userEvent.click(screen.getByRole('button', { name: chip }));
+  await userEvent.click(await screen.findByRole('menuitemradio', { name: item }));
+};
+
+
 describe('evaluating from the controls',()=>{
   const page=(extra:Record<string,unknown>={})=>({protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],protocolVersionId:'p2',direction:'trial_to_patient',candidateRoster:['P-001'],...extra}) as unknown as VcrMatchingTab;
-  const controls=(data=page(),extra:Record<string,unknown>={})=>render(<MatchingPanelControls studyId="s1" data={data} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}} {...extra}/>);
+  const controls=(data=page(),extra:Partial<ControlsProps>={})=>render(<Controls data={data} {...extra}/>);
   // Review V-M5: 开始评估所选方案 and 刷新结果 were inside 比较多个方案, so running one protocol meant finding a section named "compare several".
-  it('starts the protocol in view, and refreshes, without opening 比较多个方案',async()=>{
+  it('starts the protocol in view without opening 比较多个方案 — and there is no 刷新结果: the page reads itself when the job moves',async()=>{
     api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
     controls();
     const start=screen.getByRole('button',{name:'开始评估'});
     expect(start.closest('details')).toBeNull();
-    expect(screen.getByRole('button',{name:'刷新结果'}).closest('details')).toBeNull();
+    expect(screen.queryByRole('button',{name:'刷新结果'})).toBeNull();
     fireEvent.click(start);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],direction:'trial_to_patient'}));
     expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估。');
@@ -37,15 +61,23 @@ describe('evaluating from the controls',()=>{
     expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估，1 项暂不可用。');
     expect(screen.queryByRole('alert')).toBeNull();
   });
-  it('runs the protocol the reader chose, for the patient the reader chose, in the direction the reader chose',async()=>{
+  it('runs the protocol the reader chose, for the patient the reader chose, in the direction the reader chose — and offers no run until there is a patient to run it for',async()=>{
     api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
     controls(page({direction:'trial_to_patient'}),{direction:'patient_to_trial',protocolId:'p1'});
-    const start=screen.getByRole('button',{name:'开始评估'});
-    expect(start).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
+    // 给患者找试验 starts from a person: with none chosen there is no button that would be grey — the patient's chip is the way to one.
+    expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
+    await choose('患者','P-001');
+    const start=await screen.findByRole('button',{name:'开始评估'});
     expect(start).toBeEnabled();
     fireEvent.click(start);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
+  });
+  it('shows the protocol in view in the band, and tells the page which one the reader chose',async()=>{
+    const onProtocol=vi.fn();
+    controls(page(),{onProtocol});
+    expect(screen.getByRole('button',{name:'查看方案：方案二'})).toBeVisible();
+    await choose(/^查看方案/,'方案一');
+    expect(onProtocol).toHaveBeenCalledWith('p1');
   });
   // Per-source reprocessing (E-13): what an evaluation rested on has changed, so the page says so and offers the evaluation that exists.
   it('says how many evaluations rest on a basis that has changed, and evaluates those people again with the existing trigger',async()=>{
@@ -62,13 +94,17 @@ describe('evaluating from the controls',()=>{
     expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
     document.body.innerHTML='';
     controls(page({basisUpdated:{count:1,subjects:['P-001']}}),{canRun:false});
-    expect(screen.getByText('1 人的评估依据已更新')).toBeVisible();
+    expect(document.body).toHaveTextContent('1 人的评估依据已更新');
     expect(screen.queryByRole('button',{name:'重新评估'})).toBeNull();
   });
-  it('offers no run to a reader who may not run it, and keeps the refresh',()=>{
+  it('offers no run to a reader who may not run it, and no refresh either',()=>{
     controls(page(),{canRun:false});
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
-    expect(screen.getByRole('button',{name:'刷新结果'})).toBeVisible();
+    expect(screen.queryByRole('button',{name:'刷新结果'})).toBeNull();
+  });
+  it('says how much of the selection has been evaluated as one sentence whose figures are numbers',()=>{
+    controls(page({candidateCoverage:{requested:12,evaluated:8,pending:3,unavailable:1}}));
+    expect(document.body).toHaveTextContent('本次选择 12 人 · 已评估 8 人 · 待评估 3 人 · 暂不可用 1 人');
   });
 });
 
@@ -379,7 +415,7 @@ describe('the clinical timeline',()=>{
 
 describe('choosing the protocols to compare',()=>{
   const protocols=(count:number)=>Array.from({length:count},(_,index)=>({id:`p${index+1}`,version:index+1,title:`方案 ${index+1}`}));
-  const controls=(count:number)=>render(<MatchingPanelControls studyId="s1" data={{protocols:protocols(count),protocolVersionId:'p1',direction:'trial_to_patient'} as unknown as VcrMatchingTab} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+  const controls=(count:number)=>render(<Controls data={{protocols:protocols(count),protocolVersionId:'p1',direction:'trial_to_patient'} as unknown as VcrMatchingTab}/>);
   const group=()=>screen.getByRole('group',{name:'选择方案（最多 10 项）'});
   const boxes=()=>within(group()).getAllByRole('checkbox') as HTMLInputElement[];
   // Review V-M1: a native <select multiple> asks for Ctrl/Cmd-click with no hint, is unusable by touch, and showed an eleventh
@@ -418,13 +454,13 @@ describe('clinical matching controls',()=>{
   it('keeps a patient-to-trial request unsubmitted until both patient and protocols are selected',async()=>{
     api.enqueue.mockResolvedValue({jobs:[{id:'job'}],unavailable:[]});
     const data={protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab;
-    render(<MatchingPanelControls studyId="s1" data={data} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+    render(<Controls data={data}/>);
     fireEvent.click(screen.getByText('比较多个方案'));
     const button=screen.getByRole('button',{name:'开始评估所选方案'});
     expect(button).toBeDisabled();
     for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
     expect(button).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
+    await choose('患者','P-001');
     fireEvent.click(button);
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p2'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
     expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估');
@@ -445,53 +481,54 @@ describe('clinical matching controls',()=>{
     render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P-0192"/>);
     expect(screen.getByText('P-0192 的临床记录与更正')).toBeInTheDocument();
   });
-  it('says 患者, once and the same, where the controls ask for the person',()=>{
-    render(<MatchingPanelControls studyId="s1" data={{protocols:[{id:'p1',version:1,title:'方案一'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab} canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
-    expect(screen.getByLabelText('患者')).toBeInTheDocument();
-    expect(screen.getByRole('option',{name:'请选择患者'})).toBeInTheDocument();
+  it('says 患者, once and the same, where the controls ask for the person',async()=>{
+    render(<Controls data={{protocols:[{id:'p1',version:1,title:'方案一'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab}/>);
+    await userEvent.click(screen.getByRole('button',{name:'患者'}));
+    expect(await screen.findByRole('menuitemradio',{name:'请选择患者'})).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/受试者/);
   });
   // 给患者找试验 starts from a person, and a person's trials do not wait on a protocol: a study with patients and no protocol version
   // still offers the patient to start from — and only that, since the protocol's controls have nothing to work on.
   it('offers the patient to start from when the study has no protocol version, in the direction that starts from a patient',()=>{
     const data={protocols:[],candidateRoster:['P-001','P-002'],direction:'patient_to_trial'} as unknown as VcrMatchingTab;
-    render(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
-    expect(screen.getByLabelText('患者')).toBeInTheDocument();
-    expect(screen.getByRole('button',{name:'刷新结果'})).toBeVisible();
-    expect(screen.queryByLabelText('查看方案')).toBeNull();
+    render(<Controls data={data} direction="patient_to_trial"/>);
+    expect(screen.getByRole('button',{name:'患者'})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'刷新结果'})).toBeNull();
+    expect(screen.queryByRole('button',{name:/^查看方案/})).toBeNull();
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
     expect(screen.queryByText('比较多个方案')).toBeNull();
   });
   it('draws nothing for a study with no protocol version in the other direction, as before',()=>{
     const data={protocols:[],candidateRoster:['P-001'],direction:'trial_to_patient'} as unknown as VcrMatchingTab;
-    const {container}=render(<MatchingPanelControls studyId="s1" data={data} direction="trial_to_patient" canRun onProtocol={()=>{}} onCandidate={()=>{}} onReload={()=>{}}/>);
+    const {container}=render(<Controls data={data} direction="trial_to_patient"/>);
     expect(container).toBeEmptyDOMElement();
   });
-  it('shows the patient the page keeps, tells the page what was chosen, and says nobody when 请选择患者 is chosen again',()=>{
+  it('shows the patient the page keeps, tells the page what was chosen, and says nobody when 请选择患者 is chosen again',async()=>{
     const onCandidate=vi.fn();
     const data={protocols:[{id:'p1',version:1,title:'方案一'}],candidateRoster:['P-001','P-002'],direction:'patient_to_trial'} as unknown as VcrMatchingTab;
-    const view=render(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" subjectKey="P-001" canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
-    const select=screen.getByLabelText('患者') as HTMLSelectElement;
-    expect(select.value).toBe('P-001');
+    const view=render(<Controls data={data} direction="patient_to_trial" subjectKey="P-001" onCandidate={onCandidate}/>);
+    expect(screen.getByRole('button',{name:'患者：P-001'})).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'开始评估'})).toBeEnabled();
-    fireEvent.change(select,{target:{value:'P-002'}});
+    await choose('患者：P-001','P-002');
     expect(onCandidate).toHaveBeenLastCalledWith('P-002');
-    // The page keeps the patient: the select follows what the page was given, not what was clicked.
-    expect(select.value).toBe('P-001');
-    fireEvent.change(select,{target:{value:''}});
+    // The page keeps the patient: the chip follows what the page was given, not what was clicked.
+    expect(screen.getByRole('button',{name:'患者：P-001'})).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button',{name:'患者：P-001'}));
+    await userEvent.click(await screen.findByRole('menuitemradio',{name:'请选择患者'}));
     expect(onCandidate).toHaveBeenLastCalledWith('');
-    view.rerender(<MatchingPanelControls studyId="s1" data={data} direction="patient_to_trial" subjectKey={null} canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
-    expect((screen.getByLabelText('患者') as HTMLSelectElement).value).toBe('');
-    expect(screen.getByRole('button',{name:'开始评估'})).toBeDisabled();
+    view.rerender(<Controls data={data} direction="patient_to_trial" subjectKey={null} onCandidate={onCandidate}/>);
+    expect(screen.getByRole('button',{name:'患者'})).toBeInTheDocument();
+    // Nobody to run it for: no button, rather than one that is grey.
+    expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
   });
-  it('keeps the choice itself, and says nothing for the placeholder, where the page does not keep the patient',()=>{
+  it('keeps the choice itself, and says nothing for the placeholder, where the page does not keep the patient',async()=>{
     const onCandidate=vi.fn();
     const data={protocols:[{id:'p1',version:1,title:'方案一'}],candidateRoster:['P-001'],direction:'trial_to_patient'} as unknown as VcrMatchingTab;
-    render(<MatchingPanelControls studyId="s1" data={data} canRun onProtocol={()=>{}} onCandidate={onCandidate} onReload={()=>{}}/>);
-    fireEvent.change(screen.getByLabelText('患者'),{target:{value:'P-001'}});
+    render(<Controls data={data} onCandidate={onCandidate}/>);
+    await choose('患者','P-001');
     expect(onCandidate).toHaveBeenCalledWith('P-001');
     onCandidate.mockClear();
-    fireEvent.change(screen.getByLabelText('患者'),{target:{value:''}});
+    await choose('患者：P-001','全部已登记患者');
     expect(onCandidate).not.toHaveBeenCalled();
   });
   it('preserves Unicode offsets and requires renewed permission when a source authorization expired',()=>{

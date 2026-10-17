@@ -3,47 +3,44 @@ import { addVcrRegulatoryContact, type VcrRegulatoryContact } from "@/lib/vcrCli
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { DataTable } from "@/components/ui/DataTable";
 import { Input, Textarea } from "@/components/ui/Input";
+import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 
 /**
  * 监管沟通: the study's log of contacts with a regulator — when, with which agency, what kind, what was discussed, what the agency
  * concluded in its own words and what it left. A record: it is added to and never edited, so a correction is another entry; it is
- * part of the study package. Drawn only while there is an entry (the first one is added from the trial tab's own action), so there
- * is no card that is nothing but its title and a button.
+ * part of the study package. It is one of the three kinds of record the trial tab switches between, drawn as a table; the first entry,
+ * and the next, are added from the band (R19), so the log has no button of its own.
  */
-export function VcrRegulatoryLog({ contacts, canWrite, onAdd }: { contacts: readonly VcrRegulatoryContact[]; canWrite: boolean; onAdd: () => void }) {
+export function VcrRegulatoryLog({ contacts }: { contacts: readonly VcrRegulatoryContact[] }) {
   return (
-    <Card
-      padding="p-3"
-      header={(
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-ui font-semibold text-text">监管沟通</h2>
-          {canWrite && <Button size="sm" variant="text" onClick={onAdd}>添加</Button>}
-        </div>
-      )}
-    >
-      <ul data-vcr-regulatory="" className="divide-y divide-faint">
-        {contacts.map((contact) => (
-          <li key={contact.id} data-vcr-regulatory-contact={contact.id} className="px-1 py-3">
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-text">
-              <span className="tabular-nums text-text-2">{contact.date ?? "日期未记"}</span>
-              <span>{contact.agency}</span>
-              {contact.type && <Tag>{contact.type}</Tag>}
-            </p>
-            {contact.summary && <p className="mt-1 whitespace-pre-wrap break-words text-ui text-text-2">{contact.summary}</p>}
-            {contact.outcome && (
-              <p className="mt-1 whitespace-pre-wrap break-words text-ui text-text">
-                <span className="text-text-3">结论：</span>
-                {contact.outcome}
-              </p>
-            )}
-            {contact.attachments.length > 0 && <p className="mt-1 break-words text-caption text-text-3">{`附件：${contact.attachments.join("；")}`}</p>}
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <Section title="监管沟通" count={contacts.length}>
+      <DataTable
+        label="监管沟通"
+        minWidth="min-w-[44rem]"
+        columns={[
+          { key: "date", header: "日期", rowHeader: true, width: "w-28", cell: (contact) => <span className="tabular-nums text-text-2">{contact.date ?? "日期未记"}</span> },
+          {
+            key: "agency",
+            header: "机构",
+            cell: (contact) => (
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-text">{contact.agency}</span>
+                {contact.type && <Tag>{contact.type}</Tag>}
+              </span>
+            ),
+          },
+          { key: "summary", header: "讨论", isEmpty: (contact) => !contact.summary, cell: (contact) => <span className="whitespace-pre-wrap break-words text-text-2">{contact.summary}</span> },
+          { key: "outcome", header: "机构的结论", isEmpty: (contact) => !contact.outcome, cell: (contact) => <span className="whitespace-pre-wrap break-words text-text">{contact.outcome}</span> },
+          { key: "attachments", header: "附件", isEmpty: (contact) => contact.attachments.length === 0, cell: (contact) => <span className="break-words text-caption text-text-3">{contact.attachments.join("；")}</span> },
+        ]}
+        rows={contacts}
+        rowKey={(contact) => contact.id}
+        rowAttrs={(contact) => ({ "data-vcr-regulatory-contact": contact.id })}
+      />
+    </Section>
   );
 }
 
