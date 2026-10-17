@@ -79,7 +79,7 @@ standard / more contrast.
 | `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
 | `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
 | `accent-pressed` | `#0a4da0` | `#8fb5ea` | the pressed state of an accent surface |
-| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 9.44:1 |
+| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 9.44:1 — **not used for text in the shell since 2026-10-17**: text on a pale blue ground is the accent (5.67:1), one blue for every link, mark and state, because a page is held to seven text colours (the hot list's three rank tones are the one place it is still written) |
 | `ok` `warn` `error` | 600 step | 300 step | **status only**, always beside a shape and a word |
 | `member-from` / `member-to` | `#f6d58e` → `#fbe7be` | — | the membership card's one gradient |
 
@@ -316,8 +316,9 @@ column and is a named, focusable region while it overflows (`ScrollRegion`).
 
 `Button` sizes map onto that: `sm` 28 with 13 px text, `md` 36 (the default), `lg` 44.
 `IconButton` is 28 in a row and 36 in a header. `Input`, `Textarea` and `SearchInput` are 36 (28
-with `size="sm"` in a table, toolbar or filter row) and 8 px round. Filter chips are 28 high with
-13 px text.
+with `size="sm"` in a table, toolbar or filter row) and 8 px round — except that the 28 px search in a
+toolbar row is a pill of 13 px text on the grey ground, the look of a selected chip, so the row's filled
+controls are one kind. Filter chips are 28 high with 13 px text.
 
 ### Layers, opacity, timing (2.1)
 
@@ -339,7 +340,7 @@ bordered pill or bordered `<button>` outside it:
 |---|---|
 | `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」) |
 | `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px; the open tab is always scrolled whole into its row |
-| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey), the rest in “更多 ▾” |
+| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
@@ -349,10 +350,10 @@ bordered pill or bordered `<button>` outside it:
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
 | `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle — drawn by the toolbar, folded into one 「筛选」 chip below 640 px), `search`, `summary`, `actions`. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
-| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined, a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
+| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 500, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
 | `StepState` | the body of a step's tab while it has nothing to show: `empty` (a recipe: what it uses, what it gives, one verb-and-object button), `queued`, `running`, `failed`, `credits`. Props are facts; the sentences are composed once |
 | `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
-| `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts. A bare string does not compile |
+| `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts (the figure is the link colour at the sentence's weight). A bare string does not compile; `tone="warn"` is a pale amber band with the text colour — the ground says it, not amber text |
 | `Headline` | the data page's one sentence, each number a link to what it counts |
 | `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot |
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
@@ -481,6 +482,14 @@ warning; `layoutLint.test.ts` holds each number. Two more are counts that only f
 | T4 | a `Headline` whose numbers open what they count; a `ChartGrid` whose rows are full; legend and replay controls in the card's header | a placeholder tile; a hole in the grid; a control under the canvas it controls |
 | T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |
 | T6 | settings sections only in the left rail | a link to another page (插件, 技能, 运维) drawn as a section |
+
+**One look for one job (2026-10-17, r19-guards3).** The walk counts a page's kinds of control by their look — height, size and
+weight of type, a frame, a ground, a corner — and holds a module page to ten, a reading page and a frontier list to nine or
+ten. The pages that carry real data spent 11 to 16 until the same job stopped being drawn two ways: the step rail is the tab
+row's look; a row's title and every link and text button have the 8 px corner; a figure that opens what it counts, in a note or a
+headline, has the weight of its sentence; a selected chip and the toolbar's search pill are one filled pill; a sort button has
+one height; a source mark is 12 / 400; the frontier's header action is `secondary` like the other modules'. A page that
+needs a kind of its own says what it is in its `budgetNote`. `lookKinds.test.tsx` holds the classes.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`

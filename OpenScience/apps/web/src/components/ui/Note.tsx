@@ -78,7 +78,9 @@ export function Note({ action, result, children, tone = "default", className }: 
       className={cn(
         "flex flex-wrap items-baseline gap-x-3 gap-y-1 text-ui",
         result ? "text-text" : "text-text-2",
-        tone === "warn" && "items-center rounded bg-warn-soft px-3 py-2 text-warn-strong",
+        // A held-up note is told by its amber ground, not by amber text: the sentence stays the text colour, so a note spends no text colour
+        // of its own (a page is held to seven, and the status tags beside it already wear the amber).
+        tone === "warn" && "items-center rounded bg-warn-soft px-3 py-2 text-text",
         className,
       )}
     >
