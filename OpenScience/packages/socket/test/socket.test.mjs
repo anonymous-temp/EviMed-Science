@@ -136,13 +136,15 @@ test("the kernel's own sub-agent is under the run's child budgets, like a delega
   assert.match(/** @type {any} */ (busy).reason, /已有 2 个子代理在运行/);
   // No limit configured is no limit, as for a delegation.
   assert.equal(toolPolicy(call, state({ limits: { maxSteps: 0, maxTokens: 0, maxChildren: 0, maxConcurrentChildren: 0 }, budget: { steps: 0, tokens: 0, children: 99 }, runningChildren: 99 })).allow, true);
-  // A foreground, one-level child: its call is its life, which is what makes counting calls counting children.
-  const row = preset.slice(preset.indexOf("- id: tool-subagent\n"));
-  assert.match(row.slice(0, row.indexOf("\n\n")), /enableRunInBackground: false/);
-  assert.match(row.slice(0, row.indexOf("\n\n")), /- present\b/, "the parent hands files to the user, not a child");
+  // From 0.2.1 the call answers with the child's id and the child works on: counted once when the call is admitted,
+  // working from the call's answer until the kernel's `subagent/end` (a call that failed started nothing).
+  const { NATIVE_CHILD_TOOL_DENY } = await import("../src/runPolicy.mjs");
+  assert.ok(NATIVE_CHILD_TOOL_DENY.includes("present"), "the parent hands files to the user, not a child");
   const policy = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
   assert.match(policy, /if \(decision\.allow && call\.name === NATIVE_SUBAGENT_TOOL\) \{\n\s+entry\.budget\.children \+= 1/, "an admitted call is counted against the run's total");
-  assert.match(policy, /nativeChildCalls\?\.delete\(String\(call\.callId/, "and released when it settles");
+  assert.match(policy, /nativeChildCalls\?\.delete\(String\(call\.callId/, "the call no longer counts once it answered");
+  assert.match(policy, /if \(childId\) trackNativeChild\(entry, childId\)/, "the child it started does, until it settles");
+  assert.match(policy, /runningChildren: runningDelegations\(entry\)\.length \+ entry\.nativeChildCalls\.size \+ \(entry\.nativeChildren\?\.size \?\? 0\)/);
 });
 
 test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
@@ -161,15 +163,16 @@ test("a child cannot interrupt its parent's synthesis by choosing how its report
   for (const retired of ["dsh-tool-subagent-report", "dsh-tool-subagent-control"]) {
     assert.ok(!rows.some((row) => row.includes(retired)), `${retired} is mounted; a child could address its parent directly again`);
   }
-  // The kernel's own sub-agent tool is mounted for general work (2026-10-12),
-  // and in the one mode that needs no messaging row: a one-shot child answers
-  // with its final text, or as a job its parent collects. A continuable child
-  // is the mode that is given follow-ups through `send_message`.
+  // The kernel's own sub-agent tool is mounted for general work (2026-10-12). From 0.2.1 every child it starts answers
+  // through a settlement notice the root reads in the same turn (the run policy keeps the turn open for it); with no
+  // messaging row the child still has no other channel. The row may no longer carry `toolFilter` (0.2.1 throws on it),
+  // so the orchestration tools are masked in the child's own scope at its creation.
   const subagent = preset.slice(preset.indexOf("- id: tool-subagent\n"));
-  assert.match(subagent.slice(0, subagent.indexOf("\n\n")), /backgroundMode: one-shot/);
+  assert.doesNotMatch(subagent.slice(0, subagent.indexOf("\n\n")), /toolFilter|persona|backgroundMode|enableRunInBackground/, "fields 0.2.1 refuses or no longer reads");
   assert.match(subagent.slice(0, subagent.indexOf("\n\n")), /maxDepth: 1/, "a child does not start children of its own");
+  const { NATIVE_CHILD_TOOL_DENY } = await import("../src/runPolicy.mjs");
   for (const orchestration of ["evimed_plan", "evimed_delegate", "evimed_await", "evimed_submit_deliverable"]) {
-    assert.match(subagent.slice(0, subagent.indexOf("\n\n")), new RegExp(`- ${orchestration}\\b`), `a general child is shown ${orchestration}`);
+    assert.ok(NATIVE_CHILD_TOOL_DENY.includes(orchestration), `a general child is shown ${orchestration}`);
   }
   const { DELEGATION_BASE_TOOLS } = await import("@evimed/domain");
   assert.ok(DELEGATION_BASE_TOOLS.length > 0, "no child tools were read, so this test walked nothing");

@@ -37,6 +37,7 @@ import {
   renderDeliverySummary,
   toolPolicy,
 } from "../src/runPolicy.mjs";
+import { activationsOver } from "./helpers/subagentActivations.mjs";
 
 /** The pieces of `@deepseek-ai/dsh-tools` the port calls. */
 __setHarnessModule("@deepseek-ai/dsh-tools", {
@@ -833,7 +834,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   // with that row switched off publishes nothing. `evimedCapsuleMemory` is the
   // recall and note tools alone: it is what lets a child be handed the recall tool.
   if (capsuleMounted) { ctx.provide("evimedCapsuleMethods", []); ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] }); }
-  /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
+  /** @type {any} */ (ctx).subagents = activationsOver(subagentStart ?? (() => { throw new Error("unexpected subagent start"); }));
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
@@ -2855,12 +2856,10 @@ test("a screening ledger path aimed at a protected file is refused, not written"
   // One child, one verdict, so the tool reaches the ledger write.
   // `subagents` is provided as a property here, the way the kernel exposes it;
   // the literal above does not declare it.
-  /** @type {Record<string, any>} */ (ctx).subagents = {
-    start: async () => ({
-      info: { stopReason: "completed" },
-      result: Promise.resolve({ structured: { verdicts: [{ id: "r1", decision: "include" }] } }),
-    }),
-  };
+  /** @type {Record<string, any>} */ (ctx).subagents = activationsOver(async () => ({
+    info: { stopReason: "completed" },
+    result: Promise.resolve({ structured: { verdicts: [{ id: "r1", decision: "include" }] } }),
+  }));
   await applyScreening(ctx, { batchSize: 25, maxConcurrentChildren: 4 });
 
   const call = (/** @type {any} */ ledgerPath) => ({
@@ -3111,13 +3110,11 @@ async function screeningFixture(start, maxConcurrentChildren) {
   });
   ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line) });
   let starts = 0;
-  /** @type {Record<string, any>} */ (ctx).subagents = {
-    start: (/** @type {string} */ _seam, /** @type {any} */ options) => {
-      const index = starts++;
-      refuseAbortedStart(options);
-      return start(index, options);
-    },
-  };
+  /** @type {Record<string, any>} */ (ctx).subagents = activationsOver((/** @type {string} */ _seam, /** @type {any} */ options) => {
+    const index = starts++;
+    refuseAbortedStart(options);
+    return start(index, options);
+  });
   await applyScreening(ctx, { batchSize: 1, maxConcurrentChildren });
   /** @param {number} count @param {AbortSignal} [signal] */
   const screen = (count, signal = AbortSignal.timeout(2000)) => ctx.tools.execute({

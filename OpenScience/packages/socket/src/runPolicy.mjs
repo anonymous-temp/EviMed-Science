@@ -51,6 +51,7 @@ import {
   planFileFor,
   briefFileForSession,
   runStateFileFor,
+  SOCKET_TOOL_NAMES,
 } from '@evimed/domain'
 import { SKILL_BODY_MAX_CHARS } from './skillBodies.mjs'
 import { learnedMethodCardLines, splitMountedMethods } from './learnedMethods.mjs'
@@ -190,10 +191,29 @@ export function toolPolicy(call, state) {
 }
 
 /**
- * The kernel's own sub-agent tool, as the preset names it (`tool-subagent`, `toolName: subagent`): one-shot children
- * for general work. A capability deliverable is delegated with `evimed_delegate`.
+ * The kernel's own sub-agent tool, as the preset names it (`tool-subagent`, `toolName: subagent`): children for general
+ * work, each a managed activation since 0.2.1 (the call returns the child's id; the result arrives as a settlement
+ * notice). A capability deliverable is delegated with `evimed_delegate`.
  */
 export const NATIVE_SUBAGENT_TOOL = 'subagent'
+
+/**
+ * What a child that tool started may not use: the tools that plan, delegate, collect, submit or check a deliverable,
+ * screen a batch, or hand a file to the user. Those belong to the orchestrator; a general-work child hands its result
+ * back. Masked in the child's own scope at its creation (`installChildComposition`) — the list the preset row carried
+ * as `toolFilter.deny` until 0.2.1 refused the field.
+ * @type {readonly string[]}
+ */
+export const NATIVE_CHILD_TOOL_DENY = Object.freeze([
+  SOCKET_TOOL_NAMES.plan,
+  SOCKET_TOOL_NAMES.delegate,
+  SOCKET_TOOL_NAMES.await,
+  SOCKET_TOOL_NAMES.submitDeliverable,
+  SOCKET_TOOL_NAMES.packageCheck,
+  SOCKET_TOOL_NAMES.reviseDeliverable,
+  SOCKET_TOOL_NAMES.screenBatch,
+  'present',
+])
 
 /** What a caught value says about itself.
  *

@@ -58,6 +58,7 @@ import test from "node:test";
 import { SEAMS, __setHarnessModule } from "@evimed/harness-port";
 import { DELEGATION_BASE_TOOLS, RUN_CONTEXT_PROTOCOL, deliverySummaryFileFor, planFileFor, receiptFileFor, runStateFileFor, runStateFileForSession, workspaceLayout } from "@evimed/domain";
 import { RUN_DOMAIN_NAME } from "../src/runMirror.mjs";
+import { activationsOver } from "./helpers/subagentActivations.mjs";
 
 __setHarnessModule("@deepseek-ai/dsh-tools", {
   defineTool: (/** @type {any} */ options) => ({ ...options }),
@@ -388,13 +389,11 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   ctx.provide("evimedCapsuleMemory", { tools: ["evimed_capsule_recall", "evimed_capsule_note"] });
   /** @type {{ provider: any, options: any }[]} */
   const starts = [];
-  /** @type {any} */ (ctx).subagents = {
-    start: (/** @type {any} */ provider, /** @type {any} */ options) => {
-      starts.push({ provider, options });
-      if (!subagentStart) throw new Error("unexpected subagent start");
-      return subagentStart(provider, options);
-    },
-  };
+  /** @type {any} */ (ctx).subagents = activationsOver((/** @type {any} */ provider, /** @type {any} */ options) => {
+    starts.push({ provider, options });
+    if (!subagentStart) throw new Error("unexpected subagent start");
+    return subagentStart(provider, options);
+  });
   await applyRunPolicy(ctx, {
     maxSteps: 100,
     maxTokens: 100000,
@@ -2268,4 +2267,99 @@ test("a plan of ordinary files only finishes without a clarification, and one pr
   assert.deepEqual(completionCheck({ plan: { clarifications: [] }, items: files, producedTexts: [], finalReplyText: "", partial: true }).issues, []);
   const mixed = [...files, { id: "b", contractKind: "bibliometric-analysis-report", capability: "bibliometric-analysis", status: "accepted" }];
   assert.ok(completionCheck({ plan: { clarifications: [] }, items: mixed, producedTexts: [], finalReplyText: "", partial: true }).issues.some((issue) => issue.code === "plan_missing_clarifications"));
+});
+
+// ---- the kernel's own `subagent` from 0.2.1: a child is working until it settles --------------------------------------
+//
+// 0.2.1 answers a `subagent` call with the child's id at once and lets the parent's turn close while the child works;
+// the settlement notice then starts a turn of its own, which no run owns. The run policy holds the child from the call's
+// answer to the kernel's `subagent/end`: counted once, working for the concurrency budget, the root's turn kept open
+// until it settled (so the notice is read in the same turn), and stopped with a cancelled turn.
+const nativeSubagentTool = (/** @type {string[]} */ ids) => ({
+  name: "subagent",
+  description: "start a child",
+  parameters: { type: "object", properties: {} },
+  output: { render: (/** @type {any} */ _args, /** @type {any} */ value) => [{ type: "text", text: `started subagent ${value.subagentId}` }] },
+  execute: async () => ({ kind: "activation", subagentId: ids.shift() }),
+});
+
+test("a sub-agent the kernel started is counted once, holds the root's turn open until it settles, and is stopped with a cancelled turn", async () => {
+  const f = await combinedFixture({ maxConcurrentChildren: 1 });
+  /** @type {any[]} */ const interrupted = [];
+  /** @type {any} */ (f.ctx).subagents.interrupt = (/** @type {string} */ childId, /** @type {any} */ authority) => interrupted.push([childId, authority]);
+  f.ctx.tools.register(nativeSubagentTool(["native-1", "native-2", "native-3"]));
+  await f.step(1);
+  const first = await f.execute("subagent", { description: "d", prompt: "p" });
+  assert.equal(first.value.subagentId, "native-1");
+  // One at a time here: the call answered, the child it started is the one working.
+  const refused = await f.execute("subagent", { description: "d", prompt: "p" });
+  assert.match(refused.content[0].text, /已有 1 个子代理在运行/);
+  // The turn would close now; it waits for the child instead.
+  const stopping = (f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []).map((handler) => handler({ agent: f.agent, turn: 1, signal: AbortSignal.timeout(2000) }));
+  let closed = false;
+  void Promise.all(stopping).then(() => { closed = true; });
+  for (let tick = 0; tick < 10; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(closed, false, "the turn is held while its child works");
+  // A delegation's child settling is not this one.
+  f.ctx.emit(SEAMS.events.subagentSettled, { id: "someone-else", stopReason: "completed" });
+  for (let tick = 0; tick < 5; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(closed, false);
+  f.ctx.emit(SEAMS.events.subagentSettled, { id: "native-1", stopReason: "completed" });
+  await Promise.all(stopping);
+  assert.equal(closed, true, "settled: the notice is in the next step, and the turn goes on to read it");
+  // Admitted again once it settled; the run's total counted both calls.
+  const second = await f.execute("subagent", { description: "d", prompt: "p" });
+  assert.equal(second.value.subagentId, "native-2");
+  // The researcher stops the turn: the child is stopped with it, through the root.
+  await f.endTurn("aborted");
+  assert.deepEqual(interrupted, [["native-2", f.agent]]);
+  // Its settlement notice, alone, does not start a turn the researcher did not ask for.
+  const preStep = async (/** @type {any[]} */ messages) => {
+    /** @type {any} */ let decision = null;
+    for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+      decision = await handler({ agent: f.agent, turn: 2, step: 1, messages, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+    }
+    return decision;
+  };
+  assert.equal((await preStep([{ role: "user", source: { kind: "subagent-settled", senderSessionId: "native-2" } }]))?.kind, "reject");
+  // The researcher's next message runs as usual, notice or not beside it.
+  assert.equal((await preStep([{ role: "user", source: { kind: "subagent-settled" } }, { role: "user", source: { kind: "user", rpcId: "r2" }, content: [] }]))?.kind, "enter");
+});
+
+test("a child is composed at its creation: a delegation's own tools and persona, the kernel's sub-agent without the orchestration tools", async () => {
+  const f = await combinedFixture();
+  const { startSubagent, reservedChildComposition } = await import("@evimed/harness-port");
+  const { NATIVE_CHILD_TOOL_DENY } = await import("../src/runPolicy.mjs");
+  /** @type {any[]} */ const restrictions = [];
+  /** @type {any[]} */ const sections = [];
+  const visible = new Set(["read", "write", "evimed_plan", "evimed_delegate", "evimed_await", "evimed_submit_deliverable", "present"]);
+  const child = (/** @type {string} */ id) => ({
+    id, session: { id, header: { cwd: "/workspace", origin: "subagent", parentSession: "root-session" } },
+    ctx: {
+      tools: { restrict: (/** @type {any} */ filter) => { restrictions.push([id, filter]); return () => {}; }, get: (/** @type {string} */ name) => (visible.has(name) ? {} : undefined) },
+      systemPrompt: { section: (/** @type {any} */ section) => { sections.push([id, section]); return () => {}; }, getSectionOrder: () => 7 },
+    },
+  });
+  const created = (/** @type {any} */ agent) => (f.ctx.listeners.get(SEAMS.events.sessionStart) ?? []).forEach((handler) => handler({ agent, source: "startup" }));
+  // A child the kernel's own tool started: the orchestration tools it can see are masked, the rest of the list is not named.
+  created(child("native-1"));
+  assert.deepEqual(restrictions, [["native-1", { deny: NATIVE_CHILD_TOOL_DENY.filter((name) => visible.has(name)) }]]);
+  assert.deepEqual(sections, []);
+  // A delegation's child: the id is reserved before the kernel creates it, and the composition is installed then.
+  /** @type {any} */ let reservedId = "";
+  /** @type {any} */ (f.ctx).subagents = {
+    startActivation: async (/** @type {any} */ spec) => {
+      reservedId = spec.childId;
+      assert.equal(spec.delivery, "caller", "a delegation collects its own child's result");
+      assert.equal(spec.request.toolFilter, undefined, "0.2.1 refuses the field");
+      assert.ok(reservedChildComposition(spec.childId), "reserved before the child exists");
+      created(child(spec.childId));
+      return { childId: spec.childId, messageId: "m", result: Promise.resolve({ stopReason: "completed", output: [] }), dispose: async () => {} };
+    },
+  };
+  const receipt = await startSubagent(f.ctx, { capability: "c", label: "l", prompt: "p", tools: ["read", "write"], persona: "你是筛选员。", outputSchema: {} }, f.agent, AbortSignal.timeout(2000));
+  assert.equal(receipt.childId, reservedId);
+  assert.deepEqual(restrictions.at(-1), [reservedId, { allow: ["read", "write"] }]);
+  assert.deepEqual(sections, [[reservedId, { name: "deployment:persona-prefix", order: 7, text: "你是筛选员。" }]]);
+  assert.equal(reservedChildComposition(reservedId), undefined, "consumed");
 });

@@ -217,32 +217,25 @@
 
 # The kernel's own sub-agent for general work: several independent pieces in
 # parallel, or a side task whose reading the root will not need again. One
-# level deep and one-shot in the foreground: a child lives exactly as long as
-# the call that started it, which is what lets the run policy hold it to the
-# run's two child budgets (EVIMED_MAX_CHILDREN_TOTAL, _CONCURRENT_CHILDREN) by
-# counting calls, and there is no messaging row, so a child's only channel to
-# its parent is still its result. A capability deliverable is delegated with
-# `evimed_delegate`, which hands the child that capability's method, tools and
-# gate; a child started here is handed none of them, and none of the tools
-# that plan, delegate, submit or hand a file to the user.
+# level deep. From 0.2.1 every child is a managed activation: the call returns
+# the child's id at once, the child works on, and its result comes back to the
+# root as a settlement notice. The run policy counts each call once against the
+# run's two child budgets (EVIMED_MAX_CHILDREN_TOTAL, _CONCURRENT_CHILDREN),
+# holds it as working until the kernel's `subagent/end`, keeps the root's turn
+# open until every child it started has settled — so the notice is read in the
+# same turn and the run is not finished while a child still works — and stops
+# them when the turn is cancelled. There is no messaging row, so a child's only
+# channel to its parent is still its result. A capability deliverable is
+# delegated with `evimed_delegate`, which hands the child that capability's
+# method, tools and gate; a child started here is handed none of them, and none
+# of the tools that plan, delegate, submit or hand a file to the user (masked in
+# the child's own scope at its creation: 0.2.1 refuses `toolFilter` here).
 - id: tool-subagent
   name: '@deepseek-ai/dsh-tool-subagent'
   config:
     provider: spawn
     toolName: subagent
-    backgroundMode: one-shot
-    enableRunInBackground: false
     maxDepth: 1
-    toolFilter:
-      deny:
-        - evimed_plan
-        - evimed_delegate
-        - evimed_await
-        - evimed_submit_deliverable
-        - evimed_package_check
-        - evimed_revise_deliverable
-        - evimed_screen_batch
-        - present
 
 # Skills ship with the preset and are found by relative path. Default root
 # discovery is off: it would treat `.dsh/skills` in the *workspace* as a skill

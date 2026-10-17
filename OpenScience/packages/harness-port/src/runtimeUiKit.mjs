@@ -384,7 +384,13 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     const options = { name: spec.slot };
     if (spec.inherit) {
       if (!['single','keyed'].includes(contract.kind) || !ctx.slots.entries(spec.slot).includes(spec.inherit) || (contract.kind === 'keyed' && spec.inherit.options.key !== spec.key)) throw new Error('[evimed-frame] inherited entry must be a current matching single/keyed registration');
-      if (spec.inherit.children) throw new Error('[evimed-frame] native child declarations have a sole owner; shadow a child slot instead');
+      // `children` is never copied: a child slot is declared once, by the entry that owns it, the moment that entry
+      // registers, and the declaration is the registry's, not the drawing's. A takeover that draws the shadowed
+      // component (the answer row's checks, files and sources) draws its children with it; one that draws its own
+      // (the model seat) leaves them undrawn. Refusing every shadowed entry that declares one was safe while none of
+      // the occupied ones did; from 0.2.1 the answer row and the model seat both do, and the refusal took all four
+      // takeovers off a live conversation.
+
       for (const field of ['inject', 'store', 'locale']) if (spec.inherit[field] !== undefined) options[field] = spec.inherit[field];
     }
     if (contract.kind === 'list') {

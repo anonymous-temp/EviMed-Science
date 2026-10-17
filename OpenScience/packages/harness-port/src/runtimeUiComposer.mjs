@@ -318,6 +318,9 @@ export function apply(ctx, config, target, require, kit) {
   });
   // The model seat, for a researcher. The occupant inherits the kernel's registration (its `inject` is how it reaches the session's model
   // directory), so it is made once the kernel's entry exists, in whichever order the two start. An operator keeps the kernel's own seat.
+  // From 0.2.1 the kernel's seat declares a child, `conversation.input.model.label`, where `ui-deepseek-model-label-1017`
+  // adds its 「1017」 badge beside the catalogue's display name; this seat names the model the product's way and does not
+  // draw it (the badge draws only under the name DeepSeek-V4.1-Flash, which this deployment does not show).
   if (!kit.operator) kit.guarded('thinking intensity', () => kit.occupyOver({ slot: 'conversation.input.model', priority: -1 }, createThinkingSeat(kit, target)));
 }
 export const BODY = Object.freeze({ name: 'composer', inject: ['slots'], parts: Object.freeze([createComposerUploadStore, thinkingIntensity, createThinkingSeat, apply]) });
