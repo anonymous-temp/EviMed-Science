@@ -225,6 +225,7 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   assert.match(kernelEnv, /^OPEN_SCIENCE_RUNTIME_AUTHORITY='dsh\.runtime'$/m);
   assert.match(kernelEnv, /^EVIMED_PUBLIC_SOURCE_GATEWAY_URL='https:\/\/evimed\.example\/runtime-gateway\/sources\/v1\/fetch'$/m);
   for (const secret of secrets) assert.ok(!kernelEnv.includes(secret), "the kernel's environment carries no secret");
+  assert.match(kernelEnv, /^EVIMED_GEO_SKILLS='0'$/m, "an ordinary project's session is told, in so many words, that it carries no GEO method pack");
 
   assert.equal(runtime.url, "http://dsh.runtime");
   assert.equal(runtime.sandboxMode, "agentbay");
@@ -251,6 +252,15 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   const status = await manager.status(project);
   assert.equal(status.provider, "agentbay");
   assert.deepEqual(status.sandbox, runtime.sandbox, "the waiting shell and the bring-up read the guest's report from the status");
+});
+
+test("a 循证 GEO project's session is given the method pack's switch on", async (t) => {
+  const { fake, project, managerFor } = await fixture(t, { config: { geoEnabled: true, geoAudience: "all" } });
+  const manager = managerFor();
+  manager.geoProjectOf = async (userId, projectId) => userId === "alice" && projectId === "paper1";
+  await manager.start(project);
+  const kernelEnv = await readFile(fake.sessionFile("s-1", "/run/evimed/kernel.env"), "utf8");
+  assert.match(kernelEnv, /^EVIMED_GEO_SKILLS='1'$/m);
 });
 
 test("a stop brings the run's work home, releases the session with its Context upload, and records what the Context holds", async (t) => {

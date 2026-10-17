@@ -48,7 +48,7 @@ const repoRoot = path.resolve(here, "..", "..");
 export const CATALOG_DESCRIPTION_MAX_LENGTH = 500;
 
 /**
- * The text around the lines, as `dsh-tool-skill` renders its first catalogue message (0.2.0-rc.2). Held by
+ * The text around the lines, as the pinned kernel's `dsh-tool-skill` renders its first catalogue message. Held by
  * `frameDrift` against the installed closure.
  */
 export const CATALOGUE_FRAME = Object.freeze({
