@@ -153,6 +153,12 @@ export function startMockDshRuntime(options = {}) {
 
   /** @type {Map<string, { id: string, cwd: string, agentPreset: string, events: Record<string, any>[], seq: number, running: boolean, createdAt: number, updatedAt: number }>} */
   const sessions = new Map();
+  /**
+   * The 0.2.1 workspace registry, as far as the control plane touches it: a directory registered once, and the sessions made with its
+   * `workspaceId` accounted in it (a session made by `cwd` alone is not).
+   * @type {Map<string, { workspaceId: string, path: string, title: string, sessionIds: string[] }>}
+   */
+  const workspaces = new Map();
 
   /**
    * @typedef {object} MuxConnection
@@ -591,9 +597,33 @@ export function startMockDshRuntime(options = {}) {
         return;
       }
 
+      if (endpoint === "workspace/create") {
+        const workspacePath = String(request.path ?? "");
+        if (!workspacePath.startsWith("/")) {
+          res.end(JSON.stringify(fail(rpcId, "gateway/input-invalid", "workspace path must be absolute", { endpoint, field: "path" })));
+          return;
+        }
+        let workspace = [...workspaces.values()].find((item) => item.path === workspacePath);
+        if (!workspace) {
+          workspace = { workspaceId: `web_mock_workspace_${++counter}`, path: workspacePath, title: workspacePath.split("/").filter(Boolean).pop() ?? "workspace", sessionIds: [] };
+          workspaces.set(workspace.workspaceId, workspace);
+        }
+        res.end(JSON.stringify(ok(rpcId, { workspace })));
+        return;
+      }
+
       if (endpoint === "session/create") {
         const id = String(request.sessionId ?? `web_mock_${++counter}`);
-        const cwd = String(request.cwd ?? "");
+        const workspace = request.workspaceId === undefined ? null : workspaces.get(String(request.workspaceId)) ?? null;
+        if (request.workspaceId !== undefined && !workspace) {
+          res.end(JSON.stringify(fail(rpcId, "workspace/not-found", `workspace "${String(request.workspaceId)}" not found`, { workspaceId: String(request.workspaceId) })));
+          return;
+        }
+        if (workspace && request.cwd !== undefined) {
+          res.end(JSON.stringify(fail(rpcId, "gateway/bad-request", "session.create accepts workspaceId or cwd, not both", {})));
+          return;
+        }
+        const cwd = workspace?.path ?? String(request.cwd ?? "");
         const existing = sessions.get(id);
         if (existing && existing.cwd !== (cwd || existing.cwd)) {
           res.end(JSON.stringify(fail(rpcId, "session/conflict", "session id already exists with a different cwd", { sessionId: id })));
@@ -611,6 +641,7 @@ export function startMockDshRuntime(options = {}) {
             createdAt: now,
             updatedAt: now,
           });
+          if (workspace) workspace.sessionIds.unshift(id);
           emit("api-session/added", [summaryOf(sessions.get(id))]);
         }
         res.end(JSON.stringify(ok(rpcId, { sessionId: id, agentPreset: sessions.get(id).agentPreset })));
@@ -770,6 +801,7 @@ export function startMockDshRuntime(options = {}) {
 
 /** The unary endpoints this fake serves, so a test can assert the allow-list is covered. */
 export const MOCK_ENDPOINTS = Object.freeze([
+  "workspace/create",
   "session/create",
   "session/prompt",
   "session/cancel",
