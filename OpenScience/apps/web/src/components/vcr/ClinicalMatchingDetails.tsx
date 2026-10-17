@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock } from 'lucide-react';
 import { knownErrorCodeMessage } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
 import { DataTable, type DataColumn } from '@/components/ui/DataTable';
 import { Disclosure } from '@/components/ui/Disclosure';
-import { Select } from '@/components/ui/Input';
+import { List, ListRow } from '@/components/ui/ListRow';
+import { Note } from '@/components/ui/Note';
 import { Tag } from '@/components/ui/Tag';
+import type { ToolbarFilter } from '@/components/ui/Toolbar';
 import { enqueueVcrMatching, resolveVcrQuote, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
@@ -13,6 +15,7 @@ import { formatDay } from '@/lib/format';
 import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
 import { ASSERTION_WORDS as assertions, evidenceCaveats, type EvidenceCaveat } from './evidenceCaveats';
 import { criterionStateLabel, factValueText } from './vcrText';
+import type { VcrToolbarAction } from './VcrToolbarActions';
 
 const summaries: Record<string, string> = { eligible: '全部满足', ineligible: '有不满足条件', insufficient_evidence: '证据不足', pending: '待复评' };
 const experiencers: Record<string, string> = { patient: '本人', family: '家属', other: '他人', unknown: '主体不明' };
@@ -188,83 +191,132 @@ function ProtocolChecklist({ protocols, chosen, onChange }: { protocols: readonl
   </fieldset>;
 }
 
-export function MatchingPanelControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, onProtocol, onCandidate, onReload }: {
-  studyId: string; data: VcrMatchingTab;
+/**
+ * What the matching tab's controls come to: the dimensions the reader narrows by, the buttons that start work, the sentences that
+ * say how it went and the folded comparison of several protocols (R19, plan §5.3: 「匹配与招募」 has one toolbar). The tab hands
+ * `filters` and `actions` to the band's row and draws `notes` and `compare` at the top of its body; nothing here draws a row of its own.
+ */
+export interface MatchingControls {
+  filters: ToolbarFilter[];
+  actions: VcrToolbarAction[];
+  /** How much of the selection has been evaluated, an offer to evaluate what changed under it, and what the last press said. */
+  notes: ReactNode;
+  /** 「比较多个方案」, folded. */
+  compare: ReactNode;
+}
+
+/**
+ * The matching tab's controls as data (the part of the old panel that was a row of selects and buttons above the content, drawn by
+ * the tab, and not by a toolbar of its own).
+ *
+ * Hidden knowledge:
+ *  - **No 「刷新结果」.** The page reads itself again when an evaluation's job moves (`useVcrLoad` follows the study), so the button
+ *    that admitted the page would not was the first thing to go.
+ *  - **An action that cannot work is not offered**, rather than drawn grey: 给患者找试验 starts from a person, so until one is chosen
+ *    there is no 「开始评估」 — the patient's chip beside it is the way to one. While the page for the chosen protocol is still being
+ *    read the button is working (a spinner), because a press then would evaluate the protocol the reader just left.
+ *  - A study with patients and no protocol version still offers the patient to start from in the direction that starts from one;
+ *    the protocol's controls have nothing to work on there.
+ */
+export function useMatchingControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, onProtocol, onCandidate, onReload }: {
+  studyId: string;
+  /** The page being read; null before the first one has arrived (the hook is called either way, and draws nothing). */
+  data: VcrMatchingTab | null;
   /** The direction the reader chose: `data` may still be the page of the one before. */
   direction?: NonNullable<VcrMatchingTab['direction']>;
-  /** The protocol the reader chose, once they have: the select shows it at once, before its page has arrived. */
+  /** The protocol the reader chose, once they have: the chip shows it at once, before its page has arrived. */
   protocolId?: string | null;
   /**
-   * The patient the page is about, when the page — not these controls — keeps it (给患者找试验): the select shows it, and choosing
-   * 请选择患者 again says so through `onCandidate('')`. Left out, the select keeps the choice itself.
+   * The patient the page is about, when the page — not these controls — keeps it (给患者找试验): the chip shows it, and choosing
+   * 请选择患者 again says so through `onCandidate('')`. Left out, the controls keep the choice themselves.
    */
   subjectKey?: string | null;
   /** The page for what the reader chose is still being read (or could not be): the controls stay, and a run waits for it. */
   settling?: boolean;
   canRun: boolean; onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
-}) {
+}): MatchingControls | null {
   const [panel, setPanel] = useState<string[]>([]);
   const [ownSubject, setSubject] = useState('');
   const evaluation = useMatchingEvaluation(studyId, onReload);
-  const protocols = data.protocols ?? [];
-  const way = direction ?? data.direction ?? 'trial_to_patient';
-  const roster = data.candidateRoster ?? [];
+  const protocols = data?.protocols ?? [];
+  const way = direction ?? data?.direction ?? 'trial_to_patient';
+  const roster = data?.candidateRoster ?? [];
   // A patient's trials do not wait on a protocol: the patient to start from is chosen here whether or not the study has one.
-  if (!protocols.length && !(way === 'patient_to_trial' && roster.length)) return null;
+  if (!data || (!protocols.length && !(way === 'patient_to_trial' && roster.length))) return null;
   const subject = subjectKey !== undefined ? subjectKey ?? '' : ownSubject;
   const viewing = protocolId ?? data.protocolVersionId ?? protocols[0]?.id ?? '';
   const scope = subject ? { subjectKeys: [subject] } : {};
   // 给患者找试验 starts from a person: nothing is asked of the engine until one is chosen.
   const needsPatient = way === 'patient_to_trial' && !subject;
   const name = (protocol: typeof protocols[number]) => protocol.title || `方案版本 ${protocol.version}`;
-  return <div className="flex flex-col gap-3">
-    {data.candidateCoverage && <p className="text-caption text-text-2" role="status">
-      {`本次选择 ${data.candidateCoverage.requested} 人 · 已评估 ${data.candidateCoverage.evaluated} 人 · 待评估 ${data.candidateCoverage.pending} 人 · 暂不可用 ${data.candidateCoverage.unavailable} 人`}
-    </p>}
-    <div className="flex flex-wrap items-end gap-3">
-      {protocols.length > 0 && <div className="w-full min-w-0 sm:w-64">
-        <Select label="查看方案" value={viewing} onChange={event => onProtocol(event.target.value)}>
-          {protocols.map(protocol => <option key={protocol.id} value={protocol.id}>{name(protocol)}</option>)}
-        </Select>
-      </div>}
-      <div className="w-full min-w-0 sm:w-64">
-        <Select label="患者" value={subject} onChange={event => {
-          const chosen = event.target.value;
-          setSubject(chosen);
-          // Where the page keeps the patient, choosing the placeholder again is a choice too: nobody.
-          if (chosen || subjectKey !== undefined) onCandidate(chosen);
-        }}>
-          <option value="">{way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者'}</option>
-          {roster.map(key => <option key={key} value={key}>{key}</option>)}
-        </Select>
-      </div>
-      {/* The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for. */}
-      {canRun && protocols.length > 0 && <Button variant="secondary" loading={evaluation.busy} disabled={evaluation.busy || settling || needsPatient}
-        onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope })}>开始评估</Button>}
-      <Button variant="text" onClick={onReload}>刷新结果</Button>
-    </div>
-    {data.basisUpdated && <div className="flex flex-wrap items-center gap-3">
-      <p className="text-caption text-text-2" role="status">{`${data.basisUpdated.count} 人的评估依据已更新`}</p>
-      {canRun && <Button variant="secondary" size="sm" loading={evaluation.busy} disabled={evaluation.busy || settling}
-        onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新评估</Button>}
-    </div>}
-    <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
-    {protocols.length > 0 && <Disclosure summary="比较多个方案">
+
+  const filters: ToolbarFilter[] = [];
+  if (protocols.length > 0) {
+    filters.push({
+      kind: 'select', label: '查看方案', options: protocols.map(protocol => ({ value: protocol.id, label: name(protocol) })), value: viewing || null,
+      onChange: next => { if (next) onProtocol(next); },
+    });
+  }
+  filters.push({
+    kind: 'select', label: '患者', allLabel: way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者',
+    options: roster.map(key => ({ value: key, label: key })), value: subject || null,
+    onChange: next => {
+      const chosen = next ?? '';
+      setSubject(chosen);
+      // Where the page keeps the patient, choosing the placeholder again is a choice too: nobody.
+      if (chosen || subjectKey !== undefined) onCandidate(chosen);
+    },
+  });
+
+  const actions: VcrToolbarAction[] = [];
+  // The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for.
+  if (canRun && protocols.length > 0 && !needsPatient) {
+    actions.push({
+      key: 'evaluate', label: '开始评估', loading: evaluation.busy || settling,
+      onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope }); },
+    });
+  }
+
+  const coverage = data.candidateCoverage;
+  const notes = (
+    <>
+      {coverage && (
+        <Note result={['本次选择 ', { n: coverage.requested }, ' 人 · 已评估 ', { n: coverage.evaluated }, ' 人 · 待评估 ', { n: coverage.pending }, ' 人 · 暂不可用 ', { n: coverage.unavailable }, ' 人']} />
+      )}
+      {data.basisUpdated && canRun && (
+        <Note action={<Button variant="secondary" size="sm" loading={evaluation.busy} disabled={evaluation.busy || settling}
+          onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新评估</Button>}
+        >{`${data.basisUpdated.count} 人的评估依据已更新`}</Note>
+      )}
+      {data.basisUpdated && !canRun && <Note result={[{ n: data.basisUpdated.count }, ' 人的评估依据已更新']} />}
+      <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
+    </>
+  );
+
+  const compare = protocols.length > 0 ? (
+    <Disclosure summary="比较多个方案">
       <div className="grid gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
           {canRun && <Button loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
             onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, ...scope })}>开始评估所选方案</Button>}
         </div>
-        {(data.comparisons ?? []).length > 0 && <ul className="divide-y divide-faint md:col-span-2">
-          {data.comparisons?.map(entry => <li key={entry.protocol.id} className="py-2 text-ui text-text">
-            {name(entry.protocol)} · {entry.summary ? summaries[entry.summary] ?? '待核对' : '尚未评估'}
-            {entry.evidenceGaps.length > 0 && <span className="ml-2 text-caption text-text-3">{`${entry.evidenceGaps.length} 项证据缺口`}</span>}
-          </li>)}
-        </ul>}
+        {(data.comparisons ?? []).length > 0 && (
+          <List label="各方案的评估情况" divided className="md:col-span-2">
+            {data.comparisons?.map(entry => (
+              <ListRow
+                key={entry.protocol.id}
+                title={name(entry.protocol)}
+                trailing={<span className="text-text-2">{entry.summary ? summaries[entry.summary] ?? '待核对' : '尚未评估'}{entry.evidenceGaps.length > 0 && <span className="ml-2 text-caption text-text-3">{`${entry.evidenceGaps.length} 项证据缺口`}</span>}</span>}
+              />
+            ))}
+          </List>
+        )}
       </div>
-    </Disclosure>}
-  </div>;
+    </Disclosure>
+  ) : null;
+
+  return { filters, actions, notes, compare };
 }
 
 /** How many facts the timeline draws before the reader asks for more: a patient's chart can run to hundreds. */

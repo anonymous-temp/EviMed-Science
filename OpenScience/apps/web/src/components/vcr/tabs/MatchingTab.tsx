@@ -1,4 +1,4 @@
-import { ClinicalTimeline, CriterionTable, EvaluationNote, MatchingPanelControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
+import { ClinicalTimeline, CriterionTable, EvaluationNote, useMatchingControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
@@ -23,16 +23,23 @@ import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable } from "@/components/ui/DataTable";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Headline } from "@/components/ui/Headline";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Section } from "@/components/ui/Section";
+import { StatTile } from "@/components/ui/StatTile";
 import { Tag } from "@/components/ui/Tag";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
+import { EmptyState } from "@/components/cards/EmptyState";
 import { VcrJudgmentDrawer } from "../VcrJudgmentDrawer";
 import { VcrForecastChart } from "../VcrCharts";
 import { VcrFunnelBar } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrStat, VcrStatNote } from "../VcrNumber";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
+import { VcrToolbarActions } from "../VcrToolbarActions";
 import { PatientTrials } from "./PatientTrials";
-import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
+import { useVcrToolbar } from "../studyFrameContext";
+import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
 
 type View = "matching" | "referral" | "sites" | "followup";
@@ -131,31 +138,57 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
 
   const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); setTrial(null); };
 
-  const toolbar = (summary?: string) => (
-    <VcrToolbar summary={summary}>
-      {study.abilities.includes("export") && study.abilities.includes("read_patient_level") && <VcrCorrectionCasesActions key={studyId} studyId={studyId} />}
-      <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={switchView} options={[...VIEWS]} />
-      {view === "matching" && <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />}
-    </VcrToolbar>
-  );
-  // The controls are the reader's own instrument: the select they just used, the panel they are filling in. They are drawn from
-  // this key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change
-  // of protocol or direction never unmounts them (focus falls to <body>, a half-made choice is lost; review V-M2).
+  // The controls are the reader's own instrument: the chip they just used, the patient they are filling in. They are drawn from this
+  // key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change of
+  // protocol or direction never unmounts them (focus falls to <body>, a half-made choice is lost; review V-M2).
   const shown = state.kind === "ready" ? state.data : last;
   const canRun = study.abilities.includes("run") && study.abilities.includes("read_patient_level");
-  const controls = view === "matching" && shown && shown.available !== false ? (
-    <MatchingPanelControls key="controls" studyId={studyId} data={shown} direction={direction} protocolId={protocolVersionId}
-      subjectKey={direction === "patient_to_trial" ? candidate : undefined}
-      settling={state.kind !== "ready"} canRun={canRun} onProtocol={setProtocolVersionId} onCandidate={pick} onReload={reload} />
-  ) : null;
-  if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabSkeleton /></div>;
-  if (state.kind === "error") return <div className="flex flex-col gap-6">{toolbar()}{controls}<VcrTabError message={state.message} onRetry={reload} /></div>;
+  const controls = useMatchingControls({
+    studyId,
+    data: view === "matching" && shown && shown.available !== false ? shown : null,
+    direction,
+    protocolId: protocolVersionId,
+    subjectKey: direction === "patient_to_trial" ? candidate : undefined,
+    settling: state.kind !== "ready",
+    canRun,
+    onProtocol: setProtocolVersionId,
+    onCandidate: pick,
+    onReload: reload,
+  });
+
+  // --- the band's one row: the views, the direction, the protocol and the patient, and what starts work ----------------------------
+  const filters: ToolbarFilter[] = [
+    { kind: "chips", label: "视图", neutral: "matching", value: view, onChange: (next) => switchView(next as View), options: VIEWS },
+    ...(view === "matching"
+      ? [{ kind: "chips" as const, label: "匹配方向", neutral: "trial_to_patient", value: direction, onChange: (next: string) => switchDirection(next as Direction), options: DIRECTIONS }]
+      : []),
+    ...(controls?.filters ?? []),
+  ];
+  // The tab as it opens, before the reader has chosen a view, a direction, a protocol or a person: nothing to switch between yet, so
+  // an empty one is the step's one sentence and its one button, with or without protocol versions behind it (R11). Once the reader
+  // has chosen, they got there by the switches, and an answer that comes back empty keeps them — the way back must not vanish with
+  // the page (review V-M3).
+  const asOpened = view === "matching" && direction === "trial_to_patient" && protocolVersionId === null && candidate === null;
+  const bare = state.kind === "ready" && state.data.available !== false && asOpened && emptyPage(state.data);
+  const summary = shown && shown.available !== false ? partnerLine(shown) : "";
+  useVcrToolbar(shown?.available === false || bare
+    ? null
+    : {
+      label: "匹配与招募的视图与操作",
+      filters,
+      ...(summary ? { summary } : {}),
+      ...(controls && controls.actions.length > 0 ? { actions: <VcrToolbarActions actions={controls.actions} /> } : {}),
+    });
+  const aside = controls ? <div className="flex flex-col gap-2">{controls.notes}{controls.compare}</div> : null;
+
+  if (state.kind === "loading") return <div className="flex flex-col gap-6">{aside}<VcrTabSkeleton /></div>;
+  if (state.kind === "error") return <div className="flex flex-col gap-6">{aside}<VcrTabError message={state.message} onRetry={reload} /></div>;
   const data = state.data;
   if (data.available === false) {
     return (
-      <p data-vcr-matching-unavailable="" className="py-12 text-center text-ui text-text-3">
-        {data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"}
-      </p>
+      <div data-vcr-matching-unavailable="">
+        <EmptyState title={data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"} reason="接入之后，这一步的候选患者和转诊会出现在这里。" />
+      </div>
     );
   }
   // 给患者找试验 is a page of its own: one patient's trials, ranked, with the chosen trial's criteria. It is taken only where the server
@@ -164,8 +197,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     const owner = data.patientTrials.subject;
     return (
       <div className="flex flex-col gap-6">
-        {toolbar()}
-        {controls}
+        {aside}
         <PatientTrials
           studyId={studyId}
           study={study}
@@ -183,21 +215,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       </div>
     );
   }
-  // Every sub-view counts: a referral ledger with no candidate list is a
-  // study whose matching has already run, and offering 「让 AI 做」 there
-  // would ask for work that is done.
-  const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
-    && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
-    // A person in view counts once something is known of them: recorded facts, or an assessment. A protocol listed as 尚未评估 is not one.
-    && !(data.timeline?.length || data.comparisons?.some((entry) => entry.summary));
-  // The tab as it opens, before the reader has chosen a view, a direction, a protocol or a person: nothing to switch between yet, so
-  // an empty one is the step's one sentence and its one button, with or without protocol versions behind it (R11). Once the reader
-  // has chosen, they got there by the switches, and an answer that comes back empty keeps them — the way back must not vanish with
-  // the page (review V-M3).
-  const asOpened = view === "matching" && direction === "trial_to_patient" && protocolVersionId === null && candidate === null;
+  const nothing = emptyPage(data);
   if (nothing && asOpened) {
     // 开始评估 where there is something to evaluate — protocol versions to evaluate and people registered to evaluate them for —
-    // and the step's own ask where there is not (no criteria yet, or at T0 nobody): that is what 让 AI 做 fills in.
+    // and the step's own ask where there is not (no criteria yet, or at T0 nobody): that is what the step's button fills in.
     const evaluable = canRun && (data.protocols?.length ?? 0) > 0 && (data.candidateRoster?.length ?? 0) > 0;
     return evaluable
       ? <MatchingStart studyId={studyId} study={study} data={data} onQueued={reload} />
@@ -206,17 +227,15 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   if (nothing) {
     return (
       <div className="flex flex-col gap-6">
-        {toolbar()}
-        {controls}
+        {aside}
         <VcrStepPending studyId={studyId} study={study} step="matching" hint={study.tier === "T0" ? VCR_MATCHING_EMPTY_T0 : undefined} />
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-6">
-      {toolbar(partnerLine(data))}
-      {controls}
-      {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
+      {aside}
+      {data.headline && <Headline parts={[data.headline]} />}
       {view === "matching" && (
         <MatchingView
           studyId={studyId}
@@ -231,8 +250,20 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
       {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} subject={timelineOwner(data)} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
+      {study.abilities.includes("export") && study.abilities.includes("read_patient_level") && <VcrCorrectionCasesActions key={studyId} studyId={studyId} />}
     </div>
   );
+}
+
+/**
+ * Whether the page has nothing in any of its views. Every sub-view counts: a referral ledger with no candidate list is a study whose
+ * matching has already run, and offering 「开始评估」 there would ask for work that is done.
+ */
+function emptyPage(data: MatchingData): boolean {
+  return data.candidates.length === 0 && !data.forecast && !data.pendingReview
+    && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0
+    // A person in view counts once something is known of them: recorded facts, or an assessment. A protocol listed as 尚未评估 is not one.
+    && !(data.timeline?.length || data.comparisons?.some((entry) => entry.summary));
 }
 
 /**
@@ -249,12 +280,7 @@ function MatchingStart({ studyId, study, data, onQueued }: { studyId: string; st
       label: "开始评估",
       busy: evaluation.busy,
       onStart: () => void evaluation.evaluate({ protocolVersionIds: [newest], direction: "trial_to_patient" }),
-      note: evaluation.message ? (
-        <>
-          <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
-          {!evaluation.failed && <Button variant="text" onClick={onQueued}>刷新结果</Button>}
-        </>
-      ) : undefined,
+      note: evaluation.message ? <EvaluationNote message={evaluation.message} failed={evaluation.failed} /> : undefined,
     }} />
   );
 }
@@ -360,17 +386,14 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
   return (
     <>
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.funnel.map((step) => (
-          <div key={step.key} className="rounded-card border border-border bg-surface p-4">
-            <p className="truncate text-caption text-text-3">{step.label}</p>
-            <p className={cn("mt-1 text-metric font-semibold tabular-nums",
-              step.tone === "attention" ? "text-warn-strong" : step.tone === "accent" ? "text-accent" : "text-text")}
-            >
-              {numberText(step.count, 0)}
-            </p>
-            {step.note && <p className="mt-0.5 truncate text-caption text-text-3">{step.note}</p>}
-          </div>
+          <StatTile
+            key={step.key}
+            label={step.label}
+            value={<span className={cn(step.tone === "attention" && "text-warn-strong", step.tone === "accent" && "text-accent")}>{numberText(step.count, 0)}</span>}
+            note={step.note ?? undefined}
+          />
         ))}
       </div>
       <VcrFunnelBar
@@ -382,32 +405,38 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           {data.candidates.length > 0 && (
-            <Card title={referralStateLabel("candidate")}>
-              <ul className="flex flex-col gap-1">
+            <Section title={referralStateLabel("candidate")} count={data.candidates.length}>
+              <List label="候选患者">
                 {data.candidates.map((candidate) => (
-                  <li key={candidate.id}>
-                    <CandidateButton candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
-                  </li>
+                  <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
                 ))}
-              </ul>
-            </Card>
+              </List>
+            </Section>
           )}
 
           {data.gaps.length > 0 && (
-            <Card title="待补证的主要缺口">
-              <ul className="flex flex-col gap-2.5">
-                {data.gaps.map((gap) => (
-                  <li key={gap.code} className="flex items-baseline gap-3">
-                    <span className="w-8 shrink-0 text-caption tabular-nums text-text-3">{gap.code}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-ui text-text">{gap.label}</span>
-                      {gap.detail && <span className="block truncate text-caption text-text-3">{gap.detail}</span>}
-                    </span>
-                    <span className="shrink-0 text-ui tabular-nums text-text">{numberText(gap.count, 0)}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            <Section title="待补证的主要缺口" count={data.gaps.length}>
+              <DataTable
+                label="待补证的主要缺口"
+                minWidth="min-w-0"
+                columns={[
+                  { key: "code", header: "编号", rowHeader: true, width: "w-14", cell: (gap) => <span className="tabular-nums text-text-3">{gap.code}</span> },
+                  {
+                    key: "gap",
+                    header: "缺口",
+                    cell: (gap) => (
+                      <span className="flex flex-col">
+                        <span className="text-text">{gap.label}</span>
+                        {gap.detail && <span className="text-caption text-text-3">{gap.detail}</span>}
+                      </span>
+                    ),
+                  },
+                  { key: "count", header: "人数", align: "right", cell: (gap) => <span className="tabular-nums text-text">{numberText(gap.count, 0)}</span> },
+                ]}
+                rows={data.gaps}
+                rowKey={(gap) => gap.code}
+              />
+            </Section>
           )}
 
           {data.pendingReview && data.pendingReview.count > 0 && (
@@ -468,18 +497,20 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
             {selected.trace && selected.trace.length > 0 && (
               // Who moved this person's referral, to where, and when: every step leaves its mark (plan §7.2).
-              <ol data-vcr-referral-trace="" aria-label="转诊记录" className="mt-4 divide-y divide-faint border-t border-border">
-                {selected.trace.map((step, index) => (
-                  <li key={`${step.state}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-                    <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{step.at ?? ""}</span>
-                    <span className="min-w-0 flex-1 text-ui text-text">
-                      {referralStateLabel(step.state)}
-                      {step.by && <span className="ml-1.5 text-caption text-text-3">{step.by}</span>}
-                    </span>
-                    {step.note && <span className="w-full text-caption text-text-3">{step.note}</span>}
-                  </li>
-                ))}
-              </ol>
+              <div data-vcr-referral-trace="" className="mt-4">
+                <DataTable
+                  label="转诊记录"
+                  minWidth="min-w-0"
+                  columns={[
+                    { key: "at", header: "时间", rowHeader: true, width: "w-32", isEmpty: (step) => !step.at, cell: (step) => <span className="tabular-nums text-text-3">{step.at ?? ""}</span> },
+                    { key: "state", header: "转到", cell: (step) => <span className="text-text">{referralStateLabel(step.state)}</span> },
+                    { key: "by", header: "操作人", isEmpty: (step) => !step.by, cell: (step) => <span className="text-text-2">{step.by ?? ""}</span> },
+                    { key: "note", header: "说明", isEmpty: (step) => !step.note, cell: (step) => <span className="text-text-2">{step.note ?? ""}</span> },
+                  ]}
+                  rows={selected.trace}
+                  rowKey={(step) => `${step.state}-${step.at ?? ""}`}
+                />
+              </div>
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
@@ -542,38 +573,41 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   );
 }
 
-/** One person in the list: a button that opens their rule-by-rule judgement. */
-function CandidateButton({ candidate, current, onPick }: { candidate: VcrCandidate; current: boolean; onPick: () => void }) {
+/** One person in the list: a row that opens their rule-by-rule judgement beside the list. */
+function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate; current: boolean; onPick: () => void }) {
   return (
-    <button
-      type="button"
-      data-vcr-candidate={candidate.id}
-      aria-current={current ? "true" : undefined}
-      onClick={onPick}
-      className={cn("w-full rounded px-2.5 py-2 text-left hover:bg-surface-1", current && "bg-accent-soft hover:bg-accent-soft")}
-    >
-      <span className="flex items-baseline justify-between gap-2">
-        <span className="min-w-0 truncate text-ui font-medium text-text">{candidate.id}</span>
-        {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
-        {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
-        {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
-      </span>
-      <span className="block truncate text-caption text-text-2">{candidate.summary}</span>
-      {candidate.open.length > 0 && (
-        <span className="mt-1 flex flex-wrap gap-1">
-          {candidate.open.map((open) => (
-            <Tag key={open.code} tone="warn">
-              {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}
-            </Tag>
-          ))}
+    <ListRow
+      title={candidate.id}
+      onOpen={onPick}
+      selected={current}
+      titleProps={{ "data-vcr-candidate": candidate.id }}
+      trailing={(
+        <>
+          {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
+          {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
+          {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
+        </>
+      )}
+      meta={(
+        <span className="flex flex-col gap-1">
+          <span className="truncate text-caption text-text-2">{candidate.summary}</span>
+          {candidate.open.length > 0 && (
+            <span className="flex flex-wrap gap-1">
+              {candidate.open.map((open) => (
+                <Tag key={open.code} tone="warn">
+                  {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}
+                </Tag>
+              ))}
+            </span>
+          )}
+          {candidate.priority && (
+            <span data-vcr-priority="" className="text-caption text-text-3">
+              {candidate.priority.rationale ? `${PRIORITY_LABEL} · ${candidate.priority.rationale}` : PRIORITY_LABEL}
+            </span>
+          )}
         </span>
       )}
-      {candidate.priority && (
-        <span data-vcr-priority="" className="mt-1 block text-caption text-text-3">
-          {candidate.priority.rationale ? `${PRIORITY_LABEL} · ${candidate.priority.rationale}` : PRIORITY_LABEL}
-        </span>
-      )}
-    </button>
+    />
   );
 }
 
@@ -590,7 +624,7 @@ function ReferralLedger({ studyId, sites }: { studyId: string; sites: NonNullabl
   if (referrals.length === 0) return null;
   const siteName = (id: string | null) => (id ? sites.find((site) => site.id === id)?.name ?? null : null);
   return (
-    <VcrSection title="转诊台账" meta={`${referrals.length} 人`}>
+    <Section title="转诊台账" count={`${referrals.length} 人`}>
       <DataTable
         label="转诊台账"
         minWidth="min-w-[40rem]"
@@ -617,7 +651,7 @@ function ReferralLedger({ studyId, sites }: { studyId: string; sites: NonNullabl
         rowKey={(row) => row.id}
         rowAttrs={(row) => ({ "data-vcr-referral": row.id, "data-vcr-referral-row-state": row.state })}
       />
-    </VcrSection>
+    </Section>
   );
 }
 
@@ -633,7 +667,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
   return (
     <>
       {data.ledger && data.ledger.length > 0 && (
-        <VcrSection title="转诊进度">
+        <Section title="转诊进度">
           <ol className="grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-3 lg:grid-cols-6 [&>li]:bg-surface">
             {data.ledger.map((entry) => (
               <li key={entry.state} data-vcr-referral-state={entry.state} className={cn("p-4", entry.waiting && "bg-accent-soft")}>
@@ -645,7 +679,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
               </li>
             ))}
           </ol>
-        </VcrSection>
+        </Section>
       )}
 
       {readsLedger && (data.ledger ?? []).length > 0 && <ReferralLedger studyId={studyId} sites={data.sites ?? []} />}
@@ -701,9 +735,9 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
 
 function SitesView({ data }: { data: MatchingData }) {
   const sites = data.sites ?? [];
-  if (sites.length === 0) return <p className="py-12 text-center text-ui text-text-3">还没有中心资料。</p>;
+  if (sites.length === 0) return <EmptyState title="还没有中心资料" reason="中心登记之后，容量、转诊和入组会出现在这里。" />;
   return (
-    <VcrSection title="中心" meta={`${sites.length} 个`}>
+    <Section title="中心" count={`${sites.length} 个`}>
       <DataTable
         label="中心"
         minWidth="min-w-[48rem]"
@@ -765,25 +799,35 @@ function SitesView({ data }: { data: MatchingData }) {
         rowKey={(site) => site.id}
         rowAttrs={(site) => ({ "data-vcr-site": site.id })}
       />
-    </VcrSection>
+    </Section>
   );
 }
 
 function FollowupView({ data }: { data: MatchingData }) {
   const episodes = data.followup ?? [];
-  if (episodes.length === 0) return <p className="py-12 text-center text-ui text-text-3">还没有随访记录。</p>;
+  if (episodes.length === 0) return <EmptyState title="还没有随访记录" reason="入组的患者有了随访之后，会按时间出现在这里。" />;
   return (
-    <VcrSection title="随访" meta={`${episodes.length} 条`}>
-      <ul className="divide-y divide-faint">
-        {episodes.map((episode) => (
-          <li key={episode.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
-            <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{episode.at ?? ""}</span>
-            <span className="min-w-0 flex-1 text-ui text-text">{episode.label}</span>
-            <Tag>{episode.kind}</Tag>
-            {episode.detail && <span className="w-full text-caption text-text-3">{episode.detail}</span>}
-          </li>
-        ))}
-      </ul>
-    </VcrSection>
+    <Section title="随访" count={`${episodes.length} 条`}>
+      <DataTable
+        label="随访"
+        minWidth="min-w-0"
+        columns={[
+          { key: "at", header: "时间", rowHeader: true, width: "w-32", isEmpty: (episode) => !episode.at, cell: (episode) => <span className="tabular-nums text-text-3">{episode.at ?? ""}</span> },
+          {
+            key: "label",
+            header: "记录",
+            cell: (episode) => (
+              <span className="flex flex-col">
+                <span className="text-text">{episode.label}</span>
+                {episode.detail && <span className="text-caption text-text-3">{episode.detail}</span>}
+              </span>
+            ),
+          },
+          { key: "kind", header: "类型", cell: (episode) => <Tag>{episode.kind}</Tag> },
+        ]}
+        rows={episodes}
+        rowKey={(episode) => episode.id}
+      />
+    </Section>
   );
 }
