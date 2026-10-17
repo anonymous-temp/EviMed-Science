@@ -51,16 +51,20 @@ describe("a step waiting on the allowance", () => {
     const study = readVcrStudy(fixture("empty/study.json"));
     study.steps.evidence = { status: "queued", waiting: "simulated_allowance", note: "等模拟额度" };
     draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
-    expect(screen.getByText("「证据」这一步在等模拟额度，模拟充值后会自动开始。")).toBeInTheDocument();
+    // The step is named as the work a person would ask for (`stepAction`), the way every state of a step names it.
+    expect(screen.getByText("「找证据、整理假设卡」这一步在等模拟额度，模拟充值后会自动开始。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "去模拟充值" })).toBeInTheDocument();
     expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
   });
 
-  it("and a queued 虚拟临床研究 step with no wait is still work under way", () => {
+  it("and a queued 虚拟临床研究 step with no wait is a step in line, said as one", () => {
     const study = readVcrStudy(fixture("empty/study.json"));
     study.steps.evidence = { status: "queued" };
     draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
-    expect(screen.getByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
+    // A step in line says what it is and that its turn starts it — never the orphan 「正在进行」 sentence — and offers no top-up.
+    expect(screen.getByText("找证据、整理假设卡，排队中")).toBeInTheDocument();
+    expect(screen.getByText("轮到它时会自动开始。")).toBeInTheDocument();
+    expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /充值/ })).not.toBeInTheDocument();
   });
 
