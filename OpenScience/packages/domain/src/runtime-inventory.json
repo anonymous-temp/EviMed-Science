@@ -1602,7 +1602,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "c51d2b84a04ed504617b14edf48da1cf9f3bc12d1973058d326efb455624319e",
+    "sha256": "045dda82eecbc9925ae43fe6706b6fadeb79a7fd9daa9943f792faedc532df31",
     "rows": [
       {
         "id": "persona",
