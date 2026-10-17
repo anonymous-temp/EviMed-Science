@@ -1,6 +1,6 @@
 // @vitest-environment node
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 import baseline from "./layout-lint-baseline.json";
 
@@ -11,10 +11,18 @@ import baseline from "./layout-lint-baseline.json";
  */
 const WEB = fileURLToPath(new URL("../..", import.meta.url));
 const files = baseline.files as Record<string, number>;
+// ESLint 8 ships no types of its own: the little of its API this reads.
+interface LintMessage { ruleId: string | null; severity: number }
+interface LintResult { filePath: string; messages: LintMessage[] }
+interface Linter {
+  lintFiles(files: string[]): Promise<LintResult[]>;
+  lintText(code: string, options: { filePath: string }): Promise<LintResult[]>;
+}
+const { ESLint } = createRequire(import.meta.url)("eslint") as { ESLint: new (options: { cwd: string }) => Linter };
 const eslint = new ESLint({ cwd: WEB });
 
 /** The layout sites of one result: the import rule is the layout block's alone. */
-const layoutSites = (result: ESLint.LintResult) => result.messages.filter((message) => message.ruleId === "no-restricted-imports");
+const layoutSites = (result: LintResult) => result.messages.filter((message) => message.ruleId === "no-restricted-imports");
 
 describe("the page framework's lint rules", () => {
   it("hold every file on the baseline to its recorded number, and a clean file leaves the list", async () => {
