@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { connectorCredentialSpec, connectorMissingCode } from "@evimed/domain";
+import { DEEPSEEK_FETCH_RESERVE_MS, deepseekRenditionResult, webReadFallbackReason } from "./deepseekTools.mjs";
 import { headerValue, nodeWebTransport, privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 import { recordGeneExpressionDownload, recordGeneExpressionLimit } from "./geneExpressionMetrics.mjs";
 import { GENE_EXPRESSION_LIMIT_ACTIONS, GENE_EXPRESSION_LIMIT_NAMES } from "@evimed/domain";
@@ -1416,6 +1417,58 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes, fallba
 }
 
 /**
+ * One `web_read`: our own read, and when it ends unreadable for a reason a fetcher elsewhere can overcome, DeepSeek's
+ * Fetch once (2026-10-17). Everything that protects this network and the sites runs first and is never skipped: the URL
+ * and every redirect hop are validated and pinned to public addresses, robots.txt is asked, the size caps hold — a page
+ * our read refused for any of those is refused, and an internal or private host never leaves for DeepSeek
+ * (`webReadFallbackReason` names the reasons that may be retried). With a second reader our read keeps back the time it
+ * needs (`DEEPSEEK_FETCH_RESERVE_MS`), so a read that times out still has a fallback; when the fallback fails too, the
+ * run gets our read's own reason, unchanged.
+ * @param {string} url
+ * @param {{ webReader: any, secondReader: ReturnType<typeof import("./deepseekTools.mjs").createDeepSeekTools> | null, identity: any, signal: AbortSignal, budgetMs: number }} context
+ */
+async function readWebPage(url, { webReader, secondReader, identity, signal, budgetMs }) {
+  const started = Date.now();
+  const direct = new AbortController();
+  const forward = () => direct.abort(signal.reason);
+  signal.addEventListener("abort", forward, { once: true });
+  const directTimer = secondReader
+    ? setTimeout(() => direct.abort(new DOMException("The direct read used its share of the budget.", "TimeoutError")), Math.max(1_000, budgetMs - DEEPSEEK_FETCH_RESERVE_MS))
+    : null;
+  directTimer?.unref?.();
+  try {
+    return await webReader.read(url, {
+      signal: secondReader ? direct.signal : signal,
+      runtime: { userId: String(identity?.userId ?? ""), projectId: String(identity?.projectId ?? "") },
+    });
+  } catch (error) {
+    // The caller's own deadline or departure ends the read; nothing more is tried.
+    if (signal.reason?.name === "TimeoutError") {
+      throw gatewayError(504, "web_read_timeout", "The web page could not be read in time; try another source or retry later.");
+    }
+    const timedOut = !signal.aborted && direct.signal.reason?.name === "TimeoutError";
+    const reason = secondReader && !signal.aborted ? webReadFallbackReason(error, url, { timedOut }) : null;
+    if (reason) {
+      try {
+        const remaining = Math.max(1_000, Math.min(DEEPSEEK_FETCH_RESERVE_MS, budgetMs - (Date.now() - started)));
+        const fetched = await secondReader.fetch(url, { caller: identity, signal: AbortSignal.any([signal, AbortSignal.timeout(remaining)]) });
+        return deepseekRenditionResult({ url, title: fetched.title, content: fetched.content, reason });
+      } catch {
+        // Our read's reason is the true one for the run; how the second reader ended is in its counters.
+      }
+    }
+    if (signal.reason?.name === "TimeoutError" || timedOut) {
+      throw gatewayError(504, "web_read_timeout", "The web page could not be read in time; try another source or retry later.");
+    }
+    if (error instanceof WebReadError) throw gatewayError(error.status === 499 ? 504 : error.status, error.code, error.message);
+    throw gatewayError(502, "web_read_failed", "The web page could not be read.");
+  } finally {
+    signal.removeEventListener("abort", forward);
+    if (directTimer) clearTimeout(directTimer);
+  }
+}
+
+/**
  * @param {any} config
  * @param {any} runtimeManager
  * `pdfTransport` is how an open-access PDF is fetched: the deployment's web
@@ -1426,14 +1479,16 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes, fallba
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
  *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any,
  *   evaluationIsolation?: any, sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null,
- *   fallbackFetch?: typeof fetch | null, pause?: (ms: number, signal: AbortSignal) => Promise<void> }} [options]
+ *   fallbackFetch?: typeof fetch | null, pause?: (ms: number, signal: AbortSignal) => Promise<void>,
+ *   deepseekTools?: ReturnType<typeof import("./deepseekTools.mjs").createDeepSeekTools> | null }} [options]
  * `fallbackFetch` is the other address a refused download may be asked through (the Tokyo node, `edgeFetch`); `pause` is the
- * wait between asks, replaceable by a test.
+ * wait between asks, replaceable by a test. `deepseekTools` is the process's DeepSeek tools client, whose Fetch is
+ * `web_read`'s second reader when its lever is on (`readWebPage`).
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
   pdfTransport = null, capturePdf = null, preparePdfCapture = null, sourceIntake = null, evaluationIsolation = null,
-  fallbackFetch = null, pause = abortablePause,
+  fallbackFetch = null, pause = abortablePause, deepseekTools = null,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
@@ -1536,20 +1591,11 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         // A read may render a page and parse a PDF, so it gets its own budget —
         // one that still ends before the MCP tool call does (config.mjs).
         clearTimeout(timeout);
-        timeout = arm(Math.max(1_000, Number(config.webReadTimeoutMs) || 150_000));
-        let result;
-        try {
-          result = await webReader.read(request.url, {
-            signal: controller.signal,
-            runtime: { userId: String(identity?.userId ?? ""), projectId: String(identity?.projectId ?? "") },
-          });
-        } catch (error) {
-          if (controller.signal.reason?.name === "TimeoutError") {
-            throw gatewayError(504, "web_read_timeout", "The web page could not be read in time; try another source or retry later.");
-          }
-          if (error instanceof WebReadError) throw gatewayError(error.status === 499 ? 504 : error.status, error.code, error.message);
-          throw gatewayError(502, "web_read_failed", "The web page could not be read.");
-        }
+        const readBudgetMs = Math.max(1_000, Number(config.webReadTimeoutMs) || 150_000);
+        timeout = arm(readBudgetMs);
+        const result = await readWebPage(String(request.url), {
+          webReader, secondReader: deepseekTools?.fetchEnabled ? deepseekTools : null, identity, signal: controller.signal, budgetMs: readBudgetMs,
+        });
         const body = Buffer.from(JSON.stringify(evaluationIsolation ? await evaluationIsolation.filter(identity, "web-read", result) : result));
         res.writeHead(200, {
           "content-type": "application/json; charset=utf-8",
