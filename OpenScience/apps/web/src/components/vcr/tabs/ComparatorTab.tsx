@@ -258,20 +258,26 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 function OtherRoute({ data, route }: { data: ComparatorData; route: ComparatorData["routes"][number] }) {
   const frame = useStudyFrame();
   const needs = route.state === "not_applicable" || route.state === "not_estimable";
-  const rows: Fact[] = [
-    { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
-    ...(route.reason ? [{ label: needs ? "需要什么" : "原因", value: route.reason }] : []),
-    ...(route.note ? [{ label: "说明", value: route.note }] : []),
-  ];
+  // A route with its gaps listed says its state and what it needs in the list's own card; the facts would be the same words twice.
+  const gaps = route.route === "external_control" ? data.gaps : null;
+  const rows: Fact[] = gaps
+    ? []
+    : [
+      { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
+      ...(route.reason ? [{ label: needs ? "需要什么" : "原因", value: route.reason }] : []),
+      ...(route.note ? [{ label: "说明", value: route.note }] : []),
+    ];
   return (
     <>
       <Section
         title={ROUTE_LABELS[route.route] ?? route.route}
         toolbar={needs && frame ? <Button size="sm" variant="secondary" onClick={() => frame.openPanel("intake")}>接入数据</Button> : undefined}
       >
-        <div data-vcr-route-record={route.route}><FactList rows={rows} /></div>
+        <div data-vcr-route-record={route.route} className="flex flex-col gap-4">
+          {rows.length > 0 && <FactList rows={rows} />}
+          {gaps && <Gaps gaps={gaps} />}
+        </div>
       </Section>
-      {route.route === "external_control" && data.gaps && <Gaps gaps={data.gaps} />}
       {route.route === "external_control" && data.e10 && data.e10.length > 0 && <Conditions conditions={data.e10} />}
     </>
   );

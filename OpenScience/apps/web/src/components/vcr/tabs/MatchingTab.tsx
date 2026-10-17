@@ -235,7 +235,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   return (
     <div className="flex flex-col gap-6">
       {aside}
-      {data.headline && <Headline parts={[data.headline]} />}
+      {/* The sentence is about who was assessed; the referral ledger, the sites and the follow-up say their own numbers. */}
+      {view === "matching" && data.headline && <Headline parts={[data.headline]} />}
       {view === "matching" && (
         <MatchingView
           studyId={studyId}

@@ -96,12 +96,6 @@ export function VcrModelsPanel() {
                       onOpen={() => setOpenId(model.id)}
                       selected={current?.id === model.id}
                       titleProps={{ "data-vcr-model": model.id }}
-                      trailing={(
-                        <>
-                          <Tag>{modelTierLabel(model.tier)}</Tag>
-                          <Tag tone="accent">{intendedUseLabel(model.useCeiling)}</Tag>
-                        </>
-                      )}
                       meta={<ModelMeta model={model} />}
                     />
                   ))}
@@ -195,7 +189,12 @@ export function VcrModelsPanel() {
 /** What a model row says under its name: where it comes from, what it predicts and how risky it is. */
 function ModelMeta({ model }: { model: VcrModelCard }) {
   return (
-    <span className="flex flex-col gap-0.5">
+    <span className="flex flex-col gap-1">
+      {/* The tier and what the model may be used for are the row's two marks; beside the name they would leave it a narrow column to wrap in. */}
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Tag>{modelTierLabel(model.tier)}</Tag>
+        <Tag tone="accent">{intendedUseLabel(model.useCeiling)}</Tag>
+      </span>
       <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-caption text-text-3">
         {model.family && <span>{model.family}</span>}
         {model.version && <span className="tabular-nums">{model.version}</span>}
