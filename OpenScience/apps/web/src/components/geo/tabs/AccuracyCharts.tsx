@@ -36,29 +36,32 @@ export function ErrorCharts({
   denominator: string | null;
   selection: ErrorChartSelection;
 }) {
-  const cells: Array<Pick<ChartGridCell, "key" | "node">> = [
-    {
-      key: "composition",
-      node: (
-        <ChartCard
-          title={compositionTitle}
-          state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
-          emptyText="这一轮还没有统计出回答的构成。"
-          // Counted by answer, beside a rate counted by statement: the footnote says which, so “讲错 44 次” is not read against
-          // “准确率 68%” as a share of the same thing (G17).
-          footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
-          height={120}
-        >
-          <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
-        </ChartCard>
-      ),
-    },
-    { key: "severity", node: <BySeverity errors={errors} selection={selection} /> },
-    ...(errors.length > 0 ? [
+  const composition_ = (
+    <ChartCard
+      title={compositionTitle}
+      state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
+      emptyText="这一轮还没有统计出回答的构成。"
+      // Counted by answer, beside a rate counted by statement: the footnote says which, so “讲错 44 次” is not read against
+      // “准确率 68%” as a share of the same thing (G17).
+      footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
+      height={120}
+    >
+      <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
+    </ChartCard>
+  );
+  // Two to a row, the two with the most in them first and the two single bars together: a row's cards share its height, and a
+  // bar beside a five-row list is a card that is mostly white.
+  const cells: Array<Pick<ChartGridCell, "key" | "node">> = errors.length > 0
+    ? [
+      { key: "severity", node: <BySeverity errors={errors} selection={selection} /> },
       { key: "type", node: <ByType errors={errors} selection={selection} /> },
+      { key: "composition", node: composition_ },
       { key: "source", node: <BySource errors={errors} selection={selection} /> },
-    ] : []),
-  ];
+    ]
+    : [
+      { key: "composition", node: composition_ },
+      { key: "severity", node: <BySeverity errors={errors} selection={selection} /> },
+    ];
   const rows: ChartGridCell[][] = [];
   for (let at = 0; at < cells.length; at += 2) {
     const pair = cells.slice(at, at + 2);

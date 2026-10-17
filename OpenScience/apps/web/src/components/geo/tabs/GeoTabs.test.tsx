@@ -541,7 +541,8 @@ describe("信源", () => {
     client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1], { engine: "deepseek" }));
     renderTab(<SourcesTab {...props()} />);
     await screen.findByText("3 个信源");
-    await userEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
+    await userEvent.click(screen.getByRole("button", { name: "引擎" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "DeepSeek" }));
     expect(order()).toEqual(["baike.baidu.com", "dxy.com"]);
     expect([valueOf("dxy.com", "cited"), valueOf("dxy.com", "wrong")]).toEqual(["18", "0"]);
     await userEvent.click(within(rowOf("baike.baidu.com")).getByRole("button", { name: /百度百科/ }));
@@ -565,9 +566,11 @@ describe("信源", () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     renderTab(<SourcesTab {...props()} />);
     await screen.findByText("3 个信源");
-    await userEvent.click(screen.getByRole("button", { name: "豆包" }));
+    await userEvent.click(screen.getByRole("button", { name: "引擎" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "豆包" }));
     expect(screen.queryByText("百度百科")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "全部引擎" }));
+    await userEvent.click(screen.getByRole("button", { name: /^引擎/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部引擎" }));
 
     await userEvent.click(screen.getByRole("button", { name: "只看" }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "讲错过我方" }));

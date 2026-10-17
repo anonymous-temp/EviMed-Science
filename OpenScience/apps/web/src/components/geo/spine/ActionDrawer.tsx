@@ -25,6 +25,7 @@ import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { SeverityBadge, isSeverityLevel } from "@/components/ui/SeverityBadge";
 import { Tag } from "@/components/ui/Tag";
+import { useGeoDiagnosis } from "../geoProjectData";
 import { geoDestinationPath } from "../geoTabs";
 import {
   engineName,
@@ -51,6 +52,8 @@ import {
 } from "./actionModel";
 import { clusterContext, clusterName, effectMarkers, effectPoints } from "./clusterModel";
 import { ClusterLink } from "./ClusterLink";
+import { GEO_ERROR_PARAM } from "./drawerParams";
+import { claimKeyOf } from "./errorModel";
 import { OwnedLinkForm } from "./OwnedLinkForm";
 import { QuestionRows } from "./QuestionRows";
 import { useGeoCluster, useGeoClusters } from "./spineData";
@@ -348,6 +351,9 @@ function ActionBody({
 /* --------------------------------------------------------------------- gap */
 
 function Gap({ action, claims, geoId }: { action: GeoAction; claims: GeoClusterView["claims"]; geoId: string }) {
+  // A wrong statement the action closes is the way to the claim's record, where the diagnosis holds the row that names its claim.
+  const diagnosis = useGeoDiagnosis(geoId);
+  const claimOfError = useMemo(() => new Map((diagnosis.state.kind === "ready" && Array.isArray(diagnosis.state.data?.errors) ? diagnosis.state.data.errors : []).map((row) => [row.id, claimKeyOf(row)])), [diagnosis.state]);
   const word = gapWord(action.need.gapClass);
   const points = action.need.expectedPoints;
   const evidence = action.need.evidence;
@@ -368,7 +374,15 @@ function Gap({ action, claims, geoId }: { action: GeoAction; claims: GeoClusterV
             <li key={`${entry.errorId}-${index}`} className="flex flex-wrap items-center gap-x-2 text-ui text-text">
               {isSeverityLevel(entry.severity) && <SeverityBadge level={entry.severity} />}
               <span className="text-text-2">{engineName(entry.engine)}</span>
-              <span className="min-w-0 flex-1">{`“${entry.statement ?? ""}”`}</span>
+              {claimOfError.has(entry.errorId) ? (
+                <Link
+                  to={geoDestinationPath(geoId, { tab: "accuracy" }, { [GEO_ERROR_PARAM]: claimOfError.get(entry.errorId) })}
+                  data-geo-action-error={entry.errorId}
+                  className="min-w-0 flex-1 rounded text-link hover:underline hover:underline-offset-4"
+                >
+                  {`“${entry.statement ?? ""}”`}
+                </Link>
+              ) : <span className="min-w-0 flex-1">{`“${entry.statement ?? ""}”`}</span>}
             </li>
           ) : null)}
         </ul>

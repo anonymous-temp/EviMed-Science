@@ -96,7 +96,7 @@ describe("信源: two views in the band", () => {
     expect(await screen.findByRole("list", { name: "可投放的信源" })).toBeInTheDocument();
     expect(document.querySelector("[data-geo-source]")).toBeNull();
     // the engine and 「只看」 choices belong to the other view and are gone
-    expect(within(toolbar()).queryByRole("group", { name: "引擎" })).toBeNull();
+    expect(within(toolbar()).queryByRole("button", { name: "引擎" })).toBeNull();
   });
 });
 
@@ -116,6 +116,34 @@ describe("信源: the pictures above the list", () => {
     expect(domains()).toEqual(["site4.cn", "site5.cn"]);
     await userEvent.click(within(toolbar()).getByRole("button", { name: /^类型：社区/ }));
     expect(domains()).toHaveLength(6);
+  });
+
+  it("names the kind of site cited most among those the platform could name, never 「其他」 as the conclusion", async () => {
+    const unnamed: GeoSourceRow[] = [
+      { ...many[0], id: "u0", domain: "u0.cn", kind: "其他", cited: { doubao: 50 } },
+      { ...many[0], id: "u3", domain: "u3.cn", kind: null, cited: { doubao: 5 } },
+      { ...many[1], id: "u1", domain: "u1.cn", kind: "news", cited: { doubao: 4 } },
+      { ...many[2], id: "u2", domain: "u2.cn", kind: "encyclopedia", cited: { doubao: 7 } },
+    ];
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: unnamed });
+    renderTab();
+    await screen.findByText("4 个信源");
+    const grid = document.querySelector("[data-chart-grid]") as HTMLElement;
+    expect(within(grid).getByRole("heading", { name: "百科是被引用最多的一类，7 次" })).toBeInTheDocument();
+    // 「其他」 stays a bar (and a filter): the sites with no kind are real citations
+    expect(within(within(grid).getByRole("list", { name: "各类站点被引用的次数" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      expect.stringContaining("其他"), expect.stringContaining("百科"), expect.stringContaining("新闻媒体"),
+    ]);
+  });
+
+  it("draws no kinds card where no site has a kind, and the concentration takes the row", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many.map((row) => ({ ...row, kind: null })) });
+    renderTab();
+    await screen.findByText("6 个信源");
+    const grid = document.querySelector("[data-chart-grid]") as HTMLElement;
+    expect(within(grid).queryByRole("list", { name: "各类站点被引用的次数" })).toBeNull();
+    expect(grid.querySelector("[data-source-concentration]")).not.toBeNull();
+    expect(grid.querySelectorAll("[data-chart-row] > div")).toHaveLength(1);
   });
 
   it("states the share of the busiest sites as the title, and the sites cited once as a fact of the legend", async () => {
@@ -177,6 +205,19 @@ describe("信源: where an article could go", () => {
     expect(served).toEqual([G_EFFECT, G_SAFETY]);
     expect(dxy).toHaveTextContent("120 灵豆");
     expect(dxy.querySelector("[data-geo-place-state]")).toHaveTextContent("现在可以下单");
+  });
+
+  it("a place the market lists and the server has not ruled on is called by its name, not marked as a problem", async () => {
+    client.getGeoActions.mockResolvedValue({
+      ...actionsFilled,
+      actions: [{ ...effect, sources: [site({ domain: "phirda.com", name: "药智网", layer: "coverage", route: "market", available: null })] }],
+    });
+    renderTab(geoProject(), "/app/geo/geo_1/sources?view=placeable");
+    const list = await screen.findByRole("list", { name: "可投放的信源" });
+    const state = list.querySelector("[data-geo-place='phirda.com'] ")!.closest("li")!.querySelector("[data-geo-place-state]") as HTMLElement;
+    expect(state).toHaveTextContent("媒介集市");
+    expect(state).toHaveAttribute("data-geo-place-state", "plain");
+    expect(state.className).not.toMatch(/warn/);
   });
 
   it("says the own channel is the brand's to publish and a refused place why, and nothing is worked out again", async () => {

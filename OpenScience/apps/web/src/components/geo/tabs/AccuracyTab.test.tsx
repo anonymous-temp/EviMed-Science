@@ -370,8 +370,14 @@ describe("准确与安全: the charts and the list share one selection", () => {
     expect(within(grid).getByText(/讲错最多，/)).toBeInTheDocument();
     expect(within(grid).getByText(/讲错最多的是/)).toBeInTheDocument();
     expect(within(grid).getByText(/条讲错里，/)).toBeInTheDocument();
-    // a grid with no hole: every row's cells add up to its columns
-    for (const rowNode of grid.querySelectorAll("[data-chart-row]")) expect(rowNode.children.length).toBeGreaterThan(0);
+    // a grid with no hole: two to a row, and the two cards of a row hold about as much — the lists together, the single bars together
+    const rows = [...grid.querySelectorAll("[data-chart-row]")].map((rowNode) => rowNode.children.length);
+    expect(rows).toEqual([2, 2]);
+    const first = grid.querySelectorAll("[data-chart-row]")[0];
+    expect(first.querySelector("[data-severity-engine]")).not.toBeNull();
+    expect(first.querySelector("[data-bar-list]")).not.toBeNull();
+    const second = grid.querySelectorAll("[data-chart-row]")[1];
+    expect(second.querySelectorAll("[data-share-bar]")).toHaveLength(2);
   });
 
   it("an engine of the severity chart narrows the list to it, the toolbar says so, and pressing it again lets go", async () => {

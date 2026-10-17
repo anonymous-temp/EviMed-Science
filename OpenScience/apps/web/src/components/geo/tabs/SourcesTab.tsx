@@ -28,6 +28,7 @@ import {
   isPlaceable,
   kindCounts,
   kindOf,
+  OTHER_KIND,
   type Candidate,
 } from "../spine/sourceModel";
 import { useGeoActions, useGeoClusters } from "../spine/spineData";
@@ -255,7 +256,9 @@ function SourceList({
     filters: [
       { kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => change({ [GEO_VIEW_PARAM]: value === "cited" ? null : value }) },
       ...(view === "cited" ? [
-        { kind: "chips" as const, label: "引擎", options, value: current, onChange: (value: string) => setEngineParam(value === "all" ? null : value) },
+        // A menu and not a chip for each engine: five chips are most of the band's row, and a row that wraps when a choice adds its
+        // mark moves the page under it.
+        { kind: "select" as const, label: "引擎", allLabel: "全部引擎", options: options.filter((option) => option.value !== "all"), value: current === "all" ? null : current, onChange: (value: string | null) => setEngineParam(value) },
         { kind: "select" as const, label: "只看", allLabel: "全部信源", options: ONLY_OPTIONS, value: only, onChange: (value: string | null) => setOnlyParam(value) },
       ] : []),
       ...(groups.length > 1 ? [{
@@ -365,28 +368,32 @@ function SourcePictures({
   onSelect: (kind: string | null) => void;
   facts: ReturnType<typeof concentrationFacts>;
 }) {
-  if (kinds.length === 0 || facts.sites === 0) return null;
-  const top = kinds[0];
+  if (facts.sites === 0) return null;
+  // The title is about the kinds the platform could name: 「其他」 is the sites it has no kind for, and "other is cited most" says
+  // nothing. A page where no site has a kind draws no kinds card, and the concentration has the row.
+  const named = kinds.filter((entry) => entry.key !== OTHER_KIND && entry.label !== "其他");
   const rows = kinds.slice(0, 8).map((entry) => ({ key: entry.key, label: entry.label, value: entry.citations, unit: "次", note: `${entry.sites.toLocaleString("zh-CN")} 个站` }));
+  const concentration = {
+    key: "concentration",
+    span: (named.length === 0 ? 2 : 1) as 1 | 2,
+    node: (
+      <ChartCard title={concentrationTitle(facts)}>
+        <SourceConcentration facts={facts} />
+      </ChartCard>
+    ),
+  };
   return (
     <ChartGrid
-      rows={[[
+      rows={[named.length === 0 ? [concentration] : [
         {
           key: "kinds",
           node: (
-            <ChartCard title={zh`${top.label}被引用最多，${top.citations.toLocaleString("zh-CN")} 次`}>
+            <ChartCard title={zh`${named[0].label}是被引用最多的一类，${named[0].citations.toLocaleString("zh-CN")} 次`}>
               <BarList label="各类站点被引用的次数" rows={rows} selected={selected} onSelect={onSelect} tone="rival" />
             </ChartCard>
           ),
         },
-        {
-          key: "concentration",
-          node: (
-            <ChartCard title={concentrationTitle(facts)}>
-              <SourceConcentration facts={facts} />
-            </ChartCard>
-          ),
-        },
+        concentration,
       ]]}
     />
   );
@@ -395,12 +402,16 @@ function SourcePictures({
 /* --------------------------------------------------------------- placeable */
 
 /** Where a place stands for an order now, in the reader's words: the market's, the brand's own, waiting, or why not. */
-function availability(candidate: Candidate): { text: string; tone: "ok" | "wait" | "no" } {
+function availability(candidate: Candidate): { text: string; tone: "ok" | "wait" | "no" | "plain" } {
   if (candidate.route === "own") return { text: routeWord("own") ?? "自有渠道", tone: "ok" };
   if (candidate.route === "waiting_market") return { text: routeWord("waiting_market") ?? "", tone: "wait" };
   if (candidate.available === true) return { text: "现在可以下单", tone: "ok" };
   const why = unavailableWords(candidate.unavailableBecause);
-  return { text: [routeWord(candidate.route), ...why].filter(Boolean).join("；") || "现在不能下单", tone: "no" };
+  // Refused, and said why; or the market's own and the server has not said either way, which is its name and no more.
+  if (candidate.available === false || candidate.route === "not_in_market" || why.length > 0) {
+    return { text: [routeWord(candidate.route), ...why].filter(Boolean).join("；") || "现在不能下单", tone: "no" };
+  }
+  return { text: routeWord(candidate.route) ?? "", tone: "plain" };
 }
 
 function Placeable({

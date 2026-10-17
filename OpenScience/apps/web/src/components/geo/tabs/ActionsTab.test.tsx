@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoArticle, GeoProject } from "@/lib/geoClient";
-import { distributionFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
+import { diagnosisFilled, diagnosisWith, distributionFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
 import {
   ACTION_BRAND,
   ACTION_EFFECT,
@@ -23,6 +23,7 @@ import { ActionsTab } from "./ActionsTab";
 
 const client = vi.hoisted(() => ({
   getGeoActions: vi.fn(),
+  getGeoDiagnosis: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
   skipGeoAction: vi.fn(),
@@ -111,6 +112,11 @@ beforeEach(() => {
   const project = actionsFilled;
   client.getGeoActions.mockResolvedValue(project);
   client.getGeoClusters.mockResolvedValue(clustersFilled);
+  // the two wrong statements the brand action closes, as the diagnosis holds them: one claim told by two engines
+  client.getGeoDiagnosis.mockResolvedValue(diagnosisWith([
+    { ...diagnosisFilled.errors[0], id: "err_1", engine: "deepseek", fingerprint: "fp_dose", claimId: "clm_dose", severity: "S3", status: "open" },
+    { ...diagnosisFilled.errors[0], id: "err_2", engine: "doubao", fingerprint: "fp_dose", claimId: "clm_dose", severity: "S3", status: "open" },
+  ]));
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.getGeoArticles.mockResolvedValue({
     articles: ARTICLES.map((entry) => (entry.id === "art_effect" ? { ...entry } : entry)),
@@ -295,6 +301,19 @@ describe("行动: the toolbar", () => {
     expect(await screen.findByText("没有符合的行动。")).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("region", { name: "行动" })).getByRole("button", { name: "清除筛选" }));
     expect(rowOf(ACTION_BRAND.key)).toBeInTheDocument();
+  });
+});
+
+describe("行动: the chain to the wrong statements", () => {
+  it("a wrong statement an action closes is the way to that claim's record, the same address on 准确与安全", async () => {
+    renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_BRAND.key)}`);
+    const drawer = await screen.findByRole("dialog");
+    const evidence = await waitFor(() => {
+      const found = drawer.querySelectorAll("[data-geo-action-error]");
+      if (found.length < 2) throw new Error("not yet");
+      return [...found] as HTMLAnchorElement[];
+    });
+    expect(evidence.map((link) => link.getAttribute("href"))).toEqual(["/app/geo/geo_1/accuracy?error=fp_dose", "/app/geo/geo_1/accuracy?error=fp_dose"]);
   });
 });
 
