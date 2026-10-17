@@ -40,12 +40,10 @@ except office_kit.KitError:
 if os.environ.get("EVIMED_OFFICE_REQUIRE_KIT") and not KIT:
     raise SystemExit("EVIMED_OFFICE_REQUIRE_KIT is set and the LibreOffice Kit CLI is not installed")
 needs_kit = unittest.skipUnless(KIT, "the LibreOffice Kit CLI is not installed here")
-try:
-    office_kit.find_checker()
-    CHECKER = True
-except office_kit.KitError:
-    CHECKER = False
-needs_checker = unittest.skipUnless(CHECKER, "the kernel's Office checker is not installed here")
+# The structural checker always runs now: the kernel's own where an older kernel ships it, the one beside the kit
+# wrapper otherwise (DSH 0.2.1 dropped the script from `@deepseek-ai/dsh-skill-office`).
+CHECKER = office_kit.find_checker().is_file()
+needs_checker = unittest.skipUnless(CHECKER, "no structural checker is installed here")
 
 
 def run(script: Path, *arguments: object) -> subprocess.CompletedProcess:
@@ -149,9 +147,9 @@ class DocxFlows(Workdir):
         self.assertEqual(counts, [3, 3])
 
 
-class KernelChecker(Workdir):
+class StructuralChecker(Workdir):
     @needs_checker
-    def test_the_kernels_own_structural_check_reads_every_format(self) -> None:
+    def test_the_structural_check_reads_every_format(self) -> None:
         contract = fixtures.make_contract(self.dir / "contract.docx")
         report, status = office_kit.check(contract, contains=["Payment is due within 30 days"])
         self.assertEqual((status, report["verdict"], report["summary"]["paragraphs"]), (0, "pass", 25))

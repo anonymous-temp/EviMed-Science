@@ -53,9 +53,12 @@ export const inject = ['slots'];
  * `_dock`, `_hero`, `_embeddedBody`, `_scroll`, `_previewBadge`) is in the new
  * client bundles under the same hashed name, and the composer was measured at
  * 1512 and 390 px in a real frame (room under the card, one toolbar line, no
- * statistics for a researcher).
+ * statistics for a researcher). Re-read at 0.2.1-rc.2 (2026-10-17): the same ten
+ * suffixes carry the same hashed names in ui-layout, ui-conversation, ui-chat and
+ * ui-sidebar-right as at 0.2.0-rc.2, and the frame was walked at both sizes on a live
+ * 0.2.1-rc.2 kernel.
  */
-export const GEOMETRY_KERNEL_PIN = '0.2.0-rc.2';
+export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.2';
 
 /**
  * The product's mark as a data URL, for the document's icon.
@@ -124,7 +127,11 @@ export function shellStylesheet(pin, operator = false) {
 
     // Operators retain native statistics by the owner's 2026-09-29 decision.
     // This changes presentation only; the proxy still owns session authorization.
-    operator ? '' : '[data-composer-stats]{display:none !important}',
+    // Until 0.2.0 one `div[data-composer-stats]` held the pills; 0.2.1 makes each
+    // pill an entry of `conversation.composer.dock` (`activity`: turns, steps,
+    // tok/s; `usage`: tokens and cache hits), a `span[data-composer-stat=<id>]`
+    // apiece, and the old rule hid nothing (seen in the 2026-10-17 walk).
+    operator ? '' : '[data-composer-stats],[data-composer-stat]{display:none !important}',
     // The context ring beside the statistics is the same kind of number — how
     // full the model's window is — and goes with them (2026-09-29's ruling that
     // session statistics are an operator's, extended in E-17; the owner may
@@ -133,7 +140,9 @@ export function shellStylesheet(pin, operator = false) {
     // dialog and is named by the locale key `context.aria` — 「上下文已用 20%」
     // in `zh` (which this pack falls back to), 「20% of context used」 in `en`.
     // Hidden by that name, and as the whole wrapper so the row keeps no gap.
-    operator ? '' : '[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"]),[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"]){display:none !important}',
+    // 0.2.1 renders the dock's entries inside the slot's own outlet (`div[data-slot]`), so the ring is no longer the
+    // dock's direct child; it is found anywhere under the dock (`data-composer-dock`, the kernel's own marker).
+    operator ? '' : '[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"]),[class$="_dock"] > span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"]),[data-composer-dock] span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"]),[data-composer-dock] span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"]){display:none !important}',
     // The room under the composer. The kernel leaves 4 px between the card's
     // row of controls and the window's edge (`.root{padding:0 16px 4px}`), and
     // nothing of the shell's adds any: with the statistics, the ring and the

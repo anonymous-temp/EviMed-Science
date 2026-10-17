@@ -99,7 +99,9 @@ export async function createNativeExtensionPreparer(ctx, policy) {
       }
     },
     async inventory() {
-      return (await manager.listBundles()).map((/** @type {any} */ item) => ({ name: item.name, version: item.version ?? null,
+      // What this profile holds. 0.2.1 lists the kernel's on-demand catalog beside it (the Codex and Claude Code child
+      // backends, offered with an `installTarget` and never installed here); an offer is not a bundle of the profile.
+      return (await manager.listBundles()).filter((/** @type {any} */ item) => item.installed || !item.installTarget).map((/** @type {any} */ item) => ({ name: item.name, version: item.version ?? null,
         installed: item.installed, enabled: item.enabled, error: item.error?.code ?? null,
         rows: item.rows.map((/** @type {any} */ row) => ({ rowId: row.rowId, moduleName: row.moduleName })) }))
     },

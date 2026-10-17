@@ -550,6 +550,10 @@ profile_seed() {
   node /usr/local/bin/evimed-profile-kernel-pins.mjs /usr/local/lib/node_modules/@deepseek-ai/dsh/package.json "${DSH_HOME_SEED}/profiles/evimed-runtime" /opt/evimed/profile-pnpm-workspace.yaml "${DSH_VERSION}" "${DSH_CORDIS_VERSION}" ${DSH_COMMUNITY_PEER_PINS}
   loopx_archive="$(node -p '"/opt/evimed/loopx/" + JSON.parse(require("node:fs").readFileSync("/opt/evimed/runtime-deps-version.json", "utf8")).loopx.plugin.filename')"
   openviking_archive="$(node -p '"/opt/evimed/openviking-plugin/" + JSON.parse(require("node:fs").readFileSync("/opt/evimed/runtime-deps-version.json", "utf8")).openviking.plugin.filename')"
+  # The pinned LoopX plugin declares a DSH range that ends below this kernel, and the kernel skips a bundle outside its
+  # range at install and at every start. The kernel's own exact-version exemption, for the one pair recorded as reviewed
+  # (deps-version.json loopx.compatibility.dshVersionExemption) and only for the archive whose digest is the pin.
+  node /usr/local/lib/evimed/loopx-compat.mjs --grant-exemption "${DSH_HOME_SEED}" "${loopx_archive}"
   DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" "${openviking_archive}" file:/opt/evimed/socket
   # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's and the OpenViking plugin's, whose rows it configures.
   node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"

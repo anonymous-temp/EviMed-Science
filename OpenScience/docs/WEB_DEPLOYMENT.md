@@ -501,8 +501,8 @@ OPEN_SCIENCE_BUILD_CREATED=replace-with-rfc3339-build-time
 OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:0.1.3
 OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=./release-manifest.json
 OPEN_SCIENCE_DATA_VOLUME=open-science-data
-OPEN_SCIENCE_DSH_VERSION=0.2.0-rc.2
-OPEN_SCIENCE_DSH_CORDIS_VERSION=4.0.4
+OPEN_SCIENCE_DSH_VERSION=0.2.1-rc.2
+OPEN_SCIENCE_DSH_CORDIS_VERSION=4.0.5
 OPEN_SCIENCE_SOCKET_VERSION=0.1.0
 OPEN_SCIENCE_NODE_VERSION=22.22.3
 OPEN_SCIENCE_PNPM_VERSION=11.7.0
@@ -519,7 +519,7 @@ OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET=/run/open-science-controller/controller.s
 OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS=10000
 OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS=500
 OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL=false
-OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:dsh-0.2.0-rc.2-uv-0.11.26
+OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26
 OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true
 OPEN_SCIENCE_RUNTIME_TRANSPORT=unix
 OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none
@@ -846,7 +846,7 @@ export OPEN_SCIENCE_RELEASE_ID="2026.07.10-release.1"
 export OPEN_SCIENCE_SOURCE_REVISION="$(git rev-parse HEAD)"
 export OPEN_SCIENCE_BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 export OPEN_SCIENCE_WEB_CONTAINER_IMAGE="open-science-web:0.1.3"
-export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.2.0-rc.2-uv-0.11.26"
+export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26"
 pnpm release:manifest
 pnpm verify:release-manifest
 # Verify the deployment backup and restore-drill evidence before recreation.
@@ -1081,7 +1081,14 @@ driver needs the recorded DSH tool-result envelope adaptation in
 `deploy/runtime-dsh/loopx-compat.mjs`; it is applied before sealing, with a
 receipt, and never modifies a serving installation. The same small adaptation
 passes a verified Pause action into the current model step as user context,
-without waking an idle session or cancelling its checkpoint. GoalBar requests retain
+without waking an idle session or cancelling its checkpoint. The plugin release
+declares a DSH range that ends below 0.2.1, and the kernel skips a bundle outside its
+range at install and at every start: the build grants the kernel's own exact-version
+exemption (`dsh plugin allow-version … --accept-risk`) for exactly the pair recorded in
+`loopx.compatibility.dshVersionExemption`, only for the archive whose sha256 is the pin
+(`loopx-compat.mjs --grant-exemption`); the profile's `compatibility.json` is sealed with
+the seed and synced to every project volume. Moving either pin fails the build by name
+until the pair has been run again and recorded. GoalBar requests retain
 project/session authorization and automatic turns enter the existing run and
 usage ledgers with `loopx-continuation` provenance. Goal state stays in the
 project's `.loopx` registry and `.codex/goals/` workspace files. Calendar agendas, research memory, evidence and

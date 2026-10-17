@@ -10,7 +10,15 @@
  * again at 0.2.0-rc.2 (2026-10-14: every line of the client bundles that names one of
  * these slots is the same text as at 0.1.7-rc.2, and the one registration the new
  * kernel adds on a slot we occupy is `ui-user-questions`' `question-reply` chat node
- * kind, which is a new kind and not a takeover of one listed below). Three rules of that registry decide whether an occupant
+ * kind, which is a new kind and not a takeover of one listed below), and at 0.2.1-rc.2
+ * (2026-10-17: compared line by line with the 0.2.0-rc.2 bundles of ui-layout,
+ * ui-conversation, ui-chat, ui-sidebar, ui-tool, ui-sidebar-right and ui-renderer;
+ * every slot is declared by the same package with the same kind and scope, the chat
+ * node kinds are the same fifteen, and the only changes are how `ui-chat` writes its
+ * registrations — `conversation.chat.node` as a `children` declaration of its own
+ * entry, `conversation.composer.dock` through a generator — not what they declare).
+ * `dsh-client-connection`, which provides `connection`, now serves the browser
+ * `lib/client.browser.js` through its `./client` export instead of `lib/client.js`. Three rules of that registry decide whether an occupant
  * appears at all, and each has already cost this codebase a shipped no-op:
  *
  *  - A list slot takes `options.id`; a keyed slot takes `options.key`; a chain
@@ -44,7 +52,7 @@
  */
 
 /** The kernel client version these contracts were read from. */
-export const RUNTIME_UI_KERNEL_PIN = '0.2.0-rc.2';
+export const RUNTIME_UI_KERNEL_PIN = '0.2.1-rc.2';
 
 /** Public keyed body/title cell registered by the pinned sidebar-browser client. */
 export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';

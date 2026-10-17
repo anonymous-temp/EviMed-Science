@@ -13,7 +13,7 @@ async function fixture(t) {
   const recordPath=path.join(root,'admission.json'),keys=generateKeyPairSync('ed25519'),now=Date.parse('2026-10-03T12:00:00Z');
   const entry={id:'fixture',coordinate:{kind:'npm',name:'fixture',version:'1.0.0'},executionClass:'isolated-tool',integrity:D},artifact={artifactDigest:D,adapterRevision:D};
   const composed=extensionProofAdapterRevision(D,D,value=>createHash('sha256').update(value).digest('hex'));
-  const identity={sourceCommit:null,adapterRevision:composed,runtimeImageDigest:D,dshVersion:'0.2.0-rc.2',permissionProfileRevision:D,suiteRevision:D};
+  const identity={sourceCommit:null,adapterRevision:composed,runtimeImageDigest:D,dshVersion:'0.2.1-rc.2',permissionProfileRevision:D,suiteRevision:D};
   const scope={ownerId:'owner',actorId:'owner',ownerAccountCreatedAt:'owner-epoch',actorAccountCreatedAt:'owner-epoch',actorMembershipEpoch:null,projectId:'project',projectCreatedAt:'project-epoch'};
   const facts={catalogueId:entry.id,coordinate:canonicalExtensionCoordinate(entry.coordinate),sourceCommit:null,packageIntegrity:D,artifactDigest:D,containedImageDigest:D,adapterDigest:D,adapterRevision:composed,runtimeImageDigest:D,dshVersion:identity.dshVersion,permissionProfileRevision:D,suiteRevision:D,sourcePolicyDigest:D,descriptorDigest:D,fixtureRootDigest:D,databaseNamespace:'fixture-db',installerId:'owner',installerAccountCreatedAt:'owner-epoch',installerMembershipEpoch:null,...scope};
   const record={...facts,assessmentId:'fixture-measurement',issuedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+1000).toISOString(),allowedOperations:['doc_read','doc_write']};

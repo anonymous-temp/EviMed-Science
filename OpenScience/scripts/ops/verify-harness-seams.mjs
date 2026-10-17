@@ -32,7 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { panelRemotes } from "../../packages/contracts/dsh/panelRemotes.mjs";
 import { closureDrift, installKernel } from "./kernel-install.mjs";
-import { ownWireNamespaces, wireSurfaceFindings } from "./wire-surface.mjs";
+import { ownWireNamespaces, typertHostMethods, wireSurfaceFindings } from "./wire-surface.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const seamPath = path.join(repoRoot, "packages/harness-port/seam-manifest.json");
@@ -253,6 +253,7 @@ const nameGroups = {
   "required services": names("required services", "services.required"),
   "optional services": names("optional services", "services.optional"),
   "stream endpoints": names("stream endpoints", "wire.streamEndpoints"),
+  "message source kinds": names("message source kinds", "messageSourceKinds"),
 };
 for (const [group, list] of Object.entries(nameGroups)) {
   if (!list.length) continue;
@@ -356,16 +357,14 @@ function declaredMethods() {
   /** @type {Map<string, string[]>} */
   const found = new Map();
   for (const pkg of deepseekPackages) {
-    let out = "";
-    try {
-      out = execFileSync("grep", ["-rhoE", "id: ['\"][^'\"#]+#[A-Za-z][A-Za-z0-9]*/[A-Za-z][A-Za-z0-9]*['\"]", "--include=typert.host.js", pkg.dir], { encoding: "utf8" });
-    } catch {
-      continue; // grep exits non-zero when a package has no host endpoints
-    }
-    for (const line of out.split("\n")) {
-      const method = /#([A-Za-z][A-Za-z0-9]*\/[A-Za-z][A-Za-z0-9]*)['"]/.exec(line)?.[1];
-      if (!method) continue;
-      found.set(method, [...(found.get(method) ?? []), pkg.dir.split("/").at(-1) ?? ""]);
+    // The package's own files, not a nested `node_modules` (another package, indexed on its own).
+    const files = readdirSync(pkg.dir, { recursive: true, encoding: "utf8" })
+      .filter((entry) => path.basename(entry) === "typert.host.js" && !entry.split(path.sep).includes("node_modules"));
+    // 0.2.1 dropped the `#` endpoint ids for one structured remote-info object; `typertHostMethods` reads both.
+    for (const file of files) {
+      for (const method of typertHostMethods(readFileSync(path.join(pkg.dir, file), "utf8"))) {
+        found.set(method, [...(found.get(method) ?? []), pkg.dir.split("/").at(-1) ?? ""]);
+      }
     }
   }
   return found;

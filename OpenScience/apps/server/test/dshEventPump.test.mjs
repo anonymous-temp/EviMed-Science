@@ -984,6 +984,15 @@ test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on
   const activity = [];
   const { runEvents, pump, muxes } = pumpOnFakeMux({ onRunActivity: (_project, _runId, note) => activity.push(note.seq) });
   t.after(() => pump.closeAll());
+  // Every event the pump published, not the channel's replay buffer: that keeps the last 500, and the 0.2.1-rc.2
+  // recording (a real model delegating and waiting in one turn) streams more than that before its turn ends.
+  /** @type {any[]} */
+  const published = [];
+  const publish = runEvents.publish.bind(runEvents);
+  runEvents.publish = (/** @type {string} */ runId, /** @type {string} */ type, /** @type {any} */ data) => {
+    if (runId === "run-1" && type === "run/event") published.push(data.event);
+    return publish(runId, type, data);
+  };
   const project = { userId: "alice", id: "recorded" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
   pump.noteRun(project, { id: "run-1", sessionId, status: "running" });
@@ -991,9 +1000,8 @@ test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on
   const stream = muxes[0].follow(sessionId);
   for (const frame of golden.session) stream.push(frame);
   const firstTurnEnd = golden.session.find((frame) => frame?.event?.type === "turn/end").event.seq;
-  await waitFor(() => eventsOf(runEvents, "run-1").some((event) => event.type === "turn/end" && event.seq === firstTurnEnd), "the first turn's end");
+  await waitFor(() => published.some((event) => event.type === "turn/end" && event.seq === firstTurnEnd), "the first turn's end");
 
-  const published = eventsOf(runEvents, "run-1");
   assert.ok(published.length > 10, "the recording must publish something, or this proves nothing");
   assert.equal(published.filter((event) => event.type === "unknown").length, 0, "no record without a variant is a card");
   assert.deepEqual(published.filter((event) => event.type === "session/title").map((event) => event.source), ["fallback", "provider"]);
@@ -1005,7 +1013,8 @@ test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on
   // A floor on the fixture, so the loop below cannot pass over an empty list; it is not a property of the kernel. The
   // scripted-model recording of 0.1.7-rc.2 delegated an evidence appraisal and the run policy nudged the parent on
   // every step (18 records); a real model's conversation, which is what 0.2.0-rc.2's was recorded with, writes the
-  // kernel's own bookkeeping only (7: header, context, system message, two titles, two inbox splices).
+  // kernel's own bookkeeping only (7: header, context, system message, two titles, two inbox splices); 0.2.1-rc.2's
+  // adds the background-job ledger beside each shell call and the inbox splices that carry a child's settlement.
   assert.ok(bookkeeping.length >= 5, "the first turn of the recording carries bookkeeping");
   for (const seq of bookkeeping) assert.ok(activity.includes(seq), `record ${seq} was a heartbeat`);
 });

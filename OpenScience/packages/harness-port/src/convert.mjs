@@ -255,8 +255,8 @@ export function toSubagentOutcome(run, settled) {
     ? result.output.map((block) => (record(block).type === 'text' ? str(record(block).text) : '')).filter(Boolean).join('\n')
     : str(result.output)
   return {
-    // `SubagentRun` declares `id` directly; there is no `info` on it.
-    childSessionId: str(source.id),
+    // The activation receipt (0.2.1) names the child `childId`; the one-shot run it replaced declared `id`.
+    childSessionId: str(source.childId ?? source.id),
     stopReason: /** @type {any} */ (known.includes(stopReason) ? stopReason : 'unknown'),
     output,
     structured: result.structured,

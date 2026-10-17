@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "kernel": "@deepseek-ai/dsh@0.2.0-rc.2",
+  "kernel": "@deepseek-ai/dsh@0.2.1-rc.2",
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-runtime-ui",
@@ -263,7 +263,7 @@
     {
       "name": "dsh-mermaid",
       "npmPackage": "dsh-mermaid",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "status": "installed",
       "row": "ui-mermaid",
       "switch": "OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED",

@@ -67,12 +67,15 @@ import {
   defineTool,
   guardTools,
   injectContext,
+  installChildComposition,
+  interruptSubagent,
   isSubagentSession,
   listDirAt,
   onPreStep,
   onPromptAssemble,
   onSessionEvent,
   onSessionStart,
+  onSubagentSettled,
   onToolObserved,
   onToolPolicy,
   onToolWrap,
@@ -84,6 +87,8 @@ import {
   registeredToolNames,
   restrictAgentTools,
   startSubagent,
+  startedChildId,
+  stepIsSettlementOnly,
   steerContext,
   toSubagentOutcome,
   toUsage,
@@ -120,6 +125,7 @@ import {
   submissionVerdict,
   toolPolicy,
   unmetDependencies,
+  NATIVE_CHILD_TOOL_DENY,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { collectSubagentRun } from '../src/subagentRun.mjs'
@@ -153,7 +159,7 @@ const Schema = await configSchema()
 
 export const name = 'evimed-run-policy'
 
-export const inject = ['tools', 'agents', 'sessions', 'subagents']
+export const inject = ['tools', 'agents', 'sessions', 'subagents', 'systemPrompt']
 
 /**
  * @typedef {object} Config
@@ -900,6 +906,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // kernel, 2026-09-27). `agent/pre-step` runs before every request and hands
   // its messages to that same request, so it is the one place that delivers.
   ctx.effect(() => onSessionStart(ctx, (agent) => {
+    // A delegated child's own persona prefix and tool mask, or — for a child the kernel's `subagent` started — the
+    // orchestration tools it may not use (`NATIVE_CHILD_TOOL_DENY`).
+    if (isSubagentSession(agent)) installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
     narrowRootTools(agent)
     void loadBrief(ctx, agent, sessionState, config)
   }))
@@ -910,9 +919,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // ---- budget and the root/child verdict ----------------------------------
   ctx.effect(() => onPreStep(
     ctx,
-    async (step) => {
+    async (step, payload) => {
       const entry = sessionState(step.sessionId)
       entry.cwd = step.cwd || entry.cwd
+      // A child's settlement notice reaching a root the researcher stopped would start a turn of its own (the kernel
+      // queues it for an idle parent). Nothing wakes a run the researcher stopped: a step that holds nothing but such
+      // notices is refused before it reaches the model, and the next thing the researcher sends runs as usual.
+      if (step.root && entry.wakeSuppressed && stepIsSettlementOnly(payload)) {
+        return { allow: false, code: 'run_stopped', reason: '研究者停止了本次运行，子代理结束的消息不再开始新的一轮。' }
+      }
       if (step.root) {
         entry.rootActive = true
         entry.agentId = step.agentId || entry.agentId
@@ -987,6 +1002,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           entry.pathContextRunId = entry.runId
         }
       }
+      // What the root needs to know about the `subagent` children it started, once per child, in the step that follows
+      // the call: they work on, and each one's result arrives in this turn by itself. Without it a model waiting for
+      // them slept in the shell (`sleep 30`, seen on a live 0.2.1-rc.2 kernel) while the results sat in its inbox.
+      if (step.root && entry.nativeChildren?.size) {
+        const fresh = [...entry.nativeChildren.entries()].filter(([, child]) => !child.told)
+        const notifyAgent = fresh.length ? ctx.get('agents')?.get?.(step.agentId) : null
+        if (notifyAgent) {
+          injectContext(notifyAgent, `<evimed-run>你启动的 ${entry.nativeChildren.size} 个子任务在后台工作；每个结束时，它的结果会自动送到这一轮里，不用 sleep 或轮询等它们：有别的事就接着做，没有就直接结束这一步。</evimed-run>`, name)
+          for (const [, child] of fresh) child.told = true
+        }
+      }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
@@ -1042,6 +1068,49 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @type {Map<string, Map<string, { sessionId: string, nested: boolean }>>} */
   const writersByRun = new Map()
 
+  // ---- the kernel's own sub-agents: a child is working until it settles ----
+  //
+  // From 0.2.1 `subagent` answers with the child's id and the child works on as a managed activation; when it settles
+  // the kernel hands the root a settlement notice (steered into a working root's next step, queued — a turn of its
+  // own — for an idle one) and publishes `subagent/end`. The run holds each child it started from the call's answer to
+  // that edge, which is what the concurrency budget counts and what the root's turn waits for below.
+  /** @type {Map<string, Record<string, any>>} child session id -> the run state of the root that started it */
+  const nativeChildOwners = new Map()
+  /** Children that settled before their call's answer was observed; bounded, every settlement passes through. */
+  const settledEarly = new Set()
+  /** @param {Record<string, any>} entry @param {string} childId */
+  const trackNativeChild = (entry, childId) => {
+    if (settledEarly.delete(childId)) return
+    entry.nativeChildren ??= new Map()
+    entry.nativeChildren.set(childId, { startedAt: new Date().toISOString() })
+    nativeChildOwners.set(childId, entry)
+  }
+  ctx.effect(() => onSubagentSettled(ctx, (childId) => {
+    const entry = nativeChildOwners.get(childId)
+    if (!entry) {
+      // A delegation's child (collected by its own tool) or one whose call has not been observed yet.
+      settledEarly.add(childId)
+      if (settledEarly.size > 256) settledEarly.delete(settledEarly.values().next().value ?? '')
+      return
+    }
+    nativeChildOwners.delete(childId)
+    entry.nativeChildren?.delete(childId)
+    if (!entry.nativeChildren?.size) for (const resolve of (entry.nativeChildWaiters ?? []).splice(0)) resolve()
+  }))
+  /**
+   * Until every child the root started with `subagent` has settled, or the turn is cancelled.
+   * @param {Record<string, any>} entry @param {AbortSignal | undefined} signal @returns {Promise<void>}
+   */
+  const nativeChildrenSettled = (entry, signal) => new Promise((resolve) => {
+    if (!entry.nativeChildren?.size || signal?.aborted) return resolve(undefined)
+    const done = () => {
+      signal?.removeEventListener?.('abort', done)
+      resolve(undefined)
+    }
+    ;(entry.nativeChildWaiters ??= []).push(done)
+    signal?.addEventListener?.('abort', done, { once: true })
+  })
+
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const { entry } = ownedSessionState(call.sessionId)
@@ -1066,8 +1135,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       if (notice) diagnostics(call.sessionId)?.degrade?.(notice)
       break
     }
-    // The kernel's own sub-agents (`subagent`, one-shot) of this run that are working now: counted when the call is
-    // admitted and released when it settles, which for a one-shot child is its whole life.
+    // The kernel's own sub-agents (`subagent`) of this run that are working now: a call admitted and not yet answered,
+    // and a child it started that has not settled. Counted against the run's total once, when the call is admitted.
     entry.nativeChildCalls ??= new Set()
     const decision = toolPolicy(call, {
       budget: entry.budget,
@@ -1077,7 +1146,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       // Only once the turn that wrote them has ended: inside it, an accepted
       // deliverable is still the run's to repair.
       frozenDeliverables: entry.frozen ? entry.items.filter((/** @type {any} */ item) => item.status === 'accepted').map((/** @type {any} */ item) => item.id) : [],
-      runningChildren: runningDelegations(entry).length + entry.nativeChildCalls.size,
+      runningChildren: runningDelegations(entry).length + entry.nativeChildCalls.size + (entry.nativeChildren?.size ?? 0),
     })
     if (decision.allow && call.name === NATIVE_SUBAGENT_TOOL) {
       entry.budget.children += 1
@@ -1140,8 +1209,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   // ---- record everything the run writes, for the completion scan ----------
   ctx.effect(() => onToolObserved(ctx, (call, outcome) => {
-    // A one-shot sub-agent's call settling, however it ended, is the child no longer working.
-    if (call.name === NATIVE_SUBAGENT_TOOL) ownedSessionState(call.sessionId).entry.nativeChildCalls?.delete(String(call.callId ?? ''))
+    // A `subagent` call answers as soon as its child is accepted: from here the child is the one working, until the
+    // kernel says it settled (`onSubagentSettled` below). A call that failed started nothing.
+    if (call.name === NATIVE_SUBAGENT_TOOL) {
+      const { entry } = ownedSessionState(call.sessionId)
+      entry.nativeChildCalls?.delete(String(call.callId ?? ''))
+      const childId = startedChildId(outcome)
+      if (childId) trackNativeChild(entry, childId)
+    }
     if (outcome.status !== 'completed') return
     if (call.name !== 'write' && call.name !== 'edit') return
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
@@ -1277,6 +1352,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (end.kind === 'aborted') {
       entry.wakeSuppressed = true
       for (const delegation of runningDelegations(entry)) delegation.abort.abort(new Error('研究者停止了本次运行'))
+      // The kernel's cancel stops the root's turn and nothing below it (0.2.1): a `subagent` child would work on and its
+      // notice would wake the root. Each one is stopped here, as the person's stop; its settlement then finds the run
+      // stopped (pre-step).
+      for (const childId of [...(entry.nativeChildren?.keys() ?? [])]) {
+        try {
+          interruptSubagent(ctx, childId, session.sessionId)
+        } catch (error) {
+          diagnostics(session.sessionId)?.degrade?.(`a sub-agent was not stopped with its run: ${errorMessage(error)}`)
+        }
+      }
     } else if (runningDelegations(entry).length) {
       // Recorded: the turn ended with work still out, after the stopping
       // reminders. The settlement will wake the root (`wakeForSettlements`);
@@ -1300,8 +1385,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }))
 
   // ---- one nudge when the plan promised files and the turn produced none --
-  ctx.effect(() => onTurnStopping(ctx, async (agent) => {
+  ctx.effect(() => onTurnStopping(ctx, async (agent, _turn, signal) => {
     const sessionId = String(agent?.session?.id ?? '')
+    // A root whose `subagent` children are still working is not done: the kernel's own design lets the turn close and
+    // the notice start the next one, which is a turn no run owns — the run would read finished on 「started subagent」
+    // while its child worked, and the answer that uses the child's result would belong to nobody. So the turn waits
+    // for them here. Each settlement notice is steered into this turn's next step before `subagent/end` is published,
+    // and the kernel runs that step when this listener returns. A cancel ends the wait with the turn.
+    if (!isSubagentSession(agent) && sessionState(sessionId).nativeChildren?.size) {
+      await nativeChildrenSettled(sessionState(sessionId), signal)
+      return
+    }
     // A delegated child submits its own deliverable and gets its review back
     // in its own submission, so it is the one that can answer — reminded of
     // that deliverable only. Its own session state holds no plan, which is why

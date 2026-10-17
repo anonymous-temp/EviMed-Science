@@ -10,7 +10,7 @@ import { verifyHostedLoopx, registerHostedLoopx } from '../../harness-port/src/l
 import { runtimeUiMethodFromPath } from '../../domain/src/runtimeUiSurface.mjs';
 import { isSuccessfulLoopxSkillResult } from '../../harness-port/src/loopxEvents.mjs';
 import { explainLoopxPause } from '../../harness-port/src/loopxPause.mjs';
-import { adaptLoopxDriver, orderLoopxProfileBundles } from '../../../deploy/runtime-dsh/loopx-compat.mjs';
+import { adaptLoopxDriver, grantLoopxVersionExemption, orderLoopxProfileBundles } from '../../../deploy/runtime-dsh/loopx-compat.mjs';
 
 const root = new URL('../../../', import.meta.url);
 const read = file => readFile(new URL(file, root), 'utf8');
@@ -153,6 +153,39 @@ test('build-time adaptation is idempotent and rejects any unreviewed bytes befor
   await writeFile(path.join(dir, pin.compatibility.goalbarFile), goalbar + '\n// unreviewed');
   assert.throws(() => adaptLoopxDriver(options), /GoalBar differs/);
   assert.equal(await readFile(path.join(dir, pin.compatibility.driverFile), 'utf8'), adaptedDriver);
+});
+
+// 0.2.1 skips a bundle outside its declared DSH range unless the profile's compatibility.json exempts that exact pair.
+// The grant is the kernel's own CLI; what is ours is that it is made only for the reviewed pair and the pinned bytes, and
+// that the record it leaves is that one grant (r19-dsh021).
+test('the version exemption is granted only for the reviewed pair, the pinned archive, and leaves exactly one grant', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-exemption-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const archive = path.join(dir, 'plugin.tgz');
+  await writeFile(archive, 'reviewed bytes');
+  const sha256 = createHash('sha256').update('reviewed bytes').digest('hex');
+  // A stand-in for `dsh plugin --profile P allow-version NAME@V --dsh-version D --accept-risk`, writing what the kernel writes.
+  const dsh = path.join(dir, 'dsh');
+  await writeFile(dsh, `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path');const a=process.argv.slice(2);` +
+    `if(a[0]!=='plugin'||a[3]!=='allow-version'||!a.includes('--accept-risk'))process.exit(2);` +
+    `const f=path.join(process.env.DSH_HOME,'profiles',a[2],'compatibility.json');fs.mkdirSync(path.dirname(f),{recursive:true});` +
+    `const r=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{};r[a[4]]=[...new Set([...(r[a[4]]??[]),a[6]])];fs.writeFileSync(f,JSON.stringify(r,null,2),{mode:0o600});\n`, { mode: 0o755 });
+  const exemption = deps.loopx.compatibility.dshVersionExemption;
+  assert.equal(exemption.plugin, `dsh-loopx-plugin@${deps.loopx.plugin.version}`, 'the record names the pinned plugin');
+  assert.equal(exemption.dsh, deps.dsh.version, 'the record names the pinned kernel');
+  const pins = { dsh: { version: exemption.dsh }, loopx: { plugin: { version: deps.loopx.plugin.version, sha256 }, compatibility: { dshVersionExemption: exemption } } };
+  const seedHome = path.join(dir, 'seed');
+  assert.deepEqual(grantLoopxVersionExemption({ seedHome, archive, pins, dsh }), { [exemption.plugin]: [exemption.dsh] });
+  assert.throws(() => grantLoopxVersionExemption({ seedHome, archive, dsh, pins: { ...pins, dsh: { version: '9.9.9' } } }), new RegExp(`reviewed for .* on DSH ${exemption.dsh.replaceAll('.', '\\.')}`));
+  assert.throws(() => grantLoopxVersionExemption({ seedHome, archive, dsh, pins: { ...pins, loopx: { ...pins.loopx, plugin: { ...pins.loopx.plugin, sha256: '0'.repeat(64) } } } }), /differs from the pinned digest/);
+  assert.throws(() => grantLoopxVersionExemption({ seedHome, archive, dsh, pins: { ...pins, loopx: { ...pins.loopx, compatibility: {} } } }), /no reviewed/);
+  // A second grant already in the profile is not the reviewed record.
+  const file = path.join(seedHome, 'profiles', 'evimed-runtime', 'compatibility.json');
+  await writeFile(file, JSON.stringify({ 'other-plugin@1.0.0': [exemption.dsh] }));
+  assert.throws(() => grantLoopxVersionExemption({ seedHome, archive, pins, dsh }), /not the one reviewed grant/);
+  const install = await read('deploy/runtime-dsh/install-runtime.sh');
+  assert.ok(install.indexOf('loopx-compat.mjs --grant-exemption') < install.indexOf('dsh plugin --profile evimed-runtime add'),
+    'granted before the add, which the kernel refuses without it');
 });
 
 // The folders the pinned CLI installs are a recorded fact, so the plugins page can list what the image carries and a CLI bump

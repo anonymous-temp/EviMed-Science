@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "71042681ddec476e4337cb088cdbafd428440431eac1225a5b8b44579caa550f",
+    "sha256": "6d3ef6f85bee3c7ffd464611a7202bfebfb99125a1825c59ac9515abfd9fbbfa",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -94,6 +94,13 @@
       {
         "id": "typert-gateway",
         "name": "@deepseek-ai/dsh-api-gateway",
+        "bundle": "@deepseek-ai/dsh-base",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "remote-access",
+        "name": "@deepseek-ai/dsh-api-remote-access",
         "bundle": "@deepseek-ai/dsh-base",
         "patchedBy": [],
         "state": "enabled"
@@ -220,6 +227,22 @@
         "bundle": "@deepseek-ai/dsh-base",
         "patchedBy": [],
         "state": "enabled"
+      },
+      {
+        "id": "working-directory",
+        "name": "@deepseek-ai/dsh-working-directory",
+        "bundle": "@deepseek-ai/dsh-base",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "tool-working-directory",
+        "name": "@deepseek-ai/dsh-tool-working-directory",
+        "bundle": "@deepseek-ai/dsh-base",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
       },
       {
         "id": "session-projection",
@@ -408,13 +431,6 @@
         "state": "disabled"
       },
       {
-        "id": "skill-badge",
-        "name": "@deepseek-ai/dsh-skill-badge",
-        "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
-        "state": "disabled"
-      },
-      {
         "id": "tool-skill",
         "name": "@deepseek-ai/dsh-tool-skill",
         "bundle": "@deepseek-ai/dsh-base",
@@ -498,7 +514,9 @@
         "id": "subagent",
         "name": "@deepseek-ai/dsh-subagent",
         "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
         "state": "enabled"
       },
       {
@@ -639,13 +657,6 @@
         "state": "disabled"
       },
       {
-        "id": "tool-ralph",
-        "name": "@deepseek-ai/dsh-tool-ralph",
-        "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
-        "state": "disabled"
-      },
-      {
         "id": "repeat-tool-reminder",
         "name": "@deepseek-ai/dsh-repeat-tool-reminder",
         "bundle": "@deepseek-ai/dsh-base",
@@ -665,8 +676,19 @@
         "id": "web-search-deepseek",
         "name": "@deepseek-ai/dsh-web-search-deepseek",
         "bundle": "@deepseek-ai/dsh-base",
-        "patchedBy": [],
-        "state": "enabled"
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
+        "id": "web-deepseek-api",
+        "name": "@deepseek-ai/dsh-web-deepseek-api",
+        "bundle": "@deepseek-ai/dsh-base",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
       },
       {
         "id": "web-fetch-http",
@@ -888,6 +910,15 @@
         "state": "enabled"
       },
       {
+        "id": "schedule",
+        "name": "@deepseek-ai/dsh-schedule",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
         "id": "ui-settings-account",
         "name": "@deepseek-ai/dsh-client-ui-settings-account",
         "bundle": "@deepseek-ai/dsh-web-app",
@@ -959,6 +990,15 @@
           "@evimed/dsh-socket"
         ],
         "state": "enabled"
+      },
+      {
+        "id": "harness-dev-context",
+        "name": "@deepseek-ai/dsh-harness-dev-context",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
       },
       {
         "id": "client-hmr",
@@ -1261,8 +1301,22 @@
         "state": "enabled"
       },
       {
+        "id": "ui-secret-mask",
+        "name": "@deepseek-ai/dsh-client-ui-secret-mask",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
         "id": "ui-jobs",
         "name": "@deepseek-ai/dsh-client-ui-jobs",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "ui-schedule",
+        "name": "@deepseek-ai/dsh-client-ui-schedule",
         "bundle": "@deepseek-ai/dsh-web-app",
         "patchedBy": [],
         "state": "enabled"
@@ -1284,6 +1338,13 @@
       {
         "id": "ui-model-selection",
         "name": "@deepseek-ai/dsh-client-ui-model-selection",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "ui-deepseek-model-label-1017",
+        "name": "@deepseek-ai/dsh-client-ui-deepseek-model-label-1017",
         "bundle": "@deepseek-ai/dsh-web-app",
         "patchedBy": [],
         "state": "enabled"
@@ -1541,7 +1602,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "81c91a49129d9e61b10d6e2f49a38b38a3f951e00f6342ea5625f93dc3ca7fc6",
+    "sha256": "045dda82eecbc9925ae43fe6706b6fadeb79a7fd9daa9943f792faedc532df31",
     "rows": [
       {
         "id": "persona",

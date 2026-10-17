@@ -110,23 +110,12 @@ export async function apply(ctx, config) {
       available: () => true,
       /** @param {any} request @param {AbortSignal} [signal] */
       async search(request, signal) {
+        const maxResults = Number.isInteger(request?.maxResults) && request.maxResults > 0 ? request.maxResults : null
         const payload = await call(ctx, config, search, {
-          query: String(request?.query ?? request?.text ?? '').trim(),
-          ...(Number.isInteger(request?.limit) ? { limit: request.limit } : {}),
-          ...(request?.language ? { language: String(request.language) } : {}),
+          query: String(request?.query ?? '').trim(),
+          ...(maxResults ? { limit: maxResults } : {}),
         }, signal)
-        // Upstream's own result shape, which is not ours: the gateway answers
-        // `{results:[{title,url,snippet}]}` and a `WebSearchProvider` returns
-        // rows carrying `content`. Translating here is the whole point of a
-        // provider — a caller written against the kernel's interface must not
-        // have to know which gateway answered.
-        return {
-          results: (Array.isArray(payload?.results) ? payload.results : []).map((/** @type {any} */ row) => ({
-            title: String(row?.title ?? ''),
-            url: String(row?.url ?? ''),
-            content: String(row?.snippet ?? ''),
-          })),
-        }
+        return searchResult(payload)
       },
     }))
   }
@@ -144,13 +133,57 @@ export async function apply(ctx, config) {
         // What may be read is the gateway's rule, not this file's: a second
         // copy here would be a second opinion, and a page the gateway refuses
         // is refused with the gateway's own reason.
-        const payload = await call(ctx, config, fetchUrl, { webRead: { url } }, signal)
-        return {
-          url: String(payload?.receipt?.finalUrl ?? url),
-          content: typeof payload?.text === 'string' ? payload.text : '',
-        }
+        return fetchResult(await call(ctx, config, fetchUrl, { webRead: { url } }, signal), url)
       },
     }))
+  }
+}
+
+/**
+ * The gateway's search answer in the kernel's `WebSearchResult` (`@deepseek-ai/dsh-web`, unchanged in 0.2.1).
+ *
+ * The web-search gateway answers `{ data: { results: [{ title, url, snippet, engine, publishedDate, … }] }, warnings }`.
+ * This read `payload.results` and answered `{ results: [{ title, url, content }] }`: the first is a field the gateway
+ * never sends, so every search came back empty, and the second is not the shape the kernel reads (`sources`, which its
+ * own cap step slices), so a consumer written against `ctx.web` would have thrown on it. Nothing consumes the registry
+ * today (`tool-web` is unmounted), which is the only reason neither was seen. A source carries what the gateway gave
+ * and nothing invented: `publishedAt` is the engine's date where one gave it.
+ * @param {any} payload
+ * @returns {{ sources: Array<{ url: string, title?: string, snippet?: string, publishedAt?: string }>, truncated: boolean }}
+ */
+export function searchResult(payload) {
+  const rows = Array.isArray(payload?.data?.results) ? payload.data.results : []
+  /** @type {Array<{ url: string, title?: string, snippet?: string, publishedAt?: string }>} */
+  const sources = []
+  for (const row of rows) {
+    const url = typeof row?.url === 'string' ? row.url.trim() : ''
+    if (!url) continue
+    const title = typeof row?.title === 'string' ? row.title.trim() : ''
+    const snippet = typeof row?.snippet === 'string' ? row.snippet.trim() : ''
+    const date = typeof row?.publishedDate === 'string' ? row.publishedDate : typeof row?.date === 'string' ? row.date : ''
+    sources.push({ url, ...(title ? { title } : {}), ...(snippet ? { snippet } : {}), ...(date ? { publishedAt: date } : {}) })
+  }
+  // `truncated` is the seam's to set when it cuts to `maxResults`; the gateway already answered within the limit.
+  return { sources, truncated: false }
+}
+
+/**
+ * The gateway's web read in the kernel's `WebFetchResult`.
+ *
+ * The web-read mode answers the read itself, unwrapped: `{ receipt: { finalUrl, status, contentType, truncated, … },
+ * text, links }` — the page as text (HTML is extracted, a PDF parsed), so the body is always the `text` kind, never
+ * HTML the caller would have to strip. The status is the page's own, as the contract asks: a page that answered 404 is
+ * a result, a page the gateway refused is an error under the gateway's code.
+ * @param {any} payload @param {string} requested
+ * @returns {{ url: string, statusCode: number, body: { kind: 'text', content: string }, truncated: boolean }}
+ */
+export function fetchResult(payload, requested) {
+  const receipt = payload?.receipt ?? {}
+  return {
+    url: typeof receipt.finalUrl === 'string' && receipt.finalUrl ? receipt.finalUrl : requested,
+    statusCode: Number.isInteger(receipt.status) ? receipt.status : 200,
+    body: { kind: 'text', content: typeof payload?.text === 'string' ? payload.text : '' },
+    truncated: receipt.truncated === true,
   }
 }
 

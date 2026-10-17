@@ -43,6 +43,41 @@ export function ownWireNamespaces(sourceDir) {
 }
 
 /**
+ * The RPC methods one generated `typert.host.js` declares.
+ *
+ * Two generations of the generator's output are read. Up to 0.2.0 every
+ * endpoint carried `id: '<package>#<namespace>/<method>'`. From 0.2.1 the file
+ * ends in one `createTypertRemoteInfo({ package, methods: { '<namespace>/<method>':
+ * { … } } })` and no `#` id is written at all, so the old reader found no method
+ * in any of the 29 host packages and the scan reported an empty surface. The
+ * keys of that `methods` object are read structurally — a quoted
+ * `namespace/method` key opening an object at the object's own indentation —
+ * and only inside the call, so a schema property or a description that happens
+ * to contain a slash is never a method.
+ * @param {string} text the file's source
+ * @returns {string[]} `namespace/method`, in source order
+ */
+export function typertHostMethods(text) {
+  /** @type {string[]} */
+  const found = [];
+  for (const match of text.matchAll(/id: ['"][^'"#]+#([A-Za-z][A-Za-z0-9]*\/[A-Za-z][A-Za-z0-9]*)['"]/g)) found.push(match[1]);
+  const call = text.indexOf("createTypertRemoteInfo({");
+  if (call < 0) return found;
+  const block = /\n(\s*)methods: \{\n/.exec(text.slice(call));
+  if (!block) return found;
+  const keyIndent = `${block[1]}  `;
+  const body = text.slice(call + block.index + block[0].length);
+  const key = new RegExp(`^${keyIndent}['"]([A-Za-z][A-Za-z0-9]*/[A-Za-z][A-Za-z0-9]*)['"]: \\{$`);
+  for (const line of body.split("\n")) {
+    // The object closes at its own indentation; nothing after it is a method.
+    if (line === `${block[1]}},` || line === `${block[1]}}`) break;
+    const method = key.exec(line)?.[1];
+    if (method) found.push(method);
+  }
+  return found;
+}
+
+/**
  * The two ways the manifest and the shipped surface can disagree.
  * @param {{ declared: Iterable<string>, shipped: Iterable<string>, streams?: Iterable<string>, own?: ReadonlySet<string> }} input
  *   `declared` the manifest's `wire.unary` and `wire.denied`; `shipped` the

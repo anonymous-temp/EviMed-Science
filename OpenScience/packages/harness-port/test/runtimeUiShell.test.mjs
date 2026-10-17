@@ -97,8 +97,9 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
 
 test("operators can use native kernel statistics while ordinary reader chrome stays compact", () => {
   const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
-  // The session statistics under the composer, by their stable data attribute.
-  assert.ok(css.includes('[data-composer-stats]{display:none !important}'));
+  // The session statistics under the composer, by their stable data attributes: the 0.2.0 row and each 0.2.1 pill
+  // (`span[data-composer-stat="activity"|"usage"]`, read off a live 0.2.1-rc.2 frame).
+  assert.ok(css.includes('[data-composer-stats],[data-composer-stat]{display:none !important}'));
   // The footer's usage and duration pills are its only dialog triggers; the
   // copy and branch buttons open none, and the clock is a plain span.
   assert.ok(css.includes('[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}'));
@@ -119,7 +120,7 @@ test("operators can use native kernel statistics while ordinary reader chrome st
   const kit = kitFor(operator.ctx, operator.target);
   apply(operator.ctx, {}, operator.target, undefined, kit);
   const sheet = operator.target.document.head.children.find((/** @type {any} */ node) => 'data-evimed-shell' in node.attributes);
-  assert.ok(!sheet.textContent.includes('[data-composer-stats]{display:none !important}'));
+  assert.ok(!sheet.textContent.includes('[data-composer-stat]'));
   assert.ok(!sheet.textContent.includes('[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}'));
 });
 
@@ -133,9 +134,12 @@ test('the context ring goes with the session statistics for a researcher, and an
   // `zh` (which the product's pack falls back to) and in `en`. The wrapper goes,
   // so the row keeps no gap.
   assert.ok(researcher.includes(ring) && researcher.includes(ringEnglish));
-  assert.ok(researcher.includes(`${ring},${ringEnglish}{display:none !important}`));
+  // 0.2.1 draws the ring inside the dock slot's own outlet, so it is also found anywhere under the kernel's dock marker.
+  const nested = '[data-composer-dock] span:has(> button[aria-haspopup="dialog"][aria-label^="上下文已用"])';
+  const nestedEnglish = '[data-composer-dock] span:has(> button[aria-haspopup="dialog"][aria-label$="of context used"])';
+  assert.ok(researcher.includes(`${ring},${ringEnglish},${nested},${nestedEnglish}{display:none !important}`));
   assert.ok(!operator.includes('上下文已用') && !operator.includes('of context used'), 'an operator keeps the ring beside the statistics');
-  assert.ok(!operator.includes('[data-composer-stats]{display:none !important}'));
+  assert.ok(!operator.includes('[data-composer-stat]'));
   // Never the whole dock, which the kernel fills with other things, and never by a hashed class.
   assert.doesNotMatch(researcher, /_dock"\]\{display:none/);
   assert.doesNotMatch(researcher, /\.[A-Za-z0-9]{6}_[A-Za-z]/);

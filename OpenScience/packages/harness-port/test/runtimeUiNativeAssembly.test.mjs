@@ -11,6 +11,29 @@ test('actual pinned SlotCore refuses duplicate child declarations retained by a 
  core.register({name:'conversation.composer.bar',children:{'conversation.input.attachments':{kind:'single',scope:'session-maybe'}}},()=>null);
  assert.throws(()=>core.register({name:'conversation.composer.bar',priority:-1,children:{'conversation.input.attachments':{kind:'single',scope:'session-maybe'}}},()=>null),/already declared/);
 });
+// 0.2.1's answer row declares two children (`conversation.chat.reasoning.body`, `conversation.chat.message.images`) and its
+// model seat one (`conversation.input.model.label`). The kit refused to take over any entry that declared a child, so the
+// reply check, the file and source cards and the thinking seat each registered nothing on a live 0.2.1 conversation.
+// A takeover inherits `inject`/`store`/`locale` and never `children`: the declaration stays the shipped entry's.
+test('actual pinned SlotCore: a takeover of an entry that declares children registers below it and leaves the declaration with it',async()=>{
+ const {createFrameKit}=await import('../src/runtimeUiKit.mjs'),{FRAME_VOCABULARY}=await import('../src/runtimeUiFrame.mjs');
+ const moduleId='js'+'dom',{JSDOM}=require(moduleId),dom=new JSDOM('<div id="root"></div>');const {ctx}=await nativeUiAssembly(dom);
+ /** @type {any} */ const core=ctx.slots;
+ core.register({name:'root',children:{'conversation.chat.node':{kind:'keyed',scope:'session'}}},()=>null);
+ const presentation={};const shipped=()=>null;
+ core.register({name:'conversation.chat.node',key:'assistant-step',locale:'chat',children:{'conversation.chat.reasoning.body':{kind:'single',scope:'session'}},inject:()=>({hooks:{presentation}})},shipped);
+ /** @type {string[]} */ const warnings=[];
+ const kit=createFrameKit(ctx,{__EVIMED_FRAME__:{version:1},console:{warn:(/** @type {string} */ message)=>warnings.push(message)}},undefined,FRAME_VOCABULARY);
+ function Checks(){return null;}
+ kit.occupyOver({slot:'conversation.chat.node',key:'assistant-step',priority:-1,locale:'chat'},Checks);
+ const entries=core.entries('conversation.chat.node').filter((/** @type {any} */ entry)=>entry.options.key==='assistant-step');
+ assert.deepEqual(entries.map((/** @type {any} */ entry)=>entry.options.priority??0),[-1,0],'ours below the shipped row');
+ assert.equal(entries[0].component,Checks);assert.equal(entries[0].children,undefined,'never a second declaration');
+ assert.equal(entries[0].inject,entries[1].inject,'the shipped row\'s hooks reach the entry that wins');
+ assert.ok(core.spec('conversation.chat.reasoning.body'),'the child slot is still declared, by the shipped entry');
+ assert.deepEqual(warnings,[]);
+ await ctx.fiber.dispose();dom.window.close();
+});
 test('actual public client renderer boots its registry and scope contracts',async()=>{
  const moduleId='js'+'dom',{JSDOM}=require(moduleId),dom=new JSDOM('<div id="root"></div>');const {ctx}=await nativeUiAssembly(dom);assert.equal(typeof ctx.slots.register,'function');assert.equal(typeof ctx.slots.installScope,'function');await ctx.fiber.dispose();dom.window.close();
 });

@@ -12,8 +12,8 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.2.0-rc.2
-ARG DSH_CORDIS_VERSION=4.0.4
+ARG DSH_VERSION=0.2.1-rc.2
+ARG DSH_CORDIS_VERSION=4.0.5
 # Registry cutoff of the pinned closure: the latest publish instant of its
 # `@deepseek-ai/dsh*` packages plus a minute, computed by
 # `node scripts/ops/kernel-install.mjs cutoff` and written once in
@@ -21,7 +21,7 @@ ARG DSH_CORDIS_VERSION=4.0.4
 # resolves to the exact same version. npm's cutoff bounds dependency resolution;
 # the whole-tree version assertion below verifies the resulting kernel closure
 # rather than trusting the date.
-ARG DSH_PUBLISHED_BEFORE=2026-09-29T11:18:03.848Z
+ARG DSH_PUBLISHED_BEFORE=2026-10-17T08:52:11.767Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.3
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
@@ -255,7 +255,7 @@ COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-con
 # phase below) a boot.
 ARG DSH_CITE_BUNDLE="dsh-cite@0.3.5"
 ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.11"
-ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.1"
+ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.2"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
 COPY deploy/runtime-dsh/install-loopx.mjs /usr/local/lib/evimed/install-loopx.mjs
 COPY packages/contracts/loopx/workflow-skills.json /usr/local/lib/evimed/loopx-workflow-skills.json

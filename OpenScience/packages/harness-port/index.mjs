@@ -725,13 +725,16 @@ function addVisibleTools(ctx, assembly, agent) {
 }
 
 /**
- * Last chance to push one more step before a turn closes.
+ * Last chance to push one more step before a turn closes. A listener may also
+ * wait: the kernel awaits it, and whatever reached the agent's next step in the
+ * meantime (a steer, a child's settlement notice) runs as one more step.
+ * `signal` is the turn's own, aborted when the turn is cancelled.
  * @param {any} ctx
- * @param {(agent: any, turn: number) => Promise<void> | void} fn
+ * @param {(agent: any, turn: number, signal: AbortSignal | undefined) => Promise<void> | void} fn
  * @returns {() => void}
  */
 export function onTurnStopping(ctx, fn) {
-  return ctx.on(SEAMS.events.turnStopping, async (/** @type {any} */ payload) => fn(payload?.agent, Number(payload?.turn ?? 0)))
+  return ctx.on(SEAMS.events.turnStopping, async (/** @type {any} */ payload) => fn(payload?.agent, Number(payload?.turn ?? 0), payload?.signal))
 }
 
 /**
@@ -904,24 +907,173 @@ export function toSkillName(raw, prefix) {
 /* -------------------------------------------------------------- subagents */
 
 /**
- * Starts one delegated child.
+ * What a delegated child is composed of beyond the preset it joins — a persona
+ * prefix and a tool mask — keyed by the session id reserved for it, held until
+ * its `agent/created`.
+ *
+ * Until 0.2.0 both travelled in the start request (`toolFilter`, `persona`) and
+ * the kernel installed them while it composed the child. 0.2.1 unified every
+ * child into one managed activation and took both out of the request: a new
+ * child is composed only from an agent preset, and the two fields survive only
+ * for restoring children an older kernel recorded. So the parent reserves the
+ * child's id, leaves its composition here, and `installChildComposition` makes
+ * the same two registrations through the child's own context at the moment the
+ * kernel made them: after the child joined its preset (the kernel runs the
+ * creation `setup` before it announces the agent) and before its first request.
+ * @type {Map<string, { persona?: string, toolFilter: { allow?: readonly string[], deny?: readonly string[] } }>}
+ */
+const childCompositions = new Map()
+
+/**
+ * Starts one delegated child whose result the caller collects.
+ *
+ * `delivery: 'caller'`: the child's result comes back through the returned
+ * `result`, never as a notice in the parent's conversation, which is how a
+ * delegation tool waits for its own children (`evimed_await`, screening). The
+ * receipt is `{ childId, messageId, result, dispose }`; `dispose` cancels the
+ * exact activation, and an abort of the caller's signal calls it.
  * @param {any} ctx
  * @param {import('./src/types.mjs').SubagentRequest} request
  * @param {any} parent
  * @param {AbortSignal} signal
  * @returns {Promise<any>}
  */
-export function startSubagent(ctx, request, parent, signal) {
-  return ctx.subagents.start(SEAMS.subagentProviders.spawn, {
-    label: request.label,
-    prompt: [{ type: 'text', text: request.prompt }],
-    parent,
-    signal,
-    outputSchema: request.outputSchema,
+export async function startSubagent(ctx, request, parent, signal) {
+  const childId = globalThis.crypto.randomUUID()
+  childCompositions.set(childId, {
+    ...(request.persona ? { persona: request.persona } : {}),
     toolFilter: { allow: [...request.tools] },
-    persona: request.persona,
-    ...(request.maxDepth === undefined ? {} : { maxDepth: request.maxDepth }),
   })
+  let receipt
+  try {
+    receipt = await ctx.subagents.startActivation({
+      provider: SEAMS.subagentProviders.spawn,
+      label: request.label,
+      childId,
+      delivery: 'caller',
+      signal,
+      request: {
+        prompt: [{ type: 'text', text: request.prompt }],
+        parent,
+        outputSchema: request.outputSchema,
+        ...(request.maxDepth === undefined ? {} : { maxDepth: request.maxDepth }),
+      },
+    })
+  } finally {
+    childCompositions.delete(childId)
+  }
+  // The caller's signal still stops the child it started, as it did when the child lived inside the call: from
+  // 0.2.1 the kernel's start signal covers only the start, and a started child is stopped by its exact `dispose`.
+  // One release, whoever asks first: the abort here or the caller collecting the result.
+  /** @type {Promise<void> | null} */
+  let released = null
+  const dispose = () => (released ??= Promise.resolve().then(() => receipt.dispose()))
+  const stop = () => { void dispose().catch(() => undefined) }
+  if (signal?.aborted) stop()
+  else if (signal) {
+    signal.addEventListener('abort', stop, { once: true })
+    void Promise.resolve(receipt.result).finally(() => signal.removeEventListener('abort', stop)).catch(() => undefined)
+  }
+  return { childId: receipt.childId, messageId: receipt.messageId, result: receipt.result, dispose }
+}
+
+/**
+ * The composition reserved for a child that has not been created yet (tests stand in for the kernel with it).
+ * @param {string} childId
+ * @returns {{ persona?: string, toolFilter: { allow?: readonly string[], deny?: readonly string[] } } | undefined}
+ */
+export function reservedChildComposition(childId) {
+  return childCompositions.get(childId)
+}
+
+/**
+ * The two registrations a delegated child is owed, made at its `agent/created`.
+ * A child some other tool started — the kernel's own `subagent` — has no entry
+ * and gets `fallback`: the tools a general-work child may not use. Names its
+ * view does not hold are left out of a deny list, because the registry throws
+ * on a name it does not know and a switched-off row (screening, the capsule)
+ * registers none.
+ * @param {any} agent a subagent session's agent
+ * @param {{ deny: readonly string[] }} fallback
+ * @returns {{ reserved: boolean, toolFilter: { allow?: string[], deny?: string[] } | null }}
+ */
+export function installChildComposition(agent, fallback) {
+  const reserved = childCompositions.get(String(agent?.session?.id ?? ''))
+  childCompositions.delete(String(agent?.session?.id ?? ''))
+  if (reserved?.persona) {
+    const prompt = agent.ctx.systemPrompt
+    registerAgentSection(agent, {
+      name: 'deployment:persona-prefix',
+      order: typeof prompt?.getSectionOrder === 'function' ? prompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX') : 0,
+      text: reserved.persona,
+    })
+  }
+  const tools = agent?.ctx?.get?.('tools') ?? agent?.ctx?.tools
+  /** @type {{ allow?: string[], deny?: string[] } | null} */
+  let toolFilter = null
+  if (reserved) toolFilter = { allow: [...(reserved.toolFilter.allow ?? [])] }
+  else {
+    const deny = fallback.deny.filter((name) => typeof tools?.get === 'function' && tools.get(name, agent) !== undefined)
+    if (deny.length) toolFilter = { deny }
+  }
+  if (toolFilter) restrictAgentTools(agent, toolFilter)
+  return { reserved: Boolean(reserved), toolFilter }
+}
+
+/**
+ * The child a `subagent` call started, from its result: the tool's canonical
+ * value `{ kind: 'activation', subagentId }`, or the line it renders
+ * (`started subagent <id>`) where only the text reached the observer.
+ * @param {import('./src/types.mjs').ToolOutcome} outcome
+ * @returns {string}
+ */
+export function startedChildId(outcome) {
+  if (outcome.status !== 'completed') return ''
+  const value = /** @type {any} */ (outcome.structured)
+  if (value && typeof value === 'object' && value.kind === 'activation' && typeof value.subagentId === 'string') return value.subagentId
+  return /^started subagent (\S+)$/m.exec(outcome.text)?.[1] ?? ''
+}
+
+/**
+ * A child of this composition settled: the kernel's `subagent/end` lifecycle
+ * edge, published on the parent's scope after the child's resources are
+ * released and after its settlement notice was handed to the parent (steered
+ * into a working parent's next step, queued for an idle one). Every child, of
+ * either tool, settles exactly once.
+ * @param {any} ctx
+ * @param {(childId: string, stopReason: string) => void} fn
+ * @returns {() => void}
+ */
+export function onSubagentSettled(ctx, fn) {
+  return ctx.on(SEAMS.events.subagentSettled, (/** @type {any} */ info) => fn(String(info?.id ?? ''), String(info?.stopReason ?? '')))
+}
+
+/**
+ * Whether a step's input is only children's settlement notices: messages the
+ * kernel itself wrote into the parent, marked `source.kind: 'subagent-settled'`
+ * (a person's prompt is `user`). Empty input is not.
+ * @param {any} payload the `agent/pre-step` payload
+ * @returns {boolean}
+ */
+export function stepIsSettlementOnly(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : []
+  return messages.length > 0 && messages.every((/** @type {any} */ message) => message?.source?.kind === SETTLEMENT_SOURCE_KIND)
+}
+
+/** The source a child's settlement notice carries (`@deepseek-ai/dsh-subagent`, `createSettlementMessage`). */
+export const SETTLEMENT_SOURCE_KIND = SEAMS.messageSourceKinds.subagentSettled
+
+/**
+ * Stops one live child's current work because the person stopped its parent's
+ * turn: the kernel's human authority, `{ kind: 'user', parentSessionId }` (the
+ * other is an exact live ancestor agent, for a model-initiated stop). The
+ * activation then settles like any other (its notice says it was stopped). A
+ * child that already settled is a no-op.
+ * @param {any} ctx @param {string} childId @param {string} parentSessionId
+ * @returns {void}
+ */
+export function interruptSubagent(ctx, childId, parentSessionId) {
+  ctx.subagents.interrupt(childId, { kind: 'user', parentSessionId })
 }
 
 /* ---------------------------------------------------------------- storage */

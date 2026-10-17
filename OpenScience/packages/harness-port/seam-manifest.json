@@ -1,6 +1,6 @@
 {
-  "dsh": "0.2.0-rc.2",
-  "cordis": "4.0.4",
+  "dsh": "0.2.1-rc.2",
+  "cordis": "4.0.5",
   "pnpm": "11.7.0",
   "plugins": {
     "dsh-cite": "0.3.5"
@@ -35,7 +35,8 @@
     "promptAssemble": "system-prompt/assemble",
     "turnStopping": "agent/turn-stopping",
     "domainChanged": "domain/changed",
-    "sessionFlush": "session/flush"
+    "sessionFlush": "session/flush",
+    "subagentSettled": "subagent/end"
   },
   "sessionEventTypes": [
     "turn/start",
@@ -68,7 +69,10 @@
     "approval/policy",
     "permission/preset",
     "sandbox/mode",
-    "workspace/changes"
+    "workspace/changes",
+    "job/registered",
+    "job/settled",
+    "working-directory/change"
   ],
   "sessionEventPlumbing": [
     "system/message",
@@ -82,8 +86,14 @@
     "approval/policy",
     "permission/preset",
     "sandbox/mode",
-    "workspace/changes"
+    "workspace/changes",
+    "job/registered",
+    "job/settled",
+    "working-directory/change"
   ],
+  "messageSourceKinds": {
+    "subagentSettled": "subagent-settled"
+  },
   "turnEndKinds": [
     "completed",
     "aborted",
@@ -173,7 +183,7 @@
       },
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
-      "verifiedAgainst": "0.2.0-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.0-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
+      "verifiedAgainst": "0.2.1-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.1-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId)"
     },
     "personalSkills": {
       "package": "@deepseek-ai/dsh-skill-filesystem",
@@ -293,6 +303,8 @@
       "agentPresets/select",
       "commands/execute",
       "commands/list",
+      "cotTranslation/limits",
+      "cotTranslation/translate",
       "credentials/describe",
       "credentials/set",
       "credentials/unset",
@@ -345,10 +357,14 @@
       "pluginManager/setPluginEnabled",
       "pluginManager/setVersionExemption",
       "pluginManager/waitForInstall",
+      "pluginMarket/listIndexes",
+      "pluginMarket/search",
+      "pluginMarket/setIndexes",
       "pluginRegistryProbe/fastest",
       "productAnalytics/enabled",
       "productAnalytics/report",
       "productAnalytics/watchPolicy",
+      "remoteAccess/follow",
       "schedule/catalog",
       "schedule/delete",
       "schedule/history",
@@ -380,16 +396,14 @@
       "speech/transcribe",
       "subagents/interruptByParent",
       "subagents/prompt",
+      "terminal/attach",
       "terminal/close",
       "terminal/create",
       "terminal/environment",
-      "terminal/follow",
       "terminal/list",
       "terminal/rename",
-      "terminal/resize",
       "terminal/retain",
       "terminal/shells",
-      "terminal/write",
       "userQuestions/answer",
       "userQuestions/attachWait",
       "workspace/archiveSession",
@@ -531,7 +545,7 @@
     }
   },
   "notes": {
-    "sessionEventPlumbing": "Session records the kernel keeps for its own bookkeeping and the control plane has no use for: the assembled system prompt and request header, route metadata, the title request, the inbox splice, the permission facts written when a session starts, a workspace-change marker, and the three compaction records (`start`, `summary`, `prune`) around the `compaction/end` the control plane decodes as its one `compaction` event. The first nine are recorded verbatim in the 0.1.7-rc.2 golden frames (`apps/server/test/fixtures/dsh/golden-frames.json`); the compaction records are in no recording and are classified by name alone, so their shape is never read. Each name is in `sessionEventTypes`, decodes to `unknown` with its raw type, and is not published to a run's stream; the event pump still follows it for the log's sequence, which is the stall monitor's heartbeat. A type of the kernel's register in neither list is unclassified: counted by raw type for operators, never published. Classifying one is a name in `sessionEventPlumbing` or a RunEvent of its own.",
+    "sessionEventPlumbing": "Session records the kernel keeps for its own bookkeeping and the control plane has no use for: the assembled system prompt and request header, route metadata, the title request, the inbox splice, the permission facts written when a session starts, a workspace-change marker, and the three compaction records (`start`, `summary`, `prune`) around the `compaction/end` the control plane decodes as its one `compaction` event. The first nine are recorded verbatim in the 0.1.7-rc.2 golden frames (`apps/server/test/fixtures/dsh/golden-frames.json`); the compaction records are in no recording and are classified by name alone, so their shape is never read. Each name is in `sessionEventTypes`, decodes to `unknown` with its raw type, and is not published to a run's stream; the event pump still follows it for the log's sequence, which is the stall monitor's heartbeat. A type of the kernel's register in neither list is unclassified: counted by raw type for operators, never published. Classifying one is a name in `sessionEventPlumbing` or a RunEvent of its own. 0.2.1 adds three, classified the day the pin moved: `job/registered` and `job/settled`, the background-job ledger beside a `bash` call (in the 0.2.1-rc.2 recording; the call and its result are already the `tool/call` and `tool/result` the control plane decodes), and `working-directory/change`, a session's directory moved (the subagent service sets each child's; the model-facing tool is disabled).",
     "sessionStatusAbsent": "There is no session status method. Running state arrives as an `api-session/status` emit on the Gateway-internal `$events` stream.",
     "hostDescribeRemoved": "0.1.2 removed host.describe with the rest of ApiProxy. Host facts arrive once, in the `$events` stream's opening `ready` frame. The readiness probe is session/list, which is a real wire call and therefore also proves authentication.",
     "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
@@ -540,8 +554,8 @@
     "summarizeWithLlmNotExported": "dsh-compaction-basic declares summarizeWithLlm in lib/types/summarizer.d.ts, but the published bundle exports only { BasicCompactionEngine, default }: the function is module-internal, and `./src/*` is in `exports` while not being in `files`. src/compaction.mjs therefore reaches the upstream summarization call through the base class's own summarize() hook, which appends its checkpoint-structure directive after ours. If a later release exports it, the EviMed directive can replace the upstream one instead of composing with it.",
     "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring.",
     "sessionV4": "DSH 0.1.7 uses session format 4. A `tool/result` message is role `tool` with `toolCallId` and `isError` on the message and its content directly in `content` (format 3 wrapped it in one `tool-result` block of a user-role message); a message source names its own producer kind and the bare `plugin` kind is refused, so messages we write carry `plugin:<name>` (`pluginSource`), the kind the kernel's own V3->V4 migration gives our older ones. Format-3 logs on a project volume are read through that migration without being rewritten; the first write open publishes a `session.v4.jsonl.zstd` successor beside the untouched `session.v3.jsonl.zstd`, and a 0.1.5 kernel cannot read a session once it has one. Live assistant deltas still use assistant-stream frames; durable assistant/message contains the completed output and attempt stream. Historical v0 chunks and v3 tool-result wrappers remain readable by the EviMed decoders only.",
-    "agentScopedRegistration": "Two registrations are made through one agent's own context (`agent.ctx`) at its `agent/created` (0.1.7 folded `agent/session-start` into it), never through the preset's: `tools.restrict` (the root is shown only its own research tools) and `systemPrompt.section` (a delegated child's guidance replaces the orchestration guidance and the answer persona by name). `skills.register` through a child's context is not used: the context does not carry the skills service, and every registration failed on the first live runs (2026-09-19); a child reads a deferred method section from its skill file by line instead. The registries intersect restrictions and let the nearest scope win a section or skill name along a scope chain, and a child joins the preset's standing scope rather than its parent's, so each registration stays with the one agent. A child's session starts inside `ctx.subagents.start` (the kernel creates the agent and awaits its serial `agent/created` listeners before its loop takes queued input), so a registration made there precedes the child's first prompt and first skill catalogue. `agent.steer` wakes an idle agent and is the documented objection at `agent/turn-stopping`; `agent.inject` does neither.",
-    "subagentCatalog": "There is no `subagents/list` since 0.1.7. A parent's direct children are its own `subagentCatalog` projection, read without activating an agent through `session/projections` (`values.subagentCatalog`: `{ id, createdAt, mode, label? }`, mode `one-shot`, `continuable` or `unknown`), and a child is read at `{ kind: 'subagent', parentSessionId, childSessionId, mode }`, where `unknown` is resolved by the kernel from the child's own descriptor.",
+    "agentScopedRegistration": "Two registrations are made through one agent's own context (`agent.ctx`) at its `agent/created` (0.1.7 folded `agent/session-start` into it), never through the preset's: `tools.restrict` (the root is shown only its own research tools) and `systemPrompt.section` (a delegated child's guidance replaces the orchestration guidance and the answer persona by name). `skills.register` through a child's context is not used: the context does not carry the skills service, and every registration failed on the first live runs (2026-09-19); a child reads a deferred method section from its skill file by line instead. The registries intersect restrictions and let the nearest scope win a section or skill name along a scope chain, and a child joins the preset's standing scope rather than its parent's, so each registration stays with the one agent. A child's session starts inside `ctx.subagents.startActivation` (0.2.1; `start` and the one-shot run are gone): the kernel runs the creation `setup` that joins the child to its preset, then awaits its serial `agent/created` listeners, then submits the first prompt, so a registration made there precedes the child's first request and first skill catalogue. 0.2.1 also took `toolFilter` and `persona` out of the start request, so a delegation's own mask and persona prefix are these same two registrations, keyed by the child id the parent reserves (`installChildComposition`). `agent.steer` wakes an idle agent and is the documented objection at `agent/turn-stopping`; `agent.inject` does neither.",
+    "subagentCatalog": "There is no `subagents/list` since 0.1.7. A parent's direct children are its own `subagentCatalog` projection, read without activating an agent through `session/projections` (`values.subagentCatalog`: `{ id, createdAt, mode, label? }`, mode `one-shot`, `continuable`, `unknown` or, from catalog payload v2, `external`; every local child a 0.2.1 kernel starts is `continuable`), and a child is read at `{ kind: 'subagent', parentSessionId, childSessionId, mode }`, where `unknown` is resolved by the kernel from the child's own descriptor.",
     "presetsAreRows": "Presets are host rows since 0.1.7: `@deepseek-ai/dsh-agent-presets` and its directory roots are gone, a preset is one `@deepseek-ai/dsh-agent-preset` row whose `config.plugins` is the agent's entry list, and `agent-preset-registry.config.default` names the one sessions get. The socket ships `evimed-universal` as such a row (`presets/evimed-universal.patch.yml`, generated from the preset directory it edits), and its bundle patch disables the four rows the web bundle declares beside it (`preset-standard`, `preset-ptc`, `preset-minimal`, `preset-cordis`): a session on one of those carries none of our plugins, so `evimed-universal` is the only preset the registry holds and a `session/create` naming another answers `agent-preset/not-found`.",
     "bundleSeams": "What a pinned third-party bundle reaches in the kernel that no EviMed code calls, so a rename upstream is seen here before it is seen as a behaviour change in someone else's plugin. The official OpenViking memory bundle (the pinned one, booted on the pinned kernel on 2026-10-13) needs three that no row of ours used: the awaited `session/flush` checkpoint (it drains its capture queue there; dispatched by `sessions.flush`), `session.ownEvents()` and `agent.inbox.nextTurn/nextStep` (it reads them to tell whether its startup profile is already in the conversation, so a rename would make it inject the profile on every start or never). Their names are checked in the shipped kernel by scripts/ops/verify-harness-seams.mjs; `sessions.flush` by the startup probe and the other two on the first session a kernel creates (`bundleSeamGaps`, `evimed-seam-probe`), each a degraded notice: the plugin is an enhancement, and a missing seam turns memory off, not the session."
   },

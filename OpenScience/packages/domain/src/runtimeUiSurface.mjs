@@ -153,6 +153,21 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // through `$events/result`); that list is the adapter's, not this proxy's.
   "productAnalytics",
   "pluginInventory",
+  // Arrived in 0.2.1, classified the day the pin moved:
+  //
+  // - `pluginMarket`    searching plugin indexes and editing which indexes a kernel trusts:
+  //               the first step of installing downloaded code into a running kernel,
+  //               which a hosted runtime never does (its plugin manager row is disabled)
+  // - `cotTranslation`  translating the model's reasoning with another model call; the
+  //               experimental bundle that serves it is not in this composition, so
+  //               nothing answers today, and a call that spends model budget outside a
+  //               run is not a browser's to make when a later composition mounts it
+  //
+  // `remoteAccess` is deliberately not here: its one method (`follow`) is the read-only
+  // snapshot of what this peer may call, which the session and workspace views inject to
+  // decide what to draw. It narrows; refusing it would only leave the page guessing.
+  "pluginMarket",
+  "cotTranslation",
 ]);
 
 /**
