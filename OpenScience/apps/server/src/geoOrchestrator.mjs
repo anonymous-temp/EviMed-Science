@@ -1,5 +1,5 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
-import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, stepWaitingFor } from "@evimed/domain";
+import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { budgetOpen } from "./geoMarketStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -504,11 +504,22 @@ export function geoRunId(dispatchId) {
   return String(dispatchId).replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80);
 }
 
+/**
+ * The instruction of a dispatched run, as the run's own context carries it. The first message of the run's session is the step's
+ * sentence (`geoVisibleQuestion`) and the model works from this: the tools to use, the group ids, the data tier, the steps by key. The
+ * block is platform context the socket injects and no page draws as anything a person said (`memoryVocabulary`).
+ * @param {string} brief
+ */
+export function geoBriefBlock(brief) {
+  return `\n\n<evimed-geo-brief>\n${brief}\n</evimed-geo-brief>`;
+}
+
 // ------------------------------------------------------------------ the orchestrator
 
 /**
  * @typedef {{ userId: string, projectId: string, geoProjectId: string, capabilityId: string, dispatchId: string, reason: string,
- *   brief: string }} GeoDispatch
+ *   brief: string, question: string }} GeoDispatch
+ *   `question` is what a person reads as the run's question (`geoVisibleQuestion`); `brief` is the model's instruction.
  */
 
 export class GeoOrchestrator {
@@ -518,7 +529,6 @@ export class GeoOrchestrator {
    *   dispatchRun?: ((input: GeoDispatch) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   runStatus?: ((input: { userId: string, projectId: string, runId: string, dispatchId: string | null }) => Promise<{ status: string } | null>) | null,
    *   importRun?: ((input: { userId: string, projectId: string, run: Record<string, any> }) => Promise<unknown>) | null,
-   *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   enqueueRound?: ((spec: { geoProjectId: string, kind: string, questionIds?: string[], engines?: string[], repeat?: number,
    *     ref?: Record<string, any> }) => Promise<any>) | null,
    *   noteCitation?: ((input: { orderId: string, engine: string }) => Promise<any>) | null,
@@ -534,7 +544,7 @@ export class GeoOrchestrator {
    *   group whose content actions are all skipped and an error whose correction is skipped are left out of a new batch. Absent,
    *   nothing is chosen; a read that fails fails the advance of that project, and the next tick reads it again.
    */
-  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, importRun = null, latestSessionId = null, enqueueRound = null,
+  constructor({ store, config = {}, notifier = null, dispatchRun = null, runStatus = null, importRun = null, enqueueRound = null,
     noteCitation = null, placementChoices = null, projectsPerTick = GEO_RUN_RULES.projectsPerTick, policies = createModuleEvolutionPolicies(), now = () => new Date(),
     report = () => {} }) {
     if (!store) throw new TypeError("The GEO orchestrator needs the GEO store.");
@@ -545,7 +555,6 @@ export class GeoOrchestrator {
     this.dispatchRun = dispatchRun;
     this.runStatus = runStatus;
     this.importRun = importRun;
-    this.latestSessionId = latestSessionId;
     this.enqueueRound = enqueueRound;
     this.noteCitation = noteCitation;
     this.placementChoices = placementChoices;
@@ -714,7 +723,7 @@ export class GeoOrchestrator {
     await this.store.setStep(project.id, step, { requested: true, ...(again ? { status: "queued" } : {}) });
     await this.#allowRetries(project, step);
     const result = await this.advance(project.id);
-    return this.#answer(project, result);
+    return this.#answer(result, { step });
   }
 
   /**
@@ -730,15 +739,19 @@ export class GeoOrchestrator {
     const stamp = `${at.date.replaceAll("-", "")}t${String(at.hour).padStart(2, "0")}${String(at.minute).padStart(2, "0")}`;
     await this.#claim(project, `run:export:${kind}:${stamp}`, "run", "pending", { detail: { purpose: "export", kind, requestedBy: String(user.id) } });
     const result = await this.advance(project.id);
-    return this.#answer(project, result);
+    return this.#answer(result, { step: null });
   }
 
-  /** @param {any} project @param {any} result */
-  async #answer(project, result) {
+  /**
+   * What a press of a button answers: that the request was taken, and the run it started now (none when it waits for the project's run
+   * slot or for the allowance). There is no session in it, on purpose: starting work does not take the person to a conversation — the
+   * page shows what is under way, and the run's session is the AI-run record's and not a destination.
+   * @param {any} result @param {{ step: string | null }} asked
+   * @returns {{ accepted: true, runId: string | null, step: string | null }}
+   */
+  #answer(result, { step }) {
     const dispatched = result?.dispatched ?? null;
-    if (dispatched?.runId) return { sessionId: dispatched.sessionId ?? null, runId: dispatched.runId };
-    const sessionId = this.latestSessionId ? await this.latestSessionId({ userId: project.userId, projectId: project.projectId }).catch(() => null) : null;
-    return { sessionId: sessionId ?? null, runId: null };
+    return { accepted: true, runId: dispatched?.runId ? String(dispatched.runId) : null, step };
   }
 
   /** A person asking again gives the runs that serve the step two more tries. @param {any} project @param {string} step */
@@ -1116,7 +1129,8 @@ export class GeoOrchestrator {
 
   /**
    * @typedef {{ key: string, purpose: "insight" | "strategy" | "content" | "export" | "research", capabilityId: string, reason: string,
-   *   brief: string, steps: string[], detail?: Record<string, any> }} RunSpec
+   *   brief: string, question: string, steps: string[], detail?: Record<string, any> }} RunSpec
+   *   `question` is what a person reads as the run's question (`geoVisibleQuestion`); `brief` is the model's instruction.
    */
 
   /** Whether a run key may be tried again. @param {any} mark */
@@ -1134,6 +1148,7 @@ export class GeoOrchestrator {
     if (!mark) return null;
     const value = await this.store.latestValue(project.id);
     return { key: mark.key, purpose: "research", capabilityId: mark.detail.capabilityId, reason: "geo:research", steps: [],
+      question: geoVisibleQuestion({ purpose: "research", question: mark.detail.question }),
       detail: { ...mark.detail, basisVersion: value.version }, brief: [
         "“循证 GEO”自动运行 · 专题研究",
         productLine(project),
@@ -1158,7 +1173,8 @@ export class GeoOrchestrator {
     if (!mark || !this.#allowed(mark)) return null;
     const kind = String(mark.detail?.kind ?? "proposal");
     return { key: mark.key, purpose: "export", capabilityId: GEO_RUN_CAPABILITIES.export, reason: `geo:export-${kind}`,
-      brief: exportBrief(project, { kind, week: mark.detail?.week ?? null, freshness: await this.#freshness(project) }), steps: [], detail: { kind } };
+      brief: exportBrief(project, { kind, week: mark.detail?.week ?? null, freshness: await this.#freshness(project) }),
+      question: geoVisibleQuestion({ purpose: "export", exportKind: kind, week: mark.detail?.week ?? null }), steps: [], detail: { kind } };
   }
 
   /** `measurementFreshness()` over the project's snapshots: the latest valid answer per engine. @param {any} project */
@@ -1182,7 +1198,8 @@ export class GeoOrchestrator {
     if (!this.#allowed(mark)) return null;
     const target = [...plan.requested].find((step) => !INSIGHT_STEPS.includes(step)) ?? [...plan.requested][0] ?? null;
     return { key: "run:insight", purpose: "insight", capabilityId: GEO_RUN_CAPABILITIES.insight, reason: `geo:${scope[0].step}`,
-      brief: insightBrief(project, { scope, target, full: plan.full }), steps: scope.map((entry) => entry.step), detail: { scope, target, full: plan.full } };
+      brief: insightBrief(project, { scope, target, full: plan.full }), question: geoVisibleQuestion({ purpose: "insight", steps: scope.map((entry) => entry.step) }),
+      steps: scope.map((entry) => entry.step), detail: { scope, target, full: plan.full } };
   }
 
   /** Step 5 in one `geo-strategy` run, once the diagnosis is in. @param {any} project @param {ReturnType<typeof wantedSteps>} plan @returns {Promise<RunSpec | null>} */
@@ -1195,7 +1212,8 @@ export class GeoOrchestrator {
     if (!this.#allowed(mark)) return null;
     const minimal = project.steps.diagnosis.status === "minimal";
     return { key: "run:strategy", purpose: "strategy", capabilityId: GEO_RUN_CAPABILITIES.strategy, reason: "geo:sources",
-      brief: strategyBrief(project, { minimal, freshness: await this.#freshness(project) }), steps: ["sources"], detail: { minimal } };
+      brief: strategyBrief(project, { minimal, freshness: await this.#freshness(project) }), question: geoVisibleQuestion({ purpose: "strategy", steps: ["sources"] }),
+      steps: ["sources"], detail: { minimal } };
   }
 
   /**
@@ -1210,7 +1228,8 @@ export class GeoOrchestrator {
     const mark = await this.#mark(project.id, key);
     if (mark && (FINISHED.has(mark.state) || mark.state === "failed" || !this.#allowed(mark))) return null;
     return { key, purpose: "export", capabilityId: GEO_RUN_CAPABILITIES.export, reason: "geo:export-weekly",
-      brief: exportBrief(project, { kind: "weekly", week: week.monday, freshness: await this.#freshness(project) }), steps: [],
+      brief: exportBrief(project, { kind: "weekly", week: week.monday, freshness: await this.#freshness(project) }),
+      question: geoVisibleQuestion({ purpose: "export", exportKind: "weekly", week: week.monday }), steps: [],
       detail: { kind: "weekly", week: week.monday } };
   }
 
@@ -1275,7 +1294,8 @@ export class GeoOrchestrator {
   #contentSpec(project, key, number, batch, reason) {
     const size = Math.max(1, Math.min(GEO_RUN_RULES.batchMax, batch.groups.length + batch.errors.length || GEO_RUN_RULES.batchMax));
     return { key, purpose: "content", capabilityId: GEO_RUN_CAPABILITIES.content, reason: "geo:content",
-      brief: contentBrief(project, { number, groups: batch.groups, errors: batch.errors, reason, size }), steps: ["content"],
+      brief: contentBrief(project, { number, groups: batch.groups, errors: batch.errors, reason, size }),
+      question: geoVisibleQuestion({ purpose: "content", steps: ["content"], batch: number }), steps: ["content"],
       detail: { groups: batch.groups, errors: batch.errors, errorIds: batch.errors.map((error) => error.id), reason } };
   }
 
@@ -1486,7 +1506,7 @@ export class GeoOrchestrator {
       const brief = supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policy.revisionId}):\n${supplements.join("\n")}` : spec.brief;
       const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
-        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief,
+        dispatchId: String(mark.dispatch_id), reason: spec.reason, brief, question: spec.question,
       });
       const running = await this.#update(project.id, spec.key, { state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null,
         attempts: Number(mark.attempts ?? 0) + 1 }, ["claimed"]);

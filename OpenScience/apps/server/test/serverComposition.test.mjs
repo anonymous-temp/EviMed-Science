@@ -2011,17 +2011,23 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     return { id: `run-geo-${dispatched.length}`, status: "running" };
   };
   const brief = "「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）";
+  const question = "整理产品证据、绘制患者旅程、列出测量问题";
   const dispatchRun = app.geo.orchestrator.dispatchRun;
   const out = await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-a1", reason: "geo:evidence", brief });
+    dispatchId: "geo-insight-a1", reason: "geo:evidence", brief, question });
   assert.deepEqual(out, { runId: "run-geo-1", sessionId: "session-geo-1", status: "running" });
   assert.equal(reserved[0].project.workspaceDir, project.workspaceDir, "the GEO project's own workspace, not an internal project's");
   assert.equal(reserved[0].scope.runId, "geo-insight-a1");
   assert.ok(reserved[0].scope.runLimit > 0 && reserved[0].scope.dailyLimit > 0, "a signed scope needs positive limits");
   assert.deepEqual([dispatched[0].input.dispatchId, dispatched[0].input.automated, dispatched[0].input.effectiveAgentId,
-    dispatched[0].input.effectiveRouteReason, dispatched[0].input.question], ["geo-insight-a1", true, "geo-insight", "geo:evidence", brief]);
+    dispatched[0].input.effectiveRouteReason, dispatched[0].input.question, dispatched[0].input.brief],
+  ["geo-insight-a1", true, "geo-insight", "geo:evidence", question, brief], "the ledger holds the sentence as the question and the instruction as the brief");
   assert.deepEqual(bindings[0], { sessionId: "session-geo-1", mode: "specialist", agentId: "geo-insight" }, "the conversation is bound to the capability");
-  assert.ok(String(prompts[0].request.text).startsWith(brief), "the brief first: the kernel names the conversation after it");
+  assert.ok(String(prompts[0].request.text).startsWith(`${question}\n\n<evimed-geo-run>geo-insight-a1</evimed-geo-run>`),
+    "the sentence first: the kernel names the conversation after it");
+  assert.equal(String(prompts[0].request.text).includes(brief), false, "the instruction is not a message anybody sent");
+  assert.match(String(prompts[0].request.system), /<evimed-geo-brief>\n「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）\n<\/evimed-geo-brief>/,
+    "the instruction rides in the run's own context");
   assert.match(String(prompts[0].request.text), /<evimed-budget-scope>/);
   assert.equal(prompts[0].request.allowBounded, true);
 
@@ -2045,8 +2051,11 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   }
   assert.equal(reserved.length, 1, "no bounded runtime when the project's own is open");
   assert.equal(prompts[1].request.allowBounded, false);
-  assert.equal(String(prompts[1].request.text), `${brief}\n\n<evimed-geo-run>geo-content-1-a1</evimed-geo-run>`,
+  // A dispatch that names no sentence is asked in the one its route reason has — never in the machine instruction.
+  assert.equal(String(prompts[1].request.text), "写一批稿件\n\n<evimed-geo-run>geo-content-1-a1</evimed-geo-run>",
     "no budget scope on the researcher's own runtime — and the platform's mark all the same (M-2)");
+  assert.equal(dispatched.at(-1).input.question, "写一批稿件");
+  assert.match(String(prompts[1].request.system), /<evimed-geo-brief>\n「循证 GEO」自动运行/);
   // Bounded or open, a brief is machine text to the memory extractor, never what the researcher said.
   for (const prompt of prompts) assert.equal(carriesPlatformContext(String(prompt.request.text)), true, String(prompt.request.text));
   // A capability this deployment does not have is refused by name.

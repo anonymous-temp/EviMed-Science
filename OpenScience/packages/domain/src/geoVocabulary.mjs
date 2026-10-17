@@ -49,6 +49,97 @@ export const GEO_STEP_LABELS_ZH = Object.freeze({
 })
 export const GEO_STEP_STATUSES = frozen(['none', 'queued', 'running', 'done', 'minimal', 'failed'])
 
+/**
+ * What each step's work is called to a person: one verb and one object. The button that starts the step says it (the page's step
+ * recipes read this table), the run's own question — the first message of its session, its title, its row in the AI-run record —
+ * says it, so the two cannot drift. The instruction a run is briefed with (the orchestrator's brief: the tools to use, the group ids,
+ * the data tier) is the model's, travels in the run's context and is never what a person reads.
+ */
+export const GEO_STEP_ACTION_LABELS_ZH = Object.freeze({
+  evidence: '整理产品证据',
+  journey: '绘制患者旅程',
+  questions: '列出测量问题',
+  diagnosis: '测一轮 AI 回答',
+  sources: '分析引用的信源',
+  content: '写第一批稿件',
+  distribution: '安排投放',
+  monitoring: '开始每周复测',
+})
+
+/** What a run that is not one step is called: a document the platform writes, one research question, a batch of articles. */
+const GEO_RUN_PURPOSE_PHRASES_ZH = Object.freeze({
+  weekly_report: '生成周报',
+  proposal_pack: '生成提案资料包',
+  research: '做专题研究',
+  next_batch: '写下一批稿件',
+  any_batch: '写一批稿件',
+  work: '推进项目',
+})
+
+/** @param {unknown} value @param {number} limit */
+function oneLineOf(value, limit) {
+  const line = String(value ?? '').replace(/\s+/g, ' ').trim()
+  const chars = [...line]
+  return chars.length > limit ? `${chars.slice(0, limit - 1).join('')}…` : line
+}
+
+/** 「10月12日」 for a date given as `YYYY-MM-DD`; null for anything else. @param {unknown} date @returns {string | null} */
+function monthDayOf(date) {
+  const found = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(date ?? ''))
+  return found ? `${Number(found[1])}月${Number(found[2])}日` : null
+}
+
+/**
+ * The visible question of one programme run, as a sentence of the person's words: the step's verb and object, the document that is
+ * written, the batch of articles, the research question. Pure, and total: whatever is missing reads as the project's generic work,
+ * never as a machine instruction. This is what the run's session opens with and what the run is titled by; the orchestrator's brief
+ * rides in the run's context (`<evimed-geo-brief>`).
+ *
+ * @param {{ purpose?: string | null, steps?: readonly string[], exportKind?: string | null, week?: string | null,
+ *   batch?: number | string | null, question?: string | null }} input
+ *   `purpose` is the dispatch's own (`insight`, `strategy`, `content`, `export`, `research`, or a step); `steps` the steps a run
+ *   covers, in any order; `exportKind` and `week` (the Monday, `YYYY-MM-DD`) describe an export; `batch` is the number of a content
+ *   batch, a word when it is the round after a weekly report; `question` is a research task's own question
+ * @returns {string}
+ */
+export function geoVisibleQuestion({ purpose = null, steps = [], exportKind = null, week = null, batch = null, question = null } = {}) {
+  const actions = /** @type {Record<string, string>} */ (GEO_STEP_ACTION_LABELS_ZH)
+  if (purpose === 'export') {
+    if (exportKind !== 'weekly') return GEO_RUN_PURPOSE_PHRASES_ZH.proposal_pack
+    const day = monthDayOf(week)
+    return day ? `生成${day}这一周的周报` : GEO_RUN_PURPOSE_PHRASES_ZH.weekly_report
+  }
+  if (purpose === 'research') {
+    const asked = oneLineOf(question, 60)
+    return asked ? `${GEO_RUN_PURPOSE_PHRASES_ZH.research}：${asked}` : GEO_RUN_PURPOSE_PHRASES_ZH.research
+  }
+  if (purpose === 'content' && batch != null) {
+    return typeof batch === 'number' && Number.isSafeInteger(batch) && batch > 0 ? `写第 ${batch} 批稿件` : GEO_RUN_PURPOSE_PHRASES_ZH.next_batch
+  }
+  const named = GEO_STEPS.filter((step) => steps.includes(step)).map((step) => actions[step])
+  if (named.length) return named.join('、')
+  const own = purpose ? actions[purpose] : null
+  return own ?? GEO_RUN_PURPOSE_PHRASES_ZH.work
+}
+
+/**
+ * What a programme run is called from the one thing that is known of every run the orchestrator ever dispatched — its route reason
+ * (`geo:evidence`, `geo:sources`, `geo:content`, `geo:export-weekly`, `geo:research`): the AI-run record's row for a run, old or new.
+ * Closed: a reason that is not one of these reads as the project's generic work. A run that covered several steps is named by the
+ * first (the reason carries no more); its session opens with the full sentence.
+ * @param {unknown} reason @returns {string}
+ */
+export function geoVisibleQuestionOfReason(reason) {
+  const text = String(reason ?? '')
+  if (!text.startsWith('geo:')) return GEO_RUN_PURPOSE_PHRASES_ZH.work
+  const word = text.slice('geo:'.length)
+  if (word === 'content') return GEO_RUN_PURPOSE_PHRASES_ZH.any_batch
+  if (word === 'research') return GEO_RUN_PURPOSE_PHRASES_ZH.research
+  if (word === 'export-weekly') return GEO_RUN_PURPOSE_PHRASES_ZH.weekly_report
+  if (word.startsWith('export-')) return GEO_RUN_PURPOSE_PHRASES_ZH.proposal_pack
+  return geoVisibleQuestion({ purpose: word })
+}
+
 export const GEO_PROJECT_STATUSES = frozen(['active', 'paused', 'archived'])
 /** The three target tiers (档一 / 档二 / 档三); a project's chosen tier defaults to 2. */
 export const GEO_TIERS = frozen(['1', '2', '3'])

@@ -123,7 +123,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -356,7 +356,7 @@ import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } fro
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 // The moving parts (packages B, C and F): measurement ticks and rounds, the
 // marketplace's ticks and hooks, the orchestrator, the worker and the notices.
-import { GeoOrchestrator, geoRunId } from "./geoOrchestrator.mjs";
+import { GeoOrchestrator, geoBriefBlock, geoRunId } from "./geoOrchestrator.mjs";
 import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
 import { createGeoNotifier } from "./geoNotify.mjs";
 // 「虚拟临床研究」 (build plan 2026-09-28 §11.2). Composed in one call
@@ -2421,9 +2421,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
         return { sessionId, bound: true };
       },
-      latestSessionId: async (user, projectId) => {
-        const project = await store.requireProject(user, projectId);
-        return (await researchSessions.list(project))[0]?.sessionId ?? null;
+      // The project's own conversation: the newest one no programme step opened (a step's session is the AI-run record's, never the
+      // header's 「对话」). Null when the project has none of the person's, and the page begins one.
+      conversationSessionId: async (user, projectId) => personalConversationSessionId(await store.requireProject(user, projectId)),
+      // What the programme did in the background, newest first: a read-only record, never a destination.
+      programmeRuns: async (userId, projectId) => {
+        const owner = await store.userById(userId);
+        return owner ? programmeRunsOf(await store.requireProject(owner, projectId)) : [];
       },
       // A rename is the project owner's: an editor of the GEO project asks, and the name is written as its owner.
       rename: async (ownerId, projectId, name) => {
@@ -2738,6 +2742,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     return { sessionId, bound: true };
   }
   /**
+   * A project's programme runs, newest first, as the AI-run record lists them: what each was (its capability and route reason), the
+   * session it ran in, its state and when it began. A module's programme steps run in the module's own project, each in a session of its
+   * own, and no conversation list draws them (`runRoleOf`); the record is where they are read, and a session here is never a place to go.
+   * @param {any} project @param {{ except?: string | null, includeAutomated?: boolean }} [options] `except`: the person's own conversation;
+   *   `includeAutomated`: a scheduled task's executions in the project count as background work too
+   * @returns {Promise<Array<{ sessionId: string, runId: string, capabilityId: string | null, reason: string | null, status: string, startedAt: string | null }>>}
+   */
+  async function programmeRunsOf(project, { except = null, includeAutomated = false } = {}) {
+    return (await agentRuns.list(project))
+      .filter((run) => (runRoleOf(run) === "programme" || (includeAutomated && run.automated === true)) && run.sessionId && run.sessionId !== except)
+      .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
+      .map((run) => ({ sessionId: run.sessionId, runId: run.id, capabilityId: run.effectiveAgentId ?? null, reason: run.effectiveRouteReason ?? null,
+        status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
+  }
+  /**
+   * The conversation a person has in a module's project: the newest session that no programme run opened. "The newest session of the
+   * project" was where the header's 「对话」 landed after any step — in the step's own session, which the person can neither take part
+   * in nor leave (the same shape as the study's, R3). Null when the project has none of the person's own.
+   * @param {any} project
+   * @returns {Promise<string | null>}
+   */
+  async function personalConversationSessionId(project) {
+    const [sessions, runs] = await Promise.all([researchSessions.list(project), agentRuns.list(project)]);
+    const programme = new Set(runs.filter((run) => run.automated === true || runRoleOf(run) === "programme").map((run) => run.sessionId));
+    return sessions.find((entry) => !programme.has(entry.sessionId))?.sessionId ?? null;
+  }
+  /**
    * The study's own conversation (R3, 2026-10-14): the one recorded when it was made; for a study made before that, the oldest
    * conversation of its project that no programme run opened — the programme's runs are where "the oldest session" used to land —
    * and, for the owner, one made on the spot when the project has none. Recorded once it is found, so it stays that one.
@@ -2798,12 +2829,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // record, never a destination (the study's own conversation is not among them).
       backgroundRuns: async (userId, projectId, conversationSessionId) => {
         const owner = await store.userById(userId);
-        if (!owner) return [];
-        const runs = await agentRuns.list(await store.requireProject(owner, projectId));
-        return runs
-          .filter((run) => (run.automated === true || runRoleOf(run) === "programme") && run.sessionId && run.sessionId !== conversationSessionId)
-          .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
-          .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
+        return owner ? programmeRunsOf(await store.requireProject(owner, projectId), { except: conversationSessionId, includeAutomated: true }) : [];
       },
       // The study's first conversation, bound to a 虚拟临床研究 capability before
       // the study has a step to run: the binding is what puts the module's
@@ -5189,11 +5215,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!owner) return null;
         return geoParts.importDelivery(await store.requireProject(owner, projectId), run);
       },
-      latestSessionId: async ({ userId, projectId }) => {
-        const owner = await store.userById(userId);
-        if (!owner) return null;
-        return (await researchSessions.list(await store.requireProject(owner, projectId)))[0]?.sessionId ?? null;
-      },
       enqueueRound: (spec) => enqueueGeoRound(measureDeps, spec),
       noteCitation: (input) => noteGeoCitation(marketDeps, input),
       // A group a person set aside and an error whose correction they skipped are not given to a batch.
@@ -5457,9 +5478,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * idle. Any run already running in the project refuses with `runtime_busy`
    * (one GEO run per project; the orchestrator retries next tick), as does a
    * full runtime quota.
-   * @param {{ userId: string, projectId: string, geoProjectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   * @param {{ userId: string, projectId: string, geoProjectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string,
+   *   question?: string | null }} input `question`: what a person reads of the run (the step's sentence); `brief`: what the model works from
    */
-  async function dispatchGeoRun({ userId, projectId, geoProjectId, capabilityId, dispatchId, reason, brief }) {
+  async function dispatchGeoRun({ userId, projectId, geoProjectId, capabilityId, dispatchId, reason, brief, question = null }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "geo_project_not_found", "The GEO project's account is unavailable.");
     const project = await store.requireProject(user, projectId);
@@ -5487,14 +5509,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") }
       : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope, reason: "module-step" });
+    // What a person is shown of the run is the sentence of the step; the instruction the model works from is the brief, and it reaches
+    // the model in the run's context (as a scheduled execution's does), never as the first thing anybody "said". A dispatch that
+    // names no sentence is read from its route reason: the run's question is never the machine instruction.
+    const visible = typeof question === "string" && question.trim() ? question : geoVisibleQuestionOfReason(reason);
     try {
       await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
       const run = await agentRuns.dispatch(project, {
-        sessionId: session.id, dispatchId, automated: true, question: brief,
+        sessionId: session.id, dispatchId, automated: true, question: visible, brief,
         effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
         ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
       }, async (binding, dispatchedRun, repairText = null) => {
-        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : brief;
+        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : visible;
         let resident;
         try { resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.id }); }
         catch (error) { throw memoryRecallRejection(error); }
@@ -5515,11 +5541,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             await assertGeoProgramAuthority();
             await recordExtensionPromptActor(user, project, request);
           },
-          // The brief first: the kernel names a session after its first message.
-          // The GEO mark always, open runtime or not: a brief is never the
-          // researcher's words (the same text `geoRunPrompt` writes).
+          // The sentence first: the kernel names a session after its first message. The GEO mark always, open runtime or not: what the
+          // orchestrator sends is never the researcher's words. The instruction is in the run's own context, beside the facts the socket
+          // injects: the model works from it, and the first message of the session is the step's sentence.
           text: `${promptText}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>${marker ? `\n\n${marker}` : ""}`,
-          system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
+          system: `${prepared.system}${geoBriefBlock(brief)}`, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
