@@ -1038,6 +1038,11 @@ function vcrSettings(overrides) {
     // How long a draft study (made by 「新建研究」, never described) lives with nobody speaking in it, in minutes; then the sweep deletes
     // it and its project. A resource limit, not an opinion: every draft is a project row, a conversation record and a runtime slot's worth.
     vcrDraftTtlMinutes: integer("vcrDraftTtlMinutes", "OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES", 60, 5, 10_080),
+    // A step that runs while the researcher's own runtime is open is a turn of the study's own conversation (its visible sentence,
+    // the assistant's work and the result, in the one conversation that belongs to the study) and not a hidden programme session.
+    // A step nobody is present for (the worker's pass with the runtime closed) keeps the hidden path. Off by default until it has
+    // been measured on a real kernel in the shape a person uses it (R19 phase 2).
+    vcrStepsInStudySession: overrides.vcrStepsInStudySession ?? boolEnv("OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION", false),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.
