@@ -215,6 +215,14 @@ export const NATIVE_CHILD_TOOL_DENY = Object.freeze([
   'present',
 ])
 
+/**
+ * How long a cancelled turn's stop stays on each background job it stopped. A kill sends the process SIGTERM and,
+ * after the shell's grace (3 s in `dsh-bash-local`), SIGKILL, so a bash job settles within seconds; the bound is there
+ * for a producer that never settles, and a wait that runs out is recorded (its settlement may then come back as a
+ * completion notice). Not a limit on anyone's work: the work it waits on is already being stopped.
+ */
+export const CANCELLED_JOB_STOP_WAIT_MS = 60_000
+
 /** What a caught value says about itself.
  *
  *  A `catch` binding is `{}` under checkJs, so `error?.message` does not
