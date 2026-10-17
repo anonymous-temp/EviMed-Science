@@ -5,7 +5,8 @@ import test from "node:test";
 
 import * as clinical from "../src/clinicalEvidence.mjs";
 
-/** A snapshot as web_read.py writes it: title, the header lines, a blank line, the text. */
+/** A snapshot as web_read.py writes it: title, the header lines, a blank line, the text.
+ *  @param {string} text @param {{ rendition: boolean }} options */
 const snapshot = (text, { rendition }) => [
   "# Index", "", "- Source: https://openai.example.org/index/", "- Site: openai.example.org", "- Official source: no",
   ...(rendition ? [clinical.RENDITION_SNAPSHOT_LINE] : []),
@@ -13,6 +14,7 @@ const snapshot = (text, { rendition }) => [
 ].join("\n");
 
 const quote = "The model is served by DeepSeek-V4.1-Flash-1017.";
+/** @param {string} path @param {string} [supportQuote] */
 const claimOn = (path, supportQuote = quote) => ({ claimId: "CLM-001", claimType: "direct", claim: "The model changed.", artifactPath: path, supportQuote });
 
 test("a quotation found in a rendition is verified and says it was checked against the rendition", () => {
