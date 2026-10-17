@@ -124,7 +124,7 @@ export function HeatGrid({
                 <th
                   scope="row"
                   data-heat-emphasis={emphasis?.row === row.key ? "" : undefined}
-                  className={cn("sticky left-0 z-page w-24 text-left text-compact text-text sm:w-28", emphasis?.row === row.key && "font-semibold", groundClass)}
+                  className={cn("sticky left-0 z-page w-24 text-left text-compact text-text sm:w-28", emphasis?.row === row.key ? "font-semibold" : "font-normal", groundClass)}
                 >
                   {row.header}
                 </th>
