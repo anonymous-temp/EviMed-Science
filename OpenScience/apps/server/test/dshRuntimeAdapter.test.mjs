@@ -638,7 +638,8 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   const started = decoded.find((item) => item.event.type === "subagent/started").event;
   const catalogFrame = golden.session.find((frame) => frame?.event?.type === "subagent/catalog").event;
   assert.equal(started.childSessionId, catalogFrame.data.childId);
-  assert.equal(started.mode, "one-shot");
+  // `continuable` from 0.2.1: every local child is a managed activation (the 0.2.0 recording's child was `one-shot`).
+  assert.equal(started.mode, "continuable");
   assert.equal(started.parentSessionId, RECORDED_SESSION);
   assert.equal(started.label, catalogFrame.data.label);
 
@@ -954,12 +955,13 @@ test("running state comes from the $events stream, and 'we were not told' is not
   // removes it again: the recording carries `api-session/removed(childId)`
   // itself, positional as the kernel declares it, right after the child's last
   // `api-session/added` (`agentAvailable: false`). The live frame is what is
-  // replayed.
+  // replayed. 0.2.1-rc.2 does the same for a settled managed activation (the
+  // child is released after its settlement; recorded 2026-10-17).
   const liveChild = golden.events.find((frame) => frame.event === "api-session/added" && frame.args[0]?.origin === "subagent");
   assert.ok(liveChild, "the recording must contain the delegated child this asserts about");
   const removedSession = String(liveChild.args[0].sessionId);
   const liveRemoval = golden.events.find((frame) => frame.event === "api-session/removed" && String(frame.args[0]) === removedSession);
-  assert.ok(liveRemoval, "a finished one-shot child is removed live on 0.2.0-rc.2, and the recording must carry that frame");
+  assert.ok(liveRemoval, "a settled child is removed live (0.2.0-rc.2 one-shot, 0.2.1-rc.2 managed activation), and the recording must carry that frame");
   const synthesizedRemoval = golden.synthesized.events.find((frame) => frame.event === "api-session/removed");
   assert.ok(synthesizedRemoval, "the synthesized section keeps its removal frame for pins that keep a finished child resident");
   const removedIndex = golden.events.indexOf(liveRemoval);

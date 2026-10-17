@@ -69,7 +69,10 @@
     "approval/policy",
     "permission/preset",
     "sandbox/mode",
-    "workspace/changes"
+    "workspace/changes",
+    "job/registered",
+    "job/settled",
+    "working-directory/change"
   ],
   "sessionEventPlumbing": [
     "system/message",
@@ -83,7 +86,10 @@
     "approval/policy",
     "permission/preset",
     "sandbox/mode",
-    "workspace/changes"
+    "workspace/changes",
+    "job/registered",
+    "job/settled",
+    "working-directory/change"
   ],
   "messageSourceKinds": {
     "subagentSettled": "subagent-settled"
@@ -539,7 +545,7 @@
     }
   },
   "notes": {
-    "sessionEventPlumbing": "Session records the kernel keeps for its own bookkeeping and the control plane has no use for: the assembled system prompt and request header, route metadata, the title request, the inbox splice, the permission facts written when a session starts, a workspace-change marker, and the three compaction records (`start`, `summary`, `prune`) around the `compaction/end` the control plane decodes as its one `compaction` event. The first nine are recorded verbatim in the 0.1.7-rc.2 golden frames (`apps/server/test/fixtures/dsh/golden-frames.json`); the compaction records are in no recording and are classified by name alone, so their shape is never read. Each name is in `sessionEventTypes`, decodes to `unknown` with its raw type, and is not published to a run's stream; the event pump still follows it for the log's sequence, which is the stall monitor's heartbeat. A type of the kernel's register in neither list is unclassified: counted by raw type for operators, never published. Classifying one is a name in `sessionEventPlumbing` or a RunEvent of its own.",
+    "sessionEventPlumbing": "Session records the kernel keeps for its own bookkeeping and the control plane has no use for: the assembled system prompt and request header, route metadata, the title request, the inbox splice, the permission facts written when a session starts, a workspace-change marker, and the three compaction records (`start`, `summary`, `prune`) around the `compaction/end` the control plane decodes as its one `compaction` event. The first nine are recorded verbatim in the 0.1.7-rc.2 golden frames (`apps/server/test/fixtures/dsh/golden-frames.json`); the compaction records are in no recording and are classified by name alone, so their shape is never read. Each name is in `sessionEventTypes`, decodes to `unknown` with its raw type, and is not published to a run's stream; the event pump still follows it for the log's sequence, which is the stall monitor's heartbeat. A type of the kernel's register in neither list is unclassified: counted by raw type for operators, never published. Classifying one is a name in `sessionEventPlumbing` or a RunEvent of its own. 0.2.1 adds three, classified the day the pin moved: `job/registered` and `job/settled`, the background-job ledger beside a `bash` call (in the 0.2.1-rc.2 recording; the call and its result are already the `tool/call` and `tool/result` the control plane decodes), and `working-directory/change`, a session's directory moved (the subagent service sets each child's; the model-facing tool is disabled).",
     "sessionStatusAbsent": "There is no session status method. Running state arrives as an `api-session/status` emit on the Gateway-internal `$events` stream.",
     "hostDescribeRemoved": "0.1.2 removed host.describe with the rest of ApiProxy. Host facts arrive once, in the `$events` stream's opening `ready` frame. The readiness probe is session/list, which is a real wire call and therefore also proves authentication.",
     "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
