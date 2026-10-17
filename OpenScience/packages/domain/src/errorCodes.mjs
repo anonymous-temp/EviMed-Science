@@ -199,6 +199,9 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_search_response_too_large",
   "web_search_endpoint_invalid",
   "web_search_gateway_token_invalid",
+  // DeepSeek's search declining a query under its content policy (2026-10-17):
+  // a fact about that query and that engine, never about the topic.
+  "web_search_content_refused",
   // Knowledge-base search not answering — switched off, an outage, a slow
   // index. The documents are still in the workspace to read and grep, which
   // is what the tool's own failure tells the run to do.

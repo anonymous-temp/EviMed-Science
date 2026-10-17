@@ -1,0 +1,275 @@
+{
+ "recorded": "2026-10-17 from https://api.deepseek.com/v1/tools/{search,fetch} with the deployment's key read through loadConfig (never written here); long text fields cut to keep the fixture small (cut fields end with ' [cut]'), DeepSeek's per-request ids replaced with <request-id>; nothing else changed",
+ "answers": {
+  "fetch-blocked": {
+   "tool": "fetch",
+   "request": {
+    "url": "https://openai.com/index/"
+   },
+   "status": 504,
+   "ms": 30147,
+   "contentType": "application/json",
+   "body": {
+    "error": {
+     "message": "Request timeout (request_id: <request-id>)",
+     "type": "gateway_timeout_error",
+     "param": null,
+     "code": "gateway_timeout_error"
+    }
+   }
+  },
+  "fetch-docs": {
+   "tool": "fetch",
+   "request": {
+    "url": "https://api-docs.deepseek.com/"
+   },
+   "status": 200,
+   "ms": 191,
+   "contentType": "application/json",
+   "body": {
+    "content": "Search \\/ Fetch API is now available\\, powered by our in\\-house search engine and supporting web search and fetch\\. Click here to view the guide\\.\n\n\\# Your First API Call\n\nThe DeepSeek API uses an API format compatible with OpenAI\\/Anthropic\\. By modifying the configuration\\, you can use the OpenAI\\/Anthropic SDK or softwares compatible with the OpenAI\\/Anthropic API to access the DeepSeek API\\.\n\nPARAM \\| VALUE \n\\-\\-\\-\\|\\-\\-\\-\nbase\\_url \\(OpenAI\\) \\| https\\:\\/\\/api\\.deepseek\\.com \nbase\\_url \\(Anthropic\\) \\| https\\:\\/\\/api\\.deepseek\\.com\\/anthropic \napi\\_key \\| apply for an API key \nmodel \\| deepseek\\-flash\\(1\\)deepseek\\-v4\\-pro \n\n\\(1\\) Usedeepseek\\-flash as the model name\\. It is now served by DeepSeek\\-V4\\.1\\-Flash\\-1017\\, and the calling method remains unchanged\\. The legacy names deepseek\\-v4\\-flash and deepseek\\-v4\\-flash\\-vision\\-exp are still accepted\\, but the corresponding models have been retired\\; their requests are served by DeepSeek\\-V4\\.1\\-Flash\\-1017 and billed at the Flash price\\.\n\n\\#\\# Integrate with Agent Tools\n\nDeepSeek Harness is now in developer preview for agent harness developers worldwide\\. See the DeepSeek Harness Guide for details\\.\n\nThe DeepSeek API is supported by many popular AI agent and coding assistant tools\\. If you use tools like Claude Code\\, GitHub Copilot\\, or OpenCode\\, you can use DeepSeek as the backend model directly — no code required\\.\n\nSee the Agent Integrations Guide for details\\.\n\n\\#\\# Invoke The Chat API\n\nOnce you have obtained an API key\\, you can access the DeepSeek model using the following example scripts in the OpenAI API format\\. This is a non\\-stream example\\, you can set thestream parameter to true to get stream response\\.\n\nFor examples using the Anthropic API format\\, please refer to Anthropic API\\.\n\n\\- curl\n\\- python\n\\- nodejs\n\ncurl https\\:\\/\\/api\\.deepseek\\.com\\/chat\\/completions \\\\\n  \\-H \\\"Content\\-Type\\: application\\/json\\\" \\\\\n  \\-H \\\"Authorization\\: Bearer \\$\\{DEEPSEEK\\_API\\_KEY\\}\\\" \\\\\n  \\-d \\'\\{\n        \\\"model\\\"\\: \\\"deepseek\\-flash\\\"\\,\n        \\\"messages\\\"\\: \\[\n          \\{\\\"role\\\"\\: \\\"system\\\"\\, \\\"content\\\"\\: \\\"You are a helpful assistant\\.\\\"\\}\\,\n          \\{\\\"role\\\"\\: \\\"user\\\"\\, \\\"content\\\"\\: \\\"Hello\\!\\\"\\}\n        \\]\\,\n        \\\"thinking\\\"\\: \\{\\\"type\\\"\\: \\\"enabled\\\"\\}\\,\n        \\\"reasoning\\_effort\\\"\\: \\\"high\\\"\\,\n        \\\"stream\\\"\\: false\n      \\}\\'\n\\# Please install OpenAI SDK first\\: \\`pip3 in [cut]",
+    "title": "Your First API Call | DeepSeek API Docs"
+   }
+  },
+  "fetch-invalid": {
+   "tool": "fetch",
+   "request": {
+    "url": "not-a-url"
+   },
+   "status": 400,
+   "ms": 152,
+   "contentType": "application/json",
+   "body": {
+    "error": {
+     "message": "'url' must be a valid HTTP or HTTPS URL (request_id: <request-id>)",
+     "type": "invalid_request_error",
+     "param": null,
+     "code": "invalid_request_error"
+    }
+   }
+  },
+  "search-basic": {
+   "tool": "search",
+   "request": {
+    "query": "DeepSeek 2026-10-17 发布",
+    "count": 5
+   },
+   "status": 200,
+   "ms": 446,
+   "contentType": "application/json",
+   "body": {
+    "results": [
+     {
+      "title": "Change Log | DeepSeek API Docs",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 2.810956412383431,
+      "date": "2026-10-16T16:00:00+00:00",
+      "url": "https://api-docs.deepseek.com/updates",
+      "summary": "To allocate resources more reasonably, we will adopt peak/off-peak pricing, with off-peak prices set at half of the peak-hour prices, encouraging users to schedule their tasks based on actual usage. The new prices will take effect at 16:00 (UTC Time) on August 16, 2026.\n...\n2026-07-31\n\n### DeepSeek-V4-Flash Update\n\nThe official release of the DeepSeek-V4-Flash API is now in public beta. The API ca [cut]",
+      "snippet": "For more details, please refer to this documentation. ... with the max effort level, topp=0.95, and temperature=1.0 ... - DSBench-FullStack ... Thinking Mode. ... we will update and adjust API pricing. To allocate resources more reasonably, we will adopt peak/off-peak pricing, with off-peak prices set at half of the peak-hour prices, encouraging users to schedule their tasks based on actual usage. [cut]",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真",
+      "site_name": "证券时报",
+      "site_icon": "https://cdn.deepseek.com/site-icons/stcn.com",
+      "authority": 4,
+      "rerank_score": 2.6672678154722167,
+      "date": "2026-10-16T16:00:00+00:00",
+      "url": "https://stcn.com/article/detail/4223928.html",
+      "summary": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真\n\n来源：人民财讯作者：王焕城2026-10-17 16:34\n...\n人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。\n\nDeepSeek V4.1 Flash 1017通过基于自反馈的强化学习（RL）训练技术，提升了在游戏开发、3D建模等方面从零开始构建完整项目的能力，能够支持实现更多“许愿式”编程任务及项目开发请求。",
+      "snippet": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真 ... 人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真",
+      "site_name": "网易",
+      "site_icon": "https://cdn.deepseek.com/site-icons/163.com",
+      "authority": 2,
+      "rerank_score": 2.631345666244413,
+      "date": "2026-10-16T16:00:00+00:00",
+      "url": "https://www.163.com/dy/article/L9F5FEBN053469RG.html",
+      "summary": "# DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真\n\n2026-10-17 16:54:07 来源:\n...\n人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。\n\nDeepSeek V4.1 Flash 1017通过基于自反馈的强化学习（RL）训练技术，提升了在游戏开发、3D建模等方面从零开始构建完整项目的能力，能够支持实现更多“许愿式”编程任务及项目开发请求。",
+      "snippet": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真 2026-10-17 16:54:07 来源: 证券时报 广东 举报 ... 人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真",
+      "site_name": "新浪财经",
+      "site_icon": "https://cdn.deepseek.com/site-icons/sina.com.cn",
+      "authority": 2,
+      "rerank_score": 2.5415402931749043,
+      "date": "2026-10-16T16:00:00+00:00",
+      "url": "https://finance.sina.com.cn/jjxw/2026-10-17/doc-inivpnhn1407262.shtml",
+      "summary": "# DeepSeek V4.1 Flash新版本发布 许愿式编程一键成真\n...\n人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。\n\nDeepSeek V4.1 Flash 1017通过基于自反馈的强化学习（RL）训练技术，提升了在游戏开发、3D建模等方面从零开始构建完整项目的能力，能够支持实现更多“许愿式”编程任务及项目开发请求。",
+      "snippet": "人民财讯10月17日电，DeepSeek消息，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek V4.1 Flash新版本发布",
+      "site_name": "新京报",
+      "site_icon": "https://cdn.deepseek.com/site-icons/bjnews.com.cn",
+      "authority": 3,
+      "rerank_score": 2.4876570693331987,
+      "date": "2026-10-16T16:00:00+00:00",
+      "url": "https://m.bjnews.com.cn/detail/1792228837129628.html",
+      "summary": "DeepSeek V4.1 Flash新版本发布\n\n新京报 记者 罗亦丹 编辑 李铮\n\n2026-10-17 20:11\n...\n新京报贝壳财经讯（记者罗亦丹）10月17日，DeepSeek在官方公号发文称，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。\n\n相比上一版本的DeepSeek V4.1 Flash，新模型在各方面的基准测试中取得了长足的提升。\n\nDeepSeek官方表示，“提升性能的同时，我们还缩短了模型的任务运行时间与输出长度，让用户能够以更低成本、更快速度完成任务。特别地，本次我们着重针对DeepSeek Harness、腾讯CodeBuddy、WorkBuddy等平台框架进行了优化。”\n\nDeepSeek V4.1 Flash 1017通过基于自反馈的强化学习（RL）训练技术，提升了在 [cut]",
+      "snippet": "DeepSeek V4.1 Flash新版本发布 ... 2026-10-17 20:11 订阅 新京报贝壳财经讯（记者罗亦丹）10月17日，DeepSeek在官方公号发文称，DeepSeek V4.1 Flash现已更新至V4.1-Flash-1017版本，官方网页端、APP与API模型已同步变更为新模型。",
+      "content": ""
+     }
+    ]
+   }
+  },
+  "search-bogus-key": {
+   "tool": "search",
+   "request": {
+    "query": "test",
+    "count": 1
+   },
+   "status": 401,
+   "ms": 145,
+   "contentType": "application/json",
+   "body": {
+    "error": {
+     "message": "Authentication Fails, Your api key: ****0000 is invalid (request_id: <request-id>)",
+     "type": "authentication_error",
+     "param": null,
+     "code": "invalid_request_error"
+    }
+   }
+  },
+  "search-content": {
+   "tool": "search",
+   "request": {
+    "query": "WHO hypertension guideline 2021",
+    "count": 2,
+    "need_content": true
+   },
+   "status": 200,
+   "ms": 378,
+   "contentType": "application/json",
+   "body": {
+    "results": [
+     {
+      "title": "| Prevalence of control among those receiving antihypertensive treatment",
+      "site_name": null,
+      "site_icon": "https://cdn.deepseek.com/site-icons/paho.org",
+      "authority": 4,
+      "rerank_score": 1.9489153623580933,
+      "date": null,
+      "url": "https://iris.paho.org/bitstream/handle/10665.2/59308/PAHONMHNV23-0042_eng.pdf?sequence=1&isAllowed=y#:~:text=In%20the%20Americas%2C%20for%20every,a%202.37%25%20reduction%20in%20deaths#3#2",
+      "summary": "In 2002, WHO developed an enhanced version of the Chronic Care Model (CCM). The Innovative Care for Chronic Conditions Framework emphasizes community and policy aspects to improve health care for chronic diseases. HEARTS is based on this expanded WHO Chronic Care Model and represents its practical application in the field of cardiovascular disease prevention.\n...\n| Level of performance, goal, and  [cut]",
+      "snippet": "Brettler JW, Arcila GPG, Aumala T, Best A, Campbell NR, Cyr S, et al. Drivers and scorecards to improve hypertension control in primary care practice: Recommendations from the HEARTS in the Americas Innovation Group. Lancet Reg Health Am. 2022;9:100223. Available from: https://doi.org/10.1016/j.lama.2022.100223. PAHO Data collection digitalization data health management ... RITHS ANTERIOR 7 # HEAR [cut]",
+      "content": "| Prevalence of control among those receiving antihypertensive treatment. | The proportion of people in a given population or population group who are undergoing pharmacological treatment for hypertension and who meet the standard of care(e.g., BP < 140/90 or < 130/80 mm Hg). | Proxy of quality of care-treatment. It is equivalent to the ability of a health system to achieve the clinical standard o [cut]"
+     },
+     {
+      "title": "Guideline for the pharmacological treatment of hypertension in adults - NCBI Bookshelf",
+      "site_name": "National Institutes of Health (NIH) | (.gov)",
+      "site_icon": "https://cdn.deepseek.com/site-icons/nih.gov",
+      "authority": 4,
+      "rerank_score": 1.9185484647750857,
+      "date": null,
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK573631/#1",
+      "summary": "NCBI Bookshelf. A service of the National Library of Medicine, National Institutes of Health.\n\n## Overview\n\nThe 2021 WHO hypertension guideline aims to provide the most current and relevant evidencebased global public health guidance on the initiation of treatment (with pharmacological agents) for hypertension in adults. The recommendations target the general adult, non-pregnant, hypertensive popu [cut]",
+      "snippet": "The 2021 WHO hypertension guideline aims to provide the most current and relevant evidencebased global public health guidance on the initiation of treatment (with pharmacological agents) for hypertension in adults. ... Guideline for the pharmacological treatment of hypertension in adults. ... 2021.",
+      "content": "NCBI Bookshelf. A service of the National Library of Medicine, National Institutes of Health.\n\n## Overview\n\nThe 2021 WHO hypertension guideline aims to provide the most current and relevant evidencebased global public health guidance on the initiation of treatment (with pharmacological agents) for hypertension in adults. The recommendations target the general adult, non-pregnant, hypertensive popu [cut]"
+     }
+    ]
+   }
+  },
+  "search-site": {
+   "tool": "search",
+   "request": {
+    "query": "site:api-docs.deepseek.com tools search",
+    "count": 5
+   },
+   "status": 200,
+   "ms": 671,
+   "contentType": "application/json",
+   "body": {
+    "results": [
+     {
+      "title": "Search | DeepSeek API Docs",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 1.6412975788116455,
+      "date": null,
+      "url": "https://api-docs.deepseek.com/api/search/",
+      "summary": "# Search\nPOST \n\n## https://api.deepseek.com/v1/tools/search\n\nSearch the web for a query and return a ranked list of structured results. See the Search & Fetch guide for supported query operators, error handling, and billing.\n\n## Request\n\n- application/json\n\n## \nBody\n\nrequired\n\nquery stringrequired\n\nPossible values:non-empty and <= 128 characters\n\nThe search query. Supports operators such assite:,  [cut]",
+      "snippet": "https://api.deepseek.com/v1/tools/search Search the web for a query and return a ranked list of structured results. See the Search & Fetch guide for supported query operators, error handling, and billing. ... //api.deepseek.com/v1/tools/search' \\",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek V2 系列收官，联网搜索上线官网 - DeepSeek V2 系列收官，联网搜索上线官网",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 0.4439338445663452,
+      "date": null,
+      "url": "https://api-docs.deepseek.com/zh-cn/news/news1210/#1",
+      "summary": "# DeepSeek V2 系列收官，联网搜索上线官网\n\n今天，我们发布 DeepSeek V2.5 的最终版微调模型 DeepSeek-V2.5-1210。本版模型将是我们开启下一个全新基座模型系列前对 V2 系列的最后一次更新。\n\n与之前版本相比，本次更新通过 Post-Training 全面提升了模型各方面能力表现，包括数学、代码、写作、角色扮演等；同时，新版模型优化了文件上传功能，并且全新支持了联网搜索，展现出更加强大的全方位服务于各类工作生活场景的能力。\n\n## 模型通用能力提升\n\nDeepSeek-V2.5-1210 版本通过 Post-Training 阶段的迭代，全面提升了模型在各个领域的能力：\n...\n27.80\n\n43.20\n\n40.91\n\n43.33\n\nV2.5-0905\n...\n推理\n...\n64.70\n\n89.60\n...\nLiveCodebench (08.01 [cut]",
+      "snippet": "DeepSeek-V2.5-1210 版本支持了联网搜索功能，并已上线网页端。登陆 https://chat.deepseek.com/，在输入框中打开 “联网搜索” 即可体验。目前，API 暂不支持搜索功能。",
+      "content": ""
+     },
+     {
+      "title": "Tool Calls | DeepSeek API Docs - Tool Calls",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 0.3474191725254059,
+      "date": null,
+      "url": "https://api-docs.deepseek.com/guides/tool_calls/#1",
+      "summary": "# Tool Calls\n\nTool Calls allows the model to call external tools to enhance its capabilities.\n\n## Non-thinking Mode\n\n### Sample Code\n\nHere is an example of using Tool Calls to get the current weather information of the user's location, demonstrated with complete Python code.\n\nFor the specific API format of Tool Calls, please refer to the Chat Completion documentation.\nfrom openai import OpenAI\n\nde [cut]",
+      "snippet": "Tool Calls Tool Calls allows the model to call external tools to enhance its capabilities. ## Non-thinking Mode ### Sample Code Here is an example of using Tool Calls to get ... user's location, demonstrated with complete Python code. ... From DeepSeek-V3.2, the API supports tool use in the thinking mode. For more details ... all function need to set the strict property to true",
+      "content": ""
+     },
+     {
+      "title": "DeepSeek-V4-Pro GA Release | DeepSeek API Docs - DeepSeek-V4-Pro GA Release",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 0.287532240152359,
+      "date": "2026-08-12T16:00:00+00:00",
+      "url": "https://api-docs.deepseek.com/news/news260813/?utm_source=aibreakfast.beehiiv.com&utm_medium=newsletter&utm_campaign=openai-previews-14x-faster-gpt-5-6-sol-for-real-time-agents&_bhlid=3b5ed87b044cbd31fc5362072942dcab88cd3e05#1",
+      "summary": "# DeepSeek-V4-Pro GA Release\n\nWe’re launching DeepSeek-V4-Pro today! 🚀\n\n🔷 Major Agent upgrades with strong production gains!\n\n🔷 Flexible reasoning effort for V4-Pro & V4-Flash: low for simple tasks, high for daily Agent workflows, max for complex tasks.\n\n🔷 Native OpenAI Responses API support, optimized for Codex with one-click setup.\n\nV4 Pro is now available on app/web. Try it via “Expert Mode”.\n\n [cut]",
+      "snippet": "DeepSeek-V4-Pro GA Release ... V4 Pro is now available on app/web. Try it via “Expert Mode”. V4 Pro is also available via API. ... | HLE (wo/w tools) | 42.7/60.0 | 37.8/51.5 | 37.7/48.2 | 3 |",
+      "content": ""
+     },
+     {
+      "title": "thinking_mode_api_example_tool_call | DeepSeek API Docs",
+      "site_name": "DeepSeek",
+      "site_icon": "https://cdn.deepseek.com/site-icons/deepseek.com",
+      "authority": 3,
+      "rerank_score": 0.20704549551010132,
+      "date": null,
+      "url": "https://api-docs.deepseek.com/zh-cn/api_samples/thinking_mode_api_example_tool_call/#1",
+      "summary": "# thinking_mode_api_example_tool_call\nimport os\nimport json\nfrom openai import OpenAI\nfrom datetime import datetime\n\n# The definition of the tools\ntools = [\n...\nfunction\",\n...\nget_date\",\n...\nGet the current date\",\n...\n{ \"type\": \"object\", \"properties\": {} },\n...\nget_weather\",\n...\nGet weather of a location, the user should supply the location and date.\",\n...\n{ \"type\": \"string\", \"description\": \"The c [cut]",
+      "snippet": "thinking_mode_api_example_tool_call import os ... The definition of the tools tools = [ ... \"object\", \"properties\": {} } ... \"get_weather\" ... \"Get weather of a location, the user should supply the location and date.\" ... If there is no tool calls, then the model should get a final answer and we need to stop the loop if tool_calls is None...",
+      "content": ""
+     }
+    ]
+   }
+  },
+  "search-too-long": {
+   "tool": "search",
+   "request": {
+    "query": "hypertension guideline hypertension guideline hypertension guideline hypertension guideline hypertension guideline hypertension guideline hy",
+    "count": 3
+   },
+   "status": 400,
+   "ms": 147,
+   "contentType": "application/json",
+   "body": {
+    "error": {
+     "message": "'query' must be at most 128 characters (request_id: <request-id>)",
+     "type": "invalid_request_error",
+     "param": null,
+     "code": "invalid_request_error"
+    }
+   }
+  }
+ }
+}

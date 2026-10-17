@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-topic-selection",
-  "version": "sha256:4330f9a81102d8f44b98840063f8e4afc29769c53c090f2c508b5eb4d33c032d",
+  "version": "sha256:83ccc8e35e1f36b21b68a1082a199ff3ae51a547db9f8e65cda996d5fcc442a7",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -1399,7 +1399,7 @@
     {
       "name": "mcp__evimed__web_search",
       "source": "mcp",
-      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
+      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address. A hit may carry its date, its site and authority (0-4, the engine's rating of the site).",
       "inputSchema": {
         "type": "object",
         "properties": {

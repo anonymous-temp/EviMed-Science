@@ -19,6 +19,13 @@ text page 1 came from, not of whatever the site serves a minute later.
 Pages from authorities carry `official: true`. The label is the gateway's,
 from its own table; it says where a page comes from, for an evidence grade,
 and never decides whether the page could be read.
+
+A page our own read could not get may come back as DeepSeek Fetch's rendition
+of it (2026-10-17; the gateway's receipt says `via: "deepseek-fetch"`). It is
+preserved like any page, with one more line in its header (`RENDITION_LINE`)
+that every later reader of the file sees — the quote check included, which
+labels a quotation found in it as found in a rendition, not in the page's own
+bytes.
 """
 
 from __future__ import annotations
@@ -51,6 +58,14 @@ TIMEOUT_SECONDS = 170
 # Snapshots remembered for `page=N`, most recent first.
 SNAPSHOT_CACHE = 64
 SOURCES_ROOT = Path(".evimed-sources") / "web-pages"
+# The snapshot header line of a page read through DeepSeek Fetch. Written exactly
+# so: the domain's claim check (`RENDITION_SNAPSHOT_LINE` in clinicalEvidence.mjs)
+# compares header lines with it, character for character.
+RENDITION_LINE = "- Read through: DeepSeek Fetch, a rendition of the page by another reader, not the page's own bytes"
+RENDITION_WARNING = (
+    "This text is DeepSeek Fetch's rendition of the page, not the page's own bytes; a quotation from it is checked "
+    "against the rendition. Where exact wording matters, prefer the page itself or another source."
+)
 
 _SNAPSHOTS: "OrderedDict[str, dict]" = OrderedDict()
 
@@ -160,6 +175,8 @@ def _snapshot_markdown(receipt: dict, text: str) -> bytes:
     lines.append("- Official source: " + ("yes" if receipt.get("official") is True else "no"))
     if receipt.get("rendered") is True:
         lines.append("- Rendered in a browser before reading: yes")
+    if receipt.get("via") == "deepseek-fetch":
+        lines.append(RENDITION_LINE)
     lines.append("- Read as: %s (%s; %s %s)" % (
         read_as, receipt.get("mediaType") or "unknown type", extractor.get("name") or "extractor", extractor.get("version") or "",
     ))
@@ -249,6 +266,7 @@ def read(arguments: dict) -> dict:
             "contentType": receipt.get("contentType"),
             "mediaType": receipt.get("mediaType"),
             "sha256": receipt.get("sha256"),
+            **({"via": "deepseek-fetch"} if receipt.get("via") == "deepseek-fetch" else {}),
             "sourceId": snapshot["sourceId"],
             "markdownPath": snapshot["markdownPath"],
             "artifactSha256s": {snapshot["markdownPath"]: snapshot["markdownSha256"]},
@@ -287,6 +305,8 @@ def read(arguments: dict) -> dict:
             result["status"] = "warning"
             result["warnings"] = [snapshot["notice"]]
             result["next_actions"] = ["Prefer another source for anything the page may have left out."]
+        if receipt.get("via") == "deepseek-fetch":
+            result["warnings"] = [*result.get("warnings", []), RENDITION_WARNING]
         return result
     except WebReadError as error:
         return {

@@ -22,7 +22,7 @@ function webReadOutput(url, digest, extra = {}) {
       fetchedAt: "2026-09-20T02:00:00.000Z", official: extra.official ?? false, rendered: extra.rendered ?? false,
       contentType: "html", mediaType: "text/html", sha256: digest,
       markdownPath: extra.markdownPath ?? `.evimed-sources/web-pages/${digest.slice(0, 16)}/${"c".repeat(64)}/page.md`,
-      page: 1, pages: 1, nextPage: null, content: "…",
+      page: 1, pages: 1, nextPage: null, content: "…", ...(extra.via ? { via: extra.via } : {}),
     },
     sources: [{ id: `web-page:${digest.slice(0, 16)}`, url, source: "web-page" }],
     artifacts: [`.evimed-sources/web-pages/${digest.slice(0, 16)}/${"c".repeat(64)}/page.md`],
@@ -75,6 +75,15 @@ test("the pages a run read come off its transcripts, children included, once eac
   assert.equal(pages[2].url, "http://short.example.org/r");
   assert.equal(pages[2].finalUrl, "https://clinicaltrials.gov/study/NCT03036124");
   assert.equal(pages[3].snapshotPath, undefined, "a path outside the web snapshots is not offered as a link");
+});
+
+test("a page read through DeepSeek Fetch keeps the label on the record; nothing else can be written there", () => {
+  const { pages } = pagesReadFromSessions([session("root", [
+    { output: webReadOutput("https://openai.example.org/index/", sha("f"), { via: "deepseek-fetch" }) },
+    { output: webReadOutput("https://other.example.org/", sha("9"), { via: "my-own-reader" }) },
+    { output: webReadOutput("https://plain.example.org/", sha("8")) },
+  ])]);
+  assert.deepEqual(pages.map((page) => page.via ?? null), ["deepseek-fetch", null, null]);
 });
 
 test("a run that read more pages than a record keeps says how many it read", () => {
