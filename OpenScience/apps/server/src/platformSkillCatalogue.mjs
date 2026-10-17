@@ -67,6 +67,13 @@ const ROOTS = Object.freeze({
 const GEO_ROOT = "runtime/skills/geo-private/skills";
 /** The pack's index: written beside the pack at vendoring (`scripts/build/geo-pack-index.mjs`), the one file of the pack the web image carries. */
 const GEO_INDEX = "runtime/skills/geo-private/geo-pack-index.json";
+/**
+ * The same index as a deployment's own file, `<dataDir>/.openscience/geo-pack-index.json`: the web image is built from the public repository
+ * in CI, which holds no pack and so carries an index of no skills, and the release step that places the owner's pack in the runtime image
+ * (a private overlay on the CI image) also places this one file in the data volume, as the extension catalogue's `extensions-deployment.json`
+ * is placed. Read only where the image's own index lists nothing.
+ */
+const GEO_INDEX_DEPLOYMENT = path.join(".openscience", "geo-pack-index.json");
 
 /** The limits a copy is held to, as the native snapshot's: files, bytes per file, bytes in all, entries visited. */
 const LIMITS = Object.freeze({ files: 128, fileBytes: 4 * 1024 * 1024, totalBytes: 16 * 1024 * 1024, entries: 512, instructions: 262144 });
@@ -135,10 +142,10 @@ export async function readSkillFolder(directory) {
 }
 
 /**
- * @param {{ rootDir: string, packages?: ReadonlyMap<string, any>, display?: typeof SKILL_DISPLAY, now?: () => number,
+ * @param {{ rootDir: string, dataDir?: string | null, packages?: ReadonlyMap<string, any>, display?: typeof SKILL_DISPLAY, now?: () => number,
  *   packAllowed?: (user: any) => boolean, loopxEnabled?: boolean }} options
  */
-export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now(), packAllowed = () => false, loopxEnabled = false }) {
+export function createPlatformSkillCatalogue({ rootDir, dataDir = null, packages = SKILL_PACKAGES, display = SKILL_DISPLAY, now = () => Date.now(), packAllowed = () => false, loopxEnabled = false }) {
   /** @type {{ at: number, rows: any[] } | null} */
   let cached = null;
 
@@ -165,16 +172,20 @@ export function createPlatformSkillCatalogue({ rootDir, packages = SKILL_PACKAGE
       } catch { /* a folder without a readable skill file is not a skill */ }
     }
     if (found.length > 0) return found;
-    try {
-      const index = JSON.parse(await fs.readFile(path.join(rootDir, GEO_INDEX), "utf8"));
-      for (const entry of Array.isArray(index?.skills) ? index.skills : []) {
-        const name = String(entry?.name ?? "");
-        // A name that is not one path segment is not a skill the pack has; the index is a file, not a trusted source.
-        if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) continue;
-        found.push({ id: `geo-private:${name}`, name, title: String(entry.title ?? name).slice(0, 120), use: firstSentence(entry.use),
-          group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory: null });
-      }
-    } catch { /* no index either: there is no such group */ }
+    // The image's own index, then the deployment's: the first that lists a skill is the one used.
+    for (const file of [path.join(rootDir, GEO_INDEX), ...(dataDir ? [path.join(dataDir, GEO_INDEX_DEPLOYMENT)] : [])]) {
+      try {
+        const index = JSON.parse(await fs.readFile(file, "utf8"));
+        for (const entry of Array.isArray(index?.skills) ? index.skills : []) {
+          const name = String(entry?.name ?? "");
+          // A name that is not one path segment is not a skill the pack has; the index is a file, not a trusted source.
+          if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) continue;
+          found.push({ id: `geo-private:${name}`, name, title: String(entry.title ?? name).slice(0, 120), use: firstSentence(entry.use),
+            group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory: null });
+        }
+      } catch { /* no index in this place: try the next, or there is no such group */ }
+      if (found.length > 0) break;
+    }
     return found;
   }
 
