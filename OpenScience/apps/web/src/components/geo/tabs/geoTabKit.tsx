@@ -148,25 +148,6 @@ export function TabSection({
   );
 }
 
-/** The grey summary at the right end of a tab's filter row: “38 条结论”. */
-export function RowSummary({ children }: { children: ReactNode }) {
-  return <span className="text-caption tabular-nums text-text-3">{children}</span>;
-}
-
-/**
- * A tab's filter row: the chips, and the grey summary at the right end. On a
- * narrow screen the summary drops under the chips rather than squeezing them
- * out of sight.
- */
-export function FilterRow({ children, summary }: { children: ReactNode; summary?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      {children}
-      {summary ? <RowSummary>{summary}</RowSummary> : null}
-    </div>
-  );
-}
-
 /** A table's column heading cell. */
 export const TH = "px-2 pb-2 text-left text-caption font-normal text-text-3";
 /** A table's body cell. */
