@@ -34,7 +34,7 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
   const continuous = row.kind === "continuous" || (row.histogram !== null && !row.levels);
   const stats = continuous
     ? [row.mean !== null ? `均数 ${numberText(row.mean)}` : null, row.sd !== null ? `标准差 ${numberText(row.sd)}` : null].filter(Boolean).join(" · ")
-    : row.result ?? "";
+    : row.levels && row.levels.length > 0 ? "" : row.result ?? "";
   return (
     <section data-vcr-distribution={row.variable} className="min-w-0">
       <h4 className="truncate text-ui font-medium text-text">{row.label}</h4>

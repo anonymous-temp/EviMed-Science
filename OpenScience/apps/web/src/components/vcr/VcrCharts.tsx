@@ -155,6 +155,10 @@ export function VcrPlot({
   overlay?: ReactNode;
   className?: string;
 }) {
+  // The axis title sits at the right end of the tick row; when the last tick is near that end the two would print on top of each
+  // other (a phone's plot is about 300px: a five-character title needs the last quarter), so the title takes the line under it.
+  const lastTick = x.ticks.length > 0 ? posX(x.ticks[x.ticks.length - 1], x) : 0;
+  const titleBelow = Boolean(xLabel) && Boolean(xLabels?.length) && lastTick > 100 - 5 * (xLabel?.length ?? 0);
   return (
     <div className={cn("w-full", className)}>
       {yLabel && <p className="mb-1 text-caption text-text-3">{yLabel}</p>}
@@ -202,9 +206,10 @@ export function VcrPlot({
               {label}
             </span>
           ))}
-          {xLabel && <span className="absolute right-0 whitespace-nowrap text-meta text-text-3">{xLabel}</span>}
+          {xLabel && !titleBelow && <span className="absolute right-0 whitespace-nowrap text-meta text-text-3">{xLabel}</span>}
         </div>
       )}
+      {xLabel && titleBelow && <p className="ml-10 text-right text-meta text-text-3">{xLabel}</p>}
     </div>
   );
 }
@@ -421,19 +426,20 @@ export function VcrSurvivalChart({
         })}
       </VcrPlot>
       {curves.some((curve) => curve.atRisk?.length) && (
-        <table className="mt-3 w-full border-collapse text-caption tabular-nums">
-          <caption className="mb-1 text-left text-caption text-text-3">风险人数</caption>
-          <tbody>
-            {curves.filter((curve) => curve.atRisk?.length).map((curve) => (
-              <tr key={`risk-${curve.key}`} data-vcr-at-risk={curve.key}>
-                <th scope="row" className="whitespace-nowrap py-0.5 pr-3 text-left font-normal text-text-3">{curve.label}</th>
+        <div role="group" aria-label="风险人数" className="mt-3">
+          <p className="text-caption text-text-3">风险人数</p>
+          {curves.filter((curve) => curve.atRisk?.length).map((curve) => (
+            <div key={`risk-${curve.key}`} data-vcr-at-risk={curve.key} className="mt-1">
+              <span className="block truncate text-caption text-text-3">{curve.label}</span>
+              {/* Each count hangs under the time it was counted at, on the curve's own axis. */}
+              <span className="relative ml-10 block h-5">
                 {(curve.atRisk ?? []).map((entry) => (
-                  <td key={entry.x} className="py-0.5 text-center text-text-2">{entry.n}</td>
+                  <span key={entry.x} className="absolute -translate-x-1/2 text-caption tabular-nums text-text-2" style={{ left: `${posX(entry.x, x)}%` }}>{entry.n}</span>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

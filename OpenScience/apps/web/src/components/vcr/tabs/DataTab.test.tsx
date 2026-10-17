@@ -167,25 +167,49 @@ describe("the cards beside the one in view", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("");
   });
 
-  it("counts the cards in the band and offers the one filter a long list earns: the key assumptions", async () => {
+  it("offers the one filter a long list earns, the key assumptions, as a chip that is pressed or not — and does not count the cards again", async () => {
     const { container } = draw(<DataTab studyId={STUDY_ID} study={study()} />);
     await ready();
     const chips = within(band(container));
-    expect(chips.getByText("4 张假设卡")).toBeInTheDocument();
-    await userEvent.click(chips.getByRole("button", { name: "筛选" }));
-    const keys = await screen.findByRole("menuitemradio", { name: /关键假设/ });
+    // The count is the headline's and the section's; the band does not say it a third time.
+    expect(chips.queryByText("4 张假设卡")).toBeNull();
+    const keys = chips.getByRole("button", { name: "关键假设" });
+    expect(keys).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(keys);
     await waitFor(() => expect(container.querySelectorAll("[data-vcr-assumption]").length).toBeLessThan(4));
     expect(container.querySelectorAll("[data-vcr-assumption]").length).toBeGreaterThan(0);
+    expect(keys).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(keys);
+    await waitFor(() => expect(container.querySelectorAll("[data-vcr-assumption]").length).toBe(4));
   });
 
-  it("shows no filter for a short list, and no band at all while the tab holds no cards", async () => {
+  it("says the two counts the tab rests on in its headline, each one scrolling to what it counts", async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const { container } = draw(<DataTab studyId={STUDY_ID} study={study()} />);
+      await ready();
+      const headline = container.querySelector("[data-headline]") as HTMLElement;
+      expect(headline).toHaveTextContent("4 张假设卡 · 3 项试验先例");
+      await userEvent.click(within(headline).getByRole("button", { name: "看试验先例" }));
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(container.querySelector("[data-vcr-precedents]"));
+      await userEvent.click(within(headline).getByRole("button", { name: "看假设卡" }));
+      expect(scroll.mock.contexts[1]).toBe(container.querySelector("[data-vcr-assumptions]"));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("shows no filter for a short list, and no band at all while nothing in the tab needs one", async () => {
     const raw = fixture("ev201/data.json");
     raw.assumptions = raw.assumptions.slice(0, 2);
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: raw });
     const { container } = draw(<DataTab studyId={STUDY_ID} study={study()} />);
     await ready();
-    expect(within(band(container)).queryByRole("button", { name: "筛选" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "关键假设" })).toBeNull();
+    expect(container.querySelector("[data-page-chrome]")).toBeNull();
   });
 
   it("says, in a chip, that a version was added after the analysis plan froze — and not in a sentence", async () => {

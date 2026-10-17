@@ -295,7 +295,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
 
   const compare = protocols.length > 0 ? (
     <Disclosure summary="比较多个方案">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
           {canRun && <Button loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}

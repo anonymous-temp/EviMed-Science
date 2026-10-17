@@ -305,6 +305,8 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
   if (data.grid && data.grid.rows.length > 0) {
     cells.push({
       key: "grid",
+      // Five scenarios do not fit in half a page: the grid takes the row, and its last column is not cut.
+      ...(data.grid.columns.length > 3 ? { span: 2 as const } : {}),
       node: (
         <Card title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
           {data.grid.xLabel && <p className="mb-2 text-caption text-text-3">{data.grid.xLabel}</p>}
@@ -391,14 +393,9 @@ function NotComputedDesigns({ designs, studyId, study, failed }: { designs: read
   );
 }
 
-/** The design a dominated row points at, in the server's words when it sent some. */
-function dominatedSentence(design: VcrDesign): string {
-  return design.note ?? (design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优");
-}
-
 /**
- * The grid's columns, from the payload's own list. A dominated design prints one sentence across the measure columns instead of
- * numbers; power is a bar and its number.
+ * The grid's columns, from the payload's own list. A dominated design says what beat it under its name and draws no numbers;
+ * power is a bar and its number.
  */
 function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | null, onOpen: ((design: VcrDesign) => void) | null): Array<DataColumn<VcrDesign>> {
   return [
@@ -424,7 +421,8 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               : <span className={design.dominated ? "text-text-3" : "text-text"}>{design.name}</span>}
             {design.dominated && <Tag>{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</Tag>}
           </span>
-          {design.note && !design.dominated && <span className="text-caption text-text-3">{design.note}</span>}
+          {/* A dominated design says why under its name, in the column that is wide enough for a sentence; its numbers are not drawn. */}
+          {design.note && <span {...(design.dominated ? { "data-vcr-dominated-note": "" } : {})} className="text-caption text-text-3">{design.note}</span>}
         </span>
       ),
     },
@@ -434,12 +432,8 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       align: "right",
       isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text,
       cell: (design) => {
-        // A dominated design says why once, across the row, and gives no numbers at all.
-        if (design.dominated) {
-          return column.key === data.columns[0]?.key
-            ? <span data-vcr-dominated-note="" className="text-text-3">{dominatedSentence(design)}</span>
-            : null;
-        }
+        // A dominated design gives no numbers at all; what it was beaten by is said in its first cell.
+        if (design.dominated) return null;
         const value = design.measures[column.key];
         if (!value) return <span data-vcr-not-run={designRan(design) ? undefined : ""} className="text-text-3">{designRan(design) ? "—" : NOT_RUN}</span>;
         const mcse = mcseText(value.mcse);
@@ -471,18 +465,18 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
     })),
     {
       key: "replicates",
-      header: "模拟次数",
+      header: <span className="whitespace-nowrap">模拟次数</span>,
       align: "right",
       isEmpty: (design) => design.dominated === true || design.replicates == null,
       cell: (design) => (design.replicates == null || design.dominated
         ? <span className="text-text-3">—</span>
-        : <span data-vcr-replicates="" className="tabular-nums text-text-2">{numberText(design.replicates, 0)}</span>),
+        : <span data-vcr-replicates="" className="whitespace-nowrap tabular-nums text-text-2">{numberText(design.replicates, 0)}</span>),
     },
     {
       key: "method",
-      header: "来源",
+      header: <span className="whitespace-nowrap">来源</span>,
       isEmpty: (design) => !design.method || design.dominated === true,
-      cell: (design) => (design.method && !design.dominated ? <span data-vcr-method="" className="text-caption text-text-3">{design.method}</span> : null),
+      cell: (design) => (design.method && !design.dominated ? <span data-vcr-method="" className="whitespace-nowrap text-caption text-text-3">{design.method}</span> : null),
     },
     ...(onEdit ? [{
       key: "edit",

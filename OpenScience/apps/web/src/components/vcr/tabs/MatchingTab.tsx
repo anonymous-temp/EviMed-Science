@@ -1,7 +1,7 @@
 import { ClinicalTimeline, CriterionTable, EvaluationNote, useMatchingControls, useMatchingEvaluation } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import {
   contactVcrReferral,
   getVcrMatching,
@@ -316,6 +316,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   // The rules of the panel are tagged from the facts of the panel's person: with another person's timeline under it, from none.
   const caveatFacts = selected && timelineOwner(data) === selected.candidate.id ? data.timeline : undefined;
   const needs = selected ? evidenceNeeds(selected.criteria) : [];
+  const applicable = selected ? selected.criteria.filter((row) => row.applicable !== false) : [];
+  const allMet = applicable.length > 0 && applicable.every((row) => row.state === "satisfied");
   const referralId = selected?.referralId ?? null;
   const referralState = selected?.referralState ?? null;
   // The one human stop (plan §10.1): the server says whether this referral is
@@ -386,7 +388,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {data.funnel.map((step) => (
           <StatTile
             key={step.key}
@@ -402,8 +404,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
         ineligible={data.funnel.find((step) => step.key === "ineligible")?.count ?? null}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-        <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
           {data.candidates.length > 0 && (
             <Section title={referralStateLabel("candidate")} count={data.candidates.length}>
               <List label="患者名单">
@@ -515,8 +517,9 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
               {selected.verdict && (
-                <p data-vcr-eligibility="" className="flex min-w-0 flex-1 items-center gap-2 text-ui text-warn-strong">
-                  <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />
+                <p data-vcr-eligibility={allMet ? "met" : "open"} className={cn("flex min-w-0 flex-1 items-center gap-2 text-ui", allMet ? "text-ok" : "text-warn-strong")}>
+                  {/* The mark follows the judgements, not the sentence: every applicable criterion satisfied is a check, anything else keeps its warning. */}
+                  {allMet ? <CircleCheck size={16} aria-hidden="true" className="shrink-0" /> : <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />}
                   <span className="font-medium">{selected.verdict.text}</span>
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
@@ -685,7 +688,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
       {readsLedger && (data.ledger ?? []).length > 0 && <ReferralLedger studyId={studyId} sites={data.sites ?? []} />}
 
       {forecast && (
-        <div className={cn("grid gap-4", drawable && "xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>
+        <div className={cn("grid grid-cols-1 gap-4", drawable && "xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>
           {drawable && (
             <ChartCard
               title="入组预测与实际"
@@ -709,7 +712,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
               />
             </ChartCard>
           )}
-          <div className={cn("grid gap-4", !drawable && "sm:grid-cols-2 lg:grid-cols-3")}>
+          <div className={cn("grid grid-cols-1 gap-4", !drawable && "sm:grid-cols-2 lg:grid-cols-3")}>
             {(forecast.rows ?? []).map((metric) => (
               <VcrStat
                 key={metric.key}

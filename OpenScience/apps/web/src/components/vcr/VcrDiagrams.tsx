@@ -39,14 +39,15 @@ export function VcrAttritionChart({ steps, className }: { steps: readonly VcrAtt
         const unknown = Math.min(step.unknown ?? 0, remaining);
         const known = remaining - unknown;
         return (
-          <li key={step.key} className="grid grid-cols-[3rem_9rem_1fr_4.5rem_3.5rem] items-center gap-2 text-caption">
+          // Five columns need about 22rem before the bar has any room; on a phone the bar takes the row under the name and the counts.
+          <li key={step.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)_4rem_3.5rem] items-center gap-x-2 gap-y-1 text-caption sm:grid-cols-[3rem_9rem_minmax(0,1fr)_4.5rem_3.5rem]">
             <span className="truncate tabular-nums text-text-3">{step.code ?? ""}</span>
             <span className="truncate text-text-2">{step.label}</span>
             <span
               role="img"
               aria-label={`${step.label}：保留 ${numberText(known, 0)}，无法判断 ${numberText(unknown, 0)}`}
               data-forced-colors="preserve"
-              className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2"
+              className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2 max-sm:order-last max-sm:col-span-full"
             >
               <span className="h-3 bg-accent" style={{ width: `${share(known, total)}%` }} />
               <span data-vcr-unknown="" className="h-3" style={{ width: `${share(unknown, total)}%`, backgroundImage: UNKNOWN_HATCH }} />
@@ -496,11 +497,18 @@ export function VcrTradeoffScatter({
           const measure = design.measures[yKey];
           const cost = sizeKey ? design.measures[sizeKey] : null;
           const mcse = mcseText(measure?.mcse);
+          // A label hangs under its bubble, centred; a bubble near an edge would put half of it outside the card, so the label there
+          // reads inwards from the bubble's centre — the same class of defect in every chart that names its points.
+          const side = left > 70 ? "end" : left < 30 ? "start" : "middle";
           return (
             <span
               key={`label-${design.id}`}
               data-vcr-scatter-label={design.code}
-              className="absolute max-w-48 -translate-x-1/2 whitespace-nowrap text-center text-caption"
+              data-vcr-scatter-side={side}
+              className={cn(
+                "absolute max-w-48 whitespace-nowrap text-caption",
+                side === "end" ? "-translate-x-full text-right" : side === "start" ? "text-left" : "-translate-x-1/2 text-center",
+              )}
               style={{ left: `${left}%`, top: `calc(${top}% + ${radius(design) * 2 + 8}px)` }}
             >
               <span className={cn("block font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>
@@ -587,7 +595,8 @@ export function VcrMilestoneTimeline({
           const to = typeof high === "number" ? posX(high, scale) : at;
           const interval = intervalText(value.interval, value.precision);
           return (
-            <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[10rem_1fr_9rem] items-center gap-3">
+            // Three columns need 21rem before the time axis has any width; on a phone the axis takes the row under the name and the date.
+            <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr_9rem]">
               <div className="min-w-0">
                 <p className={cn("truncate text-caption", ours ? "font-medium text-accent-strong" : "text-text-2")}>{row.name || row.design}</p>
                 <p className="truncate text-meta text-text-3">{item.label}</p>
@@ -596,7 +605,7 @@ export function VcrMilestoneTimeline({
                 role="img"
                 aria-label={`${row.name || row.design} ${item.label}：${valueText(value)}${value.unit ?? ""}${interval ? `，${interval}` : ""}`}
                 data-forced-colors="preserve"
-                className="relative block h-4"
+                className="relative block h-4 max-sm:order-last max-sm:col-span-full"
               >
                 <span className="absolute inset-x-0 top-2 h-px bg-border" />
                 {from != null && to != null && to > from && (
@@ -608,14 +617,14 @@ export function VcrMilestoneTimeline({
               </span>
               <div className="min-w-0 text-right">
                 <p className="text-caption tabular-nums text-text"><VcrNumber value={value} label={`${row.name || row.design} ${item.label}`} /></p>
-                {interval && <p className="truncate text-meta tabular-nums text-text-3">{interval}</p>}
+                {interval && <p className="text-meta tabular-nums text-text-3 sm:truncate">{interval}</p>}
               </div>
             </li>
           );
         }))}
       </ol>
-      <div className="relative mt-1 grid grid-cols-[10rem_1fr_9rem] gap-3">
-        <span />
+      <div className="relative mt-1 grid grid-cols-1 gap-x-3 sm:grid-cols-[10rem_1fr_9rem]">
+        <span className="max-sm:hidden" />
         <span className="relative block h-5">
           {scale.ticks.map((tick) => (
             <span key={tick} className="absolute -translate-x-1/2 text-meta tabular-nums text-text-3" style={{ left: `${posX(tick, scale)}%` }}>

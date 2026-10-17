@@ -18,6 +18,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Headline } from "@/components/ui/Headline";
 import { Note, type NotePart } from "@/components/ui/Note";
+import { Tag } from "@/components/ui/Tag";
 import type { ToolbarChips, ToolbarFilter } from "@/components/ui/Toolbar";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
@@ -432,11 +433,11 @@ function ExampleCard({ example }: { example: NonNullable<PatientsData["example"]
         <>
           <VcrSeriesLegend series={scenarios.series} />
           {/* What the individual lines are, said where they are drawn: one person's trajectories under each assumption are model output. */}
-          <span data-vcr-legend-individual="" className="inline-flex items-center text-caption text-text-2">个体（模拟）</span>
+          <span data-vcr-legend-individual="" className="inline-flex items-center"><Tag>个体（模拟）</Tag></span>
         </>
       ) : undefined}
     >
-      <div className="grid gap-6 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
           {facts.length > 0 && <FactList rows={facts} />}
           {example.inScope && (

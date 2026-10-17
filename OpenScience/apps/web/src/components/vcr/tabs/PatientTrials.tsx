@@ -171,7 +171,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
       count={`${page.trials.length} 项`}
       toolbar={mayRun ? <Button variant="secondary" size="sm" loading={busy} onClick={ask}>为该患者找试验</Button> : undefined}
     >
-      <div data-vcr-patient-trials={subject} className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+      <div data-vcr-patient-trials={subject} className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
         <ul aria-busy={staleList || undefined} className={cn("flex flex-col gap-2", staleList && "opacity-60")}>
           {page.trials.map((trial) => (
             <TrialRow key={trial.id} trial={trial} current={chosen?.id === trial.id} onPick={() => onPick(trial.id)} />

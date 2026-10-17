@@ -348,7 +348,7 @@ export function NotEstimableCard({
         </h3>
         {needs && <span className="text-caption text-text-3">{needs}</span>}
       </header>
-      <ol className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ol className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item, index) => (
           <li key={item.title} className="rounded border border-border bg-surface-1 p-3">
             <p className="flex items-baseline gap-2 text-ui font-medium text-text">

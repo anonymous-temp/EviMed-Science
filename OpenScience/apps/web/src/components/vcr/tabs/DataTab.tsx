@@ -18,6 +18,7 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Headline } from "@/components/ui/Headline";
+import type { NotePart } from "@/components/ui/Note";
 import { Input, Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail } from "@/components/ui/MasterDetail";
@@ -28,7 +29,7 @@ import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { VcrKnowledgeSection } from "../VcrKnowledge";
 import { VcrNoDefinition } from "../VcrStates";
 import { hasDefinition } from "../vcrTabs";
-import { intendedUseLabel } from "../vcrText";
+import { intendedUseLabel, numberText } from "../vcrText";
 import { VcrForestPlot } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrValueText } from "../VcrNumber";
@@ -42,9 +43,9 @@ import { vcrTabPath } from "../vcrTabs";
 type Filter = "all" | "key";
 
 // Who set a card and whether a person has signed it are not ways to sort the list (owner ruling 2026-10-10): the one filter is the cards that matter most.
-const FILTER_LABELS: ReadonlyArray<{ value: Exclude<Filter, "all">; label: string }> = Object.freeze([
-  { value: "key", label: "关键假设" },
-]);
+const CARDS = "[data-vcr-assumptions]";
+const PRECEDENTS = "[data-vcr-precedents]";
+const scrollTo = (selector: string) => () => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" });
 
 function matches(assumption: VcrAssumption, filter: Filter): boolean {
   switch (filter) {
@@ -113,21 +114,23 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
     />
   );
   const cards = data.assumptions.length > 0;
-  const count = (value: Filter) => data.assumptions.filter((assumption) => matches(assumption, value)).length;
+  const keyCards = data.assumptions.filter((assumption) => matches(assumption, "key")).length;
+  // The filter only means something while some cards are key and some are not.
+  const active: Filter = keyCards > 0 && keyCards < data.assumptions.length ? filter : "all";
 
-  // --- the band's one row: the one filter a long list earns, and how many cards there are ----------------------------------------
-  // A filter earns its place with a list long enough to need one; it is one chip that opens a menu, not a row of five.
-  const filters: ToolbarFilter[] = data.assumptions.length > 3
-    ? [{
-      kind: "select",
-      label: "筛选",
-      allLabel: "全部",
-      options: FILTER_LABELS.map((option) => ({ value: option.value, label: option.label, count: count(option.value) })),
-      value: filter === "all" ? null : filter,
-      onChange: (next) => setFilter((next as Filter | null) ?? "all"),
-    }]
+  // --- the band's one row: the one filter a long list earns ------------------------------------------------------------------------
+  // A filter earns its place with a list long enough to need one; with a single choice it is one chip that is pressed or not.
+  const filters: ToolbarFilter[] = data.assumptions.length > 3 && keyCards > 0 && keyCards < data.assumptions.length
+    ? [{ kind: "toggle", label: "关键假设", pressed: active === "key", onChange: (pressed) => setFilter(pressed ? "key" : "all") }]
     : [];
-  useVcrToolbar(cards ? { label: "假设卡的筛选", filters, summary: `${data.assumptions.length} 张假设卡` } : null);
+  useVcrToolbar(filters.length > 0 ? { label: "假设卡的筛选", filters } : null);
+
+  // The headline is what the page rests on, in the two numbers it has; each opens the section it counts.
+  const headline: NotePart[] = [
+    ...(cards ? [{ n: numberText(data.assumptions.length, 0), onOpen: scrollTo(CARDS), label: "看假设卡" }, " 张假设卡"] : []),
+    ...(cards && data.precedents.length > 0 ? [" · "] : []),
+    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看试验先例" }, " 项试验先例"] : []),
+  ];
 
   // The intake is not here: it is one entry of the header's 「⋯」 on every tier (`VcrIntakeDrawer`), where the study's data came from.
   if (!cards && data.precedents.length === 0) {
@@ -141,7 +144,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
     );
   }
   const asked = params.get("card");
-  const shown = data.assumptions.filter((assumption) => matches(assumption, filter));
+  const shown = data.assumptions.filter((assumption) => matches(assumption, active));
   const selected = (asked ? data.assumptions.find((assumption) => assumption.id === asked || assumption.key === asked) : null)
     ?? data.assumptions.find((assumption) => assumption.id === data.selectedId)
     ?? shown[0] ?? data.assumptions[0] ?? null;
@@ -163,9 +166,9 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
 
   return (
     <div className="flex flex-col gap-6">
+      {headline.length > 0 && <Headline parts={headline} />}
       <DefinitionCard study={study} />
       {pack}
-      {data.headline && <Headline parts={[data.headline]} />}
 
       {cards && (
         <MasterDetail
@@ -221,10 +224,12 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       )}
 
       {data.precedents.length > 0 && (
-        <Section title="试验先例" count={data.precedents.length}>
-          <VcrPrecedentTable rows={data.precedents} withUse />
-          <VcrRegistryCoverage sources={data.registryCoverage} />
-        </Section>
+        <div data-vcr-precedents="">
+          <Section title="试验先例" count={data.precedents.length}>
+            <VcrPrecedentTable rows={data.precedents} withUse />
+            <VcrRegistryCoverage sources={data.registryCoverage} />
+          </Section>
+        </div>
       )}
 
       {data.precedentCandidates && data.precedentCandidates.length > 0 && <PrecedentCandidates rows={data.precedentCandidates} />}
@@ -497,7 +502,7 @@ function EditCard({ studyId, assumption, onClose, onSaved }: {
       className="mb-4 flex flex-col gap-3 rounded-card border border-border bg-surface-1 p-3"
       onSubmit={(event) => { event.preventDefault(); save(); }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input label="取值" type="number" step="any" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} />
         <Input label="单位" value={unit} onChange={(event) => setUnit(event.target.value)} />
       </div>

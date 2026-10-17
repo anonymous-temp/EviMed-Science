@@ -326,59 +326,62 @@ function CohortBody({ data }: { data: PopulationData }) {
 
       {row.length > 0 && <ChartGrid rows={[row]} />}
 
-      {data.unknownReasons.length > 0 && (
-        <Section title="无法判断的原因" count={data.unknownReasons.length}>
-          <DataTable
-            label="无法判断的原因"
-            columns={[
-              {
-                key: "reason",
-                header: "原因",
-                rowHeader: true,
-                cell: (reason) => (
-                  <span className="flex flex-col">
-                    <span className="text-text">{reason.label}</span>
-                    {reason.detail && <span className="text-caption text-text-3">{reason.detail}</span>}
-                  </span>
-                ),
-              },
-              { key: "count", header: "人数", align: "right", cell: (reason) => <span className="tabular-nums text-text">{numberText(reason.count, 0)}</span> },
-            ]}
-            rows={data.unknownReasons}
-            rowKey={(reason) => reason.key}
-            minWidth="min-w-0"
-          />
-        </Section>
-      )}
-
-      {data.blockers.length > 0 && (
-        <Section title="最卡人的三条" count={data.blockers.length}>
-          <DataTable
-            label="最卡人的几条标准"
-            columns={[
-              { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (blocker) => <span className="tabular-nums text-text-3">{blocker.code}</span> },
-              {
-                key: "label",
-                header: "标准",
-                cell: (blocker) => (
-                  <span className="flex flex-col">
-                    <span className="text-text">{blocker.label}</span>
-                    {blocker.quote && <span className="text-caption text-text-3">{`“${blocker.quote}”`}</span>}
-                  </span>
-                ),
-              },
-              {
-                key: "text",
-                header: "人数",
-                align: "right",
-                cell: (blocker) => <span className={cn("tabular-nums", blocker.tone === "attention" ? "font-medium text-warn-strong" : "text-text-2")}>{blocker.text}</span>,
-              },
-            ]}
-            rows={data.blockers}
-            rowKey={(blocker) => blocker.code}
-            minWidth="min-w-0"
-          />
-        </Section>
+      {(data.unknownReasons.length > 0 || data.blockers.length > 0) && (
+        <div className="grid gap-x-6 gap-y-2 lg:grid-cols-2 [&>section]:mt-0">
+          {data.unknownReasons.length > 0 && (
+            <Section title="无法判断的原因" count={data.unknownReasons.length}>
+              <DataTable
+                label="无法判断的原因"
+                columns={[
+                  {
+                    key: "reason",
+                    header: "原因",
+                    rowHeader: true,
+                    cell: (reason) => (
+                      <span className="flex flex-col">
+                        <span className="text-text">{reason.label}</span>
+                        {reason.detail && <span className="text-caption text-text-3">{reason.detail}</span>}
+                      </span>
+                    ),
+                  },
+                  { key: "count", header: "人数", align: "right", cell: (reason) => <span className="tabular-nums text-text">{numberText(reason.count, 0)}</span> },
+                ]}
+                rows={data.unknownReasons}
+                rowKey={(reason) => reason.key}
+                minWidth="min-w-0"
+              />
+            </Section>
+          )}
+          {data.blockers.length > 0 && (
+            <Section title="最卡人的三条" count={data.blockers.length}>
+              <DataTable
+                label="最卡人的几条标准"
+                columns={[
+                  { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (blocker) => <span className="tabular-nums text-text-3">{blocker.code}</span> },
+                  {
+                    key: "label",
+                    header: "标准",
+                    cell: (blocker) => (
+                      <span className="flex flex-col">
+                        <span className="text-text">{blocker.label}</span>
+                        {blocker.quote && <span className="text-caption text-text-3">{`“${blocker.quote}”`}</span>}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "text",
+                    header: "人数",
+                    align: "right",
+                    cell: (blocker) => <span className={cn("tabular-nums", blocker.tone === "attention" ? "font-medium text-warn-strong" : "text-text-2")}>{blocker.text}</span>,
+                  },
+                ]}
+                rows={data.blockers}
+                rowKey={(blocker) => blocker.code}
+                minWidth="min-w-0"
+              />
+            </Section>
+          )}
+        </div>
       )}
     </>
   );
@@ -464,7 +467,7 @@ function QualityCard({ quality }: { quality: VcrQualityReport }) {
   ].filter(Boolean);
   return (
     <ChartCard title="质量报告" meta={quality.tag ? <Tag>{quality.tag}</Tag> : undefined} footnote={counts.length > 0 ? <span className="tabular-nums">{counts.join(" · ")}</span> : undefined}>
-      <div data-vcr-quality="" className="grid gap-4 sm:grid-cols-3">
+      <div data-vcr-quality="" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {quality.groups.map((group) => (
           <section key={group.key} data-vcr-quality-group={group.key}>
             <h4 className="text-caption text-text-3">{group.label}</h4>

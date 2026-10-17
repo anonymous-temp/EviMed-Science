@@ -53,15 +53,15 @@ function Row({ row }: { row: VcrCalibrationRow }) {
   return (
     <tr data-vcr-calibration-row={row.key} data-vcr-calibration-status={row.status}>
       <th scope="row" className="border-b border-faint px-2 py-2.5 text-left font-normal text-text">{row.label}</th>
-      <td className="border-b border-faint px-2 py-2.5 text-right tabular-nums text-text-2">{withUnit(row.declared, row.unit)}</td>
-      <td className={cn("border-b border-faint px-2 py-2.5 text-right tabular-nums", row.status === "outside" ? "font-medium text-warn-strong" : "text-text")}>
+      <td className="whitespace-nowrap border-b border-faint px-2 py-2.5 text-right tabular-nums text-text-2">{withUnit(row.declared, row.unit)}</td>
+      <td className={cn("whitespace-nowrap border-b border-faint px-2 py-2.5 text-right tabular-nums", row.status === "outside" ? "font-medium text-warn-strong" : "text-text")}>
         {withUnit(row.generated, row.unit)}
       </td>
       <td className="border-b border-faint px-2 py-2.5 text-right tabular-nums text-text-2">
         {interval ? (
           <>
-            {`${interval.low === null ? "…" : numberText(interval.low)}–${interval.high === null ? "…" : numberText(interval.high)}`}
-            <span className="ml-1 text-caption text-text-3">{interval.kind === "prediction" ? intervalLabel("prediction") : "文献范围"}</span>
+            <span className="whitespace-nowrap">{`${interval.low === null ? "…" : numberText(interval.low)}–${interval.high === null ? "…" : numberText(interval.high)}`}</span>
+            <span className="ml-1 text-caption text-text-3 max-sm:ml-0 max-sm:block">{interval.kind === "prediction" ? intervalLabel("prediction") : "文献范围"}</span>
           </>
         ) : "—"}
       </td>

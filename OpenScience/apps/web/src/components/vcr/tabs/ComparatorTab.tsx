@@ -180,7 +180,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
             </>
           )}
         >
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,14rem)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,14rem)]">
             <VcrSurvivalChart curves={data.curves} rmst={data.rmst ? { tau: data.rmst.tau ?? null, label: data.rmst.label } : null} />
             <ComparatorNumbers data={data} />
           </div>
