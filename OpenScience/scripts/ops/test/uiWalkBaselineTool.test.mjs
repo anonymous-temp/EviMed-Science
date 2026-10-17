@@ -45,6 +45,16 @@ test("each finding nobody accepted becomes one entry: a number holds a page, a c
   assert.deepEqual(again.unaccepted, []);
 });
 
+test("--rule proposes the findings of the named rules alone: a debt with a name, an owner and a day is written without the findings that should still fail", () => {
+  const findings = [
+    found("type-pairs", "files@desktop", "files@desktop: 7 pairs", 7), found("type-pairs", "files@phone", "files@phone: 6 pairs", 6),
+    found("orphan-sentence", "files@desktop", "files@desktop: 2 sentences stand alone", 2), found("notice", "inbox@desktop", "inbox@desktop: something else"),
+  ];
+  assert.deepEqual(proposeEntries(report("fixture", findings), who, { rules: ["type-pairs"] }).map((entry) => [entry.view, entry.rule, entry.max]), [["files@desktop", "type-pairs", 7], ["files@phone", "type-pairs", 6]]);
+  assert.deepEqual(proposeEntries(report("fixture", findings), who, { rules: ["type-pairs", "orphan-sentence"] }).map((entry) => entry.rule), ["type-pairs", "type-pairs", "orphan-sentence"]);
+  assert.equal(proposeEntries(report("fixture", findings), who).length, 4, "without --rule every finding is proposed, as before");
+});
+
 test("a fixture walk proposes no coverage gap, and a step that did not run is proposed by no walk", () => {
   const findings = [found("not-observable", "frontier@desktop", "frontier@desktop: not observable: no row"), found("step-failed", "files-pdf", "files-pdf: the step could not run"), found("type-pairs", "files@desktop", "files@desktop: 6 pairs", 6)];
   assert.deepEqual(proposeEntries(report("fixture", findings), who).map((entry) => entry.rule), ["type-pairs"]);

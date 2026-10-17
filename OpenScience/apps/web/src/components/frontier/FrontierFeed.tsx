@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { ArrowUp, Filter, Newspaper, Search } from "lucide-react";
 import type { FrontierExposure, FrontierItem } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { groupByDay } from "./frontierText";
 
@@ -32,7 +33,7 @@ export const FEED_PAGE_SIZE = 30;
  */
 export function FeedList({
   view, q, filtered, empty, listing, error, fresh, firstRun, loadingMore, renderItem,
-  onRetry, onFresh, onMore, onAll,
+  onRetry, onFresh, onMore, onAll, onClear,
 }: {
   view: "selected" | "all";
   q: string;
@@ -51,6 +52,8 @@ export function FeedList({
   onFresh: () => void;
   onMore: () => void;
   onAll: () => void;
+  /** Take the search and the filters away: the way on from a list they emptied. */
+  onClear: () => void;
 }) {
   if (!listing) {
     return error ? <LoadError message={error} onRetry={onRetry} /> : <FrontierSkeleton />;
@@ -70,10 +73,12 @@ export function FeedList({
         </Button>
       )}
       {listing.items.length === 0 ? (
-        q ? <EmptyState icon={Search} title={`没有找到和“${q}”相关的动态`} />
-          : filtered ? <EmptyState icon={Filter} title="没有结果" />
-            : empty ? <EmptyState icon={Newspaper} title={empty} />
-              : firstRun || view === "all" ? <EmptyState icon={Newspaper} title="暂无内容" />
+        // An empty list always says where to go from it (DESIGN.md rule 8): out of a search or a filter, to the full list, or to the zones.
+        q ? <EmptyState icon={Search} title={`没有找到和“${q}”相关的动态`} action={<Button variant="secondary" onClick={onClear}>清除搜索</Button>} />
+          : filtered ? <EmptyState icon={Filter} title="没有结果" action={<Button variant="secondary" onClick={onClear}>清除筛选</Button>} />
+            : empty ? <EmptyState icon={Newspaper} title={empty} action={<Button variant="secondary" onClick={onAll}>看全部动态</Button>} />
+              : firstRun || view === "all"
+                ? <EmptyState icon={Newspaper} title="暂无内容" action={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "secondary" })}>看证据专区</Link>} />
                 : <EmptyState icon={Newspaper} title="暂无精选" action={<Button variant="secondary" onClick={onAll}>看全部</Button>} />
       ) : q ? (
         <section aria-label="搜索结果">

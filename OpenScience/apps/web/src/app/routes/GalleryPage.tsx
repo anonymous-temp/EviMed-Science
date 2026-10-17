@@ -8,17 +8,21 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
+// eslint-disable-next-line no-restricted-imports -- the gallery draws every primitive in every state (/__gallery); it is no page of the product
 import { FilterChip, FilterChips } from "@/components/ui/FilterChips";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { List, ListHeader, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { ProgressRail } from "@/components/ui/ProgressRail";
+// eslint-disable-next-line no-restricted-imports -- the gallery draws every primitive in every state (/__gallery); it is no page of the product
 import { SearchInput } from "@/components/ui/SearchInput";
+// eslint-disable-next-line no-restricted-imports -- the gallery draws every primitive in every state (/__gallery); it is no page of the product
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SeverityBadge, type SeverityLevel } from "@/components/ui/SeverityBadge";
 import { StatTile } from "@/components/ui/StatTile";
 import { Switch } from "@/components/ui/Switch";
+// eslint-disable-next-line no-restricted-imports -- the gallery draws every primitive in every state (/__gallery); it is no page of the product
 import { Tabs } from "@/components/ui/Tabs";
 import { Tag } from "@/components/ui/Tag";
 import { Toaster } from "@/components/ui/Toaster";

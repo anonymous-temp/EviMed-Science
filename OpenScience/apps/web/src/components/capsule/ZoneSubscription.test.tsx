@@ -5,6 +5,8 @@ import { ZoneSubscription } from "./ZoneSubscription";
 
 const client = vi.hoisted(() => ({ subscribeZone: vi.fn(), unsubscribeZone: vi.fn(), zoneSubscriptionStatus: vi.fn() }));
 vi.mock("@/lib/capsuleShareClient", () => client);
+const feature = vi.hoisted(() => ({ value: "on" as "loading" | "on" | "off" | "error" }));
+vi.mock("@/lib/meFeature", () => ({ useMeFeature: () => feature.value }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: (error: { message?: string }) => error?.message ?? "操作未完成，请重试。" }));
 vi.mock("@/lib/projects", () => {
   const state = { currentId: "project-a", projects: [{ id: "project-a", name: "房颤研究" }] };
@@ -14,7 +16,7 @@ vi.mock("@/lib/projects", () => {
 const active = { zoneId: "ez_1", projectId: "project-a", subscribedAt: "", title: "房颤抗凝", kind: "official", cards: 4, status: "active", reason: null, message: null };
 
 describe("用作当前项目的参考", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); feature.value = "on"; });
   afterEach(cleanup);
 
   it("makes the zone the reference of the project the shell is in", async () => {
@@ -48,6 +50,18 @@ describe("用作当前项目的参考", () => {
     const { container } = render(<ZoneSubscription zoneId="ez_1" />);
     await waitFor(() => expect(client.zoneSubscriptionStatus).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("asks nothing of the module where /api/me says it is off, or cannot say", async () => {
+    // The walk counted the module's 404 as a refused request on every zone page of a deployment without it (r19-guards2).
+    for (const answer of ["off", "error"] as const) {
+      feature.value = answer;
+      const { container, unmount } = render(<ZoneSubscription zoneId="ez_1" />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(container).toBeEmptyDOMElement();
+      unmount();
+    }
+    expect(client.zoneSubscriptionStatus).not.toHaveBeenCalled();
   });
 
   it("says why a subscription was refused", async () => {

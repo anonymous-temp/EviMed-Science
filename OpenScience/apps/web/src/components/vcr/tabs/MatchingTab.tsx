@@ -544,8 +544,10 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 </Button>
               )}
               {/* The one human stop: contacting a person is outside the
-                  platform and cannot be undone (plan §10.1). */}
+                  platform and cannot be undone (plan §10.1). It is one person's step, not the page's next one: the page's primary
+                  action is in the header, and this button is quiet beside the judgement it follows. */}
               <Button
+                variant="secondary"
                 disabled={!mayContact || busy !== null}
                 onClick={() => { if (mayContact && referralId) setConfirming({ subject: selected.candidate.id, referralId }); }}
               >

@@ -341,13 +341,19 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   // pane says nothing. A later read that fails leaves the tasks on screen, and the pane as it was.
   const known = agendas !== null && !(error && agendas.length === 0);
   const none = known && !agendas.some(agenda => !agenda.payload.archivedAt);
+  const firstTask = agendas?.find(agenda => !agenda.payload.archivedAt) ?? null;
   const firstRun = <EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
     action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />;
   // Beside the list the way on is the list; without it the list is a link away — so the detail is a function of the split.
   const detail = ({ split }: MasterDetailState) => !selectedId
     ? !known ? null
       : none ? firstRun
-        : <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1" />
+        : (
+          // Asking for a task to be chosen leaves a way to choose one: the list's first is a press away.
+          <EmptyState icon={CalendarClock} title="选择一项任务" description="任务的对话在这里打开。" className="min-h-0 flex-1"
+            action={firstTask ? <Link to={taskPath(firstTask.id, { search })} className={buttonClasses({ variant: "secondary" })}>打开第一项任务</Link> : undefined}
+            reason={firstTask ? undefined : "从列表选择一项任务。"} />
+        )
     : agendas === null ? <div className="px-6 py-6"><FilesSkeleton /></div>
       : !selected ? <EmptyState icon={CalendarClock} title="未找到这个任务" description="它可能已经删除。从列表选择其他任务。" className="min-h-0 flex-1"
         action={split ? undefined : <Link to={taskPath(null, { search })} className={buttonClasses({ variant: "secondary" })}>回到定时任务</Link>} />

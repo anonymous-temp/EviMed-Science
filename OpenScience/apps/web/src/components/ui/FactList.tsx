@@ -19,7 +19,8 @@ function Rows({ rows }: { rows: readonly Fact[] }) {
   return (
     <>
       {rows.map((row, index) => (
-        <div key={`${index}-${row.label}`} className="grid grid-cols-[6rem_1fr] gap-3 py-2">
+        // A bottom hairline on every row but the last — the kind of line a table's rows have, so a record that holds both draws one.
+        <div key={`${index}-${row.label}`} className="grid grid-cols-[6rem_1fr] gap-3 border-b border-faint py-2 last:border-b-0">
           <dt className="text-caption text-text-3">{row.label}</dt>
           <dd className="min-w-0 text-ui text-text">{row.value}</dd>
         </div>
@@ -33,12 +34,12 @@ export function FactList({ rows, max = 8, className }: { rows: readonly Fact[]; 
   const rest = rows.slice(max);
   return (
     <div data-fact-list="" className={className}>
-      <dl className="divide-y divide-faint">
+      <dl>
         <Rows rows={shown} />
       </dl>
       {rest.length > 0 && (
         <Disclosure summary={`全部 ${rows.length} 项`} className="mt-1">
-          <dl className="divide-y divide-faint">
+          <dl>
             <Rows rows={rest} />
           </dl>
         </Disclosure>

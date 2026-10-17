@@ -8,8 +8,8 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail } from "@/components/ui/MasterDetail";
 import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
-import { Toolbar } from "@/components/ui/Toolbar";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { useVcrToolbar } from "./studyFrameContext";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrModelAdoptDialog } from "./VcrModelAdoptDialog";
 import { endpointLabel, VcrModelRecord } from "./VcrModelRecord";
@@ -41,40 +41,42 @@ export function VcrModelsPanel() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [adopting, setAdopting] = useState(false);
   const { state, reload } = useVcrLoad("vcr:models", () => getVcrModels());
+  const data = state.kind === "ready" ? state.data : null;
+  const tiers = (["scenario", "literature", "data", "validated"] as const)
+    .map((tier) => ({ value: tier, count: data ? data.models.filter((model) => model.tier === tier).length : 0 }))
+    .filter((entry) => entry.count > 0);
+  // The page's one toolbar, beside its views: the tier chips, how many models, the one button that adds one.
+  useVcrToolbar(data
+    ? {
+      label: "模型与方法的筛选与操作",
+      filters: tiers.length > 1
+        ? [{
+          kind: "chips",
+          label: "可信度层级",
+          neutral: "all",
+          value: filter,
+          onChange: (next) => setFilter(next as Filter),
+          options: [{ value: "all", label: "全部", count: data.models.length }, ...tiers.map((entry) => ({ value: entry.value, label: modelTierLabel(entry.value), count: entry.count }))],
+        }]
+        : [],
+      summary: `${data.models.length} 个模型`,
+      actions: <Button variant="secondary" size="sm" onClick={() => setAdopting(true)}>引入文献模型</Button>,
+    }
+    : null);
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") {
     return state.off
       ? <EmptyState title={VCR_OFF_SENTENCE} />
       : <VcrTabError message={state.message} onRetry={reload} />;
   }
-  const data = state.data;
-  const tiers = (["scenario", "literature", "data", "validated"] as const)
-    .map((tier) => ({ value: tier, count: data.models.filter((model) => model.tier === tier).length }))
-    .filter((entry) => entry.count > 0);
+  if (!data) return null;
   const models = filter === "all" ? data.models : data.models.filter((model) => model.tier === filter);
   const opened = data.models.find((model) => model.id === openId) ?? null;
   // Beside the list the record is always there (the first model until one is chosen); on a narrow page it opens on a press.
   const current = (opened && models.includes(opened) ? opened : null) ?? models[0] ?? null;
 
-  const adopt = <Button variant="secondary" size="sm" onClick={() => setAdopting(true)}>引入文献模型</Button>;
   return (
     <div className="flex flex-col gap-6">
-      <Toolbar
-        label="模型与方法的筛选与操作"
-        filters={tiers.length > 1
-          ? [{
-            kind: "chips",
-            label: "可信度层级",
-            neutral: "all",
-            value: filter,
-            onChange: (next) => setFilter(next as Filter),
-            options: [{ value: "all", label: "全部", count: data.models.length }, ...tiers.map((entry) => ({ value: entry.value, label: modelTierLabel(entry.value), count: entry.count }))],
-          }]
-          : []}
-        summary={`${data.models.length} 个模型`}
-        actions={adopt}
-      />
-
       {models.length === 0
         ? <EmptyState title="还没有模型" action={<Button variant="secondary" onClick={() => setAdopting(true)}>引入文献模型</Button>} />
         : (

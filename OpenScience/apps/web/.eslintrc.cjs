@@ -134,20 +134,21 @@ const errorTextRules = [
 ];
 
 
-// The page framework's rules (R19, plan §3 S2; audit D §4 S4) — **off unless `LAYOUT_RULES=1`**, because the pages are not
-// moved yet and `pnpm lint` must stay green. Each migration batch moves its pages onto the slots and the count falls; the last
-// batch makes this block unconditional and its severity `error`.
-//
-//   LAYOUT_RULES=1 pnpm lint                      # prints every site, exit 0 (what GUARDS reads for the counts)
-//   LAYOUT_RULES=1 pnpm --filter @ai4s/web exec eslint . --max-warnings 0   # the same as a failure
+// The page framework's rules (R19, plan §3 S2; audit D §4 S4). They were warnings behind `LAYOUT_RULES=1` while the pages moved onto
+// the slots; since 2026-10-17 (r19-guards2) they are errors, always on. A file that still breaks one is on
+// `src/app/layout-lint-baseline.json` with the number of sites it has: there the import rule is a warning and everywhere else an
+// error, and `src/app/layoutLint.test.ts` holds each file to its number (it may fall, it may not rise; a file that is clean leaves
+// the list). A use that is right where it stands carries an inline `eslint-disable-next-line no-restricted-imports -- <why>`.
 //
 // What it says:
 //  - a page or tab component takes no `FilterChips`, `FilterSelect`, `SearchInput`, `SegmentedControl` or `Tabs`: its views,
 //    filters and search go through `PageShell`'s slots or a `Toolbar`, which draws them;
 //  - `tagClasses` is `Tag.tsx`'s: a control dressed as a label is a button that looks like a tag;
 //  - the 虚拟临床研究 components do not carry a person to the conversation: the button starts the work and the page's activity
-//    strip says how it goes (`navigate("/app/chat…")`, `useOpenVcrConversation`; two files are allowed later).
-const LAYOUT_RULES = process.env.LAYOUT_RULES === "1";
+//    strip says how it goes (`navigate("/app/chat…")`; `useOpenVcrConversation` is gone, and the rule keeps a copy of it out).
+const LAYOUT_LINT_BASELINE = Object.keys(require("./src/app/layout-lint-baseline.json").files);
+// ESLint's own matcher, to place a baseline file in the group whose rules it is held to.
+const minimatch = require(require.resolve("minimatch", { paths: [require.resolve("eslint")] }));
 
 const PAGE_FILES = [
   "src/app/**/*.{ts,tsx}",
@@ -206,25 +207,34 @@ const installedThingsRules = [
   },
 ];
 
-/** The page framework's overrides: complete lists for each file group, because a later override replaces an earlier one's options. */
-const layoutOverrides = LAYOUT_RULES ? [
-  {
-    files: ["src/**/*.{ts,tsx}"],
-    excludedFiles: ["src/components/ui/Tag.tsx"],
-    rules: { "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN] }] },
-  },
-  {
-    files: PAGE_FILES,
-    rules: { "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN, ...ATOM_PATTERNS] }] },
-  },
+/**
+ * The page framework's overrides: complete lists for each file group, because a later override replaces an earlier one's options
+ * (the last group a file matches is the one it is held to). A file on the baseline gets its group's import rule as a warning, one
+ * override per file; the 虚拟临床研究 group's syntax rule stays an error everywhere, because it carries the token rules too.
+ */
+const LAYOUT_GROUPS = [
+  { files: ["src/**/*.{ts,tsx}"], excludedFiles: ["src/components/ui/Tag.tsx"], imports: [TAG_PATTERN] },
+  { files: PAGE_FILES, imports: [TAG_PATTERN, ...ATOM_PATTERNS] },
   {
     files: VCR_FILES,
-    rules: {
-      "no-restricted-imports": ["warn", { patterns: [TAG_PATTERN, ...ATOM_PATTERNS, ...VCR_PATTERNS] }],
-      "no-restricted-syntax": ["warn", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION],
-    },
+    imports: [TAG_PATTERN, ...ATOM_PATTERNS, ...VCR_PATTERNS],
+    syntax: [...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION],
   },
-] : [];
+];
+const layoutGroupOf = (file) => [...LAYOUT_GROUPS].reverse().find((group) => group.files.some((pattern) => minimatch(file, pattern))
+  && !(group.excludedFiles ?? []).some((pattern) => minimatch(file, pattern)));
+const layoutOverrides = [
+  ...LAYOUT_GROUPS.map(({ files, excludedFiles, imports, syntax }) => ({
+    files,
+    ...(excludedFiles ? { excludedFiles } : {}),
+    rules: { "no-restricted-imports": ["error", { patterns: imports }], ...(syntax ? { "no-restricted-syntax": ["error", ...syntax] } : {}) },
+  })),
+  ...LAYOUT_LINT_BASELINE.map((file) => {
+    const group = layoutGroupOf(file);
+    if (!group) throw new Error(`layout-lint-baseline.json names ${file}, which no layout rule applies to: take it off the list`);
+    return { files: [file], rules: { "no-restricted-imports": ["warn", { patterns: group.imports }] } };
+  }),
+];
 
 module.exports = {
   root: true,

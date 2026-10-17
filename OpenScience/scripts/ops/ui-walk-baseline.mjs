@@ -15,7 +15,10 @@
  * The owner, the day and the reason are the person's: there is no default for them, because an entry nobody chose is the notice this file
  * replaces. `--write` merges the proposal into the file (an existing entry keeps the larger `max`) and writes the walk's embedded copy.
  *
- *   node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner <name> --until <YYYY-MM-DD> --why "<reason>" [--write]
+ *   node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner <name> --until <YYYY-MM-DD> --why "<reason>" [--rule <rule>[,<rule>]] [--write]
+ *
+ * `--rule` proposes only the findings of the named rules (`type-pairs`): a debt that has a name, an owner and a day is written alone, and
+ * the findings the walk should still fail on stay failures.
  *   node scripts/ops/ui-walk-baseline.mjs check      # the shipped file is valid; entries that run out within 30 days
  */
 import { execFileSync } from "node:child_process";
@@ -31,13 +34,15 @@ const BASELINE_FILE = path.join(here, "ui-walk-baseline.json");
  * One entry for each finding of a report that no baseline entry accepted.
  * @param {any} report what the walk wrote (`report.json`)
  * @param {{ owner: string, until: string, why: string }} who
+ * @param {{ rules?: string[] | null }} [only] the rules to propose for; every rule when absent
  * @returns {any[]}
  */
-export function proposeEntries(report, { owner, until, why }) {
+export function proposeEntries(report, { owner, until, why }, { rules = null } = {}) {
   const profile = report?.profile ?? "owner";
   /** @type {Map<string, any>} */ const entries = new Map();
   for (const found of report?.findings ?? []) {
     if (found.accepted || UNACCEPTABLE_RULES.has(found.rule)) continue;
+    if (rules && !rules.includes(found.rule)) continue;
     /** @type {any} */ let entry;
     if (COVERAGE_RULES.has(found.rule)) {
       if (profile !== "owner") continue;
@@ -96,10 +101,11 @@ async function main(args) {
     const until = option(rest, "--until");
     const why = option(rest, "--why");
     if (!file || !owner || !until || !why) {
-      console.error("usage: ui-walk-baseline.mjs propose <report.json> --owner <name> --until <YYYY-MM-DD> --why \"<reason>\" [--write]");
+      console.error("usage: ui-walk-baseline.mjs propose <report.json> --owner <name> --until <YYYY-MM-DD> --why \"<reason>\" [--rule <rule>[,<rule>]] [--write]");
       return 2;
     }
-    const proposed = proposeEntries(JSON.parse(await readFile(file, "utf8")), { owner, until, why });
+    const rules = option(rest, "--rule")?.split(",").map((name) => name.trim()).filter(Boolean) ?? null;
+    const proposed = proposeEntries(JSON.parse(await readFile(file, "utf8")), { owner, until, why }, { rules });
     const merged = mergeEntries(baseline, proposed);
     const problems = baselineProblems(merged);
     if (problems.length) {

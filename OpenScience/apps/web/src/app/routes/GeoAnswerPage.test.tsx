@@ -72,6 +72,10 @@ describe("one answer", () => {
     // the page has one primary action: with a wrong sentence in the answer it is the correction
     expect(screen.getAllByRole("button").filter((button) => button.hasAttribute("data-geo-answer-primary"))).toHaveLength(1);
     expect(screen.getByRole("button", { name: "写纠错稿" })).toBeInTheDocument();
+    // The answer's own step, not the module's next one: a secondary button (T3: the module's primary is the band header's).
+    expect(screen.getByRole("button", { name: "写纠错稿" })).not.toHaveClass("bg-accent");
+    // The engine's answer is the record's content, not a sentence of the page's (the walk's orphan-sentence, r19-guards2).
+    expect(document.querySelector("[data-geo-answer] [data-prose] [data-geo-wrong]")).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");

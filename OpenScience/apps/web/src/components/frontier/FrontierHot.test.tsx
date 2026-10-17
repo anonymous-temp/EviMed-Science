@@ -54,3 +54,22 @@ describe("热榜's rows on a phone", () => {
     expect(screen.getByText(/4 家机构报道 · 含原始论文/)).toBeInTheDocument();
   });
 });
+
+describe("热榜 with nothing on it", () => {
+  // An empty list is a recipe with a way on (DESIGN.md rule 8): the full list is a link away, and the state that is still being
+  // prepared says why there is nothing to press.
+  it("has a mark, a title and the way to the full feed", () => {
+    const { container } = render(<MemoryRouter><HotBoard state={{ board: { window: "current", takenAt: ago(0.2), since: ago(72.2), events: [] }, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
+    const empty = container.querySelector("[data-empty]") as HTMLElement;
+    expect(empty.querySelector("svg")).not.toBeNull();
+    expect(within(empty).getByText("暂无热点")).toBeInTheDocument();
+    expect(within(empty).getByRole("link", { name: "看全部动态" })).toHaveAttribute("href", "/app/frontier?view=all");
+  });
+
+  it("says why there is nothing to press while the board is being prepared", () => {
+    const { container } = render(<MemoryRouter><HotBoard state={{ board: null, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
+    const empty = container.querySelector("[data-empty]") as HTMLElement;
+    expect(empty).toHaveAttribute("data-reason");
+    expect(within(empty).getByText("热榜还在准备")).toBeInTheDocument();
+  });
+});

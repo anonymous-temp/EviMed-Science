@@ -322,6 +322,15 @@ test('the heat ramp is one hue, monotonically darker — never red to green', ()
   }
 })
 
+test('the number in a heat cell reads at 4.5:1: the body colour on the four light steps, white on the two dark ones', () => {
+  // HeatGrid's STEP_TEXT: `text-text` on steps 0–3, `text-accent-fg` (white) on 4–5. Step 4 failed both (r19-guards2, axe).
+  const body = '#1a1f25'
+  CHART_COLORS.heat.forEach((step, index) => {
+    const ratio = contrastRatio(index >= 4 ? '#ffffff' : body, step)
+    assert.ok(ratio >= 4.5, `heat step ${index} ${step}: ${ratio.toFixed(2)}:1`)
+  })
+})
+
 test('the three containers are the three the language names', () => {
   assert.equal(CONTAINERS.read, 720)
   assert.equal(CONTAINERS.page, 1040)

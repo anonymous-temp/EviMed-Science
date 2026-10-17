@@ -210,6 +210,13 @@ describe("匹配与招募 — 确认后联系, the one human stop", () => {
     expect(screen.getByRole("button", { name: "确认后联系" })).toBeDisabled();
   });
 
+  // One primary action on a module page, and it is in the header (DESIGN.md, template T3): contacting a person is one person's step.
+  it("is a quiet button, never the page's primary action", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(screen.getByRole("button", { name: "确认后联系" }).className).not.toMatch(/bg-accent/);
+  });
+
   it("is off for a reader who may not contact patients, even where the referral allows it", async () => {
     const reader = study((raw) => { raw.abilities = raw.abilities.filter((ability: string) => ability !== "contact_patients"); });
     drawTab(<MatchingTab studyId={STUDY_ID} study={reader} />);

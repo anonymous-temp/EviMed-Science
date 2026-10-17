@@ -137,6 +137,7 @@
  *   [OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0] \
  *   [OPEN_SCIENCE_WALK_PROFILE=owner|fixture] [OPEN_SCIENCE_WALK_BASELINE=<file>|none] \
  *   [OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>] \
+ *   [OPEN_SCIENCE_WALK_ONLY=<view>,<view>]   # a partial walk of the named views, for the one who changed them: never a release walk \
  *   node scripts/ops/ui-walk.mjs
  *
  * Exit 0 when every assertion holds and the baseline accepts every finding, 1 when one does not (the report names which), 2 when the walk
@@ -190,7 +191,7 @@ const WALK_TABLES = {
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
-      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
+      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -204,7 +205,7 @@ const WALK_TABLES = {
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true},
-      {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":true},
+      {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":false,"rowsNote":"a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)"},
       {"view":"account-appearance","route":"/app/account?tab=appearance","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-usage","route":"/app/account?tab=usage","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-connectors","route":"/app/account?tab=connectors","pattern":"/app/account","family":"settings","template":"T6","rows":false},
@@ -224,7 +225,7 @@ const WALK_TABLES = {
       {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","template":"T5","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -246,7 +247,61 @@ const WALK_TABLES = {
   "baseline": {
     "version": 1,
     "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
-    "entries": []
+    "entries": [
+      {"view":"frontier@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-hot@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-daily@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-all@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-following@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-zones@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"capabilities@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"virtual-research@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"virtual-research-models@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"virtual-research-precedents@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"files@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"knowledge-graph@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"memory-project@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"memory-map@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"autopilot@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"inbox@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"account-appearance@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"account-usage@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"account-connectors@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"account-projects@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"account-notifications@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"extensions-plugins@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"extensions-skills@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"extensions-plugin-missing@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"extensions-skill-missing@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-overview@desktop","rule":"type-pairs","max":11,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-visibility@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-accuracy@desktop","rule":"type-pairs","max":12,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-questions@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-sources@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-actions@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-plan@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-evidence@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"geo-answer@desktop","rule":"type-pairs","max":11,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-overview@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-population@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-patients@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-comparator@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-trial@desktop","rule":"type-pairs","max":12,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-matching@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-data@desktop","rule":"type-pairs","max":12,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-overview@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-population@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-patients@2@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-comparator@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-trial@2@desktop","rule":"type-pairs","max":12,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-matching@2@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"vcr-data@2@desktop","rule":"type-pairs","max":12,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-zone@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-evidence@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"frontier-event@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
+      {"view":"files-reader@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"}
+    ]
   },
   "operatorSentences": [
     "EviMed 主站账号登录没有启用，请检查登录配置。",
@@ -1120,7 +1175,8 @@ export function structureFindings(name, viewportName, s) {
  * one tab, a grey sentence nobody can press), the walk could not see: it counted kinds of control and matched a list of old sentences.
  *
  * With `hold` the page's scroll container is moved by up to 480 px and put back, to see whether the sticky band stays where it is
- * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0.
+ * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0: with `hold`, a page
+ * that scrolled itself on load is moved to its top for the reading and put back.
  * @param {[{ hold?: boolean }?]} [args]
  */
 export function measureComposition([options] = [{}]) {
@@ -1156,6 +1212,12 @@ export function measureComposition([options] = [{}]) {
     }
     return document.scrollingElement ?? document.documentElement;
   };
+  // Reads are at scroll 0. A page that moves itself on load (a GEO answer brings its first wrong sentence up) is read from its top
+  // and put back where it was: read where it had moved to, its band stood 10 px higher than its tabs' (module-chrome, r19-guards2).
+  const anchor = document.querySelector("[data-page-chrome]") ?? document.querySelector("main");
+  const startScroller = hold && anchor ? scrollerOf(anchor) : null;
+  const startTop = startScroller ? startScroller.scrollTop : 0;
+  if (startScroller && startTop) startScroller.scrollTop = 0;
 
   // The page: its height (the tallest thing that scrolls), its title.
   let height = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0);
@@ -1331,11 +1393,13 @@ export function measureComposition([options] = [{}]) {
   // What the report keeps of the page's make-up: its notes (with or without an action or a number) and its headline.
   const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
 
-  return {
+  const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
     orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
     activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
   };
+  if (startScroller && startTop) startScroller.scrollTop = startTop;
+  return read;
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
@@ -1462,8 +1526,9 @@ export function familyFindings(pages) {
     if (!row) continue;
     // The second study of the module walk is `vcr-trial@2`, the same tabs of another study: its own group.
     const study = /@\d+$/.test(name) ? name.slice(name.lastIndexOf("@")) : "";
-    if (row.module) {
-      const key = `${row.module}${study}@${viewport}`;
+    // A record read inside a module's band (`band`: one 循证 GEO answer) is held to the band of the module's tabs.
+    if (row.module || row.band) {
+      const key = `${row.module ?? row.band}${study}@${viewport}`;
       modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
     }
     if (viewport === "desktop" && c.title) {
@@ -2153,10 +2218,11 @@ export function taskPageFindings(name, r) {
   const current = `${name}@desktop`;
   /** @type {string[]} */ const failures = [];
   /** @type {string[]} */ const notices = [];
-  if (!r) return { failures, notices };
+  /** @type {string[]} */ const info = [];
+  if (!r) return { failures, notices, info };
   if (!/^\/app\/autopilot\/[^/]+$/.test(r.path ?? "")) {
     notices.push(`${current}: not observable: the first row did not go to a task's own page (the address is ${r.path}), so the task page was not read`);
-    return { failures, notices };
+    return { failures, notices, info };
   }
   if (!r.main) notices.push(`${current}: the task page has no main area (data-task-main)`);
   if (!r.bar) notices.push(`${current}: the task page has no task bar (data-task-bar)`);
@@ -2179,12 +2245,14 @@ export function taskPageFindings(name, r) {
       if (!sameBox(box, r.paneBox)) {
         notices.push(`${current}: the kernel frame${r.frameBox ? "" : "'s container"} is ${boxText(box)} and the pane ${boxText(r.paneBox)} (the same rectangle)`);
       } else if (!r.frameBox) {
-        notices.push(`${current}: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
+        // No walk starts a runtime, so this is so on every account: an INFO line of what was compared, not a gap of the account's data
+        // (a fixture walk accepts no gap, and no data could fill this one — r19-guards2).
+        info.push(`${current}: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
       }
     }
   }
   if (r.zoneIds.length) failures.push(`${current}: the task bar names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
-  return { failures, notices };
+  return { failures, notices, info };
 }
 
 /**
@@ -2478,11 +2546,14 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   // Visually hidden is not visible: the skip link until it has focus and a
   // screen-reader-only phrase are clipped to a 1 px box (`sr-only`), and the
   // skip link counted as a kind of control on every page (2026-09-27 walk).
+  // What a reader sees: the body of a closed <details> (a folded 方法包, an unopened 来源) has boxes when asked, and nobody has seen it —
+  // `checkVisibility` is false for it, as it is for `display: none`.
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
     const clipped = cs.clip === "rect(0px, 0px, 0px, 0px)" || cs.clipPath === "inset(50%)" || (r.width <= 1 && r.height <= 1);
-    return r.width > 0 && r.height > 0 && !clipped && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0";
+    return r.width > 0 && r.height > 0 && !clipped && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0"
+      && (typeof el.checkVisibility !== "function" || el.checkVisibility());
   };
   const text = document.body.innerText || "";
   // What the vocabulary checks read: the page less what it quotes. A source's own words in a <blockquote> or <q> can say
@@ -2951,6 +3022,7 @@ async function walkRowClicks(page, base, route, name, popups) {
         const judged = afterClickFindings(name, kind, opened);
         failures.push(...judged.failures);
         notices.push(...judged.notices);
+        info.push(.../** @type {{ info?: string[] }} */ (judged).info ?? []);
       }
     }
   } finally {
@@ -3159,7 +3231,15 @@ async function main() {
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
     const found = await discoverRoutes(context, base, notices, failures);
-    const routes = [...ROUTES, ...found.routes];
+    const everything = [...ROUTES, ...found.routes];
+    // A name that is no view of this walk is a typo that would walk nothing and pass.
+    const unknown = setting.only.filter((name) => !everything.some(([view]) => view === name || budgetKey(view) === name));
+    if (unknown.length) {
+      console.error(`the walk cannot start: OPEN_SCIENCE_WALK_ONLY names no view: ${unknown.join(", ")}`);
+      return 2;
+    }
+    const routes = setting.only.length ? everything.filter(([view]) => setting.only.includes(view) || setting.only.includes(budgetKey(view))) : everything;
+    if (setting.only.length) report.only = setting.only;
     // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
     const axe = await loadAxeSource();
     if (!axe.source) {
@@ -3183,7 +3263,7 @@ async function main() {
     // stay and the words must be Chinese — never the router's English page.
     // First, before the phone width folds the sidebar away (its state is kept
     // per browser), and by the router's own history, not by a sidebar click.
-    {
+    if (!setting.only.length) {
       current = "stale-chunk@desktop";
       const probe = await context.newPage();
       await probe.setViewportSize(VIEWPORTS[0][1]);
@@ -3320,9 +3400,10 @@ async function main() {
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
     await page.setViewportSize(VIEWPORTS[0][1]);
     current = "address@desktop";
-    await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
+    if (!setting.only.length) await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
     const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
-    if (eventRoute) await recordStep(report, failures, notices, "frontier-event-handoff", () => walkEventHandoff(page, base, eventRoute));
+    if (setting.only.length) { /* a partial walk takes no step that is not about a page it was asked for */ }
+    else if (eventRoute) await recordStep(report, failures, notices, "frontier-event-handoff", () => walkEventHandoff(page, base, eventRoute));
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
@@ -3380,6 +3461,7 @@ async function main() {
   for (const line of unaccepted) console.log(`FAIL (not accepted by the baseline) ${line}`);
   for (const line of report.info) console.log(`INFO ${line}`);
   for (const line of baselineDelta(decided, setting.profile)) console.log(line);
+  if (setting.only.length) console.log(`PARTIAL WALK (${setting.only.join(", ")}): not a release walk — the steps that are not pages, the family checks across the others and the coverage of the rest were not read`);
   console.log(`${Object.keys(report.pages).length} page views walked, ${report.failures.length} failure(s) (${failures.length} outright, ${unaccepted.length} findings not accepted), `
     + `${decided.accepted.length} finding(s) accepted by the baseline, ${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return report.failures.length ? 1 : 0;
@@ -3440,7 +3522,7 @@ function describeEntry(entry) {
  * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
  * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
  * @param {Record<string, string | undefined>} [env]
- * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[] }>}
+ * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[], only: string[] }>}
  */
 export async function walkSetting(env = process.env) {
   /** @type {string[]} */ const problems = [];
@@ -3463,7 +3545,11 @@ export async function walkSetting(env = process.env) {
     }
   }
   problems.push(...baselineProblems(baseline).map((problem) => `baseline: ${problem}`));
-  return { profile, today, baseline, baselineSource, problems };
+  // A partial walk (`OPEN_SCIENCE_WALK_ONLY=vcr-trial,geo-visibility`, view names without the width): the views a change touched, read again in
+  // a minute instead of twelve. It says so in the report and on the last line, and the steps that are not about a page are not taken; the release
+  // gate never sets it.
+  const only = (env.OPEN_SCIENCE_WALK_ONLY ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  return { profile, today, baseline, baselineSource, problems, only };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */
@@ -3862,8 +3948,12 @@ export function handoffProbe([action]) {
   };
 }
 
-/** The fields a hand-off to the conversation may carry (`RuntimeUiIntent`): none of them sends. */
-export const HANDOFF_FIELDS = ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"];
+/**
+ * The fields a hand-off to the conversation may carry — those of `RuntimeUiIntent` (apps/web/src/lib/runtimeUiNavigation.ts; a test holds
+ * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
+ * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
+ */
+export const HANDOFF_FIELDS = ["draft", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "sessionId"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and

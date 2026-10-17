@@ -165,7 +165,7 @@ describe("试验 · the designs", () => {
     const { container } = draw();
     await trialDrawn();
     expect(container.querySelector("[data-vcr-stale]")).toHaveTextContent("假设卡已变更 · 输入已变更，这些数字可能已过期");
-    const greyed = container.querySelector("[data-vcr-stale-block] .opacity-disabled") as HTMLElement;
+    const greyed = container.querySelector("[data-vcr-stale-block] [data-vcr-stale-results]") as HTMLElement;
     expect(greyed.querySelector("tr[data-vcr-design='B']")).not.toBeNull();
     expect(greyed.contains(band(container))).toBe(false);
     expect(within(band(container)).getByRole("button", { name: "改选方案" })).toBeEnabled();

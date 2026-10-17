@@ -241,7 +241,9 @@ function Answer({
         </div>
       </div>
       {target && (
-        <Button data-geo-answer-primary="" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
+        // The answer's own step, not the module's next one: a secondary button in the answer's heading row, as 确认后联系 is in its
+        // person's row (T3: the one primary action of a module page is the band header's).
+        <Button data-geo-answer-primary="" variant="secondary" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
       )}
     </header>
   );
@@ -367,8 +369,9 @@ function AnswerBody({
     return finding ? <Correction key={key} finding={finding} claims={claims} onOpen={onOpen} /> : null;
   };
 
+  // The engine's answer as it was given, and the drugs it named: the record's content (`data-prose`), not sentences of the page's.
   return (
-    <div className="flex max-w-read flex-col gap-4 text-body text-text">
+    <div data-prose="" className="flex max-w-read flex-col gap-4 text-body text-text">
       {snapshot.status === "refusal" && <p><Tag>{SNAPSHOT_STATUS_WORDS.refusal}</Tag></p>}
       {marked.paragraphs.map((paragraph, index) => (
         <Fragment key={index}>

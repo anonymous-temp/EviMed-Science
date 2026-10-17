@@ -9,7 +9,7 @@ import { VcrModelsPanel } from "./VcrModelsPanel";
 import { runFilePath, VcrPackageReader } from "./VcrPackageReader";
 import { VcrPrecedentsPanel } from "./VcrPrecedentsPanel";
 import { fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
-import { fakeRoom } from "./__fixtures__/tabFrame";
+import { fakeRoom, ToolbarSlotFrame } from "./__fixtures__/tabFrame";
 
 // Only the network is doubled; every payload is the server's own fixture, or
 // a copy of one with one field changed.
@@ -19,7 +19,7 @@ vi.mock("@/lib/productClient", () => network);
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
-const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
+const draw = (node: React.ReactElement) => render(<MemoryRouter><ToolbarSlotFrame>{node}</ToolbarSlotFrame></MemoryRouter>);
 const off = () => { throw new WebApiError("off", { status: 404, code: "vcr_not_enabled" }); };
 
 let server: ReturnType<typeof installVcrServer>;

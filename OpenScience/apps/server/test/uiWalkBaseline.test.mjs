@@ -52,7 +52,7 @@ test("the page table names six templates, each view one of them, and a budget ro
     assert.equal(view.provisional, undefined, `${view.view}: the provisional list ended in R19; a debt is a baseline entry with an owner and a day`);
   }
   // A module page's tabs are its template's: the step rail is on every one of them.
-  for (const view of table.views.filter((entry) => entry.module)) assert.equal(table.templates[view.template].stepRail, "every-tab", view.view);
+  for (const view of table.views.filter((entry) => entry.module || entry.band)) assert.equal(table.templates[view.template].stepRail, "every-tab", view.view);
   assert.ok(seen.size > 55, `${seen.size} views: the table did not read`);
 });
 

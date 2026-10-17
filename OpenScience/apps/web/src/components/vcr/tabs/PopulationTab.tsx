@@ -12,7 +12,7 @@ import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Headline } from "@/components/ui/Headline";
-import { Section } from "@/components/ui/Section";
+import { BlockHeading, Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { VcrAttritionChart, VcrFunnelBar, VcrSmdDot } from "../VcrDiagrams";
 import { VcrMiniHistogram } from "../VcrMiniHistogram";
@@ -470,7 +470,7 @@ function QualityCard({ quality }: { quality: VcrQualityReport }) {
       <div data-vcr-quality="" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {quality.groups.map((group) => (
           <section key={group.key} data-vcr-quality-group={group.key}>
-            <h4 className="text-caption text-text-3">{group.label}</h4>
+            <BlockHeading className="text-caption text-text-3">{group.label}</BlockHeading>
             <dl className="mt-1.5 flex flex-col gap-1.5">
               {group.rows.map((metric) => (
                 <div key={metric.key} className="flex items-baseline justify-between gap-2">

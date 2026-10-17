@@ -173,8 +173,10 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
       {onClear && (active > 0 || searching) && <FilterChip onClick={onClear}>清除筛选</FilterChip>}
     </>
   );
+  // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
+  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
   const end = (search || summary != null || actions) && (
-    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:basis-full")}>
+    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:flex-1")}>
       {search && (
         <SearchInput
           size="sm"
@@ -185,10 +187,11 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           onChange={(event) => search.onChange(event.target.value)}
           onClear={search.onClear}
           {...search.inputProps}
-          className="min-w-0 flex-1 sm:w-56 sm:flex-none"
+          className="min-w-0 flex-1 max-sm:min-w-28 sm:w-56 sm:flex-none"
         />
       )}
-      {summary != null && <span className="shrink-0 text-caption tabular-nums text-text-3">{summary}</span>}
+      {/* On a phone beside a search the count gives way (truncated) before the search does. */}
+      {summary != null && <span className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}>{summary}</span>}
       {actions}
     </div>
   );

@@ -25,13 +25,14 @@ export function EvidenceReferences({
       Number.isInteger(index) && index > 0 && index <= evidence.sources.length,
   );
   return valid.length ? (
-    <span className="ml-2 inline-flex flex-wrap gap-2 text-caption">
+    <span className="ml-2 inline-flex flex-wrap gap-1 text-caption">
       {valid.map((index) => (
+        // A 24 px target around each 「[n]」 (WCAG 2.5.8; axe target-size found two marks too close on a claim citing four sources).
         <a
           key={index}
           href={`#${evidenceSourceId(evidence.id, index)}`}
           aria-label={`查看来源 ${index}`}
-          className="text-accent hover:underline"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center text-accent hover:underline"
           onClick={inspect ? (event) => { event.preventDefault(); inspect.openSource(index); } : undefined}
         >
           [{index}]

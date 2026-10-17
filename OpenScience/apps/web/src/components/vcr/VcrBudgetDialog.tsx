@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { confirmVcrBudget, type VcrBudget, type VcrJob } from "@/lib/vcrClient";
+import { confirmVcrBudget, type VcrBudget, type VcrJob, type VcrStudy } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,15 @@ export function jobsAwaitingBudget(jobs: readonly VcrJob[]): { jobs: VcrJob[]; s
   const waiting = jobs.filter((job) => job.state === "awaiting_budget");
   const seconds = waiting.reduce((sum, job) => sum + (typeof job.cpuSecondsLimit === "number" && job.cpuSecondsLimit > 0 ? job.cpuSecondsLimit : 0), 0);
   return { jobs: waiting, seconds };
+}
+
+/**
+ * What waits at the second human stop, as the page and the header say it: how many computations and the CPU time they need. The count
+ * is the larger of the study's own tally and the jobs listed, so a job the list has not caught up with still asks.
+ */
+export function budgetWaitOf(study: Pick<VcrStudy, "jobs" | "budget">): { count: number; seconds: number } {
+  const waiting = jobsAwaitingBudget(study.jobs);
+  return { count: Math.max(study.budget?.awaitingBudget ?? 0, waiting.jobs.length), seconds: waiting.seconds };
 }
 
 /**

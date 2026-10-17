@@ -1,14 +1,18 @@
-import type { LucideIcon } from "lucide-react";
+import { Inbox, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
- * The standard empty state: icon + title + description + an optional primary
- * action. Pages pass their own copy (and container chrome such as a dashed
- * border via `className`) so every "nothing here yet" / "service unavailable"
- * surface shares one shape instead of hand-rolled variants.
+ * The standard empty state: a mark + title + description + a way on. Pages pass
+ * their own copy (and container chrome such as a dashed border via
+ * `className`) so every "nothing here yet" / "service unavailable" surface
+ * shares one shape instead of hand-rolled variants.
+ *
+ * The mark is never left out: a page that names none gets the empty tray
+ * (DESIGN.md rule 8, and the walk's `empty-state` rule reads it). The way on
+ * is an `action` (one verb + object) or a `reason` for there being none.
  */
 export function EmptyState({
-  icon: Icon,
+  icon: Icon = Inbox,
   title,
   titleAs: Title = "p",
   description,
@@ -28,8 +32,8 @@ export function EmptyState({
 }) {
   return (
     <div data-empty="" data-reason={reason ? "" : undefined} className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
-      {Icon && <Icon size={20} className="text-muted" aria-hidden />}
-      <Title className={cn("text-ui font-medium text-text", Icon && "mt-3")}>{title}</Title>
+      <Icon size={20} className="text-muted" aria-hidden />
+      <Title className="mt-3 text-ui font-medium text-text">{title}</Title>
       {(description || reason) && (
         <div className="mt-2 max-w-sm text-caption text-muted">
           {description}

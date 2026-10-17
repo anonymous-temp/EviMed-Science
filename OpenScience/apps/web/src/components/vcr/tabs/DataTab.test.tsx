@@ -116,6 +116,15 @@ describe("what moved here from 总览", () => {
     expect(pack.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("names each of its regions once (axe landmark-unique: the list column and its Section were both 假设卡)", async () => {
+    draw(<DataTab studyId={STUDY_ID} study={study((raw) => { raw.knowledge = PACK; })} />);
+    await ready();
+    const names = screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")
+      ?? document.getElementById(region.getAttribute("aria-labelledby") ?? "")?.textContent ?? "");
+    expect(names.length).toBeGreaterThan(1);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it("has no list of reviews, no decision log and no strip of statistics above the cards — the change log has them", async () => {
     draw(<DataTab studyId={STUDY_ID} study={study()} />);
     await ready();

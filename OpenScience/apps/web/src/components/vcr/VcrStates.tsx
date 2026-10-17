@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import { useBlockHeadingLevel } from "@/components/ui/Section";
 import { StepState, type StepInput } from "@/components/ui/StepState";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
@@ -265,13 +266,14 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
 }) {
   const { run, busy } = useVcrRun(study);
   const note = study.steps[step]?.note;
+  const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4";
   return (
     <section data-vcr-step-failed={step} role="status" className="rounded-card border border-border bg-surface p-4">
-      <h3 className="flex items-center gap-2 text-section font-semibold text-text">
+      <Heading className="flex items-center gap-2 text-section font-semibold text-text">
         <TriangleAlert size={20} aria-hidden="true" className="text-warn" />
         这一步未完成
         <span className="text-ui font-normal text-text-3">{stepLabel(step)}</span>
-      </h3>
+      </Heading>
       {note && <p className="mt-1 text-ui text-text-2">{note}</p>}
       {partial && <PartialResultNote sentence={partial.sentence} className="mt-3" />}
       {study.abilities.includes("run") && (
@@ -302,16 +304,19 @@ export function StaleBar({ reason, queued = false, className }: { reason?: strin
 
 /**
  * A stale block of results: the bar, then the results themselves in the
- * secondary colour. Every result block of every tab is wrapped in one, driven
- * by the payload's own `stale` note — a stale number that was merely dimmed,
- * with no bar to say why, was the defect this replaces.
+ * secondary colour and without their hues. Every result block of every tab is
+ * wrapped in one, driven by the payload's own `stale` note — a stale number
+ * that was merely dimmed, with no bar to say why, was the defect this replaces.
+ * Greyed, not faded: an opacity took every line of the block under 4.5:1 (axe
+ * color-contrast, 147 lines of a study's 人群 tab, r19-guards2); a grey scale
+ * keeps each colour's lightness, so what was legible stays legible.
  */
 export function Stale({ note, children }: { note: VcrStaleNote | null | undefined; children: ReactNode }) {
   if (!note) return <>{children}</>;
   return (
     <div data-vcr-stale-block="">
       <StaleBar reason={note.reason} queued={note.queued} className="mb-3" />
-      <div className="text-text-2 opacity-disabled">{children}</div>
+      <div data-vcr-stale-results="" className="text-text-2 grayscale">{children}</div>
     </div>
   );
 }
@@ -338,14 +343,15 @@ export function NotEstimableCard({
   conclusion?: string | null;
   className?: string;
 }) {
+  const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4";
   return (
     <section data-vcr-not-estimable="" className={cn("rounded-card border border-border bg-surface p-4", className)}>
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="flex items-center gap-2 text-section font-semibold text-text">
+        <Heading className="flex items-center gap-2 text-section font-semibold text-text">
           <CircleDashed size={20} aria-hidden="true" className="text-warn" />
           {title}
           <span className="text-ui font-normal text-text-3">{`缺 ${items.length} 项数据`}</span>
-        </h3>
+        </Heading>
         {needs && <span className="text-caption text-text-3">{needs}</span>}
       </header>
       <ol className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -414,9 +420,10 @@ export function NotApplicableCard({ title, reason, options, className }: {
   options?: readonly string[];
   className?: string;
 }) {
+  const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4";
   return (
     <section data-vcr-not-applicable="" className={cn("rounded-card border border-border bg-surface p-4", className)}>
-      <h3 className="text-section font-semibold text-text">{title}</h3>
+      <Heading className="text-section font-semibold text-text">{title}</Heading>
       <p className="mt-1 text-ui text-text-2">{reason}</p>
       {options && options.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 text-caption text-text-3">
