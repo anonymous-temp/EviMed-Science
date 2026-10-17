@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { actionsFilled, clustersFilled, clusterViewFixture } from "../__fixtures__/geoSpine";
 import {
   articlesFilled,
   diagnosisFilled,
@@ -42,6 +43,9 @@ const client = vi.hoisted(() => ({
   getGeoDistribution: vi.fn(),
   getGeoMonitoring: vi.fn(),
   getGeoStrategy: vi.fn(),
+  getGeoActions: vi.fn(),
+  getGeoClusters: vi.fn(),
+  getGeoCluster: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -102,7 +106,7 @@ function typeCombos(root: Element): string[] {
  * What each tab may carry today — a ratchet, not the target. Measured on
  * 2026-09-27 after the GEO files were moved onto the named levels (metric-lg
  * 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11,
- * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4, 信源 6 → 5 → 4 (R11: a list of rows, no section title), 行动 8 → 7,
+ * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4 → 5 (R19: a pool is a subsection titled 14/600, the groups' rows are 14/400 and their counts 12/400), 信源 6 → 5 → 4 → 4 (R11: a list of rows, no section title; R19: the two charts above the list are titled at 18/600), 行动 8 → 7,
  * 方案 6 → 5 → 6 (R19: the plan's five blocks are titled at 18/600 again, and a tier's name is 14/600: 12/400, 14/400, 14/600 and
  * 18/600 are the page's own, the 13s are the buttons' and the chips') Every pair above four comes from a shared primitive the GEO
  * files do not own: `StatTile` (unit 14/500, a non-lead number 32/600, a
@@ -115,9 +119,9 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   总览: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "20/600", "32/600", "40/600"],
   可见度: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600"],
   准确与安全: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600", "40/600"],
-  问题与回答: ["12/400", "13/400", "13/500", "14/400"],
-  信源: ["12/400", "13/400", "13/500", "14/400"],
-  行动: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600"],
+  问题与回答: ["12/400", "13/400", "13/500", "14/400", "14/600"],
+  信源: ["12/400", "13/400", "13/500", "14/400", "18/600"],
+  行动: ["12/400", "13/400", "13/500", "14/400", "18/600"],
   方案: ["12/400", "13/400", "13/500", "14/400", "14/600", "18/600"],
 });
 
@@ -133,6 +137,9 @@ beforeEach(() => {
   client.getGeoDistribution.mockResolvedValue(distributionFilled);
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
+  client.getGeoActions.mockResolvedValue(actionsFilled);
+  client.getGeoClusters.mockResolvedValue(clustersFilled);
+  client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
 });
 
 async function measured(tab: ReactElement, ready: string): Promise<string[]> {
@@ -151,7 +158,7 @@ describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
     ["准确与安全", () => <AccuracyTab {...props} />, "事实准确率"],
     ["问题与回答", () => <QuestionsTab {...props} />, "恶心呕吐与胃肠反应"],
     ["信源", () => <SourcesTab {...props} />, "丁香医生"],
-    ["行动", () => <ActionsTab {...props} />, "效果"],
+    ["行动", () => <ActionsTab {...props} />, "品牌身份、规格与厂家"],
     ["方案", () => <PlanTab {...props} />, "目标"],
   ] as const)("%s", async (name, tab, ready) => {
     const combos = await measured(tab(), ready);

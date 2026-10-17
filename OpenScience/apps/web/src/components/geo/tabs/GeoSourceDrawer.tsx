@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
+import { routeWord, unavailableWords } from "../spine/actionModel";
+import { clusterName } from "../spine/clusterModel";
+import { ClusterLink } from "../spine/ClusterLink";
+import type { Candidate } from "../spine/sourceModel";
 import { safeWebHref } from "@/lib/readPages";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
@@ -34,8 +38,9 @@ const CONDITION_WORDS: Array<{ key: keyof GeoSourceRow["conditions"]; label: str
  * then the rest, the ones that name us marked. Every answer is the way into its page. A site nothing misstated still lists the
  * answers that cite it. After the answers: the specific pages of the site those answers cited (R14 N-11, outside links, the most cited
  * eight and then all of them), and the site's counts across the last few rounds — compared only where the rounds were measured over
- * the same thing, a rule drawn where the coverage changed (N-4). The last lines are the three conditions and the price of an article
- * there, and the one button hands a draft to the project's conversation — never sent.
+ * the same thing, a rule drawn where the coverage changed (N-4). What an article there needs and costs — the three conditions, the
+ * price, whether an order could be placed now — and the groups whose actions send one there are the first screen (R19); the one
+ * button hands a draft to the project's conversation — never sent.
  *
  * It is a record, so it is a drawer: the list stays where it was (page-structure rule 2).
  */
@@ -45,6 +50,7 @@ export function GeoSourceDrawer({
   source,
   engine,
   focus,
+  served,
   onClose,
 }: {
   geoId: string;
@@ -54,6 +60,8 @@ export function GeoSourceDrawer({
   engine: string;
   /** Opened from the red count: the drawer rests on the answers that misstated us. */
   focus: "wrong" | null;
+  /** What the project's actions say about sending an article here: the market's ranking carried by them, and the groups they are for. */
+  served?: { groups: Array<{ id: string; name: string }>; candidate: Candidate | null } | null;
   onClose: () => void;
 }) {
   const narrowed = engine === "all" ? null : engine;
@@ -77,12 +85,14 @@ export function GeoSourceDrawer({
     >
       <div data-geo-source-drawer={source.domain} className="flex min-h-full flex-col">
         <div className="flex flex-1 flex-col gap-6">
+          {/* What an article here needs and costs, and the groups it serves, are the first screen: the answers behind the counts follow. */}
+          <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
+          <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
           {state.kind === "error" && <TabError message={state.message} onRetry={reload} />}
           {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} />}
           {state.kind === "ready" && <Pages detail={state.data} />}
           {state.kind === "ready" && <History detail={state.data} />}
-          <Conditions source={state.kind === "ready" ? state.data.source : source} />
         </div>
         <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
       </div>
@@ -269,15 +279,17 @@ function AnswerRow({ geoId, answer }: { geoId: string; answer: GeoSourceAnswer }
 }
 
 /**
- * The conditions the platform knows, said as words, and what an article there costs: the last thing the drawer says about the site. A
+ * The conditions the platform knows, said as words, and what an article there costs: the first thing the drawer says about the site. A
  * condition it has not checked is not listed and nothing says so — "not verified" is the platform's bookkeeping (owner ruling 2026-10-10) —
  * and a site about which it knows nothing of the three, its layer or its price has no such section.
  */
-function Conditions({ source }: { source: Pick<GeoSourceRow, "conditions" | "layer" | "market"> }) {
+function Conditions({ source, candidate }: { source: Pick<GeoSourceRow, "conditions" | "layer" | "market">; candidate: Candidate | null }) {
   const known = CONDITION_WORDS.filter(({ key }) => source.conditions?.[key] != null);
-  const price = source.market && typeof source.market.price === "number" ? yuan(source.market.price) : null;
+  const price = source.market && typeof source.market.price === "number" ? yuan(source.market.price) : candidate && candidate.price !== null ? yuan(candidate.price) : null;
   const layer = source.layer ? GEO_SOURCE_LAYER_WORDS[source.layer] ?? null : null;
-  if (!layer && known.length === 0 && !price) return null;
+  const route = candidate ? routeWord(candidate.route) : null;
+  const why = candidate && candidate.available === false ? unavailableWords(candidate.unavailableBecause) : [];
+  if (!layer && known.length === 0 && !price && !route) return null;
   return (
     <section aria-label="投放条件" data-geo-source-detail="" className="text-ui text-text-2">
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -294,6 +306,25 @@ function Conditions({ source }: { source: Pick<GeoSourceRow, "conditions" | "lay
           );
         })}
         {price && <span>{`单篇价格 ${price}`}</span>}
+      </p>
+      {route && (
+        <p data-geo-source-route="" className="mt-1">
+          {route}
+          {why.length > 0 && <span className="text-text-3">{`：${why.join("；")}`}</span>}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** The question groups whose actions send an article here: each the way to the group. */
+function Served({ groups }: { groups: ReadonlyArray<{ id: string; name: string }> }) {
+  if (groups.length === 0) return null;
+  return (
+    <section aria-label="涉及的问题群" data-geo-source-groups="" className="text-ui text-text-2">
+      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span>涉及的问题群</span>
+        {groups.map((group) => <ClusterLink key={group.id} groupId={group.id}>{clusterName(group)}</ClusterLink>)}
       </p>
     </section>
   );

@@ -301,6 +301,8 @@ export interface GeoQuestionGroup {
   name: string;
   typicalQuestion: string;
   journeyStage: string | null;
+  /** The stage's number in the journey, when the run wrote one; every group written before it has none (fall back to `journeyStage`). */
+  journeyStageNo?: number | null;
   audience: "patient" | "physician" | "caregiver" | "pharmacist" | "institution" | "other" | null;
   weight: number | null;
   isControl: boolean;
@@ -317,6 +319,12 @@ export interface GeoCitedSource {
   url: string | null;
   domain: string | null;
   attribute: "owned" | "partner" | "encyclopedia" | "farm" | "impostor" | "none" | null;
+  /**
+   * How the trace was made: `inline_marker` — the page the engine's own marker puts beside the sentence; `no_retrieval` — the
+   * engine cited nothing (`attribute: "none"`); `not_attributable` — it cited pages and the sentence is not tied to one of them
+   * (`candidates` are the sites it listed). Absent on a row written before the field.
+   */
+  basis?: "inline_marker" | "no_retrieval" | "not_attributable" | (string & {}) | null;
 }
 export interface GeoErrorRow {
   id: string;
@@ -339,8 +347,30 @@ export interface GeoErrorRow {
   evidenceQuote?: string | null;
   claimId?: string | null;
   questionId?: string | null;
+  /** The claim's fingerprint: every engine that tells the same wrong claim carries the same one (the key the list is grouped by). */
+  fingerprint?: string | null;
   /** When the error was first recorded. */
   createdAt?: string | null;
+}
+
+/**
+ * One wrong claim and every engine that tells it (`GET …/diagnosis` `byClaim`, `geoErrorsByClaim`): the list's row, where the
+ * error rows keep one per claim × engine. `status` is the most open of its rows; `severity` the gravest.
+ */
+export interface GeoErrorByClaim {
+  fingerprint: string;
+  claimId: string | null;
+  statement: string | null;
+  engines: GeoEngine[];
+  count: number;
+  severity: GeoSeverity | null;
+  status: GeoErrorStatus;
+  errorIds: string[];
+  /** The answer the claim was first seen in, the most severe live row's. */
+  snapshotId: string | null;
+  citedSources: GeoCitedSource[];
+  actions: GeoErrorAction[];
+  urgent: boolean;
 }
 export interface GeoRoundRef {
   id: string;
@@ -380,6 +410,8 @@ export interface GeoDiagnosis {
   byPool: Array<{ pool: GeoPool; mention: GeoCell; topCompetitor: string | null; mainIssue: string | null }>;
   failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell };
   errors: GeoErrorRow[];
+  /** The same errors by claim, one row per wrong claim with the engines that tell it. Absent from a server older than R19. */
+  byClaim?: GeoErrorByClaim[];
   /** True counts; the list above is capped (live errors first). Absent from a server older than the counts. */
   errorCounts?: GeoErrorCounts;
   noise: { band: number; measuredAt: string | null } | null;
@@ -567,6 +599,14 @@ export interface GeoArticle {
   staleReferences?: { cardId: string; claimId: string; revision: number; category: string; summary: string; occurredAt: string }[];
   /** 广告 or 商业合作, on an article that was paid for. */
   placementLabel?: "advertisement" | "commercial_cooperation" | null;
+  /** Where the article is meant to be published: an owned platform's id or `media_market`; null on an older article. */
+  channel?: string | null;
+  /** The run's own words where it used none of the ids. */
+  channelNote?: string | null;
+  audience?: string | null;
+  audienceNote?: string | null;
+  /** The group it was written for is a control group: writing for it takes the group out of the control arm. */
+  groupIsControl?: boolean;
 }
 export interface GeoArticles {
   articles: GeoArticle[];
@@ -698,8 +738,15 @@ export interface GeoClustersView {
   groups: GeoClusterRow[];
 }
 
+/**
+ * One source an action may go to. A source is a website (`domain`) or the brand's own channel (`channel`, no domain: the person
+ * publishes there and pastes the link). `route` says how it would be placed: `market` — the platform places it; `own` — the person
+ * publishes it; `waiting_market` — a media outlet and no market is connected; `not_in_market` — a market is connected and does not
+ * list it (see `unavailableBecause`). A source row always carries the same sixteen keys; only their values move.
+ */
 export interface GeoActionSource {
-  domain: string;
+  domain: string | null;
+  channel: string | null;
   name: string | null;
   kind: string | null;
   layer: GeoSourceLayer | null;
@@ -708,10 +755,16 @@ export interface GeoActionSource {
   citedFor: Record<string, number>;
   conditions: { icp?: boolean | null; newsIndexed?: boolean | null; medical?: boolean | null };
   price: number | null;
+  /** Would the platform place an article there now (the three conditions and the market's own rules); true for an own channel. */
   available: boolean | null;
-  origin: "cited" | "layout" | "market";
+  /** Closed-ish codes of why not (`media_unavailable`, `refuses_medical`, `price_above_auto_cap`, …). */
+  unavailableBecause: string[];
+  route: "market" | "own" | "waiting_market" | "not_in_market" | null;
+  origin: "cited" | "layout" | "market" | "own_channel" | "placed" | null;
   chosen: "recommended" | "swapped" | "placed";
   orderId: string | null;
+  /** An own channel: the articles that name it. */
+  articleIds: string[];
 }
 
 export type GeoActionEvidence =
@@ -1209,6 +1262,20 @@ export function skipGeoAction(geoId: string, key: string, skipped = true) {
 /** A person sends an action to another source (a domain); `null` goes back to the recommendation. */
 export function chooseGeoActionSource(geoId: string, key: string, domain: string | null) {
   return productRequest<GeoActionChoiceResult>(`${project(geoId)}/actions/${id(key)}/source`, "POST", { domain });
+}
+
+/**
+ * 「我已发布，贴链接」: the person published a page of the brand's own and pastes its address. The server registers it exactly as the run's
+ * `geo_write owned_links` does — the post-publication re-tests (weeks 1, 2, 4, 8, 12 on the group's questions) and the citation match read
+ * the row, and nothing else is asked. Send `articleId` whenever the page is one of the platform's articles: the action moves through the
+ * article it names; a link with only a `groupId` is registered and re-tested but belongs to no action. A tracking query is dropped
+ * from the page's key and the same page again is an update, never a second row.
+ */
+export function createGeoOwnedLink(
+  geoId: string,
+  input: { url: string; platform: string; title?: string; publishedAt?: string; articleId?: string; groupId?: string },
+) {
+  return productRequest<{ id: string; registered: string[]; notices: string[] }>(`${project(geoId)}/owned-links`, "POST", input);
 }
 
 /** The plan page's one read: targets as baseline → now → target with dates, battlefield, each engine's promise, the client's to-dos. */
