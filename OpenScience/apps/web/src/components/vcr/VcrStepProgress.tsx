@@ -69,8 +69,8 @@ export function VcrStepProgress({ studyId, steps, described = true, paused = fal
               className={cn("inline-flex items-center gap-1.5 rounded hover:text-text hover:underline hover:underline-offset-4", entry.state === "todo" && "text-text-3")}
             >
               <span aria-hidden="true" data-forced-colors="preserve" className={cn("inline-block shrink-0", MARK[entry.state])} />
-              <span className={entry.state === "active" ? "font-semibold text-accent-strong" : undefined}>{stepName(entry.key)}</span>
-              {entry.word && <span className={entry.state === "attention" ? "text-warn-strong" : "text-accent-strong"}>{entry.word}</span>}
+              <span className={entry.state === "active" ? "font-semibold text-accent" : undefined}>{stepName(entry.key)}</span>
+              {entry.word && <span className={entry.state === "attention" ? "text-warn-strong" : "text-accent"}>{entry.word}</span>}
             </Link>
           </li>
         ))}

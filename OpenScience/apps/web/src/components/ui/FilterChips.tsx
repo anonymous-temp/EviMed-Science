@@ -9,7 +9,8 @@ import { Menu } from "@/components/ui/Menu";
  *
  * A chip is 28 px high, 13 px text (`text-compact`), fully round, with no
  * border (spec §20.3, appendix E #10 — it was 32 / 14): unselected it is plain
- * text, selected it sits on the grey ground. The frontier feed used to wrap
+ * text, selected it sits on the grey ground (at the same weight: the toolbar's
+ * search pill is the same grey pill). The frontier feed used to wrap
  * into a second row that held nothing but “只看收藏”, beside a native select
  * dressed as a pill (inventory §2.1, §2.5). One dimension, one control: a
  * single-choice dimension is `FilterChips` (six chips at most, the rest in
@@ -32,7 +33,9 @@ export function filterChipClasses({ selected = false, className }: { selected?: 
     "inline-flex h-sm shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-compact outline-none transition-colors duration-fast",
     // Under a finger the hit area is 40 high; chips sit 4 px apart, so it grows up and down only.
     "relative coarse:before:absolute coarse:before:-inset-y-1.5 coarse:before:inset-x-0",
-    selected ? "bg-surface-2 font-medium text-text hover:bg-surface-3" : "text-text-2 hover:bg-surface-2 hover:text-text",
+    // The selected chip is told by its ground and its colour, not by a weight (as a selected tab is): it is then the look of the toolbar's
+    // search pill, and the row's filled controls are one kind.
+    selected ? "bg-surface-2 text-text hover:bg-surface-3" : "text-text-2 hover:bg-surface-2 hover:text-text",
     className,
   );
 }

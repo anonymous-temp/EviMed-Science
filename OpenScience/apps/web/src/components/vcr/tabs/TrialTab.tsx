@@ -609,7 +609,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
               <label
                 className={cn(
                   "inline-flex h-control cursor-pointer items-center gap-1.5 rounded px-3 text-ui",
-                  option.disabled ? "cursor-not-allowed bg-surface-1 text-text-3" : chosen === option.id ? "bg-accent-soft font-medium text-accent-strong" : "bg-surface-2 text-text-2",
+                  option.disabled ? "cursor-not-allowed bg-surface-1 text-text-3" : chosen === option.id ? "bg-accent-soft font-medium text-accent" : "bg-surface-2 text-text-2",
                 )}
               >
                 <input

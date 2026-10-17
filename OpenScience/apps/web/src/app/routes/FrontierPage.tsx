@@ -712,7 +712,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
-      actions={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "text" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>}
+      actions={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "secondary" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>}
       toolbar={toolbar}
     >
       {ready && params.get("item") && (

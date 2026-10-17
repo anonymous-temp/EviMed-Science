@@ -16,7 +16,7 @@ import { nodeWebTransport, webReadError } from "../src/webReadNetwork.mjs";
 
 const recorded = JSON.parse(await readFile(new URL("./fixtures/deepseek-tools/recorded-2026-10-17.json", import.meta.url), "utf8")).answers;
 const challenge = await readFile(new URL("./fixtures/web-read/nmpa-ggtg.412.html", import.meta.url));
-const KEY = "sk-test-deepseek-key-not-real";
+const KEY = "sk-test-only-deepseek-key";
 const readConfig = { webReadEnabled: true, webReadHostIntervalMs: 0, webReadConcurrency: 4, publicSourceGatewayMaxResponseBytes: 64 * 1024, publicUrl: "https://evimed.example.cn" };
 const withKey = { ...readConfig, deepseekApiKey: KEY, deepseekBaseUrl: "https://api.deepseek.com" };
 

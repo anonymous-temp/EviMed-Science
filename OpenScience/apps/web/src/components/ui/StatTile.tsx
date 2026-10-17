@@ -141,7 +141,7 @@ function OpenNumber({ label, value, to, onOpen }: { label: string; value: ReactN
 /** 「第 3 / 6」 beside a number: where it stands among comparable products. */
 export function Rank({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-tag shrink-0 items-center rounded-tag bg-accent-soft px-1.5 text-meta font-semibold tabular-nums text-accent-strong">
+    <span className="inline-flex h-tag shrink-0 items-center rounded-tag bg-accent-soft px-1.5 text-meta font-semibold tabular-nums text-accent">
       {children}
     </span>
   );

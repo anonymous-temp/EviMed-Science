@@ -175,7 +175,7 @@ export function DataTable<T>({
                   {drawn.map((column, index) => {
                     const body = column.cell(row);
                     const shared = cn(
-                      "border-b border-faint px-2 py-2.5 align-middle text-ui",
+                      "border-b border-border px-2 py-2.5 align-middle text-ui",
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
                       ours ? "font-medium text-text" : "text-text",
                     );

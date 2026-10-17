@@ -368,7 +368,7 @@ function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; v
                   <span className="text-text-2">{ownedPlatformName(link.platform)}</span>
                   <span className="min-w-0 flex-1">{href ? <a href={href} target="_blank" rel="noreferrer" className="hover:underline">{link.title || link.url}</a> : link.title || "—"}</span>
                   {link.status === "retired" ? <span className="text-caption text-text-3">已下线</span>
-                    : engines.length > 0 ? <span className="text-caption text-accent-strong">{`被 ${engines.join("、")} 引用`}</span>
+                    : engines.length > 0 ? <span className="text-caption text-accent">{`被 ${engines.join("、")} 引用`}</span>
                       : <span className="text-caption text-text-3">还没有被引用</span>}
                 </li>
               );

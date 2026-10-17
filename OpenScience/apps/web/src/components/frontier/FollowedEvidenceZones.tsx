@@ -15,7 +15,7 @@ export function FollowedEvidenceZones({ zones, cards }: { zones: readonly Eviden
     <section aria-label="关注的证据专区">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-body font-semibold leading-6 text-text">证据专区</h2>
-        <Link to="/app/frontier/zones?scope=following" className="text-caption text-accent">
+        <Link to="/app/frontier/zones?scope=following" className="rounded text-ui text-accent hover:underline hover:underline-offset-4">
           查看全部关注专区
         </Link>
       </div>
