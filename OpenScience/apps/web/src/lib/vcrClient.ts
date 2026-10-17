@@ -382,6 +382,13 @@ export interface VcrDesign {
   /** How many replicates the simulation ran. */
   replicates?: number | null;
   measures: Record<string, VcrValue>;
+  /** The run behind the row, as numbers: what the row's record drawer reads (`vcrViews.mjs`); null before the design ran. */
+  record?: {
+    method: string | null;
+    replicates: number | null;
+    seed: number | null;
+    check: { analytic: number | null; simulated: number | null; differencePoints: number | null; allowedPoints: number | null; approximate: boolean; agrees: boolean | null } | null;
+  } | null;
 }
 
 export interface VcrOverview {
@@ -616,17 +623,50 @@ export interface VcrProfileRow {
   note?: string | null;
 }
 
-/** One variable of a generated population: what the study set for it, what came out, and a small histogram of it. */
+/** One level of a categorical or binary variable, as the engine counted it (a level a handful of people share is withheld). */
+export interface VcrGeneratedLevel {
+  level: string;
+  label: string;
+  n: number | null;
+  percent: number | null;
+  suppressed: boolean;
+}
+
+/** What the study declared for a variable, as the scenario schema states it. */
+export interface VcrDeclaredSpec {
+  family: string;
+  params: Record<string, number | number[] | string[]>;
+}
+
+/** One variable of a generated table: what the study set for it, what came out, a small histogram of it, and what broke its limits. */
 export interface VcrGeneratedRow {
   key: string;
+  /** The column's name in the table, which the rows route is addressed by. */
+  variable: string;
   label: string;
   kind: "continuous" | "binary" | "categorical" | null;
   /** 「正态分布，均数 58、标准差 10」; null for a table made from real data (nothing was declared). */
   declared: string | null;
+  /** The declaration itself, for the mark the page draws on the histogram; null when nothing was declared. */
+  declaredSpec: VcrDeclaredSpec | null;
   /** 「均数 58.2，标准差 9.8」 / 「是 44.6%」. */
   result: string | null;
   missing: string | null;
   histogram: { breaks: number[]; counts: number[] } | null;
+  /** Of a categorical or binary variable. */
+  levels: VcrGeneratedLevel[] | null;
+  n: number | null;
+  mean: number | null;
+  sd: number | null;
+  median: number | null;
+  q1: number | null;
+  q3: number | null;
+  min: number | null;
+  max: number | null;
+  /** How many generated records broke the limits the variable declared; null when it declared none or the count is the table's. */
+  violations: number | null;
+  /** The generated values passed a declared bound (`violations` stays null: the count is the table's, and this says it was). */
+  outOfBounds: boolean;
 }
 
 /** The quality report that travels with a synthetic population: values, never a verdict (plan §5.1). */
@@ -656,17 +696,12 @@ export interface VcrPopulationTab {
   outcome: { eligible: number | null; insufficient: number | null; ineligible: number | null } | null;
   /** A real cohort against the published one, row by row; empty for a generated population (its rows are `generated`). */
   profile: VcrProfileRow[];
-  profileNote?: string | null;
   /** `generated`: one row per variable, set beside what came out; `comparison`: ours against the comparator's. */
   profileKind?: "generated" | "comparison" | null;
-  /** A generated population whose result carries no profile (it was generated before the engine wrote one): the tab offers 「重新生成」. */
-  profileMissing?: boolean;
   generated: VcrGeneratedRow[];
-  /** How a generated population was made: 「按设定的分布和相关性抽样」. */
-  method?: string | null;
-  /** What it may be used for, as the reader's words. */
-  allowedUses: Array<{ key: string; label: string }>;
-  /** How many generated records broke each declared constraint. */
+  /** The generated records as a list (`GET …/population/rows?result=`): which result they are, and how many; null for a real cohort. */
+  records?: { result: string; rows: number | null } | null;
+  /** The rules no variable carries itself, and how many generated records broke each (a variable's own are on its row). */
   constraints: Array<{ label: string; violations: number }>;
   /** Where the generated records can be downloaded from, when there are any to offer. */
   download?: { path: string; rows: number | null } | null;
@@ -793,19 +828,48 @@ export interface VcrAssessments {
   plan: { version: number; frozenAt: string | null } | null;
 }
 
+/** One line of the 「设定 vs 生成 vs 证据区间」 strip: the server's own comparison of a number the study set with the number the table holds. */
+export interface VcrCalibrationRow {
+  key: string;
+  label: string;
+  unit: string | null;
+  /** What the job was told (the frozen scenario) or the bound card's point value. */
+  declared: number | null;
+  /** What the table holds, computed from it by code. */
+  generated: number | null;
+  difference: number | null;
+  /** The evidence's own interval — the pooled prediction interval first, the declared range after. */
+  interval: { low: number | null; high: number | null; kind: "prediction" | "range" } | null;
+  /** `outside` is a mark for the page, never a verdict; a row with no interval is `unknown`, never `within`. */
+  status: "within" | "outside" | "unknown";
+}
+
+export interface VcrCalibration {
+  endpoint: "time_to_event" | "binary" | "continuous" | null;
+  rows: VcrCalibrationRow[];
+}
+
 export interface VcrPatientsTab {
   model: VcrModelCard | null;
   assessments: VcrAssessments;
   /** The label the model's output has earned: never 「数字孪生」 by default. */
   twin: { label: string; reason: string | null } | null;
   headline?: string | null;
+  /** The people the set holds, as a list (`GET …/patients/rows?result=`): which result, how many, and the arms with their events. */
+  records: { result: string; rows: number | null; arms: Array<{ value: string; label: string; n: number; events: number | null }> } | null;
+  /** How each variable of the table is distributed (and what the study declared for it), read from the table itself. */
+  profile: VcrGeneratedRow[];
+  profileKind: "generated" | null;
+  /** Declared against generated against the evidence's interval; computed on the server, never in the browser. */
+  calibration: VcrCalibration | null;
   /** The main chart: one series per scenario. */
   trajectories: { xLabel?: string | null; yLabel?: string | null; ticks?: string[]; series: VcrSeries[] } | null;
   /** One virtual patient, and the same random numbers under two assumptions. */
   example: {
-    id: string;
-    source: VcrValueSource;
-    origin?: string | null;
+    /** 「示例患者 · 年龄 62 岁 · ECOG 1」: the person, not an identifier. */
+    title: string;
+    /** The engine's own id and how it was made: a line of the record, never of the page. */
+    record: { id: string; source: VcrValueSource; origin: string | null };
     baseline: Array<{ label: string; value: string; source: VcrValueSource }>;
     inScope?: { ok: boolean; text: string } | null;
     scenarios?: { note?: string | null; series: VcrSeries[]; difference?: string | null } | null;
@@ -975,8 +1039,6 @@ export interface VcrTrialTab {
     options: Array<{ id: string; label: string; name?: string | null; disabled?: boolean }>;
     note?: string | null;
   } | null;
-  /** 「运行记录」. */
-  runRecord: Array<{ key: string; title: string; detail?: string | null; ok?: boolean }>;
   /** The forecast registry. */
   forecasts: VcrForecast[];
   /** The milestone timeline: when each design would reach its landmarks. */
@@ -1550,6 +1612,24 @@ function readDesign(raw: unknown): VcrDesign {
     method: text(value.method),
     replicates: finite(value.replicates),
     measures: Object.fromEntries(Object.entries(measures).map(([key, cell]) => [key, readVcrValue(cell)])),
+    record: readDesignRecord(value.record),
+  };
+}
+
+function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  const check = obj(value.check);
+  return {
+    method: text(value.method),
+    replicates: finite(value.replicates),
+    seed: finite(value.seed),
+    check: Object.keys(check).length
+      ? {
+        analytic: finite(check.analytic), simulated: finite(check.simulated), differencePoints: finite(check.differencePoints),
+        allowedPoints: finite(check.allowedPoints), approximate: check.approximate === true, agrees: typeof check.agrees === "boolean" ? check.agrees : null,
+      }
+      : null,
   };
 }
 
@@ -1744,19 +1824,51 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
   };
 }
 
+function readDeclaredSpec(raw: unknown): VcrDeclaredSpec | null {
+  const value = obj(raw);
+  const family = text(value.family);
+  if (!family) return null;
+  const params: VcrDeclaredSpec["params"] = {};
+  for (const [key, item] of Object.entries(obj(value.params))) {
+    if (typeof item === "number" && Number.isFinite(item)) params[key] = item;
+    else if (Array.isArray(item) && item.every((entry) => typeof entry === "number")) params[key] = item as number[];
+    else if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) params[key] = item as string[];
+  }
+  return { family, params };
+}
+
 function readGeneratedRow(raw: unknown): VcrGeneratedRow {
   const value = obj(raw);
   const histogram = obj(value.histogram);
   const counts = Array.isArray(histogram.counts) ? histogram.counts : [];
   const numbers = (items: unknown[]) => items.map((item) => (typeof item === "number" && Number.isFinite(item) ? item : 0));
+  const variable = text(value.variable) ?? text(value.key) ?? "";
   return {
-    key: text(value.key) ?? text(value.variable) ?? "",
-    label: text(value.label) ?? text(value.variable) ?? "",
+    key: text(value.key) ?? variable,
+    variable,
+    label: text(value.label) ?? variable,
     kind: value.kind === "continuous" || value.kind === "binary" || value.kind === "categorical" ? value.kind : null,
     declared: text(value.declaredText) ?? text(value.declared),
+    declaredSpec: readDeclaredSpec(value.declared),
     result: text(value.generatedText) ?? text(value.result),
     missing: text(value.missingText),
     histogram: counts.length ? { breaks: numbers(Array.isArray(histogram.breaks) ? histogram.breaks : []), counts: numbers(counts) } : null,
+    levels: Array.isArray(value.levels)
+      ? arr(value.levels).map((level) => ({
+        level: String(level.level ?? ""), label: text(level.label) ?? String(level.level ?? ""),
+        n: finite(level.n), percent: finite(level.percent), suppressed: level.suppressed === true,
+      }))
+      : null,
+    n: finite(value.n),
+    mean: finite(value.mean),
+    sd: finite(value.sd),
+    median: finite(value.median),
+    q1: finite(value.q1),
+    q3: finite(value.q3),
+    min: finite(value.min),
+    max: finite(value.max),
+    violations: finite(value.violations),
+    outOfBounds: value.outOfBounds === true,
   };
 }
 
@@ -1765,6 +1877,7 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
   const quality = obj(value.quality);
   const generatedKind = value.profileKind === "generated";
   const download = obj(value.download);
+  const records = obj(value.records);
   return {
     ...(value as unknown as VcrPopulationTab),
     versions: arr(value.versions).map((item) => ({ ...(item as unknown as VcrPopulationTab["versions"][number]), counts: readVcrCounts(item.counts) })),
@@ -1773,10 +1886,8 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
     outcome: value.outcome && typeof value.outcome === "object" ? value.outcome as VcrPopulationTab["outcome"] : null,
     profile: generatedKind ? [] : arr(value.profile).map(readProfileRow),
     profileKind: value.profileKind === "generated" || value.profileKind === "comparison" ? value.profileKind : null,
-    profileMissing: value.profileMissing === true,
     generated: generatedKind ? arr(value.profile).map(readGeneratedRow) : [],
-    method: text(value.method),
-    allowedUses: arr(value.allowedUses).filter((item) => typeof item.label === "string").map((item) => ({ key: text(item.key) ?? "", label: String(item.label) })),
+    records: typeof records.result === "string" && records.result ? { result: records.result, rows: finite(records.rows) } : null,
     constraints: arr(value.constraints).filter((item) => typeof item.label === "string" && finite(item.violations) !== null)
       .map((item) => ({ label: String(item.label), violations: Number(item.violations) })),
     download: typeof download.path === "string" ? { path: download.path, rows: finite(download.rows) } : null,
@@ -1816,21 +1927,58 @@ export function readVcrAssessments(raw: unknown): VcrAssessments {
   };
 }
 
+function readCalibration(raw: unknown): VcrCalibration | null {
+  const value = obj(raw);
+  const rows = arr(value.rows).filter((row) => typeof row.key === "string" && row.key).map((row): VcrCalibrationRow => {
+    const interval = obj(row.interval);
+    const low = finite(interval.low);
+    const high = finite(interval.high);
+    return {
+      key: String(row.key),
+      label: text(row.label) ?? String(row.key),
+      unit: text(row.unit),
+      declared: finite(row.declared),
+      generated: finite(row.generated),
+      difference: finite(row.difference),
+      interval: low === null && high === null ? null : { low, high, kind: interval.kind === "range" ? "range" : "prediction" },
+      status: row.status === "within" || row.status === "outside" ? row.status : "unknown",
+    };
+  });
+  if (rows.length === 0) return null;
+  return { endpoint: value.endpoint === "time_to_event" || value.endpoint === "binary" || value.endpoint === "continuous" ? value.endpoint : null, rows };
+}
+
 export function readVcrPatients(raw: unknown): VcrPatientsTab {
   const value = obj(raw);
   const trajectories = obj(value.trajectories);
   const example = obj(value.example);
+  const record = obj(example.record);
+  const records = obj(value.records);
   const sensitivity = obj(value.sensitivity);
   return {
     ...(value as unknown as VcrPatientsTab),
     model: value.model ? readVcrModelCard(value.model) : null,
     assessments: readVcrAssessments(value.assessments),
     twin: value.twin && typeof value.twin === "object" ? value.twin as VcrPatientsTab["twin"] : null,
+    records: typeof records.result === "string" && records.result
+      ? {
+        result: records.result,
+        rows: finite(records.rows),
+        arms: arr(records.arms).filter((arm) => typeof arm.value === "string").map((arm) => ({
+          value: String(arm.value), label: text(arm.label) ?? String(arm.value), n: finite(arm.n) ?? 0, events: finite(arm.events),
+        })),
+      }
+      : null,
+    profile: value.profileKind === "generated" ? arr(value.profile).map(readGeneratedRow) : [],
+    profileKind: value.profileKind === "generated" ? "generated" : null,
+    calibration: readCalibration(value.calibration),
     trajectories: Object.keys(trajectories).length ? {
       xLabel: text(trajectories.xLabel), yLabel: text(trajectories.yLabel), ticks: strings(trajectories.ticks), series: readSeries(trajectories.series),
     } : null,
     example: Object.keys(example).length ? {
       ...(example as unknown as NonNullable<VcrPatientsTab["example"]>),
+      title: text(example.title) ?? text(record.id) ?? "示例患者",
+      record: { id: text(record.id) ?? "", source: (text(record.source) as VcrValueSource | null) ?? "synthetic", origin: text(record.origin) },
       baseline: arr(example.baseline) as unknown as NonNullable<VcrPatientsTab["example"]>["baseline"],
       scenarios: example.scenarios && typeof example.scenarios === "object"
         ? { ...(example.scenarios as Loose), series: readSeries(obj(example.scenarios).series) } as NonNullable<VcrPatientsTab["example"]>["scenarios"] : null,
@@ -1897,7 +2045,6 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     footnotes: strings(value.footnotes),
     powerCurve: Object.keys(power).length ? { ...(power as Loose), series: readSeries(power.series), markers: arr(power.markers), prior: arr(power.prior) } as VcrTrialTab["powerCurve"] : null,
     decision: Object.keys(decision).length ? { ...(decision as Loose), options: arr(decision.options) } as VcrTrialTab["decision"] : null,
-    runRecord: arr(value.runRecord) as unknown as VcrTrialTab["runRecord"],
     forecasts: arr(value.forecasts).map((row) => ({ ...(row as unknown as VcrForecast), lines: arr(row.lines) as unknown as VcrForecast["lines"] })),
     milestones: arr(value.milestones).map((row) => ({
       design: text(row.design) ?? "", name: text(row.name) ?? "",

@@ -64,6 +64,16 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         const set = id === EMPTY_STUDY_ID ? "empty" : "ev201";
         if (!section) return fixture(`${set}/study.json`);
         if (section === "export") return fixture("ev201/export.json");
+        // The people of a generated table as a list, and one patient's record (`vcrRows.mjs`): the first page, or the narrowed one when
+        // the reader filtered or sorted; the censored patient's record when that is who was asked for.
+        if (set === "ev201" && (section === "patients" || section === "population") && item === "rows") {
+          if (section === "population") return fixture("ev201/population-rows.json");
+          const narrowed = query.get("arm") !== null || query.get("sort") !== null || [...query.keys()].some((name) => name.startsWith("filter["));
+          return fixture(narrowed ? "ev201/patients-rows-filtered.json" : "ev201/patients-rows.json");
+        }
+        if (set === "ev201" && section === "patients" && item) {
+          return fixture(item === "vp_6408f547ca06" ? "ev201/patients-record-censored.json" : "ev201/patients-record.json");
+        }
         // The programme's background conversations and the page's editable cards answer in their own shapes (no presented page).
         if (section === "runs") return { runs: [] };
         if (section === "cards") return { kind: query.get("kind"), objectId: query.get("object") ?? "pop_1", title: "", settings: [] };
