@@ -584,7 +584,7 @@ test("the counts hold the sums a reader would add up by hand: kinds by status, s
   // a project with a group no gap names has one without an action; nothing listed is a zero, not a missing member
   const bare = deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: gaps.filter((gap) => gap.groupId !== "g-p2") } });
   assert.equal(bare.counts.groupsWithoutAction, 1);
-  assert.deepEqual(bare.counts.sources, { actions: 0, rows: 0, distinct: 0, byRoute: {}, byChosen: {} });
+  assert.deepEqual(bare.counts.sources, { actions: 0, rows: 0, distinct: 0, byRoute: {} }, "nothing swapped, placed or unavailable: those keys are not there, which counts zero");
   assert.deepEqual(deriveGeoActions({ now: NOW, tier: "2", engines: [], groups: [] }).counts.byKindStatus, {});
 });
 
@@ -598,13 +598,17 @@ test("a lean row is the whole action's figures without its long words", () => {
     assert.deepEqual([row.key, row.kind, row.status, row.gapClass], [action.key, action.kind, action.status, action.need.gapClass]);
     assert.deepEqual(row.group, action.group && { id: action.group.id, name: action.group.name, pool: action.group.pool });
     assert.equal(Object.hasOwn(row.group ?? {}, "isControl"), false, "an action never belongs to a control group: nothing to say");
-    assert.deepEqual([row.expected.metricId, row.expected.promise, row.expected.target, row.expected.reached, row.expected.horizonWeeks],
-      [action.expected.primaryMetricId, action.expected.promise, action.expected.target, action.expected.reached, action.expected.horizonWeeks]);
+    assert.deepEqual([row.expected.metricId, row.expected.promise, row.expected.target, row.expected.horizonWeeks],
+      [action.expected.primaryMetricId, action.expected.promise, action.expected.target, action.expected.horizonWeeks]);
+    assert.equal(Object.hasOwn(row.expected, "reached"), action.expected.reached != null, "a verdict stands only where there is one");
+    if (action.expected.reached != null) assert.equal(row.expected.reached, action.expected.reached);
     const from = action.expected.from;
     assert.deepEqual(row.expected.from, from && { k: from.k, n: from.n, state: from.state, ...(from.state === "enough" ? { rate: from.rate } : {}) });
     assert.deepEqual([row.articles, row.orders, row.links], [action.articleIds.length, action.orderIds.length, action.ownedLinkIds.length]);
-    assert.deepEqual(row.choice, action.choice && { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain });
-    assert.deepEqual(row.checks, [...new Set(action.checks.map((/** @type {any} */ check) => check.code))]);
+    assert.deepEqual(row.choice ?? null, action.choice && { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain });
+    assert.equal(Object.hasOwn(row, "choice"), action.choice != null, "a person's word stands only where there is one");
+    assert.deepEqual(row.checks ?? [], [...new Set(action.checks.map((/** @type {any} */ check) => check.code))]);
+    assert.equal(Object.hasOwn(row, "checks"), action.checks.length > 0, "the platform's notes stand only where there are some");
     // the sources keep their order and what is known of each; the run's reasons are the whole action's
     assert.deepEqual(row.sources.map((/** @type {any} */ source) => source.domain ?? source.channel), action.sources.map((/** @type {any} */ source) => source.domain ?? source.channel));
     for (const [index, source] of row.sources.entries()) {

@@ -900,10 +900,12 @@ export function deriveGeoActions(input) {
   // What a reader would otherwise add up by hand: the sources the actions list, and what no action reaches.
   const withAction = new Set(actions.filter((action) => action.group).map((action) => action.group.id))
   const unavailable = tallySources(actions, (source) => (source.available === false ? 'unavailable' : null)).unavailable
+  const byChosen = tallySources(actions, (source) => (source.chosen === 'recommended' ? null : text(source.chosen)))
+  // A key that is absent counts zero: `byChosen` (a person's swap, an order placed) and `unavailable` stand only when there is one.
   const sourceCounts = {
     ...(tallySources(actions, () => 'all').all ?? { actions: 0, rows: 0, distinct: 0 }),
     byRoute: tallySources(actions, (source) => text(source.route) ?? 'unknown'),
-    byChosen: tallySources(actions, (source) => (source.chosen === 'recommended' ? null : text(source.chosen))),
+    ...(Object.keys(byChosen).length ? { byChosen } : {}),
     ...(unavailable ? { unavailable } : {}),
   }
   const actedGroups = new Set(actions.filter((action) => ACTED_STATUSES.includes(action.status) && action.group).map((action) => action.group.id))
@@ -969,12 +971,14 @@ function leanSource(source) {
  * move and where it is to go, with every number the whole action holds and none of the run's longer words (the judgment, the expected
  * points, why a source, the reason). The same function's output as the whole action, shorter; the whole is a read of one action
  * (`filter.key`, or a group's with `filter.groupId`). What is not known is `null` — a reading nobody took is no zero — and there is
- * no rate under the floor, as in the whole.
+ * no rate under the floor, as in the whole. Three annotations stand only when there is something to say: `reached` (a verdict on the
+ * target), `choice` (a person's word) and `checks` (what the platform noted of the run's entry); a row without them has none.
  *
  * @param {Record<string, any>} action an action of {@link deriveGeoActions}
  */
 export function geoLeanAction(action) {
   const from = action.expected.from
+  const codes = [...new Set(action.checks.map((/** @type {{ code: string }} */ check) => String(check.code)))]
   return {
     key: action.key,
     kind: action.kind,
@@ -988,15 +992,15 @@ export function geoLeanAction(action) {
       promise: action.expected.promise,
       from: from ? { k: from.k, n: from.n, state: from.state, ...(from.state === 'enough' ? { rate: from.rate } : {}) } : null,
       target: action.expected.target,
-      reached: action.expected.reached,
+      ...(action.expected.reached == null ? {} : { reached: action.expected.reached }),
       horizonWeeks: action.expected.horizonWeeks,
     },
     sources: action.sources.map(leanSource),
     articles: action.articleIds.length,
     orders: action.orderIds.length,
     links: action.ownedLinkIds.length,
-    choice: action.choice ? { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain } : null,
-    checks: [...new Set(action.checks.map((/** @type {{ code: string }} */ check) => String(check.code)))],
+    ...(action.choice ? { choice: { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain } } : {}),
+    ...(codes.length ? { checks: codes } : {}),
   }
 }
 
