@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { subscribeZone, unsubscribeZone, zoneSubscriptionStatus, type ZoneSubscriptionView } from "@/lib/capsuleShareClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { useMeFeature } from "@/lib/meFeature";
 import { useProjectStore } from "@/lib/projects";
 
 /**
@@ -12,8 +13,8 @@ import { useProjectStore } from "@/lib/projects";
  * account's (new evidence reaches 前沿动态 › 关注), and the words say so.
  *
  * Mount it in `EvidenceZonePage.tsx` as the quiet row under the zone's description, with the zone's id: `<ZoneSubscription zoneId={zone.id} />`.
- * It reads the project the shell is in, and asks the server whether the module is on: where it is off the answer is a 404 and the
- * control renders nothing.
+ * It reads the project the shell is in, and asks `/api/me` whether the module is on (`features.zoneSubscription`) before it asks the
+ * module anything: where it is off the control renders nothing and makes no request (a named 404 from the module is still read as off).
  */
 export function ZoneSubscription({ zoneId, projectId }: { zoneId: string; projectId?: string }) {
   const current = useProjectStore((state) => state.projects.find((item) => item.id === (projectId ?? state.currentId)) ?? null);
@@ -24,16 +25,18 @@ export function ZoneSubscription({ zoneId, projectId }: { zoneId: string; projec
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const projectKey = current?.id ?? null;
+  const feature = useMeFeature("zoneSubscription");
 
   useEffect(() => {
     let active = true;
     setState("loading"); setSubscription(null); setError(null);
-    if (!projectKey) { setState("off"); return; }
+    if (feature === "loading") return;
+    if (!projectKey || feature !== "on") { setState("off"); return; }
     void zoneSubscriptionStatus(projectKey, zoneId)
       .then((answer) => { if (active) { setSubscription(answer.subscription); setState("ready"); } })
       .catch((caught) => { if (active) { setState((caught as { code?: string })?.code === "evidence_zone_subscription_not_enabled" ? "off" : "ready"); } });
     return () => { active = false; };
-  }, [projectKey, zoneId]);
+  }, [feature, projectKey, zoneId]);
 
   if (state === "loading" || state === "off" || !current) return null;
   const act = async (operation: () => Promise<ZoneSubscriptionView | null>) => {

@@ -6584,6 +6584,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
+              // The community column of an official zone, as its route decides (evidenceCommunity.mjs): its switch and the frontier's audience.
+              evidenceCommunity: Boolean(evidenceCommunity) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).

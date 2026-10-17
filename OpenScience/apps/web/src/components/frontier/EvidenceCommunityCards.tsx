@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { WebApiError } from "@/lib/apiClient";
 import { fetchEvidenceCommunity, type EvidenceCommunityCard } from "@/lib/evidenceCommunityClient";
+import { useMeFeature } from "@/lib/meFeature";
 import type { EvidenceFrom } from "./FrontierBack";
 
 const cardPath = (card: Pick<EvidenceCommunityCard, "zoneId" | "id">) => `/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`;
@@ -26,9 +27,13 @@ export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?
   const [items, setItems] = useState<EvidenceCommunityCard[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Asked of `/api/me` first (`features.evidenceCommunity`): where the column is off nothing is requested.
+  const feature = useMeFeature("evidenceCommunity");
   useEffect(() => {
     let active = true;
     setFailed(false);
+    if (feature === "loading") return;
+    if (feature !== "on") { setItems([]); return; }
     fetchEvidenceCommunity(zoneId)
       .then((column) => { if (active) setItems(column.items); })
       .catch((reason: unknown) => {
@@ -39,7 +44,7 @@ export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?
         else setFailed(true);
       });
     return () => { active = false; };
-  }, [zoneId, attempt]);
+  }, [feature, zoneId, attempt]);
   if (failed) {
     return (
       <p role="status" className="text-caption text-text-3">

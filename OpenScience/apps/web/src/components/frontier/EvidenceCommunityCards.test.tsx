@@ -8,6 +8,8 @@ import { EvidenceCommunityCards } from "./EvidenceCommunityCards";
 
 const client = vi.hoisted(() => ({ fetchEvidenceCommunity: vi.fn() }));
 vi.mock("@/lib/evidenceCommunityClient", () => client);
+const feature = vi.hoisted(() => ({ value: "on" as "loading" | "on" | "off" | "error" }));
+vi.mock("@/lib/meFeature", () => ({ useMeFeature: () => feature.value }));
 
 const card = (over: Partial<EvidenceCommunityCard> = {}): EvidenceCommunityCard => ({
   id: "ec_1", zoneId: "ez_user1", zoneTitle: "我的真实世界研究", title: "阿哌沙班在真实世界中的出血事件", summary: "单中心 1,200 例患者中，抗凝相关出血低于预期。",
@@ -19,7 +21,16 @@ const settled = () => act(async () => { await new Promise((resolve) => setTimeou
 const show = () => render(<MemoryRouter><EvidenceCommunityCards zoneId="ez_official" /></MemoryRouter>);
 
 describe("the community cards of an official zone", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); feature.value = "on"; });
+
+  it("asks nothing where /api/me says the column is off", async () => {
+    // A deployment without the column drew a refused request on every official zone page (r19-guards2).
+    feature.value = "off";
+    const { container } = show();
+    await settled();
+    expect(container).toBeEmptyDOMElement();
+    expect(client.fetchEvidenceCommunity).not.toHaveBeenCalled();
+  });
 
   it("lists each card with a link to it and to its author, and what the check found, in a section the reader can find", async () => {
     client.fetchEvidenceCommunity.mockResolvedValue({ zoneId: "ez_official", entityKeys: ["drug:apixaban"], items: [card(), card({ id: "ec_2", title: "第二张卡", claims: { total: 0, verified: 0 }, reviewScore: null, reviews: 0, summary: "" })], limit: 20 });
