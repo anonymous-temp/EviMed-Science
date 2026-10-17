@@ -720,7 +720,7 @@ describe("a document's page", () => {
     it("is the text that was read for a document in the cloud drive, and says so", async () => {
       const column = await original(policy);
       expect(await within(column).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/.evimed-derived/src_policy/read-1-job-aaa/index.md");
-      expect(within(column).getByText("原件在网盘里，这里是从它读出的文本。")).toBeInTheDocument();
+      expect(within(column).getByText("从网盘文件读出的文本")).toBeInTheDocument();
     });
 
     it("is the snapshot for a web page, with the day it was taken and the way to the page itself", async () => {
@@ -818,13 +818,15 @@ describe("a document's page", () => {
       expect(mocks.getSource.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    it("says that nothing can be shown for a readable document the reading has nothing on", async () => {
+    it("writes no sentence for a readable document the reading has nothing on: the column holds what there is, and there is none", async () => {
       mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_image"), current: null });
       mocks.getSource.mockResolvedValue(picture);
       renderReader(readerAt("src_image"));
       await screen.findByRole("heading", { level: 1, name: picture.display.title });
       resize(TWO_COLUMN_MIN_WIDTH);
-      expect(await within(columnOf("points")!).findByText("没有可以显示的内容。")).toBeInTheDocument();
+      await waitFor(() => expect(mocks.getSourceUnderstanding).toHaveBeenCalled());
+      await waitFor(() => expect(within(columnOf("points")!).queryByRole("status", { name: "正在加载内容" })).toBeNull());
+      expect(columnOf("points")!.textContent?.trim()).toBe("");
     });
 
     it("says it could not load the key points, with a way to try again, and the original still shows", async () => {

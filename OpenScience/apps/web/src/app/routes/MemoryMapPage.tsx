@@ -4,31 +4,30 @@ import { Brain } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
-import { PageShell } from "@/components/layout/PageShell";
-import { FilterChip } from "@/components/ui/FilterChips";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
+import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { ActivityView } from "@/components/memory/map/ActivityView";
 import { DimsView } from "@/components/memory/map/DimsView";
 import { GraphView } from "@/components/memory/map/GraphView";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
-import { MapFilters } from "@/components/memory/map/MapFilters";
-import { memoryTabAddress, MemoryTabs } from "@/components/memory/MemoryTabs";
+import { mapToolbar } from "@/components/memory/map/mapToolbar";
+import { MemoryFrame } from "@/components/memory/MemoryFrame";
 import { MarkList, type MarkLine } from "@/components/memory/map/MarkList";
 import { TimeView } from "@/components/memory/map/TimeView";
 import { TopicsView } from "@/components/memory/map/TopicsView";
-import { headline, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
+import { headline, headlineParts, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
 import { useMapSelection } from "@/components/memory/map/useMapSelection";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
+import { projectScopeGroups } from "@/components/memory/memoryItems";
+import { useProjectChoices } from "@/components/memory/useProjectChoices";
 import { webErrorMessage } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
 import { knowledgeNodeAddress } from "@/lib/knowledgeNav";
-import { hideMapEdge, MAP_VIEWS, type MapEdge, type MapEvent, type MapNode, type MapView } from "@/lib/memoryMapClient";
+import { hideMapEdge, type MapEdge, type MapEvent, type MapNode } from "@/lib/memoryMapClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
-
-const VIEW_NAMES: Record<MapView, string> = { graph: "关系", topics: "主题", dims: "维度", time: "时间", activity: "活跃" };
-const VIEW_OPTIONS = MAP_VIEWS.map((value) => ({ value, label: VIEW_NAMES[value] }));
 
 /** What a part that could not be read is called, for the one line that says so. */
 const MISSING_NAMES: Record<string, string> = {
@@ -58,10 +57,12 @@ function eventLine(event: MapEvent, node: MapNode | undefined, open: (node: MapN
  * mark opens the record's own drawer). It is the last tab of 记忆胶囊 (2026-10-14): the page is titled as that page and carries its tab
  * bar, which is how a person who looks for their memory finds the map.
  *
- * One sentence says what the picture proves, with a number that opens what it counts; one row switches among five views — 关系,
- * 主题, 维度, 时间, 活跃 — over one selection kept in the address; one row of filters narrows them all. Under the canvas the same
- * marks are a list, which is also the text of the page. Every mark opens the memory page's own drawer, so what a mark shows can be
- * edited, corrected or forgotten where it is read. With too little to draw there is no chart: the sentence, three numbers and the list.
+ * 记忆胶囊's frame (`MemoryFrame`) is the page's: the same title, the same four tabs, one column. Under the tabs, one toolbar row —
+ * five views (关系, 主题, 维度, 时间, 活跃) over one selection kept in the address, what narrows them all, and the search; the project
+ * is the header's. One sentence over the picture says what it proves, with a number that opens what it counts; the picture is a card
+ * with its legend and, for the relations, its replay in its header. Under the canvas the same marks are a list, which is also the
+ * text of the page. Every mark opens the memory page's own drawer, so what a mark shows can be edited, corrected or forgotten where
+ * it is read. With too little to draw there is no chart: the sentence, three numbers and the list.
  *
  * Reads `GET /api/memory/map` once for the project, range and focus, and the views switch over the document in hand.
  */
@@ -77,6 +78,7 @@ export function MemoryMapPage() {
   const byId = useMemo(() => new Map((doc?.nodes ?? []).map((node) => [node.id, node])), [doc]);
   // A focus is a few marks round one: a picture of them is the point, however few. What is too little to draw is the whole map.
   const thin = doc ? !doc.scope.focus && isThin(doc) : false;
+  const choices = useProjectChoices();
 
   /** What pressing a mark does: the record's drawer, a page of its own, or — for a mark that is a group — narrow the map to it. */
   const openNode = useCallback((node: MapNode) => {
@@ -137,23 +139,23 @@ export function MemoryMapPage() {
     }));
   }, [doc, narrowed, selection.view, selection.q, byId, openNode]);
 
-  const sentence = doc ? headline(doc) : [];
+  const sentence = doc ? headlineParts(headline(doc), () => narrow({ look: true })) : null;
+  const toolbar = mapToolbar({ selection, doc, topicName, aspectName, focusLabel, onView: setView, onNarrow: narrow, onClear: clear, search });
   const showListFor = selection.view !== "topics" || Boolean(selection.topic);
   const listLabel = selection.view === "time" || selection.view === "activity" ? "记下的事" : selection.view === "topics" ? `主题“${topicName ?? ""}”的记忆` : "标记";
-  const headingId = "memory-map-headline";
 
   const body = () => {
     if (!doc || !narrowed) return null;
     if (selection.view === "graph") {
       if (thin) {
         return (
-          <div className="space-y-3">
-            <dl className="flex flex-wrap gap-x-10 gap-y-2" aria-label="三个数字">
-              {[["记忆", doc.summary.memories], ["资料", doc.summary.documents], ["需要看一眼", doc.summary.needsLook]].map(([name, count]) => (
-                <div key={String(name)}><dt className="text-caption text-text-3">{name}</dt><dd className="text-heading text-text">{count}</dd></div>
-              ))}
-            </dl>
-            <p className="text-ui text-text-2">再多聊几次，这里会长出你的地图。</p>
+          <div className="space-y-4">
+            <StatBand label="三个数字" columns={3}>
+              <StatTile label="记忆" value={doc.summary.memories} to={doc.summary.memories > 0 ? "/app/memory" : undefined} />
+              <StatTile label="资料" value={doc.summary.documents} to={doc.summary.documents > 0 ? "/app/files" : undefined} />
+              <StatTile label="需要看一眼" value={doc.summary.needsLook} onOpen={doc.summary.needsLook > 0 ? () => narrow({ look: true }) : undefined} />
+            </StatBand>
+            <Note action={<Button size="sm" variant="secondary" onClick={() => navigate("/app/chat")}>去对话</Button>}>再多聊几次，这里会长出你的地图。</Note>
           </div>
         );
       }
@@ -176,34 +178,24 @@ export function MemoryMapPage() {
 
   const empty = doc !== null && doc.summary.memories === 0 && doc.nodes.length === 0 && !selection.project && selection.range === "all" && !loading;
   return (
-    <PageShell title="记忆胶囊" documentTitle="记忆地图" width="wide">
-      {/* The memory page's own tab bar, with 地图 selected: this page is that page's last tab, and the other four lead back to it. */}
-      <MemoryTabs value="map" map onChange={(tab) => navigate(memoryTabAddress(tab))} className="mb-5" />
+    <MemoryFrame
+      tab="map" map documentTitle="记忆地图"
+      scope={choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: selection.project, onChange: (project) => narrow({ project }), allLabel: "全部项目" } : undefined}
+      toolbar={toolbar}
+      headline={sentence ? { parts: sentence, id: "memory-map-headline" } : undefined}
+    >
       {failed && !doc && <LoadError message="暂时读不到记忆地图。" onRetry={reload} />}
       {!doc && !failed && <RunsSkeleton filter={false} />}
       {doc && narrowed && (
         <div className="space-y-5">
-          <section aria-labelledby={headingId} className="space-y-3">
-            <p id={headingId} className="text-section text-text">
-              {sentence.map((part, index) => (part.action
-                ? <FilterChip key={index} onClick={() => narrow({ look: true })} className="align-middle text-accent" aria-label={`${part.text}，只看这些`}>{part.text}</FilterChip>
-                : <span key={index}>{part.text}</span>))}
-            </p>
-            <SegmentedControl aria-label="地图的视图" options={VIEW_OPTIONS} value={selection.view} onChange={setView} />
-            <MapFilters
-              selection={selection} doc={doc} topicName={topicName} aspectName={aspectName} focusLabel={focusLabel}
-              projects={projects.map((project) => ({ id: project.id, label: labels.get(project.id) ?? project.name }))}
-              onNarrow={narrow} onClear={clear} search={search}
+          {(failed || doc.missing.length > 0) && (
+            <LoadError
+              message={failed ? "这次没有读到最新的内容。" : `有一部分没有读到：${[...new Set(doc.missing.map((name) => MISSING_NAMES[name] ?? "部分内容"))].join("、")}。`}
+              onRetry={reload}
             />
-            {(failed || doc.missing.length > 0) && (
-              <LoadError
-                message={failed ? "这次没有读到最新的内容。" : `有一部分没有读到：${[...new Set(doc.missing.map((name) => MISSING_NAMES[name] ?? "部分内容"))].join("、")}。`}
-                onRetry={reload}
-              />
-            )}
-          </section>
+          )}
           {empty ? (
-            <EmptyState icon={Brain} title="还没有记住什么" description="和 EviMed 聊几次，它记住的内容会在这里连成一张图。" />
+            <EmptyState icon={Brain} title="还没有记住什么" description="和 EviMed 聊几次，它记住的内容会在这里连成一张图。" action={<Button onClick={() => navigate("/app/chat")}>去对话</Button>} />
           ) : (
             <div aria-busy={loading || status === "loading"} className={loading ? "opacity-70 transition-opacity" : undefined}>{body()}</div>
           )}
@@ -216,6 +208,6 @@ export function MemoryMapPage() {
           onOpenRecord={(id) => drawer.open(`record:${id}`)} canOpenRecord={() => true}
         />
       )}
-    </PageShell>
+    </MemoryFrame>
   );
 }

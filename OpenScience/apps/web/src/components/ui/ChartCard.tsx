@@ -60,7 +60,7 @@ export function ChartCard({
         {level === 2
           ? <h2 className="min-w-0 text-section font-semibold text-text">{title}</h2>
           : <h3 className="min-w-0 text-section font-semibold text-text">{title}</h3>}
-        {meta != null && <span className="shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}
+        {meta != null && <span className="max-w-full shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}
       </header>
       {legend != null && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">{legend}</div>}
       <div className="mt-3 min-w-0 flex-1">

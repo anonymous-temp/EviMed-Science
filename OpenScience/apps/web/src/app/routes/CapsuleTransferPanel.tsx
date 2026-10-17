@@ -6,7 +6,11 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
 import { Tabs } from "@/components/ui/Tabs";
+import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
+import { getWebProjectId } from "@/lib/apiClient";
 import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryPreview, fromSender, takenEntries } from "@/lib/capsuleText";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
@@ -83,6 +87,8 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [signature, setSignature] = useState("");
   const signatureTyped = useRef(false);
   const { busy, error, notice, setError, setNotice, perform, mounted } = useAction();
+  // What a conversation begun from an empty export leaves in the composer, unsent: the blanks are the person's to fill.
+  const speak = useKnowledgeConversation(getWebProjectId());
   const capsuleId = capsule?.deletedAt ? null : capsule?.id;
   const currentCapsuleId = useRef(capsuleId);
   currentCapsuleId.current = capsuleId;
@@ -169,7 +175,9 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={knowledge} disabled={busy} onChange={event => setKnowledge(event.target.checked)} />知识与项目事实</label>
       </fieldset>
       {outgoing?.empty ? (
-        <p className="text-ui text-text-2">还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。</p>
+        <Note action={<Button size="sm" variant="secondary" onClick={() => speak("我的工作方式是：\n\n我常做的事：\n我偏好的写作和回答方式：", [])}>说说你的工作方式</Button>}>
+          还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。
+        </Note>
       ) : outgoing?.card?.summary ? (
         <Disclosure summary={`对方会看到：${outgoing.card.summary}`}>
           <ul className="space-y-2">
@@ -196,29 +204,25 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     {capsuleId && <section className="space-y-2" aria-label="导出的版本">
       <h3 className="text-ui font-semibold text-text">导出的版本</h3>
       {loading ? <p role="status" className="text-ui text-text-3">正在读取</p> : history.length === 0 ? <p className="text-ui text-text-3">还没有导出过。</p> : (
-        <ul className="divide-y divide-border">
-          {history.map(snapshot => <li key={snapshot.id} className="space-y-2 py-3">
-            <p className="text-ui text-text">
-              {stamp(snapshot.createdAt)} · {snapshot.entryCount} 条 · {snapshot.scopes.map(scope => labelFor(SCOPE_LABELS, scope, "其他范围")).join("、")}
-              {snapshot.status === "revoked" ? " · 已撤回" : ""}
-            </p>
-            <div className="flex flex-wrap gap-1">
+        <List label="导出的版本" divided>
+          {history.map(snapshot => <ListRow key={snapshot.id}
+            title={`${stamp(snapshot.createdAt)} · ${snapshot.entryCount} 条 · ${snapshot.scopes.map(scope => labelFor(SCOPE_LABELS, scope, "其他范围")).join("、")}${snapshot.status === "revoked" ? " · 已撤回" : ""}`}
+            actions={<>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
                 onClick={() => setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "" })}>更新</Button>
               <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
-            </div>
-            {updating?.id === snapshot.id && (
-              <div className="flex flex-wrap items-end gap-2">
+            </>}
+            meta={updating?.id === snapshot.id ? (
+              <div className="flex flex-wrap items-end gap-2 pt-2">
                 <div className="min-w-48 flex-1">
                   <Input label="文件密码" type="password" autoComplete="new-password" value={updating.password} disabled={busy} maxLength={1024}
                     onChange={event => setUpdating({ id: snapshot.id, password: event.target.value })} />
                 </div>
                 <Button disabled={busy || !updating.password} loading={busy} onClick={() => void createExport(updating.password, snapshot.id, snapshot.scopes)}>更新并下载</Button>
               </div>
-            )}
-          </li>)}
-        </ul>
+            ) : undefined} />)}
+        </List>
       )}
       {historyCursor && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void perform(async () => { const page = await listCapsuleExports(capsuleId, historyCursor); if (currentCapsuleId.current === capsuleId) { setHistory(items => [...items, ...page.items]); setHistoryCursor(page.nextCursor); } })}>更多</Button>}
     </section>}
@@ -260,7 +264,6 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
         if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的胶囊文件。"); return; }
         void perform(async () => { const content = await file.text(); if (mounted.current) setArchive(content); });
       }} /></label>
-      <p className="text-caption text-text-3">别人分享给你的记忆胶囊，不超过 2 MiB。预览不会改变你的记忆。</p>
       {/* A file made for this account opens without a password. */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48 flex-1">

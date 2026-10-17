@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
+import { useProjectStore } from "@/lib/projects";
 import type { WebStructuredMemory } from "@/lib/apiClient";
+import { expectComposed } from "@/test/expectComposed";
+import { precedes } from "@/test/compositionFixtures";
 import { MemoryMapPage } from "./MemoryMapPage";
 
 const fetchMemoryMap = vi.fn();
@@ -83,6 +86,8 @@ function open(search = "") {
   );
 }
 const where = () => screen.getByTestId("where").textContent;
+/** One of the five views: a chip of the toolbar's own group, not a second row of tabs. */
+const viewChip = (name: string) => within(screen.getByRole("group", { name: "地图的视图" })).getByRole("button", { name });
 
 beforeEach(() => {
   fetchMemoryMap.mockReset().mockResolvedValue(busyMap());
@@ -112,7 +117,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(fetchMemoryMap).toHaveBeenCalledTimes(1);
     expect(fetchMemoryMap.mock.calls[0][0]).toEqual({ projectId: null, range: "all", focus: null, depth: 1 });
-    for (const view of ["主题", "维度", "时间", "活跃", "关系"]) await user.click(screen.getByRole("radio", { name: view }));
+    for (const view of ["主题", "维度", "时间", "活跃", "关系"]) await user.click(viewChip(view));
     expect(fetchMemoryMap).toHaveBeenCalledTimes(1);
     expect(where()).toBe("/app/memory/map");
   });
@@ -121,7 +126,7 @@ describe("记忆地图", () => {
     const user = userEvent.setup();
     open();
     await screen.findByText(/EviMed 记住了你的/u);
-    await user.click(screen.getByRole("radio", { name: "维度" }));
+    await user.click(viewChip("维度"));
     expect(where()).toBe("/app/memory/map?view=dims");
     await user.click(screen.getByRole("button", { name: "只看需要看一眼的" }));
     expect(where()).toBe("/app/memory/map?view=dims&look=1");
@@ -200,7 +205,7 @@ describe("记忆地图", () => {
     open("?focus=memory%3Am3");
     expect(await screen.findByRole("img", { name: /关系图/u })).toBeInTheDocument();
     expect(fetchMemoryMap.mock.calls[0][0]).toMatchObject({ focus: "memory:m3", depth: 1 });
-    expect(screen.getByRole("button", { name: /取消聚焦/u })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /聚焦：/u })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "来源链" })).toBeInTheDocument();
   });
 
@@ -244,10 +249,88 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "成长", "地图"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "地图"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
     await user.click(within(tabs).getByRole("tab", { name: "做法" }));
     expect(where()).toBe("/app/memory?tab=methods");
     expect(await screen.findByText("记忆页")).toBeInTheDocument();
+  });
+
+  // R19 (plan §3 S10; audit D C1c): the page held to the framework's assertions, on each of its five views.
+  describe("composed as a data page of the framework", () => {
+    it.each(["graph", "topics", "dims", "time", "activity"])("%s: the tabs of 记忆胶囊 are the one row of views, the views and the filters are one toolbar under them, and the sentence comes before the picture", async (view) => {
+      const { container } = open(view === "graph" ? "" : `?view=${view}`);
+      const sentence = await screen.findByText(/EviMed 记住了你的/u);
+      const facts = expectComposed(container, { tablists: 1, toolbar: true });
+      // One row of tabs (the page's own four), one toolbar — and the five views are chips in it, not a second row of tabs or radios.
+      expect(facts.toolbars).toHaveLength(1);
+      expect(screen.queryByRole("radiogroup")).toBeNull();
+      expect(facts.toolbars[0]).toContainElement(screen.getByRole("group", { name: "地图的视图" }));
+      expect(facts.chrome!.contains(facts.toolbars[0]!)).toBe(true);
+      expect(facts.chrome!.contains(facts.tablists[0]!)).toBe(true);
+      // The sentence is the page's headline slot, under the band; the picture and its list are the body.
+      const headline = container.querySelector("[data-headline]")!;
+      expect(headline).toContainElement(sentence);
+      expect(precedes(facts.chrome!, headline)).toBe(true);
+      expect(precedes(headline, facts.body!.firstElementChild!)).toBe(true);
+      expect(facts.body!.contains(headline)).toBe(false);
+      // Nothing that filters stands in the body.
+      expect([...facts.body!.querySelectorAll("input[type=search]")]).toEqual([]);
+    });
+
+    it("is the same column as the lists of 记忆胶囊, so the title and the tabs do not move between them", async () => {
+      const { container } = open();
+      await screen.findByText(/EviMed 记住了你的/u);
+      expect(container.querySelector("[data-page-header]")!.parentElement).toHaveClass("max-w-page");
+      expect(container.querySelector("[data-page-header]")!.parentElement).not.toHaveClass("max-w-wide");
+    });
+
+    it("keeps the project in the header, as the scope of the page, and not among the filters", async () => {
+      useProjectStore.setState({ projects: [{ id: "p1", name: "疳证 Meta" }, { id: "p2", name: "信尔美" }], currentId: "p1" });
+      open();
+      await screen.findByText(/EviMed 记住了你的/u);
+      const header = document.querySelector("[data-page-header]") as HTMLElement;
+      expect(within(header).getByRole("button", { name: "项目" })).toHaveTextContent("全部项目");
+      expect(within(document.querySelector("[data-toolbar]") as HTMLElement).queryByRole("button", { name: /^项目/ })).toBeNull();
+      await userEvent.click(within(header).getByRole("button", { name: "项目" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "信尔美" }));
+      expect(where()).toBe("/app/memory/map?project=p2");
+    });
+
+    it("has the legend in the card and the replay in the card's header — the controls of a chart belong to the chart", async () => {
+      const dated = busyMap();
+      dated.nodes = dated.nodes.map((node, index) => (node.type === "memory" ? { ...node, at: `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00.000Z` } : node));
+      fetchMemoryMap.mockResolvedValue(dated);
+      open();
+      const replay = await screen.findByRole("slider", { name: "回放到哪一天" });
+      const card = replay.closest("section")!;
+      expect(card.querySelector("header")).toContainElement(replay);
+      expect(within(card).getByRole("button", { name: "回放它是怎么长出来的" })).toBeInTheDocument();
+      expect(card).toContainElement(screen.getByRole("group", { name: "图例" }));
+      // The card's heading says what is in it, with its numbers; the legend is under the heading, over the picture.
+      const heading = within(card).getByRole("heading", { level: 2 });
+      expect(heading.textContent).toMatch(/^\d+ 件现行的记忆/u);
+      expect(precedes(heading, screen.getByRole("group", { name: "图例" }))).toBe(true);
+      expect(precedes(screen.getByRole("group", { name: "图例" }), card.querySelector("[data-chart]")!)).toBe(true);
+      // Nothing under the picture says how to use the replay or what the colours are.
+      expect(document.body.textContent).not.toMatch(/拖下面的滑块/u);
+    });
+
+    it("has one entry for the time window on each view: the menu everywhere but 时间, where it is the bars' slider and a window that is set lets go from the toolbar", async () => {
+      open();
+      await screen.findByText(/EviMed 记住了你的/u);
+      // The 时间 chip of the views is one button; the menu of the window, which says 「全部时间」, is the other — the two are not one name.
+      const windowMenus = (toolbar: HTMLElement) => within(toolbar).queryAllByRole("button", { name: /^全部时间|^近 / }).filter((button) => button.getAttribute("aria-haspopup") === "menu");
+      expect(windowMenus(document.querySelector("[data-toolbar]") as HTMLElement)).toHaveLength(1);
+      cleanup();
+      fetchMemoryMap.mockResolvedValue(busyMap({ scope: { projectId: null, range: { from: "2026-09-01", to: "2026-09-30", unit: "week" }, timeZone: "Asia/Shanghai", focus: null, depth: null } }));
+      open("?view=time&range=2026-09-01..2026-09-30");
+      await screen.findByText(/EviMed 记住了你的/u);
+      const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
+      // No 时间 menu (it would be a second entry); the window is a mark that lets go of it.
+      expect(windowMenus(toolbar)).toHaveLength(0);
+      await userEvent.click(within(toolbar).getByRole("button", { name: /^时间：.+ 至 .+/u }));
+      expect(where()).toBe("/app/memory/map?view=time");
+    });
   });
 });

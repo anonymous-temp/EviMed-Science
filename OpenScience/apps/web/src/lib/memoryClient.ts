@@ -140,58 +140,6 @@ export function ensureMyCapsule() {
  * events above the list said the same thing twice.
  */
 
-/** A moment the growth line marks: a method learned, a capsule received. */
-export interface MemoryGrowthMoment {
-  /** YYYY-MM-DD in the researcher's zone. */
-  day: string;
-  kind: "method" | "capsule";
-  title: string;
-}
-
-/**
- * How much of the researcher the capsule has held over time: one point per
- * day (a new account's first two weeks), week (a short history) or month,
- * each what the page listed at its end.
- * Counted by the server over every row, never from the page's capped lists.
- */
-export interface MemoryGrowth {
-  unit: "day" | "week" | "month" | null;
-  /** The day the first row began to hold. */
-  first: string | null;
-  /** The first point is the zero before the first memory. */
-  fromStart: boolean;
-  points: Array<{ start: string; known: number }>;
-  moments: MemoryGrowthMoment[];
-  timeZone: string;
-}
-
-export function fetchMemoryGrowth(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
-  const query = new URLSearchParams(timeZone ? { timeZone } : {});
-  return productRequest<MemoryGrowth>(`/memory/growth?${query.toString()}`);
-}
-
-/**
- * 「哪天学会了什么」, under the growth line: one entry per day, newest first — when the capsule began to remember, and each
- * method or handbook that was learned or improved. Read from the records that say it, never from a log of its own.
- */
-export interface MemoryLearnedItem {
-  kind: "start" | "learned" | "improved";
-  what: "method" | "handbook" | null;
-  /** The method's or handbook's id, to open its drawer; null for the beginning. */
-  id: string | null;
-  title: string;
-}
-
-export interface MemoryLearned {
-  days: Array<{ /** YYYY-MM-DD in the researcher's zone. */ day: string; items: MemoryLearnedItem[] }>;
-  timeZone: string;
-}
-
-export function fetchMemoryLearned(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
-  const query = new URLSearchParams(timeZone ? { timeZone } : {});
-  return productRequest<MemoryLearned>(`/memory/learned?${query.toString()}`);
-}
-
 /**
  * One project, read from above (the 项目 tab's top): the card its memories were written under, what its conversations did, and the
  * files they delivered by month. Every list is empty when the control plane could not read the run ledger, and the card stands.
