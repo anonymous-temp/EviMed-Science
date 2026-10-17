@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "@/lib/projects";
 import { ScopeMenu } from "@/components/ui/ScopeMenu";
 import type { SourceScope } from "@/lib/sourceClient";
-import { useKnowledgeScope } from "./KnowledgeScopeMenu";
+import { useKnowledgeScope } from "./useKnowledgeScope";
 
 const modules = vi.hoisted(() => ({ geo: new Set<string>() }));
 vi.mock("@/lib/geoClient", () => ({ useGeoFeature: () => "on" }));

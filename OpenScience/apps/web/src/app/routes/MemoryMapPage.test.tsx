@@ -6,7 +6,7 @@ import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
 import { useProjectStore } from "@/lib/projects";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { expectComposed } from "@/test/expectComposed";
-import { compositionFacts, precedes } from "@/test/compositionFixtures";
+import { precedes } from "@/test/compositionFixtures";
 import { MemoryMapPage } from "./MemoryMapPage";
 
 const fetchMemoryMap = vi.fn();
@@ -319,8 +319,8 @@ describe("记忆地图", () => {
     it("has one entry for the time window on each view: the menu everywhere but 时间, where it is the bars' slider and a window that is set lets go from the toolbar", async () => {
       open();
       await screen.findByText(/EviMed 记住了你的/u);
-      // The 时间 chip of the views is one button; the menu of the window is the other.
-      const windowMenus = (toolbar: HTMLElement) => within(toolbar).queryAllByRole("button", { name: "时间" }).filter((button) => button.getAttribute("aria-haspopup") === "menu");
+      // The 时间 chip of the views is one button; the menu of the window, which says 「全部时间」, is the other — the two are not one name.
+      const windowMenus = (toolbar: HTMLElement) => within(toolbar).queryAllByRole("button", { name: /^全部时间|^近 / }).filter((button) => button.getAttribute("aria-haspopup") === "menu");
       expect(windowMenus(document.querySelector("[data-toolbar]") as HTMLElement)).toHaveLength(1);
       cleanup();
       fetchMemoryMap.mockResolvedValue(busyMap({ scope: { projectId: null, range: { from: "2026-09-01", to: "2026-09-30", unit: "week" }, timeZone: "Asia/Shanghai", focus: null, depth: null } }));

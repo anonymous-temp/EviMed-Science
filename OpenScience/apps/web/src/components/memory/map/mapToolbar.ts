@@ -54,7 +54,8 @@ export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, 
   } else {
     const known = RANGES.some((range) => range.value === selection.range);
     filters.push({
-      kind: "select", label: "时间", allLabel: "全部时间",
+      // 「全部时间」, not 「时间」: the chip stands beside the view that is called 时间, and two chips of one name read as one control.
+      kind: "select", label: "全部时间", allLabel: "全部时间",
       options: !windowed || known ? RANGES : [...RANGES, { value: selection.range, label: rangeLabel(selection.range) }],
       value: windowed ? selection.range : null,
       onChange: (range) => onNarrow({ range: range ?? "all" }),

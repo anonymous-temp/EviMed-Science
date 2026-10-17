@@ -32,7 +32,7 @@ import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialo
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeGraphView } from "@/components/sources/KnowledgeGraphView";
-import { useKnowledgeScope } from "@/components/sources/KnowledgeScopeMenu";
+import { useKnowledgeScope } from "@/components/sources/useKnowledgeScope";
 import { KnowledgeStatusDot } from "@/components/sources/KnowledgeStatusDot";
 import { KnowledgeTree, KnowledgeTreeMissing } from "@/components/sources/KnowledgeTree";
 import { LibraryComposition } from "@/components/sources/LibraryComposition";
@@ -478,7 +478,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const line = pagesOffered ? statusLine(knowledge) : null;
 
   /** What a document count is in the 资料 tab: the platform's own files are not among them. */
-  const documentTotal = (tally: SourceCounts | null): number | null => (tally ? tally.all - (hideCompiled || pagesTabs ? tally.wiki : 0) : null);
+  const documentTotal = (tally: SourceCounts | null): number | null => (tally ? tally.all - (hideCompiled || pagesTabs ? tally.wiki ?? 0 : 0) : null);
   const kindOptions: FilterOption<SourceKind | "all">[] = useMemo(() => {
     if (!counts) return [];
     return [
