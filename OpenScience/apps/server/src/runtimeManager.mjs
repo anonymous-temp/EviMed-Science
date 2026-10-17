@@ -1594,8 +1594,11 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // Open-web search rides the same runtime token as the source gateway, and
     // is only offered when the deployment actually has an engine behind it
     // (`webSearchHasEngine`). Its URL is the server's own route: the runtime
-    // never learns which aggregator, or which engines, sit behind it.
-    if (webSearchHasEngine(config)) {
+    // never learns which aggregator, or which engines, sit behind it. Where the
+    // web API hands the gateways over (the controller's path), it has already
+    // decided with its own configuration — an engine may be a provider key the
+    // controller deliberately does not hold — and an empty address means none.
+    if (gateways ? Boolean(String(gateways.webSearch ?? "").trim()) : webSearchHasEngine(config)) {
       const webSearchGatewayUrl = String(gateways ? gateways.webSearch ?? "" : config.webSearchGatewayInternalUrl ?? "").trim();
       let parsedSearch;
       try {

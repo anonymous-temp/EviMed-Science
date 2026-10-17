@@ -1990,7 +1990,7 @@ test("a page whose id the lists do not name is not walked, and the notice says w
  * The composer as the kernel's frame draws it: a root holding the card (the editable and the toolbar's row, with its tools and its send key) and the dock
  * under the card. The kernel's classes end in a stable suffix (`InputBar_card`), which is how the shell's own stylesheet and the probe find them.
  */
-function composerDom({ chipsInBar = 0, chipsInDock = 0, hero = false, dock = true, researcher = true, wrap = false, gap = 24 } = {}) {
+function composerDom({ chipsInBar = 0, chipsInDock = 0, hero = false, dock = true, researcher = true, wrap = false, gap = 24, perStat = false } = {}) {
   const chip = (placement) => node("span", { attrs: { "data-evimed-tool-chip": "vcr-protocol", "data-evimed-chip-placement": placement }, w: 120, h: 24, top: 945 - gap - 28 });
   const lowest = 945 - gap;
   const send = node("button", { attrs: { "aria-label": "发送" }, w: 32, h: 32, top: lowest - 32 });
@@ -2002,7 +2002,10 @@ function composerDom({ chipsInBar = 0, chipsInDock = 0, hero = false, dock = tru
   const card = node("div", { attrs: { class: "InputBar_card" }, top: lowest - 100, h: 100 }, [node("div", { attrs: { contenteditable: "true" }, top: lowest - 100, h: 60 }), row]);
   const hidden = researcher ? { display: "none" } : {};
   const dockEl = node("div", { attrs: { class: "InputBar_dock" }, top: lowest, h: 24 }, [
-    node("span", { attrs: { "data-composer-stats": "" }, text: "用量 12K", style: hidden, top: lowest - 24 }),
+    // Until 0.2.0 one `[data-composer-stats]` held the pills; 0.2.1 draws each as its own `span[data-composer-stat=<id>]`.
+    ...(perStat
+      ? ["activity", "usage"].map((id) => node("span", { attrs: { "data-composer-stat": id }, text: id === "usage" ? "用量 12K" : "42 tok/s", style: hidden, top: lowest - 24 }))
+      : [node("span", { attrs: { "data-composer-stats": "" }, text: "用量 12K", style: hidden, top: lowest - 24 })]),
     node("span", {}, [node("button", { attrs: { "aria-haspopup": "dialog", "aria-label": "上下文已用 20%" }, style: hidden, top: lowest - 60 })]),
     ...Array.from({ length: chipsInDock }, () => chip("bar")),
   ]);
@@ -2026,6 +2029,9 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
   // The statistics and the ring are in the document for a researcher and hidden; an operator's are drawn.
   const operator = read({ operator: true }, { researcher: false });
   assert.deepEqual([operator.operator, operator.stats, operator.ring], [true, { present: 1, visible: 1 }, 1]);
+  // The 0.2.1 kernel's per-pill spans are read the same way: present and hidden for a researcher, drawn for an operator.
+  assert.deepEqual(read({ operator: false }, { perStat: true }).stats, { present: 2, visible: 0 });
+  assert.deepEqual(read({ operator: true }, { perStat: true, researcher: false }).stats, { present: 2, visible: 2 });
   // The blank conversation has no dock under its card; a toolbar whose children start on two lines took two.
   assert.equal(read({}, { dock: false }).hero, true);
   assert.equal(read({}, { hero: true }).hero, true);

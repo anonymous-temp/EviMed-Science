@@ -4074,7 +4074,7 @@ export function composerProbe([options] = [{}]) {
       inTools: tools ? chips.filter((el) => tools.contains(el)).length : 0,
       inDock: dock ? chips.filter((el) => dock.contains(el)).length : 0,
     },
-    stats: { present: document.querySelectorAll("[data-composer-stats]").length, visible: [...document.querySelectorAll("[data-composer-stats]")].filter(visible).length },
+    stats: { present: document.querySelectorAll("[data-composer-stats],[data-composer-stat]").length, visible: [...document.querySelectorAll("[data-composer-stats],[data-composer-stat]")].filter(visible).length },
     ring: ring.length,
   };
 }
@@ -4171,7 +4171,7 @@ async function walkChat(page, base) {
         const seen = await frame.evaluate(() => ({
           composer: document.querySelectorAll("textarea, [contenteditable='true']").length > 0,
           // On screen: a researcher's statistics are in the document and hidden (R13 E-17), and are not what this records.
-          stats: [...document.querySelectorAll("[data-composer-stats]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
+          stats: [...document.querySelectorAll("[data-composer-stats],[data-composer-stat]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
         })).catch(() => null);
         if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
       }

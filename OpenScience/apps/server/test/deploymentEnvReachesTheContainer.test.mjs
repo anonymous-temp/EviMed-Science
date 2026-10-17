@@ -681,7 +681,7 @@ test("every setting the controller's launch plan reads reaches the controller wh
     for (const match of body.matchAll(/\bconfig\.(\w+)/g)) read.add(match[1]);
     for (const match of body.matchAll(/\b(\w+)\(config\b/g)) queue.push(match[1]);
   }
-  assert.ok(read.has("runtimeReviewEnabled") && read.has("runtimeMemoryLimit") && read.has("webSearchUrl") && read.size >= 25,
+  assert.ok(read.has("runtimeReviewEnabled") && read.has("runtimeMemoryLimit") && read.has("webSearchGatewayInternalUrl") && read.size >= 25,
     `the walk read ${read.size} settings from the launch plan; it did not walk`);
 
   // Which variables move each of those settings, asked of loadConfig itself,

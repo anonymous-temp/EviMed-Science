@@ -335,6 +335,30 @@ test("「前沿动态」 search reaches a runtime only where the module is on an
   }
 });
 
+// Whether a runtime is offered open-web search: in the web API's own process the
+// rule is `webSearchHasEngine` over its configuration; on the controller's path
+// the web API has already decided (an engine may be a provider key the
+// controller deliberately does not hold) and hands an empty address for none.
+test("open-web search reaches a runtime where the deployment has an engine, decided where the keys are", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-web-search-mcp-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const searchUrl = (config, onPlan = plan) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      webSearchGatewayInternalUrl: "http://127.0.0.1:8787/internal/search/v1/query", ...config,
+    }), project, onPlan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment.EVIMED_WEB_SEARCH_GATEWAY_URL;
+    assert.equal(searchUrl({ webSearchUrl: "", deepseekApiKey: "" }), undefined, "no engine: no route");
+    assert.equal(searchUrl({ webSearchUrl: "", deepseekApiKey: "sk-not-real" }), "http://127.0.0.1:8787/internal/search/v1/query");
+    const gateways = { model: "https://evimed.example/runtime-gateway/model/v1", publicSource: "https://evimed.example/runtime-gateway/sources/v1/fetch", adapters: {} };
+    const remote = (webSearch) => ({ ...plan, gateways: { ...gateways, webSearch } });
+    assert.equal(searchUrl({ webSearchUrl: "", deepseekApiKey: "" }, remote("https://evimed.example/runtime-gateway/search/v1/query")),
+      "https://evimed.example/runtime-gateway/search/v1/query", "the controller holds no key and follows the web API's address");
+    assert.equal(searchUrl({ webSearchUrl: "http://searxng:8080/search" }, remote("")), undefined, "an empty address is the web API saying none");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 // 「循证 GEO」 is a module a deployment may run for its operators only. A
 // runtime of an account it is not open to is given no route, so its three
 // tools answer `geo_disabled` without asking, and are not even listed; the
