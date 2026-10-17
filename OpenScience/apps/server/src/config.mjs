@@ -2337,8 +2337,9 @@ export function loadConfig(overrides = {}) {
     // runtime serves both kinds; a question asked with no page attached is answered by the kernel with an error.
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", true),
     // How that tool waits (2026-10-17, `r19-upstream2a`): `attended` holds the turn until the person answers, `timed`
-    // releases the model after two minutes to carry on with the work that does not depend on the answer, and the answer
-    // reaches it later as a message. Measured on a real kernel before it was offered; `attended` stays the default.
+    // releases the model after the wait it chose (two minutes unless it passes its own number; 5 of 11 measured asks
+    // chose longer, one unbounded) to carry on with the work that does not depend on the answer, and the answer reaches
+    // it later as a message. Measured on a real kernel before it was offered; `attended` stays the default.
     // A session that has taken a timed answer holds a message kind 0.1.7-rc.2 cannot read, so going back below the
     // 0.2.0-rc.2 pin after this has been on loses those sessions (docs/WEB_DEPLOYMENT.md).
     runtimeAskUserMode: parseAskUserMode(overrides.runtimeAskUserMode ?? process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE),
