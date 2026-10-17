@@ -118,12 +118,28 @@ describe("试验 · the designs", () => {
     expect(document.body.textContent).not.toMatch(BARE_INTERVAL);
   });
 
-  it("keeps the error and the cost's unit on the trade-off scatter's labels", async () => {
+  it("keeps the error and the cost's unit on the trade-off scatter's key", async () => {
     const { container } = draw();
     const label = await found(container, "[data-vcr-scatter-label='C']");
     expect(label).toHaveTextContent("74.0%");
     expect(label).toHaveTextContent("±0.40");
     expect(label).toHaveTextContent("4,600 万元");
+  });
+
+  it("names the designs under the plot and not beside the bubbles, where three close ones would write over one another: a letter in each bubble, a key with the names and the numbers", async () => {
+    const { container } = draw();
+    const scatter = await found(container, "[data-vcr-scatter]");
+    const key = scatter.querySelector("[data-vcr-scatter-key]") as HTMLElement;
+    expect(key).not.toBeNull();
+    // The key holds every design the chart is about, in the order of the table, and each one's letter is on its bubble.
+    const keyed = [...key.querySelectorAll("[data-vcr-scatter-label]")].map((entry) => entry.getAttribute("data-vcr-scatter-label"));
+    expect(keyed).toEqual(["A", "B", "C", "D"]);
+    for (const code of ["A", "B", "C"]) expect(scatter.querySelector(`[data-vcr-scatter-point='${code}']`)).toHaveTextContent(code);
+    // Nothing is written beside a bubble: the only labels are in the key.
+    expect(scatter.querySelectorAll("[data-vcr-scatter-label]").length).toBe(keyed.length);
+    expect(scatter.querySelector("[data-vcr-scatter-point] [data-vcr-scatter-label]")).toBeNull();
+    // The dominated design is said once, with the one that beats it, and has no numbers.
+    expect(key.querySelector("[data-vcr-scatter-label='D']")).toHaveTextContent("被 B 占优");
   });
 
   it("draws each design's last patient in as a point inside its named prediction interval", async () => {

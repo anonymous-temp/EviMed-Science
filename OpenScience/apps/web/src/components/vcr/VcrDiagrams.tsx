@@ -446,11 +446,11 @@ export function VcrTradeoffScatter({
   const sizes = sizeKey ? points.map((design) => at(design, sizeKey) ?? 0) : [];
   const biggest = Math.max(...sizes, 1);
   const radius = (design: VcrDesign) => {
-    if (!sizeKey) return 4.5;
+    if (!sizeKey) return 5;
     const value = at(design, sizeKey) ?? 0;
     // Area, not diameter: a bubble twice as wide is four times the cost, and
-    // scaling the radius by the value overstates every big one.
-    return 3 + 6 * Math.sqrt(Math.max(0, value) / biggest);
+    // scaling the radius by the value overstates every big one. The floor is the room a design's letter needs.
+    return 5 + 4 * Math.sqrt(Math.max(0, value) / biggest);
   };
   return (
     <div data-vcr-scatter="" className={className}>
@@ -489,47 +489,9 @@ export function VcrTradeoffScatter({
                   opacity: design.dominated ? 1 : design.chosen ? 0.9 : 0.42,
                 }}
               />
-              {/* A phone's plot has no room beside a bubble for a name and two numbers: the bubble carries its design's letter and the key under the chart says whose it is. */}
-              <span aria-hidden="true" className={cn("absolute inset-0 flex items-center justify-center text-meta font-semibold sm:hidden", design.chosen ? "text-accent-fg" : "text-text")}>
+              <span aria-hidden="true" className={cn("absolute inset-0 flex items-center justify-center text-meta font-semibold", design.chosen ? "text-accent-fg" : "text-text")}>
                 {design.code}
               </span>
-            </span>
-          );
-        })}
-        {points.map((design) => {
-          const left = posX(at(design, xKey) as number, x);
-          const top = 100 - posX(at(design, yKey) as number, y);
-          const measure = design.measures[yKey];
-          const cost = sizeKey ? design.measures[sizeKey] : null;
-          const mcse = mcseText(measure?.mcse);
-          // A label hangs under its bubble, centred; a bubble near an edge would put half of it outside the card, so the label there
-          // reads inwards from the bubble's centre — the same class of defect in every chart that names its points.
-          const side = left > 70 ? "end" : left < 30 ? "start" : "middle";
-          return (
-            <span
-              key={`label-${design.id}`}
-              data-vcr-scatter-label={design.code}
-              data-vcr-scatter-side={side}
-              className={cn(
-                "absolute max-w-48 whitespace-nowrap text-caption max-sm:hidden",
-                side === "end" ? "-translate-x-full text-right" : side === "start" ? "text-left" : "-translate-x-1/2 text-center",
-              )}
-              style={{ left: `${left}%`, top: `calc(${top}% + ${radius(design) * 2 + 8}px)` }}
-            >
-              <span className={cn("block font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>
-                {design.name || design.code}
-              </span>
-              {design.dominated
-                ? <span className="block text-text-3">{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>
-                : (
-                  // The numbers under a bubble are text: each is a button with its source in the table of the same designs just above, and
-                  // six more buttons of a size nothing else on the page has would be a kind of control for a caption.
-                  <span className="block tabular-nums text-text-3">
-                    {withUnit(measure)}
-                    {mcse && <span className="ml-1">{mcse}</span>}
-                    {cost && cost.value != null && <span>{` · ${withUnit(cost)}`}</span>}
-                  </span>
-                )}
             </span>
           );
         })}
@@ -539,23 +501,29 @@ export function VcrTradeoffScatter({
         {xLabel && <span>{xLabel}</span>}
         {sizeLabel && <span>{sizeLabel}</span>}
       </p>
-      <p data-vcr-scatter-key="" className="ml-10 mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-caption text-text-3 sm:hidden">
-        {points.map((design) => (
-          <span key={design.id}>
-            <span className={cn("font-medium", design.chosen ? "text-accent-strong" : "text-text-2")}>{design.code}</span>
-            {` ${design.name || design.code}`}
-          </span>
-        ))}
-      </p>
-      {unplaced.length > 0 && (
-        <ul className="ml-10 mt-2 flex flex-col gap-1 text-caption text-text-3">
-          {unplaced.map((design) => (
-            <li key={design.id} data-vcr-scatter-dominated={design.code}>
-              {`${design.name || design.code} · ${design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}`}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The names and the numbers are under the plot, not beside the bubbles: three designs close together put their labels over one another at any width, a letter in the bubble says whose it is. */}
+      <div role="group" aria-label="各方案的取舍" data-vcr-scatter-key="" className="ml-10 mt-2 flex flex-col gap-1.5 text-caption text-text-3">
+        {designs.filter((design) => points.includes(design) || unplaced.includes(design)).map((design) => {
+          const measure = design.measures[yKey];
+          const cost = sizeKey ? design.measures[sizeKey] : null;
+          const mcse = mcseText(measure?.mcse);
+          return (
+            <span key={design.id} data-vcr-scatter-label={design.code} className="flex flex-wrap items-baseline gap-x-2">
+              <span className={cn("font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>{design.code}</span>
+              <span className={cn(design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>{design.name || design.code}</span>
+              {design.dominated
+                ? <span>{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>
+                : (
+                  <span className="tabular-nums">
+                    {withUnit(measure)}
+                    {mcse && <span className="ml-1">{mcse}</span>}
+                    {cost && cost.value != null && <span>{` · ${withUnit(cost)}`}</span>}
+                  </span>
+                )}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -608,8 +576,8 @@ export function VcrMilestoneTimeline({
           const to = typeof high === "number" ? posX(high, scale) : at;
           const interval = intervalText(value.interval, value.precision);
           return (
-            // Three columns need 21rem before the time axis has any width; on a phone the axis takes the row under the name and the date.
-            <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr_9rem]">
+            // Three columns need 23rem before the time axis has any width; on a phone the axis takes the row under the name and the date.
+            <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr_11rem]">
               <div className="min-w-0">
                 <p className={cn("truncate text-caption", ours ? "font-medium text-accent-strong" : "text-text-2")}>{row.name || row.design}</p>
                 <p className="truncate text-meta text-text-3">{item.label}</p>
@@ -636,7 +604,7 @@ export function VcrMilestoneTimeline({
           );
         }))}
       </ol>
-      <div className="relative mt-1 grid grid-cols-1 gap-x-3 sm:grid-cols-[10rem_1fr_9rem]">
+      <div className="relative mt-1 grid grid-cols-1 gap-x-3 sm:grid-cols-[10rem_1fr_11rem]">
         <span className="max-sm:hidden" />
         <span className="relative block h-5">
           {scale.ticks.map((tick) => (
