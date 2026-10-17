@@ -479,19 +479,16 @@ export function exportBrief(project, { kind, week = null, freshness = null }) {
 }
 
 /**
- * The prompt a GEO run is dispatched with: the brief, then the platform's
- * mark naming the dispatch. Every GEO dispatch carries it, into a runtime
- * the researcher has open as much as into a bounded one (M-2, 2026-09-26: a
- * brief dispatched into an open runtime carried no platform tag at all, and
- * the memory extractor stored 「产品：信尔美（通用名：玛仕度肽注射液）。」 as
- * something the researcher said). The mark is one of the domain's
- * `PLATFORM_CONTEXT_TAGS`, so a message carrying it is machine text to the
- * extractor; it goes after the brief because the kernel names a session
- * after the start of its first message.
- * @param {string} brief @param {string} dispatchId
+ * The prompt a GEO run is dispatched with: the step's sentence (`geoVisibleQuestion`; the brief itself rides in the run's context,
+ * `geoBriefBlock`), then the platform's mark naming the dispatch. Every GEO dispatch carries it, into a runtime the researcher has open
+ * as much as into a bounded one (M-2, 2026-09-26: a brief dispatched into an open runtime carried no platform tag at all, and the
+ * memory extractor stored 「产品：信尔美（通用名：玛仕度肽注射液）。」 as something the researcher said). The mark is one of the
+ * domain's `PLATFORM_CONTEXT_TAGS`, so a message carrying it is machine text to the extractor; it goes after the sentence because the
+ * kernel names a session after the start of its first message.
+ * @param {string} text what the run is asked, in the person's words @param {string} dispatchId
  */
-export function geoRunPrompt(brief, dispatchId) {
-  return `${brief}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>`;
+export function geoRunPrompt(text, dispatchId) {
+  return `${text}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>`;
 }
 
 /**
