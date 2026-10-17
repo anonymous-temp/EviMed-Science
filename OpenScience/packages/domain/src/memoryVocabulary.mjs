@@ -103,6 +103,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // The instruction of a step's run, in the run's own context (2026-10-14): the first message of its session is the step's sentence
   // (「生成虚拟患者」) and the model's brief arrives here, never as anything a person said.
   { tag: 'evimed-vcr-brief', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs'] },
+  // That the researcher stopped the step that ran in the study's own conversation (R19 phase 2): the context the conversation's next turn
+  // is handed, so a question about the step is answered from the study and not from the stopped turn's history.
+  { tag: 'evimed-vcr-stopped', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
   { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },

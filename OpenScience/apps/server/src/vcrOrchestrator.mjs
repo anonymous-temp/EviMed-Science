@@ -212,6 +212,18 @@ export function vcrBriefBlock(brief) {
 }
 
 /**
+ * What the model of the study's conversation is told when the researcher stopped a step that ran in it: a fact the platform knows and the
+ * conversation's own history does not state (the turn ends with no reply of its own, and a one-line question asked afterwards was answered
+ * from that history — the step 「还在进行中」 — without reading the study). The state itself is the study's, read with `vcr_read`.
+ * @param {string} label the step's sentence, as the person read it
+ * @returns {string}
+ */
+export function vcrStoppedBlock(label) {
+  const named = String(label ?? "").replace(/[<>\n]/g, " ").trim().slice(0, 80);
+  return `<evimed-vcr-stopped>研究者刚刚停止了${named ? `“${named}”` : "上一步"}，它没有做完（已经写进研究的部分保留）。这一步现在的状态以 vcr_read 读到的研究为准，不要沿用停止前对话里的说法。</evimed-vcr-stopped>`;
+}
+
+/**
  * What each exportable document is, in one sentence: the outline the plan gives
  * it (§5.4, §8.3). Text a brief carries, so the run is told which document is
  * wanted in words and not only by a kind — the package capability's own skill
@@ -1555,13 +1567,12 @@ export class VcrOrchestrator {
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
    *     reason: string, brief: string, question?: string, attended?: boolean, products?: string[] }) =>
    *     Promise<{ runId: string, sessionId: string | null, status?: string | null, placement?: string | null }>) | null,
-   *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
    *   longitudinal?: { providers: { list: () => Promise<any[]> }, prepare: (study: any, request: any, actor: string, extra?: Record<string, any>) => Promise<{ job: any }> } | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null, latestSessionId = null,
+  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null,
     briefFor = null, longitudinal = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
@@ -1573,7 +1584,6 @@ export class VcrOrchestrator {
     this.queueExport = queueExport;
     this.queueReviews = queueReviews;
     this.dispatchRun = dispatchRun;
-    this.latestSessionId = latestSessionId;
     this.briefFor = briefFor;
     // The longitudinal forecast path: a patient set that names an event-history model is run there (G12). Absent, that step says
     // the forecast service is not connected, in the platform's own sentence, and nothing else waits for it.

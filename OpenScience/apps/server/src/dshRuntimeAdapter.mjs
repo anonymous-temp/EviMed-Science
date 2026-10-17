@@ -208,6 +208,21 @@ export function sessionListItems(value) {
 }
 
 /**
+ * What waits in a session's inbox, from its entry in a `session/list` reply: the inputs queued for the next turn (what a person typed
+ * while the agent worked, or what the control plane sent) and for the next step (a steer). The kernel keeps them in order and hands the
+ * first of them to whatever turn starts next — which is why a dispatch must not go in behind an input somebody else queued (found
+ * live: a question queued during a step that was then stopped ran as the next turn, under the context of the step dispatched after it,
+ * which waited behind it). `null` for a reply that does not carry the projection, so a reader never reads "nothing waits" from silence.
+ * @param {Record<string, any> | null | undefined} entry
+ * @returns {{ running: boolean, queued: number } | null}
+ */
+export function sessionInboxOf(entry) {
+  const inbox = entry?.projections?.values?.inbox;
+  if (!inbox || typeof inbox !== "object" || !Array.isArray(inbox["next-turn"]) || !Array.isArray(inbox["next-step"])) return null;
+  return { running: entry.running === true, queued: inbox["next-turn"].length + inbox["next-step"].length };
+}
+
+/**
  * A socket tool's result, as the kernel records it in a session's history.
  *
  * The kernel renders a tool's structured result to text before the model or

@@ -157,6 +157,9 @@ const dispatchFields = new Set([
   "effectiveRuntimeAgent",
   "effectiveRouteReason",
   "effectiveProducts",
+  // This dispatch is a turn of the capability it names although the conversation is bound to another: a module's own step run in
+  // the study's conversation (the control plane's dispatcher alone sets it; the public dispatch route never takes it from a caller).
+  "routedOverBinding",
 ]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
 /** An evidence card's id (`evidenceOrigins.mjs`), the one shape a run's `originCardId` may take. */
@@ -419,6 +422,8 @@ function normalizeDispatchInput(input) {
   const effectiveProducts = normalizeEffectiveProducts(input.effectiveProducts, { strict: true });
   if (effectiveProducts && input.effectiveAgentId == null) throw invalid("Effective products need the specialist they belong to.");
   if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
+  if (input.routedOverBinding != null && typeof input.routedOverBinding !== "boolean") throw invalid("routedOverBinding must be a boolean.");
+  if (input.routedOverBinding === true && input.effectiveAgentId == null) throw invalid("A turn routed over the binding needs the specialist it is a turn of.");
   if (input.waitForRoom != null && typeof input.waitForRoom !== "boolean") throw invalid("waitForRoom must be a boolean.");
   const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
   if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
@@ -451,6 +456,7 @@ function normalizeDispatchInput(input) {
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
     effectiveRouteReason: input.effectiveRouteReason ?? null,
     effectiveProducts,
+    routedOverBinding: input.routedOverBinding === true,
   };
 }
 
@@ -4999,6 +5005,7 @@ export class AgentRunStore {
       effectiveRuntimeAgent,
       effectiveRouteReason,
       effectiveProducts,
+      routedOverBinding,
     } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
@@ -5007,7 +5014,10 @@ export class AgentRunStore {
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
     const baselineCursor = await this.captureBaseline(project, sessionId, { waitForRoom: input.waitForRoom === true });
-    const selected = session.mode === "specialist"
+    // A conversation bound to a capability keeps it: the binding owns the identity of every turn typed or dispatched into it. The
+    // one exception is a turn the control plane says is another capability's (`routedOverBinding`): a module's step run in the
+    // study's own conversation, which is a turn of the step's capability and not of the analyst the conversation is bound to.
+    const selected = session.mode === "specialist" && !routedOverBinding
       ? {
           effectiveAgentId: session.agentId,
           effectiveAgentVersion: session.agentVersion,
@@ -5018,7 +5028,13 @@ export class AgentRunStore {
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
     await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
+    // The run is recorded under the identity it ran as. A ledger row whose specialist pin differs from its effective identity is
+    // refused by the fold (and the whole project's ledger with it), so a turn of another capability than the conversation's
+    // binding carries its own capability's pin: the binding stays what it is in the research-session record, which no run reads back.
+    const pinned = routedOverBinding && session.mode === "specialist"
+      ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
+      : session;
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);

@@ -274,11 +274,39 @@ export function isVerificationRun(run) {
 export const PROGRAMME_ROUTE_REASON_PREFIXES = Object.freeze(['vcr:', 'geo:'])
 
 /**
- * Whether a run is one of a module's programme steps, decided by the route reason the control plane wrote at dispatch.
+ * The route-reason prefix of a module step that ran as a turn of the study's own conversation (`vcr:turn:definition`, …): the
+ * same step as `vcr:definition`, with the person present, in their conversation — so it stays under the module's `vcr:` family (its
+ * purpose, its budget, its exclusion from what memory learns) and is a conversation's turn, never a programme run (`isProgrammeRun`).
+ */
+export const CONVERSATION_TURN_ROUTE_REASON_PREFIX = 'vcr:turn:'
+
+/**
+ * The route reason a step's run takes when it is a turn of the study's conversation: `vcr:definition` → `vcr:turn:definition`.
+ * A reason of another family is returned as it is.
+ * @param {string} reason @returns {string}
+ */
+export function conversationTurnRouteReason(reason) {
+  const text = String(reason ?? '')
+  if (!text.startsWith('vcr:') || text.startsWith(CONVERSATION_TURN_ROUTE_REASON_PREFIX)) return text
+  return `${CONVERSATION_TURN_ROUTE_REASON_PREFIX}${text.slice('vcr:'.length)}`.slice(0, 64)
+}
+
+/**
+ * Whether a run is a module step that ran in the study's own conversation, decided by the route reason the control plane wrote.
+ * @param {{ effectiveRouteReason?: string | null } | null | undefined} run @returns {boolean}
+ */
+export function isConversationTurnRun(run) {
+  return String(run?.effectiveRouteReason ?? '').startsWith(CONVERSATION_TURN_ROUTE_REASON_PREFIX)
+}
+
+/**
+ * Whether a run is one of a module's programme steps, decided by the route reason the control plane wrote at dispatch. A step that
+ * ran as a turn of the study's conversation is not: it is what the person asked for in their conversation.
  * @param {{ effectiveRouteReason?: string | null } | null | undefined} run @returns {boolean}
  */
 export function isProgrammeRun(run) {
   const reason = String(run?.effectiveRouteReason ?? '')
+  if (isConversationTurnRun(run)) return false
   return PROGRAMME_ROUTE_REASON_PREFIXES.some((prefix) => reason.startsWith(prefix))
 }
 
