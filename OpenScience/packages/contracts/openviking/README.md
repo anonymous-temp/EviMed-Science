@@ -47,7 +47,8 @@ plugin (`@openviking/dsh-memory-plugin`, `runtime.mjs`) commits in exactly three
 the session reports `pending_tokens >= commitTokenThreshold` (the upstream default 20000, minimum 1000, which the engine
 counts about twice DeepSeek's tokens for Chinese); when the kernel appends `compaction/start`, whatever the threshold (new in
 0.5.25: it commits before the history is summarized, so a conversation long enough to compact is committed by its first
-compaction, and `/compact` does the same); and when its session is disposed — the kernel's shutdown or a release of the
+compaction, and `/compact` does the same; unchanged at 0.5.26, whose one change is that a capture filter's substitutions
+also reach tool calls and results); and when its session is disposed — the kernel's shutdown or a release of the
 container. `commitTurnThreshold` and `autoCommitOnCompact` are in its schema and no code of the DSH runtime reads them (the
 compaction commit is not the latter's switch: it is unconditional). Every one of the three reaches the engine through the
 memory gateway's commit path, so the admission rule below applies to a compaction commit exactly as to a turn's. An ordinary conversation is a few hundred to a few thousand tokens in a runtime that lives for hours, so on

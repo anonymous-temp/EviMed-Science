@@ -183,7 +183,7 @@
       },
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
-      "verifiedAgainst": "0.2.0-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.0-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
+      "verifiedAgainst": "0.2.1-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.1-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId)"
     },
     "personalSkills": {
       "package": "@deepseek-ai/dsh-skill-filesystem",

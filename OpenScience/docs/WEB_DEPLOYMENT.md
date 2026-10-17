@@ -1081,7 +1081,14 @@ driver needs the recorded DSH tool-result envelope adaptation in
 `deploy/runtime-dsh/loopx-compat.mjs`; it is applied before sealing, with a
 receipt, and never modifies a serving installation. The same small adaptation
 passes a verified Pause action into the current model step as user context,
-without waking an idle session or cancelling its checkpoint. GoalBar requests retain
+without waking an idle session or cancelling its checkpoint. The plugin release
+declares a DSH range that ends below 0.2.1, and the kernel skips a bundle outside its
+range at install and at every start: the build grants the kernel's own exact-version
+exemption (`dsh plugin allow-version … --accept-risk`) for exactly the pair recorded in
+`loopx.compatibility.dshVersionExemption`, only for the archive whose sha256 is the pin
+(`loopx-compat.mjs --grant-exemption`); the profile's `compatibility.json` is sealed with
+the seed and synced to every project volume. Moving either pin fails the build by name
+until the pair has been run again and recorded. GoalBar requests retain
 project/session authorization and automatic turns enter the existing run and
 usage ledgers with `loopx-continuation` provenance. Goal state stays in the
 project's `.loopx` registry and `.codex/goals/` workspace files. Calendar agendas, research memory, evidence and
