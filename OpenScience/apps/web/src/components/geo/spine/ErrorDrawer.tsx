@@ -44,6 +44,7 @@ export function ErrorDrawer({
   claim,
   actions,
   groupOf,
+  basis,
   onClose,
 }: {
   geoId: string;
@@ -52,6 +53,8 @@ export function ErrorDrawer({
   /** The project's actions: the ones that name this claim's rows are its corrections. */
   actions: readonly GeoAction[];
   groupOf: GroupOfQuestion;
+  /** The reader's name for the source the label's words come from (「玛仕度肽注射液说明书」), where the page knows it. */
+  basis?: string | null;
   onClose: () => void;
 }) {
   const open = useOpenGeoConversation();
@@ -102,6 +105,7 @@ export function ErrorDrawer({
               <span className="min-w-0 max-w-measure">说明书：{claim.evidenceQuote}</span>
             </p>
           )}
+          {basis && <p data-geo-error-basis="" className="mt-1 text-caption text-text-3">{`依据：${basis}`}</p>}
           {claim.severity && <p className="mt-2 text-caption text-text-3">{`${claim.severity}：${SEVERITY_WORDS[claim.severity]}`}</p>}
         </Section>
 

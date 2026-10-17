@@ -87,6 +87,9 @@ export function filterErrors(errors: readonly GeoErrorRow[], filter: ErrorFilter
 
 /* -------------------------------------------------------------------- claims */
 
+/** The key a claim is grouped and addressed by: its fingerprint, else the claim it contradicts, else the row itself (`geoErrorsByClaim`'s). */
+export const claimKeyOf = (error: Pick<GeoErrorRow, "fingerprint" | "claimId" | "id">): string => error.fingerprint || error.claimId || error.id;
+
 /** One wrong claim, with the engines that tell it and the rows behind it. */
 export interface ClaimRow {
   /** The claim's fingerprint (the row's address: `?error=`). */

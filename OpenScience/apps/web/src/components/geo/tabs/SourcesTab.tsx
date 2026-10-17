@@ -294,8 +294,9 @@ function SourceList({
                 {visible.map(({ source, counts }) => (
                   <ListRow
                     key={source.id || source.domain}
-                    title={<SourceTitle source={source} />}
+                    title={<span className="block max-w-full min-w-0 truncate">{source.name || source.domain}</span>}
                     titleProps={{ "data-geo-source": source.domain }}
+                    meta={<SourceMeta source={source} />}
                     selected={drawerRow?.domain === source.domain}
                     onOpen={() => openSource(source, current, null)}
                     columns={[
@@ -432,18 +433,16 @@ function Placeable({
         return (
           <ListRow
             key={place.key}
-            title={(
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
-                <span className="max-w-full min-w-0 truncate">{place.name || place.domain || "自有渠道"}</span>
-                {layer && <Tag>{layer}</Tag>}
-                {kind && <Tag>{kind}</Tag>}
-                {place.domain && place.name && <span className="min-w-0 max-w-full truncate text-caption text-text-3">{place.domain}</span>}
-              </span>
-            )}
+            title={<span className="block max-w-full min-w-0 truncate">{place.name || place.domain || "自有渠道"}</span>}
             titleProps={{ "data-geo-place": place.key }}
             onOpen={row ? () => onOpen(row) : undefined}
             meta={(
               <span className="flex flex-col gap-0.5">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {layer && <Tag>{layer}</Tag>}
+                  {kind && <Tag>{kind}</Tag>}
+                  {place.domain && place.name && <span className="min-w-0 max-w-full truncate text-caption text-text-3">{place.domain}</span>}
+                </span>
                 <span data-geo-place-state={state.tone} className={state.tone === "no" ? "text-warn-strong" : undefined}>{state.text}</span>
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
                   {place.engines.length > 0 && <span>{`被 ${place.engines.map(engineName).join("、")} 引用`}</span>}
@@ -462,16 +461,16 @@ function Placeable({
 }
 
 /**
- * The site on one line: its name, its kind, the 「自有」 tag when it is ours, and the domain in grey. The other layer words
- * (覆盖, 锚点) are about where we would place content there, which is the drawer's to say.
+ * The line under a site's name: its kind, the 「自有」 tag when it is ours, and the domain in grey. The tags are not in the row's
+ * title because the title is the row's one control and a tag is never a control. The other layer words (覆盖, 锚点) are about where
+ * we would place content there, which is the drawer's to say.
  */
-function SourceTitle({ source }: { source: GeoSourceRow }) {
+function SourceMeta({ source }: { source: GeoSourceRow }) {
   const kind = sourceKindWord(source.kind);
   const own = source.layer === "owned" ? GEO_SOURCE_LAYER_WORDS.owned : null;
+  if (!kind && !own && !source.name) return null;
   return (
-    // One line from `sm` up, the name and the domain shortened to fit; on a phone the tags and the domain wrap under the name.
-    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
-      <span className="max-w-full min-w-0 truncate">{source.name || source.domain}</span>
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
       {kind && <Tag>{kind}</Tag>}
       {own && <Tag tone="accent">{own}</Tag>}
       {source.name && <span className="min-w-0 max-w-full truncate text-caption text-text-3">{source.domain}</span>}

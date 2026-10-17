@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useNavigationType, useParams } from "react-router";
 import { ArrowLeft, ExternalLink, Image as ImageIcon, Radar } from "lucide-react";
 import {
   geoScreenshotUrl,
   getGeoAnswer,
   getGeoProject,
+  type GeoAction,
   type GeoAnswer,
   type GeoClaim,
   type GeoErrorRow,
@@ -14,20 +15,27 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { FilterSelect } from "@/components/ui/FilterChips";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
-import { AskAi } from "@/components/geo/AskAi";
-import { useGeoFrame } from "@/components/geo/geoFrame";
+import { useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
 import { useGeoEvidence } from "@/components/geo/geoProjectData";
+import { scrollBlockToTop } from "@/components/geo/geoScroll";
+import { questionGroupIndex, clusterName } from "@/components/geo/spine/clusterModel";
+import { ClusterDrawerHost } from "@/components/geo/spine/ClusterDrawerHost";
+import { ClusterLink } from "@/components/geo/spine/ClusterLink";
+import { useGeoDrawerAddress } from "@/components/geo/spine/drawerParams";
+import { claimKeyOf, claimRows, correctionBrief } from "@/components/geo/spine/errorModel";
+import { ErrorDrawer } from "@/components/geo/spine/ErrorDrawer";
+import { useGeoActions, useGeoQuestionSet } from "@/components/geo/spine/spineData";
+import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindings";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
-import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
+import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
-import { answerPath, CITED_ATTRIBUTE_WORDS, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
+import { answerPath, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
 /** The sentence a direct link lands on where the module is off (the shell's off page says the same). */
@@ -51,6 +59,9 @@ export function GeoAnswerPage() {
   const frame = useGeoFrame();
   const fetched = useGeoLoad(`project:${geoId}`, () => (frame ? Promise.resolve(frame.project) : getGeoProject(geoId)));
   const evidence = useGeoEvidence(geoId);
+  // The records a mark on the answer opens: the question's group, and the actions that correct a claim.
+  const actions = useGeoActions(geoId);
+  const questionSet = useGeoQuestionSet(geoId);
 
   if (answer.state.kind === "error" && answer.state.off) {
     return <Shell title="循证 GEO"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
@@ -73,7 +84,9 @@ export function GeoAnswerPage() {
   const data = answer.state.data;
   const loadedProject = frame ? frame.project : fetched.state.kind === "ready" ? fetched.state.data : null;
   const claims = evidence.state.kind === "ready" && Array.isArray(evidence.state.data?.claims) ? evidence.state.data.claims : [];
-  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} />;
+  const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
+  const groups = questionSet.state.kind === "ready" ? questionSet.state.data?.groups : undefined;
+  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} actions={everyAction} groups={groups} />;
 }
 
 /**
@@ -123,8 +136,25 @@ function BackLink({ geoId, fallback }: { geoId: string; fallback: keyof typeof B
 
 type Project = Awaited<ReturnType<typeof getGeoProject>>;
 
-function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnswer; project: Project | null; claims: GeoClaim[] }) {
+function Answer({
+  geoId,
+  data,
+  project,
+  claims,
+  actions,
+  groups,
+}: {
+  geoId: string;
+  data: GeoAnswer;
+  project: Project | null;
+  claims: GeoClaim[];
+  actions: readonly GeoAction[];
+  groups: Parameters<typeof questionGroupIndex>[0];
+}) {
   const navigate = useNavigate();
+  const drawer = useGeoDrawerAddress();
+  const open = useOpenGeoConversation();
+  const [asking, setAsking] = useState(false);
   const snapshot = data.snapshot;
   const question = data.question?.text || "回答";
   const date = monthDay(snapshot.askedAt);
@@ -144,41 +174,75 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
   const placed = marked.paragraphs.reduce((sum, paragraph) => sum + paragraph.wrong.length, 0);
   const screenshot = snapshot.screenshot && snapshot.screenshotSha256 ? geoScreenshotUrl(geoId, snapshot.screenshotSha256) : null;
   const target = project ? { projectId: project.projectId, sessionId: project.sessionId } : null;
+  const group = data.question?.id ? questionGroupIndex(groups).get(data.question.id) ?? null : null;
   const article = useRef<HTMLElement>(null);
   const firstWrong = () => {
     const span = article.current?.querySelector<HTMLElement>("[data-geo-wrong]");
-    if (!span || typeof span.scrollIntoView !== "function") return;
-    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    span.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+    // The page's own ground moves to it, not the app shell (`scrollBlockToTop`).
+    if (span) scrollBlockToTop(span);
   };
-  // The page opens on the sentence it is about: the first wrong one is brought to the middle, once for each answer.
+  // The page opens on the sentence it is about: the first wrong one is brought to the top of the page, once for each answer.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(firstWrong, [snapshot.id]);
 
+  // The date switcher and the screenshot are the band's toolbar, above what they control (a day's answer, and the proof of it).
+  useGeoToolbar(history.length > 1 || screenshot ? {
+    filters: history.length > 1 ? [{
+      kind: "select",
+      label: "测量日期",
+      options: history.map((entry) => ({ value: entry.snapshotId, label: monthDay(entry.sampleDate) ?? entry.sampleDate })),
+      value: snapshot.id,
+      // Another day's answer replaces this one in the history: the way back is still the list.
+      onChange: (value) => { if (value && value !== snapshot.id) navigate(answerPath(geoId, value), { replace: true }); },
+    }] : undefined,
+    actions: screenshot ? (
+      <a href={screenshot} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm" })}>
+        <ImageIcon size={16} aria-hidden="true" />
+        截图
+      </a>
+    ) : undefined,
+  } : null);
+
+  // The one action of the page: have the correction written where the answer is wrong, else talk the answer over.
+  const claimOf = found.findings.find((finding) => finding.error)?.error ?? null;
+  const productName = product?.brandName || product?.genericName || project?.name || "我们";
+  const everyClaim = useMemo(() => claimRows(Array.isArray(data.errors) ? data.errors.filter((row) => row && row.id) : []), [data.errors]);
+  const lead = claimOf ? everyClaim.find((claim) => claim.key === claimKeyOf(claimOf)) ?? null : null;
+  const ask = () => {
+    if (!target) return;
+    setAsking(true);
+    const draft = lead
+      ? correctionBrief(lead, productName)
+      : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
+    // A request about one answer opens a fresh conversation: the project's latest may be a strategy run's own session.
+    void open({ projectId: target.projectId, sessionId: null }, draft).finally(() => setAsking(false));
+  };
+  const groupMap = useMemo(() => questionGroupIndex(groups), [groups]);
+  const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;
+  const basisOf = (claim: (typeof everyClaim)[number]) => {
+    // The judge's statement names the card's claim where the error row does not.
+    const id = claim.claimId ?? found.findings.find((finding) => finding.error && claimKeyOf(finding.error) === claim.key)?.statement?.claimId ?? null;
+    const row = id ? claims.find((entry) => entry.id === id) ?? null : null;
+    return row ? row.sourceLabel || readableSourceRef(row.sourceRef) : null;
+  };
+
   const header = (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-2">
         <BackLink geoId={geoId} fallback={found.findings.length > 0 || found.elsewhere.length > 0 ? "accuracy" : "questions"} />
-        <h2 className="min-w-0 text-section font-semibold text-text">{question}</h2>
-        {pool && <span className="shrink-0 text-caption text-text-3">{pool}</span>}
+        <div className="min-w-0">
+          <h2 className="min-w-0 text-section font-semibold text-text">{question}</h2>
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-caption text-text-3">
+            <span>{engineName(snapshot.engine)}</span>
+            {date && <span className="tabular-nums">{date}</span>}
+            {pool && <span>{pool}</span>}
+            {group && <ClusterLink groupId={group.id} className="text-link">{clusterName(group)}</ClusterLink>}
+          </p>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        {history.length > 1 ? (
-          <FilterSelect<string>
-            label="测量日期"
-            options={history.map((entry) => ({ value: entry.snapshotId, label: monthDay(entry.sampleDate) ?? entry.sampleDate }))}
-            value={snapshot.id}
-            // Another day's answer replaces this one in the history: the way back is still the list.
-            onChange={(value) => { if (value && value !== snapshot.id) navigate(answerPath(geoId, value), { replace: true }); }}
-          />
-        ) : date && <span className="text-caption tabular-nums text-text-3">{date}</span>}
-        {screenshot && (
-          <a href={screenshot} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm" })}>
-            <ImageIcon size={16} aria-hidden="true" />
-            截图
-          </a>
-        )}
-      </div>
+      {target && (
+        <Button data-geo-answer-primary="" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
+      )}
     </header>
   );
 
@@ -193,22 +257,16 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
               <Button variant="text" size="sm" onClick={firstWrong}>看第 1 处</Button>
             </p>
           )}
-          <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} />
-          {target && (
-            <div className="mt-4">
-              <AskAi
-                project={target}
-                draft={wrongSentences.length
-                  ? zh`${engineName(snapshot.engine)}回答“${question}”时说“${wrongSentences[0]}”${date ? `（${date}）` : ""}，和说明书不一致。它为什么这么说，怎么纠正？`
-                  : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`}
-              />
-            </div>
-          )}
+          <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} onOpen={(key) => drawer.open({ error: key })} />
           <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
           <Elsewhere geoId={geoId} current={snapshot.id} errors={found.elsewhere} unplaced={marked.unplaced} findings={found.findings} />
         </article>
       </div>
+      {project && opened && (
+        <ErrorDrawer geoId={geoId} project={project} claim={opened} actions={actions} groupOf={groupMap} basis={basisOf(opened)} onClose={drawer.close} />
+      )}
+      {project && <ClusterDrawerHost geoId={geoId} project={project} />}
     </Shell>
   );
 }
@@ -279,11 +337,14 @@ function AnswerBody({
   marked,
   findings,
   claims,
+  onOpen,
 }: {
   data: GeoAnswer;
   marked: { paragraphs: AnswerParagraph[]; unplaced: string[] };
   findings: AnswerFinding[];
   claims: GeoClaim[];
+  /** Open the claim's record: the key of the claim a mark is about. */
+  onOpen: (claimKey: string) => void;
 }) {
   const snapshot = data.snapshot;
   const brands = Array.isArray(data.facts?.brands) ? data.facts.brands : [];
@@ -300,11 +361,10 @@ function AnswerBody({
       </p>
     );
   }
-  const citations = Array.isArray(snapshot.citations) ? snapshot.citations : [];
   const bySentence = new Map(findings.map((finding) => [finding.sentence.trim(), finding]));
   const correction = (sentence: string, key: string) => {
     const finding = bySentence.get(sentence.trim());
-    return finding ? <Correction key={key} finding={finding} claims={claims} citations={citations} /> : null;
+    return finding ? <Correction key={key} finding={finding} claims={claims} onOpen={onOpen} /> : null;
   };
 
   return (
@@ -338,49 +398,47 @@ function Paragraph({ paragraph }: { paragraph: AnswerParagraph }) {
 }
 
 /**
- * Under a wrong sentence: what is right, which label (or source) says so,
- * which cited source the engine took it from, and what has been done — the
- * error trace's columns in the reader's words. A part the record does not
- * have is left out rather than guessed.
+ * Under a wrong sentence, one line: that the platform checked it, what is right, and where the handling stands. The line is the way
+ * into the claim's record (a drawer): the label's words, what every engine said, where this one took it from and the correction
+ * under way are there, not in a block of the answer's text. A finding with no error row behind it has nothing to open and says only
+ * what is right. A part the record does not have is left out rather than guessed.
  */
 function Correction({
   finding,
   claims,
-  citations,
+  onOpen,
 }: {
   finding: AnswerFinding;
   claims: GeoClaim[];
-  citations: GeoAnswer["snapshot"]["citations"];
+  onOpen: (claimKey: string) => void;
 }) {
   const { error, statement } = finding;
   const claimId = error?.claimId ?? statement?.claimId ?? null;
   const claim = claimId ? claims.find((row) => row.id === claimId) ?? null : null;
   const right = claim?.statement || statement?.evidence || error?.evidenceQuote || null;
   const kind = error?.errorType ?? statement?.errorType ?? null;
-  const cited = error?.citedSource ?? null;
-  const citationIndex = cited?.url ? citations.findIndex((citation) => citation.url === cited.url) : -1;
-  const citation = citationIndex >= 0 ? citations[citationIndex] : null;
-  const source = cited && (cited.domain || citation)
-    ? [citationIndex >= 0 ? `[${citationIndex + 1}]` : null, citation?.title || cited.domain].filter(Boolean).join(" ")
-      + (cited.attribute && CITED_ATTRIBUTE_WORDS[cited.attribute] ? `（${CITED_ATTRIBUTE_WORDS[cited.attribute]}）` : "")
-    : cited?.attribute === "none" ? CITED_ATTRIBUTE_WORDS.none : null;
-  const action = error?.action ? GEO_ERROR_ACTION_WORDS[error.action] : null;
   const status = error?.status ? GEO_ERROR_STATUS_WORDS[error.status] : null;
-  // The reader's name for the source, never its internal address (G14:
-  // “web-page:e1edc04a…” was printed here).
-  const basis = claim ? claim.sourceLabel || readableSourceRef(claim.sourceRef) : null;
-
+  const body = (
+    <>
+      <span className="text-danger">讲错我方</span>
+      {right ? <>：对的是{right.endsWith("。") ? right : `${right}。`}</> : kind ? `：${GEO_ERROR_TYPE_WORDS[kind]}。` : null}
+      {status && <span className="ml-2 text-caption text-text-3">{status}</span>}
+    </>
+  );
   return (
-    <div data-geo-correction="" className="flex max-w-measure-body flex-col gap-1 border-l-2 border-danger pl-4 text-ui text-text-2">
-      <p>
-        {/* The platform's finding, not the engine's words: it is marked as such. */}
-        <Tag className="mr-2 align-middle">核查</Tag>
-        <span className="text-danger">讲错我方</span>
-        {right ? <>：对的是{right.endsWith("。") ? right : `${right}。`}</> : kind ? `：${GEO_ERROR_TYPE_WORDS[kind]}。` : null}
-      </p>
-      {basis && <p>{`依据：${basis}`}</p>}
-      {source && <p>{`出处：${source}`}</p>}
-      {(action || status) && <p>{`处置：${[action, status].filter(Boolean).join(" · ")}`}</p>}
+    <div data-geo-correction="" className="flex max-w-measure-body items-baseline gap-2 border-l-2 border-danger pl-4 text-ui text-text-2">
+      {/* The platform's finding, not the engine's words: it is marked as such. The tag stands beside the control, never in it. */}
+      <Tag className="shrink-0 self-start">核查</Tag>
+      {error ? (
+        <button
+          type="button"
+          data-geo-correction-open=""
+          onClick={() => onOpen(claimKeyOf(error))}
+          className="min-w-0 rounded text-left hover:text-text hover:underline hover:underline-offset-4"
+        >
+          {body}
+        </button>
+      ) : <p className="min-w-0">{body}</p>}
     </div>
   );
 }

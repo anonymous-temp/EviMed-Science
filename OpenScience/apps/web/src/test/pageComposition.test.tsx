@@ -16,7 +16,9 @@ import {
   strategyFilled,
   valueFilled,
 } from "@/components/geo/__fixtures__/geoTabs";
+import { answerFilled } from "@/components/geo/__fixtures__/geoTabs";
 import { GEO_TAB_SECTIONS, GEO_TABS, geoSectionId } from "@/components/geo/geoTabs";
+import { GeoAnswerPage } from "@/app/routes/GeoAnswerPage";
 import { GeoProjectLayout } from "@/app/routes/GeoProjectPage";
 import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precedes } from "./compositionFixtures";
 import { expectComposed } from "./expectComposed";
@@ -38,6 +40,7 @@ const geo = vi.hoisted(() => ({
   getGeoActions: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
+  getGeoAnswer: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...geo }));
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => vi.fn() }));
@@ -228,16 +231,12 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     );
   }
 
-  // `SourcesTab`'s row title wraps the site's kind in a Tag, inside the row's own button: three of them in the fixture (rule 5: a tag
-  // is not a control). r19-geob restructures that tab; the baseline falls to 0 with it.
-  const KNOWN_CLICKABLE_TAGS: Partial<Record<string, number>> = { sources: 3 };
-
   it.each(GEO_TABS)("$label: the rail is in the sticky band, the tab row is the page's one row of views, and nothing stands under what it controls", async ({ key, label }) => {
     const { container } = renderGeo(key === "overview" ? "/app/geo/geo_masi" : `/app/geo/geo_masi/${key}`);
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
     await waitFor(() => expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true"));
-    const facts = expectComposed(container, { stepRail: true, tablists: 1, clickableTags: KNOWN_CLICKABLE_TAGS[key] });
+    const facts = expectComposed(container, { stepRail: true, tablists: 1 });
     expect(facts.stepRails).toHaveLength(1);
     expect([...facts.stepRails[0].querySelectorAll("[data-rail-step]")]).toHaveLength(8);
     expect(facts.chrome).toHaveClass("sticky", "top-0");
@@ -316,5 +315,94 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
     expect(facts.chrome!.contains(toolbar)).toBe(true);
     expect(list.querySelectorAll("[data-toolbar]")).toHaveLength(0);
     expect(facts.clickableTags).toEqual([]);
+  });
+});
+
+/**
+ * The other pages of 循证 GEO, each by its template (R19, plan §3): 问题与回答 and 信源 are lists under the band's toolbar (信源 with
+ * two pictures above it), 准确与安全 and 可见度 are data pages — the numbers, the charts, then the table of the same rows — and one
+ * answer is a reading page: the heading with its one action, then the text. What a page's control filters is never under it, no tag
+ * is a control, and the group's name is a link wherever it stands.
+ */
+describe("the GEO lists, data pages and reading page, each by its template", () => {
+  beforeEach(() => {
+    geo.useGeoFeature.mockReturnValue("on");
+    geo.getGeoProject.mockResolvedValue(GEO_PROJECT);
+    geo.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    geo.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    geo.getGeoStrategy.mockResolvedValue(strategyFilled);
+    geo.getGeoEvidence.mockResolvedValue(evidenceFilled);
+    geo.getGeoValue.mockResolvedValue(valueFilled);
+    geo.getGeoQuestions.mockResolvedValue(questionsFilled);
+    geo.getGeoJourney.mockResolvedValue(journeyFilled);
+    geo.getGeoSources.mockResolvedValue(sourcesFilled);
+    geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    geo.getGeoDistribution.mockResolvedValue({ ...distributionFilled, market: { configured: false }, budget: null, orders: [] });
+    geo.getGeoActions.mockResolvedValue(actionsFilled);
+    geo.getGeoClusters.mockResolvedValue(clustersFilled);
+    geo.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
+    geo.getGeoAnswer.mockResolvedValue(answerFilled);
+  });
+
+  function renderAt(path: string) {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/app/geo/:geoId" element={<GeoProjectLayout />}>
+            <Route index element={null} />
+            <Route path="answers/:snapshotId" element={<GeoAnswerPage />} />
+            <Route path=":tab" element={null} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  /** The landmarks of each page, in the order a reader meets them. */
+  const ORDER: Record<string, string[]> = {
+    questions: ["[data-geo-group]"],
+    sources: ["[data-chart-grid]", "ul[aria-label='信源']"],
+    accuracy: ["[data-chart-grid]", "[data-geo-error-list]"],
+    visibility: ["[data-chart='trend']", "[data-heat-row]", "[data-geo-engine-trend]"],
+  };
+
+  it.each(Object.keys(ORDER))("%s: the band, then its toolbar, then its landmarks in order, with no control under what it controls", async (key) => {
+    const { container } = renderAt(`/app/geo/geo_masi/${key}`);
+    for (const selector of ORDER[key]) await waitFor(() => expect(container.querySelector(selector), `${key}: ${selector}`).not.toBeNull(), { timeout: 4000 });
+    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const body = facts.body as HTMLElement;
+    expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
+    let earlier: Element = facts.toolbars[0];
+    for (const selector of ORDER[key]) {
+      const found = container.querySelector(selector) as HTMLElement;
+      expect(precedes(earlier, found), `${key}: ${selector} follows the one before it`).toBe(true);
+      earlier = found;
+    }
+    // nothing in the body filters: every search box is the band's
+    for (const search of body.querySelectorAll("input[type='search']")) expect(search).toBeNull();
+    expect(facts.clickableTags).toEqual([]);
+  });
+
+  it("a group's name is a link on every page that draws one, opening the same drawer", async () => {
+    for (const [key, selector] of [["actions", "[data-geo-actions]"], ["sources", "[data-geo-tab='sources']"]] as const) {
+      const { container, unmount } = renderAt(`/app/geo/geo_masi/${key}${key === "sources" ? "?view=placeable" : ""}`);
+      await waitFor(() => expect(container.querySelector(selector), key).not.toBeNull(), { timeout: 4000 });
+      await waitFor(() => expect(container.querySelector("[data-geo-cluster-link]"), key).not.toBeNull(), { timeout: 4000 });
+      unmount();
+    }
+  });
+
+  it("one answer reads heading → its one action → the text, inside the band, with the date switcher in the band's toolbar", async () => {
+    const { container } = renderAt("/app/geo/geo_masi/answers/snap_deepseek");
+    const heading = await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
+    await waitFor(() => expect(container.querySelector("[data-geo-answer]")).not.toBeNull());
+    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const action = container.querySelector("[data-geo-answer-primary]") as HTMLElement;
+    const text = container.querySelector("[data-geo-answer]") as HTMLElement;
+    for (const [before, after] of [[facts.chrome!, heading], [heading, action], [action, text]] as const) expect(precedes(before, after)).toBe(true);
+    expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
+    expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
+    // the one question's tab stays selected under the answer
+    expect(screen.getByRole("tab", { name: "问题与回答" })).toHaveAttribute("aria-selected", "true");
   });
 });
