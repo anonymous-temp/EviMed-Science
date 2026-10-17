@@ -230,7 +230,13 @@ test("a person's stop of a step that is a turn of the conversation stops the con
   assert.match(String(index.runId), /^native_[0-9a-f]{32}$/);
   assert.match(String(index.contextRevision), /^release_/);
   assert.equal(index.sessionId, conversation);
-  for (const file of ["context.md", "memory.md", "research-brief.md"]) assert.equal(await readFile(path.join(sessionDir, file), "utf8"), "", `${file} carries nothing`);
+  for (const file of ["memory.md", "research-brief.md"]) assert.equal(await readFile(path.join(sessionDir, file), "utf8"), "", `${file} carries nothing`);
+  // Except the one fact the conversation's history does not state: the researcher stopped the step (so a question about it is answered
+  // from the study, not from the stopped turn — found live: 「还在进行中」).
+  const stoppedNote = await readFile(path.join(sessionDir, "context.md"), "utf8");
+  assert.match(stoppedNote, /^<evimed-vcr-stopped>研究者刚刚停止了“整理研究定义”，它没有做完/);
+  assert.match(stoppedNote, /vcr_read/);
+  assert.doesNotMatch(stoppedNote, /vcr_write|exploratory|数据档位/, "none of the brief");
   const view = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data;
   assert.equal(view.conversation.sessionId, conversation, "the conversation is the same one");
   // The next press is a turn in it again: a stop leaves the conversation as it found it.
@@ -275,6 +281,9 @@ test("a pass that finds the researcher's runtime open runs in their conversation
   assert.deepEqual(record.reserved, []);
   const runs = await runsOf(study.projectId);
   assert.deepEqual(runs.map((/** @type {any} */ run) => run.effectiveRouteReason).sort(), ["vcr:turn:definition", "vcr:turn:evidence"]);
+  // A step that finished says nothing of itself afterwards: its conversation history does, and nobody stopped it.
+  const released = path.join(context.dataDir, "users", OWNER, "projects", study.projectId, "workspace", ".evimed-brief", "sessions", conversation);
+  assert.equal(await readFile(path.join(released, "context.md"), "utf8"), "");
   // The first step let go of the conversation before the next one was sent into it: the next dispatch's files are the ones that stand.
   assert.equal(record.prompts[1].routedCapability, "vcr-evidence");
   // None of it is in the study's list of background work: it is all in the conversation.

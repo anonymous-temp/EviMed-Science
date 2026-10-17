@@ -369,7 +369,7 @@ import { availabilityMetricFamilies } from "./availabilityService.mjs";
 import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
-import { VcrOrchestrator, vcrBriefBlock, vcrRunId } from "./vcrOrchestrator.mjs";
+import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
@@ -3793,18 +3793,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // a GEO run takes below. Released whether or not the orchestrator is
       // composed: the reservation belongs to the dispatch, not to the module.
       if (String(run.dispatchId ?? "").startsWith("vcr-")) {
-        // A step that ran in the study's own conversation lets go of it, before the programme's next step is sent into it (that
-        // dispatch's revision replaces this one): what is typed there next is the conversation's, not the step's.
-        if (isConversationTurnRun(run) && run.sessionId) {
-          if (!(await runtimeManager.releaseDispatchedSession(project, run.sessionId))) {
-            await securityAudit(config, "vcr.conversation.release", "failed", { userId: project.userId, projectId: project.id, runId: run.id, code: "session_release_failed" }).catch(() => {});
-          }
-        }
         if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
           await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "vcr.runtime.release", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           }));
+        }
+        // A step that ran in the study's own conversation lets go of it, before the programme's next step is sent into it (that
+        // dispatch's revision replaces this one): what is typed there next is the conversation's, not the step's.
+        if (isConversationTurnRun(run) && run.sessionId) {
+          // A step the researcher stopped says so in the revision the conversation's next turn reads.
+          const stopped = run.status === "canceled" && run.canceledBy === "user" ? vcrStoppedBlock(run.question ?? "") : "";
+          if (!(await runtimeManager.releaseDispatchedSession(project, run.sessionId, { note: stopped }))) {
+            await securityAudit(config, "vcr.conversation.release", "failed", { userId: project.userId, projectId: project.id, runId: run.id, code: "session_release_failed" }).catch(() => {});
+          }
         }
         if (vcr?.orchestrator) {
           await vcr.orchestrator.onRunFinished(project, run).catch((/** @type {any} */ error) => securityAudit(config, "vcr.run.complete", "failed", {

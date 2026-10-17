@@ -5525,15 +5525,16 @@ export class RuntimeManager {
    *
    * The way a dispatch's context is replaced is a newer revision, so this is one: it routes nowhere, belongs to a run of the
    * conversation's own (`native_…`, which is what a conversation typed in the kernel's window is), and carries no brief, no context
-   * and no memory. The session binding is not touched: the next turn is the conversation's analyst again. Isolated, like every
-   * context write: a revision that was not written leaves the conversation as the dispatch left it.
-   * @param {Record<string, any>} project @param {string} sessionId
+   * and no memory — except a `note`, a fact the platform knows of the run that ended, for the model to read before the next turn.
+   * The session binding is not touched: the next turn is the conversation's analyst again. Isolated, like every context write: a
+   * revision that was not written leaves the conversation as the dispatch left it.
+   * @param {Record<string, any>} project @param {string} sessionId @param {{ note?: string }} [options]
    * @returns {Promise<boolean>} whether the revision was written
    */
-  async releaseDispatchedSession(project, sessionId) {
+  async releaseDispatchedSession(project, sessionId, { note = "" } = {}) {
     try {
       const session = safeId(sessionId, "session id");
-      await this.writeRunContextFile(project, "", { sessionId: session, required: true });
+      await this.writeRunContextFile(project, note, { sessionId: session, required: true });
       await this.writeRunMemoryFile(project, "", { sessionId: session, required: true });
       const brief = briefFileForSession(session);
       await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, brief), "", { encoding: "utf8", mode: 0o444 });
