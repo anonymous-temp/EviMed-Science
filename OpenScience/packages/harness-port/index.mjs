@@ -1064,13 +1064,16 @@ export function stepIsSettlementOnly(payload) {
 export const SETTLEMENT_SOURCE_KIND = SEAMS.messageSourceKinds.subagentSettled
 
 /**
- * Stops one live child's current work on behalf of an exact live ancestor. The
- * activation then settles like any other (its notice says it was stopped).
- * @param {any} ctx @param {string} childId @param {any} ancestor
+ * Stops one live child's current work because the person stopped its parent's
+ * turn: the kernel's human authority, `{ kind: 'user', parentSessionId }` (the
+ * other is an exact live ancestor agent, for a model-initiated stop). The
+ * activation then settles like any other (its notice says it was stopped). A
+ * child that already settled is a no-op.
+ * @param {any} ctx @param {string} childId @param {string} parentSessionId
  * @returns {void}
  */
-export function interruptSubagent(ctx, childId, ancestor) {
-  ctx.subagents.interrupt(childId, ancestor)
+export function interruptSubagent(ctx, childId, parentSessionId) {
+  ctx.subagents.interrupt(childId, { kind: 'user', parentSessionId })
 }
 
 /* ---------------------------------------------------------------- storage */

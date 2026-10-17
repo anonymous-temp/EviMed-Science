@@ -2291,6 +2291,17 @@ test("a sub-agent the kernel started is counted once, holds the root's turn open
   await f.step(1);
   const first = await f.execute("subagent", { description: "d", prompt: "p" });
   assert.equal(first.value.subagentId, "native-1");
+  // The step after the call is told, once, that the child reports back by itself.
+  const nextStep = async () => {
+    /** @type {any[]} */ const entered = [];
+    for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+      const decision = await handler({ agent: f.agent, turn: 1, step: 2, messages: [], signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+      entered.push(...(decision?.messages ?? []));
+    }
+    return entered.map((message) => JSON.stringify(message)).join("\n");
+  };
+  assert.match(await nextStep(), /1 个子任务在后台工作.*自动送到这一轮/);
+  assert.doesNotMatch(await nextStep(), /子任务在后台工作/, "once per child");
   // One at a time here: the call answered, the child it started is the one working.
   const refused = await f.execute("subagent", { description: "d", prompt: "p" });
   assert.match(refused.content[0].text, /已有 1 个子代理在运行/);
@@ -2312,7 +2323,7 @@ test("a sub-agent the kernel started is counted once, holds the root's turn open
   assert.equal(second.value.subagentId, "native-2");
   // The researcher stops the turn: the child is stopped with it, through the root.
   await f.endTurn("aborted");
-  assert.deepEqual(interrupted, [["native-2", f.agent]]);
+  assert.deepEqual(interrupted, [["native-2", { kind: "user", parentSessionId: "root-session" }]], "the person's stop, under the kernel's human authority");
   // Its settlement notice, alone, does not start a turn the researcher did not ask for.
   const preStep = async (/** @type {any[]} */ messages) => {
     /** @type {any} */ let decision = null;

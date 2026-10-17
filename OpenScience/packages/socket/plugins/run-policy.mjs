@@ -1002,6 +1002,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           entry.pathContextRunId = entry.runId
         }
       }
+      // What the root needs to know about the `subagent` children it started, once per child, in the step that follows
+      // the call: they work on, and each one's result arrives in this turn by itself. Without it a model waiting for
+      // them slept in the shell (`sleep 30`, seen on a live 0.2.1-rc.2 kernel) while the results sat in its inbox.
+      if (step.root && entry.nativeChildren?.size) {
+        const fresh = [...entry.nativeChildren.entries()].filter(([, child]) => !child.told)
+        const notifyAgent = fresh.length ? ctx.get('agents')?.get?.(step.agentId) : null
+        if (notifyAgent) {
+          injectContext(notifyAgent, `<evimed-run>你启动的 ${entry.nativeChildren.size} 个子任务在后台工作；每个结束时，它的结果会自动送到这一轮里，不用 sleep 或轮询等它们：有别的事就接着做，没有就直接结束这一步。</evimed-run>`, name)
+          for (const [, child] of fresh) child.told = true
+        }
+      }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
@@ -1342,11 +1353,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       entry.wakeSuppressed = true
       for (const delegation of runningDelegations(entry)) delegation.abort.abort(new Error('研究者停止了本次运行'))
       // The kernel's cancel stops the root's turn and nothing below it (0.2.1): a `subagent` child would work on and its
-      // notice would wake the root. Each one is stopped here; its settlement then finds the run stopped (pre-step).
-      const root = entry.nativeChildren?.size ? ctx.get('agents')?.get?.(entry.agentId) : null
-      for (const childId of root ? [...entry.nativeChildren.keys()] : []) {
+      // notice would wake the root. Each one is stopped here, as the person's stop; its settlement then finds the run
+      // stopped (pre-step).
+      for (const childId of [...(entry.nativeChildren?.keys() ?? [])]) {
         try {
-          interruptSubagent(ctx, childId, root)
+          interruptSubagent(ctx, childId, session.sessionId)
         } catch (error) {
           diagnostics(session.sessionId)?.degrade?.(`a sub-agent was not stopped with its run: ${errorMessage(error)}`)
         }
