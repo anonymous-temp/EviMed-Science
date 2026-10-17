@@ -1741,7 +1741,8 @@ export function pageProbe([kind, arg]) {
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       legend: all("[role='group'][aria-label='图例']").some(visible),
-      views: all("[role='tab']").filter(visible).map(words),
+      // A tab says how many it holds once it holds some (资料 12, 知识页 66): the name is what the switch is checked by.
+      views: all("[role='tab']").filter(visible).map(words).map((label) => label.replace(/\s*\d[\d,]*$/, "")),
       engineAddress: text.includes("viking://"),
       empty: text.includes("还没有整理出页面") || text.includes("内容还少"),
     };

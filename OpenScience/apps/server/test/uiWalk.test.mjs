@@ -2548,6 +2548,14 @@ test("the knowledge graph's first mark opens a knowledge page with no engine add
   assert.match(none.notices[0], /not observable/u, "a project with no compiled pages proves nothing");
 });
 
+test("the knowledge base's tabs are read by their names, whatever they count", () => {
+  // 资料 holds twelve documents and 知识页 sixty-six pages on a project that has them (PAGESA's data-rich fixture); the switch is still 资料 · 知识页 · 图谱.
+  const tabs = (labels) => [node("div", { attrs: { role: "tablist" } }, labels.map(([name, count]) => node("button", { attrs: { role: "tab" }, text: `${name}${count ?? ""}` })))];
+  assert.deepEqual(read(tabs([["资料", 12], ["知识页", 66], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
+  assert.deepEqual(read(tabs([["资料"], ["知识页"], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
+  assert.deepEqual(read(tabs([["资料", "1,204"], ["知识页", 7], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
+});
+
 test("the knowledge graph's figure has a name, a legend and the same marks as a list, the three tabs of the knowledge base are one tab list, and no engine address is on the page", () => {
   const ok = { figures: [{ kind: "knowledge-kg", named: true }], lists: [{ label: "实体", rows: 12 }], legend: true, views: [...KNOWLEDGE_VIEWS], engineAddress: false, empty: false };
   assert.deepEqual(probeFindings("knowledge-graph", "desktop", "knowledgeGraph", ok), { failures: [], notices: [] });
