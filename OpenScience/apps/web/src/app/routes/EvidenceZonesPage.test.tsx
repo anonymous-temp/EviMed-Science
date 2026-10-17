@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceZonesPage } from "./EvidenceZonesPage";
+import { expectComposed } from "@/test/expectComposed";
 const client = vi.hoisted(() => ({ listEvidenceZones: vi.fn(), followEvidenceZone: vi.fn() }));
 const features = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn() }));
 const topics = vi.hoisted(() => ({ listTopicRequests: vi.fn() }));
@@ -180,5 +181,17 @@ describe("evidence zone directory", () => {
     expect(within(rows[0]).getByText("6 条证据")).toBeInTheDocument();
     expect(within(rows[2]).getByText("草稿 · 1 条证据")).toBeInTheDocument();
     expect(screen.queryByText("0 条证据")).not.toBeInTheDocument();
+  });
+});
+
+describe("the zone directory's composition", () => {
+  it("is one row of views and a live search above the list, with at most one action in the header", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [{ ...zone, kind: "official" }], nextCursor: null, total: 1, canCreate: true });
+    const { container } = mount();
+    await screen.findByRole("link", { name: "急诊医学" });
+    const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
+    expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" })).toBeInTheDocument();
+    // 新建专区 is in the header's menu, with nothing else beside it.
+    expect(within(container.querySelector("[data-page-header]") as HTMLElement).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["更多操作"]);
   });
 });

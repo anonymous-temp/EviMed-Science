@@ -346,19 +346,18 @@ export function InboxPage() {
           {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
         </Button>
       )}
-      // The filters over the list they narrow: 全部 / 未读 and, when the notices come from more than one place, which place (R19).
+      // The page's one row of controls, over the list they narrow (R19, audit D C1): 全部 / 未读 are its views, as the tabs of every list
+      // page; and, when the notices come from more than one place, which place — chips for the sources that have any.
       toolbar={{
         label: "收件箱筛选",
-        filters: [
-          {
-            kind: "chips", label: "消息筛选", value: filter, onChange: (next) => chooseFilter(next as Filter),
-            options: [{ value: "all", label: "全部" }, { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) }],
-          },
-          ...(sources.length > 1 ? [{
-            kind: "chips" as const, label: "消息来源", value: source, neutral: "", onChange: chooseSource,
-            options: [{ value: "", label: "全部来源" }, ...sources.map((entry) => ({ value: entry.type, label: INBOX_SOURCE_WORDS[entry.type], count: entry.count }))],
-          }] : []),
-        ],
+        views: {
+          label: "消息视图", value: filter, onChange: (next) => chooseFilter(next as Filter), panelId: "inbox-list",
+          items: [{ value: "all", label: "全部" }, { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) }],
+        },
+        filters: sources.length > 1 ? [{
+          kind: "chips" as const, label: "消息来源", value: source, neutral: "", onChange: chooseSource,
+          options: [{ value: "", label: "全部来源" }, ...sources.map((entry) => ({ value: entry.type, label: INBOX_SOURCE_WORDS[entry.type], count: entry.count }))],
+        }] : [],
       }}
     >
       <span ref={scrollAnchor} hidden />

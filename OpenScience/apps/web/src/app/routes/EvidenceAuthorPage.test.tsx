@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { EvidenceAuthorPage } from "./EvidenceAuthorPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({ fetchEvidenceAuthor: vi.fn() }));
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...client }));
@@ -148,5 +149,16 @@ describe("an author's page", () => {
     client.fetchEvidenceAuthor.mockResolvedValue({ ...author, cards: [] });
     mount();
     expect(await screen.findByText("暂无已发布的证据卡")).toBeInTheDocument();
+  });
+});
+
+describe("the author page's composition", () => {
+  it("has its header, then the toolbar with its three views over what they switch, and the facts as one list", async () => {
+    client.fetchEvidenceAuthor.mockResolvedValue({ ...author, cards: manyCards(9), totals: { cards: 9, followers: 3, runsFromCards: 5 } });
+    const { container } = mount();
+    await screen.findByRole("list", { name: "证据卡" });
+    const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
+    expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索证据卡" })).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-fact-list]")).toHaveLength(1);
   });
 });

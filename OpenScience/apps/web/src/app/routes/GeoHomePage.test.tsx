@@ -6,6 +6,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { GEO_SUMMARIES } from "@/components/geo/__fixtures__/geoProjects";
 import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
 import { GeoHomePage } from "./GeoHomePage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   useGeoFeature: vi.fn(),
@@ -226,5 +227,19 @@ describe("循证 GEO home", () => {
     client.listGeoProjects.mockRejectedValue(new WebApiError("off", { status: 404, code: "geo_not_enabled" }));
     renderHome();
     expect(await screen.findByText(GEO_OFF_SENTENCE)).toBeInTheDocument();
+  });
+});
+
+describe("the GEO home's composition", () => {
+  it("has its header with one primary action, the order over the list, and no button among the data columns", async () => {
+    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], status: "paused" }, GEO_SUMMARIES[1]]);
+    const { container } = renderHome();
+    await screen.findByRole("list", { name: "循证 GEO 项目" });
+    expectComposed(container, { tablists: 0, stepRail: false, toolbar: true });
+    // 继续 is under the name (the row's meta line); the values on the right are text.
+    for (const row of within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("listitem")) {
+      const values = row.querySelector(".w-16")?.parentElement;
+      expect(values && within(values as HTMLElement).queryByRole("button")).toBeNull();
+    }
   });
 });

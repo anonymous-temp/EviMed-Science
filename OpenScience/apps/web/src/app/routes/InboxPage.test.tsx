@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
 import { useToastStore } from "@/lib/toast";
+import { expectComposed } from "@/test/expectComposed";
 
 const operator = vi.hoisted(() => ({ value: false }));
 vi.mock("@/lib/inboxClient");
@@ -81,13 +82,13 @@ it("sits in the one page column with a one-line header and no subtitle", async (
   expect(readAll.className).not.toMatch(/(^|\s)border(\s|$)/);
 });
 
-it("filters with two quiet chips, 全部 and 未读 with its count, and no segmented control", async () => {
+it("switches with two tabs, 全部 and 未读 with its count — the views of the page's toolbar, not chips and not a segmented control", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
   open();
-  expect(await screen.findByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "false");
+  expect(await screen.findByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: /^未读\s*2$/ })).toHaveAttribute("aria-selected", "false");
   expect(screen.queryAllByRole("radio")).toEqual([]);
-  await userEvent.click(screen.getByRole("button", { name: /^未读\s*2$/ }));
+  await userEvent.click(screen.getByRole("tab", { name: /^未读\s*2$/ }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
 });
 
@@ -234,14 +235,14 @@ it("opens a notice that points nowhere in place, whole, and reads it", async () 
 it("keeps the filter in the address and reads it back from there", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
   const { unmount } = open();
-  await userEvent.click(await screen.findByRole("button", { name: /^未读\s*2$/ }));
+  await userEvent.click(await screen.findByRole("tab", { name: /^未读\s*2$/ }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread"));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/inbox$/));
   unmount();
   vi.mocked(api.listInbox).mockClear();
   open("?filter=unread");
-  expect(await screen.findByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByRole("tab", { name: /^未读\s*2$/ })).toHaveAttribute("aria-selected", "true");
   expect(api.listInbox).toHaveBeenCalledWith({ unread: true });
 });
 
@@ -329,7 +330,7 @@ it("comes back from the row's destination to the list as it was", async () => {
   await userEvent.click(await screen.findByRole("link", { name: /已完成/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
   await act(async () => { await router.navigate(-1); });
-  expect(await screen.findByRole("button", { name: /^未读\s*1$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByRole("tab", { name: /^未读\s*1$/ })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread");
 });
 
@@ -337,7 +338,7 @@ it("empties the view with one sentence and no button", async () => {
   serve({ items: [], nextCursor: null });
   open();
   expect(await screen.findByText("收件箱为空")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
   expect(screen.queryByText(/新的研究结果和待决事项/)).not.toBeInTheDocument();
@@ -371,7 +372,7 @@ it("discards a late page after changing filters and prevents duplicate page requ
   await userEvent.click(more);
   // The page, the unread safety findings it pins, and the one next page — not two.
   expect(api.listInbox).toHaveBeenCalledTimes(3);
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
   finishPage({ items: [{ ...review, id: "late-review", title: "旧筛选消息" }], nextCursor: null });
   await waitFor(() => expect(screen.queryByText("旧筛选消息")).not.toBeInTheDocument());
@@ -383,13 +384,13 @@ it("removes a read item from the unread view and ignores a late mutation after r
   let finishRead!: (value: api.InboxItem) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((resolve) => { finishRead = resolve; }));
   open();
-  await userEvent.click(await screen.findByRole("button", { name: "未读" }));
+  await userEvent.click(await screen.findByRole("tab", { name: "未读" }));
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   finishRead({ ...notice, readAt: "2026-09-06T00:01:00Z", revision: 2 });
   await waitFor(() => expect(screen.getByText("研究完成")).toBeInTheDocument());
 
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: "2026-09-06T00:01:00Z", revision: 2 });
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
   await waitFor(() => expect(screen.queryByText("研究完成")).not.toBeInTheDocument());
@@ -401,9 +402,9 @@ it("does not leak an old mutation failure or busy state into a reloaded filter",
   let failRead!: (error: Error) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((_resolve, reject) => { failRead = reject; }));
   open();
-  await userEvent.click(await screen.findByRole("button", { name: "未读" }));
+  await userEvent.click(await screen.findByRole("tab", { name: "未读" }));
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   expect(await screen.findByRole("button", { name: "标为已读" })).toBeEnabled();
   failRead(new Error("old request failed"));
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
@@ -414,7 +415,7 @@ it("reads the whole inbox in one request", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 7 });
   vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 7 });
   open();
-  expect(await screen.findByRole("button", { name: /^未读\s*7$/ })).toBeInTheDocument();
+  expect(await screen.findByRole("tab", { name: /^未读\s*7$/ })).toBeInTheDocument();
   serve({ items: [runNotice({ id: "a", readAt: at(0) })], nextCursor: null, unreadTotal: 0 });
   await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
   await waitFor(() => expect(api.markAllInboxRead).toHaveBeenCalledTimes(1));
@@ -645,5 +646,15 @@ describe("a module's repeating notices", () => {
     const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
     expect(within(toolbar).queryByRole("button", { name: /全部来源/ })).not.toBeInTheDocument();
     expect(toolbar.compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("the inbox's composition", () => {
+  it("has its header, then the toolbar with the views over the list, and one primary action at most", async () => {
+    serve({ items: [runNotice({ id: "a" }), runNotice({ id: "b" })], nextCursor: null });
+    const { container } = open();
+    await screen.findByRole("list", { name: "消息" });
+    const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
+    expect(facts.toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

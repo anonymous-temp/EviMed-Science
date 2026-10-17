@@ -184,8 +184,8 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
   const heat = event.heat ?? null;
-  // From ten reports on, a kind of source narrows the list: the filter is one row over the groups it narrows, which stay where they
-  // are while it works (it was a menu on a row of its own, with no word for what it filters).
+  // From ten reports on, a kind of source narrows the list: the filter is the toolbar of the first group, at its heading, over the rows
+  // it narrows (it was a menu on a row of its own between two sections, with no word for what it filters).
   const sourceFilter = timeline.length >= 10 && sourceTypes.length > 1 ? (
     <Toolbar label="筛选来源" filters={[{ kind: "select", label: "全部来源", allLabel: "全部来源", value: sourceType, options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }]} />
   ) : null;
@@ -246,13 +246,12 @@ function EventBody({ event }: { event: FrontierEvent }) {
             )}
           </Section>
 
-          {sourceFilter}
           {firstHand ? (
             <>
-              <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} />
+              <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
               <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
             </>
-          ) : <ReportGroup id="event-reports" title="报道" rows={visible} />}
+          ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
 
           {event.related.length > 0 && (
             <Section title="相关事件" className="mt-0">
@@ -272,11 +271,15 @@ function EventBody({ event }: { event: FrontierEvent }) {
   );
 }
 
-/** A group of reports: its heading and count, then the rows — nothing at all with no rows. */
-function ReportGroup({ id, title, rows }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }> }) {
-  if (rows.length === 0) return null;
+/**
+ * A group of reports: its heading and count, then the rows — nothing at all with no rows, except the group that carries the page's
+ * source filter: the filter narrows every group, so the one it sits in stays (with a count of nothing) when a kind has no reports
+ * there, and the way back to all of them is where it was.
+ */
+function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }>; toolbar?: ReactNode }) {
+  if (rows.length === 0 && !toolbar) return null;
   return (
-    <Section title={title} count={rows.length} className="mt-0">
+    <Section title={title} count={rows.length} toolbar={toolbar} className="mt-0">
       <ol id={id} aria-label={title} className="ml-1 border-l border-border">
         {rows.map((item) => <TimelineRow key={item.id} item={item} />)}
       </ol>

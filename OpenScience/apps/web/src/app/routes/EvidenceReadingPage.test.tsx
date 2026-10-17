@@ -2,9 +2,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { card, zone } from "@/components/frontier/__fixtures__/evidenceCards";
+import { card, programmeCard, zone } from "@/components/frontier/__fixtures__/evidenceCards";
 import { WebApiError } from "@/lib/apiClient";
 import { EvidenceReadingPage } from "./EvidenceReadingPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   fetchEvidenceZone: vi.fn(), fetchZoneEvidence: vi.fn(), fetchEvidenceCardLinks: vi.fn(), continueResearchFromCard: vi.fn(),
@@ -181,5 +182,31 @@ describe("reading an evidence card", () => {
     mount("?edit=1");
     await screen.findByTestId("evidence-card-header");
     expect(screen.queryByLabelText("证据标题")).not.toBeInTheDocument();
+  });
+});
+
+// R19 (plan S10): the page is put together the way the framework says — a header, a body, no control under the content it controls —
+// and the long card is a reader, not a stack (audit D C2: 40,200 px). The 39-source, 58-conclusion card the owner opened.
+describe("the card page's composition", () => {
+  it("is a header and a reader: contents beside it, two lists of ten that open, no excerpt on the page, and no row of views to switch", async () => {
+    client.fetchZoneEvidence.mockResolvedValue(programmeCard());
+    const { container } = mount();
+    await screen.findByTestId("evidence-card-header");
+    const facts = expectComposed(container, { tablists: 0, stepRail: false, toolbar: false });
+    // The two lists have a toolbar each, inside their own sections, over their own rows (a section's toolbar is judged against it).
+    expect(facts.toolbars.map((toolbar) => toolbar.getAttribute("aria-label"))).toEqual(["筛选证据要点", "筛选来源"]);
+    await waitFor(() => expect(container.querySelector("[data-outline]")).not.toBeNull());
+    expect(container.querySelectorAll("blockquote")).toHaveLength(0);
+    expect(within(screen.getByRole("list", { name: "证据要点" })).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(screen.getByRole("list", { name: "来源与引用" })).getAllByRole("listitem")).toHaveLength(10);
+    // Nothing after the article but the card's links and folds.
+    expect(container.querySelector("article")?.lastElementChild).toHaveTextContent("来源与引用");
+  });
+
+  it("has exactly one row of views where the card has two readings, and it is above what it switches", async () => {
+    const { container } = mount();
+    await screen.findByTestId("evidence-card-header");
+    const facts = expectComposed(container, { tablists: 1 });
+    expect(facts.tablists[0].compareDocumentPosition(screen.getByRole("table", { name: "结局总结表" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

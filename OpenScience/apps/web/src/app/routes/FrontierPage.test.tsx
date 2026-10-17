@@ -16,6 +16,7 @@ import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierPage } from "./FrontierPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(),
@@ -1058,4 +1059,20 @@ it("discards pagination replies after leaving a listing view", async () => {
   expect(screen.queryByText("Late pagination reply")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "加载更多" })).toBeEnabled();
   await act(async () => resolveRefresh(page([today])));
+});
+
+describe("the feed's composition", () => {
+  it("has its header, then one toolbar in the sticky band — views, filters and the search — then the feed, in every view", async () => {
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const feed = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
+    expect(feed.toolbars).toHaveLength(1);
+    expect(feed.chrome).toContainElement(feed.toolbars[0]);
+    for (const name of ["热榜", "简报", "关注"]) {
+      await userEvent.click(viewTabs().getByRole("tab", { name }));
+      const facts = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
+      expect(facts.toolbars, `${name}: one toolbar`).toHaveLength(1);
+      expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" }), `${name}: the search is in it`).toBeInTheDocument();
+    }
+  });
 });

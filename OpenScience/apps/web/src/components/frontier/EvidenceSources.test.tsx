@@ -17,8 +17,16 @@ describe("the sources of a card", () => {
     expect(row).toHaveTextContent("试验 A");
     expect(row).toHaveTextContent("依据全文");
     expect(row).toHaveTextContent("2 条结论依据它");
-    expect(row).toHaveTextContent("example.org");
+    // Where every source is on one site the address says nothing; it is on each row where they differ.
+    expect(row).not.toHaveTextContent("example.org");
     expect(screen.queryByText(/Among 100 adults/)).not.toBeInTheDocument();
+  });
+
+  it("names the site of each source only when the sources are not all on one", () => {
+    mount({ ...card, sources: [card.sources[0], { ...card.sources[0], title: "试验 B", url: "https://www.nejm.org/doi/x" }] });
+    const [first, second] = rows();
+    expect(first).toHaveTextContent("example.org");
+    expect(second).toHaveTextContent("nejm.org");
   });
 
   it("opens a source with the way to the original, its excerpt and the conclusions that name it, and a conclusion from there", async () => {

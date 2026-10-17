@@ -6,6 +6,7 @@ import { WebApiError } from "@/lib/apiClient";
 import type { FrontierEvent } from "@/lib/frontierClient";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierEventPage } from "./FrontierEventPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({ useFrontierFeature: vi.fn(), fetchFrontierEvent: vi.fn() }));
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
@@ -231,19 +232,53 @@ describe("an event with many reports", () => {
     expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道11");
   });
 
-  it("hides a group the chosen kind has nothing in, rather than drawing an empty heading", async () => {
+  it("hides a group the chosen kind has nothing in — except the one that holds the filter, which stays with its count of nothing", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12) }));
     renderEvent();
     await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "媒体" }));
-    expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
+    // 12 reports: the one primary is a journal. The first group keeps its heading — and the filter, which is what brings it back.
+    const first = screen.getByRole("heading", { level: 2, name: "一手材料" });
+    expect(first.parentElement).toHaveTextContent("一手材料0");
+    expect(first.closest("section")).toContainElement(screen.getByRole("button", { name: "全部来源：媒体" }));
     expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道8");
+    await userEvent.click(screen.getByRole("button", { name: "全部来源：媒体" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部来源" }));
+    expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
   });
 
+  it("puts the source filter in the first group's heading, over the rows it narrows", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12) }));
+    renderEvent();
+    const filter = await screen.findByRole("button", { name: "全部来源" });
+    expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).closest("section")).toContainElement(filter);
+    expect(within(screen.getByRole("group", { name: "筛选来源" })).getByRole("button", { name: "全部来源" })).toBe(filter);
+  });
   it("offers no menu when all the reports are of one kind", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
     renderEvent();
     await screen.findByRole("heading", { level: 2, name: "其他报道" });
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the event page's composition", () => {
+  it("is a reader — the document's serif title, the one action on the title's row — with the sections as Section headings", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event());
+    const { container } = renderEvent();
+    const title = await screen.findByRole("heading", { level: 1, name: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释" });
+    expect(title).toHaveClass("text-doc-title");
+    expectComposed(container, { tablists: 0, stepRail: false, toolbar: false });
+    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "深入研究" }));
+    expect(screen.getByRole("heading", { level: 2, name: "概要" })).toHaveClass("text-section");
+  });
+
+  it("is a screen of its own — an icon, one sentence, the way on and the way back — for an event that is gone", async () => {
+    client.fetchFrontierEvent.mockRejectedValue(new WebApiError("gone", { status: 404, code: "frontier_event_not_found" }));
+    const { container } = renderEvent();
+    expect(await screen.findByRole("heading", { level: 1, name: "这个事件已不存在" })).toBeInTheDocument();
+    expect(container.querySelector("[data-state-screen]")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "看热榜" })).toHaveAttribute("href", "/app/frontier?view=hot");
+    expect(screen.getByRole("link", { name: "回到前沿动态" })).toHaveAttribute("href", "/app/frontier");
   });
 });

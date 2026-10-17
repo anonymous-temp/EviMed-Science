@@ -44,6 +44,8 @@ export function EvidenceSources({ evidence }: { evidence: EvidenceCard }) {
     return evidence.sources.map((source, position) => ({ source, index: position + 1, cited: cited.get(position + 1) ?? 0 }));
   }, [evidence.claims, evidence.sources]);
   const warned = rows.filter((row) => row.source.publicationStatus).length;
+  // Where every source is on one site the address says nothing (thirty-nine rows of pubmed.ncbi.nlm.nih.gov); it is shown when they differ.
+  const mixedHosts = new Set(rows.map((row) => hostOf(row.source.url))).size > 1;
   const needle = query.trim().toLowerCase();
   const matching = useMemo(() => rows.filter((row) => {
     if (status === "warned" && !row.source.publicationStatus) return false;
@@ -67,14 +69,14 @@ export function EvidenceSources({ evidence }: { evidence: EvidenceCard }) {
     : null;
 
   return (
-    <Section title="来源与引用" count={rows.length} toolbar={toolbar ? <Toolbar {...toolbar} /> : undefined}>
+    <Section title="来源与引用" count={rows.length} toolbar={toolbar ? <Toolbar {...toolbar} className="max-sm:w-full" /> : undefined}>
       {matching.length === 0 ? (
         <Note action={<Button variant="secondary" size="sm" onClick={clear}>清除筛选</Button>}>没有符合的来源。</Note>
       ) : (
         <>
           <List label="来源与引用" divided>
             {visible.map(({ source, index, cited }) => {
-              const line = [source.coverage ? COVERAGE_WORDS[source.coverage] : null, cited > 0 ? `${cited} 条结论依据它` : null, hostOf(source.url)].filter(Boolean).join(" · ");
+              const line = [source.coverage ? COVERAGE_WORDS[source.coverage] : null, cited > 0 ? `${cited} 条结论依据它` : null, mixedHosts ? hostOf(source.url) : null].filter(Boolean).join(" · ");
               return (
                 <ListRow
                   key={index}

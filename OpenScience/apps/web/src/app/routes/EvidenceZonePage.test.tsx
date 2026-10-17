@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { card, zone } from "@/components/frontier/__fixtures__/evidenceCards";
 import { EvidenceZonePage } from "./EvidenceZonePage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({ fetchEvidenceZoneDetail: vi.fn(), listZoneEvidence: vi.fn(), followEvidenceZone: vi.fn(), publishEvidenceZone: vi.fn(), prepareEvidenceResearch: vi.fn() }));
 const upkeep = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn(), fetchEvidenceChanges: vi.fn() }));
@@ -286,5 +287,23 @@ describe("a zone's page and the features the server says it has", () => {
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "给专区提建议" }));
     expect(await screen.findByRole("dialog", { name: "给专区提建议" })).toContainElement(screen.getByLabelText("专区建议"));
+  });
+});
+
+describe("the zone page's composition", () => {
+  it("has its header, then the toolbar with the search and the count after it, then the list — and nothing of the zone's menu on the page", async () => {
+    client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...readable, canEdit: true }, feedback: [] });
+    client.listZoneEvidence.mockResolvedValue({ items: [card], total: 3, nextCursor: null });
+    const { container } = mount();
+    await screen.findByRole("searchbox", { name: "搜索当前专区证据" });
+    const facts = expectComposed(container, { tablists: 0, stepRail: false, toolbar: true });
+    expect(facts.toolbars).toHaveLength(1);
+    expect(facts.chrome).toContainElement(facts.toolbars[0]);
+    // The owner's way to add to the list is the toolbar's, not a button above it.
+    expect(within(facts.toolbars[0]).getByRole("button", { name: "添加证据" })).toBeInTheDocument();
+    // What was a fold on the page — 领域背景与专家, 变更记录, 给专区提建议 — is the menu's, and is not on it.
+    expect(screen.queryByText("领域背景与专家")).toBeNull();
+    expect(screen.queryByText("变更记录")).toBeNull();
+    expect(screen.queryByText("给专区提建议")).toBeNull();
   });
 });

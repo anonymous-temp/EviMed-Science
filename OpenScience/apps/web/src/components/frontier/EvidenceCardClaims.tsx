@@ -82,7 +82,7 @@ export function EvidenceClaims({ evidence }: { evidence: EvidenceCard }) {
 
   return (
     <div id={evidenceClaimsAnchor(evidence.id)}>
-      <Section title="证据要点" count={rows.length} toolbar={toolbar ? <Toolbar {...toolbar} /> : undefined}>
+      <Section title="证据要点" count={rows.length} toolbar={toolbar ? <Toolbar {...toolbar} className="max-sm:w-full" /> : undefined}>
         {matching.length === 0 ? (
           <Note action={<Button variant="secondary" size="sm" onClick={clear}>清除筛选</Button>}>没有符合的结论。</Note>
         ) : (
