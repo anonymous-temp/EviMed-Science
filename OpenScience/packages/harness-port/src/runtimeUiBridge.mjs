@@ -109,19 +109,18 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         let sessionId = intent.sessionId;
         if (intent.kind === 'create') sessionId = await createBoundSession(sessionId);
         else {
+          // Opening is the kernel's own door: the list is refreshed and the main view retains the session by the id it was
+          // asked for. A session the control plane made (`session/create` with a cwd) is in that list and not in the Workspace
+          // Registry's ownership account, and no registry account is needed to read it or to continue it natively. Nothing
+          // here may call `session/create` to "adopt" it: from 0.2.1 the kernel reuses a named session only while it is
+          // accounted in the requested workspace AND has not started a turn, and mints another one otherwise
+          // (dsh-api-session-controller `create` -> `claim`: lib/index.js:769, :443, :452), so an adoption call changes the
+          // identity of every conversation that has a history. The kernel accounts the sessions on disk by itself when it
+          // starts (dsh-workspace lib/index.js:783).
           await ctx.sessions.refresh();
-          const known = ctx.sessions.list.getSnapshot().byId?.[sessionId];
-          // Older control-plane sessions may have no Workspace Registry account.
-          // Native create with an existing identity idempotently adopts it; its
-          // transcript and identity survive while the registry attaches it.
-          // Only with a bound directory: a row without `cwd` and a frame
-          // without one would otherwise read as the same workspace.
-          if (known && typeof boundCwd === 'string' && known.cwd === boundCwd
-            && !ctx.workspaces.list.getSnapshot().items.some((/** @type {any} */ item) => workspaceContains(item, sessionId))) {
-            const attachedId = await createBoundSession(sessionId);
-            if (attachedId !== sessionId) throw new Error('Existing native session identity changed');
-          }
         }
+        // Whatever the branch, an open is of the session that was asked for.
+        if (intent.kind === 'open' && sessionId !== intent.sessionId) throw new Error('Existing native session identity changed');
         if (!validId(sessionId)) throw new Error('Invalid native session identity');
         if (disposed) return;
         // Retains the session for the main view, which is what makes its
