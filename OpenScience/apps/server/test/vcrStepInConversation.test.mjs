@@ -12,9 +12,13 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { runRoleOf } from "@evimed/domain";
 import { AgentRunStore } from "../src/agentRuns.mjs";
+import { loadConfig } from "../src/config.mjs";
 import { HttpError } from "../src/security.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const BINDING = Object.freeze({ sessionId: "session-study", mode: "specialist", agentId: "vcr-protocol", agentVersion: "1.3.4", runtimeAgent: "evimed-vcr-protocol" });
 const EVIDENCE = Object.freeze({ effectiveAgentId: "vcr-evidence", effectiveAgentVersion: "1.3.0", effectiveRuntimeAgent: "evimed-vcr-evidence" });
@@ -83,5 +87,20 @@ test("a turn routed over the binding must name the capability it is a turn of, a
   } finally {
     await store.closeProject(project);
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the lever is off unless it is switched on, and a deployment switches it on by its one name", () => {
+  const saved = process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION;
+  try {
+    delete process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION;
+    assert.equal(loadConfig({ rootDir: repoRoot }).vcrStepsInStudySession, false, "default off");
+    process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION = "true";
+    assert.equal(loadConfig({ rootDir: repoRoot }).vcrStepsInStudySession, true);
+    process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION = "false";
+    assert.equal(loadConfig({ rootDir: repoRoot }).vcrStepsInStudySession, false);
+  } finally {
+    if (saved === undefined) delete process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION;
+    else process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION = saved;
   }
 });

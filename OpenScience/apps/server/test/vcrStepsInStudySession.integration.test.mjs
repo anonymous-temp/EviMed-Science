@@ -33,7 +33,8 @@ const OWNER = `own${suffix}`;
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */ let isolated = null;
 /** What the runtime was asked, in order. */
 const record = { starts: /** @type {any[]} */ ([]), reserved: /** @type {any[]} */ ([]), prompts: /** @type {any[]} */ ([]),
-  stops: /** @type {string[]} */ ([]), minted: /** @type {string[]} */ ([]), noRoom: false };
+  stops: /** @type {string[]} */ ([]), minted: /** @type {string[]} */ ([]), noRoom: false,
+  /** The session's dispatch index as it stood when each prompt was sent. */ indexAtPrompt: /** @type {any[]} */ ([]) };
 
 before(async () => {
   if (!databaseUrl) return;
@@ -68,8 +69,9 @@ before(async () => {
     record.minted.push(`kernel-session-${record.minted.length + 1}`);
     return { id: record.minted.at(-1), kernel: "dsh" };
   };
-  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ session, /** @type {any} */ request) => {
+  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ project, /** @type {string} */ session, /** @type {any} */ request) => {
     record.prompts.push({ session, ...request });
+    record.indexAtPrompt.push(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", session, "index.json"), "utf8").then((text) => JSON.parse(text), () => null));
     return { accepted: true };
   };
   app.runtimeManager.cancelRuntimeSession = async (/** @type {any} */ _project, /** @type {string} */ session) => { record.stops.push(session); return true; };
@@ -134,7 +136,7 @@ async function finishRun(projectId, runId) {
 /** Forget everything the runtime was asked, and the stand-in runtimes of an earlier test. */
 function reset() {
   context.app.runtimeManager.runtimes.clear();
-  for (const list of [record.starts, record.reserved, record.prompts, record.stops]) list.length = 0;
+  for (const list of [record.starts, record.reserved, record.prompts, record.stops, record.indexAtPrompt]) list.length = 0;
   record.noRoom = false;
 }
 
@@ -284,8 +286,12 @@ test("a pass that finds the researcher's runtime open runs in their conversation
   // A step that finished says nothing of itself afterwards: its conversation history does, and nobody stopped it.
   const released = path.join(context.dataDir, "users", OWNER, "projects", study.projectId, "workspace", ".evimed-brief", "sessions", conversation);
   assert.equal(await readFile(path.join(released, "context.md"), "utf8"), "");
-  // The first step let go of the conversation before the next one was sent into it: the next dispatch's files are the ones that stand.
+  // The first step let go of the conversation before the next one was sent into it, so the next dispatch's files are the ones that stand:
+  // when the second prompt went out, the index on disk was the release of the first (the dispatch writes after it, never before).
   assert.equal(record.prompts[1].routedCapability, "vcr-evidence");
+  assert.equal(record.indexAtPrompt[0], null, "nothing of an earlier step stood when the first went out");
+  assert.match(String(record.indexAtPrompt[1]?.contextRevision), /^release_/, "the first step had let go of the conversation when the second was sent");
+  assert.equal(record.indexAtPrompt[1].capability, undefined);
   // None of it is in the study's list of background work: it is all in the conversation.
   assert.deepEqual((await call("GET", `/api/vcr/studies/${study.id}/runs`)).body.data.runs, []);
 });

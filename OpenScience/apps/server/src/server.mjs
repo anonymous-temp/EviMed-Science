@@ -5294,11 +5294,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
       queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
-      latestSessionId: async ({ userId, projectId }) => {
-        const owner = await store.userById(userId);
-        if (!owner) return null;
-        return (await researchSessions.list(await store.requireProject(owner, projectId)))[0]?.sessionId ?? null;
-      },
       report: (code) => process.stderr.write(`vcr orchestrator: ${code}\n`),
     });
     vcr.orchestrator = orchestrator;

@@ -1567,13 +1567,12 @@ export class VcrOrchestrator {
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
    *     reason: string, brief: string, question?: string, attended?: boolean, products?: string[] }) =>
    *     Promise<{ runId: string, sessionId: string | null, status?: string | null, placement?: string | null }>) | null,
-   *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
    *   longitudinal?: { providers: { list: () => Promise<any[]> }, prepare: (study: any, request: any, actor: string, extra?: Record<string, any>) => Promise<{ job: any }> } | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null, latestSessionId = null,
+  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null,
     briefFor = null, longitudinal = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
@@ -1585,7 +1584,6 @@ export class VcrOrchestrator {
     this.queueExport = queueExport;
     this.queueReviews = queueReviews;
     this.dispatchRun = dispatchRun;
-    this.latestSessionId = latestSessionId;
     this.briefFor = briefFor;
     // The longitudinal forecast path: a patient set that names an event-history model is run there (G12). Absent, that step says
     // the forecast service is not connected, in the platform's own sentence, and nothing else waits for it.
