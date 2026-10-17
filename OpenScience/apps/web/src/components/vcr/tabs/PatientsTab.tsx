@@ -428,7 +428,13 @@ function ExampleCard({ example }: { example: NonNullable<PatientsData["example"]
         </Tooltip>
       )}
       meta={scenarios?.difference ?? undefined}
-      legend={scenarios ? <VcrSeriesLegend series={scenarios.series} /> : undefined}
+      legend={scenarios ? (
+        <>
+          <VcrSeriesLegend series={scenarios.series} />
+          {/* What the individual lines are, said where they are drawn: one person's trajectories under each assumption are model output. */}
+          <span data-vcr-legend-individual="" className="inline-flex items-center text-caption text-text-2">个体（模拟）</span>
+        </>
+      ) : undefined}
     >
       <div className="grid gap-6 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">

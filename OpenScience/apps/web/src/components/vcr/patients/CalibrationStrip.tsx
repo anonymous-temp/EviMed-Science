@@ -91,7 +91,7 @@ function Track({ row }: { row: VcrCalibrationRow }) {
   return (
     <span aria-hidden="true" data-forced-colors="preserve" className="relative block h-3 w-full">
       <span className="absolute inset-x-0 top-1/2 h-px bg-border" />
-      {band && <span data-vcr-band="" className="absolute top-1/2 h-2 -translate-y-1/2 rounded-tag bg-accent-soft" style={band} />}
+      {band && <span data-vcr-interval-band="" className="absolute top-1/2 h-2 -translate-y-1/2 rounded-tag bg-accent-soft" style={band} />}
       {row.declared !== null && (
         <span data-vcr-declared-mark="" className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-text-2 bg-bg" style={{ left: at(row.declared) }} />
       )}

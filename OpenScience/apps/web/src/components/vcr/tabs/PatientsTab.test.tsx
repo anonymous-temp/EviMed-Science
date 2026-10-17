@@ -6,6 +6,7 @@ import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { PatientsTab } from "./PatientsTab";
 import { renderTab } from "../__fixtures__/tabFrame";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
+import { VCR_NO_DEFINITION } from "../vcrText";
 
 /**
  * 虚拟患者, the owner's page (R19; audit B §4.5): a list of people with their record, not one example patient and a pile of cards.
@@ -78,6 +79,11 @@ beforeEach(() => {
 
 const draw = (study: VcrStudy = ev201(), route = "/") => renderTab(<><PatientsTab studyId={STUDY_ID} study={study} /><Where /></>, { route });
 const band = (container: HTMLElement) => container.querySelector("[data-page-chrome]") as HTMLElement;
+const found = (root: ParentNode, selector: string) => waitFor(() => {
+  const node = root.querySelector(selector);
+  if (!node) throw new Error(`nothing at ${selector}`);
+  return node as HTMLElement;
+});
 
 describe("虚拟患者 · the list of people", () => {
   it("puts what a reader controls above what it controls: the band, the sentence, the charts, the people, the calibration, the assumptions", async () => {
@@ -235,6 +241,84 @@ describe("虚拟患者 · the list of people", () => {
     const drawer = await screen.findByRole("dialog", { name: "虚拟患者 vp_gone" });
     expect(await within(drawer).findByText(/这一批记录里没有这位虚拟患者/)).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "患者" })).toBeInTheDocument();
+  });
+});
+
+describe("虚拟患者 · the charts", () => {
+  it("draws a model's output as a thin dashed mean, with a band only where the band has a name", async () => {
+    const { container } = draw();
+    const treatment = await found(container, "[data-vcr-series='treatment']");
+    expect(treatment.querySelector("[data-vcr-band='prediction']")).not.toBeNull();
+    expect(treatment.querySelector("[data-vcr-series-line]")?.getAttribute("stroke-dasharray")).toBeTruthy();
+    // Both scenarios name their spread (a prediction interval, at 80%), so both bands are drawn ...
+    const control = container.querySelector("[data-vcr-series='control']") as SVGElement;
+    expect(control.querySelector("[data-vcr-band='prediction']")).not.toBeNull();
+    // ... and the legend names it from the data, level included, once.
+    expect(container.querySelectorAll("[data-vcr-legend-band]")).toHaveLength(1);
+    expect(container.querySelector("[data-vcr-legend-band]")).toHaveTextContent("80% 预测区间");
+  });
+
+  it("draws a spread nobody named as no band at all: an unnamed range is not an interval", async () => {
+    const raw = fixture("ev201/patients.json");
+    for (const line of raw.trajectories.series) { line.bandKind = null; line.bandLevel = null; }
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-series='control']");
+    expect(container.querySelector("[data-vcr-band]")).toBeNull();
+    expect(container.querySelector("[data-vcr-legend-band]")).toBeNull();
+  });
+
+  it("names the individual lines in the legend — 个体（模拟） — and shades what nobody could observe; no sentence says that two outcomes of one person cannot both be seen", async () => {
+    const raw = fixture("ev201/patients.json");
+    const series = raw.trajectories.series;
+    raw.example.scenarios = { note: null, difference: "12 个月差 0.23", series };
+    raw.trajectories.series[1].unobserved = [{ from: 6, to: 12 }];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const scenarios = await found(container, "[data-vcr-scenarios]");
+    expect(scenarios).not.toBeNull();
+    expect(container.querySelector("[data-vcr-legend-individual]")).toHaveTextContent("个体（模拟）");
+    expect(container.textContent).not.toMatch(/不可能同时被观察到|细线是个体轨迹/);
+    expect(container.querySelector("[data-vcr-unobserved]")).not.toBeNull();
+    expect(screen.getAllByText("未观察时段").length).toBeGreaterThan(0);
+  });
+
+  it("measures the tornado against the base case the result sent, and invents none without it", async () => {
+    const { container, unmount } = draw();
+    const tornado = await found(container, "[data-vcr-tornado]");
+    expect(tornado.querySelector("[data-vcr-tornado-base]")).not.toBeNull();
+    expect(tornado).toHaveTextContent("基准0.41");
+    unmount();
+
+    const raw = fixture("ev201/patients.json");
+    raw.sensitivity.base = null;
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const again = draw();
+    const bare = await found(again.container, "[data-vcr-tornado]");
+    expect(bare.querySelector("[data-vcr-tornado-base]")).toBeNull();
+    expect(bare.textContent).not.toContain("基准");
+    // The bars are still the server's ranges.
+    expect(within(bare).getByRole("img", { name: "目标 HR：0.33 到 0.49" })).toBeInTheDocument();
+  });
+
+  it("says the step did not finish, above the part it kept — and keeps showing that part", async () => {
+    const { container } = draw();
+    const failed = await found(container, "[data-vcr-step-failed='patients']");
+    expect(within(failed).getByText("这一步未完成")).toBeInTheDocument();
+    expect(failed.querySelector("[data-vcr-partial]")).toHaveTextContent("这次生成算完了 1,200 / 2,000 次重复就停下了，下面是已完成部分的结果。");
+    expect(within(failed).getByRole("button", { name: "接着做" })).toBeInTheDocument();
+    // The data are still there, under it.
+    const people = await screen.findByRole("table", { name: "患者" });
+    expect(failed.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("这次运行的结果")).toBeInTheDocument();
+    expect(container.querySelector("[data-vcr-counts]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+  });
+
+  it("says the first sentence is missing on a study nobody has described", async () => {
+    installVcrServer(network.productRequest, { [tab("patients")]: fixture("empty/patients.json") });
+    renderTab(<PatientsTab studyId={STUDY_ID} study={readVcrStudy(fixture("empty/study.json"))} />);
+    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
   });
 });
 
