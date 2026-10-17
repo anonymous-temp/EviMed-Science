@@ -130,12 +130,14 @@ function activityOfStep(activity: VcrActivity | null | undefined, step: VcrStepK
  * The button starts the step and **takes nobody anywhere**: the page's strip says what happens next, and this tab is the step's
  * state, so it is a recipe, then a run, then — when the page has read the study again — the result.
  */
-export function VcrStepPending({ studyId, study, step, hint, start }: {
+export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   studyId: string;
   study: VcrStudy;
   step: VcrStepKey;
   /** What the step gives, when the step's own sentence does not fit this study (matching at T0). */
   hint?: string;
+  /** Why the step cannot start on this deployment (the evidence library is not connected): said in the button's place, which is not drawn. */
+  blocked?: string | null;
   /** Where the step can be started directly (an evaluation of protocol versions that already exist), this is the one button instead. */
   start?: VcrStepStart;
 }) {
@@ -202,7 +204,7 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
   }
   const cards = study.stepSummaries.evidence?.note;
   if (cards && step !== "evidence" && step !== "definition") uses.push({ label: cards, to: vcrTabPath(studyId, "data") });
-  const startHere = start ? start.onStart : mayRun ? () => { void run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。"); } : undefined;
+  const startHere = blocked ? undefined : start ? start.onStart : mayRun ? () => { void run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。"); } : undefined;
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4">
       <StepState
@@ -213,7 +215,7 @@ export function VcrStepPending({ studyId, study, step, hint, start }: {
         gives={hint ?? VCR_STEP_GIVES[step]}
         onStart={startHere}
         starting={start ? start.busy : busy}
-        reason={startHere ? undefined : "需要有运行权限的成员来开始这一步。"}
+        reason={startHere ? undefined : blocked || "需要有运行权限的成员来开始这一步。"}
       />
       {start?.note}
     </div>

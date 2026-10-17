@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import {
   bindVcrPack,
@@ -21,16 +22,19 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { safeLink } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input, Select, Textarea } from "@/components/ui/Input";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { VcrSmdDot } from "./VcrDiagrams";
+import { VCR_HOME_PATH } from "./vcrTabs";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
-import { useVcrLoad, VcrSection, VcrTabError } from "./vcrTabKit";
+import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
 
 /**
@@ -93,30 +97,34 @@ export function VcrKnowledgeSection({ studyId, knowledge, canWrite, onChanged }:
   // the catalogue has a pack to choose (`BindPackSection`). A heading over 「这个研究还没有病种定义包」 is a title over an empty box.
   if (!pack && definitions.length === 0) return canWrite ? <BindPackSection studyId={studyId} onChanged={onChanged} /> : null;
   return (
-    <VcrSection title="病种定义包">
+    <Section title="病种定义包">
       <div data-vcr-knowledge="" className="flex flex-col gap-4">
         {pack && <PackRow studyId={studyId} pack={pack} onChanged={onChanged} />}
         {definitions.length > 0 && (
-          <ul className="divide-y divide-faint">
+          <List label="用到的定义" divided>
             {definitions.map((definition) => (
-              <li key={`${definition.definitionId}-${definition.version}`} data-vcr-used-definition={definition.definitionId} className="py-2.5">
-                <p className="flex flex-wrap items-center gap-2 text-ui text-text">
-                  <span className="min-w-0 font-medium">{`${definition.name} v${definition.version}`}</span>
-                  <Tag>定义库</Tag>
-                  <span className="text-caption text-text-3">{`共 ${numberText(definition.versions, 0)} 个版本 · 用于 ${numberText(definition.uses, 0)} 个研究`}</span>
-                </p>
-                {definition.text && <p className="mt-1 text-caption text-text-2">{definition.text}</p>}
-                {definition.packRefs.length > 0 && (
-                  <p className="mt-1.5 flex flex-wrap gap-1.5">
-                    {definition.packRefs.map((ref) => <Tag key={`${ref.section}-${ref.id}`}>{ref.concept ?? ref.id}</Tag>)}
-                  </p>
+              <ListRow
+                key={`${definition.definitionId}-${definition.version}`}
+                title={`${definition.name} v${definition.version}`}
+                titleProps={{ "data-vcr-used-definition": definition.definitionId }}
+                trailing={<Tag>定义库</Tag>}
+                meta={(
+                  <span className="flex flex-col gap-1">
+                    <span>{`共 ${numberText(definition.versions, 0)} 个版本 · 用于 ${numberText(definition.uses, 0)} 个研究`}</span>
+                    {definition.text && <span className="text-text-2">{definition.text}</span>}
+                    {definition.packRefs.length > 0 && (
+                      <span className="flex flex-wrap gap-1.5">
+                        {definition.packRefs.map((ref) => <Tag key={`${ref.section}-${ref.id}`}>{ref.concept ?? ref.id}</Tag>)}
+                      </span>
+                    )}
+                  </span>
                 )}
-              </li>
+              />
             ))}
-          </ul>
+          </List>
         )}
       </div>
-    </VcrSection>
+    </Section>
   );
 }
 
@@ -141,7 +149,7 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
       {/* The study chose an edition of this pack that the catalogue no longer holds: say that what it reads now is the newest. */}
-      {pack.binding?.resolution === "newest_compatible" && <p data-vcr-pack-edition="newest" className="text-caption text-text-2">目录里已没有这个研究当初选定的那一版，现按最新的一版读取。</p>}
+      {pack.binding?.resolution === "newest_compatible" && <p data-vcr-pack-edition="newest"><Tag>改按最新一版读取</Tag></p>}
       {pack.platform && <PlatformAttribution platform={pack.platform} />}
       {pack.platformRequest && <PlatformRequest studyId={studyId} request={pack.platformRequest} onChanged={onChanged} />}
       {pack.sources.length > 0 && (
@@ -226,7 +234,7 @@ function BindPackSection({ studyId, onChanged }: { studyId: string; onChanged: (
       .finally(() => { holding.current = false; setBusy(false); });
   };
   return (
-    <VcrSection title="病种定义包">
+    <Section title="病种定义包">
       <div data-vcr-knowledge="">
         <div data-vcr-bind-pack="" className="flex flex-wrap items-end gap-3">
           <div className="min-w-48">
@@ -238,7 +246,7 @@ function BindPackSection({ studyId, onChanged }: { studyId: string; onChanged: (
           <Button variant="secondary" loading={busy} disabled={!choice} onClick={bind}>绑定</Button>
         </div>
       </div>
-    </VcrSection>
+    </Section>
   );
 }
 
@@ -263,17 +271,18 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
   const comparing = canRun && comparable.length > 0;
   if (!saveable && !usable && !comparing && knowledge.comparisons.length === 0) return null;
   return (
-    <VcrSection title="定义库">
+    <Section title="定义库">
       <div data-vcr-definitions="" className="flex flex-col gap-4">
         {saveable && (
-          <ul className="divide-y divide-faint">
+          <List label="可存入定义库的人群" divided>
             {knowledge.savable.map((population) => (
-              <li key={population.populationId} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0 truncate text-ui text-text">{population.name ? `${population.label} · ${population.name}` : population.label}</span>
-                <Button size="sm" variant="secondary" onClick={() => setSaving(population.populationId)}>存入定义库</Button>
-              </li>
+              <ListRow
+                key={population.populationId}
+                title={population.name ? `${population.label} · ${population.name}` : population.label}
+                actions={<Button size="sm" variant="secondary" onClick={() => setSaving(population.populationId)}>存入定义库</Button>}
+              />
             ))}
-          </ul>
+          </List>
         )}
         {usable && <UseDefinition studyId={studyId} library={usable} onChanged={onChanged} />}
         {comparing && <CompareVersions studyId={studyId} definitions={comparable} onChanged={onChanged} />}
@@ -290,7 +299,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
           onSaved={onChanged}
         />
       )}
-    </VcrSection>
+    </Section>
   );
 }
 
@@ -399,7 +408,7 @@ function CompareVersions({ studyId, definitions, onChanged }: {
     holding.current = true;
     setBusy(true);
     void compareVcrDefinition(studyId, entry.definitionId, { versionA: Number(a), versionB: Number(b) })
-      .then(() => { toast.success("已交给引擎比较，完成后显示在下面。"); onChanged(); })
+      .then(() => { onChanged(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法比较，请稍后重试。" })))
       .finally(() => { holding.current = false; setBusy(false); });
   };
@@ -484,22 +493,22 @@ export function ComparisonCard({ comparison, name }: { comparison: VcrComparison
 /** 人群定义库 on the module home: the account's definitions, their versions and the studies that used them. */
 export function VcrDefinitionsPanel() {
   const { state, reload } = useVcrLoad("vcr:library", () => getVcrLibrary());
-  if (state.kind === "error" && state.off) return <p className="py-12 text-center text-ui text-text-3">{VCR_OFF_SENTENCE}</p>;
+  if (state.kind === "error" && state.off) return <EmptyState title={VCR_OFF_SENTENCE} />;
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   if (state.data.length === 0) {
-    // No button: the library is filled from a study (「存入定义库」 on its 人群 page, for a real cohort with rules), and a button here would have nothing to save.
+    // The library is filled from a study (「存入定义库」 on its 人群 page, for a real cohort with rules), so the way to fill it is the studies.
     return (
       <EmptyState
         title="还没有人群定义"
-        description="人群定义来自研究：在一项用你自己的数据筛出真实队列的研究里，打开“人群”页，点“存入定义库”。之后别的研究可以直接使用它，也可以比较它的不同版本。公开资料（T0）的研究用的是生成人群，不能存入。"
+        action={<Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "secondary" })}>去研究里存入</Link>}
       />
     );
   }
   return (
-    <ul data-vcr-library="" className="divide-y divide-border">
+    <List label="人群定义库" divided>
       {state.data.map((entry) => <LibraryRow key={entry.id} entry={entry} />)}
-    </ul>
+    </List>
   );
 }
 
@@ -507,21 +516,17 @@ function LibraryRow({ entry }: { entry: VcrLibraryEntry }) {
   const [open, setOpen] = useState(false);
   const { state } = useVcrLoad(open ? `vcr:library:${entry.id}` : "vcr:library:closed", () => (open ? getVcrLibraryDetail(entry.id) : Promise.resolve(null)));
   return (
-    <li data-vcr-library-entry={entry.id} className="py-4">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full flex-col gap-1 text-left"
-      >
-        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-body font-semibold text-text">{entry.name}</span>
-          <span className="text-caption tabular-nums text-text-3">{`${numberText(entry.versions, 0)} 个版本 · 用于 ${numberText(entry.uses, 0)} 个研究`}</span>
-        </span>
-        {entry.latest?.text && <span className="text-ui text-text-2">{entry.latest.text}</span>}
-      </button>
+    <>
+      <ListRow
+        title={entry.name}
+        expanded={open}
+        onOpen={() => setOpen((value) => !value)}
+        titleProps={{ "data-vcr-library-entry": entry.id }}
+        trailing={<span className="tabular-nums">{`${numberText(entry.versions, 0)} 个版本 · 用于 ${numberText(entry.uses, 0)} 个研究`}</span>}
+        meta={entry.latest?.text ? <span className="text-text-2">{entry.latest.text}</span> : undefined}
+      />
       {open && state.kind === "ready" && state.data && (
-        <div className="mt-3 flex flex-col gap-3">
+        <li className="mb-2 flex flex-col gap-3 px-2 pb-3">
           {state.data.versions.map((version) => (
             <div key={version.version} data-vcr-library-version={version.version} className="rounded border border-border p-3">
               <p className="text-ui font-medium text-text">{`v${version.version}`}</p>
@@ -537,9 +542,9 @@ function LibraryRow({ entry }: { entry: VcrLibraryEntry }) {
           {state.data.studies.length > 0 && (
             <p className="text-caption text-text-3">{`用过的研究：${[...new Set(state.data.studies.map((study) => study.studyName || "未命名研究"))].join("、")}`}</p>
           )}
-        </div>
+        </li>
       )}
-      {open && state.kind === "error" && <p className="mt-3 text-ui text-text-3">{state.message}</p>}
-    </li>
+      {open && state.kind === "error" && <li className="px-2 pb-3 text-ui text-text-3">{state.message}</li>}
+    </>
   );
 }
