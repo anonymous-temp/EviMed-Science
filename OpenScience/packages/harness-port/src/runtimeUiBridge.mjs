@@ -119,6 +119,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           // still reads and continues natively, and a BLANK one that is not accounted has a disabled composer in the kernel's
           // own view (dsh-client-ui-conversation lib/client.js:17812), which nothing on this side can repair.
           await ctx.sessions.refresh();
+          // A conversation the platform named and the kernel has never held — a study's or a GEO project's, made before the platform
+          // created its sessions in the kernel (its id is the platform's own, `vcr-…`, `geo-…`) — is opened by creating it under that
+          // name: a free name is the one thing the kernel honours (`claim`: lib/index.js:426-430, a session it cannot find is created
+          // with the id asked for), and the workspace account comes with the creation. Anything but the same id back is an identity
+          // change and is refused below.
+          if (!ctx.sessions.list.getSnapshot().byId?.[sessionId] && typeof boundCwd === 'string') sessionId = await createBoundSession(sessionId);
         }
         // Whatever the branch, an open is of the session that was asked for.
         if (intent.kind === 'open' && sessionId !== intent.sessionId) throw new Error('Existing native session identity changed');

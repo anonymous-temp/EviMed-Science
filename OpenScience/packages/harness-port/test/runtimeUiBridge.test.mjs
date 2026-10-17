@@ -138,6 +138,7 @@ test('a bound resume retries failed readiness on the same generation without rec
 
 test('navigation to an existing session during delayed reconnect is retained until the generation is ready', async () => {
   const f = fixture(); const known = new Set(['session-a', 'session-b']);
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': {}, 'session-b': {} });
   f.ctx.uiWorkspace.openSession = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
@@ -288,6 +289,29 @@ test('a session the control plane made opens under its own identity, whether or 
     assert.ok(!f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false), label);
     f.ctx.dispose();
   }
+});
+
+test('a conversation the platform named and the kernel never held is created under that name, and a different id back is refused', async () => {
+  // The id is the platform's own (`vcr-…`): the kernel's `claim` creates a session it cannot find with the id asked for.
+  const f = fixture();
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': { blank: false, cwd: '/workspace/project-a' } });
+  f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', path: '/workspace/project-a', sessionIds: ['session-a', 'vcr-study-1'] });
+  f.ctx.sessions.create = async (/** @type {{ sessionId?: string }} */ request) => { f.calls.push(['create', request.sessionId]); return request.sessionId; };
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'open', sessionId: 'vcr-study-1' } }); await settle();
+  assert.deepEqual(f.calls, [['create', 'vcr-study-1'], ['open', 'vcr-study-1']]);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true && row.message.sessionId === 'vcr-study-1'));
+  f.ctx.dispose();
+  // A kernel that answers with another id (a name it could not honour) is an identity change: no open, no ack of success.
+  const g = fixture();
+  g.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', path: '/workspace/project-a', sessionIds: ['session-minted'] });
+  g.ctx.sessions.create = async () => 'session-minted';
+  apply(g.ctx, {}, g.target); await settle();
+  g.navigate({ intent: { kind: 'open', sessionId: 'vcr-study-2' } }); await settle();
+  assert.ok(!g.calls.some(row => row[0] === 'open'));
+  assert.ok(g.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false));
+  assert.ok(!g.sent.some(row => row.message.ok === true));
+  g.ctx.dispose();
 });
 
 test('opening a session carries the draft to the session that was asked for, never to one the kernel would have minted', async () => {
