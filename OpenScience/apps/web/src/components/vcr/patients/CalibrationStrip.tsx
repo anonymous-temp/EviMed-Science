@@ -79,7 +79,10 @@ function Row({ row }: { row: VcrCalibrationRow }) {
 
 /** The row's numbers on one track: the interval as a band, the declared value as a ring and the generated one as a dot. */
 function Track({ row }: { row: VcrCalibrationRow }) {
-  const values = [row.declared, row.generated, row.interval?.low ?? null, row.interval?.high ?? null].filter((value): value is number => value !== null);
+  // The track is the interval and where the two numbers stand against it. A row with no interval has nothing to stand against, and a
+  // track scaled to two close numbers would draw a gap of a few hundredths as wide as the card.
+  if (!row.interval || (row.interval.low === null && row.interval.high === null)) return null;
+  const values = [row.declared, row.generated, row.interval.low, row.interval.high].filter((value): value is number => value !== null);
   if (values.length < 2) return null;
   const low = Math.min(...values);
   const high = Math.max(...values);
