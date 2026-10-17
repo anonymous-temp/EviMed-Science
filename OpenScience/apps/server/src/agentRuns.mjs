@@ -229,6 +229,43 @@ function goalAnchorRun(knownRuns, transcript, sessionId, turn, goalId) {
 }
 
 /**
+ * The run whose question a late answer settles: the turn that made the `ask_user_question` call, found by the call's id in the
+ * transcript. A turn the ledger has not adopted (or an id the transcript no longer holds) leaves the researcher's latest earlier
+ * turn, so the work that follows is never filed as a question of its own.
+ * @param {any[]} knownRuns @param {import('@evimed/domain').RunTranscript} transcript @param {string} sessionId
+ * @param {{ startSeq: number, time: number }} turn @param {string | null} callId
+ */
+function replyAnchorRun(knownRuns, transcript, sessionId, turn, callId) {
+  const own = knownRuns.filter((item) => item.sessionId === sessionId);
+  if (callId) {
+    const asking = transcript.messages.find((message) => Number.isSafeInteger(message.turnStartSeq)
+      && Number(message.turnStartSeq) < turn.startSeq
+      && (message.parts ?? []).some((part) => part.type === "tool" && part.callId === callId));
+    const asker = asking ? own.find((item) => item.nativeTurn?.startSeq === asking.turnStartSeq) : null;
+    if (asker) return asker;
+  }
+  return own.filter((item) => !item.automated && Date.parse(item.startedAt) <= turn.time)
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))[0] ?? null;
+}
+
+/**
+ * The words of a late answer, for the one place a run needs a line to be called by when no earlier turn can lend its question:
+ * the labels the person chose and what they typed, read out of the structured payload the kernel wrote.
+ * @param {string} text
+ */
+function replyAnswerText(text) {
+  try {
+    const answers = JSON.parse(text)?.answers;
+    if (!Array.isArray(answers)) return text;
+    const said = answers.flatMap((answer) => [...(Array.isArray(answer?.selected) ? answer.selected : []), answer?.custom])
+      .filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim());
+    return said.length ? said.join("；") : text;
+  } catch {
+    return text;
+  }
+}
+
+/**
  * How many mid-run corrections one run accepts.
  *
  * A bound rather than a preference. Every correction is another instruction the
@@ -1250,10 +1287,18 @@ function actualUserMessage(message) {
   return messageRole(message) === "user" && message.info?.source === "user";
 }
 
-/** LoopX's recorded automatic turns use the same ledger without becoming user intent. */
+/**
+ * LoopX's recorded automatic turns use the same ledger without becoming user intent, and so does the late answer to a question the
+ * model left pending (`ask_user_question` in timed mode): the person answered, the kernel steered the answer in as a message of its
+ * own kind, and when the agent was idle that message started a turn nobody dispatched. It is workload, never the person's words —
+ * what it carries is a structured answer to the model's own question.
+ */
 function workloadInput(message) {
-  return actualUserMessage(message) || (messageRole(message) === "user" && message.info?.source === "loopx-continuation"
-    && String(message.info?.sourceRequestId ?? "").startsWith("loopx:"));
+  if (actualUserMessage(message)) return true;
+  if (messageRole(message) !== "user") return false;
+  const request = String(message.info?.sourceRequestId ?? "");
+  return (message.info?.source === "loopx-continuation" && request.startsWith("loopx:"))
+    || (message.info?.source === "user-question-reply" && request.startsWith("reply:"));
 }
 
 /**
@@ -7740,10 +7785,15 @@ export class AgentRunStore {
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
         const continuation = first.source === "loopx-continuation";
+        // A late answer to a question the model left pending: the person answered in the page, and the work goes on under the
+        // turn that asked (its question, its contract), attended and charged like any turn of theirs.
+        const reply = first.source === "user-question-reply";
         const goalId = continuation && typeof first.loopxGoalId === "string" && loopxGoalIdPattern.test(first.loopxGoalId) ? first.loopxGoalId : null;
-        const previous = continuation ? goalAnchorRun(knownRuns, transcript, sessionId, turn, goalId) : null;
+        const previous = continuation ? goalAnchorRun(knownRuns, transcript, sessionId, turn, goalId)
+          : reply ? replyAnchorRun(knownRuns, transcript, sessionId, turn, typeof first.answeredCallId === "string" ? first.answeredCallId : null) : null;
         // Keep the initiating research contract; heartbeat text is not a new specialty request.
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
+          : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
           : await routeTurn(question, { requestIds });
         const reservation = await this.reserveRun(project, binding ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
@@ -7753,7 +7803,7 @@ export class AgentRunStore {
           startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
-          question: continuation && previous?.question ? previous.question : questionPreview(question),
+          question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
           automated: continuation,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
           estimatedMinutes: routed.estimatedMinutes ?? null,

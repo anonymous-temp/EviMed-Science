@@ -309,9 +309,20 @@
           # is told not to ask (the dispatch context says so), and a question asked
           # anyway with no page attached is answered by the kernel with an error the
           # model reads, never by a wait.
+          #
+          # `mode` is the deployment's other switch (OPEN_SCIENCE_RUNTIME_ASK_USER_MODE):
+          # `legacy` is the blocking tool, which holds the turn until the person answers.
+          # `timed` returns `{pending: true}` after `timeout` seconds so the model carries
+          # on with the work that does not depend on the answer; the question stays
+          # answerable in the page, and the answer arrives later as a message that
+          # continues the work. Timed asks an unwatched turn to wait the whole timeout
+          # where the blocking tool fails at once, which is why it is a measured choice.
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
             disabled: !!js process.env.EVIMED_ASK_USER !== '1'
+            config:
+              mode: !!js (process.env.EVIMED_ASK_USER_MODE === 'timed' && 'timed') || 'legacy'
+              timeout: 120
 
           - id: compaction
             name: cordis:group

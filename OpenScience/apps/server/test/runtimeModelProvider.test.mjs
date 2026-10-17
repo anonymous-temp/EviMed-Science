@@ -541,6 +541,12 @@ test("the two runtime capability settings reach the container, and the default d
   assert.ok(off.includes("EVIMED_ASK_USER=0"));
   assert.ok(off.includes("EVIMED_REVIEW_ENABLED=0"), "a setting that cannot turn something off is not a setting");
 
+  // How the tool waits is its own switch, always sent: the blocking tool unless the deployment chose the timed one, and a
+  // value that is neither is refused where the deployment's settings are read, not guessed at.
+  assert.ok(on.includes("EVIMED_ASK_USER_MODE=attended"), "the shipped tool is the blocking one");
+  assert.ok(argvFor({ runtimeAskUserMode: "timed" }).includes("EVIMED_ASK_USER_MODE=timed"), "timed must reach the runtime");
+  assert.ok(argvFor({ runtimeAskUserMode: "attended" }).includes("EVIMED_ASK_USER_MODE=attended"));
+
   const capsuleOn = argvFor({ stateStore: "postgres" });
   assert.ok(capsuleOn.includes("EVIMED_CAPSULE_GATEWAY_URL=http://127.0.0.1:8787/internal/capsules/v1"));
   assert.ok(capsuleOn.includes("EVIMED_REVISION_AUTHORIZE_URL=http://127.0.0.1:8787/internal/revisions/v1/authorize"));
@@ -557,6 +563,20 @@ test("the two runtime capability settings reach the container, and the default d
   const defaults = loadConfig({});
   assert.equal(defaults.runtimeAskUserEnabled, true, "a conversation may ask for the one input its task turns on, unless the deployment says otherwise");
   assert.equal(loadConfig({ runtimeAskUserEnabled: false }).runtimeAskUserEnabled, false, "the deployment's switch still turns it off");
+  assert.equal(defaults.runtimeAskUserMode, "attended", "the blocking tool is the default until the timed one has been measured in production");
+  assert.equal(loadConfig({ runtimeAskUserMode: "timed" }).runtimeAskUserMode, "timed");
+  assert.equal(loadConfig({ runtimeAskUserMode: " Timed " }).runtimeAskUserMode, "timed", "a mode is read by name, not by case or padding");
+  assert.throws(() => loadConfig({ runtimeAskUserMode: "timeout" }), /OPEN_SCIENCE_RUNTIME_ASK_USER_MODE must be attended or timed/,
+    "a misspelt mode would leave the blocking tool on while the operator believes the other is");
+  const saved = process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE;
+  try {
+    process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE = "timed";
+    assert.equal(loadConfig({}).runtimeAskUserMode, "timed", "the environment variable moves it");
+    process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE = "";
+    assert.equal(loadConfig({}).runtimeAskUserMode, "attended", "an empty value is the default, as a value-less compose entry delivers it");
+  } finally {
+    if (saved === undefined) delete process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE; else process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE = saved;
+  }
   assert.equal(defaults.runtimeReviewEnabled, false, "review follows the reviewer, which is off until a deployment turns it on");
   assert.equal(loadConfig({ reviewEnabled: true }).runtimeReviewEnabled, true, "turning the reviewer on turns the runtime's review on");
 });

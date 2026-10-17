@@ -117,6 +117,21 @@ function parseDisabledSocketPlugins(ids) {
   return [...new Set(ids)];
 }
 
+/**
+ * How the ask-user tool waits for the person: the kernel's own two modes, named for what the turn does.
+ * `attended` is the blocking tool every shipped preset uses. `timed` returns "pending" after the tool's own deadline so the
+ * model carries on with work that does not depend on the answer, and the answer, whenever it comes, arrives as a message.
+ * Anything else is refused here: a misspelt mode would leave the blocking tool on while the operator believes the other is.
+ * @param {unknown} value
+ * @returns {'attended'|'timed'}
+ */
+export function parseAskUserMode(value) {
+  const mode = String(value ?? '').trim().toLowerCase();
+  if (mode === '' || mode === 'attended') return 'attended';
+  if (mode === 'timed') return 'timed';
+  throw new Error(`OPEN_SCIENCE_RUNTIME_ASK_USER_MODE must be attended or timed, got ${JSON.stringify(String(value))}.`);
+}
+
 function boolEnv(name, fallback) {
   const value = process.env[name];
   if (value == null || value === "") return fallback;
@@ -2321,6 +2336,12 @@ export function loadConfig(overrides = {}) {
     // a proactive episode, a platform job — is said per dispatch (`researchContext.mjs`, `attended`), because one
     // runtime serves both kinds; a question asked with no page attached is answered by the kernel with an error.
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", true),
+    // How that tool waits (2026-10-17, `r19-upstream2a`): `attended` holds the turn until the person answers, `timed`
+    // releases the model after two minutes to carry on with the work that does not depend on the answer, and the answer
+    // reaches it later as a message. Measured on a real kernel before it was offered; `attended` stays the default.
+    // A session that has taken a timed answer holds a message kind 0.1.7-rc.2 cannot read, so going back below the
+    // 0.2.0-rc.2 pin after this has been on loses those sessions (docs/WEB_DEPLOYMENT.md).
+    runtimeAskUserMode: parseAskUserMode(overrides.runtimeAskUserMode ?? process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).

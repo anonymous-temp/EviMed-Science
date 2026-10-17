@@ -102,7 +102,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {{ deliveryAttemptLimit: number, maxChildrenTotal?: number, maxConcurrentChildren?: number, maxParallelChildren?: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize?: number }} limits
  *   `maxParallelChildren` is the retired single limit, read only as the
  *   fallback for the two that replaced it.
- * @property {{ hosted: boolean, askUser: boolean, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  * @property {readonly string[]} [disabledClientBundles] ids of `COMMUNITY_CLIENT_BUNDLE_ROWS`
  *   the deployment switched off; each becomes a `disabled: true` row
  */
@@ -708,6 +708,9 @@ export function runtimeEnvironment(input) {
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",
+    // Always sent, like every switch: the preset's `tool-ask-user` row reads it, and a name that is sent only when a caller
+    // passes it would leave the row on the blocking tool while the deployment believes it chose the other.
+    EVIMED_ASK_USER_MODE: input.flags.askUserMode === "timed" ? "timed" : "attended",
     EVIMED_CAPSULE_ACTIVE: input.flags.capsule ? "1" : "0",
     EVIMED_REVIEW_ENABLED: input.flags.review ? "1" : "0",
     // Where the control plane wrote the tools this runtime does not offer
