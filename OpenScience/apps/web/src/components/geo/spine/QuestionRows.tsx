@@ -66,7 +66,7 @@ export function QuestionRows({
       <div className="flex items-end gap-1 px-2 pb-1 text-meta text-text-3 max-sm:hidden">
         <span className="min-w-0 flex-1">问句</span>
         {engines.map((engine) => (
-          <span key={engine} className={cn("w-14 shrink-0 text-center", focus === engine && "font-medium text-text")}>{engineName(engine)}</span>
+          <span key={engine} className={cn("w-14 shrink-0 text-center", focus === engine && "font-semibold text-text")}>{engineName(engine)}</span>
         ))}
         {menuFor && <span className="w-8 shrink-0" />}
       </div>

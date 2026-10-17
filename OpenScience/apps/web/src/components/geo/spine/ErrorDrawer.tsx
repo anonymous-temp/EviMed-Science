@@ -135,7 +135,7 @@ export function ErrorDrawer({
         </Section>
 
         <Section title="它是从哪里来的" level="sub">
-          <ul aria-label="每个引擎引用的出处" className="flex flex-col divide-y divide-faint">
+          <List label="每个引擎引用的出处" divided>
             {claim.rows.map((row) => {
               const trace = errorTrace(row);
               const cited = row.citedSource;
@@ -162,7 +162,7 @@ export function ErrorDrawer({
                 </li>
               );
             })}
-          </ul>
+          </List>
           {groups.length > 0 && (
             <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-ui text-text-2">
               <span>在这些问题群的回答里出现</span>

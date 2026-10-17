@@ -107,9 +107,10 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
     >
       <StatusMark status={action.status} className="w-20 shrink-0 pt-0.5" />
       <div className="flex min-w-0 flex-1 basis-80 flex-col gap-1">
-        <div className="flex min-w-0 items-baseline gap-x-2">
+        {/* On a phone the group's name is a line and what is to be done is the next, two lines of it: the work is the row. */}
+        <div className="flex min-w-0 items-baseline gap-x-2 max-sm:flex-wrap">
           {showCluster && (
-            <span className="relative z-sticky flex min-w-0 max-w-[45%] shrink-0 items-baseline gap-x-2">
+            <span className="relative z-sticky flex min-w-0 max-w-[45%] shrink-0 items-baseline gap-x-2 max-sm:max-w-full">
               <ClusterLink groupId={group?.id} className="min-w-0 truncate text-ui text-link">{group ? clusterName(group) : "全项目"}</ClusterLink>
               {group && <span className="hidden shrink-0 text-caption text-text-3 xl:inline">{clusterContext(group)}</span>}
             </span>
@@ -120,7 +121,7 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
             data-geo-action-open=""
             title={what.detail ?? undefined}
             className={cn(
-              "min-w-0 flex-1 truncate text-left text-ui after:absolute after:inset-0 after:content-['']",
+              "min-w-0 flex-1 truncate text-left text-ui after:absolute after:inset-0 after:content-[''] max-sm:basis-full max-sm:line-clamp-2 max-sm:whitespace-normal",
               skipped ? "text-text-3" : "text-text",
             )}
           >

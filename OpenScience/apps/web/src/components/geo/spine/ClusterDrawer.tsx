@@ -30,7 +30,6 @@ import { expectedText, gapWord, statusWord, whatToDo } from "./actionModel";
 import {
   clusterContext,
   clusterName,
-  countText,
   effectMarkers,
   effectPoints,
   groupTally,
@@ -108,7 +107,7 @@ export function ClusterDrawer({
         {detail.state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取这个问题群</p>}
         {detail.state.kind === "error" && (
           detail.state.missing
-            ? <p className="text-ui text-text-2">这个问题群不存在，或者已被新的问句集替换。</p>
+            ? <Note action={<Button variant="secondary" size="sm" onClick={onClose}>关闭</Button>}>这个问题群不存在，或者已被新的问句集替换。</Note>
             : <TabError message={detail.state.message} onRetry={detail.reload} />
         )}
         {view && (
@@ -255,7 +254,7 @@ function Answering({ geoId, view, engines, focus }: { geoId: string; view: GeoCl
       )}
       {gaps.length > 0 && (
         <div className="mt-5 flex flex-col gap-4">
-          <p className="text-caption text-text-3">策略里找到的缺口，和一个回答该说的</p>
+          <p className="text-caption text-text-3">缺口和回答该说的</p>
           {gaps.map((gap, index) => {
             const word = gapWord(gap.class);
             return (
@@ -342,7 +341,7 @@ function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; v
       {orders.length > 0 && (
         <div className="mt-4">
           <p className="mb-1 text-caption text-text-3">投放的订单</p>
-          <ul aria-label="这一群的订单" className="flex flex-col divide-y divide-faint">
+          <List label="这一群的订单" divided>
             {orders.map((order) => {
               const href = safeWebHref(order.publishedUrl);
               return (
@@ -354,13 +353,13 @@ function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; v
                 </li>
               );
             })}
-          </ul>
+          </List>
         </div>
       )}
       {ownedLinks.length > 0 && (
         <div className="mt-4">
           <p className="mb-1 text-caption text-text-3">自己发布的页面</p>
-          <ul aria-label="这一群自己发布的页面" className="flex flex-col divide-y divide-faint">
+          <List label="这一群自己发布的页面" divided>
             {ownedLinks.map((link) => {
               const href = safeWebHref(link.url);
               const engines = link.citedBy.map((entry) => engineName(entry.engine));
@@ -374,7 +373,7 @@ function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; v
                 </li>
               );
             })}
-          </ul>
+          </List>
         </div>
       )}
     </Section>
@@ -397,7 +396,6 @@ function Effect({ view }: { view: GeoClusterView }) {
       {points.length > 0 && (
         <>
           <EffectStrip label={`${metric}：这一群每轮被提到的回答数`} points={points} markers={markers} />
-          <p className="mt-1 text-caption text-text-3">{`每根柱子是一轮的回答数，${countText(points.filter((p) => p.k !== null).length, points.length)} 轮有读数`}</p>
         </>
       )}
       {arm && arm.comparable && size !== null && arm.verdict && (

@@ -14,6 +14,7 @@ import {
 import { toast } from "@/lib/toast";
 import { Drawer } from "@/components/ui/Drawer";
 import type { FilterOption } from "@/components/ui/FilterChips";
+import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
@@ -275,7 +276,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
                         <span className="text-caption tabular-nums text-text-3">{`${block.actions.length} 条行动`}</span>
                       </div>
                     )}
-                    <ul aria-label={`${block.name}的行动`} className="flex flex-col divide-y divide-border [&>li]:rounded-none">
+                    <List label={`${block.name}的行动`} divided>
                       {block.actions.map((action) => {
                         const article = articleOf(action);
                         const reach = article ? articleActions.reachable(article) : null;
@@ -296,7 +297,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
                           />
                         );
                       })}
-                    </ul>
+                    </List>
                   </div>
                 ))}
               </div>

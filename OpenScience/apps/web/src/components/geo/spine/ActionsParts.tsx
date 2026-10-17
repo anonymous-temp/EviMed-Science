@@ -237,7 +237,7 @@ export function ControlGroups({ view, clusters }: { view: GeoActionsView; cluste
   return (
     <section aria-label="对照组" data-geo-control="">
       <Disclosure summary={`对照组 ${named.length} 个，只监测`}>
-        <ul className="flex flex-col divide-y divide-faint">
+        <List label="对照组" divided>
           {named.map((entry) => (
             <li key={entry.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-ui">
               <ClusterLink groupId={entry.id} className="min-w-0">{entry.row ? clusterName(entry.row) : entry.name}</ClusterLink>
@@ -245,7 +245,7 @@ export function ControlGroups({ view, clusters }: { view: GeoActionsView; cluste
               {entry.articles > 0 && <Tag tone="warn">{`已写 ${entry.articles} 篇，不再是对照`}</Tag>}
             </li>
           ))}
-        </ul>
+        </List>
         {written.length > 0 && <p className="sr-only">{`有 ${written.length} 个对照群写了稿件`}</p>}
       </Disclosure>
     </section>

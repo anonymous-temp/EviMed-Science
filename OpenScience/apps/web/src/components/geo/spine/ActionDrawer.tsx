@@ -238,7 +238,7 @@ function ActionBody({
           {action.sources.length === 0 ? (
             <Note action={can("run") ? <Button variant="secondary" size="sm" onClick={ask}>让 AI 找信源</Button> : undefined}>这条行动还没有推荐的信源。</Note>
           ) : (
-            <ul aria-label="推荐的信源" className="flex flex-col divide-y divide-faint">
+            <List label="推荐的信源" divided>
               {action.sources.map((source, index) => (
                 <SourceRow
                   key={`${source.domain ?? source.channel ?? index}`}
@@ -251,7 +251,7 @@ function ActionBody({
                   onChanged={onChanged}
                 />
               ))}
-            </ul>
+            </List>
           )}
         </Section>
 
@@ -286,7 +286,7 @@ function ActionBody({
           {orders.length > 0 && (
             <div className="mt-3">
               <p className="mb-1 text-caption text-text-3">订单</p>
-              <ul aria-label="这条行动的订单" className="flex flex-col divide-y divide-faint">
+              <List label="这条行动的订单" divided>
                 {orders.map((order) => {
                   const href = safeWebHref(order.publishedUrl);
                   const cancellable = GEO_ORDER_CANCELLABLE.has(order.state);
@@ -302,13 +302,13 @@ function ActionBody({
                     </li>
                   );
                 })}
-              </ul>
+              </List>
             </div>
           )}
           {links.length > 0 && (
             <div className="mt-3">
               <p className="mb-1 text-caption text-text-3">自己发布的页面</p>
-              <ul aria-label="这条行动自己发布的页面" className="flex flex-col divide-y divide-faint">
+              <List label="这条行动自己发布的页面" divided>
                 {links.map((link) => {
                   const href = safeWebHref(link.url);
                   const cited = link.citedBy.map((entry) => engineName(entry.engine));
@@ -322,7 +322,7 @@ function ActionBody({
                     </li>
                   );
                 })}
-              </ul>
+              </List>
             </div>
           )}
           {arm && arm.comparable && armSize !== null && arm.verdict && (
