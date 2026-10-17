@@ -123,7 +123,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -3793,6 +3793,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // a GEO run takes below. Released whether or not the orchestrator is
       // composed: the reservation belongs to the dispatch, not to the module.
       if (String(run.dispatchId ?? "").startsWith("vcr-")) {
+        // A step that ran in the study's own conversation lets go of it, before the programme's next step is sent into it (that
+        // dispatch's revision replaces this one): what is typed there next is the conversation's, not the step's.
+        if (isConversationTurnRun(run) && run.sessionId) {
+          if (!(await runtimeManager.releaseDispatchedSession(project, run.sessionId))) {
+            await securityAudit(config, "vcr.conversation.release", "failed", { userId: project.userId, projectId: project.id, runId: run.id, code: "session_release_failed" }).catch(() => {});
+          }
+        }
         if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
           await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "vcr.runtime.release", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,

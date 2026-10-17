@@ -13,6 +13,9 @@ import {
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
   RUN_ROLES,
   PROGRAMME_ROUTE_REASON_PREFIXES,
+  CONVERSATION_TURN_ROUTE_REASON_PREFIX,
+  conversationTurnRouteReason,
+  isConversationTurnRun,
   isProgrammeRun,
   isVerificationRouteReason,
   isVerificationRun,
@@ -183,4 +186,35 @@ test('a 虚拟临床研究 programme step is a programme run, by the route reaso
   assert.deepEqual([...PROGRAMME_ROUTE_REASON_PREFIXES], ['vcr:'])
   // A verification stays a verification.
   assert.equal(runRoleOf({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON }), 'verification')
+})
+
+// 2026-10-17 (R19 phase 2): a step that ran as a turn of the study's own conversation is the person's conversation, not the study's
+// back office — it keeps the module's family (purpose, budget, what memory learns) and is no programme run, so the conversation lists
+// that leave programme runs out leave this one in.
+test('a 虚拟临床研究 step that ran in the study\'s conversation is a turn of it: still the module\'s, never a programme run', () => {
+  assert.equal(CONVERSATION_TURN_ROUTE_REASON_PREFIX, 'vcr:turn:')
+  for (const [reason, turn] of [['vcr:definition', 'vcr:turn:definition'], ['vcr:analysis', 'vcr:turn:analysis'], ['vcr:export-study_package', 'vcr:turn:export-study_package'],
+    ['vcr:review-repair', 'vcr:turn:review-repair'], ['vcr:trial-search', 'vcr:turn:trial-search'], ['vcr:evidence-refresh', 'vcr:turn:evidence-refresh']]) {
+    assert.equal(conversationTurnRouteReason(reason), turn, reason)
+    // Said twice it is said once, and the turn is not a programme run while the hidden step it replaces is.
+    assert.equal(conversationTurnRouteReason(turn), turn)
+    const hidden = { effectiveRouteReason: reason, effectiveAgentId: 'vcr-analysis', automated: true }
+    const inConversation = { ...hidden, effectiveRouteReason: turn }
+    assert.equal(isProgrammeRun(hidden), true, reason)
+    assert.equal(isConversationTurnRun(hidden), false, reason)
+    assert.equal(isProgrammeRun(inConversation), false, turn)
+    assert.equal(isConversationTurnRun(inConversation), true, turn)
+    assert.equal(runRoleOf(inConversation), null, turn)
+    // The module's family: charged and counted as the hidden step was, and not something the person said.
+    assert.equal(usagePurposeOfRun(inConversation), usagePurposeOfRun(hidden), turn)
+    assert.equal(isChargeableResearchRun(inConversation), isChargeableResearchRun(hidden), turn)
+    assert.equal(isResearcherOwnedWork(inConversation), isResearcherOwnedWork(hidden), turn)
+  }
+  // Another family is left as it was, and nothing a person's own turn carries reads as a turn of the module.
+  for (const reason of ['geo:insight', 'autopilot:literature-sentinel', 'session-binding', 'unrouted:open-domain', 'xvcr:turn:definition', '', null, undefined]) {
+    assert.equal(conversationTurnRouteReason(/** @type {any} */ (reason)), String(reason ?? ''))
+    assert.equal(isConversationTurnRun({ effectiveRouteReason: reason }), false, String(reason))
+  }
+  assert.equal(isConversationTurnRun(null), false)
+  assert.ok(conversationTurnRouteReason(`vcr:${'x'.repeat(100)}`).length <= 64, 'a route reason is at most 64 characters')
 })

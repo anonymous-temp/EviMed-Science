@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -5512,6 +5512,40 @@ export class RuntimeManager {
     try {
       await write();
     } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
+  /**
+   * Lets a conversation go from a dispatch to what is typed into it next (R19 phase 2).
+   *
+   * The runtime's run policy keeps a session's run — its plan, its route, the method it was handed, the deliverables it still owes —
+   * until another dispatch's revision replaces it, and it reads the dispatch's brief and context again in a process that has not
+   * seen them. A step that ran in the study's own conversation would therefore be the run of the next question: found live, a person
+   * stopped the evidence step and asked how far it had got, and the answer was the step finished — its plan's reminder arrived at
+   * the end of the question's turn and the model resumed the work that had been stopped.
+   *
+   * The way a dispatch's context is replaced is a newer revision, so this is one: it routes nowhere, belongs to a run of the
+   * conversation's own (`native_…`, which is what a conversation typed in the kernel's window is), and carries no brief, no context
+   * and no memory. The session binding is not touched: the next turn is the conversation's analyst again. Isolated, like every
+   * context write: a revision that was not written leaves the conversation as the dispatch left it.
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {Promise<boolean>} whether the revision was written
+   */
+  async releaseDispatchedSession(project, sessionId) {
+    try {
+      const session = safeId(sessionId, "session id");
+      await this.writeRunContextFile(project, "", { sessionId: session, required: true });
+      await this.writeRunMemoryFile(project, "", { sessionId: session, required: true });
+      const brief = briefFileForSession(session);
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, brief), "", { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, brief, "", true);
+      await this.writeRunBriefIndex(project, `native_${createHash("sha256").update(session).digest("hex").slice(0, 32)}`, {
+        sessionId: session, required: true, contextRevision: randomId("release_"), capability: null,
+      });
+      return true;
+    } catch {
+      // isolated: evimed_session_release_failures_total
+      return false;
+    }
   }
 
   /**
