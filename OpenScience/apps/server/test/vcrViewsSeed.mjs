@@ -105,10 +105,14 @@ export function seedVirtualPatientsCsv() {
  * Seed the EV-201 study and a second, empty one, and return what the test needs
  * to address them.
  *
- * @param {{ store: any, matchStore: any, evidenceStore: any, plane?: string }} stores `plane`: a data plane's directory (mode 0700);
- *   with it, the patient set's table is written there and recorded on its result, so its rows can be read
+ * @param {{ store: any, matchStore: any, evidenceStore: any, plane?: string, owner?: string, projectId?: string, emptyProjectId?: string,
+ *   name?: string, withEmpty?: boolean }} stores `plane`: a data plane's directory (mode 0700);
+ *   with it, the patient set's table is written there and recorded on its result, so its rows can be read. The rest say whose study this
+ *   is and what its project and name are: the page contract uses the defaults (`u_owner`, `prj_ev201`), the UI walk's fixture
+ *   (`scripts/ops/walk-fixture/vcr.mjs`) gives a real account and the projects it made. `withEmpty: false` seeds the one study alone.
  */
-export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }) {
+export async function seedEv201({ store, matchStore, evidenceStore, plane = "", owner = OWNER, projectId = "prj_ev201", emptyProjectId = "prj_empty",
+  name = "EV-201 二线 NSCLC：单臂 II 期还是随机", withEmpty = true, idTag = "" }) {
   await seedVcrCatalogue({ store });
   for (const [method, endpoints, passed, total] of [
     ["comparator.entropy_balance", ["continuous", "binary", "time_to_event"], 7, 7],
@@ -121,11 +125,11 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
   }
 
   const study = await store.createStudy({
-    userId: OWNER, projectId: "prj_ev201", name: "EV-201 二线 NSCLC：单臂 II 期还是随机",
+    userId: owner, projectId, name,
     question: "单臂 II 期加外部对照行不行，还是必须做随机？", dataTier: "T0", intendedUse: "design_support",
   });
   await store.query("INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'u_stat', 'statistical_reviewer'), ($1, 'u_recruit', 'recruiter')", [study.id]);
-  const userId = OWNER;
+  const userId = owner;
   const studyId = study.id;
 
   // --- 定义
@@ -222,8 +226,9 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
   });
   const assumptions = await store.assumptions(studyId);
 
-  // --- 模型
-  await store.saveModel({
+  // --- 模型（a second study of the same account finds the library's model where the first left it）
+  const libraryHas = (await store.models(userId)).some((/** @type {any} */ model) => model.name === "nsclc-docetaxel-pfs-weibull" && String(model.version) === "1.2");
+  if (!libraryHas) await store.saveModel({
     name: "nsclc-docetaxel-pfs-weibull", version: "1.2", tier: "literature", risk: "low", endpointType: "time_to_event", userId,
     card: { title: "二线 NSCLC 多西他赛组 PFS · Weibull", type: "fitted_prediction_model", provider: "研究 EV-201", interface: "vcr-engine patients.time_to_event",
       inputs: ["中位 PFS", "形状参数"], outputs: "对照组个体 PFS 的推演", missingData: "缺项不插补。", knownLimits: ["未做外部验证", "无更新机制"],
@@ -349,7 +354,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
   /** @param {string} kind @param {string} method @param {Record<string, any>} [fields] */
   const job = async (kind, method, fields = {}) => {
     jobNumber += 1;
-    const id = `job_seed_${jobNumber}`;
+    const id = `job_seed_${jobNumber}${idTag}`;
     await store.query(`INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, method_version, state, scenario_hash, seed, replicates,
       progress, cpu_seconds_limit, cpu_seconds_used, error)
       VALUES ($1, $2, $3, $4, $5, '1.0.0', $6, $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb)`,
@@ -525,7 +530,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
   await store.addEdges(studyId, [{ from: lineageNode("assumption", "control_median_pfs", 1), to: lineageNode("patient_set", patientSet.id, patientSet.version) }]);
   const populationNode = lineageNode("population", population.id, population.version);
   await store.markStale(studyId, [populationNode], "criterion_changed", {});
-  await store.noteRecomputeJob(studyId, populationNode, "job_seed_1");
+  await store.noteRecomputeJob(studyId, populationNode, `job_seed_1${idTag}`);
   await store.registerForecast({ studyId, userId, kind: "accrual", prediction: { last_patient_in_months: 14.2, probability_by_2027_12_15: 0.61 } });
 
   // 合作方数据：评估、转诊、中心
@@ -564,15 +569,15 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
     assessments[subject.key] = await matchStore.saveAssessment({ assessment, userId });
   }
   for (const [id, name, activated, slots, used, verified] of [
-    ["ste_01", "中心 01", "2026-07-15", 6, 2, "2026-09-20T00:00:00.000Z"], ["ste_07", "中心 07", null, 4, 0, null],
+    [`ste_01${idTag}`, "中心 01", "2026-07-15", 6, 2, "2026-09-20T00:00:00.000Z"], [`ste_07${idTag}`, "中心 07", null, 4, 0, null],
   ]) {
     await store.query(`INSERT INTO evimed_vcr.sites (id, study_id, user_id, name, capability, capacity, competing, contacts, activated_on, verified_at)
       VALUES ($1, $2, $3, $4, '{"place": "北京"}'::jsonb, $5::jsonb, '[{"id":"x"}]'::jsonb, '[]'::jsonb, $6, $7)`,
     [id, studyId, userId, name, JSON.stringify({ slots, used }), activated, verified]);
   }
   for (const [id, subjectKey, state, siteId, approver] of [
-    ["ref_seed_1", "P-0192", "contactable", "ste_01", null], ["ref_seed_2", "P-0233", "needs_evidence", null, null],
-    ["ref_seed_3", "P-0201", "contacted", "ste_01", "u_recruit"], ["ref_seed_4", "P-0207", "enrolled", "ste_01", "u_recruit"],
+    [`ref_seed_1${idTag}`, "P-0192", "contactable", `ste_01${idTag}`, null], [`ref_seed_2${idTag}`, "P-0233", "needs_evidence", null, null],
+    [`ref_seed_3${idTag}`, "P-0201", "contacted", `ste_01${idTag}`, "u_recruit"], [`ref_seed_4${idTag}`, "P-0207", "enrolled", `ste_01${idTag}`, "u_recruit"],
   ]) {
     await store.query(`INSERT INTO evimed_vcr.referrals (id, study_id, assessment_id, site_id, user_id, subject_key, state, contact_approved_by, contact_approved_at, enrolled_on)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8::text IS NULL THEN NULL ELSE now() END, CASE WHEN $7 = 'enrolled' THEN '2026-09-20'::date ELSE NULL END)`,
@@ -609,12 +614,14 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "" }
   await store.createExport({ studyId, userId, kind: "cde_communication_pack", cover: { reviewed: false } });
 
   // --- 第二个研究：刚创建，什么都没有
-  const empty = await store.createStudy({ userId: OWNER, projectId: "prj_empty", name: "GLP-1 周制剂 III 期：样本量与脱落情景", question: "", dataTier: "T0" });
-  for (const step of ["population", "patients", "comparator", "trial"]) await store.setStep(empty.id, step, { requested: true });
-  await store.setStep(empty.id, "definition", { requested: true });
+  const empty = withEmpty ? await store.createStudy({ userId: owner, projectId: emptyProjectId, name: "GLP-1 周制剂 III 期：样本量与脱落情景", question: "", dataTier: "T0" }) : null;
+  if (empty) {
+    for (const step of ["population", "patients", "comparator", "trial"]) await store.setStep(empty.id, step, { requested: true });
+    await store.setStep(empty.id, "definition", { requested: true });
+  }
 
   await fixClock(store);
-  return { study, empty, protocol, population, criteria, scenarios, packageId: packageRow.id, owner: OWNER };
+  return { study, empty, protocol, population, criteria, scenarios, packageId: packageRow.id, owner };
 }
 
 /**

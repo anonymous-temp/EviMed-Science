@@ -106,7 +106,8 @@ export function SkillsList({ personal, platform, tools, query, group, hasMore, l
               })}
             </List>
           ) : (
-            <Note action={<Button size="sm" variant="secondary" onClick={onCreate}>写第一个技能</Button>}>
+            // A text button, like 「展开其余」 under the other groups: one look for what a list section asks, so the page spends one kind of control on it.
+            <Note action={<Button size="sm" variant="text" onClick={onCreate}>写第一个技能</Button>}>
               还没有自己的技能：把一件做了几次的事写成技能，对话里会按需用到。也可以导入技能文件。
             </Note>
           )}

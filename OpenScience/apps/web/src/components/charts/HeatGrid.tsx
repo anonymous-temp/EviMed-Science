@@ -16,7 +16,8 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * ramp and the cells keep their colours in a Windows contrast theme (spec
  * §10.9 rule 6); their text colours are the ones contrast was measured for.
  *
- * Wider than its box (a phone), the grid scrolls in a labelled region that takes
+ * A grid of up to five columns fits the box of a phone (the names take less room there and a header wraps); wider than its box
+ * (more columns), the grid scrolls in a labelled region that takes
  * keyboard focus (`ScrollRegion`), and the row names stay at the left edge — a cell is never read
  * without the name of its row (DESIGN.md, 2026-10-07 audit B-03). The frozen
  * names paint a ground of their own, so they cover the cells that slide under
@@ -30,6 +31,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
 const STEPS = ["bg-heat-0", "bg-heat-1", "bg-heat-2", "bg-heat-3", "bg-heat-4", "bg-heat-5"] as const;
 /** White reads on the top two steps; the rest carry the body colour. */
 const STEP_TEXT = ["text-text", "text-text", "text-text", "text-text", "text-accent-fg", "text-accent-fg"] as const;
+
+/** Columns a phone's card holds without a sideways scroll: the row names, then five cells of a number and a wrapped header. */
+const FITS_A_PHONE = 5;
 
 /** A hatched ground for “未测”, built from the surface tokens rather than a colour. */
 const HATCH = "repeating-linear-gradient(135deg, var(--surface-1) 0 6px, var(--surface-2) 6px 12px)";
@@ -97,11 +101,11 @@ export function HeatGrid({
         </div>
       )}
       <ScrollRegion label={label}>
-        <table className="w-full min-w-[36rem] border-separate border-spacing-1">
+        <table className={cn("w-full border-separate border-spacing-1", columns.length > FITS_A_PHONE ? "min-w-[36rem]" : "sm:min-w-[36rem]")}>
           <caption className="sr-only">{label}</caption>
           <thead>
             <tr>
-              <th scope="col" className={cn("sticky left-0 z-sticky w-28 text-left text-meta font-normal text-text-3", groundClass)}><span className="sr-only">行</span></th>
+              <th scope="col" className={cn("sticky left-0 z-sticky w-24 text-left text-meta font-normal text-text-3 sm:w-28", groundClass)}><span className="sr-only">行</span></th>
               {columns.map((column) => (
                 <th
                   key={column.key}
@@ -120,7 +124,7 @@ export function HeatGrid({
                 <th
                   scope="row"
                   data-heat-emphasis={emphasis?.row === row.key ? "" : undefined}
-                  className={cn("sticky left-0 z-page w-28 text-left text-compact text-text", emphasis?.row === row.key && "font-semibold", groundClass)}
+                  className={cn("sticky left-0 z-page w-24 text-left text-compact text-text sm:w-28", emphasis?.row === row.key && "font-semibold", groundClass)}
                 >
                   {row.header}
                 </th>

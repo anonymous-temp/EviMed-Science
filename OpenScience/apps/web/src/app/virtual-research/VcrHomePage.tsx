@@ -196,7 +196,7 @@ export function VcrHomePage() {
       toolbar={{
         views: {
           label: "虚拟临床研究的视图",
-          items: TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready ? { count: ready.studies.length } : {}) })),
+          items: TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready && ready.studies.length > 0 ? { count: ready.studies.length } : {}) })),
           value: tab,
           onChange: (next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true }),
           panelId: "vcr-home-panel",

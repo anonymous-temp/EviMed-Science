@@ -278,6 +278,8 @@ describe("the study list", () => {
     draw();
     // The header's button stands until the empty state has taken its place: wait for the state before pressing.
     await screen.findByText("还没有研究");
+    // A tab that counts nothing does not say 0: the number is for a list with something in it.
+    expect(screen.getAllByRole("tab")[0].textContent).toBe("研究");
     await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
     await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === "/vcr/studies")).toBe(true));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_9/chat"));
