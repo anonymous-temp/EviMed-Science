@@ -25,7 +25,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Note } from "@/components/ui/Note";
 import type { MenuEntry } from "@/components/ui/Menu";
 import { VcrOffPage, VcrStudySkeleton } from "@/components/vcr/VcrStates";
-import { VcrBudgetDialog, cpuTimeText, jobsAwaitingBudget } from "@/components/vcr/VcrBudgetDialog";
+import { VcrBudgetDialog, budgetWaitOf, cpuTimeText } from "@/components/vcr/VcrBudgetDialog";
 import { VcrMembersDialog } from "@/components/vcr/VcrMembersDialog";
 import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
 import { VcrBackgroundRunsDrawer, VcrChangeLogDrawer } from "@/components/vcr/VcrStudyDrawers";
@@ -246,14 +246,13 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法取消，请稍后重试。" }))); };
 
   // What waits for the lead's word: a job past the budget. Said once, with the way to give it — and not to a reader who cannot.
-  const waiting = jobsAwaitingBudget(study.jobs);
-  const awaiting = Math.max(study.budget?.awaitingBudget ?? 0, waiting.jobs.length);
-  const budgetNote = awaiting > 0 && can("manage_study") ? (
+  // The header's primary action is 确认预算 while this is so (`StudyFrame`); the sentence says how much, and its number opens the same dialog.
+  const waiting = budgetWaitOf(study);
+  const budgetNote = waiting.count > 0 && can("manage_study") ? (
     <Note
       tone="warn"
       className="mb-4"
-      result={["有 ", { n: awaiting, onOpen: () => setPanel("budget"), label: `${awaiting} 项计算等待预算确认` }, ` 项计算等你确认预算${waiting.seconds > 0 ? `，需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`]}
-      action={<Button size="sm" onClick={() => setPanel("budget")}>确认预算</Button>}
+      result={["有 ", { n: waiting.count, onOpen: () => setPanel("budget"), label: `${waiting.count} 项计算等待预算确认` }, ` 项计算等你确认预算${waiting.seconds > 0 ? `，需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`]}
     />
   ) : null;
 

@@ -34,6 +34,21 @@ describe("evidence zone directory", () => {
     expect(within(tabs).getByRole("tab", { name: "全部专区" })).toHaveAttribute("aria-selected", "true");
     expect(tabs.parentElement).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
   });
+  it("never leaves an empty list as a dead end: a mark, and a way on or the reason there is none", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+    mount();
+    await screen.findByText("暂无证据专区");
+    const empty = document.querySelector("[data-empty]") as HTMLElement;
+    expect(empty.querySelector("svg")).not.toBeNull();
+    expect(empty.querySelector("button, a[href]") !== null || empty.hasAttribute("data-reason")).toBe(true);
+    // Out of the reader's followed zones the way on is every zone.
+    cleanup();
+    client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
+    render(<MemoryRouter initialEntries={["/app/frontier/zones?scope=following"]}><EvidenceZonesPage /></MemoryRouter>);
+    await screen.findByText("暂无证据专区");
+    await userEvent.click(screen.getByRole("button", { name: "看全部专区" }));
+    await waitFor(() => expect(client.listEvidenceZones).toHaveBeenLastCalledWith("", null, undefined));
+  });
   it("switches scope through the tabs, keeps it in the address and reads the other list", async () => {
     client.listEvidenceZones.mockResolvedValue({ items: [], nextCursor: null });
     mount();

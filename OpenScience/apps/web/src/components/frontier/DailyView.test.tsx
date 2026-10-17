@@ -181,8 +181,9 @@ describe("a day without an issue", () => {
     showEmpty(empty());
     expect(screen.getByText("今日日报尚未发布")).toBeInTheDocument();
     expect(screen.queryByText(/\d{2}:\d{2}/)).not.toBeInTheDocument();
-    // With nothing published at all there is no past to open.
+    // With nothing published at all there is no past to open — and the page is still not a dead end: the feed is a link away.
     expect(screen.queryByRole("button", { name: "往期" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "看精选动态" })).toHaveAttribute("href", "/app/frontier");
   });
 
   it("lets the reader open a past issue from the empty state when there are any, for the real day that has none", async () => {
@@ -202,6 +203,7 @@ describe("a day without an issue", () => {
   it("keeps saying 暂无日报 where the server has no daily at all, and 暂无周报 for a week", () => {
     showEmpty(empty({ index: null }));
     expect(screen.getByText("暂无日报")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "看精选动态" })).toBeInTheDocument();
     cleanup();
     showEmpty(empty(), { weekly: true });
     expect(screen.getByText("暂无周报")).toBeInTheDocument();

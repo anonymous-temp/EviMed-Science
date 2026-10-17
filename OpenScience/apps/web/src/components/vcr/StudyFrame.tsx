@@ -16,6 +16,7 @@ import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
+import { budgetWaitOf } from "./VcrBudgetDialog";
 import { leadJob, isMoving, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
 import { stepsOfTab, tabDot, VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
 import { intendedUseLabel, tierLabel } from "./vcrText";
@@ -48,7 +49,8 @@ export const STUDY_PANEL_ID = "vcr-tab-panel";
  *    tabs never loses where the study is, and its height is the same on every tab.
  *  - **The primary action is the server's `next`** and is in the header on every tab, not only on the overview. While work is going
  *    on it is not drawn: the strip under the header says what is happening, with 取消 — a second button for the next step beside it
- *    could only queue another.
+ *    could only queue another. While computations wait for the lead's word on the budget, 确认预算 is the primary instead — it is
+ *    the one thing that lets the study go on — and the next step, if it has one, is the quiet button beside it.
  *  - **「对话」 is a view, not a place.** It opens `/app/virtual-research/:studyId/chat` — this page, with the band still above it.
  *    It is not a tab (it is not one of the domain's `VCR_TABS`), so with it open no tab is selected.
  *  - **The tab's controls are the band's.** A tab calls `useVcrToolbar`; the frame draws that in the `toolbar` slot, or reserves the
@@ -163,9 +165,11 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
 
   // The primary action: the next step, in the header of every tab. While work goes on the strip under the header is what is said
   // and there is nothing to press for another step — it could only queue behind this one.
+  const waitingBudget = study.abilities.includes("manage_study") && budgetWaitOf(study).count > 0;
+  const budgetButton = waitingBudget ? <Button onClick={() => onPanel("budget")}>确认预算</Button> : null;
   const nextButton = next && mayRun && !moving ? (() => {
     const button = (
-      <Button loading={busy} onClick={() => run(() => runVcrStep(studyId, next.step), "这一步无法开始，请稍后重试。")}>
+      <Button variant={waitingBudget ? "secondary" : "primary"} loading={busy} onClick={() => run(() => runVcrStep(studyId, next.step), "这一步无法开始，请稍后重试。")}>
         {`${next.reason === "retry" ? "接着做" : next.reason === "refresh" ? "重新做" : "下一步"}：${next.label}`}
       </Button>
     );
@@ -190,6 +194,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
         meta={<StudyMeta study={study} />}
         actions={(
           <>
+            {budgetButton}
             {nextButton}
             <Button variant="secondary" aria-pressed={view === "chat"} onClick={() => { if (view !== "chat") onChat(); }}>
               <MessageSquare size={16} aria-hidden="true" />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Plus, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -20,10 +20,11 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
-import type { ToolbarFilter } from "@/components/ui/Toolbar";
+import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { VcrStepProgress } from "@/components/vcr/VcrStepProgress";
 import { announceVcrStudiesChanged, hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
+import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
 import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
 import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
 import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
@@ -190,9 +191,7 @@ export function VcrHomePage() {
   const onStudies = tab === "studies" && ready !== null && studies.length > 0;
 
   return (
-    <PageShell
-      title="虚拟临床研究"
-      width="wide"
+    <HomeFrame
       actions={none ? undefined : newStudy}
       toolbar={{
         views: {
@@ -236,7 +235,24 @@ export function VcrHomePage() {
                         {shown.map((study) => <StudyRow key={study.id} study={study} todos={todosOf(study)} />)}
                       </List>
                     )}
-    </PageShell>
+    </HomeFrame>
+  );
+}
+
+/**
+ * The home's page: its views, and beside them whatever its libraries ask for. 方法库 and 试验先例 load their own data and know their
+ * own filters, search and buttons, so they hand them to **the page's one toolbar** (`useVcrToolbar`, which finds this slot) instead of
+ * drawing a second one under it. A component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the
+ * panel — the study page's frame does the same.
+ */
+function HomeFrame({ actions, toolbar, children }: { actions: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
+  const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
+  return (
+    <ToolbarSlotContext.Provider value={setPanel}>
+      <PageShell title="虚拟临床研究" width="wide" actions={actions} toolbar={panel ? { ...toolbar, ...panel, views: toolbar.views } : toolbar}>
+        {children}
+      </PageShell>
+    </ToolbarSlotContext.Provider>
   );
 }
 
@@ -250,22 +266,21 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
   const described = Boolean(study.question) || ["done", "minimal", "stale"].includes(study.steps.definition?.status ?? "");
   return (
     <li className="relative flex flex-col gap-3 px-2 py-5 hover:bg-surface-1">
-      <div className="flex items-start gap-6">
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Link
-              to={vcrTabPath(study.id, "overview")}
-              data-row-title
-              className="min-w-0 text-body font-semibold text-text after:absolute after:inset-0 after:rounded after:content-['']"
-            >
-              {study.name}
-            </Link>
-            <span className="shrink-0 text-caption text-text-3">{tierLabel(study.tier)}</span>
-          </p>
-          {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
-          {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
-        </div>
-        <span className="shrink-0 text-caption tabular-nums text-text-3">{study.updatedAt}</span>
+      <div className="min-w-0">
+        {/* The title has the row's whole line on a phone — the tier and the date go under it — and on a wide page the date stands at the right edge. */}
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <Link
+            to={vcrTabPath(study.id, "overview")}
+            data-row-title
+            className="min-w-0 text-body font-semibold text-text after:absolute after:inset-0 after:rounded after:content-[''] max-sm:basis-full"
+          >
+            {study.name}
+          </Link>
+          <span className="shrink-0 text-caption text-text-3">{tierLabel(study.tier)}</span>
+          <span className="shrink-0 text-caption tabular-nums text-text-3 sm:ml-auto">{study.updatedAt}</span>
+        </p>
+        {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
+        {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
       </div>
       <VcrStepProgress studyId={study.id} steps={study.steps} described={described} paused={study.status === "paused"} />
       {(need || line) && (

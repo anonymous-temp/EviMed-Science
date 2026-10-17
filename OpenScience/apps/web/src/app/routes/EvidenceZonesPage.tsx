@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EVIDENCE_ZONE_KINDS, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
+import { Layers } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useEvidenceScope } from "@/components/frontier/useEvidenceScope";
 import { ZoneEditor } from "@/components/frontier/EvidenceEditors";
@@ -157,6 +158,16 @@ export function EvidenceZonesPage() {
   const kinds = EVIDENCE_ZONE_KINDS.filter((kind) => items.some((zone) => (zone.kind ?? "user") === kind));
   const zonePath = (zone: EvidenceZone) =>
     `/app/frontier/zones/${encodeURIComponent(zone.id)}${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`;
+  // An empty list says where to go from it: to every zone, to the one the reader may make, to a topic nobody has written, or out of a search.
+  const emptyAction = scope === "following"
+    ? <Button variant="secondary" onClick={() => setScope("public")}>看全部专区</Button>
+    : canCreate && scope === "owned" && !query
+      ? <Button variant="secondary" onClick={() => setCreating(true)}>新建专区</Button>
+      : requestable
+        ? <Button variant="secondary" onClick={() => setAsking("")}>申请选题</Button>
+        : query
+          ? <Button variant="secondary" onClick={() => { setQ(""); setQuery(""); }}>清除搜索</Button>
+          : null;
   const list = (zones: EvidenceZone[]) => (
     <List divided label="证据专区">
       {zones.map((zone) => {
@@ -238,8 +249,11 @@ export function EvidenceZonesPage() {
         <FrontierSkeleton />
       ) : !error && items.length === 0 ? (
         <EmptyState
+          icon={Layers}
           title={query ? "没有找到匹配的专区" : "暂无证据专区"}
-          action={requestable ? <Button variant="secondary" onClick={() => setAsking("")}>申请选题</Button> : undefined}
+          {...(emptyAction
+            ? { action: emptyAction }
+            : { reason: "专区由平台和研究者发布，发布后会列在这里。" })}
         />
       ) : (
         <div className="space-y-6">
