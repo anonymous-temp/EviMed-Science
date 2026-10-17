@@ -452,7 +452,7 @@ describe("数据接入 — what the page sends", () => {
       body: { grantee: "view-manager", fields: ["AGE", "ARM"], purposes: ["vcr"] },
     });
     expect(Object.keys(writes()[0].body as object).sort()).toEqual(["fields", "grantee", "purposes"]);
-  });
+  }, 20_000); // the longest test of the file: a grant, a revoke and their re-reads in a row — five seconds do not cover it when the whole suite shares the machine
 
   it("names a refusal with the plane's own code as a sentence, not as a status", async () => {
     drawTab();
