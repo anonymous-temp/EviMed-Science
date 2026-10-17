@@ -666,6 +666,7 @@ function composerRead(operator, narrow) {
 }
 function context() {
   const routes = [];
+  const initScripts = [];
   const fire = async (url) => {
     for (const [pattern, handler] of routes) {
       if (!pattern.test(url)) continue;
@@ -879,6 +880,8 @@ function context() {
   };
   return {
     async route(pattern, handler) { routes.push([pattern, handler]); },
+    // The script every document starts with: the walk gives its page the account's own project each time (a click into a study switched it).
+    async addInitScript(script) { initScripts.push(script); log({ initScript: script.name }); },
     newPage,
     request: {
       async post(url) { if (url.endsWith("/api/auth/login")) { loggedIn = true; return json(200, {}); } loggedIn = false; return json(200, {}); },
@@ -1083,6 +1086,14 @@ test("a list the walk finds its pages by that the deployment cannot answer is a 
   assert.equal(refused.code, 0, "a refusal is the account's");
   assert.ok(!refused.report.failures.some((line) => line.startsWith("discovery:")));
   assert.ok(!Object.keys(refused.report.pages).some((view) => view.startsWith("geo-overview@")), "no project was found, so no GEO tab was walked");
+});
+
+test("every document the walk opens starts in the account's own project, so that a click into a study does not turn the pages after it into that study's", async () => {
+  const { log } = await walk();
+  const installed = log.findIndex((entry) => entry.initScript === "forgetProjectChoice");
+  const firstPage = log.findIndex((entry) => entry.goto);
+  assert.ok(installed >= 0 && installed < firstPage, "the script is on the context before the first page is opened");
+  assert.equal(log.filter((entry) => entry.initScript).length, 1);
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {

@@ -230,7 +230,7 @@ test("every function the walk hands to the browser stands on its own text", asyn
   const require = createRequire(import.meta.url);
   const { Linter } = require("eslint");
   const source = await readFile(WALK, "utf8");
-  const named = [...new Set([...source.matchAll(/\.(?:evaluate|waitForFunction)\(\s*([A-Za-z_]\w*)/g)].map((match) => match[1]))];
+  const named = [...new Set([...source.matchAll(/\.(?:evaluate|waitForFunction|addInitScript)\(\s*([A-Za-z_]\w*)/g)].map((match) => match[1]))];
   assert.ok(named.length >= 25, `${named.length} in-page functions were found: ${named.join(", ")}`);
   const linter = new Linter();
   const problems = [];

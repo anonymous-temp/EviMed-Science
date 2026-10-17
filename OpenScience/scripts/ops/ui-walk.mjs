@@ -158,13 +158,13 @@ import { brotliDecompressSync } from "node:zlib";
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs. `templates` says what each template may hold (`tablist`, `toolbar`, `stepRail`: `allowed`, `none`, `every-tab`) and how many windows tall a page of it may be before it needs contents (`longViewports`; a reading page needs contents from six, anything else contents or a list read a page at a time from twelve)."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs. `templates` says what each template may hold (`tablist`, `toolbar`, `stepRail`: `allowed`, `none`, `every-tab`; a reading page may carry the switch of its own document — a GEO answer's date, a document's 内容 / 原文 on a phone — and DESIGN.md forbids it nothing but a missing outline) and how many windows tall a page of it may be before it needs contents (`longViewports`; a reading page needs contents from six, anything else contents or a list read a page at a time from twelve)."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
       "T3": {"name":"module page","tablist":"allowed","toolbar":"allowed","stepRail":"every-tab","outline":"none","longViewports":12},
       "T4": {"name":"data page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
-      "T5": {"name":"reader page","tablist":"none","toolbar":"none","stepRail":"none","outline":"when-long","longViewports":6},
+      "T5": {"name":"reader page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"when-long","longViewports":6},
       "T6": {"name":"settings page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
       "screen": {"name":"state screen","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
       "kernel": {"name":"the kernel's own conversation","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12}
@@ -1576,6 +1576,22 @@ async function capturePage(page, out, view, viewport, route, composition) {
   const facts = `${view}.json`;
   await writeFile(path.join(out, facts), `${JSON.stringify({ view, route, viewport, shape, capture: plan, ...composition }, null, 1)}\n`);
   return { screenshots, capture: plan.kind === "slices" ? { kind: plan.kind, slices: plan.tops.length, truncated: plan.truncated } : { kind: plan.kind }, facts };
+}
+
+/**
+ * The app keeps the project a person is in under this key (`apiClient.ts`, `PROJECT_KEY`): in the tab's session storage, remembered in local
+ * storage. A click on a row of 循证 GEO's or 虚拟临床研究's home goes into a project, and the walk's one browser then read every page after it
+ * as that project — the memory page of a study's project, no scheduled task, a library with nothing in it — and said "not observable" of
+ * pages that had something. Every page the walk opens starts from the account's own project, as a person who opens it fresh does.
+ * Run by the browser at the start of every document (`addInitScript`), so it names nothing of this module.
+ */
+export function forgetProjectChoice() {
+  try {
+    window.sessionStorage.removeItem("openScience.projectId");
+    window.localStorage.removeItem("openScience.projectId");
+  } catch {
+    // A document with no storage (an error page) has no project to forget.
+  }
 }
 
 /** Where keyboard focus is: what it names and whether it is inside the sidebar. */
@@ -3104,6 +3120,7 @@ async function main() {
   let allowRuntimeStart = false;
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
+    await context.addInitScript(forgetProjectChoice);
     // The walk starts no runtime (F-G20): the shell warms the account's
     // default runtime from every page. Refused here, before any page loads;
     // let through only for the chat page, which cannot load without one.

@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { compositionFindings, familyFindings, measureComposition, scrollPage } from "../../../scripts/ops/ui-walk.mjs";
+import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -257,5 +257,21 @@ test("the page's scroll area is found, measured and moved: the app scrolls insid
   const plain = await page.evaluate(scrollPage, ["shape"]);
   assert.deepEqual([plain.clientHeight, plain.scrollHeight], [945, 3000]);
   assert.deepEqual(await page.evaluate(scrollPage, ["to", 500]), { top: 500 });
+});
+
+test("the project the app remembers is forgotten at the start of every document, and only that", { skip }, async () => {
+  const context = await browser.newContext();
+  try {
+    await context.addInitScript(forgetProjectChoice);
+    const tab = await context.newPage();
+    await tab.route("http://walk.test/**", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>x</title>" }));
+    await tab.goto("http://walk.test/a");
+    // The app's own words for it (apiClient.ts), as a click into a study sets them, and a setting of the app's that is not the project.
+    await tab.evaluate(() => { window.sessionStorage.setItem("openScience.projectId", "p-study"); window.localStorage.setItem("openScience.projectId", "p-study"); window.localStorage.setItem("openScience.theme", "dark"); });
+    await tab.goto("http://walk.test/b");
+    assert.deepEqual(await tab.evaluate(() => [window.sessionStorage.getItem("openScience.projectId"), window.localStorage.getItem("openScience.projectId"), window.localStorage.getItem("openScience.theme")]), [null, null, "dark"]);
+  } finally {
+    await context.close();
+  }
 });
 
