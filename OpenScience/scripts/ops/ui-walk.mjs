@@ -205,7 +205,7 @@ const WALK_TABLES = {
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true},
-      {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":true},
+      {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":false,"rowsNote":"a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)"},
       {"view":"account-appearance","route":"/app/account?tab=appearance","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-usage","route":"/app/account?tab=usage","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-connectors","route":"/app/account?tab=connectors","pattern":"/app/account","family":"settings","template":"T6","rows":false},
@@ -2155,10 +2155,11 @@ export function taskPageFindings(name, r) {
   const current = `${name}@desktop`;
   /** @type {string[]} */ const failures = [];
   /** @type {string[]} */ const notices = [];
-  if (!r) return { failures, notices };
+  /** @type {string[]} */ const info = [];
+  if (!r) return { failures, notices, info };
   if (!/^\/app\/autopilot\/[^/]+$/.test(r.path ?? "")) {
     notices.push(`${current}: not observable: the first row did not go to a task's own page (the address is ${r.path}), so the task page was not read`);
-    return { failures, notices };
+    return { failures, notices, info };
   }
   if (!r.main) notices.push(`${current}: the task page has no main area (data-task-main)`);
   if (!r.bar) notices.push(`${current}: the task page has no task bar (data-task-bar)`);
@@ -2181,12 +2182,14 @@ export function taskPageFindings(name, r) {
       if (!sameBox(box, r.paneBox)) {
         notices.push(`${current}: the kernel frame${r.frameBox ? "" : "'s container"} is ${boxText(box)} and the pane ${boxText(r.paneBox)} (the same rectangle)`);
       } else if (!r.frameBox) {
-        notices.push(`${current}: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
+        // No walk starts a runtime, so this is so on every account: an INFO line of what was compared, not a gap of the account's data
+        // (a fixture walk accepts no gap, and no data could fill this one — r19-guards2).
+        info.push(`${current}: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
       }
     }
   }
   if (r.zoneIds.length) failures.push(`${current}: the task bar names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
-  return { failures, notices };
+  return { failures, notices, info };
 }
 
 /**
@@ -2956,6 +2959,7 @@ async function walkRowClicks(page, base, route, name, popups) {
         const judged = afterClickFindings(name, kind, opened);
         failures.push(...judged.failures);
         notices.push(...judged.notices);
+        info.push(.../** @type {{ info?: string[] }} */ (judged).info ?? []);
       }
     }
   } finally {

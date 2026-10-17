@@ -81,10 +81,12 @@ export async function furnishAccount(app, user, ids, { log }) {
     log(`account: ${METHODS.length} learned methods`);
   } else log("account: no learning service on the control plane; no methods");
 
-  // ---- scheduled tasks (made, not started: nothing here can run one)
+  // ---- scheduled tasks (made, not started: nothing here can run one). Each has its conversation, as the first execution would open it
+  // (`conversation`): the task page places the kernel's frame over that pane, which is what the walk reads.
   for (const [title, prompt, scheduleHour, taskTypes] of TASKS) {
-    await app.autopilotService.create(user.id, { projectId: "default", title, prompt, topics: [title], taskTypes, dailyBudgetCny: 3, weeklyBudgetCny: 15, maxEpisodeCny: 2,
+    const agenda = await app.autopilotService.create(user.id, { projectId: "default", title, prompt, topics: [title], taskTypes, dailyBudgetCny: 3, weeklyBudgetCny: 15, maxEpisodeCny: 2,
       scheduleHour, timeZone: "Asia/Shanghai" });
+    await app.autopilotService.conversation(user.id, agenda.id);
   }
   log(`account: ${TASKS.length} scheduled tasks`);
 

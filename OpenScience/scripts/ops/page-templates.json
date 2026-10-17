@@ -53,7 +53,7 @@
     { "view": "memory-shared-missing", "route": "/app/memory/shared/impeccable-audit-missing", "pattern": "/app/memory/shared/:token", "family": "memory-record", "template": "screen", "rows": false },
     { "view": "autopilot", "route": "/app/autopilot", "pattern": "/app/autopilot/:taskId?", "family": "autopilot", "template": "T2", "shapes": 2, "rows": true },
     { "view": "inbox", "route": "/app/inbox", "pattern": "/app/inbox", "family": "inbox", "template": "T1", "shapes": 2, "rows": true },
-    { "view": "account", "route": "/app/account", "pattern": "/app/account", "family": "settings", "template": "T6", "shapes": 3, "rows": true },
+    { "view": "account", "route": "/app/account", "pattern": "/app/account", "family": "settings", "template": "T6", "shapes": 3, "rows": false, "rowsNote": "a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)" },
     { "view": "account-appearance", "route": "/app/account?tab=appearance", "pattern": "/app/account", "family": "settings", "template": "T6", "rows": false },
     { "view": "account-usage", "route": "/app/account?tab=usage", "pattern": "/app/account", "family": "settings", "template": "T6", "rows": false },
     { "view": "account-connectors", "route": "/app/account?tab=connectors", "pattern": "/app/account", "family": "settings", "template": "T6", "rows": false },
