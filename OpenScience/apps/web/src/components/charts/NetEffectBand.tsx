@@ -85,22 +85,27 @@ export function netEffectOption(model: NetEffectModel): EChartsCoreOption {
   const grey = resolvedColor(rivalColor(0));
   const rule = resolvedColor(TARGET_COLOR);
   const band = model.band;
-  const lower = band === null ? null : model.control.map((value) => (value === null ? null : value - band));
+  // A stacked band is drawn over values of one sign (the library stacks positives on positives and negatives on negatives), and a
+  // change since the first round is negative as often as it is positive: every value is lifted by `lift` so the stack is of
+  // positives, and the axis, the tooltip and the rules write the value less the lift.
+  const raw = [...model.pilot, ...model.control, ...model.control.map((value) => (value === null || band === null ? null : value - band)),
+    ...model.control.map((value) => (value === null || band === null ? null : value + band)), 0].filter((value): value is number => value !== null);
+  const low = Math.floor(Math.min(...raw) - 1);
+  const high = Math.ceil(Math.max(...raw) + 1);
+  const lift = -low;
+  const up = (value: number | null) => (value === null ? null : value + lift);
+  const lower = band === null ? null : model.control.map((value) => (value === null ? null : value - band + lift));
   const width = band === null ? null : model.control.map((value) => (value === null ? null : band * 2));
-  const levels = [...model.pilot, ...model.control, ...(lower ?? []), ...(band === null ? [] : model.control.map((value) => (value === null ? null : value + band))), 0]
-    .filter((value): value is number => value !== null);
-  const low = Math.floor(Math.min(...levels) - 1);
-  const high = Math.ceil(Math.max(...levels) + 1);
   return {
     animation: false,
-    grid: { left: 8, right: 8, top: model.markers.length > 0 ? 32 : 16, bottom: 8, containLabel: true },
-    tooltip: { trigger: "axis", valueFormatter: (value: unknown) => (typeof value === "number" ? changeText(value) : "—") },
+    grid: { left: 8, right: 48, top: model.markers.length > 0 ? 32 : 16, bottom: 8, containLabel: true },
+    tooltip: { trigger: "axis", valueFormatter: (value: unknown) => (typeof value === "number" ? changeText(value - lift) : "—") },
     xAxis: { type: "category", boundaryGap: false, data: model.labels },
-    yAxis: { type: "value", min: low, max: high, axisLabel: { formatter: (value: number) => changeText(value) } },
+    yAxis: { type: "value", min: 0, max: high + lift, axisLabel: { formatter: (value: number) => changeText(value - lift) } },
     series: [
       ...(lower && width ? [
         { type: "line", stack: "noise", silent: true, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, data: lower, z: 1 },
-        { type: "line", stack: "noise", silent: true, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: resolvedColor(BAND_COLOR) }, data: width, z: 1 },
+        { type: "line", stack: "noise", silent: true, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: resolvedColor(BAND_COLOR) }, data: width, z: 1, tooltip: { show: false } },
       ] : []),
       {
         type: "line",
@@ -110,13 +115,13 @@ export function netEffectOption(model: NetEffectModel): EChartsCoreOption {
         connectNulls: false,
         lineStyle: { color: own, width: CHART_STROKES.own, cap: "round" },
         itemStyle: { color: own },
-        data: model.pilot,
+        data: model.pilot.map(up),
         z: 3,
         markLine: {
           silent: true,
           symbol: "none",
           data: [
-            { yAxis: 0, label: { show: true, position: "insideEndTop", formatter: "起点", color: rule }, lineStyle: { color: rule, width: 1, type: "dotted" } },
+            { yAxis: lift, label: { show: true, position: "insideEndTop", formatter: "起点", color: rule }, lineStyle: { color: rule, width: 1, type: "dotted" } },
             ...model.markers.map((marker) => ({
               xAxis: marker.index,
               label: { show: true, position: "end", rotate: 0, distance: 4, formatter: marker.label, color: rule, align: marker.index / Math.max(1, model.labels.length - 1) > 0.5 ? "right" : "left" },
@@ -133,7 +138,7 @@ export function netEffectOption(model: NetEffectModel): EChartsCoreOption {
         lineStyle: { color: grey, width: CHART_STROKES.other },
         itemStyle: { color: grey },
         endLabel: { show: true, formatter: "对照组", color: grey, distance: 4 },
-        data: model.control,
+        data: model.control.map(up),
         z: 2,
       },
     ],

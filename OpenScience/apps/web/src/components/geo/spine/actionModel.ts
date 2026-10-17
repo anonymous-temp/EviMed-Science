@@ -257,6 +257,8 @@ export interface ExpectedText {
   now: string;
   /** The goal and the promise (the pool's target for the chosen tier, how far the platform says the action can move it). */
   goal: string | null;
+  /** The target alone: 「池目标 98%」, for the row that has little room. */
+  target: string | null;
   /** The sample's word, when the reading is thin. */
   sample: string | null;
   /** The group is at its pool's target: the action's remaining work is what it closes. */
@@ -277,18 +279,20 @@ export function expectedText(action: GeoAction): ExpectedText {
     return {
       now: from.rate ? `${name} ${from.rate}，已达池目标${target ? ` ${target}` : ""}` : `${name} ${from.counts}，已达池目标${target ? ` ${target}` : ""}`,
       goal: closes ?? promise,
+      target: closes,
       sample: null,
       reached: true,
     };
   }
   const goalParts = [target ? `池目标 ${target}` : null, promise].filter((part): part is string => Boolean(part));
   const goal = goalParts.length > 0 ? goalParts.join(" · ") : closes;
-  if (from.state === "absent") return { now: `${name} 还没有测到`, goal, sample: null, reached: false };
+  const targetOnly = target ? `池目标 ${target}` : null;
+  if (from.state === "absent") return { now: `${name} 还没有测到`, goal, target: targetOnly, sample: null, reached: false };
   if (from.state === "enough" && from.rate) {
     const start = baseline.state === "enough" && baseline.rate ? `基线 ${baseline.rate} → ` : baseline.state !== "absent" ? `基线 ${baseline.counts} → ` : "";
-    return { now: `${name} ${start}现在 ${from.rate}`, goal, sample: null, reached: false };
+    return { now: `${name} ${start}现在 ${from.rate}`, goal, target: targetOnly, sample: null, reached: false };
   }
-  return { now: `${name} ${from.counts}`, goal, sample: from.sample, reached: false };
+  return { now: `${name} ${from.counts}`, goal, target: targetOnly, sample: from.sample, reached: false };
 }
 
 /* ------------------------------------------------------------------- page */
