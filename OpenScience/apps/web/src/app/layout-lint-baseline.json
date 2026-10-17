@@ -1,0 +1,20 @@
+{
+  "about": "The files that still break a page-framework lint rule (.eslintrc.cjs, the layout block), with the number of sites each has: there the import rule is a warning, everywhere else an error. src/app/layoutLint.test.ts holds every number (it may fall, it may not rise) and the total to the sum. Recorded by r19-guards2 on 2026-10-17; a file that is clean leaves the list.",
+  "total": 14,
+  "files": {
+    "src/app/extensions/PersonalSkillDrawer.tsx": 1,
+    "src/app/routes/CapsuleTransferPanel.tsx": 1,
+    "src/app/routes/SourceReaderPage.tsx": 1,
+    "src/components/geo/MembersDialog.tsx": 1,
+    "src/components/geo/ProducerDialog.tsx": 1,
+    "src/components/inspector/ResultImpactPanel.tsx": 1,
+    "src/components/markdown-viewer/ClaimCitation.tsx": 1,
+    "src/components/markdown-viewer/SourceUpdateBadges.tsx": 1,
+    "src/components/markdown-viewer/StudyTypeBadge.tsx": 1,
+    "src/components/settings/AppearanceSection.tsx": 1,
+    "src/components/settings/GeoMarketCard.tsx": 1,
+    "src/components/vcr/VcrModelAssessments.tsx": 1,
+    "src/components/vcr/VcrPredictionsDrawer.tsx": 1,
+    "src/components/vcr/tabs/DataTab.tsx": 1
+  }
+}
