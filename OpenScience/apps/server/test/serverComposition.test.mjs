@@ -2006,7 +2006,7 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   };
   const list = app.agentRuns.list.bind(app.agentRuns);
   app.agentRuns.dispatch = async (/** @type {any} */ scoped, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
-    dispatched.push({ project: scoped, input });
+    dispatched.push({ project: scoped, input, sendPrompt });
     await sendPrompt({ sessionId: input.sessionId }, { id: `run-geo-${dispatched.length}`, kernelRequestIds: [] });
     return { id: `run-geo-${dispatched.length}`, status: "running" };
   };
@@ -2030,6 +2030,12 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     "the instruction rides in the run's own context");
   assert.match(String(prompts[0].request.text), /<evimed-budget-scope>/);
   assert.equal(prompts[0].request.allowBounded, true);
+  // The gate's repair round goes into the same session as a message of its own: the repair text under the mark, and the instruction is
+  // still in the run's context (it is rebuilt with every prompt, so the model keeps the brief it was given).
+  await dispatched[0].sendPrompt({ sessionId: "session-geo-1" }, { id: "run-geo-1", kernelRequestIds: [] }, "请按下面的意见修订交付物：缺少引文。");
+  assert.match(String(prompts[1].request.text), /^请按下面的意见修订交付物：缺少引文。\n\n<evimed-geo-run>geo-insight-a1<\/evimed-geo-run>/);
+  assert.match(String(prompts[1].request.system), /<evimed-geo-brief>\n「循证 GEO」自动运行/);
+  prompts.splice(1, 1);
 
   // A run already running in the project: the GEO step waits.
   app.agentRuns.list = async () => [{ id: "busy", status: "running", dispatchId: "chat-1" }];

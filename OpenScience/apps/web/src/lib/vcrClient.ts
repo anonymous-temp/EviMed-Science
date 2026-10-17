@@ -36,6 +36,7 @@
 import { useEffect, useState } from "react";
 import { fetchWebMe, fetchWithWebAuth, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
+import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody,
@@ -2381,21 +2382,13 @@ export function renameVcrStudy(studyId: string, name: string) {
   return patchVcrStudy(studyId, { name });
 }
 
-/** One conversation the programme opened in the study's project, as 「AI 运行」 lists it. */
-export interface VcrBackgroundRun {
-  sessionId: string;
-  /** The capability's product name: 「虚拟临床研究 · 证据」. */
-  label: string;
-  state: "running" | "finished" | "stopped";
-  /** 「今天 14:32」. */
-  at: string | null;
-}
+/** One step the programme ran in the study's project, as 「AI 运行」 lists it: the shared record shape (`ProgrammeRun`). */
+export type VcrBackgroundRun = ProgrammeRun;
 
 export async function getVcrBackgroundRuns(studyId: string): Promise<VcrBackgroundRun[]> {
   const value = obj(await productRequest<unknown>(`${study(studyId)}/runs`));
   return arr(value.runs).filter((item) => typeof item.sessionId === "string").map((item) => ({
-    sessionId: String(item.sessionId), label: text(item.label) ?? "后台分析",
-    state: item.state === "running" || item.state === "finished" ? item.state : "stopped", at: text(item.at),
+    sessionId: String(item.sessionId), label: text(item.label) ?? "后台分析", state: programmeRunState(item.state), at: text(item.at),
   }));
 }
 

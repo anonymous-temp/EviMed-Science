@@ -854,8 +854,8 @@ export interface WebAgentRun {
   /**
    * What the platform's own bookkeeping calls this run, when it is not the person's conversation (`runRoleOf` in the domain, derived by the
    * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim,
-   * `programme` a step a module's programme dispatched (虚拟临床研究). A list of conversations leaves such a run out
-   * (`isConversationRun`); the ledger, the task's page and the study's 「AI 运行」 record still hold it. Absent on an ordinary run.
+   * `programme` a step a module's programme dispatched (虚拟临床研究, 循证 GEO). A list of conversations leaves such a run out
+   * (`isConversationRun`); the ledger, the task's page and the module's 「AI 运行」 record still hold it. Absent on an ordinary run.
    */
   role?: "verification" | "programme";
   /** Put away by the researcher; the lists leave it out. */

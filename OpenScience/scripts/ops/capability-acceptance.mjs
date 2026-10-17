@@ -358,7 +358,8 @@ async function main() {
     const list = await api("/api/agent-runs");
     run = (list.body?.data ?? []).find((/** @type {any} */ entry) => entry.id === runId) ?? { id: runId, status: "running" };
     sessionId = String(run.sessionId ?? sessionId);
-    promptSource = "the GEO orchestrator's brief, as the run ledger records it";
+    // The ledger's question is the sentence the run was asked in; the orchestrator's brief travels in the run's own context.
+    promptSource = "the GEO run's question, as the run ledger records it (the orchestrator's brief is in the run's context)";
   } else if (attachRunId) {
     const list = await api("/api/agent-runs");
     if (list.status !== 200) throw new Error(`could not list runs: ${list.status}`);
