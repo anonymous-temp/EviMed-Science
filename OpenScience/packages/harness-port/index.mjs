@@ -1076,6 +1076,65 @@ export function interruptSubagent(ctx, childId, parentSessionId) {
   ctx.subagents.interrupt(childId, { kind: 'user', parentSessionId })
 }
 
+/* -------------------------------------------------------- background jobs */
+
+/**
+ * The background jobs one agent owns, as the kernel's job registry lists them
+ * (`ctx.jobs`, an optional seam: a composition without the jobs rows has none,
+ * and that is an empty list). A job outlives the turn that started it: the
+ * person's cancel stops the turn and leaves every job running (0.2.1-rc.2,
+ * `session/cancel` → `agent.cancel({ kind: 'user' }, { keepInbox: true })`).
+ * Only the agent's own jobs; the registry also lists unowned ones to everyone.
+ * @param {any} ctx @param {string} ownerId the agent id (an agent and its session share one)
+ * @returns {{ id: string, kind: string, status: string, startedAt: number }[]}
+ */
+export function agentJobs(ctx, ownerId) {
+  const jobs = ctx.get('jobs')
+  if (!jobs || typeof jobs.list !== 'function' || !ownerId) return []
+  return jobs.list(ownerId)
+    .filter((/** @type {any} */ job) => job?.owner === ownerId)
+    .map((/** @type {any} */ job) => ({ id: String(job.id), kind: String(job.kind ?? ''), status: String(job.status ?? ''), startedAt: Number(job.startedAt ?? 0) }))
+}
+
+/**
+ * Stops one background job on the person's account and stays on it until it
+ * settles, so that the stop does not come back as a turn of its own.
+ *
+ * Why the wait: `tool-jobs` turns every settlement nobody waited for into a
+ * completion notice, and an idle owner is woken by it (`completionDelivery:
+ * 'wakeup'`, the default) — a kill that is not the model's own included, by
+ * design, so that the agent hears about it. A settlement a waiter was owed is
+ * `awaited`, and then no notice follows. That is the kernel's own way of
+ * stopping a job without a notice (`dsh-tool-bash`, `waitOnJob`: "Stop the job
+ * on this call's own account and stay on it until it settles, so the
+ * settlement is `awaited` and no completion notice follows"). The wait is
+ * registered in the same synchronous run as the kill, before the producer can
+ * settle; the record is kept, so a later `job_list` / `job_output` still says
+ * what happened to it.
+ *
+ * A job already stopping (another stop is under way) is only waited for; one
+ * that already settled is left as it is.
+ * @param {any} ctx @param {string} ownerId @param {string} jobId @param {string} reason recorded on the job
+ * @param {number} timeoutMs how long to stay on it; a wait that runs out leaves the stop under way and its settlement unawaited
+ * @returns {Promise<string>} the job's status when the wait ended: terminal, or still `stopping` when it ran out;
+ *   `absent` when there is no registry or the job has left it
+ */
+export async function stopJobQuietly(ctx, ownerId, jobId, reason, timeoutMs) {
+  const jobs = ctx.get('jobs')
+  if (!jobs) return 'absent'
+  let status
+  try {
+    status = String(jobs.get(jobId, ownerId)?.status ?? '')
+  } catch {
+    // Left the registry since it was listed (a foreground call that stopped its own job removes the record).
+    return 'absent'
+  }
+  if (status === 'running') jobs.kill(jobId, ownerId, reason)
+  else if (status !== 'stopping') return status
+  const settled = await jobs.wait(jobId, timeoutMs, ownerId)
+  return String(settled?.status ?? '')
+}
+
 /* ---------------------------------------------------------------- storage */
 
 /**
