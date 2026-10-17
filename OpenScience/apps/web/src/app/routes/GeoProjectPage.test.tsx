@@ -40,6 +40,9 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
 
+const scroll = vi.hoisted(() => ({ scrollBlockToTop: vi.fn() }));
+vi.mock("@/components/geo/geoScroll", () => scroll);
+
 // The tabs other than 总览 have their own tests; here each is a marker that says the layout gave it the project — and, through the
 // toolbar hook, one filter, so what the band does with a tab's controls can be read.
 const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown) => void) => ({ geoId, project }: { geoId: string; project: { name: string } }) => {
@@ -47,7 +50,11 @@ const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown)
   return <div data-testid={`${name}-tab`}>{geoId}:{project.name}</div>;
 });
 const toolbarHook = vi.hoisted(() => async () => (await import("@/components/geo/geoFrame")).useGeoToolbar as (toolbar: unknown) => void);
-vi.mock("@/components/geo/tabs/VisibilityTab", async () => ({ VisibilityTab: marker("visibility", await toolbarHook()) }));
+// 总览 draws 可见度's ranking card (one implementation), so this module keeps its other exports.
+vi.mock("@/components/geo/tabs/VisibilityTab", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/geo/tabs/VisibilityTab")>()),
+  VisibilityTab: marker("visibility", await toolbarHook()),
+}));
 vi.mock("@/components/geo/tabs/AccuracyTab", async () => ({ AccuracyTab: marker("accuracy", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/QuestionsTab", async () => ({ QuestionsTab: marker("questions", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/SourcesTab", async () => ({ SourcesTab: marker("sources", await toolbarHook()) }));
@@ -57,7 +64,14 @@ vi.mock("@/components/geo/tabs/EvidenceTab", async () => ({ EvidenceTab: marker(
 
 function Landed() {
   const location = useLocation();
-  return <p data-testid="landed">{`${location.pathname}${location.search}${location.hash}`}</p>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <p data-testid="landed">{`${location.pathname}${location.search}${location.hash}`}</p>
+      {/* What a filter chip does: the query is rewritten in place, the block's name stays in the address. */}
+      <button type="button" onClick={() => navigate({ search: "?show=open", hash: "#geo-errors" }, { replace: true })}>改写查询</button>
+    </>
+  );
 }
 
 /** The project the way the app mounts it: one layout over the tab routes and the answer. */
@@ -181,11 +195,55 @@ describe("a GEO project's page", () => {
     expect(hrefOf("diagnosis")).toBe("/app/geo/geo_masi/accuracy#geo-errors");
     expect(hrefOf("sources")).toBe("/app/geo/geo_masi/sources");
     expect(hrefOf("content")).toBe("/app/geo/geo_masi/actions");
+    expect(hrefOf("distribution")).toBe("/app/geo/geo_masi/actions#geo-delivery");
     expect(hrefOf("monitoring")).toBe("/app/geo/geo_masi/visibility#geo-trend");
     // A click goes there, and the tab that holds it opens.
     await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
     expect(await screen.findByTestId("accuracy-tab")).toBeInTheDocument();
     expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/accuracy#geo-errors");
+  });
+
+  // The live walk: `scrollIntoView` also scrolls the app shell's clipped root and carried the sidebar and the band off the screen.
+  // The page's own ground is the only thing an address with a block scrolls, through `scrollBlockToTop`.
+  it("scrolls the block an address names through the page's ground, once it is on the page", async () => {
+    const block = Object.assign(document.createElement("div"), { id: "geo-errors" });
+    document.body.append(block);
+    try {
+      renderProject("/app/geo/geo_masi/accuracy#geo-errors");
+      await screen.findByTestId("accuracy-tab");
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledWith(block));
+      expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
+    } finally {
+      block.remove();
+    }
+  });
+
+  it("scrolls again when the same step is pressed again, and not when the query is only rewritten in place", async () => {
+    const block = Object.assign(document.createElement("div"), { id: "geo-errors" });
+    document.body.append(block);
+    try {
+      renderProject("/app/geo/geo_masi/accuracy#geo-errors");
+      await screen.findByTestId("accuracy-tab");
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1));
+      // A filter chip rewrites the query where it is: the reader stays where they scrolled to.
+      await userEvent.click(screen.getByRole("button", { name: "改写查询" }));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
+      // 「诊断」 again, from the same address, brings the block back.
+      const rail = document.querySelector("[data-step-rail]") as HTMLElement;
+      await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
+      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(2));
+    } finally {
+      block.remove();
+    }
+  });
+
+  it("scrolls to nothing where the block is not on the tab, and leaves the tab at its top", async () => {
+    renderProject("/app/geo/geo_masi/visibility#geo-nowhere");
+    await screen.findByTestId("visibility-tab");
+    // The layout waits a moment for a block that may still be coming, then stops.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(scroll.scrollBlockToTop).not.toHaveBeenCalled();
   });
 
   it("draws the tab's controls in the band, above the body, and takes them away with the tab", async () => {
@@ -256,8 +314,8 @@ describe("a GEO project's page", () => {
     expect(await screen.findByRole("link", { name: /DeepSeek 仍把用法说成/ })).toHaveAttribute("href", "/app/geo/geo_masi/answers/snap_2");
     expect(screen.getByRole("link", { name: /豆包在“打了减重针恶心/ })).toHaveAttribute("href", "/app/geo/geo_masi/answers/snap_1");
     expect(screen.getByRole("link", { name: /和司美格鲁肽怎么选/ })).toHaveAttribute("href", "/app/geo/geo_masi/sources");
-    // 投放 is read on 行动 now.
-    expect(screen.getByRole("link", { name: /6 篇证据卡片已被百度收录/ })).toHaveAttribute("href", "/app/geo/geo_masi/actions");
+    // 投放 is read on 行动 now, at its own block.
+    expect(screen.getByRole("link", { name: /6 篇证据卡片已被百度收录/ })).toHaveAttribute("href", "/app/geo/geo_masi/actions#geo-delivery");
   });
 
   it("opens each tab with a heading of its own, so the outline never jumps from the title to a third-level block", async () => {

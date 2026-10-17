@@ -22,6 +22,7 @@ import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
 import { coverageNotice, denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
 import { engineName, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
+import { geoSectionId } from "../geoTabs";
 import { metricName, metricUnit } from "./geoTabText";
 import { TabError, TabSkeleton } from "./geoTabKit";
 
@@ -139,7 +140,7 @@ function Accuracy({
 
   return (
     <div data-geo-tab="accuracy" className="flex flex-col gap-6">
-      <StatBand label="准确与安全" footnote={[denominator, coverageNotice(accuracyChange)].filter(Boolean).join(" · ") || null} columns={tiles.length >= 5 ? 5 : 4}>
+      <StatBand label="准确与安全" footnote={[denominator, coverageNotice(accuracyChange)].filter(Boolean).join(" · ") || null} columns={Math.min(5, Math.max(2, tiles.length)) as 2 | 3 | 4 | 5}>
         {tiles.map((tile) => (
           <StatTile
             key={tile.key}
@@ -334,27 +335,30 @@ function ErrorList({
   });
   if (counts.total === 0 && errors.length === 0) return null;
   return (
-    <ChartCard
-      title="讲错清单，按严重度排序"
-      state={rows.length === 0 ? "empty" : "content"}
-      emptyText="这一类里没有讲错。"
-      footnote={denominator}
-      height={160}
-    >
-      <div data-geo-error-list="">
-        {visible.map((error) => (
-          <GeoErrorCard key={error.id} geoId={geoId} project={project} error={error} />
-        ))}
-      </div>
-      {rows.length > visible.length && (
-        <div className="pt-2">
-          <Button variant="text" size="sm" onClick={() => setShown((count) => count + PAGE)}>
-            {`显示更多 · 还有 ${rows.length - visible.length} 条`}
-          </Button>
+    // The block the rail's 「诊断」 and a 「需要你」 row scroll to (`GEO_TAB_SECTIONS`).
+    <div id={geoSectionId("errors")}>
+      <ChartCard
+        title="讲错清单，按严重度排序"
+        state={rows.length === 0 ? "empty" : "content"}
+        emptyText="这一类里没有讲错。"
+        footnote={denominator}
+        height={160}
+      >
+        <div data-geo-error-list="">
+          {visible.map((error) => (
+            <GeoErrorCard key={error.id} geoId={geoId} project={project} error={error} />
+          ))}
         </div>
-      )}
-      {unlisted > 0 && <p className="pt-2 text-caption text-text-3">{`这里列出了 ${rows.length} 条，还有 ${unlisted} 条没有列出。`}</p>}
-    </ChartCard>
+        {rows.length > visible.length && (
+          <div className="pt-2">
+            <Button variant="text" size="sm" onClick={() => setShown((count) => count + PAGE)}>
+              {`显示更多 · 还有 ${rows.length - visible.length} 条`}
+            </Button>
+          </div>
+        )}
+        {unlisted > 0 && <p className="pt-2 text-caption text-text-3">{`这里列出了 ${rows.length} 条，还有 ${unlisted} 条没有列出。`}</p>}
+      </ChartCard>
+    </div>
   );
 }
 

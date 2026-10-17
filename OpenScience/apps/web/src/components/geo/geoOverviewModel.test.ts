@@ -70,6 +70,18 @@ describe("the headline", () => {
     expect(headlineSentence(moved, severe)).toBe("综合可见度 61，比上次高 17，目标 65；还有 1 条严重讲错待处理。");
   });
 
+  it("says a target the index has reached as reached, and one it has not as the number to reach", () => {
+    const at = (value: number, target: number) => project({
+      overview: {
+        ...geoProject().overview,
+        metrics: [{ key: "gvi", cell: { value, numerator: null, denominator: 310, ciLow: null, ciHigh: null, status: "ok", dataType: "measured" }, target, trend: [{ date: "a", value: 40 }, { date: "b", value }] }],
+      },
+    });
+    expect(headlineSentence(at(53, 50), null)).toBe("综合可见度 53，比上次高 13，已达到目标 50。");
+    expect(headlineSentence(at(50, 50), null)).toContain("已达到目标 50");
+    expect(headlineSentence(at(44, 50), null)).toBe("综合可见度 44，比上次高 4，目标 50。");
+  });
+
   it("states a two-point change of the index as a change: the measured band is a mention rate's, not the index's", () => {
     const wobble = project({
       overview: {
@@ -437,6 +449,9 @@ describe("a 本周 line lands on what it is about", () => {
 
   it("lands a line that quotes no answer on the tab that holds it", () => {
     const orders: GeoWeekItem = { kind: "orders", text: "2 篇稿件已发布", tab: "distribution", ref: null, at: null };
-    expect(weekTarget("geo_masi", orders)).toBe("/app/geo/geo_masi/actions");
+    // 投放 is a block of 行动: the line lands on it.
+    expect(weekTarget("geo_masi", orders)).toBe("/app/geo/geo_masi/actions#geo-delivery");
+    const written: GeoWeekItem = { kind: "articles", text: "写了 6 篇稿件", tab: "content", ref: null, at: null };
+    expect(weekTarget("geo_masi", written)).toBe("/app/geo/geo_masi/actions");
   });
 });

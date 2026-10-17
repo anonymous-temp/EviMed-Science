@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import type { GeoMonitoring, GeoProject } from "@/lib/geoClient";
 import { ChartCard } from "@/components/ui/ChartCard";
-import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
 import { BulletBar, StatBand, StatTile } from "@/components/ui/StatTile";
 import { Section } from "@/components/ui/Section";
@@ -33,6 +32,7 @@ import {
 import { GEO_METRIC_NAMES, monthDay } from "../geoText";
 import { geoTabPath } from "../geoTabs";
 import { roundKindWord } from "./geoTabText";
+import { Ranking } from "./VisibilityTab";
 
 /**
  * 总览 — the first screen, and the only one most readers will look at (fusion plan §4.8, mockup m10; R19 audit C §2.3).
@@ -141,7 +141,8 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
           // Nothing is drawn for a ranking nobody measured: no empty card beside the trend.
           className={ranked || diagnosis.state.kind === "loading" ? "lg:col-span-2" : "lg:col-span-3"}
         />
-        {(ranked || diagnosis.state.kind === "loading") && <RankCard ranking={ranking} loading={diagnosis.state.kind === "loading"} />}
+        {/* The same card 可见度 draws (one implementation: the two pages cannot disagree about who is ahead, or over what). */}
+        <Ranking compact ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       </div>
 
       <Week geoId={geoId} project={project} />
@@ -247,42 +248,6 @@ function TrendCard({
       className={className}
     >
       <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} />
-    </ChartCard>
-  );
-}
-
-/* ---------------------------------------------------------------- ranking */
-
-function RankCard({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking>; loading: boolean }) {
-  const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
-  const ours = ranking.find((row) => row.ours) ?? null;
-  const place = ours ? ranking.indexOf(ours) + 1 : 0;
-  return (
-    <ChartCard
-      title={ours && place > 0 ? `提及率在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
-      state={loading ? "loading" : ranking.length === 0 ? "empty" : "content"}
-      emptyText="这一轮还没有测到同类药的提及率。"
-      height={200}
-    >
-      <DataTable
-        label="同类药提及率"
-        minWidth="min-w-0"
-        rows={ranking}
-        rowKey={(row) => row.key}
-        highlight={(row) => row.ours}
-        rowAttrs={(row) => ({ "data-rank-row": row.key })}
-        columns={[
-          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <span className="truncate">{row.name}{row.ours && <span className="ml-1 text-caption font-normal text-accent-strong">本品</span>}</span> },
-          { key: "bar", header: "", width: "w-24", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
-          {
-            key: "value",
-            header: "提及率",
-            align: "right",
-            width: "w-16",
-            cell: (row) => (row.value === null ? "—" : `${Math.round(row.value)}%`),
-          },
-        ]}
-      />
     </ChartCard>
   );
 }

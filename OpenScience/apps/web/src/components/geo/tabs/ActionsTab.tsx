@@ -2,6 +2,7 @@ import { getGeoDistribution, type GeoProject } from "@/lib/geoClient";
 import { ContentTab } from "./ContentTab";
 import { Distribution, hasDistribution } from "./DistributionTab";
 import { EffectSection } from "./EffectSection";
+import { geoSectionId } from "../geoTabs";
 import { TabError, TabSection, useGeoLoad } from "./geoTabKit";
 
 /** What placing waits for, said once — under the stage counts, not at the bottom of the page. */
@@ -32,15 +33,20 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
         project={project}
         notice={marketOff ? <p data-geo-market-off="" className="mt-3 max-w-measure text-ui text-text-2">{MARKET_OFF_SENTENCE}</p> : null}
       />
+      {/* The block the rail's 「投放」 scrolls to (`GEO_TAB_SECTIONS`). */}
       {distribution.state.kind === "error" && (
-        <TabSection title="投放">
-          <TabError message={distribution.state.message} onRetry={distribution.reload} />
-        </TabSection>
+        <div id={geoSectionId("delivery")}>
+          <TabSection title="投放">
+            <TabError message={distribution.state.message} onRetry={distribution.reload} />
+          </TabSection>
+        </div>
       )}
       {loaded && hasDistribution(loaded) && (
-        <TabSection title="投放">
-          <Distribution geoId={geoId} project={project} data={loaded} onChanged={distribution.reload} />
-        </TabSection>
+        <div id={geoSectionId("delivery")}>
+          <TabSection title="投放">
+            <Distribution geoId={geoId} project={project} data={loaded} onChanged={distribution.reload} />
+          </TabSection>
+        </div>
       )}
       <TabSection title="效果">
         <EffectSection project={project} />

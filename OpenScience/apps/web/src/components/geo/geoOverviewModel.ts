@@ -387,7 +387,11 @@ export function headlineSentence(project: GeoProject, diagnosis: GeoDiagnosis | 
   const parts: string[] = [];
   if (gvi && gvi.cell.status === "ok" && gvi.cell.value !== null) {
     const move = changeWord(readingChange(gvi.trend), "index") ?? "这是第一次测量";
-    const target = gvi.target != null ? `，目标 ${formatGeoValue(gvi.target, "index")}` : "";
+    // A target the reading has passed is said as done, the way the tile under it says it: 「目标 50」 beside a 53 was the page
+    // contradicting itself (audit C 4.3).
+    const target = gvi.target == null ? ""
+      : gvi.cell.value >= gvi.target ? `，已达到目标 ${formatGeoValue(gvi.target, "index")}`
+        : `，目标 ${formatGeoValue(gvi.target, "index")}`;
     const where = standing(project, diagnosis);
     const rank = where.place !== null && where.count > 1 ? `，提及率在 ${where.count} 个同类药里排第 ${where.place}` : "";
     parts.push(`综合可见度 ${formatGeoValue(gvi.cell.value, "index")}，${move}${target}${rank}`);

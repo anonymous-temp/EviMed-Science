@@ -117,8 +117,14 @@ describe("方案: 目标", () => {
     const mention = second.querySelector("[data-geo-target='M-01S']") as HTMLElement;
     expect(mention).toHaveTextContent("12%");
     expect(mention).toHaveTextContent("基线 7% · 9月25日 → 现在 21% · 10月12日");
-    // The target falls due on the baseline round's day plus the plan's weeks.
-    expect(mention).toHaveTextContent("12月18日前");
+    // The target falls due on the baseline round's day plus the plan's weeks — where the reading has not reached it. This one has
+    // (21% against 12%): it says so, and gives no deadline for something done.
+    const index = second.querySelector("[data-geo-target='M-19']") as HTMLElement;
+    expect(index).toHaveTextContent("55");
+    expect(index).toHaveTextContent("12月18日前");
+    expect(index).not.toHaveTextContent("已达到");
+    expect(mention).toHaveTextContent("已达到");
+    expect(mention).not.toHaveTextContent("12月18日前");
     // A bar with the baseline's tick and the target's, under the figure.
     expect(mention.querySelector("[data-bullet-baseline]")).not.toBeNull();
     expect(mention.querySelector("[data-bullet-target]")).not.toBeNull();

@@ -152,9 +152,18 @@ export function Rank({ children }: { children: ReactNode }) {
  * denominator said once underneath (「按 4 个引擎、264 次有效回答计算」).
  * The first tile may be wider than the rest — the composite index is the
  * leading number and its four parts are its decomposition.
+ *
+ * The hairlines are the tiles' own: each has a line on its left and its top,
+ * pulled 1 px outside the box so the band's clip takes the ones on its edge and
+ * the band's own border is the outline. They used to be the grid's gap over a
+ * border-coloured ground, and a band with fewer tiles than columns — two tiles
+ * of four, five at the width of three — showed that ground as a grey block where
+ * the tiles ran out. Now the room a row does not fill is the card's own white.
  */
-/** How many tiles a band spreads across at full width; four to six, no more. */
-const BAND_COLUMNS: Record<4 | 5 | 6, string> = {
+/** How many tiles a band spreads across at full width: as many as it has, up to six. */
+const BAND_COLUMNS: Record<2 | 3 | 4 | 5 | 6, string> = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
   4: "sm:grid-cols-2 lg:grid-cols-4",
   5: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
   6: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
@@ -172,7 +181,7 @@ export function StatBand({
   label: string;
   /** The denominator, and anything else true of every number above it. */
   footnote?: ReactNode;
-  columns?: 4 | 5 | 6;
+  columns?: 2 | 3 | 4 | 5 | 6;
   /** On a phone, two tiles to a row instead of one (pair it with `StatTile dense`). */
   dense?: boolean;
   className?: string;
@@ -180,9 +189,15 @@ export function StatBand({
 }) {
   return (
     <section aria-label={label} className={className}>
-      {/* The hairlines are the gap: a 1 px grid gap over the border colour
-          draws every divider the layout actually has, at any wrap. */}
-      <div className={cn("grid gap-px overflow-hidden rounded-panel border border-border bg-border [&>*]:bg-surface", dense ? "grid-cols-2" : "grid-cols-1", BAND_COLUMNS[columns])}>
+      {/* Every tile's left and top line, 1 px out of its box: a divider wherever two tiles meet, at any wrap, and none on the band's
+          edge (the clip takes it). */}
+      <div
+        className={cn(
+          "grid overflow-hidden rounded-panel border border-border bg-surface [&>*]:-ml-px [&>*]:-mt-px [&>*]:border-l [&>*]:border-t [&>*]:border-border",
+          dense ? "grid-cols-2" : "grid-cols-1",
+          BAND_COLUMNS[columns],
+        )}
+      >
         {children}
       </div>
       {footnote != null && <p className="mt-2 text-caption text-text-3">{footnote}</p>}

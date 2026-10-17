@@ -22,6 +22,7 @@ import { Tag } from "@/components/ui/Tag";
 import { ArticleTextDialog } from "../ArticleTextDialog";
 import { useGeoToolbar } from "../geoFrame";
 import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STALE_NOTE, GEO_ARTICLE_STATUS_WORDS, GEO_ARTICLE_UNRESOLVED_NOTE, GEO_LAYER_NAMES, GEO_PLACEMENT_LABEL_WORDS, layerName } from "../geoText";
+import { geoSectionId } from "../geoTabs";
 import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 
@@ -115,7 +116,7 @@ function Articles({ geoId, project, articles, notice, onChanged }: { geoId: stri
         {notice}
         {project.cards?.blockedBy && <p className="mt-3 max-w-measure text-ui text-text-2">{CARDS_WAIT[project.cards.blockedBy]}</p>}
       </div>
-      <div>
+      <div id={geoSectionId("review")}>
         {matching.length === 0 ? (
           <p className="py-10 text-center text-ui text-text-3">{needle ? `没有包含“${query.trim()}”的稿件。` : "没有符合的稿件。"}</p>
         ) : (

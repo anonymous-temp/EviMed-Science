@@ -173,7 +173,9 @@ function QuestionMap({
         const inPool = groups.filter((group) => group.pool === key && matches.get(group.id));
         if (inPool.length === 0) return null;
         return (
-          <section key={key} aria-label={GEO_POOL_KINDS[key]} className="mt-8">
+          // `first:mt-0`: a first child's top margin would collapse through the tab and put this tab's content 8 px lower than
+          // every other tab's (the body already has its own).
+          <section key={key} aria-label={GEO_POOL_KINDS[key]} className="mt-8 first:mt-0">
             {/* A pool is a group heading over its rows, in the list's meta
                 level: the groups under it are what a reader opens. */}
             <h2 className="flex items-baseline gap-2 text-caption text-text-3">
