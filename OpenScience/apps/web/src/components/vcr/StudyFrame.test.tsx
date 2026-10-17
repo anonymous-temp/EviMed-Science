@@ -248,10 +248,10 @@ describe("what the strip says", () => {
     expect(onCancel).toHaveBeenCalled();
   });
 
-  it("is a step in line with what it waits for, and no cancel: nothing holds the slot", () => {
+  it("is a step in line with what it waits for, and it can be stopped: the cancel holds the programme, so what waits is not taken up", () => {
     const strip = activityStripOf(base((raw) => { raw.activity = { run: null, queue: [{ step: "patients", waitingFor: "allowance" }], jobs: [], last: null }; }), { onCancel: () => undefined });
     expect(strip).toMatchObject({ label: "生成虚拟患者", waiting: "等研究额度" });
-    expect(strip?.onCancel).toBeUndefined();
+    expect(strip?.onCancel).toBeTypeOf("function");
   });
 
   it("never carries a percentage", () => {
