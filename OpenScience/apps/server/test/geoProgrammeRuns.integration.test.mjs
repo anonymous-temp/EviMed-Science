@@ -8,7 +8,7 @@
 // read are written through the store's own `reserveRun`, as a dispatch would.
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -37,11 +37,20 @@ before(async () => {
   if (!databaseUrl) return;
   isolated = await createGeoTestDatabase(databaseUrl, "geoq");
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-geo-q-"));
+  const plane = path.join(dataDir, "plane");
+  await mkdir(plane, { recursive: true });
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     rateLimitMaxRequests: 100_000, authRateLimitMaxRequests: 1_000, modelGatewaySigningSecret: randomBytes(32).toString("hex"),
     geoEnabled: true, geoAudience: "all", geoPollMs: 3_600_000,
+    // 虚拟临床研究 is composed too: its AI-run record reads the same helper (`programmeRunsOf`) as 循证 GEO's.
+    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane,
+    vcrEngineUrl: "http://engine.test:8080", vcrEngineToken: "t".repeat(40), vcrEngineReceiptKey: "r".repeat(40),
+    vcrFetch: async (/** @type {any} */ url) => {
+      const body = new URL(String(url)).pathname === "/health" ? { ok: true, engineVersion: "test", rVersion: "test", methods: [], packageLockHash: "" } : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    },
   });
   // The worker is the module's own timer; the test drives the orchestrator by hand.
   await app.geo.worker.close();
@@ -207,5 +216,32 @@ test("a GEO project whose only sessions are steps' has no conversation of the pe
     assert.equal((await call("GET", `/api/geo/projects/${geo.id}`)).body.data.sessionId, null, "a step's session is nobody's conversation");
   } finally {
     context.app.researchSessions.list = real;
+  }
+});
+
+test("the 虚拟临床研究 record reads the same runs: the programme's steps and a scheduled task's, never the study's own conversation", options, async () => {
+  reset();
+  // The kernel mints a conversation's id: a stand-in that numbers them.
+  let minted = 0;
+  context.app.runtimeManager.createRuntimeSession = async () => ({ id: `kernel-session-${++minted}`, kernel: "dsh" });
+  const created = await call("POST", "/api/vcr/studies", { name: "同一份记录", question: "在二线 NSCLC 中，试验药相对多西他赛的无进展生存", dataTier: "T0", intendedUse: "exploratory" });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const study = created.body.data;
+  const own = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data.conversation.sessionId;
+  assert.ok(own, "the study has its own conversation");
+  const agent = (await context.app.agentRegistry)?.get?.("vcr-protocol");
+  assert.ok(agent, "this build's registry has the 虚拟临床研究 capabilities");
+  const row = (/** @type {string} */ sessionId, /** @type {string} */ reason, /** @type {boolean} */ automated) =>
+    ledgerRun(study, { sessionId, agentId: "vcr-protocol", agentVersion: agent.version, dispatchId: sessionId, automated, reason, question: "x" });
+  await row("vcr-step-1", "vcr:definition", true);
+  await row("vcr-task-1", "autopilot:routine", true);
+  await row(own, "session-binding", false);
+  await row("vcr-chat-2", "session-binding", false);
+  const listed = (await call("GET", `/api/vcr/studies/${study.id}/runs`)).body.data.runs;
+  assert.deepEqual(listed.map((/** @type {any} */ run) => run.sessionId).sort(), ["vcr-step-1", "vcr-task-1"],
+    "a programme step and a scheduled execution are background work; the study's conversation and the person's other one are not");
+  for (const run of listed) {
+    assert.ok(run.label.length > 0 && !/vcr:|run_|session/.test(run.label), run.label);
+    assert.ok(["running", "finished", "stopped"].includes(run.state));
   }
 });

@@ -74,6 +74,25 @@ describe("AI 运行 — the record of what a module's programme did in the backg
     expect(await screen.findByRole("dialog", { name: "AI 运行" })).toBeInTheDocument();
   });
 
+  it("draws a path inside the run's workspace as its name, not as a link to a page that does not exist; an address on the web is a link that opens in a tab of its own", async () => {
+    api.history.mockResolvedValue({
+      sessionId: "ses_weekly", capturedAt: null, partial: false,
+      messages: [
+        { seq: 1, role: "user", text: "生成周报" },
+        { seq: 2, role: "assistant", text: "文件：[claims.json](deliverables/geo-insight/claims.json)，来源：[药监局](https://www.nmpa.gov.cn/x)。" },
+      ],
+    });
+    draw();
+    await userEvent.click(await screen.findByRole("button", { name: "生成周报" }));
+    const record = await screen.findByRole("dialog", { name: "生成周报" });
+    expect(await within(record).findByText("claims.json")).toBeInTheDocument();
+    expect(within(record).queryByRole("link", { name: "claims.json" })).toBeNull();
+    const external = within(record).getByRole("link", { name: "药监局" });
+    expect(external).toHaveAttribute("href", "https://www.nmpa.gov.cn/x");
+    expect(external).toHaveAttribute("target", "_blank");
+    expect(external).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
   it("says plainly when a record cannot be read or has no words, and when the AI has done nothing", async () => {
     api.history.mockRejectedValueOnce(new Error("down"));
     const first = draw();

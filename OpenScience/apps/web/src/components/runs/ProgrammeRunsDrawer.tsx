@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 import { sourceCitationProse } from "@evimed/domain";
 import { getWebConversationHistory, webErrorMessage, type PreservedConversationHistory } from "@/lib/apiClient";
@@ -95,6 +95,15 @@ function RunsSkeleton() {
   );
 }
 
+/**
+ * A link in what a run wrote: an address on the web opens in a tab of its own, so the reader keeps their place; a path inside the run's
+ * workspace (「[claims.json](deliverables/…)」) is its name. The record is read where the reader is, and such a path is no page of this app
+ * — pressed, it took the reader to a page that does not exist.
+ */
+const recordLink = (href: string | undefined, children: ReactNode): ReactNode => (/^https?:\/\//i.test(href ?? "")
+  ? <a href={href} target="_blank" rel="noopener noreferrer" className="text-link underline underline-offset-2">{children}</a>
+  : <span>{children}</span>);
+
 /** What one run said and wrote, as the platform kept it: read-only, with no way into the conversation it was made in. */
 function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; projectId: string; onBack: () => void }) {
   const [history, setHistory] = useState<PreservedConversationHistory | "error" | null>(null);
@@ -120,7 +129,7 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
               <article key={message.seq} aria-label={message.role === "user" ? "要求" : "结果"}>
                 {message.role === "user"
                   ? <p className="whitespace-pre-wrap text-ui font-medium text-text">{message.text}</p>
-                  : <MarkdownViewer>{sourceCitationProse(message.text)}</MarkdownViewer>}
+                  : <MarkdownViewer renderLink={recordLink}>{sourceCitationProse(message.text)}</MarkdownViewer>}
               </article>
             ))}
     </div>
