@@ -29,12 +29,12 @@ async function skill(root, relative, text, extra = {}) {
   for (const [name, body] of Object.entries(extra)) { await fs.mkdir(path.dirname(path.join(dir, name)), { recursive: true }); await fs.writeFile(path.join(dir, name), body); }
 }
 
-test("the list is the fifty-seven shipped skills in Chinese, in their groups, answered from the packages alone", async () => {
+test("the list is every shipped skill in Chinese, in their groups, answered from the packages alone", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
   const { groups, geoGroup, items } = await catalogue.list(reader);
   assert.deepEqual(groups, [...SKILL_DISPLAY_GROUPS]);
   assert.equal(geoGroup, SKILL_DISPLAY_GEO_GROUP, "the page is told which group is the module's, so it names none itself");
-  assert.equal(items.length, 57);
+  assert.equal(items.length, Object.keys(SKILL_DISPLAY).length, "one row for each skill the table describes");
   assert.ok(items.every((item) => /[㐀-鿿]/.test(item.title) && /[㐀-鿿]/.test(item.use)), "every row is in Chinese");
   assert.ok(items.every((item) => item.directory === undefined && item.when === undefined), "a row names no folder on the server and carries no full text");
   // Rows come in the groups' order and, inside a group, in the table's own order.
@@ -61,7 +61,7 @@ test("a folder this image does not carry still lists, says no text and offers no
   await skill(root, "runtime/skills/curated-scientific/survival-analysis", "---\nname: survival-analysis\ndescription: x\n---\n\nBody text.\n");
   const catalogue = createPlatformSkillCatalogue({ rootDir: root });
   const { items } = await catalogue.list(reader);
-  assert.equal(items.length, 57);
+  assert.equal(items.length, Object.keys(SKILL_DISPLAY).length);
   const present = items.find((item) => item.name === "survival-analysis");
   const absent = items.find((item) => item.name === "dsh-ppt");
   assert.equal(present.canCopy, true);

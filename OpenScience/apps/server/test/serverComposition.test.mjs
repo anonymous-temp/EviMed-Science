@@ -972,7 +972,7 @@ test("a verification runs in a workspace that does not contain the report it is 
   // The scope it is signed with: the account's day and week (no cap here, so a figure no run reaches) and the share the
   // episode held back for it. The agenda's own ¥8 a day and ¥80 a week are not in it: the gateway would compare them with
   // everything the account spent.
-  assert.deepEqual(reserved[0].scope, { runId: VERIFICATION_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 0.67 });
+  assert.deepEqual(reserved[0].scope, { runId: VERIFICATION_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 0.67, reason: "scheduled-task" });
 });
 
 test("a verification that could not be dispatched leaves no scratch directory behind", async (t) => {
@@ -1206,7 +1206,7 @@ test("an episode is signed with the account's day and week and a run limit of wh
   // that figure and cannot be: the pool answers the task's own spend, and the account has no cap here.
   fixture.pool.daySpendCny = 3;
   assert.equal((await app.autopilotWorker.dispatchEpisode(episode)).runId, "run-episode");
-  assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5 },
+  assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5, reason: "scheduled-task" },
     "the account has no cap, so a figure no run reaches; the run's limit is what the task has left (¥8 less ¥3), the smaller of that and the episode's ¥6");
   // The scope rides in the run context the socket injects, not in the message the researcher sees (2026-10-08).
   assert.doesNotMatch(String(prompts[0].text), /evimed-budget-scope|evimed-autopilot-episode/, "the conversation's first message carries neither");
