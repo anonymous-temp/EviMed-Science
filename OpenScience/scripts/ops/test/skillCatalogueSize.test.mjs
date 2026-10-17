@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,11 +33,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
  * LoopX's folders are written into the image from a pinned wheel, an account's own skills are its own, and the GEO method pack is
  * private and mounted only in a GEO project's runtime: none of them is in this figure.
  *
- * Measured 2026-10-17 with the humanizer pair at their current versions: 57 skills.
+ * Measured 2026-10-17 with the humanizer pair at v3.1.0 and f4518a8e: 57 skills, 17 494 characters of catalogue lines (the kernel's
+ * message for such a session was 18 177 characters with the frame, checked on a real kernel at the pin). Before the GEO pack
+ * became per-project the same figure was 43 903 for 108 skills.
  * To raise it: run `node scripts/ops/skill-catalogue-size.mjs`, read the table, change the number here and say in the commit
  * what the extra characters buy. To lower it, lower it: a budget that is not tight is not read.
  */
-const NON_GEO_BUDGET = Object.freeze({ skills: 57, lineChars: 17_700 });
+const NON_GEO_BUDGET = Object.freeze({ skills: 57, lineChars: 17_500 });
 
 const withTree = (build) => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "catalogue-size-"));
@@ -138,6 +141,22 @@ test("what a runtime that is not a GEO project puts in the model's catalogue sta
   // And tight: a budget that is far above the measurement stops being a budget.
   assert.ok(NON_GEO_BUDGET.lineChars - nonGeo.chars < 200, `the budget (${NON_GEO_BUDGET.lineChars}) is more than 200 characters above the measurement (${nonGeo.chars}); lower it`);
   assert.equal(NON_GEO_BUDGET.skills, nonGeo.skills, "the skill count is pinned exactly");
+});
+
+test("the command line prints the same numbers the functions compute, as a table and as one JSON line", () => {
+  const script = path.join(repoRoot, "scripts/ops/skill-catalogue-size.mjs");
+  const table = spawnSync("node", [script], { encoding: "utf8" });
+  assert.equal(table.status, 0, table.stderr);
+  assert.match(table.stdout, /A runtime that is not a GEO project:\n(?:  .+\n)+A GEO project's runtime:\n  not measured: /, "no pack in a clone: the GEO figure is said not to be measured");
+  const json = spawnSync("node", [script, "--json"], { encoding: "utf8" });
+  assert.equal(json.status, 0, json.stderr);
+  const result = JSON.parse(json.stdout.trim());
+  const expected = measure(presetRoots());
+  assert.equal(result.nonGeo.skills, expected.nonGeo.skills);
+  assert.equal(result.nonGeo.total, expected.nonGeo.total);
+  assert.equal(result.geo, null);
+  assert.deepEqual(result.frameDrift, []);
+  assert.equal(spawnSync("node", [script, "--no-such-flag"], { encoding: "utf8" }).status === 0, false, "an unknown flag is refused");
 });
 
 test("the image carries exactly the evimed packages this measure counts", () => {

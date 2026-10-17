@@ -1360,21 +1360,21 @@
       "id": "core/humanizer",
       "name": "humanizer",
       "origin": "core",
-      "version": "2.9.1",
-      "source": {"kind":"release"},
+      "version": "3.1.0",
+      "source": {"kind":"repository","repository":"blader/humanizer","commit":"225a6f39ac85f76ee48dbad772ea4abe4ed6c9d8"},
       "licence": {"id":"MIT","file":{"path":"LICENSE","sha256":"4ac4810254ab36d45419141aeb8e69bf50652cfafe5b2dab947d06d44e5cbf96"},"basis":"declared"},
-      "digest": "sha256:c8ac4b756d149646a33e75a220ba9db16daab5d90a222ba0bd8c5db707f76895",
+      "digest": "sha256:0044f44a7fc1f13db824cea92394a2d70072235830701d6eaa416a9f60b8f170",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/validate-package.py","sha256":"d2c5496ca73a8ce2d3f0cad6681724170d8566bef54d36dfc1e5d3972597b614"}]
+      "scripts": [{"path":"scripts/validate-package.py","sha256":"941bd99e52b2ba21449719bb7969607ac8117e3dc173d0c9dfe64fd274c65938"}]
     },
     {
       "schemaVersion": 1,
       "id": "core/humanizer-zh",
       "name": "humanizer-zh",
       "origin": "core",
-      "source": {"kind":"release"},
+      "source": {"kind":"repository","repository":"op7418/humanizer-zh","commit":"f4518a8eab97b8bfebc66a89d34320a89bef6930"},
       "licence": {"file":{"path":"LICENSE","sha256":"aa00e74769e1b9d8e7fa7094dbfcca9b129a0ded6dce1cf4da050b99146d2fa7"},"basis":"file-present"},
-      "digest": "sha256:ab09c9ff20760676d253885a198a0628ca3af13dee48b8be0d5006e6b1da118d",
+      "digest": "sha256:2b887541dfae3bf2364e1bf1a4cd4ce012b257bb281dcbc9c447e9d8d172e8a1",
       "digestAlgorithm": "release-directory-v1"
     },
     {

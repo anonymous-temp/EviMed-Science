@@ -251,8 +251,10 @@ export function renderTable(result) {
   return `${out.join("\n")}\n`;
 }
 
+const VALUE_FLAGS = Object.freeze(["geo-pack", "loopx-root", "closure", "candidate-json"]);
+
 /** @param {string[]} argv */
-function parseArgs(argv) {
+export function parseArgs(argv) {
   /** @type {Record<string, string | boolean>} */
   const args = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -260,7 +262,8 @@ function parseArgs(argv) {
     if (!arg.startsWith("--")) throw new Error(`unexpected argument ${arg}`);
     const key = arg.slice(2);
     if (key === "json") args[key] = true;
-    else { args[key] = argv[i + 1]; i += 1; }
+    else if (VALUE_FLAGS.includes(key) && typeof argv[i + 1] === "string" && !argv[i + 1].startsWith("--")) { args[key] = argv[i + 1]; i += 1; }
+    else throw new Error(`${arg} is not a flag of this command (--json, ${VALUE_FLAGS.map((flag) => `--${flag} <value>`).join(", ")})`);
   }
   return args;
 }
@@ -302,4 +305,6 @@ async function main() {
   if (drift.length) process.exitCode = 1;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) await main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  await main().catch((error) => { process.stderr.write(`${error?.message ?? error}\n`); process.exitCode = 2; });
+}
