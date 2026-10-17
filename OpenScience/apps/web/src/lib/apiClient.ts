@@ -977,6 +977,8 @@ export interface WebReadPage {
   rendered: boolean;
   snapshotPath?: string;
   sha256: string;
+  /** The text is DeepSeek Fetch's rendition of the page, not its own bytes (2026-10-17). */
+  via?: "deepseek-fetch";
 }
 
 export type WebRunPlanItemStatus = "planned" | "queued" | "delegated" | "submitted" | "accepted" | "rejected" | "failed";

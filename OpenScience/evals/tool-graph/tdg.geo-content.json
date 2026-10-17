@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-content",
-  "version": "sha256:87f0d8534cfe5e962a5aab31e704df92e66ba2dc7f7d1419a7ab1feed5ce673c",
+  "version": "sha256:b58e8b4b0b9dbb4a6ab912178a0514734a3edd9fccfd2858da4bccf408628f14",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 36,
@@ -1569,7 +1569,7 @@
     {
       "name": "mcp__evimed__web_search",
       "source": "mcp",
-      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
+      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address. A hit may carry its date, its site and authority (0-4, the engine's rating of the site).",
       "inputSchema": {
         "type": "object",
         "properties": {

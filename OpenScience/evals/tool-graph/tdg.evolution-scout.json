@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evolution-scout",
-  "version": "sha256:de987e57cea0da9358bc4e16b09e922556e7eb3ad3254a5df247dc03f7eb0bd0",
+  "version": "sha256:996084a809e17e6037e36f122d5704e8a18de9b79cae69568771fafb8acc88db",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
@@ -768,7 +768,7 @@
     {
       "name": "mcp__evimed__web_search",
       "source": "mcp",
-      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
+      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address. A hit may carry its date, its site and authority (0-4, the engine's rating of the site).",
       "inputSchema": {
         "type": "object",
         "properties": {

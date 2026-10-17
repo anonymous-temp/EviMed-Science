@@ -193,6 +193,43 @@ class WebReadTests(unittest.TestCase):
         self.assertEqual(result["warnings"], ["this text may be incomplete"])
         self.assertTrue((self.workspace / result["data"]["markdownPath"]).is_file())
 
+    def test_a_page_read_through_deepseek_fetch_is_preserved_as_its_rendition(self):
+        # The gateway's second reader (2026-10-17): the receipt says so, and so does every reader of the file after it.
+        url = "https://openai.example.org/index/"
+        rendition = "# Index\n\nThe model is served by DeepSeek-V4.1-Flash-1017."
+        sha = hashlib.sha256(rendition.encode("utf-8")).hexdigest()
+        Gateway.answers[url] = (200, {"receipt": receipt(
+            url, sha, rendered=False, official=False, contentType="text", mediaType="text/markdown",
+            extractor={"name": "deepseek-fetch", "version": "1"}, via="deepseek-fetch", fallbackReason="site_403",
+        ), "text": rendition, "links": []})
+        server = load_server()
+        result = server.call_tool("web_read", {"url": url})
+        self.assertEqual(result["status"], "success", "a rendition is a reading, not a failure")
+        self.assertEqual(result["data"]["via"], "deepseek-fetch")
+        self.assertIn(web_read.RENDITION_WARNING, result["warnings"])
+        path = result["data"]["markdownPath"]
+        snapshot = (self.workspace / path).read_bytes()
+        page = snapshot.decode("utf-8")
+        header = "\n" + page.split("\n\n", 2)[1] + "\n"
+        self.assertIn("\n" + web_read.RENDITION_LINE + "\n", header, "the line is in the header, before the page's text")
+        self.assertIn("- Read as: plain text (text/markdown; deepseek-fetch 1)\n", page)
+        self.assertIn("- SHA-256: " + sha + "\n", page)
+        self.assertIn(rendition, page)
+        # The preserved-source rule binds this file exactly as any other: the digest the run's record checks is the file's.
+        self.assertEqual(result["data"]["artifactSha256s"], {path: hashlib.sha256(snapshot).hexdigest()})
+        self.assertEqual(result["sources"][0]["source"], "web-page")
+        self.assertNotIn("via", result["sources"][0], "provenance fields stay the contract's; the label is data")
+        # The domain's claim check reads the line character for character.
+        domain = (ROOT.parents[2] / "packages" / "domain" / "src" / "clinicalEvidence.mjs").read_text(encoding="utf-8")
+        self.assertIn(json.dumps(web_read.RENDITION_LINE), domain)
+
+        direct = "https://direct.example.org/p"
+        Gateway.answers[direct] = (200, {"receipt": receipt(direct, "e" * 64), "text": "Direct text.", "links": []})
+        plain = web_read.read({"url": direct})
+        self.assertNotIn("via", plain["data"])
+        self.assertNotIn("warnings", plain)
+        self.assertNotIn(web_read.RENDITION_LINE, (self.workspace / plain["data"]["markdownPath"]).read_text(encoding="utf-8"))
+
     def test_the_same_bytes_at_two_addresses_keep_separate_snapshots(self):
         sha = "d" * 64
         for url in ("https://a.example.org/p", "https://b.example.org/p"):
