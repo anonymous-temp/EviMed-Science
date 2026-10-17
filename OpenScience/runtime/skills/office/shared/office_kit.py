@@ -12,10 +12,11 @@ this wrapper takes care of both and finds the CLI.
     python3 office_kit.py recalculate --input budget.xlsx --output budget-calculated.xlsx
     python3 office_kit.py check deck.pptx --count 11 --contains "Market size"
 
-`check` runs the structural checker that ships beside the kit in the kernel's own `@deepseek-ai/dsh-skill-office`
-(standard library only): it reads a DOCX, PPTX or XLSX without changing it, validates the package and its relationships,
-and reports paragraphs / slides / sheets, optionally asserting required text or a slide count. A pass says the file is
-sound, not that it looks right or that its formulas are calculated.
+`check` reads a DOCX, PPTX or XLSX without changing it, validates the package and its relationships, and reports
+paragraphs / slides / sheets, optionally asserting required text or a slide count (`office_check.py` beside this file,
+standard library only; the kernel's own `@deepseek-ai/dsh-skill-office` shipped the same check until DSH 0.2.1 and is
+used where an older kernel still carries it). A pass says the file is sound, not that it looks right or that its
+formulas are calculated.
 """
 from __future__ import annotations
 
@@ -71,16 +72,15 @@ def find_cli() -> Path:
 
 
 def find_checker() -> Path:
-    """The kernel's own structural checker: beside the kit when CLI_ENV points into a kernel install, else where the kernel is installed."""
+    """The structural checker: the kernel's own where an older kernel carries it (beside the kit when CLI_ENV points into
+    a kernel install, else where the kernel is installed), and the one beside this file otherwise — DSH 0.2.1 no longer
+    ships a script in `@deepseek-ai/dsh-skill-office`."""
     explicit = os.environ.get(CLI_ENV)
     if explicit:
         beside = Path(explicit).resolve().parents[2] / "dsh-skill-office/assets/scripts/check_office.py"
         if beside.is_file():
             return beside
-    found = _find(CHECKER)
-    if not found:
-        raise KitError("the kernel's Office checker (@deepseek-ai/dsh-skill-office) is not installed here")
-    return found
+    return _find(CHECKER) or Path(__file__).resolve().with_name("office_check.py")
 
 
 def check(path: str | Path, contains: list[str] | None = None, count: int | None = None) -> tuple[dict, int]:

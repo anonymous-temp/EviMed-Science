@@ -3410,7 +3410,7 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:6b511044e4d1c407b883d8e7d250bc674f39aea8cebc11dab00f954b269826fc",
+      "digest": "sha256:e4a1b0f7a4a3f6827575516b3f145b1f5ab22dfefc26588f39bc70efa13b3dea",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_docx.py","sha256":"41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6"},
@@ -3491,7 +3491,7 @@
       "origin": "office",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"inventory"},
-      "digest": "sha256:e6ecb1d78bd43c971c79c20e7e8b25936cb3852d73fc4d52045e72603da6f47c",
+      "digest": "sha256:7a5fe286bf9d2f67496c2c9d66cb9ea0b937a3d7f6a352f825aae8a7b51a866c",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/create_pptx.py","sha256":"2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"},
