@@ -8,6 +8,7 @@ import http from "node:http";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, compactAction } from "../src/geoService.mjs";
+import { GEO_ACTIONS_READ_CHARS, geoLeanAction } from "@evimed/domain";
 import { GeoMarketStore } from "../src/geoMarketStore.mjs";
 import { previewOutlets } from "../src/geoMarket.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -382,20 +383,62 @@ test("the accuracy read gives each claim once, with the engines that say it, bes
 });
 
 test("the runtime reads the same verdicts as the page: numbers equal, one function", options, async () => {
-  const project = await store.getProject(ALICE, geo.geoId);
+  const project = /** @type {any} */ (await store.getProject(ALICE, geo.geoId));
   const page = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data;
-  const read = await service.runtimeRead(/** @type {any} */ (project), "actions", {});
-  assert.deepEqual(read.actions, page.actions.map(compactAction), "the model reads the page's actions, shortened");
-  assert.deepEqual([read.headline, read.counts, read.tier], [page.headline, page.counts, page.tier]);
-  const one = await service.runtimeRead(/** @type {any} */ (project), "actions", { groupId: id("g3") });
+  // a list is read lean: the domain's row of each of the page's actions, in the page's order, with the page's own sums
+  const read = await service.runtimeRead(project, "actions", {});
+  assert.equal(read.detail, "lean");
+  assert.deepEqual(read.actions, page.actions.map(geoLeanAction), "the model reads the page's actions, shortened by one function");
+  assert.deepEqual([read.headline, read.counts, read.tier, read.total, read.more], [page.headline, page.counts, page.tier, page.actions.length, false]);
+  assert.equal(Object.hasOwn(read, "nextOffset"), false, "nothing is left: no cursor");
+  assert.ok(JSON.stringify(read).length < JSON.stringify(page).length / 2, "under half the page's");
+  assert.ok(JSON.stringify(read.actions).length <= GEO_ACTIONS_READ_CHARS);
+  // the engine and pool filters narrow the list and it stays lean; a group's or an action's own filter reads whole
+  assert.equal((await service.runtimeRead(project, "actions", { pool: "P2" })).detail, "lean");
+  const one = await service.runtimeRead(project, "actions", { groupId: id("g3") });
+  assert.equal(one.detail, "whole");
   assert.deepEqual(one.actions.map((/** @type {any} */ action) => action.key).sort(), [`correct_error:${id("g3")}:wrong`, `fill_gap:${id("g3")}:missing_evidence`].sort());
-  const clusters = await service.runtimeRead(/** @type {any} */ (project), "clusters", { pool: "P2" });
+  assert.deepEqual(one.actions, page.actions.filter((/** @type {any} */ action) => action.group?.id === id("g3")).map(compactAction), "whole is the entry as it was read before");
+  const key = `fill_gap:${id("g3")}:missing_evidence`;
+  const named = await service.runtimeRead(project, "actions", { key });
+  assert.deepEqual([named.detail, named.total, named.actions.length, named.actions[0].key], ["whole", 1, 1, key]);
+  assert.deepEqual(named.counts, page.counts, "the sums are the project's whatever one asks to read");
+  await assert.rejects(service.runtimeRead(project, "actions", { key: `fill_gap:${id("g3")}:no_such_gap` }), { code: "geo_action_not_found" });
+  const clusters = await service.runtimeRead(project, "clusters", { pool: "P2" });
   assert.deepEqual(clusters.groups.map((/** @type {any} */ group) => group.id).sort(), [id("c1"), id("g1")].sort());
-  assert.ok(JSON.stringify(read).length < JSON.stringify(page).length, "shorter than the page's");
-  // the numbers the model can quote: k, n and the target are the page's
-  const compact = read.actions.find((/** @type {any} */ action) => action.key.startsWith("correct_error:") && action.key.includes(id("g1")));
-  const full = page.actions.find((/** @type {any} */ action) => action.key === compact.key);
-  assert.deepEqual([compact.expected.from, compact.expected.target], [full.expected.from, full.expected.target]);
+  // the numbers the model can quote: k, n, the state and the target of the lean row are the page's
+  const lean = read.actions.find((/** @type {any} */ action) => action.key.startsWith("correct_error:") && action.key.includes(id("g1")));
+  const full = page.actions.find((/** @type {any} */ action) => action.key === lean.key);
+  assert.deepEqual([lean.expected.from, lean.expected.target], [full.expected.from && { k: full.expected.from.k, n: full.expected.from.n, state: full.expected.from.state }, full.expected.target]);
+  // a page the budget cuts says where the next one starts, and reading on from there gives the rest once
+  const first = await service.runtimeRead(project, "actions", { limit: 2 });
+  assert.deepEqual([first.actions.length, first.total, first.more, first.nextOffset, first.omitted], [2, page.actions.length, true, 2, page.actions.length - 2]);
+  const rest = await service.runtimeRead(project, "actions", { offset: first.nextOffset, limit: 50 });
+  assert.deepEqual([...first.actions, ...rest.actions].map((/** @type {any} */ action) => action.key), page.actions.map((/** @type {any} */ action) => action.key));
+});
+
+test("the sums in `counts` are the page's rows added up by code: what the model is asked to total, it quotes", options, async () => {
+  const page = (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data;
+  const { counts, actions } = page;
+  const rows = actions.flatMap((/** @type {any} */ action) => action.sources.map((/** @type {any} */ source) => ({ action: action.key, name: source.domain ?? `channel:${source.channel}`, route: source.route ?? "unknown" })));
+  assert.equal(counts.sources.rows, rows.length);
+  assert.equal(counts.sources.distinct, new Set(rows.map((/** @type {any} */ row) => row.name)).size);
+  assert.equal(counts.sources.actions, new Set(rows.map((/** @type {any} */ row) => row.action)).size);
+  for (const [route, tally] of Object.entries(counts.sources.byRoute)) {
+    const mine = rows.filter((/** @type {any} */ row) => row.route === route);
+    assert.deepEqual(tally, { actions: new Set(mine.map((/** @type {any} */ row) => row.action)).size, rows: mine.length, distinct: new Set(mine.map((/** @type {any} */ row) => row.name)).size }, route);
+  }
+  assert.equal(Object.values(counts.sources.byRoute).reduce((total, tally) => total + /** @type {any} */ (tally).rows, 0), rows.length, "every row is on one route");
+  for (const [kind, byStatus] of Object.entries(counts.byKindStatus)) {
+    assert.equal(Object.values(/** @type {Record<string, number>} */ (byStatus)).reduce((total, n) => total + n, 0), counts.byKind[kind], kind);
+    for (const [status, n] of Object.entries(/** @type {Record<string, number>} */ (byStatus))) {
+      assert.equal(actions.filter((/** @type {any} */ action) => action.kind === kind && action.status === status).length, n, `${kind} × ${status}`);
+    }
+  }
+  // the placement the scenario holds is the one placed source; the group with a control has no action of its own
+  assert.deepEqual(counts.sources.byChosen.placed, { actions: 1, rows: 1, distinct: 1 });
+  assert.equal(counts.groupsWithoutAction, 0);
+  assert.equal(counts.articlesWithoutGroup, 0);
 });
 
 test("a person pastes the address of a page the brand published: the run's own registration, so the re-tests that read the row pick it up", options, async () => {
@@ -432,6 +475,36 @@ test("a person pastes the address of a page the brand published: the run's own r
   assert.equal((await call("POST", route, { body: { platform: "zhihu" } })).payload.code, "geo_owned_link_invalid");
   assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "zhihu", title: "x", extra: 1 } })).status, 400);
   assert.equal((await call("POST", route, { body: { url: "https://example.com/a", platform: "zhihu", title: "x" }, user: MALLORY })).status, 404);
+});
+
+test("a link pasted for a group alone is the group's: its content actions take it, a correction does not, and the sums and the model's row move with it", options, async () => {
+  // Live finding 2026-10-15, decided 2026-10-17: the person published for the group, so the group's content actions say so — what the
+  // orchestrator's staleness rule already did with a link that names a group and no article.
+  const route = `/api/geo/projects/${geo.geoId}/owned-links`;
+  const project = /** @type {any} */ (await store.getProject(ALICE, geo.geoId));
+  const content = `win_cluster:${id("g1")}:M-01`;
+  const correction = `correct_error:${id("g1")}:${id("e3")}`;
+  const read = async () => (await call("GET", `/api/geo/projects/${geo.geoId}/actions`)).payload.data;
+  const before = await read();
+  assert.equal(before.actions.find((/** @type {any} */ action) => action.key === content).status, "proposed");
+  const created = await call("POST", route, { body: { url: "https://zhuanlan.zhihu.com/p/777001", platform: "zhihu", title: "停药后会反弹吗", groupId: id("g1") } });
+  assert.equal(created.status, 201);
+  const linkId = created.payload.data.id;
+  try {
+    const after = await read();
+    const mine = after.actions.find((/** @type {any} */ action) => action.key === content);
+    assert.deepEqual([mine.status, mine.ownedLinkIds], ["live", [linkId]]);
+    const fix = after.actions.find((/** @type {any} */ action) => action.key === correction);
+    assert.deepEqual([fix.status, fix.ownedLinkIds], ["proposed", []], "a page for the group does not answer one error");
+    assert.equal(after.counts.byStatus.live, (before.counts.byStatus.live ?? 0) + 1);
+    assert.equal(after.counts.byKindStatus.win_cluster.live, 1);
+    const lean = (await service.runtimeRead(project, "actions", {})).actions.find((/** @type {any} */ action) => action.key === content);
+    assert.deepEqual([lean.status, lean.links], ["live", 1], "the model's row counts it too");
+  } finally {
+    const retired = await geoRuntimeWrite({ store, project, what: "owned_links", body: { items: [{ id: linkId, status: "retired" }] } });
+    assert.equal(retired.ok, true);
+  }
+  assert.equal((await read()).actions.find((/** @type {any} */ action) => action.key === content).status, "proposed", "taking the link back puts the action back");
 });
 
 test("what a person's choices do to the platform's choosers is the page's own verdict, read from the same actions", options, async () => {

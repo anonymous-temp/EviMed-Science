@@ -25,6 +25,12 @@
  * - **A key survives what rewrites around it**: a new strategy version with the same gap, and a question set copied under new
  *   group ids (a group keeps its name; `aliasIds` carry the ids it had), find the same choice. The key's first word is the kind the
  *   action was born with; `kind` itself becomes `correct_error` when a group is already at its target and errors are open.
+ * - **A page the brand published for a group is the group's content actions'**, with or without an article of the platform's: a link
+ *   that names only a group moves the group's `fill_gap` / `win_cluster` / `maintain` actions (never a correction), and the engines that
+ *   cite it are theirs — the orchestrator's staleness rule already reads it so (decided 2026-10-17; r19-geos had it attributed by article only).
+ * - **What a reader would add up is added up here** (`counts`): the actions by kind and status, the sources they list by route, the groups
+ *   no action reaches, the articles of no group. The model that reads the list (`geoLeanAction`, one row an action, under a character
+ *   budget) quotes these and never sums a column of rows — which it did, wrongly, when it was given every row whole.
  *
  * @module geoActions
  */
@@ -412,6 +418,31 @@ function rankedSources(candidates, { swapped, placed, modelSources, info = {} })
 }
 
 /**
+ * The sources the actions list, tallied under a label (a source that has none is not counted): in how many actions it stands, on
+ * how many rows (a source of one action is one row) and how many different sources those are — a website, or one of the brand's own
+ * channels, however many actions name it. Counted here so that nobody — the page, the model reading it — has to add rows up.
+ * @param {Array<Record<string, any>>} actions @param {(source: Record<string, any>) => string | null} labelOf
+ * @returns {Record<string, { actions: number, rows: number, distinct: number }>}
+ */
+function tallySources(actions, labelOf) {
+  /** @type {Map<string, { actions: Set<string>, rows: number, distinct: Set<string> }>} */
+  const tally = new Map()
+  for (const action of actions) {
+    for (const source of list(action.sources)) {
+      const label = labelOf(source)
+      if (label == null) continue
+      const entry = tally.get(label) ?? { actions: new Set(), rows: 0, distinct: new Set() }
+      entry.actions.add(String(action.key))
+      entry.rows += 1
+      entry.distinct.add(source.domain ?? `channel:${source.channel}`)
+      tally.set(label, entry)
+    }
+  }
+  return Object.fromEntries([...tally].sort(([left], [right]) => left.localeCompare(right))
+    .map(([label, entry]) => [label, { actions: entry.actions.size, rows: entry.rows, distinct: entry.distinct.size }]))
+}
+
+/**
  * Derive every action of a project from the rows the caller read.
  *
  * @param {GeoActionInput} input
@@ -470,13 +501,24 @@ export function deriveGeoActions(input) {
   // ---- facts by group
   /** @param {GeoActionGroup} group */
   const articlesOf = (group) => articles.filter((article) => article.groupId && idsOf(group).includes(String(article.groupId)) && article.layer !== 'correction')
-  /** @param {ReadonlyArray<Record<string, any>>} forArticles */
-  const factsOf = (forArticles) => {
+  /**
+   * What became of a set of articles: the orders for them, the links the brand published for them and the citations of either. With
+   * `group` (a content action's), a link the brand pasted for the group and no article counts too, and so do the engines that cited
+   * that page: the person published for the group, and the orchestrator already reads it so — its staleness rule takes `link.groupId`
+   * where the link names no article (`#staleGroupIds`), so the page and the worker say one thing. A correction action never takes
+   * one: a link for a group answers no particular error.
+   * @param {ReadonlyArray<Record<string, any>>} forArticles @param {GeoActionGroup | null} [group]
+   */
+  const factsOf = (forArticles, group = null) => {
     const ids = new Set(forArticles.map((article) => String(article.id)))
+    const groupIds = group ? new Set(idsOf(group)) : null
+    const ofGroup = groupIds ? ownedLinks.filter((link) => !link.articleId && link.groupId && groupIds.has(String(link.groupId))) : []
     return {
       orders: orders.filter((order) => order.articleId && ids.has(String(order.articleId))),
-      links: ownedLinks.filter((link) => link.articleId && ids.has(String(link.articleId))),
-      citations: cited.filter((entry) => ids.has(String(entry.articleId))),
+      links: [...ownedLinks.filter((link) => link.articleId && ids.has(String(link.articleId))), ...ofGroup],
+      citations: [...cited.filter((entry) => ids.has(String(entry.articleId))),
+        ...ofGroup.flatMap((link) => list(link.citedBy).filter((entry) => entry && typeof entry === 'object')
+          .map((entry) => ({ articleId: null, engine: text(entry.engine), questionId: null, firstSeen: text(entry.firstSeen) })))],
     }
   }
   /** The reading rows of a group's metric, oldest first. @param {GeoActionGroup} group @param {string} metricId */
@@ -612,7 +654,7 @@ export function deriveGeoActions(input) {
     const errorIds = errorRows.map((row) => String(row.id))
     const correctionIds = new Set(errorRows.flatMap((row) => list(row.materials).map((material) => text(record(material).articleId)).filter(Boolean)))
     const forArticles = born === 'correct_error' ? articles.filter((article) => correctionIds.has(String(article.id))) : group ? articlesOf(group) : []
-    const facts = factsOf(forArticles)
+    const facts = factsOf(forArticles, born === 'correct_error' ? null : group)
     const inBatch = batches.some((item) => ['pending', 'claimed', 'running'].includes(String(item.state))
       && ((group && list(item.groups).some((id) => idsOf(group).includes(String(id)))) || errorIds.some((id) => list(item.errors).includes(id))))
     const errorsClosed = errorRows.length > 0 && errorRows.every((row) => row.status === 'closed') && correctionIds.size > 0
@@ -831,7 +873,7 @@ export function deriveGeoActions(input) {
     if (short.short) {
       build({ born: 'win_cluster', group, ref: 'M-01', entry: entryFor({ group, bare: true }), extraMetricIds: ['M-01'] })
     } else if (short.basis !== null) {
-      const facts = factsOf(articlesOf(group))
+      const facts = factsOf(articlesOf(group), group)
       const live = facts.orders.some((order) => PUBLISHED_ORDER_STATES.includes(String(order.state))) || facts.links.length > 0
       if (live) build({ born: 'maintain', group, ref: 'M-01', extraMetricIds: ['M-01'] })
     }
@@ -853,9 +895,24 @@ export function deriveGeoActions(input) {
   const byStatus = {}
   /** @type {Record<string, number>} */
   const byKind = {}
+  /** @type {Record<string, Record<string, number>>} */
+  const byKindStatus = {}
   for (const action of actions) {
     byStatus[action.status] = (byStatus[action.status] ?? 0) + 1
     byKind[action.kind] = (byKind[action.kind] ?? 0) + 1
+    const row = byKindStatus[action.kind] ?? (byKindStatus[action.kind] = {})
+    row[action.status] = (row[action.status] ?? 0) + 1
+  }
+  // What a reader would otherwise add up by hand: the sources the actions list, and what no action reaches.
+  const withAction = new Set(actions.filter((action) => action.group).map((action) => action.group.id))
+  const unavailable = tallySources(actions, (source) => (source.available === false ? 'unavailable' : null)).unavailable
+  const byChosen = tallySources(actions, (source) => (source.chosen === 'recommended' ? null : text(source.chosen)))
+  // A key that is absent counts zero: `byChosen` (a person's swap, an order placed) and `unavailable` stand only when there is one.
+  const sourceCounts = {
+    ...(tallySources(actions, () => 'all').all ?? { actions: 0, rows: 0, distinct: 0 }),
+    byRoute: tallySources(actions, (source) => text(source.route) ?? 'unknown'),
+    ...(Object.keys(byChosen).length ? { byChosen } : {}),
+    ...(unavailable ? { unavailable } : {}),
   }
   const actedGroups = new Set(actions.filter((action) => ACTED_STATUSES.includes(action.status) && action.group).map((action) => action.group.id))
   const waitingGapGroups = new Set(actions.filter((action) => action.kind !== 'maintain' && NOT_ACTED_STATUSES.includes(action.status)
@@ -872,9 +929,111 @@ export function deriveGeoActions(input) {
     noAction,
     unmatched,
     issues,
-    counts: { total: actions.length, byKind, byStatus, gapsWithoutEntry },
+    counts: {
+      total: actions.length,
+      byKind,
+      byStatus,
+      gapsWithoutEntry,
+      byKindStatus,
+      groupsWithoutAction: groups.filter((group) => group.isControl !== true && !withAction.has(group.id)).length,
+      articlesWithoutGroup: articles.filter((article) => !article.groupId || !groupById.has(String(article.groupId))).length,
+      sources: sourceCounts,
+    },
     headline: { ...headline, sentence: geoActionSentence(headline) },
   }
+}
+
+/**
+ * The characters the rows of one lean read of the actions may take. It is not the kernel's cap: the kernel keeps `maxInlineTokens:
+ * 12500` of a tool result inline and estimates four characters a token, so about 50,000 characters — which the 22,000-character list
+ * of eleven actions never reached (live, 2026-10-14: the transcript holds that answer whole, with no omission notice). It is the size
+ * at which the model has been seen to read a list in one go: the same session paged around the 22 K list in thirteen reads and added a
+ * column up wrongly, and read answers of 7 – 9 K characters (a page of four actions, the clusters) once each. The rows get 9,000; the
+ * headline, the counts and the paging take the rest. What a longer list leaves out is one `offset` away, and `nextOffset` says where.
+ */
+export const GEO_ACTIONS_READ_CHARS = 9000
+/** The longest title of an action a lean row carries; the whole action has it entire. */
+const GEO_LEAN_TITLE_CHARS = 60
+
+/** @param {string | null} value @param {number} limit */
+const clipped = (value, limit) => (value && value.length > limit ? `${value.slice(0, limit - 1)}…` : value)
+
+/**
+ * One source of an action as a lean row names it: what it is (a website, or one of the brand's own channels), how an article gets
+ * there, and whether the platform would place at it and at what price — each only when it is known — and what a person or an order
+ * made of it when it is not the recommendation. Why the run recommended it is the whole action's.
+ * @param {Record<string, any>} source
+ */
+function leanSource(source) {
+  return {
+    ...(source.domain ? { domain: source.domain } : { channel: source.channel }),
+    route: source.route ?? null,
+    ...(source.available == null ? {} : { available: source.available }),
+    ...(source.price == null ? {} : { price: source.price }),
+    ...(source.chosen === 'recommended' ? {} : { chosen: source.chosen }),
+  }
+}
+
+/**
+ * An action as the project's conversation reads it in a list — the lean row: what it is, how far it has got, what it is expected to
+ * move and where it is to go, with every number the whole action holds and none of the run's longer words (the judgment, the expected
+ * points, why a source, the reason). The same function's output as the whole action, shorter; the whole is a read of one action
+ * (`filter.key`, or a group's with `filter.groupId`). What is not known is `null` — a reading nobody took is no zero — and there is
+ * no rate under the floor, as in the whole. Three annotations stand only when there is something to say: `reached` (a verdict on the
+ * target), `choice` (a person's word) and `checks` (what the platform noted of the run's entry); a row without them has none.
+ *
+ * @param {Record<string, any>} action an action of {@link deriveGeoActions}
+ */
+export function geoLeanAction(action) {
+  const from = action.expected.from
+  const codes = [...new Set(action.checks.map((/** @type {{ code: string }} */ check) => String(check.code)))]
+  return {
+    key: action.key,
+    kind: action.kind,
+    status: action.status,
+    // An action never belongs to a control group (a control group is measured and never worked on): the group carries no `isControl`.
+    group: action.group ? { id: action.group.id, name: action.group.name, pool: action.group.pool } : null,
+    gapClass: action.need.gapClass,
+    what: { layer: action.what.layer, title: clipped(action.what.title, GEO_LEAN_TITLE_CHARS), channel: action.what.channel },
+    expected: {
+      metricId: action.expected.primaryMetricId,
+      promise: action.expected.promise,
+      from: from ? { k: from.k, n: from.n, state: from.state, ...(from.state === 'enough' ? { rate: from.rate } : {}) } : null,
+      target: action.expected.target,
+      ...(action.expected.reached == null ? {} : { reached: action.expected.reached }),
+      horizonWeeks: action.expected.horizonWeeks,
+    },
+    sources: action.sources.map(leanSource),
+    articles: action.articleIds.length,
+    orders: action.orderIds.length,
+    links: action.ownedLinkIds.length,
+    ...(action.choice ? { choice: { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain } } : {}),
+    ...(codes.length ? { checks: codes } : {}),
+  }
+}
+
+/**
+ * A page of the lean rows under a character budget: the rows asked for (`offset`, `limit`) as far as they fit — always at least one —
+ * and, when rows are left after them, where the next page starts and how many are left. A cut is therefore never silent: `more` says
+ * there is more, `nextOffset` is the `offset` to ask for it, `omitted` how many rows are still unread.
+ *
+ * @param {ReadonlyArray<Record<string, any>>} actions the matching actions, in the order the page lists them
+ * @param {{ offset?: number, limit?: number, chars?: number }} [window]
+ */
+export function geoLeanActionsPage(actions, { offset = 0, limit = 20, chars = GEO_ACTIONS_READ_CHARS } = {}) {
+  /** @type {Array<ReturnType<typeof geoLeanAction>>} */
+  const rows = []
+  let used = 0
+  for (const action of actions.slice(offset, offset + limit)) {
+    const row = geoLeanAction(action)
+    const size = JSON.stringify(row).length + 1
+    if (rows.length > 0 && used + size > chars) break
+    rows.push(row)
+    used += size
+  }
+  const next = offset + rows.length
+  const left = Math.max(0, actions.length - next)
+  return { rows, total: actions.length, more: left > 0, ...(left > 0 ? { nextOffset: next, omitted: left } : {}) }
 }
 
 /**

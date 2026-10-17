@@ -1497,6 +1497,7 @@ export {
 // stage reached (the 8-week stale rule the orchestrator also reads). The page, `geo_read actions`, the weekly report and the
 // scheduler share these functions.
 export {
+  GEO_ACTIONS_READ_CHARS,
   GEO_ACTION_QUESTIONS,
   GEO_ACTION_READ_METRICS,
   GEO_ACTION_SERIES_POINTS,
@@ -1512,6 +1513,8 @@ export {
   geoGroupReading,
   geoChoiceEffects,
   geoGroupShort,
+  geoLeanAction,
+  geoLeanActionsPage,
   geoNeedsYou,
   geoPlacementStale,
   geoPoolTarget,
