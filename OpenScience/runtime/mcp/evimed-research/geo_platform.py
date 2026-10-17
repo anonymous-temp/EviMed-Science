@@ -57,6 +57,8 @@ POOLS = ("P1", "P2", "P3", "P4")
 SOCIAL_PLATFORMS = ("xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels")
 SOCIAL_SORTS = ("hot", "latest")
 READ_MAX_LIMIT = 50
+# An action's key (`kind:group:ref`), as the domain's `parseGeoActionKey` bounds it.
+ACTION_KEY_MAX = 240
 WRITE_MAX_ITEMS = 200
 SOCIAL_MAX_LIMIT = 50
 SOCIAL_DEFAULT_LIMIT = 20
@@ -82,10 +84,10 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, "
-                "sources, strategy, targets, articles, orders and monitoring. Cards carry checked quotes and "
-                "citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. "
-                "clusters: groups, k of n; actions: per-gap work. "
+                "Read this 循证 GEO project in the shapes its pages show. Cards carry checked quotes and citation ids. "
+                "Value holds scoped findings, research and coverage; research lists specialist tasks. "
+                "snapshots: engine answers. clusters: groups, k of n. "
+                "actions: lean rows plus counts to quote, never add up; filter.key or groupId reads one whole. "
                 "filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero."
             ),
             "inputSchema": {
@@ -102,6 +104,7 @@ def tool_definitions():
                             "pool": {"type": "string", "enum": list(POOLS)},
                             "groupId": ID,
                             "questionId": ID,
+                            "key": {"type": "string", "minLength": 1, "maxLength": ACTION_KEY_MAX},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
                         },
@@ -253,7 +256,13 @@ def read(arguments: dict) -> dict:
     next_actions = []
     if data.get("more") is True:
         warnings.append("More items exist than this answer holds.")
-        next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
+        next_offset = data.get("nextOffset")
+        if isinstance(next_offset, int) and not isinstance(next_offset, bool):
+            next_actions.append("Call again with filter.offset=%d to read the next page, or narrow the filter." % next_offset)
+        else:
+            next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
+    if what == "actions" and data.get("detail") == "lean":
+        next_actions.append("Rows are lean; filter.key (or filter.groupId) reads an action whole: its judgment, expected points, why each source.")
     return {
         "status": "success",
         "summary": "Read %s of this 循证 GEO project." % what,

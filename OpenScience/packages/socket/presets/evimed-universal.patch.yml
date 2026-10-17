@@ -289,7 +289,13 @@
                 # build machine). Its skills sit under `skills/`, beside the `shared/`
                 # layer they call $GEO_LIB. A build without the pack has the root and no
                 # `skills/` in it, which the loader reads as no skills, not as an error.
-                - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills'
+                # Mounted only in the runtime of a 「循证 GEO」 project (`EVIMED_GEO_SKILLS=1`,
+                # which the control plane sends per project): its 51 skills were 60% of the
+                # model's skill catalogue in every session, and an ordinary conversation has
+                # no use for them (2026-10-17, measured by scripts/ops/skill-catalogue-size.mjs).
+                # Elsewhere the root is a path that is not there, which the loader reads as no
+                # skills, the way the LoopX root below reads when LoopX is off.
+                - !!js (process.env.EVIMED_GEO_SKILLS === '1' && (process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills')) || '/opt/evimed/geo-private-disabled'
                 # Community skills, vendored at pinned commits and last in the order: the
                 # first root wins a name collision, so nothing taken from the ecosystem
                 # can displace a skill we wrote. What is in here is recorded in

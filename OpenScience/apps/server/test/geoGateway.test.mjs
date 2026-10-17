@@ -135,6 +135,11 @@ test("reads and writes are refused whole only when the call itself cannot be rea
   await refused("read", { what: "claims", filter: { limit: GEO_READ_MAX_ITEMS + 1 } }, "geo_read_filter_invalid");
   await refused("read", { what: "claims", filter: { round: "../../etc" } }, "geo_read_filter_invalid");
   await refused("read", { what: "claims", filter: { sql: "1" } }, "geo_read_filter_invalid");
+  // an action is named by its key, as the list shows it: nothing else is one
+  await refused("read", { what: "actions", filter: { key: "../../etc/passwd" } }, "geo_read_filter_invalid");
+  await refused("read", { what: "actions", filter: { key: "fill_gap:ggr_1" } }, "geo_read_filter_invalid");
+  await refused("read", { what: "actions", filter: { key: 7 } }, "geo_read_filter_invalid");
+  await refused("read", { what: "actions", filter: { key: `fill_gap:${"g".repeat(81)}:benefit_only` } }, "geo_read_filter_invalid");
   await refused("write", { what: "passwords" }, "geo_write_what_invalid");
   await refused("write", { what: "claims", items: [{}], data: {} }, "geo_write_payload_invalid");
   await refused("write", { what: "claims", data: {} }, "geo_write_payload_invalid");
@@ -163,6 +168,20 @@ test("a round the project does not have is the filter being wrong; a failure und
   assert.deepEqual([failed.status, failed.body.code], [503, "geo_gateway_unavailable"]);
   assert.equal(JSON.stringify(failed.body).includes("10.0.0.5"), false, "an internal address never reaches the run");
   assert.deepEqual(reports, ["ECONNREFUSED"]);
+});
+
+test("an action key is passed to the read as it was written; a key the project does not have is the filter being wrong", async (t) => {
+  const { geo, calls } = geoDouble(on);
+  const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const key = "fill_gap:ggr_5cb286e63ea76584d2b0fea518fc9c64:benefit_only";
+  const answer = await post("read", { what: "actions", filter: { key, limit: 1 } });
+  assert.equal(answer.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "geo_1", "actions", { key, limit: 1 }]);
+  const missing = geoDouble(on, { failRead: new HttpError(404, "geo_action_not_found", "This project has no action with that key; read the list (no filter) and copy a key from it.") });
+  const { post: absent } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo: missing.geo }));
+  const none = await absent("read", { what: "actions", filter: { key } });
+  assert.deepEqual([none.status, none.body.code], [400, "geo_read_filter_invalid"], "a route code never reaches a run; the sentence does");
+  assert.match(none.body.error, /no action with that key/);
 });
 
 test("a write the database refuses by a constraint of its own is the payload's fault, not an outage", async (t) => {

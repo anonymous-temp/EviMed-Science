@@ -521,7 +521,7 @@
     },
     "geo-private": {
       "listed": true,
-      "how": "The 循证 GEO method pack: its index (name and one sentence per skill, never a body) is what the skills page lists, for accounts the module is open to."
+      "how": "The 循证 GEO method pack: its index (name and one sentence per skill, never a body) is what the skills page lists, for accounts the module is open to. Only the runtime of a 循证 GEO project mounts the pack itself; every other runtime has no GEO skill in its catalogue."
     },
     "loopx": {
       "listed": true,

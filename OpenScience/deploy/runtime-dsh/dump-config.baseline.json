@@ -1506,7 +1506,10 @@
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/evimed'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/curated-scientific'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
-            - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills'
+            - !!js >-
+              (process.env.EVIMED_GEO_SKILLS === '1' &&
+              (process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills')) ||
+              '/opt/evimed/geo-private-disabled'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
             - !!js >-
               (process.env.EVIMED_LOOPX_ENABLED !== '0' &&

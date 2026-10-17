@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GEO_ACTIONS_READ_CHARS,
   GEO_ACTION_CHECKS,
   GEO_ACTION_KINDS,
   GEO_ACTION_PROMISES,
@@ -22,6 +23,8 @@ import {
   geoGroupReading,
   geoChoiceEffects,
   geoGroupShort,
+  geoLeanAction,
+  geoLeanActionsPage,
   geoNeedsYou,
   geoPlacementStale,
   geoPoolTarget,
@@ -234,10 +237,11 @@ test("the status is the furthest stage reached; skipped and stale are flags", ()
   assert.equal(status({ articles: [article({ status: "withdrawn" })] }), "proposed", "a withdrawn article is nothing");
 });
 
-test("a pasted link moves an action through the article it names; a link of a group alone is the group's and moves no action", () => {
-  // Live finding, 2026-10-15: a link registered with a group and no article was recorded (and is read by the post-publication
-  // re-tests and the cluster view) while the group's action stayed `proposed`. Attribution is by article: the same chain that
-  // carries orders and citations. The web sends `articleId` whenever the page's link is for one of the platform's articles.
+test("a pasted link moves the actions of its group: through the article it names, or — naming only a group — the group's content actions", () => {
+  // Live finding, 2026-10-15: a link registered with a group and no article was recorded (and read by the post-publication re-tests and
+  // by the orchestrator's staleness rule, `link.groupId` where no article is named) while the group's action stayed `proposed`. Decided
+  // 2026-10-17: the person published for the group, so the group's content actions take it — the page says what the worker already
+  // does. A correction takes only the articles written for its errors.
   const article = { id: "a1", groupId: "g-p4", layer: "qa", title: "安全问答", status: "publishable", gate: "passed", safety: "clear", createdAt: ago(10) };
   const key = "fill_gap:g-p4:benefit_only";
   const read = (/** @type {any} */ over) => byKey(deriveGeoActions({ ...base(), ...over }))[key];
@@ -245,11 +249,26 @@ test("a pasted link moves an action through the article it names; a link of a gr
   const named = read({ articles: [article], ownedLinks: [link({ articleId: "a1" })] });
   assert.deepEqual([named.status, named.ownedLinkIds], ["live", ["l1"]]);
   const byGroup = read({ articles: [article], ownedLinks: [link({ articleId: null })] });
-  assert.deepEqual([byGroup.status, byGroup.ownedLinkIds], ["ready", []], "no article named: nothing in the action's chain");
+  assert.deepEqual([byGroup.status, byGroup.ownedLinkIds], ["live", ["l1"]], "no article named: the group's content action takes it all the same");
   const alone = read({ ownedLinks: [link({ articleId: null })] });
-  assert.deepEqual([alone.status, alone.ownedLinkIds], ["proposed", []]);
+  assert.deepEqual([alone.status, alone.ownedLinkIds], ["live", ["l1"]], "even where the group has no article of the platform's");
+  const both = read({ articles: [article], ownedLinks: [link({ articleId: "a1" }), link({ id: "l2", articleId: null })] });
+  assert.deepEqual(both.ownedLinkIds, ["l1", "l2"], "a link of the article and a link of the group are two links, each once");
   const retired = read({ articles: [article], ownedLinks: [link({ articleId: "a1", status: "retired" })] });
   assert.deepEqual([retired.status, retired.ownedLinkIds], ["ready", []], "a retired link is nothing");
+  const another = read({ ownedLinks: [link({ articleId: null, groupId: "g-p2" })] });
+  assert.deepEqual([another.status, another.ownedLinkIds], ["proposed", []], "a link of another group is another group's");
+  // the group's content actions only: the correction of the group's errors is not answered by a page for the group
+  const correction = byKey(deriveGeoActions({ ...base(), ownedLinks: [link({ articleId: null, groupId: "g-p1" })] }))["correct_error:g-p1:wrong"];
+  assert.deepEqual([correction.status, correction.ownedLinkIds], ["proposed", []]);
+  // an engine citing the page the group's link names is a direct citation of the group's action, with no article to name
+  const cited = read({ ownedLinks: [link({ articleId: null, citedBy: [{ engine: "qianwen", firstSeen: ago(2) }] })] });
+  assert.equal(cited.status, "cited");
+  assert.deepEqual(cited.observed.citedBy, [{ engine: "qianwen", questionId: null, askedAt: ago(2), articleId: null }]);
+  // and the wait for a citation is the orchestrator's: published eight weeks ago and never cited is stale
+  const old = read({ ownedLinks: [link({ articleId: null, publishedAt: ago(60) })] });
+  assert.equal(old.status, "stale");
+  assert.equal(geoPlacementStale({ publishedAt: ago(60), now: NOW, cited: false }), true, "the same function the orchestrator calls");
 });
 
 test("a person's choices are found under the key a group had before its set was copied, and swap the first source", () => {
@@ -491,4 +510,164 @@ test("a person's two words reach the choosers as the derived actions' verdicts: 
   assert.equal(derive(skip("fill_gap:g-p2:benefit_only")).actions.find((action) => action.key === "fill_gap:g-p2:benefit_only")?.status, "skipped");
   assert.deepEqual(geoChoiceEffects(null).skippedGroupIds.size, 0);
   assert.deepEqual(geoChoiceEffects(/** @type {any} */ ([{ nonsense: true }, null])).preferredByArticle.size, 0);
+});
+
+// ------------------------------------------------------------------ what the model reads of the actions (r19-geos2)
+
+/** The sources a group could go to, as the spine hands them to the derivation: some wait for a market, one never will place, one is the brand's own. */
+const candidates = {
+  "g-p4": [
+    { domain: "dayi.org.cn", name: "大医", layer: "anchor", route: "waiting_market", available: null, origin: "cited", citedFor: { qianwen: 3 } },
+    { domain: "kepuchina.cn", name: "科普中国", layer: "coverage", route: "waiting_market", available: false, origin: "layout" },
+    { domain: null, channel: "wechat_mp", name: "微信公众号", layer: "owned", route: "own", available: true, origin: "own_channel" },
+  ],
+  "g-p2": [
+    { domain: "dayi.org.cn", name: "大医", layer: "anchor", route: "waiting_market", available: null, origin: "cited" },
+    { domain: "haodf.com", name: "好大夫", layer: "anchor", route: "market", available: true, price: 120, origin: "market" },
+  ],
+  "g-p1": [{ domain: "baike.baidu.com", name: "百度百科", route: null, origin: "cited" }],
+};
+
+const longTitle = `禁忌与就医信号稿：${"很长".repeat(40)}`;
+
+/** A project with three actions, sources on every route and what no action reaches. */
+const richInput = () => ({
+  ...base(), candidates,
+  strategy: { ...base().strategy, actions: [
+    { gapId: "GAP-01", what: { layer: "qa", title: longTitle, channel: "wechat_mp" },
+      engines: ["doubao"], promise: "raise_mention", reason: "补上限定条件", sources: [{ domain: "dayi.org.cn", why: "说明书原文所在，最可能被当作规范口径引用" }] },
+  ] },
+  choices: [{ key: "fill_gap:g-p2:dropped_condition", skipped: false, sourceDomain: "haodf.com", updatedAt: ago(1) }],
+  articles: [
+    { id: "a-orphan", groupId: null, layer: "qa", title: "没有语义群的稿件", status: "draft" },
+    { id: "a-gone", groupId: "g-deleted", layer: "popular", title: "语义群已不在", status: "draft" },
+    { id: "a-withdrawn", groupId: null, layer: "qa", title: "已撤下", status: "withdrawn" },
+    { id: "a-p4", groupId: "g-p4", layer: "qa", title: "安全问答", status: "publishable" },
+  ],
+});
+
+test("the counts hold the sums a reader would add up by hand: kinds by status, sources by route, what no action reaches", () => {
+  const result = deriveGeoActions(richInput());
+  const { counts, actions } = result;
+  assert.equal(counts.total, 3);
+  // (the group of the safety gap has a publishable article of the platform's: its action is `ready`, the other `proposed`)
+  assert.deepEqual(counts.byKindStatus, { correct_error: { proposed: 1 }, fill_gap: { proposed: 1, ready: 1 } });
+  assert.deepEqual([counts.byKind, counts.byStatus], [{ correct_error: 1, fill_gap: 2 }, { proposed: 2, ready: 1 }], "the older two are the rows of this one, summed");
+  // pinned against a count made the long way over the same actions: the aggregates and the rows are one derivation
+  const long = { rows: 0, bySource: new Set(), byRoute: /** @type {Record<string, { actions: Set<string>, rows: number, distinct: Set<string> }>} */ ({}) };
+  for (const action of actions) {
+    for (const source of action.sources) {
+      const name = source.domain ?? `channel:${source.channel}`;
+      const route = source.route ?? "unknown";
+      long.rows += 1;
+      long.bySource.add(name);
+      const entry = long.byRoute[route] ?? (long.byRoute[route] = { actions: new Set(), rows: 0, distinct: new Set() });
+      entry.actions.add(action.key);
+      entry.rows += 1;
+      entry.distinct.add(name);
+    }
+  }
+  assert.equal(counts.sources.rows, long.rows);
+  assert.equal(counts.sources.distinct, long.bySource.size);
+  assert.deepEqual(counts.sources.byRoute, Object.fromEntries(Object.entries(long.byRoute).sort(([left], [right]) => left.localeCompare(right))
+    .map(([route, entry]) => [route, { actions: entry.actions.size, rows: entry.rows, distinct: entry.distinct.size }])));
+  // and spelled out, the numbers the model was asked to add up: the same website in two actions is two rows and one source
+  assert.deepEqual(counts.sources.byRoute.waiting_market, { actions: 2, rows: 3, distinct: 2 });
+  assert.deepEqual(counts.sources.byRoute.market, { actions: 1, rows: 1, distinct: 1 });
+  assert.deepEqual(counts.sources.byRoute.own, { actions: 1, rows: 1, distinct: 1 });
+  assert.deepEqual(counts.sources.byRoute.unknown, { actions: 1, rows: 1, distinct: 1 }, "a source with no route is counted as unknown, never dropped");
+  assert.deepEqual(counts.sources.unavailable, { actions: 1, rows: 1, distinct: 1 });
+  assert.deepEqual(counts.sources.byChosen, { swapped: { actions: 1, rows: 1, distinct: 1 } }, "a person's swap is counted; the recommendation is not");
+  assert.deepEqual([counts.sources.actions, counts.sources.rows, counts.sources.distinct], [3, 6, 5]);
+  assert.equal(counts.groupsWithoutAction, 0, "the control group is nobody's action and is not counted");
+  assert.equal(counts.articlesWithoutGroup, 2, "an article of no group, and one of a group the set no longer has; a withdrawn one is nothing");
+  // a project with a group no gap names has one without an action; nothing listed is a zero, not a missing member
+  const bare = deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: gaps.filter((gap) => gap.groupId !== "g-p2") } });
+  assert.equal(bare.counts.groupsWithoutAction, 1);
+  assert.deepEqual(bare.counts.sources, { actions: 0, rows: 0, distinct: 0, byRoute: {} }, "nothing swapped, placed or unavailable: those keys are not there, which counts zero");
+  assert.deepEqual(deriveGeoActions({ now: NOW, tier: "2", engines: [], groups: [] }).counts.byKindStatus, {});
+});
+
+test("a lean row is the whole action's figures without its long words", () => {
+  const readings = [{ groupId: "g-p4", metricId: "M-15", roundId: "r2", date: "2026-10-05", kind: "weekly", k: 3, n: 14, value: 21.4, status: "insufficient" },
+    { groupId: "g-p2", metricId: "M-01", roundId: "r2", date: "2026-10-05", kind: "weekly", k: 40, n: 100, value: 40, status: "ok" }];
+  const result = deriveGeoActions({ ...richInput(), readings });
+  assert.equal(result.actions.length, 3);
+  for (const action of result.actions) {
+    const row = geoLeanAction(action);
+    assert.deepEqual([row.key, row.kind, row.status, row.gapClass], [action.key, action.kind, action.status, action.need.gapClass]);
+    assert.deepEqual(row.group, action.group && { id: action.group.id, name: action.group.name, pool: action.group.pool });
+    assert.equal(Object.hasOwn(row.group ?? {}, "isControl"), false, "an action never belongs to a control group: nothing to say");
+    assert.deepEqual([row.expected.metricId, row.expected.promise, row.expected.target, row.expected.horizonWeeks],
+      [action.expected.primaryMetricId, action.expected.promise, action.expected.target, action.expected.horizonWeeks]);
+    assert.equal(Object.hasOwn(row.expected, "reached"), action.expected.reached != null, "a verdict stands only where there is one");
+    if (action.expected.reached != null) assert.equal(row.expected.reached, action.expected.reached);
+    const from = action.expected.from;
+    assert.deepEqual(row.expected.from, from && { k: from.k, n: from.n, state: from.state, ...(from.state === "enough" ? { rate: from.rate } : {}) });
+    assert.deepEqual([row.articles, row.orders, row.links], [action.articleIds.length, action.orderIds.length, action.ownedLinkIds.length]);
+    assert.deepEqual(row.choice ?? null, action.choice && { skipped: action.choice.skipped, sourceDomain: action.choice.sourceDomain });
+    assert.equal(Object.hasOwn(row, "choice"), action.choice != null, "a person's word stands only where there is one");
+    assert.deepEqual(row.checks ?? [], [...new Set(action.checks.map((/** @type {any} */ check) => check.code))]);
+    assert.equal(Object.hasOwn(row, "checks"), action.checks.length > 0, "the platform's notes stand only where there are some");
+    // the sources keep their order and what is known of each; the run's reasons are the whole action's
+    assert.deepEqual(row.sources.map((/** @type {any} */ source) => source.domain ?? source.channel), action.sources.map((/** @type {any} */ source) => source.domain ?? source.channel));
+    for (const [index, source] of row.sources.entries()) {
+      assert.equal(source.route, action.sources[index].route);
+      assert.equal(Object.hasOwn(source, "why"), false);
+      assert.equal(Object.hasOwn(source, "available"), action.sources[index].available != null);
+      assert.equal(Object.hasOwn(source, "price"), action.sources[index].price != null);
+    }
+    const text = JSON.stringify(row);
+    for (const word of [action.need.judgment, action.reason, ...action.need.expectedPoints.map((/** @type {any} */ point) => point.statement)]) {
+      if (word) assert.equal(text.includes(word), false, `the lean row leaves out: ${word}`);
+    }
+    assert.ok(JSON.stringify(row).length < JSON.stringify(action).length / 2, "a lean row is under half the whole action");
+  }
+  const lean = result.actions.map(geoLeanAction);
+  const thin = lean.find((row) => row.key === "fill_gap:g-p4:benefit_only");
+  assert.deepEqual(thin?.expected.from, { k: 3, n: 14, state: "thin" }, "k of n and a state; no rate under the floor");
+  assert.equal(JSON.stringify(thin).includes('"rate"'), false);
+  assert.deepEqual(lean.find((row) => row.key === "fill_gap:g-p2:dropped_condition")?.expected.from, { k: 40, n: 100, state: "enough", rate: 40 });
+  assert.deepEqual(thin?.what, { layer: "qa", title: `${longTitle.slice(0, 59)}…`, channel: "wechat_mp" }, "a very long title is cut in the list; the whole action has it entire");
+  assert.equal(result.actions.find((action) => action.key === "fill_gap:g-p4:benefit_only")?.what.title, longTitle);
+  assert.deepEqual(thin?.sources.map((/** @type {any} */ source) => [source.domain ?? source.channel, source.route, source.available ?? "unknown"]),
+    [["dayi.org.cn", "waiting_market", "unknown"], ["kepuchina.cn", "waiting_market", false], ["wechat_mp", "own", true]]);
+  const swapped = lean.find((row) => row.key === "fill_gap:g-p2:dropped_condition");
+  assert.deepEqual(swapped?.sources[0], { domain: "haodf.com", route: "market", available: true, price: 120, chosen: "swapped" });
+  // an action of the project (no group) reads as it is: no group, no reading
+  const project = deriveGeoActions({ ...base(), strategy: { ...base().strategy, gaps: [{ gapId: "gap-1", class: "weak_source", rank: 1, judgment: "无来源" }] } });
+  const row = geoLeanAction(project.actions[0]);
+  assert.deepEqual([row.group, row.expected.from, row.key], [null, null, "fill_gap:-:gap-1"]);
+});
+
+test("a page of lean rows keeps to its budget, always holds a row, and a cut is never silent", () => {
+  const [one] = deriveGeoActions(richInput()).actions;
+  const many = Array.from({ length: 40 }, (_, index) => ({ ...one, key: `fill_gap:g-p4:gap_${index}` }));
+  const sized = (/** @type {number} */ count) => many.slice(0, count).reduce((total, action) => total + JSON.stringify(geoLeanAction(action)).length + 1, 0);
+  const page = geoLeanActionsPage(many, { limit: 50 });
+  assert.ok(sized(page.rows.length) <= GEO_ACTIONS_READ_CHARS, "the rows are under the budget");
+  assert.ok(sized(page.rows.length + 1) > GEO_ACTIONS_READ_CHARS, "and as many as fit: the next would not");
+  assert.ok(page.rows.length > 5 && page.rows.length < 40, "a real row is a few hundred characters");
+  assert.equal(page.total, 40);
+  assert.deepEqual([page.more, page.nextOffset, page.omitted], [true, page.rows.length, 40 - page.rows.length], "the cut says where to read on and how much is left");
+  // paging by the cursor reads every action once, in order
+  const seen = [];
+  for (let offset = 0; offset < 40;) {
+    const next = geoLeanActionsPage(many, { offset, limit: 50 });
+    seen.push(...next.rows.map((row) => row.key));
+    if (!next.more) break;
+    assert.ok(typeof next.nextOffset === "number" && next.nextOffset > offset);
+    offset = next.nextOffset;
+  }
+  assert.deepEqual(seen, many.map((action) => action.key));
+  // a budget below one row still holds the row; a limit is a cut too, and says so
+  assert.equal(geoLeanActionsPage(many, { chars: 1 }).rows.length, 1);
+  const limited = geoLeanActionsPage(many, { limit: 3 });
+  assert.deepEqual([limited.rows.length, limited.more, limited.nextOffset, limited.omitted], [3, true, 3, 37]);
+  // everything fits: no cursor at all, not a null one
+  const all = geoLeanActionsPage(many.slice(0, 3));
+  assert.equal(all.more, false);
+  assert.equal(Object.hasOwn(all, "nextOffset") || Object.hasOwn(all, "omitted"), false);
+  assert.deepEqual(geoLeanActionsPage([], {}), { rows: [], total: 0, more: false });
+  assert.equal(geoLeanActionsPage(many, { offset: 99 }).more, false, "past the end is the end");
 });

@@ -1013,6 +1013,16 @@ minutes) before it is refused; the workers defer without spending an attempt.
 how many are waiting now; a mean wait that grows (seconds_total over waits) or a
 `gave_up` that is not zero is the host being too small.
 
+### A project whose runtime a background step holds (423, since R19)
+
+A project's conversation is refused while a bounded runtime is reserved for work nobody is attending:
+`423 runtime_reserved_for_autopilot`, whose `details.reason` says which work holds it and from which the shell picks its sentence:
+`scheduled-task` (the researcher's own scheduled task — 「这个项目正在执行你设定的定时任务」), `module-step` (a 虚拟临床研究 or 循证 GEO
+step started by the worker while nobody was in the study). A step a **person** starts opens the project's runtime first and runs in it,
+so it holds nothing and the conversation stays open; a person's cancel holds the programme (nothing is taken up again until a step is
+asked for). The study page reads `activity` / `next` / `stepSummaries` from `GET /api/vcr/studies/:id`; a press of a step answers
+`{ accepted, runId, step, queuedBehind }` and no session to go to.
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
@@ -1281,6 +1291,18 @@ schema and holds the isolated image's policy to them, so a limit that moves on o
 only fails a test instead of reaching the model as a stale sentence. A built-in skill's
 preview shows how to run it from the same kind of schema (the executor's flags are read
 from the executor).
+
+### What 插件与技能 lists, and what turns a test red (R19)
+
+The page lists what the runtime image really carries: `packages/domain/src/runtime-inventory.json` is generated
+(`pnpm generate:runtime-inventory`; `pnpm check:runtime-inventory` is part of `ci:web`) from the composition snapshot
+`deploy/runtime-dsh/dump-config.baseline.json` (every row with the bundle it came from), the preset's agent rows, the tool names, the skill
+roots, the LoopX workflow-skill record `packages/contracts/loopx/workflow-skills.json` and the GEO method pack's **index**
+(`runtime/skills/geo-private/geo-pack-index.json`: names and one sentence each; the web image carries the index and none of the pack).
+The words people read are `runtime-inventory-zh.json`. `runtimeInventory.test.mjs` fails for any bundle, enabled row, skill root, tool set or
+LoopX skill that has neither an item with words nor a reason in `plumbing` — a newly installed package without words is a red test, not a
+missing line on the page. The model's skill catalogue is a measured budget: `node scripts/ops/skill-catalogue-size.mjs` prints the count and
+characters per root for a 循证 GEO project's runtime and for any other; `skillCatalogueSize.test.mjs` pins the ordinary runtime.
 
 ### Specialist engines say which optional source they did not use
 

@@ -21,7 +21,10 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 12 adds disposable candidate execution, without a customer runtime.
 // Version 13 adds one optional field to a runtime start: `memoryGatewayUrl`, the memory gateway's base for an account on
 // the native memory engine (absent for one on the legacy path). The controller accepts only its own configured endpoint.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 13;
+// Version 14 adds one more optional field to a runtime start: `geoSkills`, true for the runtime of a 「循证 GEO」 project, which
+// mounts the GEO method pack as a skill root (absent for every other project). A boolean, and all it chooses is whether one
+// read-only directory the image already carries is among the session's skill roots.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 14;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -295,7 +298,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "") {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -310,6 +313,8 @@ export class RuntimeControllerClient {
       // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
       // then; absent, the runtime is launched for the legacy path.
       ...(memoryGatewayUrl ? { memoryGatewayUrl } : {}),
+      // Protocol 14: the project is a 「循证 GEO」 one. Sent only then; absent, no method pack is mounted.
+      ...(geoSkills === true ? { geoSkills: true } : {}),
     });
   }
 

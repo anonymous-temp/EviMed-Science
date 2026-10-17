@@ -68,8 +68,8 @@ was or was not taken, is in `community/plugin-support.json` and `community/try-i
 
 ## Curated scientific delivery tiers
 
-`curated-scientific/inventory.json` is the delivery contract for all 38 reviewed
-scientific packages. Each package now has a bounded executable baseline, pinned
+`curated-scientific/inventory.json` is the delivery contract for every reviewed
+scientific package it lists, and records the upstream release they were reviewed against. Each package now has a bounded executable baseline, pinned
 dependencies, declared artifacts, and a retained execution receipt. The shared
 `_runtime/` support directory is deployed with those packages but is not exposed
 as a separate Skill.

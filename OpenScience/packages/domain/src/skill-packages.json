@@ -1360,21 +1360,21 @@
       "id": "core/humanizer",
       "name": "humanizer",
       "origin": "core",
-      "version": "2.9.1",
-      "source": {"kind":"release"},
+      "version": "3.1.0",
+      "source": {"kind":"repository","repository":"blader/humanizer","commit":"225a6f39ac85f76ee48dbad772ea4abe4ed6c9d8"},
       "licence": {"id":"MIT","file":{"path":"LICENSE","sha256":"4ac4810254ab36d45419141aeb8e69bf50652cfafe5b2dab947d06d44e5cbf96"},"basis":"declared"},
-      "digest": "sha256:c8ac4b756d149646a33e75a220ba9db16daab5d90a222ba0bd8c5db707f76895",
+      "digest": "sha256:0044f44a7fc1f13db824cea92394a2d70072235830701d6eaa416a9f60b8f170",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/validate-package.py","sha256":"d2c5496ca73a8ce2d3f0cad6681724170d8566bef54d36dfc1e5d3972597b614"}]
+      "scripts": [{"path":"scripts/validate-package.py","sha256":"941bd99e52b2ba21449719bb7969607ac8117e3dc173d0c9dfe64fd274c65938"}]
     },
     {
       "schemaVersion": 1,
       "id": "core/humanizer-zh",
       "name": "humanizer-zh",
       "origin": "core",
-      "source": {"kind":"release"},
+      "source": {"kind":"repository","repository":"op7418/humanizer-zh","commit":"f4518a8eab97b8bfebc66a89d34320a89bef6930"},
       "licence": {"file":{"path":"LICENSE","sha256":"aa00e74769e1b9d8e7fa7094dbfcca9b129a0ded6dce1cf4da050b99146d2fa7"},"basis":"file-present"},
-      "digest": "sha256:ab09c9ff20760676d253885a198a0628ca3af13dee48b8be0d5006e6b1da118d",
+      "digest": "sha256:2b887541dfae3bf2364e1bf1a4cd4ce012b257bb281dcbc9c447e9d8d172e8a1",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -2039,7 +2039,7 @@
       "id": "curated/drug-discovery-data",
       "name": "drug-discovery-data",
       "origin": "curated",
-      "source": {"kind":"derived","path":"therapeutics-data-commons+deepchem","package":"scientific-agent-skills"},
+      "source": {"kind":"derived","path":"pytdc+deepchem","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
@@ -2368,52 +2368,53 @@
       "id": "curated/markdown-mermaid-writing",
       "name": "markdown-mermaid-writing",
       "origin": "curated",
-      "version": "1.1",
+      "version": "1.3",
       "source": {"kind":"derived","path":"markdown-mermaid-writing","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:11b97f2c10208ffd1b3f88a57487d2aa34eb3d00377e1039409c7da403a36bcd",
+      "digest": "sha256:b0c1f60c2ca6edb79791b139ff704f507d28c7170435be11f1287548ea78a41c",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"assets/examples/example-research-report.md","sha256":"05a9e64bf13415f2b4e49c46c02ce48869a4a4e4922d64b752b0cbc79fbbf6e0"},
-        {"path":"references/diagrams/architecture.md","sha256":"a0ce8122c68ab040abedbd072315d86528bfbbf4167506c9449e672943b46bd5"},
-        {"path":"references/diagrams/block.md","sha256":"37db54de9c926ae1b2ead4ec5c0641119d452b4ae09868df59fdfce71b244f63"},
-        {"path":"references/diagrams/c4.md","sha256":"68e7f4b491cfee954f3d7228a67c78c34cb9171448d5e487fb4fed2e5e05078c"},
-        {"path":"references/diagrams/class.md","sha256":"1700e36fe29e5aa687cc36b091126b86bc561688befa7f9496602a2852af9c66"},
-        {"path":"references/diagrams/complex_examples.md","sha256":"d58319e3a4e8c9518dd477841b8d56b04fea37db5bce47ee4c3926c10ca55af8"},
-        {"path":"references/diagrams/er.md","sha256":"86c581b8a9d6c65a245087ed82472926a5b0682214b771f3bdd59d0042c4e97e"},
-        {"path":"references/diagrams/flowchart.md","sha256":"d450c52f59682f90715c11664715fa3770611434644896fe1b7c88092719a82a"},
-        {"path":"references/diagrams/gantt.md","sha256":"b51ef540f6cae178c7d5b76cd9f6bf0229c5a2d6e995df5523cc49d3532a4128"},
-        {"path":"references/diagrams/git_graph.md","sha256":"b93d7f713867f1c30fa879378e2624c047c324947ba0e0e739ad0dc0ff663ae0"},
-        {"path":"references/diagrams/kanban.md","sha256":"b682c5f71713c7655ee992f895597ad1f6e9723efc2a62af1f2ce5e7b97cf886"},
-        {"path":"references/diagrams/mindmap.md","sha256":"3a6dc95f7fce1e6c0842bb66e44c45a1ee6b9db017d62fc7e57f1b0f394dee8c"},
-        {"path":"references/diagrams/packet.md","sha256":"2f456c0514b1ae521711f976b23445ea374cd9a02db0782ad86f1ccf16054e12"},
-        {"path":"references/diagrams/pie.md","sha256":"94fdb61d0240f7e201538e910329ac1f0bae76e7fa2a4fc3f944d0b33fa99d6a"},
-        {"path":"references/diagrams/quadrant.md","sha256":"861a023803e0d7e753118c5b1127ea33e984e8c48b245f5084239f0c4593dae7"},
-        {"path":"references/diagrams/radar.md","sha256":"2024c1e28e8a2458bec6ca630e1c7f055a70227dcfb2c7861f4c5f8eed31c656"},
-        {"path":"references/diagrams/requirement.md","sha256":"52b77e05935296d7a50b7056b220762061e4fb32e9ee44e2af5091b864ab2397"},
-        {"path":"references/diagrams/sankey.md","sha256":"622a103a08da26bf3f194e52e1555513c1769d54806a22cefa6922c2d6add948"},
-        {"path":"references/diagrams/sequence.md","sha256":"9457d93250240dd12d97b4d7481d4626f0fb262f1673f8f2d165e7f0321cbd74"},
-        {"path":"references/diagrams/state.md","sha256":"a735d97bf574bba8cd0eea3beebbe99fad91770161782e28322c9408e0a74508"},
-        {"path":"references/diagrams/timeline.md","sha256":"920a533f375fae3da53a30ddf7ac5538f36e55e0ead7309ed8aba05d5248e923"},
-        {"path":"references/diagrams/treemap.md","sha256":"45980d28bba78eb7b83dd0b68f54561f3931a5ce26d096bb3f937b041d6244d4"},
-        {"path":"references/diagrams/user_journey.md","sha256":"1c99799368a4121f84839a5eb82b75ad60e05ec6cd0f69589e2dece9d4e8aa50"},
-        {"path":"references/diagrams/xy_chart.md","sha256":"4df50afcedd91e0bfbcc851ddde763e4d520d2e015b5b75775b35f5d542db9be"},
-        {"path":"references/diagrams/zenuml.md","sha256":"69cfe24fd119eb3223d404dd9c07d58954cabbc70d2b3df3ecffd527f671ff2b"},
-        {"path":"references/markdown_style_guide.md","sha256":"01338438471ff723403a9a948262f2ecd81e341924352c1e2dadbe9b0f65e28a"},
-        {"path":"references/mermaid_style_guide.md","sha256":"f4aaeebe99d640cae23abf7b087505ef10149903fc108e864395b4ce86a162d0"},
-        {"path":"templates/decision_record.md","sha256":"30192e491938d799284bc76dcf7e47600896a1815bd76a55c044bff2f47a2ead"},
-        {"path":"templates/how_to_guide.md","sha256":"df0f491db8697c28914187c1375f4957644d055a512c7b6c92fec3abdadb1350"},
-        {"path":"templates/issue.md","sha256":"66a7f0746f599e12208a7009d61f1296d3f9a642e430c9db4cddbe4ec8b53dc8"},
-        {"path":"templates/kanban.md","sha256":"1d3e0d6f20628459bb73a63263a446d942441ced871bab4279918e2f33b82166"},
-        {"path":"templates/presentation.md","sha256":"3753856520cf61d787c0ad9db640f0587dcf726df7c67a6bbf46b5c07e1b96a1"},
-        {"path":"templates/project_documentation.md","sha256":"43da7e54717f97d31cec00a5a5576d838ada34fb1fa13563c2eb11820f122a21"},
-        {"path":"templates/pull_request.md","sha256":"737981cb04acde56f9c0402445c9120c75c12270d17c30a3f9a3d95e660d22d1"},
-        {"path":"templates/research_paper.md","sha256":"5fdcf37e2596b7a8e3917f3da3db9caf90fff5301932be68f9fe639f608815ca"},
-        {"path":"templates/status_report.md","sha256":"090b5af7d41a417a365e44f4cb61f6d6e903e75d3daf8ea36edd9f67ee04d5a2"}
+        {"path":"assets/examples/example-research-report.md","sha256":"af5844d2f8b2972d96ad85218b479367b1fa99cd718bd23be6027266079ec7de"},
+        {"path":"references/current-rendering.md","sha256":"f8cb62fec5cdeb122b3e7aa18ca94232b220400c0f78d2a487753d2ba2e7eacd"},
+        {"path":"references/diagrams/architecture.md","sha256":"b246d31c1b99d41a795d7df1c451b77f8bd1cf584561471bc3cd8874b3199376"},
+        {"path":"references/diagrams/block.md","sha256":"02b2a095b4c8c6845c1fd9d3a3ca917113746517dcd224107f6c9c6bede8221c"},
+        {"path":"references/diagrams/c4.md","sha256":"2f815d518f8715fa2968566c88edd146f760f33db3299704ff15614ec50df2d5"},
+        {"path":"references/diagrams/class.md","sha256":"496286c007ab15dc5e875ff7e30ca2a2e6b69d8cf46bce4330a3e92eb9810c8b"},
+        {"path":"references/diagrams/complex_examples.md","sha256":"1eddefc2e1e2717ac813b3488a1355fa9585b496c5d7bc9606121924c73b3c73"},
+        {"path":"references/diagrams/er.md","sha256":"2086906f3c002837c5508205a81acc93cc2cc6166cea96d62f3836153a71f76e"},
+        {"path":"references/diagrams/flowchart.md","sha256":"be90231d635aea2645fefd86c108a3a0f819e74929e30afe5b670702265e368e"},
+        {"path":"references/diagrams/gantt.md","sha256":"c05da4e62a02f4ae4d01995a0de4272cc04f7609408d9ecc08345b1ff6e65914"},
+        {"path":"references/diagrams/git_graph.md","sha256":"5992286cc0ac0b16020ef71fccb074eeb9b5c70d874fc08ef1b07672f550645e"},
+        {"path":"references/diagrams/kanban.md","sha256":"acd582211a09ba799445a0d1fc7fb710149cd46ea71e4f17509ffce7733f142f"},
+        {"path":"references/diagrams/mindmap.md","sha256":"79bbffa9faff776f832a77d7fbe29530b3f3aa45c60e08176e621c39c824dcee"},
+        {"path":"references/diagrams/packet.md","sha256":"6d17b2b9dcb24d78538b3d14d06a53c51a06d5b7b81a191c1c923d85f90f07d2"},
+        {"path":"references/diagrams/pie.md","sha256":"5c23d5928eea6cfaf3d6cdd7fc0306403abf8a1d5394dfea2d5f64bc30bc5f99"},
+        {"path":"references/diagrams/quadrant.md","sha256":"14977d2d10cd6255afad2f9e6db92f21ece23cf50b0595928877a84125e340c6"},
+        {"path":"references/diagrams/radar.md","sha256":"37bd437a3b99782b3a2adb5cbc7a9d888e99508f25539fbad53aa2ca12a9f03d"},
+        {"path":"references/diagrams/requirement.md","sha256":"37da70b91532bf1c71925b75c1fe5424cb1637726765f285c7ee059231916941"},
+        {"path":"references/diagrams/sankey.md","sha256":"28446f926580846fe9dffd8fc19d08d69aab010793520b2b41045a5e0d5e57e3"},
+        {"path":"references/diagrams/sequence.md","sha256":"7eb7c9d4822de94a8c2e0fce23cd3c98a4eabfd72969ac1db5b774ba981ac1b0"},
+        {"path":"references/diagrams/state.md","sha256":"6f4932b9e0f8b52eb1e364e54ce79d5051facf0706b8832d2fa1ec61b1c3d4dd"},
+        {"path":"references/diagrams/timeline.md","sha256":"54989d17d5636c8cb4a32cd256f58857d63a78928d2b06a7bc204cd4bdbaca6c"},
+        {"path":"references/diagrams/treemap.md","sha256":"2a52475aa915d9173ec506c8b71500ea8e6ebea48663c742c2a9b0d0b8c2e56d"},
+        {"path":"references/diagrams/user_journey.md","sha256":"3e04d3e557732cd90f841e142f43bdb70d255bc9c7b9d148a609014aca56ca0f"},
+        {"path":"references/diagrams/xy_chart.md","sha256":"642910cf5949017f15dfe8ecf46564e0697427072f66eebbcb33d8c0a35232c0"},
+        {"path":"references/diagrams/zenuml.md","sha256":"319efbe76fd336bc4049f20a3139e51f3d4df6be2fcea421b85e4ca8c7e6441a"},
+        {"path":"references/markdown_style_guide.md","sha256":"ecc85928c8ebcb4bbfd46556bb37269061e6f58504dfe3ffbaf29b7788d64248"},
+        {"path":"references/mermaid_style_guide.md","sha256":"083ce0070bf3d8b4e64d9b946ab6eaec908168f0a3bb77926d720a4f767feaef"},
+        {"path":"templates/decision_record.md","sha256":"da314705b15a2c4bb9fb6150222f9db5e8229da275481c4acfc9e8c7a0afdbbc"},
+        {"path":"templates/how_to_guide.md","sha256":"1363b28cc6edd59f68ca81efe6e8723ad43008283acad23dcda45fa0e8c30848"},
+        {"path":"templates/issue.md","sha256":"3ec84341c5a923f1dc9066e1c346533c7021602a6a8b17252d51dd4f40d0d1ec"},
+        {"path":"templates/kanban.md","sha256":"213df6f39e2ef3e253b98fe6c3688322bb78e88f0f89d9cdbd23933774bc21e2"},
+        {"path":"templates/presentation.md","sha256":"13494ab83e242fd4cb9fb3110d87a4f8aadcc8a4f520cb16acca4d8fdb8875cf"},
+        {"path":"templates/project_documentation.md","sha256":"58da34425cabac1b859e8f43916bad215232e60ecefe031a959b729c1549f9df"},
+        {"path":"templates/pull_request.md","sha256":"18828f680999f39bdb6f7ae7c175af507dbe945363f16962ddd019958751c499"},
+        {"path":"templates/research_paper.md","sha256":"c795783bfde5fa07ccb29159ff5129d5ea0888d827cfa50548a9101e8c177c29"},
+        {"path":"templates/status_report.md","sha256":"2cdf785affe8831d2fa1cb6e87cf33afbb5c3cb056575aa5ecb2b8b6bfbe3152"}
       ],
       "dependencies": [
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
@@ -2547,26 +2548,27 @@
       "id": "curated/matplotlib",
       "name": "matplotlib",
       "origin": "curated",
-      "version": "1.1",
+      "version": "1.4",
       "source": {"kind":"derived","path":"matplotlib","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:0040c311493fa995d0e0405c58393b6c8a2c0109a581d08c590fa304840ef5e0",
+      "digest": "sha256:78ea8d4dec9bbbc08296d27f64bd19da2057e04c1d71a31abff70240d33c8d76",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/plot_template.py","sha256":"89188efd57764d55614bd88265ab3ac15a215c3818e4c89f9bd41e99abd95ddf"},
-        {"path":"scripts/style_configurator.py","sha256":"5839cebb22b21f7612c6d169b9f63f20316910d1d7a3f0eb68c2b79cc43e1b0d"}
+        {"path":"scripts/plot_template.py","sha256":"88fe993c113b581cf7da41c6330a6528ba768afb3fdc2be8fa4e1681d7c1b943"},
+        {"path":"scripts/style_configurator.py","sha256":"f6238b6de27046e3a094573714b3ecd8f856f1d4e2004f17cf4c87a0848a8993"}
       ],
       "references": [
-        {"path":"references/api_reference.md","sha256":"7db16c836bf62d9ac1bf952a70f3ffed785cfe51f76d806ded428a125ec9f1b5"},
-        {"path":"references/common_issues.md","sha256":"36d5439972718697be22222ba8a53e0e52d474153eaaa999c349f41b54e01cb5"},
-        {"path":"references/plot_types.md","sha256":"99b4c3c5c6c4d6590b722b6de7e414c2e443402df51cf99c3616b9f366a04c44"},
-        {"path":"references/styling_guide.md","sha256":"e53cb0f55fd1c4b07122cf67c0aabcc3114a686598667e62856c9d797a6e7f35"}
+        {"path":"references/api_reference.md","sha256":"151dba633c9d92e5e3c446a927971f50893c1fee382e50d3780d01d0a33bdfdf"},
+        {"path":"references/common_issues.md","sha256":"f614b7716637d18623a035653ac37fc608ff5be4d08250f7fbf66ae496c59df2"},
+        {"path":"references/plot_types.md","sha256":"149479715344beb5f9f0e5b4bf19f694e0db1ef1ea1282aa633185ab38c5d1bc"},
+        {"path":"references/styling_guide.md","sha256":"a2b84789e227bcbf5dcc99b142e4a9e6a45e5c6cff2252e96f53d0f9627ff6fc"}
       ],
       "dependencies": [
+        {"kind":"python-package","name":"cycler","supply":"image","basis":"observed","evidence":"scripts/style_configurator.py"},
         {
           "kind": "python-package",
           "name": "matplotlib",
@@ -2697,23 +2699,25 @@
       "id": "curated/pathway-enrichment",
       "name": "pathway-enrichment",
       "origin": "curated",
-      "version": "1.0",
+      "version": "1.3",
       "source": {"kind":"derived","path":"pathway-enrichment","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:8086feba42946bdd95f56a3c8c72fdb1185ea26fe8e37bed3b4958e65a4ab940",
+      "digest": "sha256:2c0923c885f85a6802a8d67a6aea5e53349bb940f09a2e266d143b906afc5195",
       "digestAlgorithm": "release-directory-v1",
-      "scripts": [{"path":"scripts/run_enrichment.py","sha256":"cad916bd1ac630a9cf7570bb71df4a495f57f18565c336b524e0144b2f1596ed"}],
+      "scripts": [{"path":"scripts/run_enrichment.py","sha256":"973a06c03e9d1df49423ca0744f7c5be5185ec9decc7de8ccbb72d0f2ac6bc06"}],
       "references": [
-        {"path":"references/databases-and-gene-sets.md","sha256":"cae6bf506df2e111c02f5c4b2edc53d4414e2556604799d1b8981d21147c1cad"},
-        {"path":"references/gseapy.md","sha256":"bcbc6c42facaae9d8e5230a889cf7307b8d919b128a0d6b36e6ba1cc60f10da5"},
-        {"path":"references/interpretation.md","sha256":"b991dbcf2e1858817475131ebeeac6fca6478e91c27a071b07566ecb82473722"}
+        {"path":"references/databases-and-gene-sets.md","sha256":"bd9dc1b2df10a2eb8794bdbe2ade248b8987ddf200a8e90b19235af8f20fd414"},
+        {"path":"references/gseapy.md","sha256":"0305a6c545c2aa5e1ac655d8a39f99e437f02a29f5f23f9786e5cf3ab98959fa"},
+        {"path":"references/interpretation.md","sha256":"d1356ee0f94c4e64191c7436c641c01592e323be1e55f4c037957b7b833d4f73"},
+        {"path":"references/verified-api.md","sha256":"911a352451ec52066f044f8eac671ad8aa6a4e8b09d455918bea790b26d882bb"}
       ],
       "dependencies": [
         {"kind":"python-package","name":"gseapy","supply":"image","optional":true,"basis":"observed","evidence":"scripts/run_enrichment.py"},
+        {"kind":"python-package","name":"matplotlib","supply":"image","optional":true,"basis":"observed","evidence":"scripts/run_enrichment.py"},
         {"kind":"python-package","name":"numpy","constraint":"==2.2.6","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {"kind":"python-package","name":"pandas","constraint":"==2.2.3","supply":"image","basis":"declared","evidence":"inventory.json: delivery contract"},
         {
@@ -3174,24 +3178,24 @@
       "id": "curated/statistical-power",
       "name": "statistical-power",
       "origin": "curated",
-      "version": "1.0",
+      "version": "1.3",
       "source": {"kind":"derived","path":"statistical-power","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:28a393ebc231769ae85e91284bb086679382f00a5996f1942b0f485c0531cec9",
+      "digest": "sha256:d1b9881fd4328d6a4a0b002cdeba71ef73ae948f0daf4e0e5b652362257c3c71",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/export_power_analysis.py","sha256":"786b71dd59ef56d9423bf38306f3ef23a766adef9a280108270fa9b99e0e8e32"},
-        {"path":"scripts/power.py","sha256":"4bb073160c59469eed4398eee0fa3c6686c1df1c2ebf7bdddfe7853d7c94914c"},
-        {"path":"scripts/simulate_power.py","sha256":"a3eb6fefe1af0aa9d67fe8762efab47df13a0ff57a35480a59c0fc4e18c404df"}
+        {"path":"scripts/power.py","sha256":"9124b7c657ccbfe8b41c777bd9e17ae076641939e4ae93b4ba17f2de18284b7d"},
+        {"path":"scripts/simulate_power.py","sha256":"bfbe75908ca071528b7b02aa1ed53949a7291f928f30634abe29b3ce23c564f4"}
       ],
       "references": [
-        {"path":"references/closed_form_recipes.md","sha256":"6194841e8477d027cae631c557a90826cd4d613d98e98749e6f40714a1da3b0b"},
-        {"path":"references/effect_sizes.md","sha256":"19f243ac6aeacfbbb7a83a1e621dc5a8248b98278499c4efd34db412d2c964db"},
-        {"path":"references/simulation_based_power.md","sha256":"5841de90e01a4e4617ce84c9ced9791f1ca3b3e0727c80f73f3ea5b9f339b469"}
+        {"path":"references/closed_form_recipes.md","sha256":"c303aa5b5103077304254f48309169609a3b0537748c68e0df4abd33cb9d4384"},
+        {"path":"references/effect_sizes.md","sha256":"b2e3c9578dce59222797ea55e9bc2c3883764adfdfdc0eed3793fb4d71fbf0a7"},
+        {"path":"references/simulation_based_power.md","sha256":"963fd56791e6db1bffb94efda7c9bef9c3195e3dec3e2a9918d17f3536ec150f"}
       ],
       "dependencies": [
         {

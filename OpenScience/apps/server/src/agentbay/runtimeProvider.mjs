@@ -470,8 +470,8 @@ export class AgentBayRuntimeProvider {
     return result.stdout.slice(-4096);
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, memoryGatewayUrl?: string }} input */
-  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, memoryGatewayUrl = "" }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
+  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
     this.assertConfigured();
     // A session that just ended may still be coming home; its Context copy
     // and manifests are what this start reads.
@@ -533,6 +533,8 @@ export class AgentBayRuntimeProvider {
       // The account's memory engine, as the address a session outside this host reaches the memory gateway at: the public
       // prefix's when the account is on the native engine, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
       memoryGatewayUrl: memoryGatewayUrl ? String(publicRuntimeGatewayUrls(this.config)?.memory ?? "") : "",
+      // Whether the project is a 「循证 GEO」 one, and so mounts the GEO method pack as a skill root.
+      geoSkills: geoSkills === true,
       agentbay,
     };
   }
@@ -635,6 +637,7 @@ export class AgentBayRuntimeProvider {
         compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
         disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
         loopxEnabled: config.loopxEnabled !== false,
+        geoSkills: plan.geoSkills === true,
         flags: {
           hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
           askUser: Boolean(config.runtimeAskUserEnabled),

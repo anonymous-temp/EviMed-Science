@@ -46,3 +46,24 @@ test('the bundle lists the preset patch after its own host patch, and ships it',
   assert.deepEqual(manifest.dsh.bundle.patch, ['./cordis.patch.yml', './presets/evimed-universal.patch.yml'])
   assert.ok(manifest.files.includes('presets'), 'the patch lives under a directory the package ships')
 })
+
+/** The loader's own evaluation of a `!!js` scalar (`@deepseek-ai/cordis-plugin-loader`: `with (ctx) { return eval(expr) }`), with a chosen environment. */
+const evaluate = (/** @type {string} */ expression, /** @type {Record<string, string>} */ env) =>
+  new Function('ctx', 'expr', 'with (ctx) { return eval(expr) }')({ process: { env } }, expression.replace(/^!!js /, ''))
+
+test('the GEO method pack is a skill root only where EVIMED_GEO_SKILLS says the runtime is a GEO project\'s', async () => {
+  const source = parse(await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8'), { customTags: [jsTag] })
+  const roots = source.find((/** @type {any} */ row) => row.id === 'skill-filesystem').config.customSkillDirs
+  const geo = roots.find((/** @type {string} */ entry) => /geo-private/.test(entry))
+  assert.ok(geo, 'the preset names the pack root')
+  const presetSkills = '/opt/evimed/socket/presets/evimed-universal/skills'
+  assert.equal(evaluate(geo, { EVIMED_PRESET_SKILLS_DIR: presetSkills, EVIMED_GEO_SKILLS: '1' }), `${presetSkills}/geo-private/skills`)
+  // Anything else is a path that is not there, which the loader reads as no skills: not mounted, and not an error.
+  for (const value of [undefined, '0', '', 'true', '2']) {
+    const env = { EVIMED_PRESET_SKILLS_DIR: presetSkills, ...(value === undefined ? {} : { EVIMED_GEO_SKILLS: value }) }
+    assert.equal(evaluate(geo, env), '/opt/evimed/geo-private-disabled', `EVIMED_GEO_SKILLS=${JSON.stringify(value)}`)
+  }
+  // And it stays one root in the same place of the order: after the office pack and before the community skills.
+  const order = roots.map((/** @type {string} */ entry) => /(?:\/)(core|evimed|curated-scientific|office|geo-private|community)/.exec(entry)?.[1] ?? 'other')
+  assert.deepEqual(order.slice(0, 6), ['core', 'evimed', 'curated-scientific', 'office', 'geo-private', 'community'])
+})

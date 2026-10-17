@@ -454,6 +454,46 @@ test("buildRuntimeLaunchPlan generates a container sandbox launch command", () =
   assert.ok(plan.runtimeDirs.includes(path.join(project.runtimeDir, "container-runtime/home")));
 });
 
+test("the GEO method pack is a skill root of a 循证 GEO project's runtime and of no other", async () => {
+  // 51 skills were 60% of the model's skill catalogue in every session (2026-10-14 audit, measured by
+  // scripts/ops/skill-catalogue-size.mjs). The preset mounts the pack's root only where EVIMED_GEO_SKILLS=1, and the control
+  // plane says per project: the launch plan carries the answer it was given, and `geoSkillsFor` is where it is read.
+  const config = {
+    runtimeSandboxMode: "docker", runtimeContainerBin: "docker", runtimeContainerImage: "evimed-runtime-dsh:test", runtimeTransport: "unix",
+    runtimeNetworkMode: "bridge", runtimeCpuLimit: "1.5", runtimeMemoryLimit: "2g", runtimePidsLimit: 128, runtimeNoNewPrivileges: true,
+    runtimeCapDrop: "ALL", runtimeReadOnlyRoot: true, runtimeTmpfs: "/tmp:rw,nosuid,nodev,size=64m", runtimeContainerUser: "1000:1000",
+    allowRuntimeHostNetwork: false,
+  };
+  const ordinary = buildRuntimeLaunchPlan(config, project, 49152);
+  const geo = buildRuntimeLaunchPlan(config, project, 49152, { geoSkills: true });
+  assert.ok(ordinary.args.includes("EVIMED_GEO_SKILLS=0"), "a project nobody said is a GEO project sends the explicit no");
+  assert.equal(ordinary.args.includes("EVIMED_GEO_SKILLS=1"), false);
+  assert.ok(geo.args.includes("EVIMED_GEO_SKILLS=1"));
+  assert.equal(geo.args.includes("EVIMED_GEO_SKILLS=0"), false);
+  assert.equal(ordinary.geoSkills, false);
+  assert.equal(geo.geoSkills, true, "the plan keeps the answer it was built with: the controller call and a cloud session's environment read it there");
+  assert.equal(buildRuntimeLaunchPlan(config, project, 49152, { geoSkills: "yes" }).geoSkills, false, "only a boolean true mounts the pack");
+
+  const open = { geoEnabled: true, geoAudience: "all" };
+  const seen = [];
+  const manager = new RuntimeManager(open);
+  assert.equal(await manager.geoSkillsFor(project), false, "no lookup assigned (the module is off): no pack");
+  manager.geoProjectOf = async (userId, projectId) => { seen.push([userId, projectId]); return projectId === "paper1"; };
+  assert.equal(await manager.geoSkillsFor(project), true);
+  assert.deepEqual(seen, [["alice", "paper1"]], "asked about the control-plane project of the runtime, by its owner");
+  assert.equal(await manager.geoSkillsFor({ ...project, id: "paper2" }), false);
+  manager.geoProjectOf = async () => { throw new Error("database unavailable"); };
+  assert.equal(await manager.geoSkillsFor(project), false, "a lookup that fails launches the conversation without the pack instead of waiting on it");
+  manager.geoProjectOf = async () => 1;
+  assert.equal(await manager.geoSkillsFor(project), false, "only a true answer counts");
+  const closed = new RuntimeManager({ geoEnabled: true, geoAudience: "operators", operatorUsers: ["someone-else"], geoPreviewUsers: [] });
+  closed.geoProjectOf = async () => true;
+  assert.equal(await closed.geoSkillsFor(project), false, "an account the module is not open to gets no pack, whatever the project");
+  const off = new RuntimeManager({ geoEnabled: false });
+  off.geoProjectOf = async () => true;
+  assert.equal(await off.geoSkillsFor(project), false);
+});
+
 test("buildRuntimeLaunchPlan shares only project volume subpaths over a Unix socket", () => {
   const dataDir = "/data";
   const volumeProject = {

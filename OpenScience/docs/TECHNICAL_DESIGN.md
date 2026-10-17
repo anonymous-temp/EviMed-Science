@@ -245,7 +245,11 @@ its switch is on; the rest are changes inside existing layers.
   AI engines are measured server side through the probe host and the metrics computed from
   `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities
   inside the project; media orders are placed and settled in code. The owner's proprietary
-  skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`.
+  skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`,
+  and the preset mounts it as a skill root in the runtime of a GEO project alone
+  (`EVIMED_GEO_SKILLS`, sent per project through the runtime controller since protocol 14):
+  its 51 skills were 59% of the model's skill catalogue in every session before
+  (`scripts/ops/skill-catalogue-size.mjs`).
 - **「虚拟临床研究」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
   account): one row per study on top of an ordinary project, `/api/vcr/*` with abilities
   checked per operation; the seven-step programme runs the five vcr capabilities inside the
@@ -273,6 +277,14 @@ its switch is on; the rest are changes inside existing layers.
   their plain-language text, versions and the studies that used them; two versions are
   compared by the engine (`cohort.build` with `compare`, filed as a result kind the study's
   own pages never list).
+  **The study page (R19).** Starting a step goes nowhere: `POST /api/vcr/studies/:id/run` answers `{ accepted, runId, step, queuedBehind }`
+  and the page, one fixed band over seven tabs and the study's own conversation view, reads what is going on from the study itself —
+  `activity` (the run that is out, its person-readable sentence, engine jobs, the steps in line and what each waits for), `next` (one pure
+  function in `@evimed/domain`, `vcrNext.mjs`: skips what is queued or running, honours `VCR_STEP_NEEDS`), `stepSummaries` (one number per
+  step) and `conversation` (the session the kernel minted with the study). A programme run has the role `programme` and is in no
+  conversation list; its visible question is a plain sentence per step and the machine brief is the model's alone. A person's cancel holds
+  the programme. The virtual patients are a list (`patients/rows`, the record, `calibration` computed in code) read from the data plane
+  with every guard of the CSV download.
 - **Fusion seams with EviMed's own platform** (fusion plan 2026-09-26 §9); login, credits
   and handoff are off by default and answer 404 when off:
   - *login* (`evimedAuthService.mjs`, `OPEN_SCIENCE_EVIMED_AUTH_ENABLED`): the shell's EviMed

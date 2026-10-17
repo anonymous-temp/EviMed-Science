@@ -40,8 +40,8 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoErrorsByClaim, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList, hardLines,
-  parseGeoActionKey, summarizeGeoValueCoverageCounts } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoErrorsByClaim, geoLeanActionsPage, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList,
+  hardLines, parseGeoActionKey, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -309,8 +309,9 @@ function metricView(row, name) {
 const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL";
 
 /**
- * An action as the runtime reads it: every number the page's action holds (k of n, the target, the status, the counts of what stands
- * behind it) and the run's own words clipped — the same function's output, shorter.
+ * An action as the runtime reads it when it asks for one (`geo_read actions` with a `key` or a `groupId`): every number the page's
+ * action holds (k of n, the target, the status, the counts of what stands behind it) and the run's own words clipped — the same
+ * function's output, shorter. A list is read as the domain's lean rows (`geoLeanAction`), which leave the long words out.
  * @param {Record<string, any>} action
  */
 export function compactAction(action) {
@@ -1778,10 +1779,11 @@ export class GeoService {
 
   /**
    * What `geo_read` answers for one `what`, in the page's shapes, cut to the
-   * tool's bounds: at most 50 items, answer text at most 4,000 characters.
+   * tool's bounds: at most 50 items, answer text at most 4,000 characters;
+   * the actions of a list under the domain's character budget.
    * The filter is validated by the gateway.
    * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string} what
-   * @param {{ round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, limit?: number, offset?: number }} filter
+   * @param {{ round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, key?: string, limit?: number, offset?: number }} filter
    */
   async runtimeRead(project, what, filter = {}) {
     this.counters.reads += 1;
@@ -1922,12 +1924,23 @@ export class GeoService {
         const groups = page(view.groups.filter((group) => (!filter.pool || group.pool === filter.pool) && (!filter.groupId || group.id === filter.groupId)));
         return { version: view.version, round: view.round, floor: view.floor, engines: view.engines, groups: groups.items, total: groups.total, more: groups.more };
       }
+      // A list is read lean: a row per action with every number and none of the run's long words, under a character budget, and the
+      // sums (`counts`, whole project) are the platform's — the model quotes them and adds nothing up. One action (`key`), or a group's
+      // (`groupId`), is read whole. A page the budget cut says where the next one starts (`nextOffset`) and how many rows are left.
       case "actions": {
         const view = await this.actionsOf(project);
-        const items = page(view.actions.filter((action) => (!filter.pool || action.group?.pool === filter.pool) && (!filter.groupId || action.group?.id === filter.groupId)
-          && (!filter.engine || action.engines.includes(filter.engine))));
-        return { tier: view.tier, round: view.round, floor: view.floor, headline: view.headline, counts: view.counts,
-          actions: items.items.map(compactAction), total: items.total, more: items.more, control: view.control.map((group) => group.name) };
+        const matching = view.actions.filter((action) => (!filter.pool || action.group?.pool === filter.pool) && (!filter.groupId || action.group?.id === filter.groupId)
+          && (!filter.engine || action.engines.includes(filter.engine)) && (!filter.key || action.key === filter.key));
+        if (filter.key && !matching.length) throw failure(404, "geo_action_not_found", "This project has no action with that key; read the list (no filter) and copy a key from it.");
+        const whole = filter.key != null || filter.groupId != null;
+        const head = { tier: view.tier, round: view.round, floor: view.floor, headline: view.headline, counts: view.counts, detail: whole ? "whole" : "lean" };
+        const control = view.control.map((group) => group.name);
+        if (whole) {
+          const items = page(matching);
+          return { ...head, actions: items.items.map(compactAction), total: items.total, more: items.more, control };
+        }
+        const lean = geoLeanActionsPage(matching, { offset, limit });
+        return { ...head, actions: lean.rows, total: lean.total, more: lean.more, ...(lean.more ? { nextOffset: lean.nextOffset, omitted: lean.omitted } : {}), control };
       }
       default:
         throw failure(400, "geo_read_what_invalid", "Unknown read.");
