@@ -967,6 +967,18 @@ test("the walk refuses every runtime start a page makes, and says how many", asy
   assert.deepEqual(report.failures, []);
 });
 
+test("a partial walk (OPEN_SCIENCE_WALK_ONLY) reads the views it names at both widths, takes no step that is not a page, and says that it is not a release walk", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_ONLY: "files,geo-visibility" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.only, ["files", "geo-visibility"]);
+  assert.deepEqual(Object.keys(report.pages).filter((name) => /@(desktop|phone)$/.test(name)).sort(), ["files@desktop", "files@phone", "geo-visibility@desktop", "geo-visibility@phone"]);
+  // The stale-chunk probe and the address-state steps are about the shell and the router, not about these pages.
+  assert.equal(log.filter((entry) => entry.goto).some((entry) => /inbox/.test(entry.goto)), false);
+  assert.match(stdout, /PARTIAL WALK \(files, geo-visibility\): not a release walk/);
+  const unknown = await walk({ OPEN_SCIENCE_WALK_ONLY: "no-such-view" }).catch((error) => error);
+  assert.match(String(unknown.message ?? unknown), /the walk wrote no report \(exit 2\)[\s\S]*names no view: no-such-view/);
+});
+
 test("a finding the baseline does not accept fails the walk, whatever kind of notice it used to be, and the delta says what", async () => {
   // R19 S4: 115 notices a run blocked nothing and belonged to nobody. With no baseline the same walk fails on every one of them.
   const { code, stdout, report } = await walk({ OPEN_SCIENCE_WALK_BASELINE: "none" });

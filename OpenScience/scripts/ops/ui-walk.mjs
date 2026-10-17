@@ -137,6 +137,7 @@
  *   [OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0] \
  *   [OPEN_SCIENCE_WALK_PROFILE=owner|fixture] [OPEN_SCIENCE_WALK_BASELINE=<file>|none] \
  *   [OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>] \
+ *   [OPEN_SCIENCE_WALK_ONLY=<view>,<view>]   # a partial walk of the named views, for the one who changed them: never a release walk \
  *   node scripts/ops/ui-walk.mjs
  *
  * Exit 0 when every assertion holds and the baseline accepts every finding, 1 when one does not (the report names which), 2 when the walk
@@ -3162,7 +3163,15 @@ async function main() {
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
     const found = await discoverRoutes(context, base, notices, failures);
-    const routes = [...ROUTES, ...found.routes];
+    const everything = [...ROUTES, ...found.routes];
+    // A name that is no view of this walk is a typo that would walk nothing and pass.
+    const unknown = setting.only.filter((name) => !everything.some(([view]) => view === name || budgetKey(view) === name));
+    if (unknown.length) {
+      console.error(`the walk cannot start: OPEN_SCIENCE_WALK_ONLY names no view: ${unknown.join(", ")}`);
+      return 2;
+    }
+    const routes = setting.only.length ? everything.filter(([view]) => setting.only.includes(view) || setting.only.includes(budgetKey(view))) : everything;
+    if (setting.only.length) report.only = setting.only;
     // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
     const axe = await loadAxeSource();
     if (!axe.source) {
@@ -3186,7 +3195,7 @@ async function main() {
     // stay and the words must be Chinese — never the router's English page.
     // First, before the phone width folds the sidebar away (its state is kept
     // per browser), and by the router's own history, not by a sidebar click.
-    {
+    if (!setting.only.length) {
       current = "stale-chunk@desktop";
       const probe = await context.newPage();
       await probe.setViewportSize(VIEWPORTS[0][1]);
@@ -3323,9 +3332,10 @@ async function main() {
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
     await page.setViewportSize(VIEWPORTS[0][1]);
     current = "address@desktop";
-    await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
+    if (!setting.only.length) await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
     const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
-    if (eventRoute) await recordStep(report, failures, notices, "frontier-event-handoff", () => walkEventHandoff(page, base, eventRoute));
+    if (setting.only.length) { /* a partial walk takes no step that is not about a page it was asked for */ }
+    else if (eventRoute) await recordStep(report, failures, notices, "frontier-event-handoff", () => walkEventHandoff(page, base, eventRoute));
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
@@ -3383,6 +3393,7 @@ async function main() {
   for (const line of unaccepted) console.log(`FAIL (not accepted by the baseline) ${line}`);
   for (const line of report.info) console.log(`INFO ${line}`);
   for (const line of baselineDelta(decided, setting.profile)) console.log(line);
+  if (setting.only.length) console.log(`PARTIAL WALK (${setting.only.join(", ")}): not a release walk — the steps that are not pages, the family checks across the others and the coverage of the rest were not read`);
   console.log(`${Object.keys(report.pages).length} page views walked, ${report.failures.length} failure(s) (${failures.length} outright, ${unaccepted.length} findings not accepted), `
     + `${decided.accepted.length} finding(s) accepted by the baseline, ${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return report.failures.length ? 1 : 0;
@@ -3443,7 +3454,7 @@ function describeEntry(entry) {
  * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
  * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
  * @param {Record<string, string | undefined>} [env]
- * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[] }>}
+ * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[], only: string[] }>}
  */
 export async function walkSetting(env = process.env) {
   /** @type {string[]} */ const problems = [];
@@ -3466,7 +3477,11 @@ export async function walkSetting(env = process.env) {
     }
   }
   problems.push(...baselineProblems(baseline).map((problem) => `baseline: ${problem}`));
-  return { profile, today, baseline, baselineSource, problems };
+  // A partial walk (`OPEN_SCIENCE_WALK_ONLY=vcr-trial,geo-visibility`, view names without the width): the views a change touched, read again in
+  // a minute instead of twelve. It says so in the report and on the last line, and the steps that are not about a page are not taken; the release
+  // gate never sets it.
+  const only = (env.OPEN_SCIENCE_WALK_ONLY ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  return { profile, today, baseline, baselineSource, problems, only };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */

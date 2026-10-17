@@ -41,6 +41,13 @@ const TASKS = [
   ["心衰证据追踪", "追踪射血分数保留心衰的新随机试验与指南更新，有新的证据时对照现有结论并说明差别。", 8, ["literature-sentinel", "evidence-update"]],
 ];
 
+/** The methods learned from the account's work: [name, title, line, what it is for, what it is not for, what it does]. */
+const METHODS = [
+  ["check-numbers-at-source", "引用数字先回原文核对", "你总是把引用的数字回到原文核对。", "报告或回答里要引用试验结果的数字时。", "只是闲聊、没有引用数字的场合。", "把数字与它在原文里的那一句对上，再写进正文。"],
+  ["compare-drugs-in-a-table", "药物比较用表格", "比较几种药物时，你更喜欢表格。", "比较两种以上药物的剂量、疗效和安全性时。", "只问一种药的用法时。", "先列剂量、疗效、安全性三列，再用一句话写结论。"],
+  ["weekly-summary-one-page", "周报写成一页纸", "每周的工作汇总你要一页纸。", "写周报或阶段汇总时。", "写论文或详细方案时。", "按完成、进行中、下周三件事写，不超过一页。"],
+];
+
 /**
  * @param {any} app @param {any} user @param {{ geoProjectId: string, studies: { finished: string, mixed: string, empty: string }, projects: { geo: string, finished: string, mixed: string } }} ids
  * @param {{ log: (line: string) => void }} context
@@ -58,6 +65,21 @@ export async function furnishAccount(app, user, ids, { log }) {
     }, null, { by: "user", reason: "walk fixture" });
   }
   log(`account: ${MEMORIES.length} memory records`);
+
+  // ---- what the platform learned from the work (做法)
+  const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
+  const learning = app.runtimeManager?.learningService;
+  if (learning) {
+    for (const [name, title, summary, appliesWhen, notWhen, does] of METHODS) {
+      await learning.createCandidate(user.id, {
+        frontmatter: { name, description: summary, whenToUse: appliesWhen, metadata: { role: "atomic", applies_when: appliesWhen, not_when: notWhen, derived_from: "observations:6", evimed_schema: METHOD_SKILL_SCHEMA } },
+        body: ["## Purpose", summary, "", "## When to Use", appliesWhen, "", "## Inputs", "The question and the files of the conversation.", "", "## Workflow", `1. ${does}`, "",
+          "## Verification", "- The result says where each number or comparison came from.", "", "## Constraints", `- ${notWhen}`, "", "## Output", "The answer in the person's own format."].join("\n"),
+        provenance: { origin: "inferred", source: "observations" }, display: { title, summary },
+      }).catch((/** @type {any} */ error) => log(`account: method ${name} — ${String(error?.message ?? error).slice(0, 160)}`));
+    }
+    log(`account: ${METHODS.length} learned methods`);
+  } else log("account: no learning service on the control plane; no methods");
 
   // ---- scheduled tasks (made, not started: nothing here can run one)
   for (const [title, prompt, scheduleHour, taskTypes] of TASKS) {

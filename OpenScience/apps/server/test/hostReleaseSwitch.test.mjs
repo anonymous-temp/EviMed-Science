@@ -385,6 +385,7 @@ test("the live pages are walked after the switch, and a failed walk says the rel
       assert.ok(walk, "the walk ran in a container");
       assert.match(walk, /open-science-runtime:x-1cf308956b6e/, "in the release's own runtime image");
       assert.match(walk, /-v \S+\/shared\/secrets\/walk-password:\/run\/walk\/password:ro/, "with the password as a read-only file, not a value");
+      assert.match(walk, /-e OPEN_SCIENCE_WALK_ONLY= /, "always the whole walk: a partial walk named in ui-walk.env is emptied");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

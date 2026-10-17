@@ -142,31 +142,6 @@ export function VcrSection({
   );
 }
 
-/**
- * The one sentence at the top of a tab: what the numbers below it add up to.
- *
- * It is the tab's finding, never a description of the tab — 「本页展示…」 is
- * banned, and a heading that explains the system has explained nothing (spec
- * v2.1, 原则四).
- */
-export function VcrHeadline({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <p data-vcr-headline="" className={cn("text-section leading-relaxed text-text", className)}>
-      {children}
-    </p>
-  );
-}
-
-/** A tab's own filter row: controls at the left, a grey summary at the right end. */
-export function VcrToolbar({ children, summary, className }: { children?: ReactNode; summary?: ReactNode; className?: string }) {
-  return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-x-4 gap-y-2", className)}>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
-      {summary && <span className="text-caption tabular-nums text-text-3">{summary}</span>}
-    </div>
-  );
-}
-
 /** A key / value list inside a card: a definition, an estimand, an ADEMP line. */
 export function VcrFacts({ rows, className }: { rows: ReadonlyArray<{ label: string; value: ReactNode }>; className?: string }) {
   return (

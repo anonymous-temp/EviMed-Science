@@ -187,6 +187,12 @@ async function furnishZones(app, user, { log }) {
     claims: claims.slice(0, 3), content: { ...card.content, comparisons: card.content.comparisons.slice(1) } }, published.id, null, true, "programme").catch((/** @type {any} */ error) => log(`frontier: second card — ${String(error?.message ?? error).slice(0, 200)}`));
   const long = (await zones.saveEditorial(publisher, card, published.id, null, true, "programme")).evidence;
 
+  // What the account follows: a specialty, a drug, a topic and a source (the 关注 view), and the official zone (its first group).
+  for (const [kind, key, label] of [["specialty", "endocrinology", "内分泌代谢"], ["drug", "weekly-agent", "每周一次降糖药"], ["topic", "heart-failure", "射血分数保留心衰"], ["source", "example-journal-medicine", "示例医学杂志"]]) {
+    await app.store.database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", [user.id, kind, key, label]);
+  }
+  await zones.act(own, published.id, "follow", {}).catch((/** @type {any} */ error) => log(`frontier: following the zone — ${String(error?.message ?? error).slice(0, 160)}`));
+
   // The fixture account's own zone and a card in it: the author's page.
   const mine = (await zones.save(own, { title: "我的心血管文献笔记", description: "自己读到的心血管证据", background: "读书笔记" })).zone;
   const mineLive = (await zones.save(own, { expectedRevision: mine.revision, state: "published" }, mine.id)).zone;

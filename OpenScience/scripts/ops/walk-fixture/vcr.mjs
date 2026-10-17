@@ -37,6 +37,13 @@ export async function furnishVcr(app, user, { log }) {
     ...common, projectId: await project("vcr-ev201", "EV-201 二线 NSCLC：单臂 II 期还是随机"), emptyProjectId: await project("vcr-glp1", "GLP-1 周制剂 III 期：样本量与脱落情景"),
   });
   await finish(store, first.study.id);
+  // The account's library of population definitions: a real cohort with rules, kept from the study that made it (人群 → 存入定义库).
+  try {
+    const study = await store.study(first.study.id);
+    await app.vcr.knowledge.saveFromStudy(study, { populationId: first.population.id, name: "晚期 NSCLC 二线人群（入排条件 v1）", text: "年龄不小于 18 岁、ECOG 0–1，一线含铂双药化疗后进展，无活动性脑转移。" }, user.id);
+  } catch (error) {
+    log(`vcr: the definition library — ${String(/** @type {any} */ (error)?.message ?? error).slice(0, 200)}`);
+  }
 
   // The mixed one, on a project of its own and under its own name.
   const second = await seedEv201({
