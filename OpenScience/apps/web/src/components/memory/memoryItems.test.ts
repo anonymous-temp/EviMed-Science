@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import {
-  OTHER_PROJECT, factItems, factRowTitle, factsOfProject, heldFrom, matches, practiceItems, projectChoices,
+  OTHER_PROJECT, factItems, factRowTitle, factsOfProject, heldFrom, matches, practiceItems, projectChoices, projectScopeGroups,
 } from "./memoryItems";
 
 /** A structured memory with only the fields the lists read. */
@@ -107,6 +107,16 @@ describe("the projects the 项目 tab can show", () => {
     expect(projectChoices(projects, sets, []).map((choice) => [choice.name, choice.kind])).toEqual([
       ["疳证 Meta", "own"], ["信尔美", "own"], ["糖尿病研究", "vcr"], ["波立维", "geo"],
     ]);
+  });
+
+  it("groups the choices for the header's menu: the researcher's own with no heading, then each module's under its name, and 「其他」 last", () => {
+    const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);
+    const groups = projectScopeGroups(projectChoices(projects, sets, orphan));
+    expect(groups.map((group) => [group.heading ?? null, group.choices.map((choice) => choice.label)])).toEqual([
+      [null, ["疳证 Meta", "信尔美"]], ["虚拟临床研究", ["糖尿病研究"]], ["循证 GEO", ["波立维"]], [null, ["其他"]],
+    ]);
+    expect(groups.at(-1)?.choices[0]?.id).toBe(OTHER_PROJECT);
+    expect(projectScopeGroups([])).toEqual([]);
   });
 
   it("tells two projects of one name apart, and keeps the id the choice is made by", () => {

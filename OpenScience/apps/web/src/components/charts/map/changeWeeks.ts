@@ -135,3 +135,14 @@ export function weekLabels(weeks: readonly Pick<WeekCounts, "start">[]): string[
     return `${landmark ? `${year}年` : ""}${month}月${day}日`;
   });
 }
+
+/**
+ * The sentence the weekly bars prove, from the same counts the bars are drawn from: 「自9月22日起，记下 18 件、合并 3 件、忘记 2 件」, or
+ * the window's own days when one is chosen. A kind that did not happen is left out; null where nothing did, and the card says that.
+ */
+export function weeksSentence(weeks: readonly WeekCounts[], { from, window, formatDay }: { from: string; window: { from: string; to: string } | null; formatDay: (day: string) => string }): string | null {
+  const totals = totalsOf(weeks);
+  const parts = CHANGE_KINDS.filter((kind) => totals[kind] > 0).map((kind) => `${CHANGE_NAMES[kind]} ${totals[kind]} 件`);
+  if (parts.length === 0) return null;
+  return `${window ? `${formatDay(window.from)}到${formatDay(window.to)}` : `自${formatDay(from)}起`}，${parts.join("、")}`;
+}

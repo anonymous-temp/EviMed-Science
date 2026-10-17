@@ -73,8 +73,9 @@ describe("主题", () => {
 
   it("draws no cloud under six topics: the ranking says it better", () => {
     view();
-    expect(screen.getByText("主题还不多，先看右边的排行。")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "主题排行" })).toBeInTheDocument();
     expect(document.querySelector("[data-chart='topic-cloud']")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/先看右边/u);
   });
 
   it("draws the cloud from six topics up, and names it for a screen reader", () => {
@@ -85,10 +86,10 @@ describe("主题", () => {
 
   it("says why there is none: being grouped, or too few memories", () => {
     view({ topics: [], grouping: true, status: "stale" });
-    expect(screen.getByRole("status")).toHaveTextContent("正在把记忆整理成主题");
+    expect(screen.getByText(/正在把记忆整理成主题/u)).toBeInTheDocument();
     cleanup();
     view({ topics: [], status: "empty" });
-    expect(screen.getByRole("status")).toHaveTextContent("再多聊几次");
+    expect(screen.getByText(/再多聊几次/u)).toBeInTheDocument();
   });
 
   it("says what failed when an edit fails, and keeps the topic", async () => {

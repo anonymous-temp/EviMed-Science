@@ -12,8 +12,6 @@ const fetchMemorySettings = vi.fn();
 const updateMemorySettings = vi.fn();
 const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
-const fetchMemoryGrowth = vi.fn();
-const fetchMemoryLearned = vi.fn();
 const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
 const settleMemoryConflict = vi.fn();
@@ -28,7 +26,7 @@ const handbookVersions = vi.fn();
 const rollbackHandbook = vi.fn();
 const geo = vi.hoisted(() => ({ feature: "off" as "on" | "off", projects: [] as { projectId: string }[] }));
 const vcr = vi.hoisted(() => ({ feature: "off" as "on" | "off", studies: [] as { projectId: string }[] }));
-const map = vi.hoisted(() => ({ feature: "off" as "on" | "off" }));
+const map = vi.hoisted(() => ({ feature: "off" as "on" | "off" | "loading" }));
 
 vi.mock("@/lib/apiClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient");
@@ -51,8 +49,6 @@ vi.mock("@/lib/memoryClient", async () => {
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
     settleMemoryConflict: (...args: unknown[]) => settleMemoryConflict(...args),
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
-    fetchMemoryGrowth: (...args: unknown[]) => fetchMemoryGrowth(...args),
-    fetchMemoryLearned: (...args: unknown[]) => fetchMemoryLearned(...args),
     fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
 });
@@ -194,17 +190,6 @@ describe("记忆胶囊", () => {
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
     // Most tests are about the memories; the overview above them has tests of its own and is unreadable by default.
     fetchProjectOverview.mockRejectedValue(new Error("not read"));
-    fetchMemoryGrowth.mockResolvedValue({
-      unit: "week", first: "2026-09-12", fromStart: true, timeZone: "Asia/Shanghai",
-      points: [
-        { start: "2026-08-31", known: 0 }, { start: "2026-09-07", known: 2 }, { start: "2026-09-14", known: 3 }, { start: "2026-09-21", known: 4 },
-      ],
-      moments: [{ day: "2026-09-21", kind: "method", title: "提交前给成品做最后把关" }],
-    });
-    fetchMemoryLearned.mockResolvedValue({ timeZone: "Asia/Shanghai", days: [
-      { day: "2026-09-22", items: [{ kind: "learned", what: "method", id: method.id, title: "提交前给成品做最后把关" }, { kind: "improved", what: "handbook", id: "method:capability-handbook:gone", title: "已不在列表里的经验" }] },
-      { day: "2026-09-12", items: [{ kind: "start", what: null, id: null, title: "" }] },
-    ] });
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [], currentId: "default" }); });
 
@@ -247,7 +232,7 @@ describe("记忆胶囊", () => {
     );
     await screen.findByRole("switch", { name: "记忆" });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["关于你", "项目", "做法", "成长", "地图"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["关于你", "项目", "做法", "地图"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
     await user.click(within(tabs).getByRole("tab", { name: "地图" }));
     expect(await screen.findByText("地图页")).toBeInTheDocument();
@@ -285,13 +270,17 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ learningPaused: true, recallPaused: true }));
   });
 
-  it("has four tabs in one row with the search box at its end, and each tab is one list", async () => {
+  it("has its tabs in the sticky band and the search box in the one toolbar row under them, and each tab is one list", async () => {
     open();
     await screen.findByRole("button", { name: /药学背景/ });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法2", "成长"]);
+    // 成长 is not a tab: what happened each week is the map's 「时间」 view.
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法2"]);
     const search = screen.getByRole("searchbox", { name: "搜索记忆" });
-    expect(tabs.parentElement).toContainElement(search);
+    const band = document.querySelector("[data-page-chrome]")!;
+    expect(band).toContainElement(tabs);
+    expect(band.querySelector("[data-toolbar]")).toContainElement(search);
+    expect(tabs.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("group", { name: "筛选记忆" })).toBeNull();
   });
 
@@ -334,9 +323,9 @@ describe("记忆胶囊", () => {
     const user = userEvent.setup();
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
-    const named = open("?tab=growth");
-    expect(await screen.findByRole("heading", { level: 2, name: /开始记住你/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "成长" })).toHaveAttribute("aria-selected", "true");
+    const named = open("?tab=methods");
+    expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /做法/ })).toHaveAttribute("aria-selected", "true");
     named.unmount();
     open("?tab=self");
     expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
@@ -414,7 +403,9 @@ describe("记忆胶囊", () => {
     expect(screen.queryByText("信尔美为处方药，需冷链。")).toBeNull();
     // A project's fact needs no label of its own: the dropdown says whose it is.
     expect(within(screen.getByRole("list", { name: "项目的记忆" })).queryByText("疳证 Meta 文献检索")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
+    // The project is the header's scope, beside the title, and only on this tab.
+    const header = screen.getAllByRole("banner")[0]!;
+    await user.click(within(header).getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
     const menu = await screen.findByRole("menu", { name: "项目" });
     expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["疳证 Meta 文献检索", "信尔美"]);
     await user.click(within(menu).getByRole("menuitemradio", { name: "信尔美" }));
@@ -434,10 +425,12 @@ describe("记忆胶囊", () => {
     await user.click(await screen.findByRole("tab", { name: /^项目/ }));
     await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
     const menu = await screen.findByRole("menu", { name: "项目" });
-    // The researcher's own first; each module's group has its heading, which cannot be chosen.
+    // The researcher's own first; each module's group has its heading, which is not an entry and cannot be chosen.
     await waitFor(() => expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(
-      ["疳证 Meta 文献检索", "信尔美", "虚拟临床研究", "糖尿病研究", "循证 GEO", "波立维"]));
-    expect(within(menu).getByRole("menuitemradio", { name: "虚拟临床研究" })).toBeDisabled();
+      ["疳证 Meta 文献检索", "信尔美", "糖尿病研究", "波立维"]));
+    expect(within(menu).getByText("虚拟临床研究")).toBeInTheDocument();
+    expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitemradio", { name: "虚拟临床研究" })).toBeNull();
     expect(within(menu).getByRole("menuitemradio", { name: "波立维" })).not.toBeDisabled();
   });
 
@@ -498,36 +491,44 @@ describe("记忆胶囊", () => {
     expect(within(drawer.closest("body")!).queryByText(/效果待观察|对照评估/)).toBeNull();
   });
 
-  it("成长 holds the line of how the capsule grew, and what was learned each day under it", async () => {
-    const user = userEvent.setup();
-    open();
-    await user.click(await screen.findByRole("tab", { name: "成长" }));
-    // The ways of working are the ones 做法 lists (one method in force, one active handbook), not the moments on the line.
-    const heading = await screen.findByRole("heading", { level: 2, name: "9月12日开始记住你，现在有 4 条记忆，学会 2 种做法" });
-    expect(within(heading.closest("section")!).getByRole("img", { name: heading.textContent! })).toBeInTheDocument();
-    // The chart is on this tab and only here: the page's top is the tabs.
-    expect(screen.queryByRole("searchbox", { name: "搜索记忆" })).toBeNull();
-    expect(await screen.findByText("学会：提交前给成品做最后把关")).toBeInTheDocument();
-    expect(screen.getByText("改进：已不在列表里的经验")).toBeInTheDocument();
-    expect(screen.getByText("开始记住你")).toBeInTheDocument();
-    // A day's row that is a method opens its drawer; the beginning, and what the page cannot find, are text.
-    expect(screen.queryByRole("button", { name: /开始记住你/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /已不在列表里的经验/ })).toBeNull();
-    await user.click(screen.getByRole("button", { name: /学会：提交前给成品做最后把关/ }));
-    expect(await screen.findByRole("dialog", { name: "提交前给成品做最后把关" })).toBeInTheDocument();
-  });
+  describe("成长 is the map's time view", () => {
+    function openOld(feature: "on" | "off" | "loading") {
+      map.feature = feature;
+      return render(
+        <MemoryRouter initialEntries={["/app/memory?tab=growth"]}>
+          <Routes>
+            <Route path="/app/memory" element={<><MemoryHubPage /><Where /></>} />
+            <Route path="/app/memory/map" element={<><p>地图页</p><Where /></>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    }
+    function Where() {
+      const location = useLocation();
+      return <p data-testid="where">{location.pathname}{location.search}</p>;
+    }
 
-  it("reads the growth line only when its tab is opened, and says so when it cannot be read", async () => {
-    const user = userEvent.setup();
-    fetchMemoryGrowth.mockRejectedValue(new Error("growth unavailable"));
-    open();
-    await screen.findByRole("button", { name: /药学背景/ });
-    expect(fetchMemoryGrowth).not.toHaveBeenCalled();
-    expect(fetchMemoryLearned).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("tab", { name: "成长" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("没有读到全部成长记录。");
-    // What did read is still shown.
-    expect(await screen.findByText("学会：提交前给成品做最后把关")).toBeInTheDocument();
+    it("sends the old address of the tab to the time view, in place, where the deployment draws the map", async () => {
+      openOld("on");
+      expect(await screen.findByText("地图页")).toBeInTheDocument();
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/map?view=time");
+      // Nothing of the old tab is read: the map asks for its own document.
+      expect(fetchMyCapsule).not.toHaveBeenCalled();
+    });
+
+    it("waits for the deployment's answer before it sends the address anywhere", async () => {
+      openOld("loading");
+      expect(await screen.findByTestId("where")).toHaveTextContent("/app/memory?tab=growth");
+      expect(screen.queryByText("地图页")).toBeNull();
+      expect(screen.queryByRole("tab", { name: "关于你" })).toBeNull();
+    });
+
+    it("sends it to the first list where the deployment draws no map, and never leaves a tab that is not there", async () => {
+      openOld("off");
+      expect(await screen.findByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/memory?tab=self");
+      expect(screen.queryByRole("tab", { name: "成长" })).toBeNull();
+    });
   });
 
   it("searches on the server, over more than the rows on screen, and never lists a run summary", async () => {
@@ -676,7 +677,7 @@ describe("记忆胶囊", () => {
     listAllHandbooks.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
-    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法", "成长"]);
+    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法"]);
   });
 
   it("says what will appear on a tab that is empty, and nothing is a 「还没有记忆」 for a tab that could not be read", async () => {
@@ -688,10 +689,16 @@ describe("记忆胶囊", () => {
     open();
     expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
     expect(screen.getByText("你在对话里说过的偏好、背景和写作习惯会出现在这里。")).toBeInTheDocument();
+    // An empty list is a recipe: what will be here, and the one thing to do — a verb and its object.
+    expect(screen.getByRole("button", { name: "在对话里说说你自己" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /^做法/ }));
     expect(screen.getByText("还没有学到的做法")).toBeInTheDocument();
+    // A practice is learned and never typed: there is no button, and the sentence says why instead.
+    expect(document.querySelector("[data-empty][data-reason]")).not.toBeNull();
+    expect(document.querySelector("[data-empty] button")).toBeNull();
     await user.click(screen.getByRole("tab", { name: /^项目/ }));
     expect(screen.getByText("这个项目还没有记忆")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "在对话里说说这个项目" })).toBeInTheDocument();
   });
 
   it("says one thing when any read fails, with 重试, keeps the lists that did read, and shows nothing as empty that did not", async () => {

@@ -83,6 +83,8 @@ function open(search = "") {
   );
 }
 const where = () => screen.getByTestId("where").textContent;
+/** One of the five views: a chip of the toolbar's own group, not a second row of tabs. */
+const viewChip = (name: string) => within(screen.getByRole("group", { name: "地图的视图" })).getByRole("button", { name });
 
 beforeEach(() => {
   fetchMemoryMap.mockReset().mockResolvedValue(busyMap());
@@ -112,7 +114,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(fetchMemoryMap).toHaveBeenCalledTimes(1);
     expect(fetchMemoryMap.mock.calls[0][0]).toEqual({ projectId: null, range: "all", focus: null, depth: 1 });
-    for (const view of ["主题", "维度", "时间", "活跃", "关系"]) await user.click(screen.getByRole("radio", { name: view }));
+    for (const view of ["主题", "维度", "时间", "活跃", "关系"]) await user.click(viewChip(view));
     expect(fetchMemoryMap).toHaveBeenCalledTimes(1);
     expect(where()).toBe("/app/memory/map");
   });
@@ -121,7 +123,7 @@ describe("记忆地图", () => {
     const user = userEvent.setup();
     open();
     await screen.findByText(/EviMed 记住了你的/u);
-    await user.click(screen.getByRole("radio", { name: "维度" }));
+    await user.click(viewChip("维度"));
     expect(where()).toBe("/app/memory/map?view=dims");
     await user.click(screen.getByRole("button", { name: "只看需要看一眼的" }));
     expect(where()).toBe("/app/memory/map?view=dims&look=1");
@@ -200,7 +202,7 @@ describe("记忆地图", () => {
     open("?focus=memory%3Am3");
     expect(await screen.findByRole("img", { name: /关系图/u })).toBeInTheDocument();
     expect(fetchMemoryMap.mock.calls[0][0]).toMatchObject({ focus: "memory:m3", depth: 1 });
-    expect(screen.getByRole("button", { name: /取消聚焦/u })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /聚焦：/u })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "来源链" })).toBeInTheDocument();
   });
 
@@ -244,7 +246,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "成长", "地图"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "地图"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
     await user.click(within(tabs).getByRole("tab", { name: "做法" }));
     expect(where()).toBe("/app/memory?tab=methods");

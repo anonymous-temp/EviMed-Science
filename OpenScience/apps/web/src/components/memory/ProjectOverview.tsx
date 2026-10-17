@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import { PROJECT_CARD_SLOT_LABELS_ZH } from "@evimed/domain";
 import type { ProjectOverview as ProjectOverviewData } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
+import { Button } from "@/components/ui/Button";
 import { DataTable, InlineBar, type DataColumn } from "@/components/ui/DataTable";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { GroupSection } from "./MemoryRows";
 
@@ -85,11 +87,13 @@ function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZ
   );
 }
 
-export function ProjectOverview({ overview, canOpen, onOpen, hasMemories = false }: {
+export function ProjectOverview({ overview, canOpen, onOpen, onSpeak, hasMemories = false }: {
   overview: ProjectOverviewData;
   /** Whether the memory a slot was written from is on the page, so the row can open its drawer. */
   canOpen: (recordId: string) => boolean;
   onOpen: (recordId: string) => void;
+  /** 「在对话里说说这个项目」: opens a conversation in the project with the blanks of a card left in the composer. Absent: the project has no conversation to open. */
+  onSpeak?: () => void;
   /** Whether the project has memories of its own below; without any, the page's own empty state speaks and no card line is added. */
   hasMemories?: boolean;
 }) {
@@ -120,10 +124,11 @@ export function ProjectOverview({ overview, canOpen, onOpen, hasMemories = false
       </GroupSection>,
     );
   }
-  if (overview.card.length === 0 && hasMemories && !overview.paused) {
+  // A project with memories and no card yet: the one sentence has the one thing to do about it.
+  if (overview.card.length === 0 && hasMemories && !overview.paused && onSpeak) {
     blocks.push(
       <GroupSection key="card" title="项目卡">
-        <p className="px-2 text-ui text-text-3">还没有记下这个项目的目标、资料和进展。</p>
+        <Note className="px-2" action={<Button size="sm" variant="secondary" onClick={onSpeak}>在对话里说说这个项目</Button>}>还没有记下这个项目的目标、资料和进展。</Note>
       </GroupSection>,
     );
   }

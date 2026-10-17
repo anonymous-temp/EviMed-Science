@@ -14,9 +14,8 @@ import { dayEndMs, dayIn, dayStartMs } from "./zone";
  * decision, a cross a correction, a triangle a method learned, a dot the rest). Where nothing happened nothing is drawn — no line
  * joins sparse points.
  *
- * The slider under the axis is the map's shared time filter: moving it chooses the range, so the other views read the same
- * window. The axis itself does not move with the range (it is the whole span the account has been remembering), so the slider
- * always shows where the window is in it.
+ * The chart has no slider of its own: the weekly bars above it hold the map's shared time window (`weekOption`), and this axis is
+ * that window — the whole span the account has been remembering while none is chosen.
  */
 
 export interface TimeRow {
@@ -47,30 +46,6 @@ export function timeExtent({ since, lanes, events, today }: { since: string | nu
   return { from, to: today };
 }
 
-/** What a zoom event chose, as days; null for the whole span. */
-export function windowFromZoom(params: { start?: number; end?: number; batch?: Array<{ start?: number; end?: number }> } | null | undefined,
-  extent: { from: string; to: string }, timeZone: string): { from: string; to: string } | null {
-  const zoom = params?.batch?.[0] ?? params;
-  if (!zoom || typeof zoom.start !== "number" || typeof zoom.end !== "number") return null;
-  const first = dayStartMs(extent.from, timeZone);
-  const last = dayEndMs(extent.to, timeZone);
-  const at = (percent: number) => first + ((last - first) * Math.max(0, Math.min(100, percent))) / 100;
-  const from = dayIn(at(zoom.start), timeZone);
-  const to = dayIn(at(zoom.end), timeZone);
-  return from <= extent.from && to >= extent.to ? null : { from, to };
-}
-
-/** The range parameter for a window: `YYYY-MM-DD..YYYY-MM-DD`, or `all`. */
-export function rangeOfWindow(window: { from: string; to: string } | null): string {
-  return window ? `${window.from}..${window.to}` : "all";
-}
-
-/** The window a range parameter names, as the days the slider is set to; null for all of it. */
-export function windowOfRange(range: string): { from: string; to: string } | null {
-  const match = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/u.exec(range);
-  return match ? { from: match[1], to: match[2] } : null;
-}
-
 /** The symbol of an event: its kind, by shape. */
 export function eventSymbol(event: Pick<MapEvent, "kind" | "type">): string {
   if (event.kind === "decision") return "diamond";
@@ -99,7 +74,7 @@ export interface TimeInput {
   events: readonly MapEvent[];
   rows: readonly TimeRow[];
   extent: { from: string; to: string };
-  /** The window the slider is set to; null is the whole span. */
+  /** The window the page is narrowed to; null is the whole span. */
   window: { from: string; to: string } | null;
   timeZone: string;
   now: number;
@@ -117,10 +92,9 @@ export function barShape(start: number, end: number, y: number, height: number, 
 export function timeOption(input: TimeInput): EChartsCoreOption {
   const { palette, timeZone } = input;
   const rowIndex = new Map(input.rows.map((row, position) => [row.key, position]));
-  const min = dayStartMs(input.extent.from, timeZone);
-  const max = dayEndMs(input.extent.to, timeZone);
-  const startValue = input.window ? dayStartMs(input.window.from, timeZone) : min;
-  const endValue = input.window ? dayEndMs(input.window.to, timeZone) : max;
+  // A bar that begins before the window is cut at its edge (`barShape`), so the axis is the window.
+  const min = dayStartMs((input.window ?? input.extent).from, timeZone);
+  const max = dayEndMs((input.window ?? input.extent).to, timeZone);
 
   const bars = input.lanes.flatMap((lane, laneIndex) => {
     const row = rowIndex.get(lane.id);
@@ -142,7 +116,8 @@ export function timeOption(input: TimeInput): EChartsCoreOption {
 
   return {
     animation: false,
-    grid: { left: 8, right: 18, top: 10, bottom: 62, containLabel: true },
+    // Fixed room for the row names: `containLabel` is a legacy feature of the library that the map does not register.
+    grid: { left: 132, right: 18, top: 10, bottom: 28 },
     tooltip: {
       confine: true,
       formatter: (params: { seriesType?: string; data?: { value?: number[]; eventId?: string } }) => {
@@ -161,16 +136,6 @@ export function timeOption(input: TimeInput): EChartsCoreOption {
       axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: palette.grid } },
       axisLabel: { color: palette.text, width: 118, overflow: "truncate", fontSize: 12 },
     },
-    dataZoom: [
-      { type: "inside", xAxisIndex: 0, startValue, endValue, filterMode: "none" },
-      {
-        type: "slider", xAxisIndex: 0, startValue, endValue, filterMode: "none", height: 24, bottom: 10, brushSelect: false, borderColor: palette.grid, textStyle: { color: palette.textFaint },
-        // The ends of the window are days in the researcher's zone, not the library's timestamp; the dates are read off the axis while
-        // dragging and, once the window is chosen, from the sentence under the chart — the library's own end labels ran off the canvas.
-        showDetail: false,
-        labelFormatter: (value: number) => dayIn(Number(value), timeZone),
-      },
-    ],
     series: [
       {
         type: "custom", name: "沿革", data: bars, encode: { x: [1, 2], y: 0 }, z: 2,

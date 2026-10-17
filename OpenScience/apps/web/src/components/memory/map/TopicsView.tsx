@@ -3,6 +3,7 @@ import { ListRow, List } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { ChartCard } from "@/components/ui/ChartCard";
 import { WordCloud } from "@/components/charts/WordCloud";
 import { webErrorMessage } from "@/lib/apiClient";
 import { editTopic, type MapTopic, type TopicEdit } from "@/lib/memoryMapClient";
@@ -58,9 +59,10 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
 
   if (ranked.length === 0) {
     return (
-      <p role="status" className="text-ui text-text-2">
-        {grouping || status === "stale" ? "正在把记忆整理成主题。" : status === "off" ? "这里还没有开通主题。" : "记下的内容还不多，再多聊几次，这里会长出你关心的主题。"}
-      </p>
+      <ChartCard
+        level={2} title="记忆的主题" state="empty"
+        emptyText={grouping || status === "stale" ? "正在把记忆整理成主题。" : status === "off" ? "这里还没有开通主题。" : "记下的内容还不多，再多聊几次，这里会长出你关心的主题。"}
+      />
     );
   }
 
@@ -74,37 +76,37 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
   ];
 
   return (
-    <div className="grid items-start gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      {ranked.length >= MIN_TOPICS
-        ? <WordCloud topics={ranked} selected={selected} onChoose={(id) => onChoose(id === selected ? null : id)} label={`主题云，共 ${ranked.length} 个主题，排行在旁边。`} />
-        : <p className="text-ui text-text-2">主题还不多，先看右边的排行。</p>}
-      <List label="主题排行">
-        {ranked.map((topic) => (
-          renaming?.id === topic.id ? (
-            <li key={topic.id} className="px-2 py-2">
-              <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); if (renaming.text.trim()) void edit(topic.id, { label: renaming.text.trim() }, "已改名"); }}>
-                <Input ref={renameField} aria-label="主题的新名字" maxLength={20} value={renaming.text} onChange={(event) => setRenaming({ id: topic.id, text: event.target.value })} />
-                <Button type="submit" size="sm" loading={busy} disabled={!renaming.text.trim()}>保存</Button>
-                <Button size="sm" variant="text" onClick={() => setRenaming(null)}>取消</Button>
-              </form>
-            </li>
-          ) : (
-            <ListRow
-              key={topic.id}
-              title={topic.label}
-              selected={selected === topic.id}
-              onOpen={() => onChoose(selected === topic.id ? null : topic.id)}
-              meta={
-                <span className="flex items-center gap-2">
-                  <span aria-hidden="true" className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(6, Math.round((topic.weight / widest) * 96))}px` }} />
-                  <span>{`${topic.weight} 条记忆 · ${trendWords(topic.trend)}`}</span>
-                </span>
-              }
-              menu={<Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
-            />
-          )
-        ))}
-      </List>
-    </div>
+    <ChartCard level={2} title={`记忆分成 ${ranked.length} 个主题，最多的是“${ranked[0]!.label}”`}>
+      <div className={ranked.length >= MIN_TOPICS ? "grid items-start gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : undefined}>
+        {ranked.length >= MIN_TOPICS && <WordCloud topics={ranked} selected={selected} onChoose={(id) => onChoose(id === selected ? null : id)} label={`主题云，共 ${ranked.length} 个主题，排行在旁边。`} />}
+        <List label="主题排行">
+          {ranked.map((topic) => (
+            renaming?.id === topic.id ? (
+              <li key={topic.id} className="px-2 py-2">
+                <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); if (renaming.text.trim()) void edit(topic.id, { label: renaming.text.trim() }, "已改名"); }}>
+                  <Input ref={renameField} aria-label="主题的新名字" maxLength={20} value={renaming.text} onChange={(event) => setRenaming({ id: topic.id, text: event.target.value })} />
+                  <Button type="submit" size="sm" loading={busy} disabled={!renaming.text.trim()}>保存</Button>
+                  <Button size="sm" variant="text" onClick={() => setRenaming(null)}>取消</Button>
+                </form>
+              </li>
+            ) : (
+              <ListRow
+                key={topic.id}
+                title={topic.label}
+                selected={selected === topic.id}
+                onOpen={() => onChoose(selected === topic.id ? null : topic.id)}
+                meta={
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden="true" className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(6, Math.round((topic.weight / widest) * 96))}px` }} />
+                    <span>{`${topic.weight} 条记忆 · ${trendWords(topic.trend)}`}</span>
+                  </span>
+                }
+                menu={<Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
+              />
+            )
+          ))}
+        </List>
+      </div>
+    </ChartCard>
   );
 }

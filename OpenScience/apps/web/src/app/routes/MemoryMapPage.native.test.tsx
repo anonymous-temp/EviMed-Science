@@ -79,7 +79,9 @@ describe("记忆地图 of an account whose memory is kept as files", () => {
     open("?view=time");
     expect(await screen.findByRole("img", { name: /时间线：3 件记下的事/ })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/蓝条|灰条|琥珀|沿革/u);
-    expect(document.body.textContent).toMatch(/拖下面的滑块/u);
+    // The weekly bars are the card above it, and the window's one entry is that card's slider: nothing explains how to read either.
+    expect(screen.getByRole("img", { name: /每周记下、合并和忘记的数量/u })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/拖下面的滑块/u);
   });
 
   it("draws the aspects it has and the calendar of the days it was written", async () => {

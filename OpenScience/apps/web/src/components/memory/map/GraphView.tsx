@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ChartCard } from "@/components/ui/ChartCard";
 import { FilterChip } from "@/components/ui/FilterChips";
 import { useColorScheme } from "@/lib/colorScheme";
 import { formatDay } from "@/lib/format";
@@ -10,7 +11,7 @@ import { useReducedMotion } from "@/components/charts/echartsBase";
 import { chainOption, edgeWords, graphOption, isHideableEdge } from "@/components/charts/map/graphOption";
 import { layoutGraph } from "@/components/charts/map/layout";
 import { mapPalette } from "@/components/charts/map/palette";
-import { existingAt, replayStops, type NarrowedMap } from "./mapModel";
+import { existingAt, relationTitle, replayStops, type NarrowedMap } from "./mapModel";
 
 /** What the reader can press on the canvas, in one place: a mark is opened, a double press centres the map on it. */
 export interface GraphActions {
@@ -69,9 +70,11 @@ export function Legend({ nodes }: { nodes: readonly MapNode[] }) {
 }
 
 /**
- * The relation graph with its replay: the marks as laid out once for the whole document (so narrowing or replaying never moves a
- * mark), the picture the library draws from them, and under it the legend and the slider that grows the map from its first day.
- * Played, it adds the marks in the order they began, which is the nearest thing the map has to the sense of having built something.
+ * The relation graph with its replay, in one card: the marks as laid out once for the whole document (so narrowing or replaying never
+ * moves a mark) and the picture the library draws from them. The card's heading says what it holds, its legend names only the shapes
+ * and colours in it, and the replay — a chip, the slider that grows the map from its first day and the day it stands on — is in the
+ * card's header, where the controls of a chart belong. Played, it adds the marks in the order they began, which is the nearest thing
+ * the map has to the sense of having built something.
  */
 export function GraphView({ doc, narrowed, selected, actions, chain, focused, onHideEdge }: {
   doc: Pick<MemoryMap, "nodes" | "edges" | "truncated">;
@@ -142,46 +145,52 @@ export function GraphView({ doc, narrowed, selected, actions, chain, focused, on
   };
 
   const count = shown.nodes.filter((node) => node.type === "memory" && node.state !== "replaced").length;
-  return (
-    <div className="space-y-2">
-      <MapChart
-        kind={chain ? "source-chain" : "relations"} option={option} height={chain ? 360 : compact ? 440 : GRAPH_HEIGHT} on={on}
-        label={chain ? `这条记忆依据的资料链，共 ${chain.rests.length} 项。` : `记忆、资料和项目之间的关系图，共 ${shown.nodes.length} 个标记，列表在下方。`}
-        unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
+  const replay = !chain && stops.length > 1 ? (
+    <span className="inline-flex flex-wrap items-center gap-3 text-ui text-text-2">
+      {/* A chip, like the filters above it: a button of its own look would be one more kind of control on a page that already has five views. */}
+      <FilterChip
+        icon={playing ? Pause : Play}
+        onClick={() => { if (playing) setPlaying(false); else { setCursor(reduced ? stops.length - 1 : 0); setPlaying(!reduced); } }}
+      >
+        {playing ? "暂停" : "回放它是怎么长出来的"}
+      </FilterChip>
+      <input
+        type="range" min={0} max={stops.length - 1} step={1} value={cursor ?? stops.length - 1} aria-label="回放到哪一天"
+        onChange={(event) => { setPlaying(false); const next = Number(event.target.value); setCursor(next >= stops.length - 1 ? null : next); }}
+        className="w-40 accent-accent"
       />
-      {!chain && <Legend nodes={shown.nodes} />}
-      {!chain && picked && onHideEdge && isHideableEdge(picked, byId.get(picked.from), byId.get(picked.to)) && (
-        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
-          <span>{edgeWords(picked, byId.get(picked.from)?.label ?? "", byId.get(picked.to)?.label ?? "")}</span>
-          <Button
-            size="sm" variant="secondary" loading={hiding}
-            onClick={() => { setHiding(true); void onHideEdge(picked).then(() => setPickedEdge(null)).finally(() => setHiding(false)); }}
-          >
-            这条关联不对
-          </Button>
-          <button type="button" onClick={() => setPickedEdge(null)} className="rounded px-1 text-accent hover:underline">知道了</button>
-        </div>
-      )}
-      {!chain && stops.length > 1 && (
-        <div className="flex flex-wrap items-center gap-3 text-ui text-text-2">
-          {/* A chip, like the filters above it: a button of its own look would be one more kind of control on a page that already has five views. */}
-          <FilterChip
-            icon={playing ? Pause : Play}
-            onClick={() => { if (playing) setPlaying(false); else { setCursor(reduced ? stops.length - 1 : 0); setPlaying(!reduced); } }}
-          >
-            {playing ? "暂停" : "回放它是怎么长出来的"}
-          </FilterChip>
-          <input
-            type="range" min={0} max={stops.length - 1} step={1} value={cursor ?? stops.length - 1} aria-label="回放到哪一天"
-            onChange={(event) => { setPlaying(false); const next = Number(event.target.value); setCursor(next >= stops.length - 1 ? null : next); }}
-            className="min-w-40 flex-1 accent-accent"
-          />
-          <span className="tabular-nums text-text-3">{moment ? `${formatDay(moment)} · ${count} 件记忆` : `现在 · ${count} 件记忆`}</span>
-        </div>
-      )}
-      {!chain && doc.truncated.nodes > 0 && (
-        <p className="text-caption text-text-3">{focused ? `还有 ${doc.truncated.nodes} 个标记不在这个范围里。` : `还有 ${doc.truncated.nodes} 个标记折叠在“一组”里，点一组可以展开。`}</p>
-      )}
-    </div>
+      <span className="tabular-nums text-text-3">{moment ? `${formatDay(moment)} · ${count} 件记忆` : `现在 · ${count} 件记忆`}</span>
+    </span>
+  ) : undefined;
+  return (
+    <ChartCard
+      level={2}
+      title={chain ? `这条记忆依据 ${chain.rests.length} 项资料` : relationTitle(shown.nodes)}
+      legend={chain ? undefined : <Legend nodes={shown.nodes} />}
+      meta={replay}
+      footnote={!chain && doc.truncated.nodes > 0
+        ? (focused ? `还有 ${doc.truncated.nodes} 个标记不在这个范围里。` : `还有 ${doc.truncated.nodes} 个标记折叠在“一组”里，点一组可以展开。`)
+        : undefined}
+    >
+      <div className="space-y-2">
+        <MapChart
+          kind={chain ? "source-chain" : "relations"} option={option} height={chain ? 360 : compact ? 440 : GRAPH_HEIGHT} on={on}
+          label={chain ? `这条记忆依据的资料链，共 ${chain.rests.length} 项。` : `记忆、资料和项目之间的关系图，共 ${shown.nodes.length} 个标记，列表在下方。`}
+          unpainted={`${shown.nodes.length} 个标记、${shown.edges.length} 条连线。`}
+        />
+        {!chain && picked && onHideEdge && isHideableEdge(picked, byId.get(picked.from), byId.get(picked.to)) && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
+            <span>{edgeWords(picked, byId.get(picked.from)?.label ?? "", byId.get(picked.to)?.label ?? "")}</span>
+            <Button
+              size="sm" variant="secondary" loading={hiding}
+              onClick={() => { setHiding(true); void onHideEdge(picked).then(() => setPickedEdge(null)).finally(() => setHiding(false)); }}
+            >
+              这条关联不对
+            </Button>
+            <button type="button" onClick={() => setPickedEdge(null)} className="rounded px-1 text-accent hover:underline">知道了</button>
+          </div>
+        )}
+      </div>
+    </ChartCard>
   );
 }
