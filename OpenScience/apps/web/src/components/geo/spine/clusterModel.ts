@@ -10,7 +10,7 @@
 import { agendaLocalDate, DISPLAY_TIME_ZONE, GEO_MIN_CELL_SAMPLES } from "@evimed/domain";
 import type { GeoClusterRow, GeoClusterView, GeoEngine, GeoGroupReading } from "@/lib/geoClient";
 import type { EffectMarker, EffectPoint } from "@/components/charts/EffectStrip";
-import { GEO_POOL_KINDS, GEO_POOL_NAMES, groupName, monthDay } from "../geoText";
+import { GEO_POOL_KINDS, groupName, monthDay } from "../geoText";
 
 /** What one engine's answers to a group's questions did in the latest full round: facts counted, not a metric. */
 export interface EngineTally {
@@ -87,14 +87,11 @@ export const clusterName = (group: Pick<GeoClusterRow, "name"> | { name: string 
 
 /**
  * 存量 · 认知与选药: the pool's reader name and the stage the group belongs to. One vocabulary for the pools (the audit's class
- * 4.6): the pool's own description is the title of the name, never a second name on the page.
+ * 4.6): 存量 · 增量 · 泛增量 · 风险监测 — the second set of names (品牌明确类 …) is nowhere on a page, not even as a tooltip.
  */
 export function clusterContext(group: Pick<GeoClusterRow, "pool" | "journeyStage">): string {
   return [group.pool ? GEO_POOL_KINDS[group.pool] : null, group.journeyStage].filter(Boolean).join(" · ");
 }
-
-/** What the pool is, for a tooltip: 「品牌明确类」. */
-export const poolDescription = (pool: GeoClusterRow["pool"]): string | null => (pool ? GEO_POOL_NAMES[pool] ?? null : null);
 
 /** The stage a group stands in the journey: its number where the run wrote one, else the free-text stage. */
 export interface StageKey {

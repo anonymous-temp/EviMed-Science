@@ -106,7 +106,7 @@ function typeCombos(root: Element): string[] {
  * What each tab may carry today — a ratchet, not the target. Measured on
  * 2026-09-27 after the GEO files were moved onto the named levels (metric-lg
  * 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11,
- * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4, 信源 6 → 5 → 4 (R11: a list of rows, no section title), 行动 8 → 7,
+ * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4 → 5 (R19: a pool is a subsection titled 14/600, the groups' rows are 14/400 and their counts 12/400), 信源 6 → 5 → 4 (R11: a list of rows, no section title), 行动 8 → 7,
  * 方案 6 → 5 → 6 (R19: the plan's five blocks are titled at 18/600 again, and a tier's name is 14/600: 12/400, 14/400, 14/600 and
  * 18/600 are the page's own, the 13s are the buttons' and the chips') Every pair above four comes from a shared primitive the GEO
  * files do not own: `StatTile` (unit 14/500, a non-lead number 32/600, a
@@ -119,7 +119,7 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   总览: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "20/600", "32/600", "40/600"],
   可见度: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600"],
   准确与安全: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600", "40/600"],
-  问题与回答: ["12/400", "13/400", "13/500", "14/400"],
+  问题与回答: ["12/400", "13/400", "13/500", "14/400", "14/600"],
   信源: ["12/400", "13/400", "13/500", "14/400"],
   行动: ["12/400", "13/400", "13/500", "14/400", "18/600"],
   方案: ["12/400", "13/400", "13/500", "14/400", "14/600", "18/600"],

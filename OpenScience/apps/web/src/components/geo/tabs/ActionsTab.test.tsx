@@ -147,7 +147,7 @@ describe("行动: the lead", () => {
     expect(document.querySelector("[data-chart='net-effect']")).not.toBeNull();
     client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, arms: { ...monitoringFilled.arms, pilot: [], control: [] } });
     const second = renderTab();
-    await waitFor(() => expect(within(second.container).getByText("首批稿件上线后，这里会把投放的语义群和对照组放在一起比。")).toBeInTheDocument());
+    await waitFor(() => expect(within(second.container).getByText("首批稿件上线后，这里会把投放的问题群和对照组放在一起比。")).toBeInTheDocument());
   });
 });
 

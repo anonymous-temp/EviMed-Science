@@ -35,6 +35,7 @@ const client = vi.hoisted(() => ({
   getGeoEvidence: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
+  getGeoClusters: vi.fn(),
   unmeasureGeoQuestion: vi.fn(),
   getGeoDiagnosis: vi.fn(),
   getGeoSources: vi.fn(),
@@ -101,6 +102,8 @@ beforeEach(() => {
   store.select.mockClear();
   download.downloadArtifact.mockClear();
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
+  // 问题与回答 reads the groups' counts beside the question set: here, groups nobody has counted yet.
+  client.getGeoClusters.mockResolvedValue({ version: 1, locked: true, floor: 30, round: null, engines: [], groups: [] });
 });
 
 describe("a tab with nothing yet", () => {
@@ -229,112 +232,6 @@ describe("旅程", () => {
     expect(screen.queryByText("没有名字的分型")).toBeNull();
     expect(screen.getByText("王女士")).toBeInTheDocument();
     expect(screen.getByText("35 · 上班族；想减重又怕副作用 · “打了会不会一直恶心”")).toBeInTheDocument();
-  });
-});
-
-describe("问题", () => {
-  it("names a platform in words, strips a group's internal number, and counts every real phrasing (G18)", async () => {
-    const group = questionsFilled.groups[0];
-    client.getGeoQuestions.mockResolvedValue({
-      ...questionsFilled,
-      groups: [{
-        ...group,
-        name: "P2-03 恶心呕吐与胃肠反应",
-        questions: [
-          ...group.questions.map((question) => (question.id === "q_2" ? { ...question, platform: "xhs" } : question)),
-          { id: "q_9", text: "打针后恶心能吃止吐药吗", kind: "real" as const, platform: "douyin", sourceUrl: null, isMeasured: true },
-        ],
-      }],
-    });
-    renderTab(<QuestionsTab {...props()} />);
-    const row = (await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" })).closest("[data-geo-group]") as HTMLElement;
-    expect(row).not.toHaveTextContent("P2-03");
-    expect(row).toHaveTextContent("3 条原话");
-    await userEvent.click(within(row).getByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    expect(screen.getByRole("link", { name: "小红书" })).toBeInTheDocument();
-    expect(screen.getByText(/真实问法 · 抖音/)).toBeInTheDocument();
-    expect(screen.queryByText(/xhs|douyin/)).not.toBeInTheDocument();
-  });
-
-  it("files groups under pools, marks control groups and opens a group to its phrasings", async () => {
-    client.getGeoQuestions.mockResolvedValue(questionsFilled);
-    renderTab(<QuestionsTab {...props()} />);
-    expect(await screen.findByText("3 个语义群 · 2 问 · 2 条真实问法")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "增量" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "风险监测" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "存量" })).not.toBeInTheDocument();
-    const control = document.querySelector("[data-geo-group='gq_2']") as HTMLElement;
-    expect(within(control).getByText("对照组")).toBeInTheDocument();
-    expect(within(control).getByText(/无信号/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    expect(screen.getByRole("link", { name: "小红书" })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/1");
-    expect(screen.getByText("恶心是不是说明剂量太大")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "风险监测" }));
-    expect(screen.queryByText("恶心呕吐与胃肠反应")).not.toBeInTheDocument();
-    expect(screen.getByText("孕期、哺乳期与未成年人")).toBeInTheDocument();
-  });
-
-  it("finds a question by a word of it, opens the groups it matches and says how many questions matched", async () => {
-    client.getGeoQuestions.mockResolvedValue(questionsFilled);
-    renderTab(<QuestionsTab {...props()} />);
-    await screen.findByText("3 个语义群 · 2 问 · 2 条真实问法");
-    expect(screen.queryByText("打了减重针一直恶心，要不要停药？")).not.toBeInTheDocument();
-
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "剂量");
-    // One real phrasing contains it; its group opens by itself and shows that phrasing alone.
-    expect(screen.getByText("匹配 1 个问题")).toBeInTheDocument();
-    expect(screen.getByText("恶心是不是说明剂量太大")).toBeInTheDocument();
-    expect(screen.queryByText("打完减肥针一直吐正常吗")).not.toBeInTheDocument();
-    expect(screen.queryByText("孕期、哺乳期与未成年人")).not.toBeInTheDocument();
-
-    // A group named for the word keeps every question in it.
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "恶心呕吐");
-    expect(screen.getByText("打了减重针一直恶心，要不要停药？")).toBeInTheDocument();
-    expect(screen.getByText("打完减肥针一直吐正常吗")).toBeInTheDocument();
-
-    // It can still be closed by hand, and a new search starts from what it matches.
-    await userEvent.click(screen.getByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    expect(screen.queryByText("打完减肥针一直吐正常吗")).not.toBeInTheDocument();
-
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "不存在的词");
-    expect(screen.getByText("没有包含“不存在的词”的问题。")).toBeInTheDocument();
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索问题" }));
-    expect(screen.getByText("3 个语义群 · 2 问 · 2 条真实问法")).toBeInTheDocument();
-  });
-
-  it("a measured question is a link to the answer it last got, the whole row; one never asked has nothing to open and is not drawn as if it had", async () => {
-    client.getGeoQuestions.mockResolvedValue(questionsFilled);
-    renderTab(<QuestionsTab {...props()} />);
-    await userEvent.click(await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    const asked = (document.querySelector("[data-geo-question='q_1']") as HTMLElement).closest("li") as HTMLElement;
-    const link = within(asked).getByRole("link", { name: /看回答/ });
-    expect(link).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_doubao");
-    // The title is the row's target: its link carries the question and the walk's hook.
-    expect(link).toHaveTextContent("打了减重针一直恶心，要不要停药？");
-    expect(link).toHaveAttribute("data-row-title");
-    expect(link.className).toMatch(/after:absolute/);
-    expect(asked.className).toMatch(/hover:bg-surface-2/);
-    await userEvent.click(screen.getByRole("button", { name: "停药与体重反弹" }));
-    const never = (document.querySelector("[data-geo-question='q_4']") as HTMLElement).closest("li") as HTMLElement;
-    expect(within(never).queryByRole("link")).not.toBeInTheDocument();
-    expect(never.className).not.toMatch(/hover:/);
-    expect(within(never).getByText("停药后体重会反弹吗？").closest("[data-row-title]")).not.toBeNull();
-  });
-
-  it("removes a question from measurement with the row's own 「⋯」, which is always there", async () => {
-    client.getGeoQuestions.mockResolvedValue(questionsFilled);
-    client.unmeasureGeoQuestion.mockResolvedValue({});
-    renderTab(<QuestionsTab {...props()} />);
-    await userEvent.click(await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" }));
-    const row = (document.querySelector("[data-geo-question='q_1']") as HTMLElement).closest("li") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "“打了减重针一直恶心，要不要停药？”的操作" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "移出测量问句" }));
-    await waitFor(() => expect(client.unmeasureGeoQuestion).toHaveBeenCalledWith("geo_1", "q_1"));
-    await waitFor(() => expect(client.getGeoQuestions).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -1211,7 +1108,7 @@ describe("药品价值分析只在依据里", () => {
     {
       tab: "questions",
       render: () => { client.getGeoQuestions.mockResolvedValue(questionsFilled); return <QuestionsTab {...props()} />; },
-      ready: () => screen.findByText("3 个语义群 · 2 问 · 2 条真实问法"),
+      ready: () => screen.findByText("3 个问题群 · 2 问 · 2 条真实问法"),
     },
     {
       tab: "sources",

@@ -21,7 +21,7 @@ import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { useSharedGeoLoad } from "../geoProjectData";
 import { geoDestinationPath, geoQuestionsView, GEO_VIEW_PARAM, type GeoQuestionsView } from "../geoTabs";
 import { GEO_POOL_KINDS, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
-import { clusterName, groupsByStage, groupTally, mentionText, poolDescription } from "../spine/clusterModel";
+import { clusterName, groupsByStage, groupTally, mentionText } from "../spine/clusterModel";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { ClusterLink } from "../spine/ClusterLink";
 import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress } from "../spine/drawerParams";
@@ -88,7 +88,6 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
     }, { replace: true }),
   };
   const rows = clusters.state.kind === "ready" ? clusters.state.data.groups : [];
-  const engines = clusters.state.kind === "ready" ? clusters.state.data.engines : project.engines;
 
   // The journey is a page of its own kind: the emotion curve and the stages, then the groups in them.
   if (view === "journey") {
@@ -114,7 +113,6 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
       data={data}
       groups={groups}
       rows={rows}
-      engines={engines}
       onVersion={setVersion}
       onChanged={() => {
         // A removal writes a new set: show the newest one, and read every group of it again.
@@ -134,7 +132,6 @@ function QuestionPage({
   data,
   groups,
   rows,
-  engines,
   onVersion,
   onChanged,
 }: {
@@ -145,7 +142,6 @@ function QuestionPage({
   data: GeoQuestions;
   groups: GeoQuestionGroup[];
   rows: readonly GeoClusterRow[];
-  engines: readonly string[];
   onVersion: (version: number | null) => void;
   onChanged: () => void;
 }) {
@@ -204,8 +200,10 @@ function QuestionPage({
     void unmeasureGeoQuestion(geoId, id)
       .then(() => {
         toast.success("已移出，之后的测量不再问这一句。");
-        frame?.data.invalidate();
-        onChanged();
+        // A removal writes a new set and moves every count taken over the old one: the project's reads are stale (read once, behind
+        // the page). Without a project above, the two this page holds are read again.
+        if (frame) frame.data.invalidate(); else onChanged();
+        onVersion(null);
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一句无法移出，请稍后重试。" })));
   };
@@ -250,7 +248,6 @@ function QuestionPage({
         if (inPool.length === 0) return null;
         return (
           <Section key={key} title={GEO_POOL_KINDS[key]} count={`${inPool.length} 个`} level="sub" className="mt-0">
-            <p className="sr-only">{poolDescription(key)}</p>
             <ListHeader label="按数字排序" columns={COLUMNS} sort={sort ?? undefined} onSort={sortBy} className="mb-1" />
             <List label={`${GEO_POOL_KINDS[key]}的问题群`} divided>
               {inPool.map((group) => {
@@ -266,7 +263,6 @@ function QuestionPage({
                     onOpen={() => drawer.open({ group: group.id })}
                     onActions={go(geoDestinationPath(geoId, { tab: "actions" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
                     onErrors={go(geoDestinationPath(geoId, { tab: "accuracy" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
-                    engines={engines}
                   />
                 );
               })}
@@ -313,7 +309,6 @@ function GroupRow({
   row,
   match,
   selected,
-  engines,
   onOpen,
   onActions,
   onErrors,
@@ -322,7 +317,6 @@ function GroupRow({
   row: GeoClusterRow | null;
   match: GroupMatch;
   selected: boolean;
-  engines: readonly string[];
   onOpen: () => void;
   onActions: () => void;
   onErrors: () => void;
@@ -333,8 +327,8 @@ function GroupRow({
   const meta = [group.journeyStage || null, `${measured} 问`, `${real} 条原话`].filter(Boolean).join(" · ");
   // The cells are the current set's: a group of an older version has no counts to draw.
   const columns: ListCell[] | undefined = row ? (() => {
-    const reading = mentionText(row, engines);
-    const tally = groupTally(row, engines);
+    const reading = mentionText(row);
+    const tally = groupTally(row);
     return [
       { key: "mention", label: "被提到", value: reading.counts === "—" ? "—" : <>{reading.counts}{reading.rate && <span className="ml-1 text-text-3">{reading.rate}</span>}</>, onOpen },
       {

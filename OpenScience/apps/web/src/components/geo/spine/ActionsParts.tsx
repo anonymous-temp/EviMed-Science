@@ -10,9 +10,9 @@ import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { OWN_COLOR, rivalColor } from "@/components/charts/trendModel";
 import { geoSectionId } from "../geoTabs";
-import { layerName, monthDay } from "../geoText";
+import { GEO_POOL_KINDS, layerName, monthDay } from "../geoText";
 import { yuan } from "../tabs/geoTabText";
-import { clusterName, poolDescription } from "./clusterModel";
+import { clusterName } from "./clusterModel";
 import { ClusterLink } from "./ClusterLink";
 import { articleMeta, articleStatusLine, headlineText, type HeadlinePart } from "./actionModel";
 import type { ArticleRef } from "./useArticleActions";
@@ -106,23 +106,23 @@ export function EffectCard({
           {part.n}
         </button>
       )))
-    : "投放的语义群和对照组还没有可以比较的读数";
+    : "投放的问题群和对照组还没有可以比较的读数";
   return (
     <div id={geoSectionId("effect")} data-geo-effect="" data-headline="">
       <ChartCard
         title={title}
         legend={input ? (
           <>
-            <LegendMark series="own" color={OWN_COLOR}>投放的语义群</LegendMark>
+            <LegendMark series="own" color={OWN_COLOR}>投放的问题群</LegendMark>
             <LegendMark series="rival-1" color={rivalColor(0)}>对照组</LegendMark>
             {input.band !== null && <LegendMark series="band" shape="band" color="var(--chart-band)">对照组的波动范围</LegendMark>}
           </>
         ) : undefined}
         state={loading ? "loading" : input ? "content" : "empty"}
-        emptyText="首批稿件上线后，这里会把投放的语义群和对照组放在一起比。"
+        emptyText="首批稿件上线后，这里会把投放的问题群和对照组放在一起比。"
         height={200}
       >
-        {input && <NetEffectBand input={input} label={headlineText(parts) || "投放的语义群和对照组的变化"} />}
+        {input && <NetEffectBand input={input} label={headlineText(parts) || "投放的问题群和对照组的变化"} />}
       </ChartCard>
     </div>
   );
@@ -241,7 +241,7 @@ export function ControlGroups({ view, clusters }: { view: GeoActionsView; cluste
           {named.map((entry) => (
             <li key={entry.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-ui">
               <ClusterLink groupId={entry.id} className="min-w-0">{entry.row ? clusterName(entry.row) : entry.name}</ClusterLink>
-              {entry.pool && <span className="text-caption text-text-3" title={poolDescription(entry.pool) ?? undefined}>{entry.pool}</span>}
+              {entry.pool && <span className="text-caption text-text-3">{GEO_POOL_KINDS[entry.pool] ?? ""}</span>}
               {entry.articles > 0 && <Tag tone="warn">{`已写 ${entry.articles} 篇，不再是对照`}</Tag>}
             </li>
           ))}

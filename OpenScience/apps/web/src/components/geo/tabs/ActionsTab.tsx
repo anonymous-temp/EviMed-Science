@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/Button";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { useGeoMonitoring } from "../geoProjectData";
 import { marketConnected } from "../geoOverviewModel";
+import { scrollBlockToTop } from "../geoScroll";
+import { geoSectionId } from "../geoTabs";
 import { ActionDrawer } from "../spine/ActionDrawer";
 import { ActionRow } from "../spine/ActionRow";
 import { BudgetLine, ControlGroups, EffectCard, netEffectInput, OtherArticles, ReviewBlock } from "../spine/ActionsParts";
@@ -210,7 +212,9 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   };
   const headlineTarget = (target: "acted" | "waiting" | "effect") => {
     if (target === "effect") {
-      document.getElementById("geo-effect")?.scrollIntoView({ block: "start" });
+      // The page's own ground moves, not the app shell (`scrollBlockToTop`).
+      const element = document.getElementById(geoSectionId("effect"));
+      if (element) scrollBlockToTop(element);
       return;
     }
     setFocus(target);
@@ -251,7 +255,8 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
       )}
 
       {all.length > 0 && (
-        <section aria-label="行动" data-geo-actions="">
+        // The rail's 「投放」 lands here (`GEO_TAB_SECTIONS`): where each piece of work goes, and how far it got, is a row of this list.
+        <section id={geoSectionId("delivery")} aria-label="行动" data-geo-actions="">
           {rows === 0 ? (
             <Note action={<Button variant="secondary" size="sm" onClick={() => { setStageParam(null); setCluster(null); setKind(null); setQuery(""); setFocus(null); }}>清除筛选</Button>}>
               没有符合的行动。

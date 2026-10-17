@@ -109,7 +109,7 @@ export function netEffectOption(model: NetEffectModel): EChartsCoreOption {
       ] : []),
       {
         type: "line",
-        name: "投放的语义群",
+        name: "投放的问题群",
         symbol: "circle",
         symbolSize: CHART_STROKES.marker,
         connectNulls: false,
@@ -165,7 +165,7 @@ export function NetEffectBand({
       <div ref={host} role="img" aria-label={label} style={{ height }} className="w-full" />
       {!canPaintChart() && model.mode === "series" && (
         <figcaption className="text-caption tabular-nums text-text-3">
-          {`投放的语义群 ${model.pilot.map((value) => (value === null ? "—" : changeText(value))).join(" / ")}；对照组 ${model.control.map((value) => (value === null ? "—" : changeText(value))).join(" / ")}`}
+          {`投放的问题群 ${model.pilot.map((value) => (value === null ? "—" : changeText(value))).join(" / ")}；对照组 ${model.control.map((value) => (value === null ? "—" : changeText(value))).join(" / ")}`}
         </figcaption>
       )}
     </figure>

@@ -35,7 +35,6 @@ import {
   effectPoints,
   groupTally,
   mentionText,
-  poolDescription,
   tallyOf,
 } from "./clusterModel";
 import { QuestionRows } from "./QuestionRows";
@@ -129,10 +128,9 @@ export function ClusterDrawer({
 function ClusterHead({ group }: { group: GeoClusterRow }) {
   const weight = typeof group.weight === "number" ? `权重 ${Math.round(group.weight * 100)}%` : null;
   const audience = group.audience === "patient" ? "患者" : group.audience === "physician" ? "医生" : group.audience === "caregiver" ? "照护者" : group.audience === "pharmacist" ? "药师" : null;
-  const pool = poolDescription(group.pool);
   return (
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span title={pool ?? undefined}>{[clusterContext(group), audience, weight].filter(Boolean).join(" · ")}</span>
+      <span>{[clusterContext(group), audience, weight].filter(Boolean).join(" · ")}</span>
       {group.isControl && <Tag title="只监测、不写稿：给它写稿会让它退出对照组">对照组 · 只监测</Tag>}
     </span>
   );
