@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "9616277b286523ae1cc9cfa0b468a90472980689db1746f4406c570b2d66d2b7",
+    "sha256": "71042681ddec476e4337cb088cdbafd428440431eac1225a5b8b44579caa550f",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1541,7 +1541,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "f3c43acbff15a991b910c72d3966ce922c7d70c438e0a7d28b1a0d627eb9b3b5",
+    "sha256": "81c91a49129d9e61b10d6e2f49a38b38a3f951e00f6342ea5625f93dc3ca7fc6",
     "rows": [
       {
         "id": "persona",
@@ -1840,13 +1840,7 @@
     "entry": "loopx",
     "kept": [
       "loopx",
-      "loopx-benchmark",
-      "loopx-doc-registry",
-      "loopx-performance-diagnosis",
-      "loopx-pr-program",
-      "loopx-pr-review",
-      "loopx-project",
-      "loopx-self-repair"
+      "loopx-project"
     ]
   }
 }

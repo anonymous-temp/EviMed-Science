@@ -734,13 +734,26 @@ export class DshRuntimeAdapter {
 
 /* ------------------------------------------------------------ normalizers */
 
-/** A continuation is workload input, but never a human message. @param {any} source @returns {string|null} */
+/**
+ * A continuation is workload input, but never a human message. So is the late answer to a question the model left pending
+ * (`ask_user_question` in timed mode): the kernel steers it into the session as a message of its own kind, and it starts a turn
+ * when the agent is idle.
+ * @param {any} source @returns {string|null}
+ */
 function nativeInputIdentity(source) {
   if (source?.kind === "loopx-continuation") {
     const id = source.turnInstanceId;
     return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,256}$/.test(id) ? `loopx:${id}` : null;
   }
+  const answered = answeredCallIdentity(source);
+  if (answered) return `reply:${answered}`;
   return typeof source?.rpcId === "string" ? source.rpcId : null;
+}
+
+/** The tool call a late answer settles, so the ledger can find the turn that asked. @param {any} source @returns {string|null} */
+function answeredCallIdentity(source) {
+  const id = source?.kind === "user-question-reply" ? source.callId : null;
+  return typeof id === "string" && /^[A-Za-z0-9_.:-]{1,256}$/.test(id) ? id : null;
 }
 
 /** The LoopX goal an automatic turn works on, so the ledger can find the turn that set it. @param {any} source @returns {string|null} */
@@ -801,6 +814,7 @@ export function normalizeTranscript(sessionId, entries) {
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
           sourceRequestId: nativeInputIdentity(data.source),
           ...(loopxGoalIdentity(data.source) ? { loopxGoalId: loopxGoalIdentity(data.source) } : {}),
+          ...(answeredCallIdentity(data.source) ? { answeredCallId: answeredCallIdentity(data.source) } : {}),
           turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,

@@ -641,6 +641,7 @@ export class AgentBayRuntimeProvider {
         flags: {
           hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
           askUser: Boolean(config.runtimeAskUserEnabled),
+          askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
           review: Boolean(config.runtimeReviewEnabled),
           capsule: Boolean(gateways.capsule),
           operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),

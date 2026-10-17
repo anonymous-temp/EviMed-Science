@@ -1526,6 +1526,11 @@
       - id: tool-ask-user
         name: '@deepseek-ai/dsh-tool-ask-user'
         disabled: !!js process.env.EVIMED_ASK_USER !== '1'
+        config:
+          mode: !!js >-
+            (process.env.EVIMED_ASK_USER_MODE === 'timed' && 'timed') ||
+            'legacy'
+          timeout: 120
       - id: compaction
         name: cordis:group
         group: true
