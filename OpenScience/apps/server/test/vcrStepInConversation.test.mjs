@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { runRoleOf } from "@evimed/domain";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
+import { sessionInboxOf } from "../src/dshRuntimeAdapter.mjs";
 import { HttpError } from "../src/security.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -102,5 +103,17 @@ test("the lever is off unless it is switched on, and a deployment switches it on
   } finally {
     if (saved === undefined) delete process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION;
     else process.env.OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION = saved;
+  }
+});
+
+test("what waits in a session is read off its entry in the kernel's list, and silence is never read as nothing", () => {
+  const entry = (/** @type {any} */ inbox, /** @type {boolean} */ running = false) => ({ sessionId: "s", running, projections: { kind: "sequenced", asOfSeq: 7, values: { title: null, inbox } } });
+  // The shape the kernel answers (read off a live DSH 0.2.0-rc.2 kernel's `session/list`).
+  assert.deepEqual(sessionInboxOf(entry({ "next-turn": [], "next-step": [] })), { running: false, queued: 0 });
+  assert.deepEqual(sessionInboxOf(entry({ "next-turn": [{ id: "a" }], "next-step": [] })), { running: false, queued: 1 });
+  assert.deepEqual(sessionInboxOf(entry({ "next-turn": [{ id: "a" }, { id: "b" }], "next-step": [{ id: "c" }] }, true)), { running: true, queued: 3 });
+  // A reply without the projection, a malformed inbox and no entry at all say nothing — and nothing is not "empty".
+  for (const unsaid of [undefined, null, {}, { running: false }, { projections: { values: {} } }, entry({}), entry({ "next-turn": [] }), entry({ "next-turn": "x", "next-step": [] }), entry(null)]) {
+    assert.equal(sessionInboxOf(/** @type {any} */ (unsaid)), null, JSON.stringify(unsaid));
   }
 });

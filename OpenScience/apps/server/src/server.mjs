@@ -2777,15 +2777,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * The id of the study's own conversation when a step may be a turn of it: the conversation that exists in the kernel (made now for the
    * owner when the study has none), or null — the step then runs in a session of its own.
-   * @param {string} studyId @returns {Promise<string | null>}
+   * A conversation with something waiting in it is not taken: the kernel hands an input somebody queued to the next turn to start, so a
+   * step sent in behind it would run under the question's turn (found live), and the step runs in a session of its own instead.
+   * @param {any} project @param {string} studyId @returns {Promise<string | null>}
    */
-  async function vcrStudyConversationId(studyId) {
+  async function vcrStudyConversationId(project, studyId) {
     if (!vcr?.store) return null;
     try {
       const study = await vcr.store.studyById(studyId);
       if (!study) return null;
       const found = await resolveStudyConversation(study, { create: true });
-      return found?.exists === true && found.sessionId ? found.sessionId : null;
+      if (found?.exists !== true || !found.sessionId) return null;
+      const inbox = await runtimeManager.sessionInbox(project, found.sessionId);
+      return inbox && inbox.running === false && inbox.queued === 0 ? found.sessionId : null;
     } catch {
       // isolated: the step runs in its own session, as it did before the conversation was asked
       return null;
@@ -5420,7 +5424,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     // The study's own conversation, when the step is to be a turn of it: the researcher's runtime is open (so they are the one it works
     // for) and the study has a conversation that exists in the kernel. Anything less keeps the hidden session below.
-    const conversationId = config.vcrStepsInStudySession === true && interactive ? await vcrStudyConversationId(studyId) : null;
+    const conversationId = config.vcrStepsInStudySession === true && interactive ? await vcrStudyConversationId(project, studyId) : null;
     const session = conversationId ? { id: conversationId } : interactive ? { id: randomId("session_") }
       : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope, reason: "module-step" });
     const placement = interactive ? "open-runtime" : "bounded";

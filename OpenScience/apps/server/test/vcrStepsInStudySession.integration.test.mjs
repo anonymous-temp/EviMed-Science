@@ -34,7 +34,9 @@ const OWNER = `own${suffix}`;
 /** What the runtime was asked, in order. */
 const record = { starts: /** @type {any[]} */ ([]), reserved: /** @type {any[]} */ ([]), prompts: /** @type {any[]} */ ([]),
   stops: /** @type {string[]} */ ([]), minted: /** @type {string[]} */ ([]), noRoom: false,
-  /** The session's dispatch index as it stood when each prompt was sent. */ indexAtPrompt: /** @type {any[]} */ ([]) };
+  /** The session's dispatch index as it stood when each prompt was sent. */ indexAtPrompt: /** @type {any[]} */ ([]),
+  /** What the kernel says waits in the conversation: nothing, unless a test puts something there (`null`: the kernel does not say). */
+  inbox: /** @type {{ running: boolean, queued: number } | null} */ ({ running: false, queued: 0 }) };
 
 before(async () => {
   if (!databaseUrl) return;
@@ -74,6 +76,7 @@ before(async () => {
     record.indexAtPrompt.push(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", session, "index.json"), "utf8").then((text) => JSON.parse(text), () => null));
     return { accepted: true };
   };
+  app.runtimeManager.sessionInbox = async () => record.inbox;
   app.runtimeManager.cancelRuntimeSession = async (/** @type {any} */ _project, /** @type {string} */ session) => { record.stops.push(session); return true; };
   // The run ledger is the real one. The kernel it reads a session's history from is not there, and no run is watched to its end here.
   app.agentRuns.readSessionHistory = async () => [];
@@ -138,6 +141,7 @@ function reset() {
   context.app.runtimeManager.runtimes.clear();
   for (const list of [record.starts, record.reserved, record.prompts, record.stops, record.indexAtPrompt]) list.length = 0;
   record.noRoom = false;
+  record.inbox = { running: false, queued: 0 };
 }
 
 test("a step a person asked for is a turn of the study's own conversation, recorded as the step's capability, and the conversation keeps its binding", options, async () => {
@@ -310,4 +314,35 @@ test("a study whose conversation cannot be made runs the step in a session of it
   assert.equal(runs[0].effectiveRouteReason, "vcr:definition");
   assert.equal(runs[0].role, "programme");
   record.noRoom = false;
+});
+
+test("a conversation with something waiting in it, or a turn running in it, is not taken: the step runs in a session of its own", options, async () => {
+  // Found live: a question queued while a step ran stayed in the kernel's inbox when the step was stopped, and ran as the next turn —
+  // under the context of the step dispatched after it, which waited behind it (the same step was done twice, the question's turn took
+  // 8.5 minutes). The kernel hands a queued input to whichever turn starts next, so a prompt is not sent in behind one.
+  for (const [why, inbox] of /** @type {Array<[string, any]>} */ ([
+    ["a message is queued", { running: false, queued: 1 }],
+    ["a steer waits for the next step", { running: false, queued: 2 }],
+    ["a turn the ledger has not adopted yet is running", { running: true, queued: 0 }],
+    ["the kernel does not say", null],
+  ])) {
+    reset();
+    record.inbox = inbox;
+    const study = await newStudy(`排队 ${why.length}`);
+    const conversation = (await call("GET", `/api/vcr/studies/${study.id}`)).body.data.conversation.sessionId;
+    const answer = await call("POST", `/api/vcr/studies/${study.id}/run`, { step: "definition" });
+    assert.equal(answer.status, 200, `${why}: ${JSON.stringify(answer.body)}`);
+    assert.equal(record.prompts.length, 1, why);
+    assert.notEqual(record.prompts[0].session, conversation, `${why}: the conversation is left as it is`);
+    assert.match(String(record.prompts[0].session), /^session_/, why);
+    const runs = await runsOf(study.projectId);
+    assert.equal(runs[0].effectiveRouteReason, "vcr:definition", why);
+    assert.equal(runs[0].role, "programme", why);
+  }
+  // And once nothing waits, the conversation is taken again.
+  reset();
+  const clear = await newStudy("队列空了");
+  const clearConversation = (await call("GET", `/api/vcr/studies/${clear.id}`)).body.data.conversation.sessionId;
+  assert.equal((await call("POST", `/api/vcr/studies/${clear.id}/run`, { step: "definition" })).status, 200);
+  assert.equal(record.prompts[0].session, clearConversation);
 });

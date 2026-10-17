@@ -53,6 +53,7 @@ import {
   wireRefusal,
   normalizeTranscript,
   transcriptToLedgerMessages,
+  sessionInboxOf,
   sessionListItems,
   subagentAddress,
   subagentListItems,
@@ -5192,6 +5193,28 @@ export class RuntimeManager {
       const items = sessionListItems(value);
       const entry = items.find((item) => String(item?.sessionId) === String(sessionId));
       return entry?.running ? "busy" : "idle";
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  /**
+   * Whether a conversation is clear for the control plane to send a prompt into: no turn running and nothing queued behind it
+   * (`sessionInboxOf`). `null` when the kernel does not say — the caller then does not take the conversation.
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {Promise<{ running: boolean, queued: number } | null>}
+   */
+  async sessionInbox(project, sessionId) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return null;
+    this.beginProxy(project);
+    try {
+      const value = await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
+        "runtime_status_unavailable",
+        "Runtime session list did not answer in time.",
+      );
+      return sessionInboxOf(sessionListItems(value).find((item) => String(item?.sessionId) === String(sessionId)));
     } finally {
       this.endProxy(project);
     }
