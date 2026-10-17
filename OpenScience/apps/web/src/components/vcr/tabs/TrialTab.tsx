@@ -405,7 +405,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       rowHeader: true,
       cell: (design) => (
         <span className="flex flex-col gap-0.5">
-          <span className="flex items-center gap-2">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta font-semibold",
               design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
             >

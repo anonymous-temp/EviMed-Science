@@ -365,9 +365,13 @@ export function VcrSurvivalChart({
         formatY={(value) => `${Math.round(value * 100)}%`}
         height={height}
         overlay={rmst?.tau != null ? (
+          // The name of the cut-off stands beside its line, on the side with the room, and not across it.
           <span
             data-vcr-tau=""
-            className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-meta text-accent-strong"
+            className={cn(
+              "absolute top-0 whitespace-nowrap text-meta text-accent-strong",
+              posX(rmst.tau, x) > 60 ? "-translate-x-full pr-1" : "pl-1",
+            )}
             style={{ left: `${posX(rmst.tau, x)}%` }}
           >
             {rmst.label ?? `τ = ${rmst.tau}`}

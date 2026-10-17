@@ -488,6 +488,10 @@ export function VcrTradeoffScatter({
                   opacity: design.dominated ? 1 : design.chosen ? 0.9 : 0.42,
                 }}
               />
+              {/* A phone's plot has no room beside a bubble for a name and two numbers: the bubble carries its design's letter and the key under the chart says whose it is. */}
+              <span aria-hidden="true" className={cn("absolute inset-0 flex items-center justify-center text-meta font-semibold sm:hidden", design.chosen ? "text-accent-fg" : "text-text")}>
+                {design.code}
+              </span>
             </span>
           );
         })}
@@ -506,7 +510,7 @@ export function VcrTradeoffScatter({
               data-vcr-scatter-label={design.code}
               data-vcr-scatter-side={side}
               className={cn(
-                "absolute max-w-48 whitespace-nowrap text-caption",
+                "absolute max-w-48 whitespace-nowrap text-caption max-sm:hidden",
                 side === "end" ? "-translate-x-full text-right" : side === "start" ? "text-left" : "-translate-x-1/2 text-center",
               )}
               style={{ left: `${left}%`, top: `calc(${top}% + ${radius(design) * 2 + 8}px)` }}
@@ -533,6 +537,14 @@ export function VcrTradeoffScatter({
       <p className="ml-10 mt-8 flex flex-wrap justify-between gap-2 text-meta text-text-3">
         {xLabel && <span>{xLabel}</span>}
         {sizeLabel && <span>{sizeLabel}</span>}
+      </p>
+      <p data-vcr-scatter-key="" className="ml-10 mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-caption text-text-3 sm:hidden">
+        {points.map((design) => (
+          <span key={design.id}>
+            <span className={cn("font-medium", design.chosen ? "text-accent-strong" : "text-text-2")}>{design.code}</span>
+            {` ${design.name || design.code}`}
+          </span>
+        ))}
       </p>
       {unplaced.length > 0 && (
         <ul className="ml-10 mt-2 flex flex-col gap-1 text-caption text-text-3">

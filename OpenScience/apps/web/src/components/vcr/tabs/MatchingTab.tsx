@@ -517,7 +517,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
               {selected.verdict && (
-                <p data-vcr-eligibility={allMet ? "met" : "open"} className={cn("flex min-w-0 flex-1 items-center gap-2 text-ui", allMet ? "text-ok" : "text-warn-strong")}>
+                <p data-vcr-eligibility={allMet ? "met" : "open"} className={cn("flex min-w-0 flex-1 items-center gap-2 text-ui max-sm:basis-full", allMet ? "text-ok" : "text-warn-strong")}>
                   {/* The mark follows the judgements, not the sentence: every applicable criterion satisfied is a check, anything else keeps its warning. */}
                   {allMet ? <CircleCheck size={16} aria-hidden="true" className="shrink-0" /> : <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />}
                   <span className="font-medium">{selected.verdict.text}</span>
@@ -528,14 +528,17 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 <Button variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
               )}
               {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedByName ?? NO_VALUE}`}</Tag></span>}
-              <Button
-                variant="secondary"
-                loading={busy === "evidence"}
-                disabled={!mayAskEvidence || busy !== null}
-                onClick={requestEvidence}
-              >
-                {evidenceAsked ? "已请求补证" : "请求补证"}
-              </Button>
+              {/* A person with nothing open has nothing to ask for: the button is not drawn grey, it is not drawn. */}
+              {(needs.length > 0 || evidenceAsked) && (
+                <Button
+                  variant="secondary"
+                  loading={busy === "evidence"}
+                  disabled={!mayAskEvidence || busy !== null}
+                  onClick={requestEvidence}
+                >
+                  {evidenceAsked ? "已请求补证" : "请求补证"}
+                </Button>
+              )}
               {/* The one human stop: contacting a person is outside the
                   platform and cannot be undone (plan §10.1). */}
               <Button

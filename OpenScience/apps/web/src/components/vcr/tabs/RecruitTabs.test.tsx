@@ -109,10 +109,11 @@ describe("匹配与招募 — choosing a person", () => {
 });
 
 describe("匹配与招募 — 请求补证", () => {
-  it("is off for a person with nothing to ask for", async () => {
+  it("is not drawn for a person with nothing to ask for — no grey button", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
-    expect(screen.getByRole("button", { name: "请求补证" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "请求补证" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "已请求补证" })).toBeNull();
   });
 
   // A person with a referral has the request made on the ledger: the referral
