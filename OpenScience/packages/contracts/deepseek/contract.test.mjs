@@ -66,3 +66,22 @@ test("the control plane's own defaults are the pin", async () => {
     for (const [name, value] of Object.entries(saved)) if (value !== undefined) process.env[name] = value;
   }
 });
+
+// DeepSeek's two tool APIs (2026-10-17): the paths, the per-account rate and the price the control plane works to are the
+// pin's, written once. The wire itself — the shapes the client reads — is replayed from answers recorded off the live API
+// by the gateways' own tests (apps/server/test/fixtures/deepseek-tools).
+test("the tool APIs the gateways call are the pinned paths, rate and price", async () => {
+  const tools = await import("../../../apps/server/src/deepseekTools.mjs");
+  const { REFERENCE_PRICE_LIST, priceUsage } = await import("@evimed/domain");
+  assert.equal(tools.DEEPSEEK_SEARCH_PATH, pin.tools.search);
+  assert.equal(tools.DEEPSEEK_FETCH_PATH, pin.tools.fetch);
+  assert.equal(tools.DEEPSEEK_TOOL_REQUESTS_PER_SECOND, pin.tools.requestsPerSecond);
+  for (const tool of ["deepseek-search", "deepseek-fetch"]) {
+    assert.deepEqual(REFERENCE_PRICE_LIST.toolRequest?.[tool], { perThousand: pin.tools.usdPerThousandRequests, currency: "USD" });
+    assert.ok(Date.parse(REFERENCE_PRICE_LIST.effectiveFrom) <= Date.parse(`${pin.tools.adopted}T00:00:00Z`), "priced from the day it was adopted");
+    assert.equal(priceUsage({ resourceType: "tool-request", tool, requests: 1, peak: true }).priced, true);
+  }
+  // The research model stays what the pin certifies: V4.1-Flash-1017 serves the same name at the same price.
+  assert.ok(pin.notes.includes("DeepSeek-V4.1-Flash-1017"));
+  assert.deepEqual(REFERENCE_PRICE_LIST.model[pin.model], { cacheHit: 0.04, cacheMiss: 2, output: 8 });
+});
