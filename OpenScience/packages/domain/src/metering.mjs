@@ -278,12 +278,13 @@ const referencePrices20260928 = deepFreeze({
  * The 2026-09-28 rates plus DeepSeek's two tool APIs, opened on 2026-10-17 and
  * asked by the control plane's gateways: Search behind the web-search gateway,
  * Fetch as the second reader of `web_read`. Each is billed per successful
- * request, $0.75 per thousand, with no token count, no cache tier and no night
- * rate (https://api-docs.deepseek.com/, the Search and Fetch guides and the
- * change log, read 2026-10-17). A request that fails is not billed, so a
- * ledger row for one is released, never settled. Converted at the dollar
- * rate this list inherits from 2026-09-24, so Jev's row is priced exactly as
- * before; a new rate would be a new version.
+ * request — HTTP 200 with a result: a search with at least one row, a fetch
+ * with the page's text; a failure, an empty search or a timeout is not billed
+ * — at ¥5 per thousand, with no token count, no cache tier and no night rate
+ * (https://api-docs.deepseek.com/zh-cn/guides/search, 计费, read 2026-10-17
+ * through this platform's own web_read). In yuan, like the model rows: the
+ * account is billed in yuan, so its own table is the price, not the English
+ * page's $0.75 converted.
  *
  * `deepseek-flash` is served by DeepSeek-V4.1-Flash-1017 from 2026-10-17 at
  * the same price and through the same method, so its row does not move.
@@ -293,10 +294,10 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   ...referencePrices20260928,
   version: 'evimed-reference-2026-10-17',
   effectiveFrom: '2026-10-17T00:00:00.000Z',
-  modelSource: `${referencePrices20260928.modelSource} · https://api-docs.deepseek.com/updates`,
+  modelSource: `${referencePrices20260928.modelSource} · https://api-docs.deepseek.com/zh-cn/updates/ · https://api-docs.deepseek.com/zh-cn/guides/search`,
   toolRequest: {
-    'deepseek-search': { perThousand: 0.75, currency: 'USD' },
-    'deepseek-fetch': { perThousand: 0.75, currency: 'USD' },
+    'deepseek-search': { perThousand: 5 },
+    'deepseek-fetch': { perThousand: 5 },
   },
 })
 

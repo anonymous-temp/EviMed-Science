@@ -41,24 +41,23 @@ test('the web-search gateway\'s Qwen-Plus call is priced at DashScope\'s one rat
   assert.deepEqual(priceListFor('evimed-reference-2026-09-24')?.model['jev-1.13.0'], REFERENCE_PRICE_LIST.model['jev-1.13.0'])
 })
 
-// Verified against https://api-docs.deepseek.com/ (the Search and Fetch guides, read 2026-10-17): $0.75 per 1,000
-// successful requests each, no night rate, converted at the dollar rate the list inherits from 2026-09-24.
-test('DeepSeek Search and Fetch are priced by the successful call, in dollars, and only from 2026-10-17', () => {
-  const usd = REFERENCE_PRICE_LIST.exchangeRates?.USD
-  assert.ok(usd)
-  assert.equal(usd.date, '2026-09-24', 'the inherited rate, so Jev is priced exactly as before')
+// Verified against https://api-docs.deepseek.com/zh-cn/guides/search (计费, read 2026-10-17): ¥5 per 1,000 successful
+// requests each, the yuan table this platform's account is billed on ($0.75 on the English page), no night rate.
+test('DeepSeek Search and Fetch are priced by the successful call, in yuan, and only from 2026-10-17', () => {
   for (const tool of ['deepseek-search', 'deepseek-fetch']) {
     const one = (/** @type {boolean} */ peak, /** @type {any[]} */ ...list) => priceUsage({ resourceType: 'tool-request', tool, requests: 1, peak }, ...list)
-    assert.equal(one(true).cost, Math.round(0.00075 * usd.rate * 1e8) / 1e8, `${tool}: $0.00075 a request at ¥${usd.rate}`)
-    assert.equal(one(true).cost, 0.00506168)
+    assert.equal(one(true).cost, 0.005, `${tool}: ¥5 per thousand`)
     assert.equal(one(false).cost, one(true).cost, `${tool}: billed by the call, around the clock`)
     assert.equal(one(true).priced, true)
-    assert.equal(priceUsage({ resourceType: 'tool-request', tool, requests: 1_000, peak: true }).cost, 5.061675)
+    assert.equal(one(true).currency, 'CNY')
+    assert.equal(priceUsage({ resourceType: 'tool-request', tool, requests: 1_000, peak: true }).cost, 5)
     assert.equal(one(true, priceListFor('evimed-reference-2026-09-28')).priced, false, 'a list from before the tool existed cannot price it')
   }
   assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'deepseek-chat', requests: 1, peak: true }).priced, false, 'an unknown tool is a visible gap, not a guess')
-  const noRate = /** @type {any} */ ({ ...REFERENCE_PRICE_LIST, exchangeRates: {} })
-  assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'deepseek-search', requests: 1, peak: true }, noRate).priced, false, 'dollars are never billed as yuan')
+  // A tool row billed in another currency is converted at the list's own rate, and never billed as yuan without one.
+  const dollars = /** @type {any} */ ({ ...REFERENCE_PRICE_LIST, toolRequest: { probe: { perThousand: 0.75, currency: 'USD' } } })
+  assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'probe', requests: 1_000, peak: true }, dollars).cost, Math.round(0.75 * Number(REFERENCE_PRICE_LIST.exchangeRates?.USD?.rate) * 1e8) / 1e8)
+  assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'probe', requests: 1, peak: true }, { ...dollars, exchangeRates: {} }).priced, false)
   // The model rows did not move: deepseek-flash is V4.1-Flash-1017 at the same price.
   assert.deepEqual(REFERENCE_PRICE_LIST.model, priceListFor('evimed-reference-2026-09-28')?.model)
 })

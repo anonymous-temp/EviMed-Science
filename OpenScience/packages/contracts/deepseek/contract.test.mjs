@@ -77,7 +77,8 @@ test("the tool APIs the gateways call are the pinned paths, rate and price", asy
   assert.equal(tools.DEEPSEEK_FETCH_PATH, pin.tools.fetch);
   assert.equal(tools.DEEPSEEK_TOOL_REQUESTS_PER_SECOND, pin.tools.requestsPerSecond);
   for (const tool of ["deepseek-search", "deepseek-fetch"]) {
-    assert.deepEqual(REFERENCE_PRICE_LIST.toolRequest?.[tool], { perThousand: pin.tools.usdPerThousandRequests, currency: "USD" });
+    assert.deepEqual(REFERENCE_PRICE_LIST.toolRequest?.[tool], { perThousand: pin.tools.cnyPerThousandRequests });
+    assert.equal(REFERENCE_PRICE_LIST.currency, "CNY");
     assert.ok(Date.parse(REFERENCE_PRICE_LIST.effectiveFrom) <= Date.parse(`${pin.tools.adopted}T00:00:00Z`), "priced from the day it was adopted");
     assert.equal(priceUsage({ resourceType: "tool-request", tool, requests: 1, peak: true }).priced, true);
   }

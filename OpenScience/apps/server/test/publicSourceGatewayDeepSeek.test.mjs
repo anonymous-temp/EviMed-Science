@@ -109,7 +109,7 @@ test("a challenge our read cannot open is read once through DeepSeek's Fetch, la
   assert.equal(ledger.calls[0][1].model, "deepseek-fetch");
   assert.equal(ledger.calls[0][1].purpose, "web-search");
   assert.equal(ledger.calls[0][1].runId, "run-3");
-  assert.equal(ledger.calls[1][1].actualCost, 0.00506168);
+  assert.equal(ledger.calls[1][1].actualCost, 0.005);
 });
 
 test("a 403 or 429 from the site goes to the second reader; a 404, a 401 or a 5xx does not", async (t) => {
@@ -172,9 +172,11 @@ test("when the second reader fails too, the run gets our read's own reason, and 
     assert.match(body.error.message, /JavaScript challenge/);
     assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["release", code]]);
   }
-  // An answer with no text is no reading of the page either.
-  const empty = await gateway(t, withKey, { transport: fakeTransport({ [page]: html(challenge, 412) }).transport, deepseek: deepseekFetch(answer({ title: "t", content: "  " })) });
+  // An answer with no text is no reading of the page either, and is not billed.
+  const ledger = fakeLedger();
+  const empty = await gateway(t, withKey, { transport: fakeTransport({ [page]: html(challenge, 412) }).transport, deepseek: deepseekFetch(answer({ title: "t", content: "  " })), usageLedger: ledger });
   assert.equal((await empty(page)).body.error.code, "web_read_needs_browser");
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["release", "provider_no_result"]]);
 });
 
 test("a read that runs out of its share of the time still has the second reader's", async (t) => {

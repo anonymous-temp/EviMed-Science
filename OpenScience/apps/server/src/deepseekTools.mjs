@@ -13,10 +13,11 @@
 // 30 s. Errors are `{error:{message,type,code}}`; a 401 masks the key (`****0000`), and no message of DeepSeek's is
 // passed on here regardless — only its status.
 //
-// Each tool is limited to five requests a second per account (fetch also per site) and billed $0.75 per thousand
-// successful requests. The limit is held here by one pacer per tool for the whole process; the bill is booked like a
-// model call (`reserveGatewaySpend`, purpose `web-search`), and a request that fails is released, because DeepSeek
-// bills only the ones that succeed.
+// Each tool is limited to five requests a second per account (fetch also per site) and billed ¥5 per thousand
+// successful requests to this platform's yuan account ($0.75 on the English page) — a 200 with a result: a search with
+// at least one row, a fetch with the page's text. The limit is held here by one pacer per tool for the whole process;
+// the bill is booked like a model call (`reserveGatewaySpend`, purpose `web-search`), and a request that fails or finds
+// nothing is released, because DeepSeek bills only the ones that produce a result.
 import { createHash } from "node:crypto";
 import { priceUsage } from "@evimed/domain";
 import { GatewaySpendRefusal, reserveGatewaySpend } from "./gatewaySpend.mjs";
@@ -42,7 +43,7 @@ const API_HOST = "api.deepseek.com";
 
 /** How a tool request ended, for the operator's metrics; a closed list so the label set stays closed. */
 export const DEEPSEEK_TOOL_OUTCOMES = Object.freeze([
-  "ok", "shed", "budget", "unrecordable", "rate_limited", "content_refused", "timeout", "refused", "upstream_error", "unavailable", "response_invalid",
+  "ok", "empty", "shed", "budget", "unrecordable", "rate_limited", "content_refused", "timeout", "refused", "upstream_error", "unavailable", "response_invalid",
 ]);
 
 /** Why a tool request gave no answer. `outcome` is one of `DEEPSEEK_TOOL_OUTCOMES`; `status` is DeepSeek's HTTP status, 0 when none came. */
@@ -219,8 +220,9 @@ export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = n
   /**
    * One request: paced, reserved, sent, and its reservation closed by how it ended.
    * @param {"search" | "fetch"} tool @param {Record<string, unknown>} body @param {any} caller @param {AbortSignal} signal
+   * @param {(payload: any) => boolean} billable whether a 200's answer is one DeepSeek bills
    */
-  async function call(tool, body, caller, signal) {
+  async function call(tool, body, caller, signal, billable) {
     try {
       try {
         await pacers[tool].acquire("deepseek", { signal });
@@ -266,11 +268,24 @@ export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = n
         await close((ledger) => ledger.release(caller.userId, reservation.id, code));
         throw new DeepSeekToolError(outcomeOfStatus(response.status), `DeepSeek's ${tool} answered HTTP ${response.status}.`, response.status);
       }
-      // A 2xx is a request DeepSeek counts as served and bills, whether or not its body is usable.
-      await close((ledger) => ledger.settleModel(caller.userId, reservation.id, {
-        usage: { cacheHitTokens: 0, cacheMissTokens: 0, completionTokens: 0 }, actualCost: price.cost, priced: price.priced,
-      }));
-      return await boundedJson(response);
+      let payload;
+      try {
+        payload = await boundedJson(response);
+      } catch (error) {
+        // A 200 whose body cannot be read: DeepSeek may have counted it as a result, so it may be billed.
+        await close((ledger) => ledger.markUncertain(caller.userId, reservation.id, "response_usage_missing", { estimatedCost: price.cost }));
+        throw error;
+      }
+      // DeepSeek bills a 200 that produced a result — a search with at least one row, a fetch with the page's text —
+      // and nothing else: "请求失败、搜索无结果或超时不计费" (the Search and Fetch guide, read 2026-10-17).
+      if (billable(payload)) {
+        await close((ledger) => ledger.settleModel(caller.userId, reservation.id, {
+          usage: { cacheHitTokens: 0, cacheMissTokens: 0, completionTokens: 0 }, actualCost: price.cost, priced: price.priced,
+        }));
+      } else {
+        await close((ledger) => ledger.release(caller.userId, reservation.id, "provider_no_result"));
+      }
+      return payload;
     } catch (error) {
       if (error instanceof DeepSeekToolError) outcomes[tool][error.outcome] += 1;
       throw error;
@@ -289,12 +304,13 @@ export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = n
      * @param {{ query: string, limit: number }} request @param {{ caller: any, signal: AbortSignal }} context
      */
     async search(request, { caller, signal }) {
-      const payload = await call("search", { query: request.query, count: Math.min(MAX_SEARCH_COUNT, Math.max(1, request.limit)) }, caller, signal);
+      const payload = await call("search", { query: request.query, count: Math.min(MAX_SEARCH_COUNT, Math.max(1, request.limit)) }, caller, signal,
+        (answer) => Array.isArray(answer?.results) && answer.results.length > 0);
       if (!Array.isArray(payload?.results)) {
         outcomes.search.response_invalid += 1;
         throw new DeepSeekToolError("response_invalid", "DeepSeek's search answer carried no results.", 200);
       }
-      outcomes.search.ok += 1;
+      outcomes.search[payload.results.length ? "ok" : "empty"] += 1;
       return payload.results.map(searchRow).sort((left, right) => right.rerankScore - left.rerankScore);
     },
 
@@ -304,10 +320,11 @@ export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = n
      * @returns {Promise<{ title: string, content: string }>}
      */
     async fetch(url, { caller, signal }) {
-      const payload = await call("fetch", { url }, caller, signal);
-      if (typeof payload?.content !== "string" || !payload.content.trim()) {
-        outcomes.fetch.response_invalid += 1;
-        throw new DeepSeekToolError("response_invalid", "DeepSeek's fetch answer carried no text.", 200);
+      const readable = (/** @type {any} */ answer) => typeof answer?.content === "string" && answer.content.trim().length > 0;
+      const payload = await call("fetch", { url }, caller, signal, readable);
+      if (!readable(payload)) {
+        outcomes.fetch.empty += 1;
+        throw new DeepSeekToolError("empty", "DeepSeek's fetch answer carried no text.", 200);
       }
       outcomes.fetch.ok += 1;
       return { title: typeof payload.title === "string" ? payload.title : "", content: payload.content };
@@ -334,7 +351,7 @@ export function deepseekToolMetricFamilies(stats) {
   return [
     {
       name: "open_science_deepseek_tool_requests_total",
-      help: "Requests to DeepSeek's Search (the web-search gateway) and Fetch (web_read's second reader), by how they ended. Only ok is billed.",
+      help: "Requests to DeepSeek's Search (the web-search gateway) and Fetch (web_read's second reader), by how they ended. Only ok is billed; empty is a 200 with no result.",
       type: "counter",
       series: /** @type {const} */ (["search", "fetch"]).flatMap((tool) => DEEPSEEK_TOOL_OUTCOMES.map((outcome) => ({ value: stats.outcomes[tool][outcome] ?? 0, labels: { tool, outcome } }))),
     },

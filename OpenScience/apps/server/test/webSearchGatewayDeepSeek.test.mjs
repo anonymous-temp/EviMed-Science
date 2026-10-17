@@ -159,7 +159,7 @@ test("a 429, a 5xx, a timeout or a refusal from DeepSeek is a thinner answer tha
 
 test("each search is reserved at its per-request price as web-search and settled on success; a failure is released, a lost answer uncertain", async () => {
   const price = priceUsage({ resourceType: "tool-request", tool: "deepseek-search", requests: 1, peak: true }).cost;
-  assert.equal(price, 0.00506168);
+  assert.equal(price, 0.005, "¥5 per thousand successful requests");
   let ledger = fakeLedger();
   let res = await search({ ...withDeepSeek, userDailySpendLimit: 20, userRunSpendLimit: 5 }, upstreams(answer(recorded["search-basic"].body)).fetchImpl, { query: "q" }, { usageLedger: ledger });
   assert.equal(res.statusCode, 200);
@@ -184,6 +184,15 @@ test("each search is reserved at its per-request price as web-search and settled
     res = await search(withDeepSeek, upstreams(answer(recorded["search-too-long"].body, status)).fetchImpl, { query: "q" }, { usageLedger: ledger });
     assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["release", code]], `HTTP ${status}: DeepSeek bills only a successful request`);
   }
+  // A 200 with no result is not billed either ("搜索无结果…不计费"); a 200 whose body cannot be read may have been.
+  ledger = fakeLedger();
+  res = await search(withDeepSeek, upstreams(answer({ results: [] })).fetchImpl, { query: "q" }, { usageLedger: ledger });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["release", "provider_no_result"]]);
+  assert.deepEqual(res.json().data.unresponsiveEngines, [], "an empty answer is an answer");
+  ledger = fakeLedger();
+  await search(withDeepSeek, upstreams({ ...answer({}), text: async () => "<html>gateway</html>" }).fetchImpl, { query: "q" }, { usageLedger: ledger });
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["uncertain", "response_usage_missing"]]);
   ledger = fakeLedger();
   await search(withDeepSeek, upstreams(() => { throw new TypeError("socket hang up"); }).fetchImpl, { query: "q" }, { usageLedger: ledger });
   assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["uncertain", "provider_response_incomplete"]]);
