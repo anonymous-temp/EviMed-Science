@@ -146,7 +146,8 @@ export function readPreset(text) {
     if (!entry) continue;
     const expression = entry[1];
     const preset = /EVIMED_PRESET_SKILLS_DIR \+ '\/([a-z0-9-]+)(\/skills)?'/.exec(expression);
-    if (preset) { roots.push({ id: preset[1], mount: preset[1] + (preset[2] ?? ""), gate: null }); continue; }
+    // The GEO method pack is a root only in the runtime of a 「循证 GEO」 project (the preset reads EVIMED_GEO_SKILLS).
+    if (preset) { roots.push({ id: preset[1], mount: preset[1] + (preset[2] ?? ""), gate: /EVIMED_GEO_SKILLS/.test(expression) ? "geoProject" : null }); continue; }
     if (/EVIMED_LOOPX_ROOT/.test(expression)) { roots.push({ id: "loopx", mount: "loopx/skills", gate: "loopxEnabled" }); continue; }
     if (/EVIMED_PERSONAL_SKILLS_DIR/.test(expression)) { roots.push({ id: "personal", mount: "personal-skills", gate: null }); continue; }
     if (/EVIMED_PLATFORM_SKILLS_DIR/.test(expression)) { roots.push({ id: "platform-learned", mount: "platform-skills", gate: null }); continue; }

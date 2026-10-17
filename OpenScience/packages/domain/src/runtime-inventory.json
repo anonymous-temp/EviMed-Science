@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "ec6158f44c012a52fca1cfe7d375c9933dc1cb8343763d11c7591bba9811f906",
+    "sha256": "9616277b286523ae1cc9cfa0b468a90472980689db1746f4406c570b2d66d2b7",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1541,7 +1541,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "fee4cb1d38ecf792ae3cfe0568b9371cc893b23f0c9fb1855f0d300a6bb097fa",
+    "sha256": "f3c43acbff15a991b910c72d3966ce922c7d70c438e0a7d28b1a0d627eb9b3b5",
     "rows": [
       {
         "id": "persona",
@@ -1802,7 +1802,7 @@
     {
       "id": "geo-private",
       "mount": "geo-private/skills",
-      "gate": null,
+      "gate": "geoProject",
       "kind": "private-index",
       "source": "runtime/skills/geo-private/geo-pack-index.json"
     },

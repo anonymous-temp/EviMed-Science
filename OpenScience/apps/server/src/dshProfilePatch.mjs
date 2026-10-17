@@ -654,7 +654,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -674,6 +674,10 @@ export function runtimeEnvironment(input) {
       .map(([id, name]) => [name, disabledPlugins.has(id) ? "0" : "1"])),
     EVIMED_LOOPX_ENABLED: input.loopxEnabled === false ? "0" : "1",
     EVIMED_LOOPX_ROOT: "/opt/evimed/loopx",
+    // Whether this runtime is a 「循证 GEO」 project's, and so carries the GEO method pack as a skill root. Per project, unlike
+    // LoopX's switch above, and always sent: absent it reads as off, which is the right answer for every other runtime, but
+    // "the control plane said no" is a value the preset reads rather than a name it failed to find.
+    EVIMED_GEO_SKILLS: input.geoSkills === true ? "1" : "0",
     LOOPX_USAGE_PING: "0",
     DO_NOT_TRACK: "1",
     LOOPX_BIN: "/opt/evimed/venv/bin/loopx",

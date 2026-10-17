@@ -444,7 +444,7 @@ export function controllerLaunchPlanIsScoped(source) {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills"].sort();
   return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
     && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
     && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
@@ -456,6 +456,9 @@ export function controllerLaunchPlanIsScoped(source) {
     // The memory gateway is the fourth endpoint of the same kind: an absent field reads as empty, anything else
     // must be exactly the controller's own configured address.
     && /constmemoryGatewayUrl=payload\.memoryGatewayUrl\?\?["']["'];if\(typeofmemoryGatewayUrl!==["']string["']\|\|\(memoryGatewayUrl!==["']["']&&memoryGatewayUrl!==memoryGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_memory_gateway_invalid["'],[^;]+;\}/.test(launch)
+    // The GEO method pack flag is a boolean or absent and nothing else: one of the image's own read-only directories is
+    // among the session's skill roots or it is not, and no caller-owned path, environment or mount can ride on it.
+    && /constgeoSkills=payload\.geoSkills\?\?false;if\(typeofgeoSkills!==["']boolean["']\)\{throwcontrollerFailure\(400,["']runtime_controller_geo_skills_invalid["'],[^;]+;\}/.test(launch)
     // The v6 addition is one typed, closed configuration object, not generic
     // caller-owned environment, mounts, images or Docker arguments.
     && /import\{validatePluginConfig\}from["']\.\/pluginService\.mjs["'];/.test(compact)
@@ -468,10 +471,10 @@ export function controllerLaunchPlanIsScoped(source) {
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {

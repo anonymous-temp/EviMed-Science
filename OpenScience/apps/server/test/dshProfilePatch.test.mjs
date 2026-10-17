@@ -169,6 +169,13 @@ test("the patch only names rows that exist in the host composition", async () =>
   assert.ok(insertedHere.includes("mcp-evimed"), "the MCP client is inserted, since nothing else mounts it");
 });
 
+test("the GEO method pack switch is always sent, and is on only for a project that is a GEO project's", () => {
+  assert.equal(runtimeEnvironment(input).EVIMED_GEO_SKILLS, "0");
+  assert.equal(runtimeEnvironment({ ...input, geoSkills: false }).EVIMED_GEO_SKILLS, "0");
+  assert.equal(runtimeEnvironment({ ...input, geoSkills: true }).EVIMED_GEO_SKILLS, "1");
+  assert.equal(runtimeEnvironment({ ...input, geoSkills: "1" }).EVIMED_GEO_SKILLS, "0", "a truthy string is not the control plane's yes");
+});
+
 test("every deployment value the preset reads is a value the container is given", async () => {
   // The preset's `!!js` expressions and this mapping are one contract in two
   // files. A name on one side only leaves a plugin on its default, silently.
