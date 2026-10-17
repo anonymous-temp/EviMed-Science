@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router";
  *  - `?group=<id>` — the question group (`ClusterDrawer`). Every place a group's name appears is a link to this address on the
  *    page it is on; a page that cannot host the drawer sends the link to 问题与回答, which can.
  *  - `?action=<key>` — one action (`ActionDrawer`), on 行动.
+ *  - `?error=<claim key>` — one wrong claim (`ErrorDrawer`), on 准确与安全.
  *  - `?engine=<id>` — the engine in view: the engine column a drawer rests on, and a tab's own engine filter.
  *
  * A page's own filters are other words (`cluster`, `pool`, `show` …) so that a link meaning "this group's drawer" and one meaning
@@ -15,6 +16,7 @@ import { useSearchParams } from "react-router";
  */
 export const GEO_GROUP_PARAM = "group";
 export const GEO_ACTION_PARAM = "action";
+export const GEO_ERROR_PARAM = "error";
 export const GEO_ENGINE_PARAM = "engine";
 /** A tab's own narrowing to one question group (a filter, not the drawer). */
 export const GEO_CLUSTER_FILTER_PARAM = "cluster";
@@ -37,14 +39,17 @@ export function useGeoDrawerAddress() {
   const [params, setParams] = useSearchParams();
   const group = params.get(GEO_GROUP_PARAM);
   const action = params.get(GEO_ACTION_PARAM);
+  const error = params.get(GEO_ERROR_PARAM);
   const engine = params.get(GEO_ENGINE_PARAM);
-  const open = useCallback((next: { group?: string | null; action?: string | null }) => {
+  const open = useCallback((next: { group?: string | null; action?: string | null; error?: string | null }) => {
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.delete(GEO_GROUP_PARAM);
       copy.delete(GEO_ACTION_PARAM);
+      copy.delete(GEO_ERROR_PARAM);
       if (next.group) copy.set(GEO_GROUP_PARAM, next.group);
       if (next.action) copy.set(GEO_ACTION_PARAM, next.action);
+      if (next.error) copy.set(GEO_ERROR_PARAM, next.error);
       return copy;
     });
   }, [setParams]);
@@ -53,10 +58,11 @@ export function useGeoDrawerAddress() {
       const copy = new URLSearchParams(previous);
       copy.delete(GEO_GROUP_PARAM);
       copy.delete(GEO_ACTION_PARAM);
+      copy.delete(GEO_ERROR_PARAM);
       return copy;
     }, { replace: true });
   }, [setParams]);
-  return { group, action, engine, open, close };
+  return { group, action, error, engine, open, close };
 }
 
 /** One parameter of the address as state: read, and written in place (a filter is not a step in the history). */

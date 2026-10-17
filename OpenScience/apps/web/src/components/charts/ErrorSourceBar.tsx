@@ -6,7 +6,7 @@ import { ShareBar, type ShareSegment } from "@/components/charts/ShareBar";
  * answers cited nothing at all. A bar over one whole — the errors — in counts.
  *
  * Read from the trace each error already carries (`citedSource.basis` and `.attribute`); the counting is `errorSourceCounts`
- * in `components/geo/spine/errorModel.ts`.
+ * in `components/geo/spine/errorModel.ts`. With `onSelect` each legend entry narrows the list beside the chart to its errors.
  */
 export interface ErrorSourceCounts {
   traced: number;
@@ -14,11 +14,37 @@ export interface ErrorSourceCounts {
   noRetrieval: number;
 }
 
-export function ErrorSourceBar({ counts, className }: { counts: ErrorSourceCounts; className?: string }) {
+/** The three, as the page says them: short enough for a legend, whole enough to stand alone on a row. */
+export const ERROR_SOURCE_WORDS: Readonly<Record<keyof ErrorSourceCounts, string>> = Object.freeze({
+  traced: "能追到被引用的页面",
+  unattributable: "没有对应到某个被引用的页面",
+  noRetrieval: "这条回答没有引用任何来源",
+});
+
+export function ErrorSourceBar({
+  counts,
+  selected,
+  onSelect,
+  className,
+}: {
+  counts: ErrorSourceCounts;
+  selected?: keyof ErrorSourceCounts | null;
+  onSelect?: (key: keyof ErrorSourceCounts | null) => void;
+  className?: string;
+}) {
   const segments: ShareSegment[] = [
-    { key: "traced", label: "能追到被引用的页面", value: counts.traced, tone: "own" },
-    { key: "unattributable", label: "没有对应到某个被引用的页面", value: counts.unattributable, tone: "rival-1" },
-    { key: "noRetrieval", label: "这条回答没有引用任何来源", value: counts.noRetrieval, tone: "quiet" },
+    { key: "traced", label: ERROR_SOURCE_WORDS.traced, value: counts.traced, tone: "own" },
+    { key: "unattributable", label: ERROR_SOURCE_WORDS.unattributable, value: counts.unattributable, tone: "rival-1" },
+    { key: "noRetrieval", label: ERROR_SOURCE_WORDS.noRetrieval, value: counts.noRetrieval, tone: "quiet" },
   ];
-  return <ShareBar label="讲错的说法的出处" segments={segments} format={(value) => `${Math.round(value)} 条`} className={className} />;
+  return (
+    <ShareBar
+      label="讲错的说法的出处"
+      segments={segments}
+      format={(value) => `${Math.round(value)} 条`}
+      selected={selected ?? null}
+      onSelect={onSelect ? (key) => onSelect(key as keyof ErrorSourceCounts | null) : undefined}
+      className={className}
+    />
+  );
 }

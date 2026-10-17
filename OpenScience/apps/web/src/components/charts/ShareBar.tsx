@@ -13,6 +13,9 @@ import { cn } from "@/lib/cn";
  * worth less than a readable sliver still shows, so “1 次” does not vanish.
  * The bar and its legend swatches keep their colours in a Windows contrast
  * theme (spec §10.9 rule 6): there the segments are told apart by nothing else.
+ *
+ * With `onSelect` each legend entry is a button of its own — the bar is the figure and its legend is the way into the rows it
+ * counts (a chart and the list beside it share one selection); the pressed one is `selected`, and pressing it again lets go.
  */
 
 export type ShareTone = "own" | "rival-1" | "rival-2" | "rival-3" | "quiet" | "s3" | "s2" | "s1";
@@ -40,6 +43,8 @@ export function ShareBar({
   segments,
   legend = true,
   format = (value: number) => String(Math.round(value)),
+  selected = null,
+  onSelect,
   className,
 }: {
   /** The whole this divides up, for assistive technology. */
@@ -48,6 +53,9 @@ export function ShareBar({
   /** The named segments under the bar; off where the row already names them. */
   legend?: boolean;
   format?: (value: number) => string;
+  /** The segment whose rows the list beside the bar is narrowed to. */
+  selected?: string | null;
+  onSelect?: (key: string | null) => void;
   className?: string;
 }) {
   const drawn = segments.filter((segment) => Number.isFinite(segment.value) && segment.value > 0);
@@ -74,13 +82,29 @@ export function ShareBar({
       </div>
       {legend && (
         <ul className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-          {drawn.map((segment) => (
-            <li key={segment.key} className="inline-flex items-center gap-1.5 text-caption text-text-2">
-              <span aria-hidden="true" data-forced-colors="preserve" className={cn("h-2 w-2 shrink-0 rounded-tag", TONE_CLASSES[segment.tone])} />
-              {segment.label}
-              <span className="tabular-nums text-text">{format(segment.value)}</span>
-            </li>
-          ))}
+          {drawn.map((segment) => {
+            const body = (
+              <>
+                <span aria-hidden="true" data-forced-colors="preserve" className={cn("h-2 w-2 shrink-0 rounded-tag", TONE_CLASSES[segment.tone])} />
+                {segment.label}
+                <span className="tabular-nums text-text">{format(segment.value)}</span>
+              </>
+            );
+            return (
+              <li key={segment.key} className="inline-flex items-center text-caption text-text-2">
+                {onSelect ? (
+                  <button
+                    type="button"
+                    aria-pressed={selected === segment.key}
+                    onClick={() => onSelect(selected === segment.key ? null : segment.key)}
+                    className={cn("-mx-1.5 inline-flex min-h-sm items-center gap-1.5 rounded px-1.5 hover:bg-surface-2", selected === segment.key && "bg-accent-soft")}
+                  >
+                    {body}
+                  </button>
+                ) : <span className="inline-flex items-center gap-1.5">{body}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

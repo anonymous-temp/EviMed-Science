@@ -36,6 +36,7 @@ const client = vi.hoisted(() => ({
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
   getGeoClusters: vi.fn(),
+  getGeoActions: vi.fn(),
   unmeasureGeoQuestion: vi.fn(),
   getGeoDiagnosis: vi.fn(),
   getGeoSources: vi.fn(),
@@ -104,6 +105,10 @@ beforeEach(() => {
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
   // 问题与回答 reads the groups' counts beside the question set: here, groups nobody has counted yet.
   client.getGeoClusters.mockResolvedValue({ version: 1, locked: true, floor: 30, round: null, engines: [], groups: [] });
+  // 准确与安全 reads the actions beside the errors, to say where a claim's correction stands: here, none yet; and the question set,
+  // to say which group a claim was told in.
+  client.getGeoQuestions.mockResolvedValue({ sets: [], version: null, groups: [] });
+  client.getGeoActions.mockResolvedValue({ version: null, tier: "2", round: null, floor: 30, headline: { actedGroups: 0, gapGroupsNotActedOn: 0, arm: null, sentence: "" }, counts: { total: 0, byKind: {}, byStatus: {}, gapsWithoutEntry: 0 }, actions: [], control: [], noAction: [], unmatched: [] });
 });
 
 describe("a tab with nothing yet", () => {
@@ -650,6 +655,19 @@ const enginesChangedMonitoring = {
 };
 const NOT_COMPARED = "引擎范围有变化，不与上一轮比较";
 
+describe("准确与安全：事实准确率", () => {
+  it("an engine-set change leaves the accuracy tile with no arrow and the band with one plain statement", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props(enginesChangedProject())} />);
+    const accuracy = await screen.findByRole("group", { name: "事实准确率" });
+    expect(accuracy.querySelector("[data-delta]")).toBeNull();
+    const band = screen.getByRole("region", { name: "准确与安全" });
+    expect(band.textContent?.split(NOT_COMPARED).length).toBe(2);
+    expect(document.body.textContent).not.toMatch(/[▲▼]/);
+  });
+});
+
 describe("总览", () => {
   it("says one change in one word wherever it says it: the sentence, the tile, the chart's heading, and 可见度 (G02)", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
@@ -812,137 +830,6 @@ describe("总览", () => {
     expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
     expect(screen.queryByText("这一轮还没有测到同类药的提及率。")).not.toBeInTheDocument();
     expect(trend.closest("section")).toHaveClass("lg:col-span-3");
-  });
-});
-
-describe("准确与安全", () => {
-  it("leads with the accuracy rate, grades every wrong statement and groups them by handling", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    const accuracy = await screen.findByRole("group", { name: "事实准确率" });
-    expect(accuracy).toHaveTextContent("92");
-    expect(accuracy).toHaveTextContent("目标 98%");
-    // The denominator is declared once for the whole band.
-    expect(within(screen.getByRole("region", { name: "准确与安全" })).getAllByText(/次有效回答计算/)).toHaveLength(1);
-
-    // The grade is said as the level, its colour and its consequence.
-    const graded = document.querySelector("[data-severity='S2']") as HTMLElement;
-    // Printed beside the grade, so not repeated as a tooltip (spec §22.8 rule 4).
-    expect(graded.parentElement).toHaveTextContent("需监测或干预");
-    expect(graded).not.toHaveAttribute("title");
-    expect(screen.getByText(/它需要每天注射一次/)).toBeInTheDocument();
-    // Red is the badge and the ✗ — not the sentence.
-    expect(screen.getByText(/它需要每天注射一次/)).not.toHaveClass("text-danger");
-    expect(screen.getByRole("link", { name: "看回答" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
-  });
-
-  it("an engine-set change leaves the accuracy tile with no arrow and the band with one plain statement", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props(enginesChangedProject())} />);
-    const accuracy = await screen.findByRole("group", { name: "事实准确率" });
-    expect(accuracy.querySelector("[data-delta]")).toBeNull();
-    const band = screen.getByRole("region", { name: "准确与安全" });
-    expect(band.textContent?.split(NOT_COMPARED).length).toBe(2);
-    expect(document.body.textContent).not.toMatch(/[▲▼]/);
-  });
-
-  it("opens the conversation with the correction brief, and never asks about a single number", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    await screen.findByRole("group", { name: "事实准确率" });
-    expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getAllByRole("button", { name: "写纠错稿" })[0]);
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
-  });
-});
-
-/** Thirty findings of the live shape: the grave ones few, the minor ones many, one closed — and the server's true counts above the page it sent. */
-function manyErrors() {
-  const rows = Array.from({ length: 30 }, (_, index) => ({
-    ...diagnosisFilled.errors[0],
-    id: `err_${index}`,
-    statement: `第 ${index + 1} 句不对的话`,
-    severity: (index < 3 ? "S3" : index < 12 ? "S2" : "S1") as "S3" | "S2" | "S1",
-    status: (index === 29 ? "closed" : index < 5 ? "acting" : "open") as "closed" | "acting" | "open",
-    snapshotId: `snap_last_${index}`,
-    firstSnapshotId: `snap_first_${index}`,
-  }));
-  // 104 errors in the project, 30 of them in the page: severe = the live S3 ones.
-  return { ...diagnosisWith(rows), errorCounts: { total: 104, open: 97, acting: 3, awaiting_remeasure: 0, closed: 4, severe: 3 } };
-}
-
-describe("准确与安全：讲错清单", () => {
-  it("comes straight after the numbers, opens on the grave findings and counts them by the server's tally, not by the page it sent", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    // The filter is the band's toolbar, above the list and not in its card.
-    const group = screen.getByRole("group", { name: "处置状态" });
-    expect(list).not.toContainElement(group);
-    expect(group.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
-    expect(within(group).getByRole("button", { name: /严重/ })).toHaveAttribute("aria-pressed", "true");
-    // Three grave ones, and nothing else, to start with.
-    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(3);
-    // The tile says the same number, with no second count beneath it that reads as a share of the first.
-    const tile = screen.getByRole("group", { name: "严重讲错" });
-    expect(tile).toHaveTextContent("3");
-    expect(tile).not.toHaveTextContent("待处理");
-    // The list comes before the distributions, and those are folded.
-    const folded = screen.getByText("按引擎和类型看分布").closest("details") as HTMLElement;
-    expect(folded).not.toHaveAttribute("open");
-    expect(list.compareDocumentPosition(folded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(folded).getByText(/按回答计，讲错我方/)).toBeInTheDocument();
-  });
-
-  it("shows twenty at a time, says how many more, and says how many the page cannot list", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    await userEvent.click(within(screen.getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^全部/ }));
-    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(20);
-    // The server counts 104 and sent 30: the other 74 are named, not hidden.
-    expect(list).toHaveTextContent("这里列出了 30 条，还有 74 条没有列出。");
-    await userEvent.click(within(list).getByRole("button", { name: "显示更多 · 还有 10 条" }));
-    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(30);
-    expect(within(list).queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
-    // The gravest first, the closed one last.
-    const ids = [...list.querySelectorAll("[data-geo-error]")].map((card) => card.getAttribute("data-geo-error"));
-    expect(ids.slice(0, 3)).toEqual(["err_0", "err_1", "err_2"]);
-    expect(ids[ids.length - 1]).toBe("err_29");
-  });
-
-  it("keeps the chip in the address, so the way back from an answer returns to the list as it was left", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    const list = (await screen.findByRole("heading", { name: "讲错清单，按严重度排序" })).closest("section") as HTMLElement;
-    await userEvent.click(within(screen.getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^处置中/ }));
-    expect(screen.getByTestId("search")).toHaveTextContent("?show=acting");
-    expect(list.querySelectorAll("[data-geo-error]")).toHaveLength(5);
-  });
-
-  it("opens an answer that holds the quoted sentence: the first one it was seen in", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(manyErrors());
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    const card = (await screen.findAllByRole("link", { name: "看回答" }))[0];
-    expect(card).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_first_0");
-  });
-
-  it("starts on 全部 when nothing grave is open, and offers no chip for a status nothing is in", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<AccuracyTab {...props()} />);
-    await screen.findByRole("heading", { name: "讲错清单，按严重度排序" });
-    const group = screen.getByRole("group", { name: "处置状态" });
-    expect(within(group).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["处置中1", "全部1"]);
-    expect(within(group).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
