@@ -180,7 +180,10 @@ requireBoundary(/^ {2}evimed-knowledge-plugin:$/m.test(knowledgeOverlay) && !/^\
 requireBoundary(/boolEnv\("OPEN_SCIENCE_REVIEW_ENABLED", false\)/.test(config), "review_default_off", "The independent reviewer must ship switched off.");
 requireBoundary(rootPackage.scripts?.["audit:saas-alignment"]?.includes("audit-saas-alignment.mjs"), "audit_script", "Root package lacks the SaaS alignment audit.");
 requireBoundary(rootPackage.scripts?.["ci:web"]?.includes("audit:saas-alignment"), "audit_ci", "SaaS alignment audit is not release-gated.");
-requireBoundary(Object.keys(curated.policy?.delivery?.executable ?? {}).length === 38, "curated_38", "All 38 curated skills must have executable delivery contracts.");
+// The curated inventory is the one list of its skills: each has an executable delivery contract and no contract stands without a skill.
+const curatedSkills = (curated.skills ?? []).map((skill) => skill.name).sort();
+const curatedContracts = Object.keys(curated.policy?.delivery?.executable ?? {}).sort();
+requireBoundary(curatedSkills.length > 0 && JSON.stringify(curatedSkills) === JSON.stringify(curatedContracts), "curated_delivery_contracts", `All ${curatedSkills.length} curated skills must have executable delivery contracts.`);
 requireBoundary(Object.keys(office.policy?.delivery?.executable ?? {}).length === 4 && office.license === "MIT", "office_4", "All four first-party MIT Office exporters must remain executable.");
 requireBoundary(
   /humanReviewRequired/.test(drugCompiler) &&

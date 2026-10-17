@@ -374,8 +374,8 @@ verify_tools() {
 }
 
 # Smoke every shared curated-skill implementation in the production dependency
-# image. The two dedicated matplotlib/statistical-power chains are exercised in
-# the next phase.
+# image. The skills with entrypoints of their own (today matplotlib and
+# statistical-power) are exercised in the next phase.
 curated_smoke() {
   python3 - <<'PY'
 import importlib.util
@@ -386,13 +386,20 @@ import tempfile
 root = pathlib.Path("/usr/local/share/evimed/skills/curated-scientific")
 inventory = json.loads((root / "inventory.json").read_text(encoding="utf-8"))
 contracts = inventory["policy"]["delivery"]["executable"]
+listed = {skill["name"] for skill in inventory["skills"]}
 shared = {
     name: contract
     for name, contract in contracts.items()
     if "../_runtime/execute_skill.py" in contract["entrypoints"]
 }
-if len(contracts) != 38 or len(shared) != 36:
+# The inventory is the one list: every skill it names has a contract and no contract names a skill it does not. The
+# skills with entrypoints of their own are the ones `office_smoke` runs by name (skillPacks.test.mjs holds the two lists equal).
+if not listed or set(contracts) != listed:
     raise SystemExit("curated delivery inventory is incomplete")
+for name in sorted(set(contracts) - set(shared)):
+    for entrypoint in contracts[name]["entrypoints"]:
+        if not (root / name / entrypoint).is_file():
+            raise SystemExit(f"curated entrypoint missing: {name}/{entrypoint}")
 
 spec = importlib.util.spec_from_file_location("evimed_curated_executor", root / "_runtime/execute_skill.py")
 module = importlib.util.module_from_spec(spec)
@@ -413,7 +420,7 @@ with tempfile.TemporaryDirectory() as temporary:
             path = output_dir / artifact
             if not path.is_file() or path.stat().st_size == 0:
                 raise SystemExit(f"curated smoke artifact missing: {name}/{artifact}")
-print(f"smoked {len(shared)} shared curated skill implementations")
+print(f"smoked {len(shared)} shared curated skill implementations; {len(contracts) - len(shared)} with their own entrypoints are smoked next")
 PY
 }
 

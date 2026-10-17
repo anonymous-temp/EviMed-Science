@@ -677,7 +677,7 @@ async function checkScientificCapabilityDelivery() {
   if (
     curatedDelivery.contractVersion === 1 &&
     curatedDelivery.defaultEnabledTier === "executable" &&
-    executable.length === 38 &&
+    executable.length > 0 &&
     conditional.length === 0 &&
     instructionOnly.length === 0 &&
     JSON.stringify(tiered) === JSON.stringify(inventoried) &&
@@ -701,17 +701,17 @@ async function checkScientificCapabilityDelivery() {
     // Per-launch filtering has no successor because there is nothing left to
     // filter: what ships is what was smoked.
     inRuntimeImage(/inventory\["policy"\]\["delivery"\]\["executable"\]/) &&
-    inRuntimeImage(/len\(contracts\) != 38/) &&
-    inRuntimeImage(/len\(shared\) != 36/) &&
+    inRuntimeImage(/set\(contracts\) != listed/) &&
+    inRuntimeImage(/curated entrypoint missing/) &&
     inRuntimeImage(/Smoke every shared curated-skill implementation in the production dependency image/) &&
     // And the pack the build smoked is the pack the kernel is given: copied
     // into the preset root the kernel actually reads, read-only.
     inRuntimeImage("COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific") &&
     inRuntimeImage(/presets\/evimed-universal\/skills\/curated-scientific/) &&
     inRuntimeImage(/chmod -R a-w \/opt\/evimed\/socket/) &&
-    /all 38 curated scientific skills have an executable, dependency-pinned, smoke-tested delivery contract/.test(skillTests)
+    /every curated scientific skill has an executable, dependency-pinned, smoke-tested delivery contract/.test(skillTests)
   ) {
-    pass("curated_skill_delivery_contract", "All 38 curated scientific skills have executable entrypoints, pinned runtime dependencies, artifact contracts, build-time delivery-contract enforcement, and read-only delivery into the preset root the kernel reads.", {
+    pass("curated_skill_delivery_contract", `All ${inventoried.length} curated scientific skills have executable entrypoints, pinned runtime dependencies, artifact contracts, build-time delivery-contract enforcement, and read-only delivery into the preset root the kernel reads.`, {
       inventoried: inventoried.length,
       executable: executable.length,
       conditional: conditional.length,
