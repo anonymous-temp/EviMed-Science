@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "about": [
+    "What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.",
+    "An entry matches one view (`name@desktop`, `name@phone`, or `name@*`) and one finding: `rule` names a measured rule (`type-pairs`, `tall-page`, `rows-ceiling`, …) and `max` is the largest value accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.",
+    "Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both)."
+  ],
+  "entries": []
+}
