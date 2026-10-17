@@ -94,7 +94,8 @@ describe("an event", () => {
     expect(within(others).getAllByRole("listitem").map((row) => row.querySelector("p")?.textContent)).toEqual(["缓释脂质体注射剂在大鼠中实现持续神经阻滞"]);
     // 一手材料 is the first thing under 概要.
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
-    expect(headings.slice(0, 3)).toEqual(["概要", "一手材料1", "其他报道1"]);
+    expect(headings.slice(0, 3)).toEqual(["概要", "一手材料", "其他报道"]);
+    expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
     expect(first[0].querySelector(".bg-accent")).not.toBeNull();
     expect(within(others).getByRole("listitem").querySelector(".bg-accent")).toBeNull();
     expect(first[0]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·原文");
@@ -105,12 +106,14 @@ describe("an event", () => {
     expect(screen.getByRole("link", { name: "同类缓释制剂的早先报道" })).toHaveAttribute("href", "/app/frontier/events/ev0");
   });
 
-  it("says in one line that nobody's own text is among the reports, and 「暂无」 in the strip", async () => {
+  it("names the group 「报道」 when nobody's own text is among the reports, and says 「暂无」 in the strip", async () => {
     const reports = event().items.map((item) => ({ ...item, role: "report" as const }));
     client.fetchFrontierEvent.mockResolvedValue(event({ items: reports, hasPrimary: false, primary: null }));
     renderEvent();
-    const heading = await screen.findByRole("heading", { level: 2, name: /^报道\s*2$/ });
-    expect(heading.closest("section")).toHaveTextContent("暂无一手材料，以下均为转述报道。");
+    const heading = await screen.findByRole("heading", { level: 2, name: "报道" });
+    expect(heading.parentElement).toHaveTextContent("报道2");
+    // The strip says nobody's own text is among them; the group does not say it a second time.
+    expect(screen.queryByText("暂无一手材料，以下均为转述报道。")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /其他报道/ })).not.toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "报道" })).getAllByRole("listitem")).toHaveLength(2);
@@ -217,15 +220,15 @@ describe("an event with many reports", () => {
     renderEvent();
     await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
     expect((await screen.findAllByRole("menuitemradio")).map((entry) => entry.textContent)).toEqual(["全部来源", "期刊", "媒体"]);
-    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*11$/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道11");
     await userEvent.click(screen.getByRole("menuitemradio", { name: "期刊" }));
     // 12 reports: journals are 0, 3, 6, 9; the first one is the primary.
-    expect(screen.getByRole("heading", { level: 2, name: /^一手材料\s*1$/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*3$/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
+    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道3");
     expect(within(screen.getByRole("list", { name: "其他报道" })).getAllByRole("listitem")).toHaveLength(3);
     await userEvent.click(screen.getByRole("button", { name: "全部来源：期刊" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "全部来源" }));
-    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*11$/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道11");
   });
 
   it("hides a group the chosen kind has nothing in, rather than drawing an empty heading", async () => {
@@ -234,13 +237,13 @@ describe("an event with many reports", () => {
     await userEvent.click(await screen.findByRole("button", { name: "全部来源" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "媒体" }));
     expect(screen.queryByRole("heading", { name: /一手材料/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: /^其他报道\s*8$/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "其他报道" }).parentElement).toHaveTextContent("其他报道8");
   });
 
   it("offers no menu when all the reports are of one kind", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
     renderEvent();
-    await screen.findByRole("heading", { level: 2, name: /^其他报道\s*11$/ });
+    await screen.findByRole("heading", { level: 2, name: "其他报道" });
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
   });
 });

@@ -86,10 +86,10 @@ describe("evidence zone directory", () => {
     expect(await screen.findByText("暂无证据专区")).toBeInTheDocument();
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "急诊{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "关注" })); expect(await screen.findByRole("button", { name: "取消关注" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "加载更多" })); expect(await screen.findByRole("link", { name: "急诊药学" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多" })); expect(await screen.findByRole("link", { name: "急诊药学" })).toBeInTheDocument();
     expect(client.listEvidenceZones).toHaveBeenLastCalledWith("急诊", "next", undefined);
   });
-  it("offers 「申请选题」 as a header button only where the public pages are on, and opens it in a drawer with the official zones to choose from", async () => {
+  it("offers 「申请选题」 at the end of the list only where the public pages are on, and opens it in a drawer with the official zones to choose from", async () => {
     client.listEvidenceZones.mockResolvedValue({ items: [
       { ...zone, id: "o1", title: "房颤抗凝", kind: "official", state: "published" },
       { ...zone, id: "o2", title: "还没发布", kind: "official", state: "draft" },
@@ -103,10 +103,11 @@ describe("evidence zone directory", () => {
     features.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     mount();
     const header = (await screen.findByRole("heading", { level: 1, name: "证据专区" })).closest("header")!;
-    // Nothing of it is on the page until it is asked for; the page is the list.
+    // Nothing of it is on the page until it is asked for; the page is the list, and the way to ask is its last line (R19: it was a header button).
+    expect(within(header).queryByRole("button", { name: "申请选题" })).not.toBeInTheDocument();
     expect(topics.listTopicRequests).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "申请选题" })).not.toBeInTheDocument();
-    await userEvent.click(await within(header).findByRole("button", { name: "申请选题" }));
+    await userEvent.click(await screen.findByRole("button", { name: "申请选题" }));
     const drawer = await screen.findByRole("dialog", { name: "申请选题" });
     const choose = within(drawer).getByRole("combobox", { name: "关联专区（可选）" });
     expect(choose).toHaveTextContent("房颤抗凝");

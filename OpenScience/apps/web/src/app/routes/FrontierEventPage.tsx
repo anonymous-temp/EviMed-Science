@@ -14,12 +14,14 @@ import {
   type FrontierItem,
 } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageTitle } from "@/components/layout/PageTitle";
 import { Button, buttonClasses } from "@/components/ui/Button";
-import { FilterSelect } from "@/components/ui/FilterChips";
+import { Section } from "@/components/ui/Section";
+import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { Sparkline } from "@/components/frontier/Sparkline";
@@ -107,20 +109,27 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   }, [eventId, ready, attempt, navigate, location.state]);
 
   if (state.kind === "off") return <FrontierOffPage />;
+  // A page that is not there is a screen of its own — an icon, one sentence, the way on and the way back — not an empty box in the
+  // event's frame (R19, audit D C5).
+  if (state.kind === "not-offered" || state.kind === "missing") {
+    return state.kind === "not-offered" ? (
+      <StateScreen icon={CalendarClock} title="事件页还在准备" titleAs="h1" back={{ to: "/app/frontier", label: "回到前沿动态" }}>
+        <PageTitle page="事件" />
+      </StateScreen>
+    ) : (
+      <StateScreen icon={SearchX} title="这个事件已不存在" titleAs="h1"
+        action={<Link to="/app/frontier?view=hot" className={buttonClasses({ variant: "secondary" })}>看热榜</Link>}
+        back={{ to: "/app/frontier", label: "回到前沿动态" }}>
+        <PageTitle page="事件" />
+      </StateScreen>
+    );
+  }
   if (state.kind !== "ready") {
     return (
       <EventFrame title="事件">
         <div>
           {state.kind === "loading" && <FrontierSkeleton />}
           {state.kind === "error" && <LoadError message={state.message} onRetry={() => setAttempt((value) => value + 1)} />}
-          {state.kind === "not-offered" && (
-            <EmptyState icon={CalendarClock} title="事件页还在准备"
-              action={<Link to="/app/frontier" className={buttonClasses({ variant: "secondary" })}>回到前沿动态</Link>} />
-          )}
-          {state.kind === "missing" && (
-            <EmptyState icon={SearchX} title="这个事件已不存在"
-              action={<Link to="/app/frontier?view=hot" className={buttonClasses({ variant: "secondary" })}>看热榜</Link>} />
-          )}
         </div>
       </EventFrame>
     );
@@ -142,6 +151,7 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
     <PageShell
       title={title}
       documentTitle={`${title} · 前沿动态`}
+      titleVariant="document"
       width="read"
       back={(
         <nav aria-label="返回">
@@ -174,6 +184,11 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
   const heat = event.heat ?? null;
+  // From ten reports on, a kind of source narrows the list: the filter is one row over the groups it narrows, which stay where they
+  // are while it works (it was a menu on a row of its own, with no word for what it filters).
+  const sourceFilter = timeline.length >= 10 && sourceTypes.length > 1 ? (
+    <Toolbar label="筛选来源" filters={[{ kind: "select", label: "全部来源", allLabel: "全部来源", value: sourceType, options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }]} />
+  ) : null;
 
   return (
     <EventFrame
@@ -189,13 +204,16 @@ function EventBody({ event }: { event: FrontierEvent }) {
         </div>
       )}
     >
-      {Boolean(event.changes?.length) && <section aria-label="自上次阅读以来" className="space-y-2">
-        <h2 className="text-ui font-semibold text-text">自上次阅读以来</h2>
-        {event.changes?.map(change => <div key={change.id} className="text-ui">
-          <p className="text-text"><span className="text-accent">{change.kind === "added" ? "新增报道" : "内容更新"} · </span>{change.title}</p>
-          {change.summary && <p className="mt-1 text-text-2">{change.summary}</p>}
-        </div>)}
-      </section>}
+      {Boolean(event.changes?.length) && (
+        <Section title="自上次阅读以来" className="mt-0">
+          <div className="space-y-2">
+            {event.changes?.map(change => <div key={change.id} className="text-ui">
+              <p className="text-text"><span className="text-accent">{change.kind === "added" ? "新增报道" : "内容更新"} · </span>{change.title}</p>
+              {change.summary && <p className="mt-1 text-text-2">{change.summary}</p>}
+            </div>)}
+          </div>
+        </Section>
+      )}
       {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
         * the summary, where a reader weighing the event looks first. */}
       <div className="mt-6 flex flex-col gap-8">
@@ -217,9 +235,8 @@ function EventBody({ event }: { event: FrontierEvent }) {
         </aside>
 
         <div className="min-w-0 space-y-8">
-          <section aria-labelledby="event-digest">
-            <h2 id="event-digest" className="text-ui font-semibold text-text">概要</h2>
-            <p className={cn("mt-2 max-w-measure whitespace-pre-line text-ui", event.digest ? "text-text" : "text-text-3")}>{event.digest ?? "暂无综述"}</p>
+          <Section title="概要" className="mt-0">
+            <p className={cn("max-w-measure whitespace-pre-line text-ui", event.digest ? "text-text" : "text-text-3")}>{event.digest ?? "暂无综述"}</p>
             {event.latest && (
               <p className="mt-3 max-w-measure text-ui text-text-2">
                 <span className="mr-1.5 font-medium text-accent">最新</span>
@@ -227,25 +244,19 @@ function EventBody({ event }: { event: FrontierEvent }) {
                 {event.latest.at && <span className="text-text-3"> · {ago(event.latest.at)}</span>}
               </p>
             )}
-          </section>
+          </Section>
 
-          {timeline.length >= 10 && sourceTypes.length > 1 && (
-            <div>
-              <FilterSelect label="全部来源" allLabel="全部来源" value={sourceType}
-                options={sourceTypes.map((label) => ({ value: label, label }))} onChange={setSourceType} />
-            </div>
-          )}
+          {sourceFilter}
           {firstHand ? (
             <>
               <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} />
               <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
             </>
-          ) : <ReportGroup id="event-reports" title="报道" rows={visible} note="暂无一手材料，以下均为转述报道。" />}
+          ) : <ReportGroup id="event-reports" title="报道" rows={visible} />}
 
           {event.related.length > 0 && (
-            <section aria-labelledby="event-related">
-              <h2 id="event-related" className="text-ui font-semibold text-text">相关事件</h2>
-              <ul className="mt-2 space-y-2">
+            <Section title="相关事件" className="mt-0">
+              <ul className="space-y-2">
                 {event.related.map((related) => (
                   <li key={`${related.relation}-${related.id}`}>
                     <Link state={location.state} replace to={`/app/frontier/events/${encodeURIComponent(related.id)}`} className="text-ui text-text hover:text-accent">{related.title}</Link>
@@ -253,7 +264,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Section>
           )}
         </div>
       </div>
@@ -261,20 +272,15 @@ function EventBody({ event }: { event: FrontierEvent }) {
   );
 }
 
-/** A group of reports: its heading and count, the line that explains an absence, then the rows — nothing at all with no rows and no line. */
-function ReportGroup({ id, title, rows, note }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }>; note?: string }) {
-  if (rows.length === 0 && !note) return null;
+/** A group of reports: its heading and count, then the rows — nothing at all with no rows. */
+function ReportGroup({ id, title, rows }: { id: string; title: string; rows: Array<FrontierItem & { role: FrontierEventRole }> }) {
+  if (rows.length === 0) return null;
   return (
-    <section aria-labelledby={id}>
-      <h2 id={id} className="flex items-baseline gap-2">
-        <span className="text-ui font-semibold text-text">{title}</span>
-        <span className="text-caption tabular-nums text-text-3">{rows.length}</span>
-      </h2>
-      {note && <p className="mt-2 text-ui text-text-3">{note}</p>}
-      <ol aria-label={title} className="ml-1 mt-2 border-l border-border">
+    <Section title={title} count={rows.length} className="mt-0">
+      <ol id={id} aria-label={title} className="ml-1 border-l border-border">
         {rows.map((item) => <TimelineRow key={item.id} item={item} />)}
       </ol>
-    </section>
+    </Section>
   );
 }
 

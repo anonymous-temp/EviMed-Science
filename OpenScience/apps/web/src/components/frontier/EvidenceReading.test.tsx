@@ -137,3 +137,45 @@ describe("evidence reading", () => {
     expect(screen.getByText(/^更新于 10月1日/)).toBeInTheDocument();
   });
 });
+
+describe("a programme card (39 sources, 58 conclusions), the card the owner opened at 40,200 px", () => {
+  afterEach(() => { vi.useRealTimers(); delete (Element.prototype as Partial<Element>).scrollIntoView; });
+  const big = programmeCard();
+
+  it("is a header line, the answer, contents, the conclusions and the sources as two lists of ten — and not one excerpt on the page", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-14T08:00:00Z"));
+    const { container } = render(<EvidenceReading evidence={big} />);
+    expect(screen.getByTestId("evidence-card-header")).toHaveTextContent("EviMed 证据中心更新于 10月12日✓55/58");
+    // The sections of the card; the Markdown body's own heading is the body's.
+    expect(within(container).getAllByRole("heading", { level: 2 }).filter((heading) => !heading.closest("[data-outline-skip]")).map((heading) => heading.textContent))
+      .toEqual(["核心回答", "补充说明", "证据要点", "适用范围与局限", "来源与引用"]);
+    expect(container.querySelector("[data-outline]")).not.toBeNull();
+    expect(container.querySelectorAll("blockquote")).toHaveLength(0);
+    expect(within(screen.getByRole("list", { name: "证据要点" })).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(screen.getByRole("list", { name: "来源与引用" })).getAllByRole("listitem")).toHaveLength(10);
+    // The three conclusions whose quotation was not found are marked in their rows, and the header counts the rest.
+    expect(screen.getAllByLabelText("未核对上").length).toBeGreaterThan(0);
+  });
+
+  it("has contents of its sections beside it, each a way to its heading — and none for a card too short to need them", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { container, rerender } = render(<EvidenceReading evidence={big} />);
+    const contents = container.querySelector("[data-outline]")!;
+    expect(within(contents as HTMLElement).getAllByRole("button").map((button) => button.textContent)).toEqual(["核心回答", "补充说明", "证据要点", "适用范围与局限", "来源与引用"]);
+    await userEvent.click(within(contents as HTMLElement).getByRole("button", { name: "来源与引用" }));
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(screen.getByRole("heading", { level: 2, name: "来源与引用" }));
+    rerender(<EvidenceReading evidence={{ ...card, claims: [], sources: [], limitations: null, body: "", content: null }} />);
+    expect(container.querySelector("[data-outline]")).toBeNull();
+  });
+
+  it("takes ✓ n/m in the header to the conclusions it counts", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { container } = render(<EvidenceReading evidence={big} />);
+    await userEvent.click(screen.getByRole("button", { name: "引文已核对 55/58，查看证据要点" }));
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(container.querySelector("#evidence-claims-ec_programme"));
+    expect(container.querySelector("#evidence-claims-ec_programme")).toContainElement(screen.getByRole("list", { name: "证据要点" }));
+  });
+});

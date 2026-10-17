@@ -100,16 +100,16 @@ describe("an author's page", () => {
     client.fetchEvidenceAuthor.mockResolvedValue({ ...author, cards: manyCards(9), totals: { cards: 30, followers: 0, runsFromCards: 0 } });
     mount();
     await screen.findByRole("link", { name: "第 0 张证据卡" });
-    expect(screen.getByText("共 30 张，这里列出最近的 9 张。")).toBeInTheDocument();
+    expect(screen.getByText("张，这里列出最近的", { exact: false })).toHaveTextContent("共 30 张，这里列出最近的 9 张。");
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索证据卡" }), "房颤");
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(within(screen.getByRole("list", { name: "证据卡" })).getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "房颤抗凝的剂量" })).toBeInTheDocument();
     expect(screen.queryByText(/共 30 张/)).toBeNull();
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索证据卡" }));
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索证据卡" }), "没有这个");
-    expect(screen.getByText("没有找到匹配的证据卡。")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "清除搜索" }));
-    expect(screen.getAllByRole("listitem")).toHaveLength(9);
+    expect(screen.getByText("没有找到匹配的证据卡")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示全部证据卡" }));
+    expect(within(screen.getByRole("list", { name: "证据卡" })).getAllByRole("listitem")).toHaveLength(9);
     // The filter belongs to the cards: on the zones' tab there is no box.
     await userEvent.click(screen.getByRole("tab", { name: /专区/ }));
     expect(screen.queryByRole("searchbox", { name: "搜索证据卡" })).toBeNull();
@@ -122,14 +122,14 @@ describe("an author's page", () => {
       people: [{ name: "李医生", affiliation: "协和医院 心内科", title: "主任医师 · 心血管" }, { name: "王药师", affiliation: null, title: "药师" }],
     });
     const shown = mount();
-    expect(await screen.findByText(/出品方：企业 Acme Pharma/)).toHaveTextContent("Drug A");
-    expect(screen.getByText("卡片里署名的作者和审核人：李医生，协和医院 心内科，主任医师 · 心血管；王药师，药师")).toBeInTheDocument();
+    expect((await screen.findByText("出品方")).nextElementSibling).toHaveTextContent(/企业 Acme Pharma.*Drug A/);
+    expect(screen.getByText("署名").nextElementSibling).toHaveTextContent("李医生，协和医院 心内科，主任医师 · 心血管；王药师，药师");
     shown.unmount();
     client.fetchEvidenceAuthor.mockResolvedValue(author);
     mount();
     await screen.findByRole("heading", { level: 1, name: "李研究" });
     expect(screen.queryByText(/出品方/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/署名的作者和审核人/)).not.toBeInTheDocument();
+    expect(screen.queryByText("署名")).not.toBeInTheDocument();
   });
   it("says an author with nothing published has no page, by the server's own code", async () => {
     client.fetchEvidenceAuthor.mockRejectedValue(new WebApiError("none", { status: 404, code: "evidence_author_not_found" }));
@@ -147,6 +147,6 @@ describe("an author's page", () => {
   it("says an empty card list plainly", async () => {
     client.fetchEvidenceAuthor.mockResolvedValue({ ...author, cards: [] });
     mount();
-    expect(await screen.findByText("暂无已发布的证据卡。")).toBeInTheDocument();
+    expect(await screen.findByText("暂无已发布的证据卡")).toBeInTheDocument();
   });
 });

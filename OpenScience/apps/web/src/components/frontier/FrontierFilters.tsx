@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
-import { FilterChip, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, FRONTIER_WINDOWS, type FrontierWindow } from "@/lib/frontierClient";
 
 /**
@@ -31,31 +32,22 @@ export interface FrontierFilterValue {
 }
 
 /**
- * The feed's filters, as the controls at the end of the view row (plan
- * 2026-10-07 §4): 「全部栏目 ▾」, 「全部专科 ▾」, in 全部 「时间 ▾」, and
- * 「☆ 收藏」. Each dimension is one menu — the lanes used to be a row of chips
- * of their own, the second row of controls above the first item. While
- * searching, 「按时间」 orders the results newest first instead of by
- * relevance. Fragments, not a row: the page puts them beside its tabs.
+ * The feed's filters, as the toolbar declares them (plan 2026-10-07 §4; R19, audit D C1): 「全部栏目 ▾」, 「全部专科 ▾」, in 全部
+ * 「时间 ▾」, and 「☆ 收藏」. Each dimension is one menu — the lanes used to be a row of chips of their own, the second row of
+ * controls above the first item. While searching, 「按时间」 orders the results newest first instead of by relevance. Declared and
+ * not drawn: the page's `Toolbar` draws them, in the band that stays at the top, and folds them into one chip on a phone.
  */
-export function FrontierFilters({ value, showWindow, searching, onChange }: {
+export function feedFilters({ value, showWindow, searching, onChange }: {
   value: FrontierFilterValue;
   showWindow: boolean;
   searching: boolean;
   onChange: (next: Partial<FrontierFilterValue>) => void;
-}) {
-  return (
-    <>
-      {searching && <FilterChip pressed={value.byTime} onClick={() => onChange({ byTime: !value.byTime })}>按时间</FilterChip>}
-      <FilterSelect label="全部栏目" allLabel="全部栏目" options={LANE_OPTIONS} value={value.lane || null}
-        onChange={(lane) => onChange({ lane: lane ?? "" })} />
-      <FilterSelect label="全部专科" allLabel="全部专科" options={SPECIALTY_OPTIONS} value={value.specialty || null}
-        onChange={(specialty) => onChange({ specialty: specialty ?? "" })} />
-      {showWindow && (
-        <FilterSelect label="时间" allLabel="不限时间" options={WINDOW_OPTIONS} value={value.window || null}
-          onChange={(window) => onChange({ window: window ?? "" })} />
-      )}
-      <FilterChip icon={Star} pressed={value.starred} onClick={() => onChange({ starred: !value.starred })}>收藏</FilterChip>
-    </>
-  );
+}): ToolbarFilter[] {
+  return [
+    ...(searching ? [{ kind: "toggle" as const, label: "按时间", pressed: value.byTime, onChange: (pressed: boolean) => onChange({ byTime: pressed }) }] : []),
+    { kind: "select", label: "全部栏目", allLabel: "全部栏目", options: LANE_OPTIONS, value: value.lane || null, onChange: (lane) => onChange({ lane: lane ?? "" }) },
+    { kind: "select", label: "全部专科", allLabel: "全部专科", options: SPECIALTY_OPTIONS, value: value.specialty || null, onChange: (specialty) => onChange({ specialty: specialty ?? "" }) },
+    ...(showWindow ? [{ kind: "select" as const, label: "时间", allLabel: "不限时间", options: WINDOW_OPTIONS, value: value.window || null, onChange: (window: string | null) => onChange({ window: (window ?? "") as FrontierWindow | "" }) }] : []),
+    { kind: "toggle", label: "收藏", icon: Star, pressed: value.starred, onChange: (pressed) => onChange({ starred: pressed }) },
+  ];
 }

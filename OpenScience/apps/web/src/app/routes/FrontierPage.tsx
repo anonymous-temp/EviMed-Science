@@ -1,5 +1,5 @@
 import { FRONTIER_LEAVING, readFrontierPosition, type FrontierReadingPosition } from "@/components/frontier/frontierReadingState";
-import { WeeklyView } from "@/components/frontier/WeeklyView";
+import { WeeklyView, useFrontierWeekly } from "@/components/frontier/WeeklyView";
 import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
@@ -34,12 +34,12 @@ import {
 } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { FrontierControls, type PageView } from "@/components/frontier/FrontierControls";
-import { DailyIssue, useFrontierDaily } from "@/components/frontier/DailyView";
+import type { ToolbarSearch } from "@/components/ui/Toolbar";
+import { frontierToolbar, type PageView } from "@/components/frontier/FrontierControls";
+import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
-import { FrontierFilters, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import type { FrontierFilterValue } from "@/components/frontier/FrontierFilters";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
@@ -71,10 +71,11 @@ function readDay(value: string | null): string | null {
 
 /**
  * 「前沿动态」 (plan 2026-09-23 §6): one page with feed, digest, recommendation and follow views —
- * 精选, 全部, 热榜, 与我相关, 关注 and 简报 (the daily and the weekly) — with a server-side
- * search at the right of the title, beside a link to the evidence zones (another group of
- * pages). The views are one row of tabs and the controls of the open view sit at that row's
- * right (`FrontierControls`; plan 2026-10-07 §4). 精选 opens with the safety strip and 当前热点
+ * 精选, 全部, 热榜, 与我相关, 关注 and 简报 (the daily and the weekly) — with a link to the evidence
+ * zones (another group of pages) beside the title. The views are one row of tabs and the controls of
+ * the open view, with the server-side search, sit at that row's right (`frontierToolbar`; plan
+ * 2026-10-07 §4) in the shell's sticky band, so they stay at the top of a six-thousand-pixel feed
+ * (R19, audit D C1d). 精选 opens with the safety strip and 当前热点
  * above the feed by day; 全部 ends with the list of sources; there is no right rail any more
  * (its hot list is the card, its safety list the strip, its AI minute lives in the daily).
  *
@@ -471,6 +472,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   }, [ready, safetyNeeded, safetyAttempt]);
 
   const daily = useFrontierDaily(view === "daily" ? day : null, ready && view === "daily");
+  const week = readDay(params.get("week"));
+  const weekly = useFrontierWeekly(week, ready && view === "weekly");
   useEffect(() => {
     const changed = () => {
       cache.current.clear();
@@ -636,23 +639,50 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     />
   );
 
-  const filters = (
-    <FrontierFilters
-      value={{ lane, specialty, starred, window: windowFilter, byTime }}
-      showWindow={view === "all"}
-      searching={Boolean(q)}
-      onChange={setFilters}
-    />
-  );
+  const openWeek = (next: string) => setParams((current) => {
+    const updated = new URLSearchParams(current); updated.set("week", next); return updated;
+  });
+  const search: ToolbarSearch = {
+    label: "搜索",
+    value: draft,
+    maxLength: 200,
+    onChange: setDraft,
+    onClear: () => setDraft(""),
+    inputProps: {
+      onCompositionStart: () => { composing.current = true; },
+      onCompositionEnd: (event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); },
+    },
+  };
+  const toolbar = frontierToolbar({
+    view,
+    onView: setView,
+    filters: { lane, specialty, starred, window: windowFilter, byTime },
+    onFilters: setFilters,
+    showWindow: view === "all",
+    searching: Boolean(q),
+    search,
+    hot: {
+      window: hotWindow,
+      board: hot[hotWindow]?.board ?? null,
+      windows: Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt)),
+      onWindow: setHotWindow,
+    },
+    follow: followControls(following),
+    narrowedFollow: view === "following" && follow !== "all",
+    onAllFollows: () => setParams((current) => {
+      const updated = new URLSearchParams(current); updated.delete("follow"); return updated;
+    }),
+    onManageFollows: () => setManageFollows(true),
+    issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay }),
+    onClear: () => { setFilters({ lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); },
+  });
 
   const main = (() => {
     switch (view) {
       case "hot":
         return <HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} />;
       case "weekly":
-        return <WeeklyView week={readDay(params.get("week"))} onWeek={(week) => {
-          const updated = new URLSearchParams(params); updated.set("week", week); setParams(updated);
-        }} />;
+        return <WeeklyView state={weekly} onWeek={openWeek} />;
       case "daily":
         return <DailyIssue state={daily} onDay={openDay} />;
       case "foryou":
@@ -680,53 +710,18 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     }
   })();
 
-  // The 简报 tab holds the daily and the weekly; every other view is its own tab.
-  const tab = view === "weekly" ? "daily" : view;
-
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
-      contentClassName="mt-2"
-      actions={(
-        <>
-          <Link to="/app/frontier/zones" className={buttonClasses({ variant: "text" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>
-          {/* On a phone the search shares the row with the link to the zones, instead of standing on a row of its own. */}
-          <SearchInput
-            label="搜索"
-            className="min-w-0 flex-1 sm:w-64 sm:flex-none"
-            value={draft}
-            maxLength={200}
-            onChange={(event) => setDraft(event.target.value)}
-            onClear={() => setDraft("")}
-            onCompositionStart={() => { composing.current = true; }}
-            onCompositionEnd={(event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); }}
-          />
-        </>
-      )}
+      actions={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "text" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>}
+      toolbar={toolbar}
     >
-      <FrontierControls
-        view={view}
-        onView={setView}
-        filters={filters}
-        hotWindow={hotWindow}
-        hotBoard={hot[hotWindow]?.board ?? null}
-        hotWindows={Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt))}
-        onHotWindow={setHotWindow}
-        follow={followControls(following)}
-        narrowedFollow={view === "following" && follow !== "all"}
-        onAllFollows={() => setParams((current) => {
-          const updated = new URLSearchParams(current); updated.delete("follow"); return updated;
-        })}
-        onManageFollows={() => setManageFollows(true)}
-      />
       {ready && params.get("item") && (
         <FrontierLinkedItem id={params.get("item")!} onClose={() => setParams((current) => {
           const updated = new URLSearchParams(current); updated.delete("item"); return updated;
         }, { replace: true })} />
       )}
-      <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${tab}`} className="mt-5">
-        {ready ? main : <FrontierSkeleton />}
-      </div>
+      {ready ? main : <FrontierSkeleton />}
       {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
         <FrontierFollows selected={follow === "all" ? null : follow} onSelect={(id) => {
           setParams((current) => {

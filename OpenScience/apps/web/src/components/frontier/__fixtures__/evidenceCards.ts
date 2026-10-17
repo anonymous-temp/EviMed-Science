@@ -95,7 +95,7 @@ export function programmeCard({ sourceCount = 39, claimCount = 58, notFound = [4
     ...card,
     id: "ec_programme", state: "published", canEdit: false, producer: { kind: "platform", name: "EviMed 证据中心", relation: "none" }, originality: "synthesis", primary: false,
     title: "房颤抗凝：证据更新", summary: claims[0].text, creator: null, reviewer: null, reviewedAt: null, createdAt: "2026-10-12T08:00:00Z",
-    content: { question: "房颤患者用口服抗凝药，各药有什么证据？", answer: `这张卡汇总了 ${claimCount} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。` },
+    content: { question: "房颤患者用口服抗凝药，各药有什么证据？", population: "", answer: `这张卡汇总了 ${claimCount} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。` },
     body, claims, claimCount,
     claimVerification: { total: claimCount, verified: claimCount - notFound.length, quote_not_found: notFound.length, source_unavailable: 0, no_quote: 0, derived: 0 },
     views: null, sources, limitations: "多数试验为开放标签设计。\n部分结论只依据摘要。",

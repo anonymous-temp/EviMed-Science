@@ -97,7 +97,7 @@ function EvidenceArticle({
   const idPrefix = `evidence${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   // The contents are read off the article as rendered, so they are always what is on the page: the headings of the answer, the
   // overview, the card's own sections, the body, the conclusions, the limits, the sources.
-  const { entries, active, select } = useOutline(article, { idPrefix, refresh: [evidence] });
+  const { entries, active, select } = useOutline(article, { idPrefix, refresh: [evidence], skip: "[data-outline-skip]" });
   const outlined = entries.length >= OUTLINE_FROM;
   // ✓ n/m in the header goes to the list it counts.
   const toClaims = () => {
@@ -140,14 +140,14 @@ function EvidenceArticle({
           {evidence.body && !redundantBody(evidence) && (
             // Written in Markdown, and read as Markdown: it was printed as text, `##` and all. A long one is folded under its
             // heading — a programme card's body listed its 58 conclusions again above the 证据要点 that list them, and the page
-            // ran to 50 000 px (release-11 walk).
+            // ran to 50 000 px (release-11 walk). Its own headings are the body's, not the card's sections: the contents skip them.
             evidence.body.length > LONG_BODY_CHARS ? (
               <Disclosure summary={<h2 className="text-section font-semibold text-text">{evidence.content ? "补充说明" : "证据正文"}</h2>}>
-                <MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer>
+                <div data-outline-skip=""><MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer></div>
               </Disclosure>
             ) : (
               <Section title={evidence.content ? "补充说明" : "证据正文"}>
-                <MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer>
+                <div data-outline-skip=""><MarkdownViewer variant="document" className="text-ui text-text-2">{evidence.body}</MarkdownViewer></div>
               </Section>
             )
           )}
