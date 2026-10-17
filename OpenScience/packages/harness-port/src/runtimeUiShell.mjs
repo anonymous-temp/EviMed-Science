@@ -125,6 +125,11 @@ export function shellStylesheet(pin, operator = false) {
     // upload carrier (`__DSH_FILE_UPLOAD__`, runtimeUiTransport.mjs). It was
     // hidden here until 2026-09-22, when uploads were refused on this surface.
 
+    // Above a turn's presented files the kernel says, in grey, that the host has no desktop to open them in (`presented.unavailable`,
+    // 「此主机没有可用的桌面，无法使用外部程序打开文件或文件夹；文件仍可在侧边栏预览」) whenever it has none — a hosted runtime never has one.
+    // It is a statement about the machine, written for an operator, and it sat under every file card of every conversation (seen
+    // 2026-10-17, r19-acceptb). Only the `span`: the failure of the presented-files host is a `div` with a retry button and stays.
+    'span[class$="_hostStatus"]{display:none !important}',
     // Operators retain native statistics by the owner's 2026-09-29 decision.
     // This changes presentation only; the proxy still owns session authorization.
     // Until 0.2.0 one `div[data-composer-stats]` held the pills; 0.2.1 makes each

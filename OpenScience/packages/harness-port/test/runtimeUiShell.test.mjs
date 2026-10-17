@@ -95,6 +95,11 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   assert.ok(shellStylesheet(GEOMETRY_KERNEL_PIN).startsWith(`/* evimed-shell: selectors read against dsh-client ${GEOMETRY_KERNEL_PIN} */`));
 });
 
+test("the kernel's line about the host having no desktop is hidden, and the retry row of a failed presented-files host is not", () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  assert.ok(css.includes('span[class$="_hostStatus"]{display:none !important}'), "the line 「此主机没有可用的桌面…」 is a span; the failure row is a div with a button");
+});
+
 test("operators can use native kernel statistics while ordinary reader chrome stays compact", () => {
   const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
   // The session statistics under the composer, by their stable data attributes: the 0.2.0 row and each 0.2.1 pill
