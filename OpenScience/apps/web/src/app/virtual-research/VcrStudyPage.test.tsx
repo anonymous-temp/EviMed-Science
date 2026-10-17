@@ -223,7 +223,9 @@ describe("the seven tabs", () => {
   // the rail and the other tabs stay where they are.
   it("keeps a tab that cannot read its payload inside the tab, with the header and the other tabs still there", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const junk = { ...fixture("ev201/data.json"), headline: { overview: 5 } };
+    // A registry number that is an object cannot be drawn: React refuses it, and the tab's boundary is what keeps the page up.
+    const base = fixture("ev201/data.json");
+    const junk = { ...base, precedents: [{ ...base.precedents[0], registryId: { overview: 5 } }] };
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: junk });
     draw(`/app/virtual-research/${STUDY_ID}/data`);
     const panel = await waitFor(() => {
