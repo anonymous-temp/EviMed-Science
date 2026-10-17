@@ -163,6 +163,8 @@ test("a tag is a label: a tag in a button, with a role or a pointer, and a butto
   const bad = await compose(framed({ body: section(rows(2) + [
     '<button><span data-tag="">药物</span></button>', '<span data-tag="" role="button">科目</span>', '<span data-tag="" style="cursor:pointer">病种</span>',
     '<button class="tag-like">仅看对照组</button>',
+    // A tag in a row that opens something has the row's pointer by inheritance: the row is the control, not the tag.
+    '<table><tr style="cursor:pointer"><td><span data-tag="">被 B 占优</span></td></tr><tr><td>b</td></tr></table>',
   ].join(""), "标签") }));
   assert.deepEqual(textOf(bad, "tag-as-control").map((line) => line.replace(/^geo-plan@desktop: \[tag-as-control\] /, "")), [
     "the tag “药物” is inside a button (a tag is a label)", "the tag “科目” has the role button", "the tag “病种” shows the pointer's cursor",

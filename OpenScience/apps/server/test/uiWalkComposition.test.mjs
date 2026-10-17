@@ -47,6 +47,8 @@ test("a toolbar further down than the window's height and a fifth is below the f
   assert.deepEqual(rules("geo-sources", "desktop", low), ["toolbar-position"]);
   assert.match(texts("geo-sources", "desktop", low)[0], /the toolbar “筛选与操作” starts at 1200 px, below 1134 px \(1.2 × the window\)/);
   assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1133, 28), controls: {} }] })), []);
+  // A block's own toolbar stands where its block does: the evidence card's 筛选来源 is 1,331 px down a page of 2.4 windows, above its own list.
+  assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选来源", inChrome: false, inSection: true, ...box(1331, 28), controls: {} }, ...good().toolbars] })), []);
 });
 
 test("toggle layers: one tab list, one view switch written as radios, one toolbar on a page; a block's own tab list and toolbar are its block's", () => {
@@ -95,6 +97,10 @@ test("an orphan sentence is a block of text with no action, no number and no row
   const two = good({ orphans: [sentence("这一轮还没有统计出回答的构成。", 300), sentence("这一轮没有测到讲错我方的说法。", 700)] });
   assert.deepEqual(texts("geo-plan", "desktop", two), ["geo-plan@desktop: [orphan-sentence] 2 sentences stand alone, with no action in them and no number (one is allowed): “这一轮还没有统计出回答的构成。”、“这一轮没有测到讲错我方的说法。”"]);
   assert.equal(compositionFindings("geo-plan", "desktop", two).notices[0].value, 2, "a baseline can hold a page at the count it has");
+  // A reading page is made of text: what stands alone on it is its content (an event's summary, a card's limits), so its template has no budget for it.
+  const reading = good({ stepRail: null, chrome: null, tablists: [], toolbars: [], orphans: [1, 2, 3].map((n) => sentence(`事件的第${n}段摘要有十二个汉字以上的文字`, 300 + n * 40)) });
+  assert.deepEqual(rules("frontier-event", "desktop", reading), []);
+  assert.deepEqual(rules("frontier", "desktop", { ...reading, tablists: [{ label: "动态视图", tabs: 6, dots: 0, inChrome: true, inToolbar: true, inSection: false, ...box(100) }] }), ["orphan-sentence"], "the same text on a list page is a sentence standing alone");
   const many = good({ orphans: ["甲乙丙丁戊己庚辛壬癸子丑", "乙丙丁戊己庚辛壬癸子丑寅", "丙丁戊己庚辛壬癸子丑寅卯", "丁戊己庚辛壬癸子丑寅卯辰"].map((text, index) => sentence(text, 300 + index * 50)) });
   assert.match(texts("geo-plan", "desktop", many)[0], /4 sentences stand alone.*“丙丁戊己庚辛壬癸子丑寅卯” and 1 more$/);
 });
