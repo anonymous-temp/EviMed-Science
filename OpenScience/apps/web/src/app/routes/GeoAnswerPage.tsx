@@ -315,7 +315,7 @@ function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; 
           const label = (
             <>
               <span className={cn("min-w-0 truncate", selected ? "text-text" : "text-text-2")}>{engineName(sibling.engine)}</span>
-              {word.text && <span className={cn("shrink-0 text-caption", word.wrong ? "text-danger" : "text-text-3")}>{word.text}</span>}
+              {word.text && <span className={cn("shrink-0 text-caption font-normal", word.wrong ? "text-danger" : "text-text-3")}>{word.text}</span>}
             </>
           );
           const rowClass = navItemClasses({ current: selected, className: "justify-between whitespace-nowrap" });
