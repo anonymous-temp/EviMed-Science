@@ -301,7 +301,8 @@ export function VcrForestPlot({
             <tr
               key={row.id}
               data-vcr-forest-row={row.id}
-              className={cn("border-b border-faint", row.highlighted && "bg-accent-soft", row.pooled && "font-medium")}
+              // The row a quotation is read from has a ground of its own and its mark in the accent; a selected ground would say it can be pressed.
+              className={cn("border-b border-faint", row.highlighted && "bg-surface-2", row.pooled && "font-medium")}
             >
               <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">
                 {row.label}

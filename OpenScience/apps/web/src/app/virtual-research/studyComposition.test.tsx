@@ -28,11 +28,6 @@ vi.mock("@/lib/projects", () => {
 vi.mock("@/lib/taskPane", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/taskPane")>()), registerTaskPane: () => () => undefined }));
 
 const TABS = ["", "/data", "/population", "/patients", "/comparator", "/trial", "/matching"] as const;
-/**
- * Tabs whose bodies hold a tag that is a control or sits in one, which is that tab's package's to put right (the criteria's tags in
- * 匹配与招募's rows). They are held to the band's assertions below and not yet to the whole page's.
- */
-const TAG_IN_CONTROL = new Set<string>(["/matching"]);
 
 beforeEach(() => {
   forgetStudies();
@@ -55,7 +50,8 @@ describe("T3 — a study, at each of its tabs", () => {
       const { container, unmount } = drawStudy(`/app/virtual-research/${STUDY_ID}${suffix}`);
       await screen.findByRole("heading", { level: 1, name: /EV-201/ });
       await waitFor(() => expect(container.querySelector("[data-vcr-loading]")).toBeNull());
-      const facts = TAG_IN_CONTROL.has(suffix) ? compositionFacts(container) : expectComposed(container, { stepRail: false });
+      // Every tab's body is held to the whole page's rules: 匹配与招募 was the last one with tags in its controls (R19 VCRT put them out).
+      const facts = expectComposed(container, { stepRail: false });
       expect(facts.header, `${suffix || "总览"}: the header`).not.toBeNull();
       expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
       expect(facts.controlsBelowContent, `${suffix || "总览"}: no control under the content it controls`).toEqual([]);

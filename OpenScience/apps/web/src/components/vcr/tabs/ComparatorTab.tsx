@@ -158,7 +158,8 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 function UsedRoute({ data }: { data: ComparatorData }) {
   const frame = useStudyFrame();
   const prior = data.prior ?? [];
-  const estimand = data.estimand && (data.estimand.rows.length > 0 || data.estimand.note) ? data.estimand : null;
+  // The server's own sentence about where the estimate holds ends in a pointer to the band beside it; the band is the statement.
+  const estimand = data.estimand && data.estimand.rows.length > 0 ? data.estimand : null;
 
   const cells: ChartGridCell[] = [];
   if (data.curves.length > 0) {
@@ -206,9 +207,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
   }
   const grid = [...cells.map((cell) => [cell]), ...pairRows(second)];
 
-  const estimandRows: Fact[] = estimand
-    ? [...estimand.rows.map((row) => ({ label: row.label, value: row.value })), ...(estimand.note ? [{ label: "说明", value: estimand.note }] : [])]
-    : [];
+  const estimandRows: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
   const priorRows: Fact[] = prior.map((row) => ({
     label: row.label,
     value: <span data-vcr-prior={row.key} className="tabular-nums"><VcrNumber value={row.value} label={row.label} /></span>,

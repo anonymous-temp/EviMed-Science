@@ -384,7 +384,7 @@ export function PartialResultNote({ sentence, resume, className }: {
   className?: string;
 }) {
   return (
-    <p data-vcr-partial="" role="status" className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 rounded bg-surface-2 px-3 py-2 text-ui text-text-2", className)}>
+    <p data-note="" data-vcr-partial="" role="status" className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 rounded bg-surface-2 px-3 py-2 text-ui text-text-2", className)}>
       <span className="min-w-0 flex-1">{sentence}</span>
       {resume && <ResumeStep {...resume} />}
     </p>
