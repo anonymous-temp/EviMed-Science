@@ -2,7 +2,7 @@
   "package": "loopx",
   "version": "1.3.1",
   "wheelSha256": "47f626cd120d08b8fa04d2dc5bd68efa2857c28e4065d71ef1bf2ae8e4bee8d9",
-  "note": "The folders `loopx workflow-skills --install --host-surface deepseek-harness-native` writes into the skills directory, read off the pinned wheel (deps-version.json loopx.wheel, sha256 verified; the installer's source was read, not run): the seven PACKAGED_HOST_SKILL_IDS of loopx/skill_install_readback.py and the generated entry skill `loopx` of loopx/slash_command_install.py, nothing else. The wheel also packages loopx-change-quality and loopx-material under share/loopx/skills; this CLI does not install them. deploy/runtime-dsh/install-loopx.mjs holds the installed folders equal to `installed` at image build and names the difference; `kept` is what the model's skill catalogue holds (what runtime-inventory.json reads). Re-record on every CLI pin change.",
+  "note": "The folders `loopx workflow-skills --install --host-surface deepseek-harness-native` writes into the skills directory, read off the pinned wheel (deps-version.json loopx.wheel, sha256 verified; the installer's source was read, not run): the seven PACKAGED_HOST_SKILL_IDS of loopx/skill_install_readback.py and the generated entry skill `loopx` of loopx/slash_command_install.py, nothing else. The wheel also packages loopx-change-quality and loopx-material under share/loopx/skills; this CLI does not install them. deploy/runtime-dsh/install-loopx.mjs holds the installed folders equal to `installed` at image build and names the difference. `kept` is what the model's skill catalogue holds and what the image carries (what runtime-inventory.json reads): the build removes every other installed folder after the install, and installation.json records both lists with the digests of what upstream shipped. Narrowed on 2026-10-17 to the entry skill and `loopx-project`, the goal lifecycle the entry hands off to: the other six are LoopX's own repository-management workflows (PR review and programmes, benchmarks, performance diagnosis, self-repair, a document registry), nothing a research goal starts, and their description lines were about 2,500 characters of every session's catalogue. A goal run on a real kernel with the narrowed set is in .evimed-local/acceptance/course-correction-20261012/live/r19-upstream2a/. Re-record on every CLI pin change.",
   "entry": "loopx",
   "installed": [
     "loopx",
@@ -16,13 +16,7 @@
   ],
   "kept": [
     "loopx",
-    "loopx-benchmark",
-    "loopx-doc-registry",
-    "loopx-performance-diagnosis",
-    "loopx-pr-program",
-    "loopx-pr-review",
-    "loopx-project",
-    "loopx-self-repair"
+    "loopx-project"
   ],
   "packagedNotInstalled": [
     "loopx-change-quality",
