@@ -9,7 +9,7 @@ import { useSearchParams } from "react-router";
  *    page it is on; a page that cannot host the drawer sends the link to 问题与回答, which can.
  *  - `?action=<key>` — one action (`ActionDrawer`), on 行动.
  *  - `?error=<claim key>` — one wrong claim (`ErrorDrawer`), on 准确与安全.
- *  - `?engine=<id>` — the engine in view: the engine column a drawer rests on, and a tab's own engine filter.
+ *  - `?on=<engine>` — the engine a group's drawer rests on (a cell of the group × engine matrix was pressed).
  *
  * A page's own filters are other words (`cluster`, `pool`, `show` …) so that a link meaning "this group's drawer" and one meaning
  * "this page, narrowed to this group" cannot be mistaken for one another. The bar keeps every other parameter a link does not name.
@@ -17,7 +17,10 @@ import { useSearchParams } from "react-router";
 export const GEO_GROUP_PARAM = "group";
 export const GEO_ACTION_PARAM = "action";
 export const GEO_ERROR_PARAM = "error";
+/** A tab's own narrowing to one engine (a filter, not the drawer). */
 export const GEO_ENGINE_PARAM = "engine";
+/** The engine a group's drawer rests on. */
+export const GEO_DRAWER_ENGINE_PARAM = "on";
 /** A tab's own narrowing to one question group (a filter, not the drawer). */
 export const GEO_CLUSTER_FILTER_PARAM = "cluster";
 export const GEO_POOL_PARAM = "pool";
@@ -40,13 +43,15 @@ export function useGeoDrawerAddress() {
   const group = params.get(GEO_GROUP_PARAM);
   const action = params.get(GEO_ACTION_PARAM);
   const error = params.get(GEO_ERROR_PARAM);
-  const engine = params.get(GEO_ENGINE_PARAM);
-  const open = useCallback((next: { group?: string | null; action?: string | null; error?: string | null }) => {
+  const engine = params.get(GEO_DRAWER_ENGINE_PARAM);
+  const open = useCallback((next: { group?: string | null; action?: string | null; error?: string | null; engine?: string | null }) => {
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.delete(GEO_GROUP_PARAM);
       copy.delete(GEO_ACTION_PARAM);
       copy.delete(GEO_ERROR_PARAM);
+      copy.delete(GEO_DRAWER_ENGINE_PARAM);
+      if (next.engine) copy.set(GEO_DRAWER_ENGINE_PARAM, next.engine);
       if (next.group) copy.set(GEO_GROUP_PARAM, next.group);
       if (next.action) copy.set(GEO_ACTION_PARAM, next.action);
       if (next.error) copy.set(GEO_ERROR_PARAM, next.error);
@@ -59,6 +64,7 @@ export function useGeoDrawerAddress() {
       copy.delete(GEO_GROUP_PARAM);
       copy.delete(GEO_ACTION_PARAM);
       copy.delete(GEO_ERROR_PARAM);
+      copy.delete(GEO_DRAWER_ENGINE_PARAM);
       return copy;
     }, { replace: true });
   }, [setParams]);
@@ -78,4 +84,23 @@ export function useGeoSearchParam(name: string): [string | null, (value: string 
     }, { replace: true });
   }, [name, setParams]);
   return [value, set];
+}
+
+/**
+ * Several parameters of the address changed in one step, in place. Two calls of {@link useGeoSearchParam} in one handler do not add
+ * up: each starts from the address the page last drew, so the later one writes the earlier one's old value back. A choice that
+ * lets go of more than one thing (the toolbar's 「清除筛选」, a pool that takes its group with it) goes through this.
+ */
+export function useGeoSearchChange(): (changes: Readonly<Record<string, string | null | undefined>>) => void {
+  const [, setParams] = useSearchParams();
+  return useCallback((changes) => {
+    setParams((previous) => {
+      const copy = new URLSearchParams(previous);
+      for (const [name, value] of Object.entries(changes)) {
+        if (value === null || value === undefined || value === "") copy.delete(name);
+        else copy.set(name, value);
+      }
+      return copy;
+    }, { replace: true });
+  }, [setParams]);
 }

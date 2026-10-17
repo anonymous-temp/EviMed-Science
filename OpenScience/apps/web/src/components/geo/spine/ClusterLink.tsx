@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { cn } from "@/lib/cn";
 import { geoDestinationPath, type GeoTabKey } from "../geoTabs";
-import { GEO_ACTION_PARAM, GEO_ENGINE_PARAM, GEO_ERROR_PARAM, GEO_GROUP_PARAM, searchWith } from "./drawerParams";
+import { GEO_ACTION_PARAM, GEO_DRAWER_ENGINE_PARAM, GEO_ERROR_PARAM, GEO_GROUP_PARAM, searchWith } from "./drawerParams";
 
 /**
  * A question group's name as a link to the group (R19, audit C §2.4): it opens the cluster drawer over the page the person is on.
@@ -34,10 +34,10 @@ export function ClusterLink({
   const location = useLocation();
   if (!groupId) return <span className={className}>{children}</span>;
   const to = tab && geoId
-    ? geoDestinationPath(geoId, { tab }, { [GEO_GROUP_PARAM]: groupId, ...(engine ? { [GEO_ENGINE_PARAM]: engine } : {}) })
+    ? geoDestinationPath(geoId, { tab }, { [GEO_GROUP_PARAM]: groupId, ...(engine ? { [GEO_DRAWER_ENGINE_PARAM]: engine } : {}) })
     : {
       pathname: location.pathname,
-      search: searchWith(location.search, { [GEO_GROUP_PARAM]: groupId, [GEO_ACTION_PARAM]: null, [GEO_ERROR_PARAM]: null, ...(engine ? { [GEO_ENGINE_PARAM]: engine } : {}) }),
+      search: searchWith(location.search, { [GEO_GROUP_PARAM]: groupId, [GEO_ACTION_PARAM]: null, [GEO_ERROR_PARAM]: null, [GEO_DRAWER_ENGINE_PARAM]: engine ?? null }),
     };
   return (
     <Link to={to} data-geo-cluster-link={groupId} className={cn("rounded text-link hover:underline hover:underline-offset-4", className)}>

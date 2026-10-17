@@ -298,6 +298,18 @@ describe("行动: the toolbar", () => {
   });
 });
 
+describe("行动: letting go", () => {
+  it("lets go of the stage and the group in one step, whichever the address carried", async () => {
+    renderTab(geoProject(), `/app/geo/geo_1/actions?show=live&cluster=${G_SAFETY}`);
+    await findRow(ACTION_SAFETY.key);
+    await userEvent.click(within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "清除筛选" }));
+    const search = screen.getByTestId("search").textContent ?? "";
+    expect(search).not.toContain("show=");
+    expect(search).not.toContain("cluster=");
+    expect(rowOf(ACTION_BRAND.key)).toBeInTheDocument();
+  });
+});
+
 describe("行动: the action's drawer", () => {
   it("opens from the row with the questions, the gap and what an answer must say, the article, the ranked sources and what is expected", async () => {
     renderTab();

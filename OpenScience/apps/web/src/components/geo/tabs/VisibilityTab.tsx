@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import {
   readGeoCell,
   type GeoDiagnosis,
+  type GeoEngine,
   type GeoMonitoring,
+  type GeoPool,
   type GeoProject,
   type GeoSeriesPoint,
 } from "@/lib/geoClient";
@@ -15,6 +17,10 @@ import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
 import { useGeoToolbar } from "../geoFrame";
 import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
+import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
+import { clusterName } from "../spine/clusterModel";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_POOL_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { useGeoClusters } from "../spine/spineData";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
@@ -33,26 +39,81 @@ import { absentWord, engineName, GEO_METRIC_NAMES, GEO_POOL_KINDS, monthDay, typ
 import { geoSectionId } from "../geoTabs";
 import { metricName, metricUnit, roundKindWord } from "./geoTabText";
 import { CellLink, TabError, TabSkeleton } from "./geoTabKit";
+import { ClusterMatrixCard, EngineHeatCard, EngineMetricCard, isEngineBarMetric, orderedGroups, poolsOf } from "./VisibilityBlocks";
 
 /**
- * 可见度 — where we stand in the answers, over time.
+ * 可见度 — where we stand in the answers, over time (R19, audit C §2.3).
  *
- * “监测” used to be a tab of its own, which meant the trend of a number was
- * somewhere other than the number. It is the horizontal axis here: pick a
- * metric and the same card shows its history, its target, what we did, and
- * when it will be measured next. Under it, the same question asked of each
- * engine and each question pool.
+ * “监测” used to be a tab of its own, which meant the trend of a number was somewhere other than the number. It is the horizontal
+ * axis here: pick a metric and the page shows its history, its target, what we did, and when it will be measured next — and the
+ * same metric is the ringed column of the engine grid under it and the bars of the engines' card. Under those, the engines against
+ * the rates, which question groups each engine names us in (counts), the pools, and the rivals.
+ *
+ * The choices are the band's toolbar: the metric, and the engine, the question pool and the question group the page is narrowed
+ * to (`?engine=` `?pool=` `?cluster=`, so a link means what it says). Nothing on the page filters from below.
  */
 export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const monitoring = useGeoMonitoring(geoId);
   const diagnosis = useGeoDiagnosis(geoId);
+  const clusters = useGeoClusters(geoId);
+  const drawer = useGeoDrawerAddress();
+  const [engineParam, setEngineParam] = useGeoSearchParam(GEO_ENGINE_PARAM);
+  const [poolParam] = useGeoSearchParam(GEO_POOL_PARAM);
+  const [clusterParam, setClusterParam] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
+  const change = useGeoSearchChange();
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const series = (Array.isArray(watch?.series) ? watch.series : []).filter((line) => line && metricName(line.key) && Array.isArray(line.points) && line.points.length > 0);
   const [key, setKey] = useState<string | null>(null);
   const line = series.find((item) => item.key === key) ?? series[0] ?? null;
   const options: FilterOption<string>[] = series.map((item) => ({ value: item.key, label: metricName(item.key) ?? "" }));
-  useGeoToolbar(options.length > 1 ? { filters: [{ kind: "chips", label: "指标", options, value: line ? line.key : options[0].value, onChange: setKey }] } : null);
+
+  const groups = useMemo(() => orderedGroups(clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : []), [clusters.state]);
+  const groupEngines = (clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.engines) && clusters.state.data.engines.length > 0 ? clusters.state.data.engines : project.engines) as GeoEngine[];
+  const engines = useMemo(() => {
+    const seen = [...(Array.isArray(diag?.byEngine) ? diag.byEngine.map((row) => row.engine) : []), ...groupEngines];
+    return seen.filter((engine, at) => engine && seen.indexOf(engine) === at);
+  }, [diag, groupEngines]);
+  const engine = engineParam && engines.includes(engineParam as GeoEngine) ? engineParam : null;
+  const pools = useMemo(() => poolsOf(groups), [groups]);
+  const pool = poolParam && pools.some((entry) => entry.value === poolParam) ? (poolParam as GeoPool) : null;
+  const inPool = useMemo(() => (pool ? groups.filter((row) => row.pool === pool) : groups), [groups, pool]);
+  const cluster = clusterParam && inPool.some((row) => row.id === clusterParam) ? clusterParam : null;
+  const shownGroups = useMemo(() => (cluster ? inPool.filter((row) => row.id === cluster) : inPool), [inPool, cluster]);
+  const narrowed = engine !== null || pool !== null || cluster !== null;
+  const metric = line ? line.key : null;
+
+  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groups.length > 1 ? {
+    filters: [
+      ...(options.length > 1 ? [{ kind: "chips" as const, label: "指标", options, value: metric ?? options[0].value, onChange: setKey }] : []),
+      ...(engines.length > 1 ? [{
+        kind: "select" as const,
+        label: "引擎",
+        allLabel: "全部引擎",
+        options: engines.map((name) => ({ value: name, label: engineName(name) })),
+        value: engine,
+        onChange: setEngineParam,
+      }] : []),
+      ...(pools.length > 1 ? [{
+        kind: "select" as const,
+        label: "问句池",
+        allLabel: "全部问句池",
+        options: pools,
+        value: pool,
+        // a pool takes the group it holds with it, in one step
+        onChange: (value: string | null) => change({ [GEO_POOL_PARAM]: value, [GEO_CLUSTER_FILTER_PARAM]: null }),
+      }] : []),
+      ...(inPool.length > 1 ? [{
+        kind: "select" as const,
+        label: "问题群",
+        allLabel: "全部问题群",
+        options: inPool.map((row) => ({ value: row.id, label: clusterName(row) })),
+        value: cluster,
+        onChange: setClusterParam,
+      }] : []),
+    ],
+    onClear: narrowed ? () => change({ [GEO_ENGINE_PARAM]: null, [GEO_POOL_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }) : undefined,
+  } : null);
 
   if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (monitoring.state.kind === "error" && diagnosis.state.kind === "error") {
@@ -73,10 +134,20 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
         loading={monitoring.state.kind === "loading"}
       />
-      <ByEngine rows={watch?.byEngine} diagnosis={diag} />
-      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} />
+      <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} />
+      {isEngineBarMetric(metric)
+        ? <EngineMetricCard diagnosis={diag} metric={metric} selected={engine} onSelect={setEngineParam} />
+        : <ByEngine rows={watch?.byEngine} diagnosis={diag} engine={engine} />}
+      <ClusterMatrixCard
+        groups={shownGroups}
+        engines={groupEngines}
+        engine={engine}
+        onOpen={(groupId, on) => drawer.open({ group: groupId, engine: on })}
+      />
+      <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} />
       <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
+      <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
 }
@@ -175,8 +246,8 @@ function latest(values: ReadonlyArray<number | null>): number | null {
  * the earlier points of a series are history, and a lone dot of them under a 「—」 reads as today's. It says why instead — the
  * round's own reason when the engine did not answer, else the last reading it has and when.
  */
-function ByEngine({ rows, diagnosis }: { rows: GeoMonitoring["byEngine"] | null | undefined; diagnosis: GeoDiagnosis | null }) {
-  const lines = (Array.isArray(rows) ? rows : []).filter((row) => row && row.engine && Array.isArray(row.points) && row.points.length > 0);
+function ByEngine({ rows, diagnosis, engine }: { rows: GeoMonitoring["byEngine"] | null | undefined; diagnosis: GeoDiagnosis | null; engine: string | null }) {
+  const lines = (Array.isArray(rows) ? rows : []).filter((row) => row && row.engine && Array.isArray(row.points) && row.points.length > 0 && (!engine || row.engine === engine));
   if (lines.length === 0) return null;
   // The latest round any engine was read in: a line that stops before it has no reading now.
   const currentDate = lines.reduce((top, row) => {
@@ -221,8 +292,8 @@ function ByEngine({ rows, diagnosis }: { rows: GeoMonitoring["byEngine"] | null 
  * that is the same on every row is said once, under it, rather than repeated
  * in a column.
  */
-function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean }) {
-  const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool && row.pool !== "P4");
+function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean; pool: GeoPool | null }) {
+  const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool && row.pool !== "P4" && (!pool || row.pool === pool));
   const top = rows.reduce((max, row) => Math.max(max, readGeoCell(row.mention).value ?? 0), 0);
   const issues = rows.map((row) => row.mainIssue || null);
   const sameIssue = rows.length > 1 && issues[0] !== null && issues.every((issue) => issue === issues[0]) ? issues[0] : null;

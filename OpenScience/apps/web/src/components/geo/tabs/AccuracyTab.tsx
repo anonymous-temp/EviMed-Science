@@ -24,7 +24,7 @@ import { engineName, GEO_ERROR_TYPE_WORDS, groupName } from "../geoText";
 import { GEO_VIEW_PARAM, geoSectionId } from "../geoTabs";
 import { ClaimRow } from "../spine/ClaimRow";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
 import { ErrorDrawer } from "../spine/ErrorDrawer";
 import {
   claimRows,
@@ -178,6 +178,7 @@ function Accuracy({
   const [clusterParam, setClusterParam] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
   const [showParam, setShowParam] = useGeoSearchParam("show");
   const [viewParam, setViewParam] = useGeoSearchParam(GEO_VIEW_PARAM);
+  const change = useGeoSearchChange();
   const [query, setQuery] = useState("");
   const drawer = useGeoDrawerAddress();
   const open = useOpenGeoConversation();
@@ -234,10 +235,7 @@ function Accuracy({
   const { visible, remaining, more } = useShowMore(flat, { first: PAGE, step: PAGE, resetKey: `${view}|${show}|${engine}|${type}|${trace}|${cluster}|${query.trim()}` });
 
   const clearAll = () => {
-    setEngineParam(null);
-    setTypeParam(null);
-    setTraceParam(null);
-    setClusterParam(null);
+    change({ [GEO_ENGINE_PARAM]: null, [TYPE_PARAM]: null, [TRACE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null });
     setQuery("");
   };
   const hasErrors = counts.total > 0 || errors.length > 0;

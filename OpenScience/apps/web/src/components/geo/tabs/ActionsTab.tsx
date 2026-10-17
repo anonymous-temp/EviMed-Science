@@ -38,7 +38,7 @@ import {
 import { clusterName } from "../spine/clusterModel";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { ClusterLink } from "../spine/ClusterLink";
-import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
 import { useGeoActions, useGeoClusters } from "../spine/spineData";
 import { useArticleActions } from "../spine/useArticleActions";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
@@ -96,6 +96,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const openConversation = useOpenGeoConversation();
   const [stageParam, setStageParam] = useGeoSearchParam(STAGE_PARAM);
   const [cluster, setCluster] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
+  const change = useGeoSearchChange();
   const [kind, setKind] = useState<GeoActionKind | null>(null);
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<"acted" | "waiting" | null>(null);
@@ -173,7 +174,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
           onChange: () => setFocus(null),
         }] : []),
       ],
-      onClear: narrowed ? () => { setStageParam(null); setCluster(null); setKind(null); setQuery(""); setFocus(null); } : undefined,
+      onClear: narrowed ? () => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setKind(null); setQuery(""); setFocus(null); } : undefined,
       search: { label: "搜索行动", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
       summary: narrowed ? `${rows} / ${all.length} 条行动` : `${all.length} 条行动`,
     }
@@ -258,7 +259,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
         // The rail's 「投放」 lands here (`GEO_TAB_SECTIONS`): where each piece of work goes, and how far it got, is a row of this list.
         <section id={geoSectionId("delivery")} aria-label="行动" data-geo-actions="">
           {rows === 0 ? (
-            <Note action={<Button variant="secondary" size="sm" onClick={() => { setStageParam(null); setCluster(null); setKind(null); setQuery(""); setFocus(null); }}>清除筛选</Button>}>
+            <Note action={<Button variant="secondary" size="sm" onClick={() => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setKind(null); setQuery(""); setFocus(null); }}>清除筛选</Button>}>
               没有符合的行动。
             </Note>
           ) : (

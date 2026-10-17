@@ -21,6 +21,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * without the name of its row (DESIGN.md, 2026-10-07 audit B-03). The frozen
  * names paint a ground of their own, so they cover the cells that slide under
  * them: `surface`, the card a chart lives in, unless the grid sits on the page.
+ *
+ * A page that has chosen one column (the metric in view) or one row (the engine in view) says so with `emphasis`: the name is set
+ * in the heavier weight and the cells of the column are ringed, so the choice shows without hiding the rest of the picture.
  */
 
 /** The six steps of the single-hue ramp, coldest first. */
@@ -61,6 +64,7 @@ export function HeatGrid({
   rows,
   legend,
   ground = "surface",
+  emphasis,
   className,
 }: {
   /** The grid's accessible name. */
@@ -71,6 +75,8 @@ export function HeatGrid({
   legend?: { low: string; high: string };
   /** What the grid is drawn on, for the frozen row names: a card (`surface`) or the page (`bg`). */
   ground?: "bg" | "surface";
+  /** The column and the row the page is looking at, by key. */
+  emphasis?: { column?: string | null; row?: string | null };
   className?: string;
 }) {
   const values = rows.flatMap((row) => (row.unmeasured ? [] : row.cells))
@@ -97,14 +103,27 @@ export function HeatGrid({
             <tr>
               <th scope="col" className={cn("sticky left-0 z-sticky w-28 text-left text-meta font-normal text-text-3", groundClass)}><span className="sr-only">行</span></th>
               {columns.map((column) => (
-                <th key={column.key} scope="col" className="px-1 pb-1 text-center text-meta font-normal text-text-3">{column.header}</th>
+                <th
+                  key={column.key}
+                  scope="col"
+                  data-heat-emphasis={emphasis?.column === column.key ? "" : undefined}
+                  className={cn("px-1 pb-1 text-center text-meta", emphasis?.column === column.key ? "font-semibold text-text" : "font-normal text-text-3")}
+                >
+                  {column.header}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} data-heat-row={row.key}>
-                <th scope="row" className={cn("sticky left-0 z-page w-28 text-left text-compact text-text", groundClass)}>{row.header}</th>
+                <th
+                  scope="row"
+                  data-heat-emphasis={emphasis?.row === row.key ? "" : undefined}
+                  className={cn("sticky left-0 z-page w-28 text-left text-compact text-text", emphasis?.row === row.key && "font-semibold", groundClass)}
+                >
+                  {row.header}
+                </th>
                 {row.unmeasured ? (
                   <td colSpan={columns.length} data-heat-unmeasured="" className="rounded px-3 text-center text-caption text-text-3" style={{ background: HATCH }}>
                     {row.unmeasured}
@@ -119,6 +138,7 @@ export function HeatGrid({
                       className={cn(
                         "h-8 rounded text-center text-compact tabular-nums",
                         step === null ? "bg-surface-1 text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,
+                        emphasis?.column === columns[index]?.key && "ring-1 ring-inset ring-border-control",
                       )}
                     >
                       {cell.text}

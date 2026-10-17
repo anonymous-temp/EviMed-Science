@@ -260,6 +260,16 @@ describe("准确与安全: the band's toolbar", () => {
     expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
   });
 
+  it("lets go of every narrowing in one step: the engine, the kind, the trace and the group together", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/accuracy?show=all&engine=kimi&type=label_conflict&trace=unattributable&cluster=ggr_safety");
+    await findClaim("fp_b");
+    await userEvent.click(within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "清除筛选" }));
+    const search = screen.getByTestId("search").textContent ?? "";
+    for (const name of ["engine=", "type=", "trace=", "cluster="]) expect(search).not.toContain(name);
+    expect(search).toContain("show=all");
+    expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
+  });
+
   it("narrows to one question group by its choice, and the choice is the group's name", async () => {
     renderTab(geoProject(), "/app/geo/geo_1/accuracy?show=all");
     await findClaim("fp_a");
