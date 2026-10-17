@@ -115,6 +115,22 @@ export function isAllowedWireMethod(method) {
 }
 
 /**
+ * The one workspace call the control plane makes itself: registering its project's own directory as a kernel workspace, so that a
+ * session it creates is accounted in that workspace from the first moment (`session/create` with `workspaceId`).
+ *
+ * From 0.2.1 the kernel records which workspace a session belongs to only when it creates the session
+ * (dsh-api-session-controller `create`: `workspace.attachSession`), never afterwards: `claim` refuses to reuse a session that is not
+ * accounted or that has a turn (lib/index.js:443, :452, :769), the registry's history bootstrap runs once per home
+ * (dsh-workspace lib/index.js:387), and the conversation view disables the composer of a blank session whose workspace it cannot
+ * name (dsh-client-ui-conversation lib/client.js:17812). A session made by `cwd` alone therefore reads 「正在连接」 for ever.
+ *
+ * The method stays on the manifest's deny list for the adapter and for every browser; the runtime UI proxy already lets the frame
+ * make exactly this call for exactly its bound directory (`runtimeUiServer.mjs`), and `RuntimeManager.callKernel` lets the control
+ * plane make it for the project's own directory only, by naming this constant in its options.
+ */
+export const WORKSPACE_BIND_METHOD = "workspace/create";
+
+/**
  * The kernel's own error codes, mapped to ours. A code we do not know lands on
  * a named unknown rather than on a generic failure, so a protocol change is
  * visible in metrics instead of being folded into "the runtime is unhappy".

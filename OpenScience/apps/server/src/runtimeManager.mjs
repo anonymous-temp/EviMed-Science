@@ -50,6 +50,7 @@ import { createAgentBayClient } from "./agentbay/client.mjs";
 import { AgentBayRuntimeProvider } from "./agentbay/runtimeProvider.mjs";
 import {
   isAllowedWireMethod,
+  WORKSPACE_BIND_METHOD,
   mapWireError,
   wireRefusal,
   normalizeTranscript,
@@ -6869,6 +6870,22 @@ export class RuntimeManager {
   }
 
   /**
+   * The kernel's workspace for this project's directory (made when the kernel has none), or null when it will not say: a session is
+   * then created by directory alone, which works and leaves it outside the workspace's account.
+   * @param {Record<string, any>} runtime @param {Record<string, any>} project @param {string} cwd @param {AbortSignal} signal
+   * @returns {Promise<string | null>}
+   */
+  async kernelWorkspaceId(runtime, project, cwd, signal) {
+    try {
+      const value = await this.callKernel(runtime, project, WORKSPACE_BIND_METHOD, { request: { path: cwd } }, signal, { workspaceBind: true });
+      const id = value?.workspace?.workspaceId ?? value?.workspaceId;
+      return typeof id === "string" && id ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Creates a kernel session for this project and returns its id.
    *
    * The browser asks the control plane for a session; it never asks a kernel.
@@ -6885,13 +6902,16 @@ export class RuntimeManager {
     if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
     this.beginProxy(project);
     try {
+      const cwd = runtime.proxyWorkspaceDir ?? project.workspaceDir;
       const value = await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session/create", {
-          request: {
-            cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
-            agentPreset: EVIMED_AGENT_PRESET,
-          },
-        }, signal),
+        async (signal) => {
+          // Accounted in the project's workspace from birth (see WORKSPACE_BIND_METHOD). A kernel that will not register the
+          // directory still makes the session, by cwd as before: the partial result stands.
+          const workspaceId = await this.kernelWorkspaceId(runtime, project, cwd, signal);
+          return this.callKernel(runtime, project, "session/create", {
+            request: { ...(workspaceId ? { workspaceId } : { cwd }), agentPreset: EVIMED_AGENT_PRESET },
+          }, signal);
+        },
         "runtime_session_create_failed",
         "The runtime did not create a session in time.",
       );
@@ -6996,11 +7016,12 @@ export class RuntimeManager {
    * The allow-list is checked by the adapter that owns it; this is the carrier.
    * @param {Record<string, any>} runtime @param {Record<string, any>} project
    * @param {string} method @param {Record<string, unknown>} payload @param {AbortSignal} signal
-   * @param {{ maxBytes?: number }} [options]
+   * @param {{ maxBytes?: number, workspaceBind?: boolean }} [options] `workspaceBind` admits `workspace/create` and nothing else beyond the
+   *   allow-list (`WORKSPACE_BIND_METHOD`): the control plane registering the project's own directory
    * @returns {Promise<any>}
    */
-  async callKernel(runtime, project, method, payload, signal, { maxBytes } = {}) {
-    if (!isAllowedWireMethod(method)) {
+  async callKernel(runtime, project, method, payload, signal, { maxBytes, workspaceBind = false } = {}) {
+    if (!isAllowedWireMethod(method) && !(workspaceBind === true && method === WORKSPACE_BIND_METHOD)) {
       throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);
     }
     const target = new URL(`${runtime.url}/api/${method}`);

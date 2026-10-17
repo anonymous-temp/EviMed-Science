@@ -109,19 +109,25 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         let sessionId = intent.sessionId;
         if (intent.kind === 'create') sessionId = await createBoundSession(sessionId);
         else {
+          // Opening is the kernel's own door: the list is refreshed and the main view retains the session by the id it was
+          // asked for. Nothing here may call `session/create` to "adopt" a session: from 0.2.1 the kernel reuses a named
+          // session only while it is accounted in the requested workspace AND has not started a turn, and mints another one
+          // otherwise (dsh-api-session-controller `create` -> `claim`: lib/index.js:769, :443, :452), so an adoption call
+          // changes the identity of every conversation that has a history. A session has its workspace account from the
+          // moment the kernel creates it, and the control plane creates its sessions inside the project's workspace
+          // (`RuntimeManager.createRuntimeSession`); a session with a history that is not accounted (made by directory alone)
+          // still reads and continues natively, and a BLANK one that is not accounted has a disabled composer in the kernel's
+          // own view (dsh-client-ui-conversation lib/client.js:17812), which nothing on this side can repair.
           await ctx.sessions.refresh();
-          const known = ctx.sessions.list.getSnapshot().byId?.[sessionId];
-          // Older control-plane sessions may have no Workspace Registry account.
-          // Native create with an existing identity idempotently adopts it; its
-          // transcript and identity survive while the registry attaches it.
-          // Only with a bound directory: a row without `cwd` and a frame
-          // without one would otherwise read as the same workspace.
-          if (known && typeof boundCwd === 'string' && known.cwd === boundCwd
-            && !ctx.workspaces.list.getSnapshot().items.some((/** @type {any} */ item) => workspaceContains(item, sessionId))) {
-            const attachedId = await createBoundSession(sessionId);
-            if (attachedId !== sessionId) throw new Error('Existing native session identity changed');
-          }
+          // A conversation the platform named and the kernel has never held — a study's or a GEO project's, made before the platform
+          // created its sessions in the kernel (its id is the platform's own, `vcr-…`, `geo-…`) — is opened by creating it under that
+          // name: a free name is the one thing the kernel honours (`claim`: lib/index.js:426-430, a session it cannot find is created
+          // with the id asked for), and the workspace account comes with the creation. Anything but the same id back is an identity
+          // change and is refused below.
+          if (!ctx.sessions.list.getSnapshot().byId?.[sessionId] && typeof boundCwd === 'string') sessionId = await createBoundSession(sessionId);
         }
+        // Whatever the branch, an open is of the session that was asked for.
+        if (intent.kind === 'open' && sessionId !== intent.sessionId) throw new Error('Existing native session identity changed');
         if (!validId(sessionId)) throw new Error('Invalid native session identity');
         if (disposed) return;
         // Retains the session for the main view, which is what makes its

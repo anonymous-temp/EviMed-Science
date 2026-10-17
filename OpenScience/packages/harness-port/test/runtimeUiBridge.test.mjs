@@ -138,6 +138,7 @@ test('a bound resume retries failed readiness on the same generation without rec
 
 test('navigation to an existing session during delayed reconnect is retained until the generation is ready', async () => {
   const f = fixture(); const known = new Set(['session-a', 'session-b']);
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': {}, 'session-b': {} });
   f.ctx.uiWorkspace.openSession = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
@@ -259,14 +260,68 @@ test('missing registry membership cannot produce a successful native readiness a
   f.ctx.dispose();
 });
 
-test('a known legacy session is adopted in place without replacing its identity or history', async () => {
+/**
+ * The 0.2.1 kernel's `session/create` for a named session (dsh-api-session-controller lib/index.js:755-772 and `claim`, :416-470): the
+ * name is reused only when the session is accounted in the requested workspace and has no turn; anything else is a new session.
+ * @param {any} f @param {{ accounted?: string[], blank?: string[] }} state
+ */
+function kernel021Create(f, { accounted = [], blank = [] }) {
+  return async (/** @type {{ sessionId?: string, workspaceId?: string }} */ request) => {
+    f.calls.push(['create', request.sessionId]);
+    return request.sessionId && accounted.includes(request.sessionId) && blank.includes(request.sessionId) ? request.sessionId : 'session-minted-by-kernel';
+  };
+}
+
+test('a session the control plane made opens under its own identity, whether or not the registry accounts it (0.2.1 mints a new one on create)', async () => {
+  for (const { label, row, accounted } of [
+    { label: 'a conversation with a history, not accounted', row: { blank: false, cwd: '/workspace/project-a' }, accounted: false },
+    { label: 'a blank conversation, not accounted', row: { blank: true, cwd: '/workspace/project-a' }, accounted: false },
+    { label: 'a conversation with a history, accounted', row: { blank: false, cwd: '/workspace/project-a' }, accounted: true },
+  ]) {
+    const f = fixture();
+    f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': row });
+    f.ctx.workspaces.list.getSnapshot = () => ({ items: accounted ? [{ workspaceId: 'workspace-a', sessionIds: ['session-a'] }] : [] });
+    f.ctx.sessions.create = kernel021Create(f, { accounted: accounted ? ['session-a'] : [], blank: row.blank ? ['session-a'] : [] });
+    apply(f.ctx, {}, f.target); await settle();
+    f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+    assert.deepEqual(f.calls, [['open', 'session-a']], `${label}: opening must not create`);
+    assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true && row.message.sessionId === 'session-a'), label);
+    assert.ok(!f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false), label);
+    f.ctx.dispose();
+  }
+});
+
+test('a conversation the platform named and the kernel never held is created under that name, and a different id back is refused', async () => {
+  // The id is the platform's own (`vcr-…`): the kernel's `claim` creates a session it cannot find with the id asked for.
   const f = fixture();
   f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': { blank: false, cwd: '/workspace/project-a' } });
-  f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', sessionIds: ['session-a'] });
+  f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', path: '/workspace/project-a', sessionIds: ['session-a', 'vcr-study-1'] });
+  f.ctx.sessions.create = async (/** @type {{ sessionId?: string }} */ request) => { f.calls.push(['create', request.sessionId]); return request.sessionId; };
   apply(f.ctx, {}, f.target); await settle();
-  f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
-  assert.deepEqual(f.calls, [['create', 'session-a'], ['open', 'session-a']]);
-  assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
+  f.navigate({ intent: { kind: 'open', sessionId: 'vcr-study-1' } }); await settle();
+  assert.deepEqual(f.calls, [['create', 'vcr-study-1'], ['open', 'vcr-study-1']]);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true && row.message.sessionId === 'vcr-study-1'));
+  f.ctx.dispose();
+  // A kernel that answers with another id (a name it could not honour) is an identity change: no open, no ack of success.
+  const g = fixture();
+  g.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', path: '/workspace/project-a', sessionIds: ['session-minted'] });
+  g.ctx.sessions.create = async () => 'session-minted';
+  apply(g.ctx, {}, g.target); await settle();
+  g.navigate({ intent: { kind: 'open', sessionId: 'vcr-study-2' } }); await settle();
+  assert.ok(!g.calls.some(row => row[0] === 'open'));
+  assert.ok(g.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false));
+  assert.ok(!g.sent.some(row => row.message.ok === true));
+  g.ctx.dispose();
+});
+
+test('opening a session carries the draft to the session that was asked for, never to one the kernel would have minted', async () => {
+  const f = fixture();
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': { blank: false, cwd: '/workspace/project-a' } });
+  f.ctx.sessions.create = kernel021Create(f, {});
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-a', draft: 'Continue here' } }); await settle();
+  assert.deepEqual(f.calls, [['open', 'session-a'], ['draft', 'session-a', 'Continue here']]);
+  assert.ok(f.sent.some(row => row.message.ok === true && row.message.sessionId === 'session-a'));
   f.ctx.dispose();
 });
 
