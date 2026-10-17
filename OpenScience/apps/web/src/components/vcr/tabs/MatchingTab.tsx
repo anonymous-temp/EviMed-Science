@@ -158,7 +158,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
 
   // --- the band's one row: the views, the direction, the protocol and the patient, and what starts work ----------------------------
   const filters: ToolbarFilter[] = [
-    { kind: "chips", label: "视图", neutral: "matching", value: view, onChange: (next) => switchView(next as View), options: VIEWS },
+    { kind: "chips", label: "匹配与招募的视图", neutral: "matching", value: view, onChange: (next) => switchView(next as View), options: VIEWS },
     ...(view === "matching"
       ? [{ kind: "chips" as const, label: "匹配方向", neutral: "trial_to_patient", value: direction, onChange: (next: string) => switchDirection(next as Direction), options: DIRECTIONS }]
       : []),
