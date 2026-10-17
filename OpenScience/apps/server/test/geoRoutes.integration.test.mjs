@@ -41,7 +41,8 @@ let dataDir = "";
 let server = null;
 let base = "";
 /** The hooks the other packages attach; each test sets what it needs. */
-const hooks = { orchestrator: /** @type {any} */ (null), market: /** @type {any} */ (null), exporter: /** @type {any} */ (null) };
+const hooks = { orchestrator: /** @type {any} */ (null), market: /** @type {any} */ (null), exporter: /** @type {any} */ (null),
+  programmeRuns: /** @type {any} */ (null) };
 const audits = /** @type {any[]} */ ([]);
 let projectCounter = 0;
 /** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
@@ -81,7 +82,8 @@ before(async () => {
     projects: {
       create: async (_user, name) => ({ id: `p-${++projectCounter}`, name }),
       bindSession: async () => ({ sessionId: "geo-session-1", bound: true }),
-      latestSessionId: async () => "geo-session-1",
+      conversationSessionId: async () => "geo-session-1",
+      programmeRuns: async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => (hooks.programmeRuns ? hooks.programmeRuns(ownerId, projectId) : []),
     },
     get orchestrator() { return hooks.orchestrator; },
     get market() { return hooks.market; },
@@ -525,12 +527,47 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   refused(await call("POST", `/api/geo/projects/${id}/run`, { body: { step: "everything" } }), 400, "geo_step_invalid");
   refused(await call("POST", `/api/geo/projects/${id}/export`, { body: { kind: "weekly" } }), 503, "geo_unavailable");
   refused(await call("POST", `/api/geo/projects/${id}/export`, { body: { kind: "annual" } }), 400, "geo_export_kind_invalid");
-  hooks.orchestrator = { async runStep(/** @type {any} */ _user, /** @type {any} */ target, /** @type {string} */ step) { return { sessionId: `run-${step}`, runId: `${target.id}:${step}` }; } };
-  hooks.exporter = { async export(/** @type {any} */ _user, /** @type {any} */ target, /** @type {string} */ kind) { return { sessionId: `export-${kind}`, runId: target.id }; } };
-  assert.deepEqual((await call("POST", `/api/geo/projects/${id}/run`, { body: { step: "sources" } })).payload.data, { sessionId: "run-sources", runId: `${id}:sources` });
-  assert.deepEqual((await call("POST", `/api/geo/projects/${id}/export`, { body: { kind: "proposal" } })).payload.data, { sessionId: "export-proposal", runId: id });
+  hooks.orchestrator = { async runStep(/** @type {any} */ _user, /** @type {any} */ target, /** @type {string} */ step) { return { accepted: true, runId: `${target.id}:${step}`, step }; } };
+  hooks.exporter = { async export(/** @type {any} */ _user, /** @type {any} */ target) { return { accepted: true, runId: target.id, step: null }; } };
+  assert.deepEqual((await call("POST", `/api/geo/projects/${id}/run`, { body: { step: "sources" } })).payload.data, { accepted: true, runId: `${id}:sources`, step: "sources" });
+  assert.deepEqual((await call("POST", `/api/geo/projects/${id}/export`, { body: { kind: "proposal" } })).payload.data, { accepted: true, runId: id, step: null });
   hooks.orchestrator = null;
   hooks.exporter = null;
+});
+
+test("the AI-run record lists the programme's runs by what they were, newest as the hook gives them, to anyone who may read the project", options, async () => {
+  const { project } = await seededProject();
+  const id = project.id;
+  // Nothing composed: an empty record, not an error.
+  assert.deepEqual((await call("GET", `/api/geo/projects/${id}/runs`)).payload.data, { runs: [] });
+  /** @type {any[]} */ const asked = [];
+  hooks.programmeRuns = async (/** @type {string} */ ownerId, /** @type {string} */ projectId) => {
+    asked.push([ownerId, projectId]);
+    return [
+      { sessionId: "s-4", runId: "run-4", reason: "geo:content", status: "running", startedAt: "2026-10-16T08:00:00.000Z" },
+      { sessionId: "s-3", runId: "run-3", reason: "geo:export-weekly", status: "succeeded", startedAt: "2026-10-15T08:00:00.000Z" },
+      { sessionId: "s-2", runId: "run-2", reason: "geo:evidence", status: "failed", startedAt: "2026-10-14T08:00:00.000Z" },
+      { sessionId: "s-1", runId: "run-1", reason: "geo:somewhere-new", status: "canceled", startedAt: null },
+    ];
+  };
+  try {
+    const record = (await call("GET", `/api/geo/projects/${id}/runs`)).payload.data;
+    assert.deepEqual(asked, [[ALICE, project.projectId]], "asked as the project's owner, of the project's own control-plane project");
+    assert.deepEqual(record.runs.map((/** @type {any} */ run) => [run.sessionId, run.label, run.state, run.startedAt]), [
+      ["s-4", "写一批稿件", "running", "2026-10-16T08:00:00.000Z"],
+      ["s-3", "生成周报", "finished", "2026-10-15T08:00:00.000Z"],
+      ["s-2", "整理产品证据", "stopped", "2026-10-14T08:00:00.000Z"],
+      ["s-1", "推进项目", "stopped", null],
+    ], "a sentence from the route reason (old runs and new), a closed state word, and a time");
+    // No row carries the instruction a run was sent with, a route reason or an id the page would print.
+    assert.equal(JSON.stringify(record).includes("geo:"), false);
+    // The ability is reading; another account's project, or none, is a 404 like every other route.
+    refused(await call("GET", `/api/geo/projects/${id}/runs`, { user: MALLORY }), 404, "geo_project_not_found");
+    refused(await call("GET", `/api/geo/projects/gp_nothing/runs`), 404, "geo_project_not_found");
+    refused(await call("POST", `/api/geo/projects/${id}/runs`, { body: {} }), 404, "not_found");
+  } finally {
+    hooks.programmeRuns = null;
+  }
 });
 
 test("another account's GEO project is a 404 on every route, reads and writes alike", options, async () => {
@@ -549,6 +586,7 @@ test("another account's GEO project is a 404 on every route, reads and writes al
     ["GET", `/api/geo/projects/${id}/distribution`], ["PUT", `/api/geo/projects/${id}/budget`, { totalCny: 10, dailyCny: 1 }],
     ["POST", `/api/geo/projects/${id}/orders/o-x/cancel`, {}], ["GET", `/api/geo/projects/${id}/monitoring`],
     ["POST", `/api/geo/projects/${id}/run`, { step: "evidence" }], ["POST", `/api/geo/projects/${id}/export`, { kind: "weekly" }],
+    ["GET", `/api/geo/projects/${id}/runs`],
   ];
   for (const [method, route, body] of routes) refused(await call(/** @type {string} */ (method), /** @type {string} */ (route), { user: MALLORY, body }), 404, "geo_project_not_found");
   assert.ok(!(await call("GET", "/api/geo/projects", { user: MALLORY })).payload.data.projects.some((/** @type {any} */ row) => row.id === id));

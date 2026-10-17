@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
   GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
-  GEO_TIERS, geoProducerSettingsIssues, normalizeGeoProducerSettings,
+  GEO_TIERS, geoProducerSettingsIssues, geoVisibleQuestionOfReason, normalizeGeoProducerSettings,
 } from "@evimed/domain";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -62,7 +62,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -179,9 +179,11 @@ function money(value, field, zero = false) {
  *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
  *     bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }>,
- *     latestSessionId?: (user: any, projectId: string) => Promise<string | null> } | null,
- *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ sessionId: string, runId?: string | null }> } | null,
- *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ sessionId: string, runId: string | null }> } | null,
+ *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
+ *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
+ *       startedAt: string | null }>> } | null,
+ *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
+ *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
  *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
  *   members?: { list: (project: any) => Promise<any[]>, add: (input: any) => Promise<any>, remove: (input: any) => Promise<any> } | null,
@@ -304,7 +306,7 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 2) {
       if (method === "GET") {
         const view = await service.projectView(user, id);
-        const sessionId = await dependencies.projects?.latestSessionId?.(user, view.projectId).catch(() => null) ?? null;
+        const sessionId = await dependencies.projects?.conversationSessionId?.(user, view.projectId).catch(() => null) ?? null;
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
@@ -391,6 +393,21 @@ export function createGeoRoutes(dependencies) {
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
       if (tab === "monitoring") return reply(await service.monitoring(user, id));
+      // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each
+      // row named by what it was (the route reason's sentence, never the brief it was sent with) and none of them a place to go.
+      if (tab === "runs") {
+        const project = await service.requireProject(user, id);
+        const runs = dependencies.projects?.programmeRuns ? await dependencies.projects.programmeRuns(project.userId, project.projectId).catch(() => []) : [];
+        return reply({
+          runs: runs.slice(0, 50).map((run) => ({
+            sessionId: String(run.sessionId),
+            runId: String(run.runId),
+            label: geoVisibleQuestionOfReason(run.reason),
+            state: ["running", "queued", "starting"].includes(String(run.status)) ? "running" : String(run.status) === "succeeded" ? "finished" : "stopped",
+            startedAt: run.startedAt ?? null,
+          })),
+        });
+      }
       // The project's product zone and its cards: each claim with its quotation, its ✓/⚠ and the card revision it stands in.
       if (tab === "cards") {
         const project = await service.requireProject(user, id);

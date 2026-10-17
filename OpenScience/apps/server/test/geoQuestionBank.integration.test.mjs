@@ -213,7 +213,7 @@ test("an internal project is never advanced by the orchestrator", options, async
   const { GeoOrchestrator } = await import("../src/geoOrchestrator.mjs");
   const dispatched = /** @type {any[]} */ ([]);
   const orchestrator = new GeoOrchestrator({ store, config: config(), notifier: null, dispatchRun: async (input) => { dispatched.push(input); return { runId: "r", sessionId: "s", status: "running" }; },
-    runStatus: async () => null, latestSessionId: async () => null, enqueueRound: async () => ({}), noteCitation: async () => {} });
+    runStatus: async () => null, enqueueRound: async () => ({}), noteCitation: async () => {} });
   const project = /** @type {any} */ (await store.projectByControlProject(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID));
   const result = await orchestrator.advance(project.id);
   assert.deepEqual(result, { dispatched: null, deferred: null, enqueued: [] });

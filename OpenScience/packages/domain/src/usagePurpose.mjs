@@ -266,11 +266,12 @@ export function isVerificationRun(run) {
 
 /**
  * The route-reason prefixes of a module's own programme steps: a run the module's orchestrator dispatched into the study's project
- * (`vcr:definition`, `vcr:export-study_package`, …). Written by the control plane's dispatcher alone — the public dispatch route
- * computes its own reasons and never takes one from a caller — so a prefix is a fact about who started the run, never about its text.
- * 「循证 GEO」's steps (`geo:`) are the same kind of run and are not listed until its own pages stop presenting them as conversations.
+ * (`vcr:definition`, `vcr:export-study_package`, …) and the 「循证 GEO」 orchestrator dispatched into a project's own (`geo:evidence`,
+ * `geo:sources`, `geo:content`, `geo:export-weekly`, `geo:research`, …). Written by the control plane's dispatcher alone — the public
+ * dispatch route computes its own reasons and never takes one from a caller — so a prefix is a fact about who started the run, never
+ * about its text.
  */
-export const PROGRAMME_ROUTE_REASON_PREFIXES = Object.freeze(['vcr:'])
+export const PROGRAMME_ROUTE_REASON_PREFIXES = Object.freeze(['vcr:', 'geo:'])
 
 /**
  * Whether a run is one of a module's programme steps, decided by the route reason the control plane wrote at dispatch.
@@ -285,8 +286,8 @@ export function isProgrammeRun(run) {
  * The closed set of roles a run can have in the platform's own bookkeeping, which a list of the person's conversations reads to
  * leave the platform's back office out. A run with none is an ordinary one.
  *  - `verification`: the independent re-check of a claim (`isVerificationRun`).
- *  - `programme`: a step of a module's programme, run in the study's project for the study (`isProgrammeRun`): the study's page
- *    says what it is doing and what it made, and its conversation is the study's own, never one of these.
+ *  - `programme`: a step of a module's programme, run in the module's own project for the study or the GEO project (`isProgrammeRun`):
+ *    the module's page says what it is doing and what it made, and its conversation is the person's own, never one of these.
  */
 export const RUN_ROLES = Object.freeze(['verification', 'programme'])
 

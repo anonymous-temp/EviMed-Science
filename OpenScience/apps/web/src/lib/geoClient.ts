@@ -24,7 +24,9 @@
  */
 import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
+import { formatRelativeTime } from "./format";
 import { productRequest } from "./productClient";
+import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -199,7 +201,7 @@ export interface GeoProject {
   budget: { totalCny: number; dailyCny: number; setAt?: string | null } | null;
   status: GeoProjectStatus;
   steps: GeoSteps;
-  /** The latest conversation in the project; null before there is one. */
+  /** The person's own conversation in the project (never a step the programme ran); null before there is one. */
   sessionId: string | null;
   overview: GeoOverview;
   /** Whether this deployment can place orders at all; without a market no page asks for a budget. */
@@ -1326,13 +1328,38 @@ export function getGeoMonitoring(geoId: string) {
   return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring`);
 }
 
-/** “让 AI 做”: dispatches one step now, in the project's own conversation. */
+/**
+ * What a press of a button answers: that the request was taken and the run it started now — none when it waits for the project's run
+ * slot or for the allowance. No session: starting work takes nobody to a conversation, the page shows what is under way.
+ */
+export interface GeoStartAnswer {
+  accepted: boolean;
+  runId: string | null;
+  step: string | null;
+}
+
+/** “让 AI 做”: starts one step now. The person stays where they are. */
 export function runGeoStep(geoId: string, step: GeoStepKey) {
-  return productRequest<{ sessionId: string; runId?: string | null }>(`${project(geoId)}/run`, "POST", { step });
+  return productRequest<GeoStartAnswer>(`${project(geoId)}/run`, "POST", { step });
 }
 
 export function exportGeo(geoId: string, kind: GeoExportKind) {
-  return productRequest<{ sessionId: string; runId: string | null }>(`${project(geoId)}/export`, "POST", { kind });
+  return productRequest<GeoStartAnswer>(`${project(geoId)}/export`, "POST", { kind });
+}
+
+/**
+ * 「AI 运行」: the steps the programme ran in the project's own sessions, newest first — each named by what it was, with a state word and
+ * a time, never an id. A record to read, not a conversation to go to (the person's own conversation is the project's `sessionId`).
+ */
+export async function getGeoProgrammeRuns(geoId: string): Promise<ProgrammeRun[]> {
+  const value = await productRequest<{ runs?: unknown }>(`${project(geoId)}/runs`);
+  const rows = Array.isArray(value?.runs) ? (value.runs as Array<Record<string, unknown>>) : [];
+  return rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
+    sessionId: String(row.sessionId),
+    label: typeof row.label === "string" && row.label.trim() ? row.label.trim() : "后台分析",
+    state: programmeRunState(row.state),
+    at: typeof row.startedAt === "string" && row.startedAt ? formatRelativeTime(row.startedAt) || null : null,
+  }));
 }
 
 /* -------------------------------------------------------------------- feature */

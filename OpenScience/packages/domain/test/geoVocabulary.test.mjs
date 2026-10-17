@@ -14,6 +14,8 @@ import {
   geoMetricId,
   geoMetricName,
   geoMetricUnit,
+  geoVisibleQuestion,
+  geoVisibleQuestionOfReason,
   ERROR_CODE_FAMILIES,
   GEO_ARTICLE_LAYERS,
   GEO_ARTICLE_LAYER_LABELS_ZH,
@@ -40,6 +42,7 @@ import {
   GEO_SOURCE_KINDS,
   GEO_SOURCE_KIND_LABELS_ZH,
   GEO_STEPS,
+  GEO_STEP_ACTION_LABELS_ZH,
   GEO_STEP_LABELS_ZH,
   GEO_VOCABULARIES,
   GEO_WRITE_WHATS,
@@ -202,4 +205,65 @@ test("a metric id has one reader name and a name one id: the table every page, r
 
 test("an article's channel is an owned platform of the brand or the media market, never free text", () => {
   assert.deepEqual(GEO_ARTICLE_CHANNELS, [...GEO_OWNED_LINK_PLATFORMS, "media_market"]);
+});
+
+test("a programme run is asked in a sentence of the person's words: one verb and one object per step, the batch, the document, the question", () => {
+  // The step's own verb is the table's, and the table names every step there is (the page's step buttons read it too).
+  assert.deepEqual(Object.keys(GEO_STEP_ACTION_LABELS_ZH).sort(), [...GEO_STEPS].sort());
+  const actions = /** @type {Record<string, string>} */ (GEO_STEP_ACTION_LABELS_ZH);
+  for (const step of GEO_STEPS) assert.equal(geoVisibleQuestion({ purpose: step, steps: [step] }), actions[step], step);
+  // The insight run covers steps one to three in the order of the programme, whatever order they come in; the strategy run is the sources step.
+  assert.equal(geoVisibleQuestion({ purpose: "insight", steps: ["questions", "evidence", "journey"] }), "整理产品证据、绘制患者旅程、列出测量问题");
+  assert.equal(geoVisibleQuestion({ purpose: "insight", steps: ["journey"] }), "绘制患者旅程");
+  assert.equal(geoVisibleQuestion({ purpose: "strategy", steps: ["sources"] }), "分析引用的信源");
+  // A content batch is told by its number; the round after a weekly report has none.
+  assert.equal(geoVisibleQuestion({ purpose: "content", steps: ["content"], batch: 2 }), "写第 2 批稿件");
+  assert.equal(geoVisibleQuestion({ purpose: "content", steps: ["content"], batch: "第 2026-10-12 周之后的一批" }), "写下一批稿件");
+  assert.equal(geoVisibleQuestion({ purpose: "content", steps: ["content"], batch: 0 }), "写下一批稿件");
+  // The documents the platform writes; the week is the Monday it names.
+  assert.equal(geoVisibleQuestion({ purpose: "export", exportKind: "weekly", week: "2026-10-12" }), "生成10月12日这一周的周报");
+  assert.equal(geoVisibleQuestion({ purpose: "export", exportKind: "weekly" }), "生成周报");
+  assert.equal(geoVisibleQuestion({ purpose: "export", exportKind: "weekly", week: "next Monday" }), "生成周报", "a week that is not a date is not printed");
+  assert.equal(geoVisibleQuestion({ purpose: "export", exportKind: "proposal" }), "生成提案资料包");
+  // A research task is its own question, on one line and not longer than a title.
+  assert.equal(geoVisibleQuestion({ purpose: "research", question: "玛仕度肽的\n心血管获益\t证据" }), "做专题研究：玛仕度肽的 心血管获益 证据");
+  assert.equal(geoVisibleQuestion({ purpose: "research", question: "  " }), "做专题研究");
+  const longQuestion = geoVisibleQuestion({ purpose: "research", question: "证据".repeat(80) });
+  assert.ok([...longQuestion].length <= 70 && longQuestion.endsWith("…"), longQuestion);
+  // Total: whatever is missing reads as the project's work, never as a machine instruction.
+  for (const input of [undefined, {}, { purpose: "nonsense" }, { purpose: null, steps: [] }, { purpose: "insight" }]) {
+    assert.equal(geoVisibleQuestion(/** @type {any} */ (input)), "推进项目", JSON.stringify(input));
+  }
+});
+
+test("no sentence a run is asked in carries the platform's own words, and each is one short line", () => {
+  // The closed inputs: the only free text in any sentence is a research task's own question, which is the task's and is cut at a title's length.
+  const inputs = [
+    ...GEO_STEPS.map((step) => ({ purpose: step, steps: [step] })),
+    { purpose: "insight", steps: ["evidence", "journey", "questions"] }, { purpose: "strategy", steps: ["sources"] },
+    { purpose: "content", batch: 1 }, { purpose: "content", batch: "第 2026-10-12 周之后的一批" },
+    { purpose: "export", exportKind: "weekly", week: "2026-10-12" }, { purpose: "export", exportKind: "proposal" },
+    { purpose: "research" }, { purpose: "research", question: "玛仕度肽在肥胖合并高血压人群里的血压获益有多大" }, {},
+  ];
+  const reasons = [...GEO_STEPS.map((step) => `geo:${step}`), "geo:content", "geo:research", "geo:export-weekly", "geo:export-proposal", "geo:future", "geo:", "", null];
+  assert.ok(inputs.length >= 17 && reasons.length >= 13, "the walk walked");
+  const sentences = [...inputs.map((input) => geoVisibleQuestion(input)), ...reasons.map((reason) => geoVisibleQuestionOfReason(reason))];
+  for (const sentence of sentences) {
+    assert.ok(sentence.trim() && !/[\r\n]/.test(sentence) && [...sentence].length <= 70, sentence);
+    assert.doesNotMatch(sentence, /geo_|evimed|mcp__|deliverable|<|>/, sentence);
+  }
+});
+
+test("a run is named from its route reason alone: old runs and new, the first step for a run of several", () => {
+  assert.equal(geoVisibleQuestionOfReason("geo:evidence"), "整理产品证据");
+  assert.equal(geoVisibleQuestionOfReason("geo:journey"), "绘制患者旅程");
+  assert.equal(geoVisibleQuestionOfReason("geo:questions"), "列出测量问题");
+  assert.equal(geoVisibleQuestionOfReason("geo:sources"), "分析引用的信源");
+  assert.equal(geoVisibleQuestionOfReason("geo:content"), "写一批稿件");
+  assert.equal(geoVisibleQuestionOfReason("geo:research"), "做专题研究");
+  assert.equal(geoVisibleQuestionOfReason("geo:export-weekly"), "生成周报");
+  assert.equal(geoVisibleQuestionOfReason("geo:export-proposal"), "生成提案资料包");
+  for (const other of ["vcr:definition", "session-binding", "geo:unheard-of", "geo:", "", null, undefined]) {
+    assert.equal(geoVisibleQuestionOfReason(other), "推进项目", String(other));
+  }
 });
