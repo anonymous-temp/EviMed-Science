@@ -413,6 +413,23 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
 }
 
 /**
+ * Whether this deployment's gateway has any engine to ask: a SearXNG of its
+ * own, the node's, Bailian with a DashScope key, or DeepSeek with a DeepSeek
+ * key. What decides whether a runtime is offered `web_search` at all
+ * (runtimeManager): until 2026-10-17 that was a SearXNG URL alone, so a
+ * deployment whose only engines were the paid ones had a gateway that would
+ * answer and a runtime told search was not configured.
+ * @param {any} config
+ */
+export function webSearchHasEngine(config) {
+  const set = (/** @type {unknown} */ value) => Boolean(String(value ?? "").trim());
+  return set(config.webSearchUrl)
+    || (set(config.webSearchEdgeUrl) && set(config.edgeProxyUrl))
+    || (config.webSearchBailianEnabled === true && set(config.dashscopeApiKey))
+    || (config.webSearchDeepseekEnabled !== false && set(config.deepseekApiKey));
+}
+
+/**
  * The search refused in DeepSeek's words when DeepSeek was the only engine
  * asked. A content-policy refusal (403) is its own named code: rewording the
  * query is the one thing that can change it.

@@ -241,3 +241,23 @@ test("DeepSeek's day is read in Beijing; any other instant passes unchanged", ()
   assert.equal(deepseekResultDate(null), null);
   assert.equal(deepseekResultDate("not a date"), null);
 });
+
+test("a runtime is offered web_search whenever the gateway has an engine, the paid ones included", async () => {
+  const { webSearchHasEngine } = await import("../src/webSearchGateway.mjs");
+  const { webSearchGatewayProviderUrl } = await import("../src/runtimeManager.mjs");
+  const internal = { webSearchGatewayInternalUrl: "http://open-science-web:8787/internal/search/v1/query" };
+  const cases = [
+    [{}, false],
+    [{ webSearchUrl: "http://open-science-web-search:8080/search" }, true],
+    [{ deepseekApiKey: KEY }, true, "DeepSeek alone: before 2026-10-17 such a runtime was told search was not configured"],
+    [{ deepseekApiKey: KEY, webSearchDeepseekEnabled: false }, false],
+    [{ dashscopeApiKey: "sk-dashscope-not-real", webSearchBailianEnabled: true }, true],
+    [{ dashscopeApiKey: "sk-dashscope-not-real" }, false, "Bailian is off unless switched on"],
+    [{ webSearchEdgeUrl: "http://127.0.0.1:8888/search", edgeProxyUrl: "https://edge.example.org/" }, true],
+    [{ webSearchEdgeUrl: "http://127.0.0.1:8888/search" }, false, "the node's SearXNG needs the node"],
+  ];
+  for (const [config, expected, why] of cases) {
+    assert.equal(webSearchHasEngine(config), expected, why ?? JSON.stringify(config));
+    assert.equal(webSearchGatewayProviderUrl({ ...internal, ...config }), expected ? internal.webSearchGatewayInternalUrl : "");
+  }
+});
