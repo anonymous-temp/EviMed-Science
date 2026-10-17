@@ -34,8 +34,10 @@ describe("a card's page where the deployment keeps evidence current", () => {
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: false, upkeep: true });
     upkeep.submitEvidenceChallenge.mockResolvedValue({ id: "ch_1", cardId: card.id, claimId: "CLM-002", state: "open", route: "producer_notice", outcome: null, outcomeLabel: null, reason: "原文里没有这句话", createdAt: "2026-10-06T00:00:00Z", resolvedAt: null, explanation: null, changeLogId: null });
     mount();
+    // A conclusion's 质疑 is in its drawer, with the quotation the reader doubts.
+    await userEvent.click(await screen.findByRole("button", { name: /出血减半/ }));
     const challenge = await screen.findByRole("button", { name: "质疑结论 CLM-002" });
-    expect(screen.getByRole("button", { name: "质疑结论 CLM-001" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "质疑结论 CLM-001" })).toBeNull();
     await userEvent.click(challenge);
     await userEvent.type(screen.getByRole("textbox", { name: /说明你认为哪里不对/ }), "原文里没有这句话");
     await userEvent.click(screen.getByRole("button", { name: "提交质疑" }));
@@ -53,8 +55,11 @@ describe("a card's page where the deployment keeps evidence current", () => {
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: false, upkeep: true });
     upkeep.listMyEvidenceChallenges.mockResolvedValue([{ id: "ch_0", cardId: card.id, claimId: "CLM-002", state: "notified", route: "producer_notice", outcome: null, outcomeLabel: null, reason: "x", createdAt: "2026-10-04T00:00:00Z", resolvedAt: null, explanation: null, changeLogId: null }]);
     mount();
+    await userEvent.click(await screen.findByRole("button", { name: /出血减半/ }));
     expect(await screen.findByText(/已通知出品方/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "质疑结论 CLM-002" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+    await userEvent.click(screen.getByRole("button", { name: /试验中卒中更少/ }));
     expect(screen.getByRole("button", { name: "质疑结论 CLM-001" })).toBeInTheDocument();
   });
 
@@ -62,6 +67,7 @@ describe("a card's page where the deployment keeps evidence current", () => {
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     mount();
     await screen.findByTestId("evidence-card-header");
+    await userEvent.click(screen.getByRole("button", { name: /出血减半/ }));
     expect(screen.queryByRole("button", { name: /质疑结论/ })).toBeNull();
     expect(screen.queryByRole("region", { name: "这张卡的变更记录" })).toBeNull();
     expect(screen.queryByText("更新记录")).toBeNull();

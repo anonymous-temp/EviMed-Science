@@ -1,38 +1,47 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EvidenceReading, evidenceUpdatedAt } from "./EvidenceReading";
+import { EvidenceReading, evidenceAuthoringRows, evidenceUpdatedAt } from "./EvidenceReading";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
-import { card as richCard } from "./__fixtures__/evidenceCards";
+import { card as richCard, programmeCard } from "./__fixtures__/evidenceCards";
 
 const card: EvidenceCard = { id: "one", revision: 1, state: "published", canEdit: false, zoneId: "zone", body: "<script>untrusted</script>", title: "急诊证据", subtype: "academic", summary: "结论", creator: null, reviewer: null, reviewedAt: null, claims: [{ text: "证据结论 [1]" }], sources: [{ title: "不安全链接", url: "javascript:alert(1)", excerpt: "原文引句" }, { title: "论文", url: "https://example.org/paper", excerpt: null }], limitations: "样本较少", discussion: [], review: null, canResearch: true };
 
 /** The one closed fold under the answer. */
-const fold = (container: HTMLElement) => container.querySelector("details") as HTMLDetailsElement;
+const folds = (container: HTMLElement) => [...container.querySelectorAll("details")].filter((details) => !details.closest("[data-outline]"));
+const fold = (container: HTMLElement) => folds(container)[0] as HTMLDetailsElement;
 
 describe("evidence reading", () => {
   afterEach(() => vi.useRealTimers());
-  it("preserves evidence/source/limitations without inventing author or grade", () => {
+  it("preserves evidence/source/limitations without inventing author or grade", async () => {
     const { container } = render(<EvidenceReading evidence={card} />);
     expect(screen.getByText("样本较少")).toBeInTheDocument();
-    expect(screen.getByText("原文引句")).toBeInTheDocument();
-    expect(screen.queryByText(/创作者|审核者|学术评议/)).not.toBeInTheDocument();
     expect(container.querySelector("script")).toBeNull();
-    expect(screen.getByRole("link", { name: "论文" })).toHaveAttribute("href", "https://example.org/paper");
-    expect(screen.queryByRole("link", { name: "不安全链接" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/创作者|审核者|学术评议/)).not.toBeInTheDocument();
+    // A source is a row; its excerpt and the way to the original are read in the drawer. An address that is not http(s) is never a link.
+    const sources = within(screen.getByRole("list", { name: "来源与引用" }));
+    expect(screen.queryByText("原文引句")).not.toBeInTheDocument();
+    await userEvent.click(sources.getByRole("button", { name: "不安全链接" }));
+    const unsafe = screen.getByRole("dialog", { name: "来源 1" });
+    expect(within(unsafe).getByText("原文引句")).toBeInTheDocument();
+    expect(within(unsafe).queryByRole("link", { name: /打开原文/ })).not.toBeInTheDocument();
+    await userEvent.click(within(unsafe).getByRole("button", { name: "关闭" }));
+    await userEvent.click(sources.getByRole("button", { name: "论文" }));
+    expect(within(screen.getByRole("dialog", { name: "来源 2" })).getByRole("link", { name: /打开原文/ })).toHaveAttribute("href", "https://example.org/paper");
     // A card that says nothing of who made it has no fold for it; and the card's own title is the page's, not an <h2> of the article
     // (the article's sections are the page's h2 since release 11, under its one h1).
-    expect(container.querySelector("details")).toBeNull();
+    expect(folds(container)).toHaveLength(0);
     expect(screen.queryByRole("heading", { level: 2, name: "急诊证据" })).not.toBeInTheDocument();
     expect(screen.queryByText("学术证据")).not.toBeInTheDocument();
   });
 
-  it("shows eight points first and folds a long body, rendered as Markdown, under its heading (release-11 walk: 50 000 px)", async () => {
+  it("lists ten conclusions first and folds a long body, rendered as Markdown, under its heading (release-11 walk: 50 000 px)", async () => {
     const claims = Array.from({ length: 12 }, (_, index) => ({ ...richCard.claims[0], claimId: undefined, text: `第 ${index + 1} 条要点` }));
     const body = `## 已逐字核对的结论\n\n${Array.from({ length: 90 }, (_, index) => `${index + 1}. 结论 ${index + 1} 在这一人群中成立，来源 [${index + 1}]`).join("\n")}`;
     const { container } = render(<EvidenceReading evidence={{ ...richCard, claims, body }} />);
-    expect(screen.getByText("第 8 条要点")).toBeInTheDocument();
-    expect(screen.queryByText("第 9 条要点")).toBeNull();
-    screen.getByRole("button", { name: "展开其余 4 条" }).click();
+    expect(screen.getByText("第 10 条要点")).toBeInTheDocument();
+    expect(screen.queryByText("第 11 条要点")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 2 条" }));
     expect(await screen.findByText("第 12 条要点")).toBeInTheDocument();
     const folded = [...container.querySelectorAll("details")].find((details) => /补充说明|证据正文/.test(details.querySelector("summary")?.textContent ?? ""));
     expect(folded).toBeDefined();
@@ -50,7 +59,7 @@ describe("evidence reading", () => {
     expect(screen.queryByText("AI 证据评议")).not.toBeInTheDocument();
   });
 
-  it("folds who wrote and checked it under the answer, with the action that goes with the answer beside it", () => {
+  it("folds who wrote and checked it under the answer, as the rows of one list, with the action that goes with the answer beside it", () => {
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
       author: { kind: "ai", name: "EviMed 证据 AI", model: "deepseek-v4-flash" },
       lastEditor: { name: "李研究", editedAt: "2026-10-03T08:00:00Z" },
@@ -62,20 +71,35 @@ describe("evidence reading", () => {
     expect(details).not.toBeNull();
     expect(details.open).toBe(false);
     expect(within(details).getByText("编写与核查")).toBeInTheDocument();
-    expect(within(details).getByText("AI 编写 · EviMed 证据 AI")).toBeInTheDocument();
-    expect(within(details).getByText(/用户修订记录 · 李研究/)).toBeInTheDocument();
-    expect(within(details).getByText("评议者 王药师")).toBeInTheDocument();
+    const row = (label: string) => within(details).getByText(label).nextElementSibling;
+    expect(row("出品方")).toHaveTextContent("李研究 · 用户 · 与所涉产品无利益关系");
+    expect(row("性质")).toHaveTextContent("解读 · 综合");
+    expect(row("编写")).toHaveTextContent("AI · EviMed 证据 AI");
+    expect(row("用户修订")).toHaveTextContent(/^李研究 · /);
+    expect(row("评议者")).toHaveTextContent("王药师");
+    expect(within(details).getByText("评议于")).toBeInTheDocument();
+    expect(within(details).getByText("来源核查")).toBeInTheDocument();
     expect(within(details).queryByText(/AI 已评议|AI 待评议/)).not.toBeInTheDocument();
-    expect(within(details).getByText(/评议于/)).toBeInTheDocument();
-    expect(within(details).getByText(/全部来源上次核查于/)).toBeInTheDocument();
-    // The disclosure of how the card was made is in the same fold, and no model is named anywhere on the page.
-    expect(within(details).getByText("披露")).toBeInTheDocument();
+    // How the card was made is in the same list, and no model is named anywhere on the page.
+    expect(row("AI 做了")).toHaveTextContent("检索、筛选、抽取、综合");
+    expect(within(details).getByText("生成于")).toBeInTheDocument();
     expect(container).not.toHaveTextContent(/deepseek|模型/i);
     // The action sits in the row directly after the answer, in front of the fold.
-    const answer = screen.getByText("核心回答").closest("section")!;
-    const row = answer.nextElementSibling!;
-    expect(row).toContainElement(screen.getByRole("button", { name: "用这张卡继续研究" }));
-    expect(row).toContainElement(details);
+    const answer = screen.getByRole("heading", { name: "核心回答" }).closest("section")!;
+    const after = answer.nextElementSibling!;
+    expect(after).toContainElement(screen.getByRole("button", { name: "用这张卡继续研究" }));
+    expect(after).toContainElement(details);
+  });
+
+  it("states what the AI did, the dates, who wrote it and who reviewed it, and never the name of the model", () => {
+    const rows = evidenceAuthoringRows({ ...richCard, disclosure: { ...richCard.disclosure!, modelVersion: "2026-09", reviewers: [{ name: "王药师", title: "主管药师", affiliation: "某医院" }] } });
+    const value = (label: string) => rows.find((entry) => entry.label === label)?.value;
+    expect(value("AI 做了")).toBe("检索、筛选、抽取、综合");
+    expect(value("作者")).toBe("李研究");
+    expect(value("审核")).toBe("王药师，主管药师，某医院");
+    expect(value("最后核对")).toBeDefined();
+    expect(JSON.stringify(rows)).not.toMatch(/deepseek|2026-09/);
+    expect(evidenceAuthoringRows({ ...richCard, producer: null, originality: null, creator: null, disclosure: null })).toEqual([]);
   });
 
   it("keeps what is wrong above the fold, in warning colour: a source that changed under the card — and says nothing of a source the upkeep did not re-read", () => {
@@ -91,9 +115,9 @@ describe("evidence reading", () => {
     expect(pending).toHaveTextContent("等待复核");
     expect(details).not.toContainElement(pending);
     expect(pending).toHaveClass("text-warn");
-    // The same source change, settled, is a plain line in the fold and no longer a warning.
+    // The same source change, settled, is a row in the fold and no longer a warning.
     const { container: settled } = render(<EvidenceReading evidence={{ ...richCard, editorial: { ...editorial, status: "ai-reviewed", reviewer: { kind: "ai", name: "核对 AI" }, reviewRevision: richCard.revision, sourceChecks: [] } }} />);
-    expect(within(fold(settled)).getByText(/依据来源更新于/)).toBeInTheDocument();
+    expect(within(fold(settled)).getByText("来源更新")).toBeInTheDocument();
   });
 
   it("says a retraction above everything, as an alert", () => {

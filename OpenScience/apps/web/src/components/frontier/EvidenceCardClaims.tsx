@@ -1,140 +1,115 @@
-import { useState } from "react";
-import { EVIDENCE_AI_STEP_LABELS_ZH, EVIDENCE_CALCULATION_LABEL_ZH } from "@evimed/domain";
-import { Tag } from "@/components/ui/Tag";
-import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
-import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
-import { EvidenceChallenge } from "./EvidenceChallenge";
-import { EvidenceReferences } from "./EvidenceContent";
-import { evidenceDay } from "./evidenceDate";
+import { useMemo, useState } from "react";
+import { EVIDENCE_CALCULATION_LABEL_ZH } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
+import { Section } from "@/components/ui/Section";
+import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
+import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
+import type { EvidenceCard, EvidenceClaim } from "@/lib/evidenceZoneClient";
+import { CLAIM_STATUS_TEXT, claimSourceIndexes } from "./EvidenceClaimDetail";
+import { evidenceClaimKey, evidenceClaimsAnchor, useEvidenceInspect } from "./evidenceInspect";
 
-/** What a ⚠ means for one quotation, in a sentence. */
-const STATUS_TEXT: Record<string, string> = {
-  quote_not_found: "来源里没有找到这段引文",
-  source_unavailable: "来源原文不可用，无法核对",
-  no_quote: "没有附引文，无法核对",
-  author_excerpt_only: "摘录由作者提供，平台未读取原文",
-};
+/** Rows listed before 「显示更多」: a programme card holds dozens of conclusions, and the page is not their stack. */
+const CLAIMS_FIRST = 10;
+const CLAIMS_STEP = 20;
+/** A list shorter than this is read, not searched. */
+const SEARCH_FROM = 12;
+
 const CONFIDENCE: Record<string, string> = { high: "高", moderate: "中", low: "低" };
 
-function Mark({ mark }: { mark: EvidenceClaimMark | undefined }) {
-  if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="引文已核对">✓</span>;
-  if (mark === "⚠") return <span className="mr-1 text-verify-pending" aria-label="未核对上">⚠</span>;
-  return null;
-}
-
-/** One quotation and where it is from. A synthesis shows a mark for each of its sources; a direct claim's mark is the claim's own, shown once. */
-function Quote({ evidence, index, quote, mark, status, showMark = false }: { evidence: EvidenceCard; index: number; quote?: string; mark: EvidenceClaimMark | undefined; status?: string; showMark?: boolean }) {
+/** ✓ (the quotation was found in the source it names), ⚠ (not found, or not checkable), nothing for an estimate; in the column every title starts after. */
+function RowMark({ claim }: { claim: EvidenceClaim }) {
+  const mark = claim.verification?.mark;
   return (
-    <div className="mt-1 text-caption text-text-3">
-      {quote && <blockquote className="border-l-2 border-border pl-3">“{quote}”</blockquote>}
-      <p className="mt-1">
-        {showMark && <Mark mark={mark} />}
-        来源 {index}
-        <EvidenceReferences evidence={evidence} indexes={[index]} />
-        {mark === "⚠" && status && STATUS_TEXT[status] && <span className="ml-2 text-verify-pending">{STATUS_TEXT[status]}</span>}
-      </p>
-    </div>
+    <span className="inline-flex w-4 justify-center">
+      {mark === "✓" && <span className="text-verify-ok" aria-label="引文已核对">✓</span>}
+      {mark === "⚠" && <span className="text-verify-pending" aria-label="未核对上">⚠</span>}
+    </span>
   );
 }
 
-/** The reader's latest challenge on a claim, when they have made one. */
-const latestChallenge = (challenges: EvidenceChallengeView[], claimId: string) =>
-  challenges.filter((challenge) => challenge.claimId === claimId).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
-
-function ClaimItem({ evidence, claim, challenges }: { evidence: EvidenceCard; claim: EvidenceClaim; challenges?: EvidenceChallengeView[] }) {
-  const verification = claim.verification;
+/** What a row says under the statement: the kind of claim when it is not a plain quotation, the sources it names, and why a ⚠ is one. */
+function rowLine(claim: EvidenceClaim): { text: string; warn: string | null } {
   const type = claim.claimType ?? "direct";
-  const statusOf = (index: number) => verification?.sources.find((entry) => entry.sourceIndex === index);
-  return (
-    <li className="text-ui leading-relaxed text-text-2" data-claim={claim.claimId}>
-      <p className="whitespace-pre-wrap">
-        <Mark mark={verification?.mark} />
-        {claim.text}
-        {type === "derived" && <Tag className="ml-2">推导结果</Tag>}
-        {type === "calculated" && <Tag className="ml-2">{EVIDENCE_CALCULATION_LABEL_ZH}</Tag>}
-        {type === "synthesized" && <Tag className="ml-2">{`综合结论${claim.confidence ? ` · 把握程度${CONFIDENCE[claim.confidence]}` : ""}`}</Tag>}
-      </p>
-      {type === "direct" && claim.sourceIndexes?.[0] != null && (
-        <Quote evidence={evidence} index={claim.sourceIndexes[0]} quote={claim.supportQuote} mark={verification?.mark} status={verification?.status} />
-      )}
-      {type === "synthesized" && claim.supportingSources?.map((bond) => (
-        <Quote key={bond.sourceIndex} evidence={evidence} index={bond.sourceIndex} quote={bond.supportQuote} mark={statusOf(bond.sourceIndex)?.mark} status={statusOf(bond.sourceIndex)?.status} showMark />
-      ))}
-      {type === "derived" && (
-        <div className="mt-1 space-y-1 text-caption text-text-3">
-          {claim.method && <p>方法：{claim.method}</p>}
-          {claim.assumptions && <p>假设：{claim.assumptions}</p>}
-          {claim.sensitivity && <p>敏感性：{claim.sensitivity}</p>}
-        </div>
-      )}
-      {(claim.applicability || claim.uncertainty) && (
-        <p className="mt-1 text-caption text-text-3">{[claim.applicability && `适用：${claim.applicability}`, claim.uncertainty && `不确定性：${claim.uncertainty}`].filter(Boolean).join(" · ")}</p>
-      )}
-      {challenges && claim.claimId && (
-        <div className="mt-2">
-          <EvidenceChallenge cardId={evidence.id} claimId={claim.claimId} existing={latestChallenge(challenges, claim.claimId)} />
-        </div>
-      )}
-    </li>
-  );
+  const kind = type === "derived" ? "推导结果"
+    : type === "calculated" ? EVIDENCE_CALCULATION_LABEL_ZH
+      : type === "synthesized" ? `综合结论${claim.confidence ? ` · 把握程度${CONFIDENCE[claim.confidence]}` : ""}` : null;
+  const sources = claimSourceIndexes(claim);
+  const status = claim.verification?.mark === "⚠" ? CLAIM_STATUS_TEXT[claim.verification.status] ?? null : null;
+  return { text: [kind, sources.length > 0 ? `来源 ${sources.join("、")}` : null].filter(Boolean).join(" · "), warn: status };
 }
 
-/**
- * The card's claims, each with ✓ (its quotation was found in the source it names) or ⚠ (not found, or not checkable) and
- * the quotation beside it. A claim from an older card — a statement and nothing else — is shown as a plain line.
- */
-/** How many of a card's points are shown before 「展开其余」. */
-const CLAIMS_FIRST = 8;
-
-export function EvidenceClaims({ evidence, challenges }: { evidence: EvidenceCard; challenges?: EvidenceChallengeView[] }) {
-  const [all, setAll] = useState(false);
-  if (!evidence.claims.length) return null;
-  // Eight first: a programme card holds dozens, each with its quotation, and every one shown at once made the page tens of
-  // thousands of pixels tall (release-11 walk). The rest are one press away, in place.
-  const shown = all ? evidence.claims : evidence.claims.slice(0, CLAIMS_FIRST);
-  const rest = evidence.claims.length - shown.length;
-  return (
-    <section>
-      <h2 className="mb-2 text-ui font-medium text-text">证据要点</h2>
-      <ul className="space-y-3">
-        {shown.map((claim, index) => claim.claimId
-          ? <ClaimItem key={claim.claimId} evidence={evidence} claim={claim} challenges={challenges} />
-          : <li key={index} className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">{claim.text}</li>)}
-      </ul>
-      {rest > 0 && <Button variant="text" className="mt-2" onClick={() => setAll(true)}>展开其余 {rest} 条</Button>}
-    </section>
-  );
-}
+type Status = "all" | "check";
 
 /**
- * How the card was made and who stands behind it: the steps an AI took, the dates, authors and reviewers. It is in the fold of 「编写与核查」
- * on the reading page. The name of the model is not on it: a reader is told what the AI did and who answers for the card, and a model's
- * name is back office (the card still carries it; it is the page that does not show it).
+ * The card's conclusions (证据要点), as a list that opens (R19, audit D C2). Each row is one conclusion with its mark in front — ✓ its
+ * quotation was found in the source it names, ⚠ it was not, or could not be checked — and a press opens the quotation in the drawer
+ * (`EvidenceInspector`). They used to be a stack of eight with their quotations under them, and 「展开其余」 for the rest, which for a
+ * programme card's fifty-eight was most of the page. The toolbar over the list narrows it to the ones that need checking (drawn only
+ * when there is one) and searches it (drawn only past a dozen); a conclusion of an older card — a statement and nothing else — is a
+ * line that opens nothing.
  */
-export function EvidenceDisclosure({ evidence }: { evidence: EvidenceCard }) {
-  const disclosure = evidence.disclosure;
-  if (!disclosure) return null;
-  const people = (list: Array<{ name: string; affiliation?: string; title?: string }>) => list.map((person) => [person.name, person.title, person.affiliation].filter(Boolean).join("，")).join("；");
-  const steps = disclosure.aiSteps.map((step) => (EVIDENCE_AI_STEP_LABELS_ZH as Record<string, string>)[step] ?? step).join("、");
-  const rows: Array<[string, string]> = [];
-  if (steps) rows.push(["AI 做了", steps]);
-  if (disclosure.generatedAt) rows.push(["生成于", evidenceDay(disclosure.generatedAt)]);
-  if (disclosure.lastCheckedAt) rows.push(["最后核对", evidenceDay(disclosure.lastCheckedAt)]);
-  if (disclosure.authors.length) rows.push(["作者", people(disclosure.authors)]);
-  if (disclosure.reviewers.length) rows.push(["审核", people(disclosure.reviewers)]);
-  if (!rows.length) return null;
+export function EvidenceClaims({ evidence }: { evidence: EvidenceCard }) {
+  const inspect = useEvidenceInspect();
+  const [status, setStatus] = useState<Status>("all");
+  const [query, setQuery] = useState("");
+  const rows = useMemo(() => evidence.claims.map((claim, position) => ({ claim, key: evidenceClaimKey(claim, position), openable: Boolean(claim.claimId) })), [evidence.claims]);
+  const needsCheck = rows.filter((row) => row.claim.verification?.mark === "⚠").length;
+  const needle = query.trim().toLowerCase();
+  const matching = useMemo(() => rows.filter((row) => {
+    if (status === "check" && row.claim.verification?.mark !== "⚠") return false;
+    if (!needle) return true;
+    const quotes = [row.claim.supportQuote, ...(row.claim.supportingSources ?? []).map((bond) => bond.supportQuote)];
+    return [row.claim.text, ...quotes].some((text) => text?.toLowerCase().includes(needle));
+  }), [rows, status, needle]);
+  const { visible, remaining, more } = useShowMore(matching, { first: CLAIMS_FIRST, step: CLAIMS_STEP, resetKey: `${status}|${needle}` });
+  if (rows.length === 0) return null;
+
+  const filtering = status !== "all" || needle !== "";
+  const clear = () => { setStatus("all"); setQuery(""); };
+  const toolbar: ToolbarProps | null = needsCheck > 0 || rows.length > SEARCH_FROM
+    ? {
+      label: "筛选证据要点",
+      filters: needsCheck > 0 ? [{
+        kind: "chips", label: "核对状态", value: status, onChange: (value) => setStatus(value as Status),
+        options: [{ value: "all", label: "全部" }, { value: "check", label: "需要核对", count: needsCheck }],
+      }] : [],
+      search: rows.length > SEARCH_FROM ? { label: "搜索证据要点", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") } : undefined,
+      summary: filtering ? `匹配 ${matching.length} 条` : undefined,
+    }
+    : null;
+
   return (
-    <section>
-      <h2 className="mb-2 text-ui font-medium text-text">披露</h2>
-      <dl className="space-y-1 text-ui text-text-2">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex gap-4">
-            <dt className="w-20 shrink-0 text-text-3">{label}</dt>
-            <dd className="min-w-0">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <div id={evidenceClaimsAnchor(evidence.id)}>
+      <Section title="证据要点" count={rows.length} toolbar={toolbar ? <Toolbar {...toolbar} /> : undefined}>
+        {matching.length === 0 ? (
+          <Note action={<Button variant="secondary" size="sm" onClick={clear}>清除筛选</Button>}>没有符合的结论。</Note>
+        ) : (
+          <>
+            <List label="证据要点" divided>
+              {visible.map(({ claim, key, openable }) => {
+                const line = rowLine(claim);
+                return (
+                  <ListRow
+                    key={key}
+                    leading={<RowMark claim={claim} />}
+                    title={<span className="line-clamp-3 whitespace-pre-wrap break-words">{claim.text}</span>}
+                    onOpen={inspect && openable ? () => inspect.openClaim(key) : undefined}
+                    meta={(line.text || line.warn) ? (
+                      <span>
+                        {line.text}
+                        {line.warn && <span className={line.text ? "ml-2 text-verify-pending" : "text-verify-pending"}>{line.warn}</span>}
+                      </span>
+                    ) : undefined}
+                  />
+                );
+              })}
+            </List>
+            <ShowMore remaining={remaining} unit="条" onMore={more} />
+          </>
+        )}
+      </Section>
+    </div>
   );
 }

@@ -2,10 +2,16 @@ import type {
   EvidenceCard,
   EvidenceContent as Content,
 } from "@/lib/evidenceZoneClient";
+import { useEvidenceInspect } from "./evidenceInspect";
 
 export const evidenceSourceId = (cardId: string, index: number) =>
   `evidence-source-${encodeURIComponent(cardId)}-${index}`;
 
+/**
+ * The `[n]` after a statement: the source it names. Where the page provides the drawer (`EvidenceInspector`) a press opens that
+ * source — its excerpt and the conclusions that stand on it — instead of scrolling a list of thirty-nine; the anchor stays an
+ * anchor, so the link still means something without one.
+ */
 export function EvidenceReferences({
   evidence,
   indexes = [],
@@ -13,6 +19,7 @@ export function EvidenceReferences({
   evidence: EvidenceCard;
   indexes?: number[];
 }) {
+  const inspect = useEvidenceInspect();
   const valid = [...new Set(indexes)].filter(
     (index) =>
       Number.isInteger(index) && index > 0 && index <= evidence.sources.length,
@@ -25,6 +32,7 @@ export function EvidenceReferences({
           href={`#${evidenceSourceId(evidence.id, index)}`}
           aria-label={`查看来源 ${index}`}
           className="text-accent hover:underline"
+          onClick={inspect ? (event) => { event.preventDefault(); inspect.openSource(index); } : undefined}
         >
           [{index}]
         </a>
@@ -220,13 +228,13 @@ export function EvidenceContent({ evidence }: { evidence: EvidenceCard }) {
       ))}
       {content.sections?.map((section, index) => (
         <section key={index}>
-          <h3 className="mb-2 text-ui font-medium text-text">
+          <h2 className="mb-2 text-section font-semibold text-text">
             {section.title}
             <EvidenceReferences
               evidence={evidence}
               indexes={section.sourceIndexes}
             />
-          </h3>
+          </h2>
           <p className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">
             {section.text}
           </p>

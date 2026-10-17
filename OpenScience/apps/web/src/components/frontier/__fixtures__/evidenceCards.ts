@@ -66,3 +66,42 @@ export const zone: EvidenceZone = {
   id: "ez_1", revision: 3, state: "published", kind: "user", visibility: "platform", canEdit: true, title: "卒中研究", description: null, background: null,
   experts: [], following: false, canFollow: false, canFeedback: false, canResearch: true, evidenceCount: 1,
 };
+
+/**
+ * A programme card the size of the one the owner opened (R19 audit D C2: 40,200 px): the platform's own, with no headline claim, one
+ * conclusion to a source's quotation and a few that were not found — `sourceCount` sources, each with a long excerpt, and
+ * `claimCount` conclusions. Every claim is a direct quotation of its own source's excerpt, in turn.
+ */
+export function programmeCard({ sourceCount = 39, claimCount = 58, notFound = [4, 17, 33] }: { sourceCount?: number; claimCount?: number; notFound?: number[] } = {}): EvidenceCard {
+  const sources = Array.from({ length: sourceCount }, (_, index) => ({
+    title: `房颤抗凝研究 ${index + 1}：${index % 2 ? "随机对照试验" : "队列研究"}的主要结局`,
+    url: `https://pubmed.ncbi.nlm.nih.gov/${30000000 + index}/`,
+    excerpt: `Study ${index + 1}: ${"In adults with atrial fibrillation, the anticoagulant reduced stroke or systemic embolism compared with warfarin. ".repeat(7)}`,
+    coverage: (index % 3 === 0 ? "full-text" : index % 3 === 1 ? "abstract" : "excerpt") as "full-text" | "abstract" | "excerpt",
+    checkedAt: "2026-10-12T08:00:00Z",
+  }));
+  const claims = Array.from({ length: claimCount }, (_, index) => {
+    const mark = notFound.includes(index) ? "⚠" as const : "✓" as const;
+    const sourceIndex = (index % sourceCount) + 1;
+    const claimId = `CLM-${String(index + 1).padStart(3, "0")}`;
+    return {
+      text: `结论 ${index + 1}：抗凝药在这一人群中降低卒中或系统性栓塞，来源 ${sourceIndex}。`, claimId, claimType: "direct" as const, sourceIndexes: [sourceIndex],
+      supportQuote: "the anticoagulant reduced stroke or systemic embolism compared with warfarin",
+      verification: { claimId, claimType: "direct", status: mark === "✓" ? "verified" as const : "quote_not_found" as const, mark, sources: [{ sourceIndex, status: mark === "✓" ? "verified" : "quote_not_found", mark }] },
+    };
+  });
+  const body = `## 已逐字核对的结论\n\n${claims.map((claim, index) => `${index + 1}. ${claim.text}（直接引用，来源 [${claim.sourceIndexes[0]}]）`).join("\n")}`;
+  return {
+    ...card,
+    id: "ec_programme", state: "published", canEdit: false, producer: { kind: "platform", name: "EviMed 证据中心", relation: "none" }, originality: "synthesis", primary: false,
+    title: "房颤抗凝：证据更新", summary: claims[0].text, creator: null, reviewer: null, reviewedAt: null, createdAt: "2026-10-12T08:00:00Z",
+    content: { question: "房颤患者用口服抗凝药，各药有什么证据？", answer: `这张卡汇总了 ${claimCount} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。` },
+    body, claims, claimCount,
+    claimVerification: { total: claimCount, verified: claimCount - notFound.length, quote_not_found: notFound.length, source_unavailable: 0, no_quote: 0, derived: 0 },
+    views: null, sources, limitations: "多数试验为开放标签设计。\n部分结论只依据摘要。",
+    disclosure: { generatedAt: "2026-10-12T08:00:00Z", lastCheckedAt: "2026-10-12T08:00:00Z", aiSteps: ["search", "screen", "extract", "synthesize", "review"], authors: [], reviewers: [] },
+    editorial: { author: { kind: "ai", name: "EviMed 证据 AI" }, reviewer: null, status: "ai-reviewed", reviewRevision: 1, sourceCheckedAt: "2026-10-12T08:00:00Z" },
+    revisions: [{ revision: 1, recordedAt: "2026-10-12T08:00:00Z", title: "房颤抗凝：证据更新", sourceFingerprint: null, reviewStatus: null }],
+    discussion: [], reviews: [], review: null,
+  };
+}
