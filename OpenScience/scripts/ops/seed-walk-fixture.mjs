@@ -35,10 +35,12 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { furnishAccount } from "./walk-fixture/account.mjs";
 import { furnishFrontier } from "./walk-fixture/frontier.mjs";
 import { furnishGeo } from "./walk-fixture/geo.mjs";
+import { furnishKnowledge, parserStandIn } from "./walk-fixture/knowledge.mjs";
+import { furnishRuns } from "./walk-fixture/runs.mjs";
 import { furnishVcr } from "./walk-fixture/vcr.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +101,15 @@ async function main() {
   const password = await passwordOf(options.passwordFile);
 
   const { createWebApiApp } = await server("server.mjs");
+  // The engine the knowledge base compiles with is OpenViking's stand-in from the page contract's tests: it holds the files in memory and
+  // writes what `compile` says a compile wrote (set by the knowledge part of the fixture); nothing here reaches a network.
+  const { createOpenVikingStub } = await import(pathToFileURL(path.join(here, "..", "..", "apps", "server", "test", "helpers", "openVikingResourcesStub.mjs")).href);
+  const { OpenVikingClient } = await server("openVikingClient.mjs");
+  /** @type {(request: any, stub: any) => void} */
+  let compile = () => {};
+  const engine = createOpenVikingStub({ compile: (/** @type {any} */ request, /** @type {any} */ stub) => compile(request, stub) });
+  const client = new OpenVikingClient({ openVikingUrl: "http://openviking.test", openVikingApiKey: "stub-key", openVikingAccount: "evimed", openVikingRequestTimeoutMs: 5000 },
+    { fetchImpl: /** @type {any} */ (engine.fetch) });
   const app = createWebApiApp({
     dataDir: options.dataDir, stateStore: "postgres", databaseUrl: options.databaseUrl, runtimeMode: "mock", authMode: "local", devAuth: false,
     bootstrapUser: "", bootstrapPassword: "", staticDir: options.staticDir, port: options.port, host: "127.0.0.1",
@@ -107,6 +118,13 @@ async function main() {
     // run a job, and the studies are furnished in the states the walk reads them in).
     vcrDataPlaneDir: path.join(options.dataDir, "vcr-plane"), vcrPollMs: 3_600_000,
     operatorUsers: [FIXTURE_OPERATOR],
+    // The knowledge base: documents read by the platform's worker (a PDF through the parser's stand-in), pages and a graph compiled by the engine's.
+    sourceIngestionEnabled: true, sourceIngestionPollMs: 200, sourceIngestionLeaseMs: 5_000, documentParserUrl: "http://parser.test", documentParserToken: "sk-walk-fixture",
+    documentParserFetch: parserStandIn, sourceMetadataFetch: async () => new Response("{}", { status: 404 }),
+    memoryIndexProvider: "builtin", ovKnowledgeEnabled: true, openVikingClient: client, knowledgePagesDebounceMs: 0, knowledgePagesMinSources: 2, knowledgePagesPollMs: 200,
+    kbSearchEnabled: false,
+    // The key the account's own data-source credentials are sealed under (random, kept nowhere): without it 设置 → 数据源 answers 503.
+    modelGatewaySigningSecret: randomBytes(36).toString("base64url"),
   });
   const address = await app.listen(options.port, "127.0.0.1");
   log(`listening on http://127.0.0.1:${typeof address === "object" && address ? address.port : options.port}`);
@@ -117,7 +135,7 @@ async function main() {
     if (!existing) await app.store.createUser(options.user, password, "walk fixture");
     if (!(await app.store.userById(FIXTURE_OPERATOR).catch(() => null))) await app.store.createUser(FIXTURE_OPERATOR, randomBytes(24).toString("base64url"), "walk operator");
     const user = await app.store.userById(options.user);
-    await furnish(app, user);
+    await furnish(app, user, { password, base: `http://127.0.0.1:${options.port}`, engine, setCompile: (/** @type {any} */ script) => { compile = script; } });
     log("the fixture is furnished");
   } else {
     log("the account exists: nothing was furnished again");
@@ -149,13 +167,16 @@ async function passwordOf(file) {
 /**
  * Everything the walk visits, furnished through the app's own stores.
  * @param {any} app @param {any} user
+ * @param {{ password: string, base: string, engine: any, setCompile: (script: (request: any, stub: any) => void) => void }} context
  */
-async function furnish(app, user) {
+async function furnish(app, user, { password, base, engine, setCompile }) {
   const context = { log };
   const studies = await furnishVcr(app, user, context);
   const geo = await furnishGeo(app, user, context);
   await furnishFrontier(app, user, context);
   await furnishAccount(app, user, { geoProjectId: geo.projectId, studies, projects: { geo: geo.controlProjectId, finished: studies.projects.finished, mixed: studies.projects.mixed } }, context);
+  await furnishKnowledge(app, user, password, { engine, setCompile, base, log });
+  await furnishRuns(app, user, context);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
