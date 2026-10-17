@@ -190,9 +190,8 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           className="min-w-0 flex-1 max-sm:min-w-28 sm:w-56 sm:flex-none"
         />
       )}
-      {/* On a phone beside a search the count gives way (truncated) before the search does; it has room of its own elsewhere. */}
-      {summary != null && <span className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}
-        title={search && typeof summary === "string" ? summary : undefined}>{summary}</span>}
+      {/* On a phone beside a search the count gives way (truncated) before the search does. */}
+      {summary != null && <span className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}>{summary}</span>}
       {actions}
     </div>
   );

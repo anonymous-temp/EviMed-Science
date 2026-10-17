@@ -66,7 +66,7 @@ export function ScrollRegion({ label, className, children }: {
           aria-hidden="true"
           data-scroll-cue=""
           className="pointer-events-none absolute inset-y-0 right-0 w-10"
-          style={{ backgroundImage: `linear-gradient(to left, ${ground || "var(--surface)"}, rgba(0, 0, 0, 0))` }}
+          style={{ backgroundImage: `linear-gradient(to left, ${ground || "var(--surface)"}, transparent)` }}
         />
       )}
     </div>
@@ -77,7 +77,9 @@ export function ScrollRegion({ label, className, children }: {
 function groundOf(element: HTMLElement): string {
   for (let node: HTMLElement | null = element; node; node = node.parentElement) {
     const color = getComputedStyle(node).backgroundColor;
-    if (color && color !== "rgba(0, 0, 0, 0)" && color !== "transparent") return color;
+    // A computed background with no alpha left is `transparent` or the four-channel form ending in a zero alpha.
+    const clear = color === "transparent" || (color.startsWith("rgba") && /,\s*0\)$/.test(color));
+    if (color && !clear) return color;
   }
   return "var(--bg)";
 }
