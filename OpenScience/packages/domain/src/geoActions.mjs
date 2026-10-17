@@ -25,6 +25,12 @@
  * - **A key survives what rewrites around it**: a new strategy version with the same gap, and a question set copied under new
  *   group ids (a group keeps its name; `aliasIds` carry the ids it had), find the same choice. The key's first word is the kind the
  *   action was born with; `kind` itself becomes `correct_error` when a group is already at its target and errors are open.
+ * - **A page the brand published for a group is the group's content actions'**, with or without an article of the platform's: a link
+ *   that names only a group moves the group's `fill_gap` / `win_cluster` / `maintain` actions (never a correction), and the engines that
+ *   cite it are theirs — the orchestrator's staleness rule already reads it so (decided 2026-10-17; r19-geos had it attributed by article only).
+ * - **What a reader would add up is added up here** (`counts`): the actions by kind and status, the sources they list by route, the groups
+ *   no action reaches, the articles of no group. The model that reads the list (`geoLeanAction`, one row an action, under a character
+ *   budget) quotes these and never sums a column of rows — which it did, wrongly, when it was given every row whole.
  *
  * @module geoActions
  */
@@ -938,10 +944,12 @@ export function deriveGeoActions(input) {
 }
 
 /**
- * The characters the rows of one lean read of the actions may take. The kernel keeps 12,500 tokens of a tool result inline and spills
- * the middle of a longer one to a file the model has to go and find: the whole list of eleven actions was 22,000 characters, and the
- * model read thirteen times and added a column up wrongly (live, 2026-10-14). A Chinese character costs at most one token, so a read
- * under 10,000 characters stays whole whatever it says; the rows get 9,000, the headline, the counts and the paging the rest.
+ * The characters the rows of one lean read of the actions may take. It is not the kernel's cap: the kernel keeps `maxInlineTokens:
+ * 12500` of a tool result inline and estimates four characters a token, so about 50,000 characters — which the 22,000-character list
+ * of eleven actions never reached (live, 2026-10-14: the transcript holds that answer whole, with no omission notice). It is the size
+ * at which the model has been seen to read a list in one go: the same session paged around the 22 K list in thirteen reads and added a
+ * column up wrongly, and read answers of 7 – 9 K characters (a page of four actions, the clusters) once each. The rows get 9,000; the
+ * headline, the counts and the paging take the rest. What a longer list leaves out is one `offset` away, and `nextOffset` says where.
  */
 export const GEO_ACTIONS_READ_CHARS = 9000
 /** The longest title of an action a lean row carries; the whole action has it entire. */
