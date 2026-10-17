@@ -32,9 +32,10 @@ const VALIDATION_WORD = { passed: "通过", partial: "部分", none: "无" } as 
  * Hidden knowledge:
  *  - **The tier is a ceiling, not a badge.** A literature model can support a design and cannot support a submission; the
  *    ceiling and the risk are said at the top, with the name its output has earned.
- *  - **Mechanics are not the reader's.** How the model is called, which events it reads, how far it projects, how many
- *    trajectories a history gets, when it retires — the interface's own parameters — are not on a person's page (owner ruling
- *    2026-10-10); a reader checks what the model covers and what backs it.
+ *  - **What the model covers comes first; how it is called comes last.** The rows a reader checks — the population, the region, the
+ *    endpoint, the sources — lead; the interface's own parameters (the call shape, the events it reads, how far it projects, how many
+ *    trajectories a history gets, when it retires) follow them behind 「全部 N 项」, because they are for the person wiring a model in,
+ *    and never a sentence about how the platform works.
  *  - A list longer than eight facts folds (`FactList`), so the record is as long as what a reader needs first.
  */
 export function VcrModelRecord({ model, className }: { model: VcrModelCard; className?: string }) {
@@ -55,10 +56,15 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
     ...(model.provider ? [{ label: "提供方", value: model.provider }] : []),
     ...(model.family ? [{ label: "类型", value: model.family }] : []),
     ...(model.version ? [{ label: "版本", value: model.version }] : []),
+    ...(model.shapeLabel ? [{ label: "调用接口", value: model.shapeLabel }] : []),
+    ...(model.events && model.events.length > 0 ? [{ label: "读取的事件", value: model.events.join("、") }] : []),
+    ...(model.horizon ? [{ label: "最长推演时间", value: model.horizon }] : []),
+    ...(model.trajectoriesMax ? [{ label: "每份历史最多轨迹数", value: String(model.trajectoriesMax) }] : []),
     ...(model.inputs && model.inputs.length > 0 ? [{ label: "输入", value: model.inputs.join("、") }] : []),
     ...(model.outputs ? [{ label: "输出", value: model.outputs }] : []),
     ...(model.missingData ? [{ label: "缺失数据", value: model.missingData }] : []),
     ...(model.uncertainty ? [{ label: "不确定性", value: model.uncertainty }] : []),
+    ...(model.retirement ? [{ label: "退役规则", value: model.retirement }] : []),
   ];
   return (
     <div data-vcr-model-card={model.id} className={cn("flex flex-col gap-6", className)}>
@@ -75,6 +81,14 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
       </p>
 
       {rows.length > 0 && <FactList rows={rows} />}
+
+      {model.shapeMissing && model.shapeMissing.length > 0 && (
+        <Section title="接口还缺的内容" level="sub" count={model.shapeMissing.length}>
+          <ul data-vcr-model-shape-missing="" className="flex list-disc flex-col gap-1 pl-4 text-ui text-text-2">
+            {model.shapeMissing.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </Section>
+      )}
 
       {model.validation && model.validation.length > 0 && (
         <Section title="验证" level="sub">
