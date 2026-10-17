@@ -82,7 +82,7 @@ export function VcrExportDialog({ busy, onClose, onExport }: {
           {VCR_EXPORT_CHOICES.map((choice) => (
             <label
               key={choice.kind}
-              className={cn("flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-ui", kind === choice.kind ? "bg-accent-soft text-accent-strong" : "text-text hover:bg-surface-1")}
+              className={cn("flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-ui", kind === choice.kind ? "bg-accent-soft text-accent" : "text-text hover:bg-surface-1")}
             >
               <input type="radio" name="vcr-export-kind" value={choice.kind} checked={kind === choice.kind} onChange={() => setKind(choice.kind)} className="h-3.5 w-3.5 accent-accent" />
               {choice.label}

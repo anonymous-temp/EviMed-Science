@@ -124,8 +124,9 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
                 onClick={() => onSelect(entry.id)}
                 aria-current={active === entry.id ? "location" : undefined}
                 className={cn(
-                  "w-full truncate rounded px-2 py-1 text-left hover:bg-surface-2",
-                  active === entry.id ? "bg-accent-soft text-accent-strong" : entry.level === 2 ? "text-text" : "text-muted",
+                  // `leading-7` in place of vertical padding: the same 28 px box, and a text control with no padding of its own is the one kind every link and title is.
+                  "w-full truncate rounded px-2 text-left leading-7 hover:bg-surface-2",
+                  active === entry.id ? "bg-accent-soft text-accent" : entry.level === 2 ? "text-text" : "text-muted",
                 )}
               >
                 {entry.text}
@@ -154,7 +155,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
       <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
       {contents}
       {/* A 60 KB report needs a way back up (appendix D §4.5). */}
-      <button type="button" onClick={top} className="mt-3 flex items-center gap-1 px-2 text-caption text-link hover:underline">
+      <button type="button" onClick={top} className="mt-3 flex min-h-6 items-center gap-1 px-2 text-caption text-link hover:underline">
         <ArrowUp size={16} aria-hidden="true" />回到顶部
       </button>
     </aside>

@@ -32,7 +32,7 @@ export function EvidenceReferences({
           key={index}
           href={`#${evidenceSourceId(evidence.id, index)}`}
           aria-label={`查看来源 ${index}`}
-          className="inline-flex min-h-6 min-w-6 items-center justify-center text-accent hover:underline"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center font-normal text-accent hover:underline"
           onClick={inspect ? (event) => { event.preventDefault(); inspect.openSource(index); } : undefined}
         >
           [{index}]

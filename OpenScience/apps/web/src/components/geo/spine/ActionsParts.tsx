@@ -167,7 +167,7 @@ export function ReviewBlock({
               onOpen={reach ? () => onOpen(article) : undefined}
               meta={(
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
-                  {group && <ClusterLink groupId={group.id} className="relative z-sticky">{clusterName(group)}</ClusterLink>}
+                  {group && <ClusterLink groupId={group.id} className="relative z-sticky text-ui">{clusterName(group)}</ClusterLink>}
                   <span>{layerName(article.layer) === "—" ? "" : layerName(article.layer)}</span>
                 </span>
               )}
@@ -289,7 +289,7 @@ export function OtherArticles({
                 onOpen={reach ? () => onOpen(article) : undefined}
                 meta={(
                   <span className="inline-flex flex-wrap items-baseline gap-x-2">
-                    {group && <ClusterLink groupId={group.id} className="relative z-sticky">{clusterName(group)}</ClusterLink>}
+                    {group && <ClusterLink groupId={group.id} className="relative z-sticky text-ui">{clusterName(group)}</ClusterLink>}
                     <span>{[articleMeta(article), articleStatusLine(article)].filter(Boolean).join(" · ")}</span>
                   </span>
                 )}

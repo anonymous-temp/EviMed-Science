@@ -22,7 +22,7 @@ export type TagTone = "neutral" | "safety" | "accent" | "warn";
 const toneClasses: Record<TagTone, string> = {
   neutral: "bg-surface-2 text-text-2",
   safety: "bg-danger-soft text-danger-strong",
-  accent: "bg-accent-soft text-accent-strong",
+  accent: "bg-accent-soft text-accent",
   warn: "bg-warn-soft text-warn-strong",
 };
 
