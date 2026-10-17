@@ -41,6 +41,9 @@ export const designRan = (design: Pick<VcrDesign, "measures" | "dominated">): bo
   // A dominated design was computed — dominance is decided on its numbers — and the server sends none for it (it prints one sentence instead).
   design.dominated === true || Object.keys(design.measures ?? {}).some((key) => key !== "sample_size" && key !== "cost");
 
+/** Whether a design has a run to open: a record of its own, or at least how many replicates and by what method. */
+const hasRun = (design: VcrDesign): boolean => Boolean(design.record || design.replicates != null || design.method);
+
 /** What a design that has not been computed says where its numbers would be. */
 const NOT_RUN = "还没算";
 
@@ -181,7 +184,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
       {shown === "schedule" && data.schedule && <VcrScheduleCard schedule={data.schedule} />}
 
       {shown === "regulatory" && (data.regulatory.length > 0
-        ? <VcrRegulatoryLog contacts={data.regulatory} canWrite={canWrite} onAdd={() => setRecording(true)} />
+        ? <VcrRegulatoryLog contacts={data.regulatory} />
         : (
           <EmptyState
             title="还没有监管沟通记录"
@@ -330,7 +333,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
           <div>
             <DataTable
               label="方案的对比"
-              columns={designColumns(data, onEdit)}
+              columns={designColumns(data, onEdit, onOpen)}
               rows={data.designs}
               rowKey={(design) => design.id}
               highlight={(design) => Boolean(design.chosen)}
@@ -339,7 +342,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
                 ...(design.dominated ? { "data-vcr-dominated": "" } : {}),
                 ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
               })}
-              onRowOpen={(design) => { if (design.record || design.replicates != null || design.method) onOpen(design); }}
+              onRowOpen={(design) => { if (hasRun(design)) onOpen(design); }}
             />
             {data.footnotes?.map((note, index) => (
               <p key={note} className="mt-1.5 text-caption text-text-3">
@@ -397,7 +400,7 @@ function dominatedSentence(design: VcrDesign): string {
  * The grid's columns, from the payload's own list. A dominated design prints one sentence across the measure columns instead of
  * numbers; power is a bar and its number.
  */
-function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | null): Array<DataColumn<VcrDesign>> {
+function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | null, onOpen: ((design: VcrDesign) => void) | null): Array<DataColumn<VcrDesign>> {
   return [
     {
       key: "design",
@@ -411,7 +414,14 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
             >
               {design.code}
             </span>
-            <span className={design.dominated ? "text-text-3" : "text-text"}>{design.name}</span>
+            {/* The keyboard's way into the run behind the row; a press anywhere else on the row does the same for a pointer. */}
+            {onOpen && hasRun(design)
+              ? (
+                <button type="button" aria-label={`打开方案 ${design.code} 的运行记录`} onClick={() => onOpen(design)} className={cn("rounded text-left hover:underline", design.dominated ? "text-text-3" : "text-text")}>
+                  {design.name}
+                </button>
+              )
+              : <span className={design.dominated ? "text-text-3" : "text-text"}>{design.name}</span>}
             {design.dominated && <Tag>{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</Tag>}
           </span>
           {design.note && !design.dominated && <span className="text-caption text-text-3">{design.note}</span>}
