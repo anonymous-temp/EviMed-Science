@@ -2375,11 +2375,11 @@
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:7f841586849b5fa08dce5fb5579a750134c70578d554fceff58d2f1d75fbd3e0",
+      "digest": "sha256:b0c1f60c2ca6edb79791b139ff704f507d28c7170435be11f1287548ea78a41c",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"assets/examples/example-research-report.md","sha256":"af5844d2f8b2972d96ad85218b479367b1fa99cd718bd23be6027266079ec7de"},
-        {"path":"references/current-rendering.md","sha256":"c6c394193ac7fd48c5f05290557e5f44e9d1c22c52759a0c15f61402ff878a34"},
+        {"path":"references/current-rendering.md","sha256":"f8cb62fec5cdeb122b3e7aa18ca94232b220400c0f78d2a487753d2ba2e7eacd"},
         {"path":"references/diagrams/architecture.md","sha256":"b246d31c1b99d41a795d7df1c451b77f8bd1cf584561471bc3cd8874b3199376"},
         {"path":"references/diagrams/block.md","sha256":"02b2a095b4c8c6845c1fd9d3a3ca917113746517dcd224107f6c9c6bede8221c"},
         {"path":"references/diagrams/c4.md","sha256":"2f815d518f8715fa2968566c88edd146f760f33db3299704ff15614ec50df2d5"},

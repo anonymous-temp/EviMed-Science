@@ -50,7 +50,7 @@ just to make a diagram render.
 
 ## Local CLI export
 
-> The EviMed runtime has no Mermaid CLI and no package registry, so the commands below cannot be run there; they describe an export on a machine that has them. In the runtime, deliver the Markdown source with its text description.
+> The EviMed runtime has no package registry or network, so the install and `npx mmdc` commands below cannot be run there; they describe an export on a machine that has them.
 
 The [official CLI](https://github.com/mermaid-js/mermaid-cli) supports SVG, PNG, PDF,
 and Markdown conversion. In a disposable preview directory:

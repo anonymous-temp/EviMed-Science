@@ -3,7 +3,7 @@ name: markdown-mermaid-writing
 description: Writes scientific Markdown documentation and Mermaid diagrams for workflows, relationships, timelines, and schemas. Provides syntax references, document templates, accessibility guidance, and version-aware rendering checks. Use when a user requests Markdown, Mermaid, or a text-based structural diagram; quantitative scientific figures require suitable plotting tools.
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0
-compatibility: Markdown authoring needs no runtime, and the platform's viewer draws Mermaid blocks. The runtime has no Mermaid CLI and no package registry, so SVG or PNG export with `mmdc` is not available there; keep the Markdown source and a text description.
+compatibility: Markdown authoring needs no runtime, and the platform's viewer draws Mermaid blocks. The runtime has no package registry or network, so the Mermaid CLI (`mmdc`) cannot be installed there.
 metadata:
   version: "1.3"
   last-reviewed: "2026-10-01"
@@ -194,6 +194,9 @@ diagram for this check](https://docs.github.com/en/get-started/writing-on-github
 A successful latest-version local preview does not establish GitHub or another host
 will render it. Where Mermaid is unsupported, supply a rendered SVG/PNG with a text
 description alongside the retained `.md` source.
+
+> In the EviMed runtime there is no package registry or network, so do not try to install a renderer (`npm`,
+> `npx mmdc`). Check a diagram with what is already there if you can, and say plainly what was and was not rendered.
 
 ### Step 5: Retain source and verification
 

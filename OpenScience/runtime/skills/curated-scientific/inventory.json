@@ -1013,7 +1013,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/markdown-mermaid-writing",
-      "digest": "sha256:7f841586849b5fa08dce5fb5579a750134c70578d554fceff58d2f1d75fbd3e0",
+      "digest": "sha256:b0c1f60c2ca6edb79791b139ff704f507d28c7170435be11f1287548ea78a41c",
       "fills": "Accessible source-controlled scientific diagrams",
       "upstreamReview": {
         "class": "A",
@@ -1026,7 +1026,7 @@
           }
         ],
         "changed": "SKILL.md +79/-53; Python files ~0 +0 -0; references ~26 +1 -0; other files ~10 +0 -0",
-        "reason": "Refreshed. Text only (38 files, no scripts, so no upstream suite). The whole upstream directory was taken (SKILL.md 1.1 to 1.3; the description now says when not to use the skill and that quantitative figures need plotting tools) and the recorded edits applied: the compatibility line made true of the image, a note that the Mermaid CLI export commands of references/current-rendering.md cannot be run in the runtime (no package registry, no CLI), EviMed's deterministic-baseline section kept.",
+        "reason": "Refreshed. Text only (38 files, no scripts, so no upstream suite). The whole upstream directory was taken (SKILL.md 1.1 to 1.3; the description now says when not to use the skill and that quantitative figures need plotting tools) and the recorded edits applied: the compatibility line made true of the image, a note in the body, and one in references/current-rendering.md, that the runtime has no package registry or network, so no renderer is to be installed, a diagram is checked with what is already there and the reply says what was and was not rendered (the front-matter compatibility line says the same but a loaded skill shows the model its body only), EviMed's deterministic-baseline section kept.",
         "edits": [
           "E2",
           "E3",
