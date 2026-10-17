@@ -203,7 +203,8 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
           <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
           {(leadText || issue.lead.event) && (
-            <p className="mt-2 max-w-measure text-ui text-text-2">
+            // The issue's own text (`data-prose`), as a row's summary is: content of the issue, not a sentence of the page's.
+            <p data-prose="" className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}
               {issue.lead.event && (
                 <Link state={origin} onClick={rememberFrontierPosition} to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
@@ -223,7 +224,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
       {issue.aiMinute && (
         <section aria-labelledby="daily-ai-minute" className="mt-8">
           <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
-          <p className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
+          <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
       )}
 

@@ -2216,7 +2216,7 @@ test("where a list page keeps its place is read from the address and from what i
   assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened, closed: null }).notices, ["memory@desktop: not observable: Back was not taken"]);
 });
 
-test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", () => {
+test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", async () => {
   const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "深入研究" })] : [])])]);
   assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
   assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
@@ -2226,7 +2226,9 @@ test("the event page's 深入研究 is read at the hand-off: the title, a link t
   assert.deepEqual(withState({ runtimeUiIntent: intent }), { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } });
   assert.deepEqual(withState({}), { path: "/app/chat", intent: null });
   assert.deepEqual(withState(undefined), { path: "/app/chat", intent: null });
-  assert.deepEqual(HANDOFF_FIELDS, ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"]);
+  // The fields of the web's `RuntimeUiIntent`, read from its declaration: a field added there is a field the walk accepts.
+  const declared = (await readFile(path.join(repoRoot, "apps/web/src/lib/runtimeUiNavigation.ts"), "utf8")).match(/export interface RuntimeUiIntent \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.deepEqual(HANDOFF_FIELDS, [...declared.matchAll(/^\s+(\w+)\??:/gm)].map((match) => match[1]).sort());
 
   const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
   const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };

@@ -3881,8 +3881,12 @@ export function handoffProbe([action]) {
   };
 }
 
-/** The fields a hand-off to the conversation may carry (`RuntimeUiIntent`): none of them sends. */
-export const HANDOFF_FIELDS = ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"];
+/**
+ * The fields a hand-off to the conversation may carry — those of `RuntimeUiIntent` (apps/web/src/lib/runtimeUiNavigation.ts; a test holds
+ * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
+ * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
+ */
+export const HANDOFF_FIELDS = ["draft", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "sessionId"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and

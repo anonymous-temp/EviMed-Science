@@ -29,6 +29,15 @@ const showWithToolbar = (daily: FrontierDaily, props: { weekly?: boolean; onDay?
   return render(<MemoryRouter><Toolbar label="简报的控制" filters={controls.filters} actions={controls.actions} /><DailyIssue state={current} onDay={() => {}} {...props} /></MemoryRouter>);
 };
 
+describe("the issue's own text", () => {
+  it("marks the lead's summary and AI 一分钟 as the issue's prose, as a row's summary is content and not a sentence of the page", () => {
+    // The fixture walk read both as sentences standing alone at 390 px (orphan-sentence, r19-guards2).
+    show(issue({ lead: { item: frontierItem({ id: "lead", title: "头条试验" }), text: "随机、双盲、对照试验纳入 1,264 名成人。", event: null }, aiMinute: "今天与临床相关的 AI 进展有 3 条。" }));
+    expect(screen.getByText("随机、双盲、对照试验纳入 1,264 名成人。").closest("[data-prose]")).not.toBeNull();
+    expect(screen.getByText("今天与临床相关的 AI 进展有 3 条。").closest("[data-prose]")).not.toBeNull();
+  });
+});
+
 describe("the issue's header", () => {
   it("is the date and how long the issue takes to read, and holds no control: they are the page toolbar's (R19, audit D C1c)", () => {
     show(issue());
