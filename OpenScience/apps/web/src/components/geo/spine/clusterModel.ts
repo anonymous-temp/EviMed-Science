@@ -109,16 +109,24 @@ export function stageOf(group: Pick<GeoClusterRow, "journeyStageNo" | "journeySt
 /**
  * The groups under their journey stages, in the journey's order. A stage is its number where groups carry one (the name of the
  * first group's stage text stands for it); groups without a number are grouped by the text, after the numbered ones, in the order
- * they come. A group with no stage at all is in 「未标阶段」, last.
+ * they come — except a group whose stage text is the name of a numbered stage, which stands in that stage: the run numbered some
+ * of the groups of a stage and wrote the words alone on the rest, and one stage is not two cards. A group with no stage at all is
+ * in 「未标阶段」, last.
  */
 export function groupsByStage<T extends Pick<GeoClusterRow, "journeyStageNo" | "journeyStage">>(groups: readonly T[]): Array<{ key: string; name: string; no: number | null; groups: T[] }> {
+  const numbered = new Map<string, number>();
+  for (const group of groups) {
+    const stage = stageOf(group);
+    if (stage.no !== null && !numbered.has(stage.name)) numbered.set(stage.name, stage.no);
+  }
   const stages = new Map<string, { key: string; name: string; no: number | null; groups: T[] }>();
   for (const group of groups) {
     const stage = stageOf(group);
-    const key = stage.no !== null ? `no:${stage.no}` : `name:${stage.name}`;
+    const no = stage.no ?? numbered.get(stage.name) ?? null;
+    const key = no !== null ? `no:${no}` : `name:${stage.name}`;
     const found = stages.get(key);
     if (found) found.groups.push(group);
-    else stages.set(key, { key, name: stage.name, no: stage.no, groups: [group] });
+    else stages.set(key, { key, name: stage.name, no, groups: [group] });
   }
   const unnamed = "未标阶段";
   return [...stages.values()].sort((left, right) => {
