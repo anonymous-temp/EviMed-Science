@@ -1,7 +1,7 @@
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import type { VcrGeneratedRow } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
-import { declaredCentre, declaredShare, expectedCounts } from "./distribution";
+import { declaredCentre, declaredShare, expectedCounts, limitState } from "./distribution";
 import { numberText } from "../vcrText";
 
 /**
@@ -27,13 +27,6 @@ export function DistributionGrid({ rows, className }: { rows: readonly VcrGenera
       {drawn.map((row) => <DistributionCard key={row.key} row={row} />)}
     </div>
   );
-}
-
-/** What the engine counted of this variable's limits, as one mark and its words; null when the variable declared none. */
-export function limitState(row: Pick<VcrGeneratedRow, "violations" | "outOfBounds">): { ok: boolean; text: string } | null {
-  if (row.outOfBounds) return { ok: false, text: "超出限定" };
-  if (row.violations === null) return null;
-  return row.violations === 0 ? { ok: true, text: "没有记录越界" } : { ok: false, text: `违反 ${numberText(row.violations, 0)} 条` };
 }
 
 function DistributionCard({ row }: { row: VcrGeneratedRow }) {

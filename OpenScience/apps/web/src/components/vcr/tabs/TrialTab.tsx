@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -7,12 +7,18 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
-import { DataTable, type DataColumn } from "@/components/ui/DataTable";
+import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
+import { DataTable, InlineBar, type DataColumn } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
+import { FactList, type Fact } from "@/components/ui/FactList";
+import { Headline } from "@/components/ui/Headline";
 import { Textarea } from "@/components/ui/Input";
+import { List, ListRow } from "@/components/ui/ListRow";
+import type { NotePart } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { EmptyState } from "@/components/cards/EmptyState";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
@@ -21,9 +27,10 @@ import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
+import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
-import { useOpenVcrConversation } from "../useOpenVcrConversation";
-import { useVcrLoad, VcrHeadline, VcrTabError } from "../vcrTabKit";
+import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
+import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, mcseText, numberText, valueText } from "../vcrText";
 
 /**
@@ -45,68 +52,110 @@ const NOT_RUN = "还没算";
 export const VCR_ADD_DESIGN_DRAFT = "再加一个试验方案：";
 export const VCR_CHANGE_ASSUMPTION_DRAFT = "我想改一下试验的假设：";
 
+type TrialView = "designs" | "schedule" | "regulatory";
+
 /**
  * 试验: what each design would actually do, and what choosing one costs.
  *
- * The page is a conclusion and a table. The conclusion is one sentence — what each design needs and how the designs did — with
- * the three things a reader does about it beside it: 选定方案, 加一个方案, 改假设. The table under it is the comparison: events,
- * patients, simulated power with its Monte-Carlo error, how many replicates, and what the numbers come from. Everything that
- * explains the table (the simulation's setup, the power curve, the grid, the trade-offs, the milestones, the forecasts) follows it.
+ * The page is a conclusion and a table (R19, plan §5.3; audit B §4.4). The conclusion is one sentence — what each design needs and
+ * how the designs did — and the table under it is the comparison: events, patients, simulated power (a bar and its number, with the
+ * Monte-Carlo error beside it) and what the other measures came out at. A row opens the run behind it. What explains the table
+ * follows it: the simulation's setup, the power curve and the trade-offs side by side, the grid, the milestones, the forecasts.
+ *
+ * Three kinds of record live on this step and the page shows one at a time (a switch in the band): the designs, the protocol's
+ * visit schedule and the log of contacts with a regulator. The things a reader does about the designs — choose one, add one,
+ * argue a hypothesis, register a prediction — are the band's buttons.
  *
  * Four rules hold this page together.
  *
- *  - **Every simulated number carries its Monte-Carlo standard error.** 71%
- *    and 71% ±0.4 are different claims, and a design chosen on the difference
- *    between two numbers inside each other's simulation error was chosen by
- *    noise. A predicted interval is printed under its number with its name.
- *  - **A design another dominates carries no numbers.** It is greyed with the
- *    server's one sentence on why — never one the page wrote for it.
- *  - **The platform never picks a design.** The brand blue is a recorded
- *    decision (`chosen`) and nothing else. The reader writes the comparison
- *    goal first, then chooses and says why; 「写入决策记录」 stays inert until
- *    both the goal and a choice are there.
- *  - **Forecasts are registered before their outcome** (plan §5.4): each one
- *    carries the time it was frozen at and — once the actual data arrive —
- *    the prediction beside what happened.
+ *  - **Every simulated number carries its Monte-Carlo standard error.** 71% and 71% ±0.4 are different claims, and a design chosen
+ *    on the difference between two numbers inside each other's simulation error was chosen by noise. A predicted interval is
+ *    printed under its number with its name.
+ *  - **A design another dominates carries no numbers.** It is greyed with the server's one sentence on why — never one the page
+ *    wrote for it.
+ *  - **The platform never picks a design.** The brand blue is a recorded decision (`chosen`) and nothing else. The reader writes
+ *    the comparison goal first, then chooses and says why; 「写入决策记录」 stays inert until both the goal and a choice are there.
+ *  - **Forecasts are registered before their outcome** (plan §5.4): each one carries the time it was frozen at and — once the
+ *    actual data arrive — the prediction beside what happened.
+ *
+ * The run behind a row (its method, its replicates, its seed and the check of the closed form against the simulation) is the row's
+ * record, behind a press on it; the check is a ✓ or a ⚠ with the two numbers, and no sentence about it stands on the page.
  */
 export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { state, reload } = useVcrLoad(`${studyId}:trial`, () => getVcrTrial(studyId));
+  if (state.kind === "loading") return <VcrTabSkeleton />;
+  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
+  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} />;
+}
+
+function TrialView({ studyId, study, data, reload }: { studyId: string; study: VcrStudy; data: TrialData; reload: () => void }) {
+  const frame = useStudyFrame();
+  const [view, setView] = useState<TrialView>("designs");
   const [choosing, setChoosing] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [editing, setEditing] = useState<VcrDesign | null>(null);
   const [recording, setRecording] = useState(false);
-  const openConversation = useOpenVcrConversation();
-  if (state.kind === "loading") return <VcrTabSkeleton />;
-  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
-  const data = state.data;
+  const [opened, setOpened] = useState<VcrDesign | null>(null);
+
   const failed = study.steps.trial?.status === "failed";
+  const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const nothing = data.designs.length === 0 && data.ademp.length === 0 && data.forecasts.length === 0 && data.milestones.length === 0
-    && !data.schedule && data.regulatory.length === 0;
+  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0;
+  const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
+  const noneRan = !data.designs.some(designRan);
+  const decided = Boolean(data.decision?.chosen);
+  // 「登记预测」 is the lead's (and only where the deployment has a registry); a reader who may not file still opens what has been filed.
+  const canFile = Boolean(study.features?.predictions) && study.abilities.includes("manage_study");
+  const hasForecasts = data.forecasts.length > 0;
+
+  // One kind of record at a time: the switch exists when the step holds more than one kind.
+  const views: Array<{ value: TrialView; label: string; count?: number }> = [];
+  if (hasDesigns) views.push({ value: "designs", label: "方案", ...(data.designs.length > 0 ? { count: data.designs.length } : {}) });
+  if (data.schedule) views.push({ value: "schedule", label: "访视" });
+  if (data.regulatory.length > 0 || canWrite) views.push({ value: "regulatory", label: "监管", ...(data.regulatory.length > 0 ? { count: data.regulatory.length } : {}) });
+  const shown: TrialView = views.some((entry) => entry.value === view) ? view : views[0]?.value ?? "designs";
+
+  // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
+  const draft = (text: string) => () => frame?.openChat(text);
+
+  const actions: VcrToolbarAction[] = [];
+  if (shown === "designs" && !nothing) {
+    if (canWrite) {
+      if (!noneRan) actions.push({ key: "choose", label: decided ? "改选方案" : "选定方案", primary: !decided, onSelect: () => setChoosing(true) });
+      if (frame) {
+        actions.push({ key: "add", label: "加一个方案", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
+        actions.push({ key: "change", label: "改假设", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
+      }
+    }
+    if ((!noneRan && canFile) || hasForecasts) actions.push({ key: "register", label: "登记预测", onSelect: () => setRegistering(true) });
+  }
+  if (shown === "regulatory" && canWrite && data.regulatory.length > 0) actions.push({ key: "record", label: "添加监管沟通", onSelect: () => setRecording(true) });
+
+  useVcrToolbar(!nothing && (views.length > 1 || actions.length > 0)
+    ? {
+      label: "试验的筛选与操作",
+      ...(views.length > 1
+        ? { filters: [{ kind: "chips" as const, label: "记录", neutral: views[0].value, value: shown, onChange: (next: string) => setView(next as TrialView), options: views }] }
+        : {}),
+      ...(shown === "designs" && data.designs.length > 0 && views.length === 1 ? { summary: `${data.designs.length} 个方案` } : {}),
+      ...(actions.length > 0 ? { actions: <VcrToolbarActions actions={actions} /> } : {}),
+    }
+    : null);
+
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
       : <VcrStepPending studyId={studyId} study={study} step="trial" />;
   }
-  const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
-  // Designs written and not computed (a conversation wrote the scenarios and the engine has not finished) are a list with a word, not a
-  // comparison: a table of names and the choice of one of them is a form without the basis for the choice.
-  const noneRan = !data.designs.some(designRan);
-  const canWrite = study.abilities.includes("write");
-  const decided = Boolean(data.decision?.chosen);
-  // 「登记预测」 is the lead's (and only where the deployment has a registry); a reader who may not file still opens what has been filed.
-  const canFile = Boolean(study.features?.predictions) && study.abilities.includes("manage_study");
-  const hasForecasts = data.forecasts.length > 0;
-  // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
-  // draws nothing is a title over an empty box.
-  const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
-  const powerCurve = data.powerCurve && data.powerCurve.series.length > 0 ? data.powerCurve : null;
 
-  // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
-  const draft = (text: string) => {
-    void openConversation({ projectId: study.projectId, sessionId: study.sessionId }, text)
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" })));
-  };
+  const chosenDesign = data.designs.find((design) => design.id === data.decision?.chosen) ?? null;
+  const headline: NotePart[] = [];
+  if (data.headline) headline.push(data.headline);
+  if (decided && data.decision?.recordedAt) {
+    headline.push(data.headline ? " 已选定方案 " : "已选定方案 ");
+    headline.push(chosenDesign ? { n: chosenDesign.code, onOpen: () => setOpened(chosenDesign), label: `方案 ${chosenDesign.code}，看它的运行记录` } : (data.decision.chosenLabel ?? ""));
+    if (data.decision.rationale) headline.push(`，理由：${data.decision.rationale}`);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,164 +163,32 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
         ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "trial" }} />}
 
-      {/* The sentence is dimmed with the numbers it states while they are stale; the three things a reader does about it are not. */}
-      {(data.headline || canWrite || ((!noneRan && canFile) || hasForecasts)) && <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
-        <div className={cn(data.stale && "text-text-2 opacity-disabled")}>
-          {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
-          {decided && data.decision?.recordedAt && (
-            <p data-vcr-decided="" className="mt-2 text-ui text-text-2">
-              {`已选定${data.decision.chosenLabel ? `：${data.decision.chosenLabel}` : ""}${data.decision.rationale ? `，理由：${data.decision.rationale}` : ""}`}
-            </p>
-          )}
-        </div>
-        {(canWrite || (!noneRan && canFile) || hasForecasts) && (
-          <div className={cn("flex flex-wrap items-center gap-2", (data.headline || decided) && "mt-4")}>
-            {canWrite && (
-              <>
-                {!noneRan && <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>}
-                <Button variant={noneRan ? "secondary" : "text"} onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
-                <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
-                {/* The first entry of the log is added from here; once there is one, the log's own 添加 does it. */}
-                {data.regulatory.length === 0 && <Button variant="text" onClick={() => setRecording(true)}>记录监管沟通</Button>}
-              </>
-            )}
-            {((!noneRan && canFile) || hasForecasts) && <Button variant="secondary" onClick={() => setRegistering(true)}>登记预测</Button>}
-          </div>
-        )}
-      </section>}
-
-      {noneRan && <NotComputedDesigns designs={data.designs} studyId={studyId} study={study} failed={failed} />}
-
-      <Stale note={data.stale}>
-        <div className="flex flex-col gap-6">
-          {!noneRan && (
-            <div>
-              <DataTable
-                label="方案的对比"
-                columns={designColumns(data, canWrite ? setEditing : null)}
-                rows={data.designs}
-                rowKey={(design) => design.id}
-                highlight={(design) => Boolean(design.chosen)}
-                rowAttrs={(design) => ({
-                  "data-vcr-design": design.code,
-                  ...(design.dominated ? { "data-vcr-dominated": "" } : {}),
-                  ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
-                })}
-              />
-              <p className="mt-2 text-caption text-text-3">功效后的 ± 是蒙特卡洛标准误。点任一个数，看它用了哪些假设、哪次运行。</p>
-              {data.footnotes?.map((note, index) => (
-                <p key={note} className="mt-1.5 text-caption text-text-3">
-                  <span aria-hidden="true" className="mr-1 tabular-nums">{index + 1}</span>
-                  {note}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* How the simulation was set up, folded under the comparison it explains: the lines are what a reviewer checks, not what a
-              reader of the table needs first. */}
-          {data.ademp.length > 0 && (
-            <Disclosure
-              summary="模拟设定"
-            >
-              <dl data-vcr-setup="" className="divide-y divide-faint">
-                {data.ademp.map((line) => (
-                  <div key={line.key} className="grid grid-cols-[7rem_1fr] gap-3 py-2">
-                    <dt className="text-caption text-text-3">{line.label}</dt>
-                    <dd className="min-w-0 text-ui text-text">{line.text}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Disclosure>
-          )}
-
-          {(powerCurve || (data.grid && data.grid.rows.length > 0)) && (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {powerCurve && (
-                <ChartCard
-                  title="功效随真实效应的变化"
-                  legend={<VcrSeriesLegend series={powerCurve.series} />}
-                >
-                  <VcrTrajectoryChart
-                    series={powerCurve.series}
-                    xLabel={powerCurve.xLabel}
-                    yLabel={powerCurve.yLabel}
-                    // The server sends the curve as percentages, like every design measure: 0 to 100 is its whole range.
-                    domain={[0, 100]}
-                    formatY={(value) => `${Math.round(value)}%`}
-                  />
-                  {powerCurve.markers && powerCurve.markers.length > 0 && (
-                    <p className="mt-2 flex flex-wrap gap-x-4 text-caption text-text-3">
-                      {powerCurve.markers.map((marker) => (
-                        <span key={marker.label} data-vcr-marker={marker.kind ?? ""} className="inline-flex items-center gap-1.5">
-                          {marker.label}
-                          {marker.kind === "assumed" && <Tag>假设</Tag>}
-                        </span>
-                      ))}
-                    </p>
-                  )}
-                </ChartCard>
-              )}
-
-              {data.grid && data.grid.rows.length > 0 && (
-                <Card title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
-                  {data.grid.xLabel && <p className="mb-2 text-caption text-text-3">{data.grid.xLabel}</p>}
-                  <HeatGrid
-                    label={data.grid.measure ?? "设计网格"}
-                    columns={data.grid.columns}
-                    rows={data.grid.rows.map((row) => ({ key: row.key, header: row.header, cells: row.cells }))}
-                    legend={{ low: "低", high: "高" }}
-                  />
-                </Card>
-              )}
-            </div>
-          )}
-
-          {(tradeoff || data.milestones.length > 0) && (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {tradeoff && (
-                <Card title="周期、成本与成功把握的取舍">
-                  <VcrTradeoffScatter
-                    designs={data.designs}
-                    xKey="duration_months"
-                    yKey="assurance"
-                    sizeKey="cost"
-                    xLabel="末例入组中位（月）"
-                    yLabel="成功把握"
-                    sizeLabel="气泡面积 = 成本"
-                  />
-                </Card>
-              )}
-              {data.milestones.length > 0 && (
-                <Card title="里程碑">
-                  <VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} />
-                </Card>
-              )}
-            </div>
-          )}
-
-        </div>
-      </Stale>
-
-      {data.schedule && <VcrScheduleCard schedule={data.schedule} />}
-
-      {data.regulatory.length > 0 && <VcrRegulatoryLog contacts={data.regulatory} canWrite={canWrite} onAdd={() => setRecording(true)} />}
-
-      {data.runRecord.length > 0 && (
-        <Card title="本次运行">
-          <ul className="flex flex-col gap-3">
-            {data.runRecord.map((record) => (
-              <li key={record.key} className="flex items-start gap-2">
-                {record.ok && <CircleCheck size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-ok" />}
-                <span className="min-w-0">
-                  <span className="block text-ui text-text">{record.title}</span>
-                  {record.detail && <span className="block text-caption text-text-3">{record.detail}</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+      {shown === "designs" && (
+        <Stale note={data.stale}>
+          <DesignsView
+            studyId={studyId}
+            study={study}
+            data={data}
+            headline={headline}
+            noneRan={noneRan}
+            failed={failed}
+            onOpen={setOpened}
+            onEdit={canWrite ? setEditing : null}
+          />
+        </Stale>
       )}
+
+      {shown === "schedule" && data.schedule && <VcrScheduleCard schedule={data.schedule} />}
+
+      {shown === "regulatory" && (data.regulatory.length > 0
+        ? <VcrRegulatoryLog contacts={data.regulatory} canWrite={canWrite} onAdd={() => setRecording(true)} />
+        : (
+          <EmptyState
+            title="还没有监管沟通记录"
+            action={canWrite ? <Button variant="secondary" onClick={() => setRecording(true)}>记录监管沟通</Button> : undefined}
+            reason={canWrite ? undefined : "与监管机构沟通之后，由有写入权限的成员记录在这里。"}
+          />
+        ))}
 
       {registering && (
         <VcrPredictionsDrawer
@@ -285,7 +202,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
       )}
 
       {choosing && (
-        <Drawer title="选定方案" description="先写比较目标，再选一个，并说明理由。" onClose={() => setChoosing(false)} widthClassName="max-w-md">
+        <Drawer title="选定方案" onClose={() => setChoosing(false)} widthClassName="max-w-md">
           <DecisionForm
             // A recorded decision comes back from the server; the form starts again from what was recorded rather than from what was typed.
             key={data.decision?.recordedAt ?? "none"}
@@ -303,6 +220,8 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
         </Drawer>
       )}
 
+      {opened && <DesignRecordDrawer design={opened} onClose={() => setOpened(null)} onEdit={canWrite ? () => { setEditing(opened); setOpened(null); } : null} />}
+
       {editing && (
         <VcrSettingsDrawer
           studyId={studyId}
@@ -317,25 +236,164 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   );
 }
 
+/* ------------------------------------------------------------------------- the designs */
+
+/** Two to a row, and a last one alone takes the row: a grid with a hole is a defect (`ChartGrid`). */
+function pairRows(cells: readonly ChartGridCell[]): ChartGridCell[][] {
+  const rows: ChartGridCell[][] = [];
+  for (let index = 0; index < cells.length; index += 2) {
+    const pair = cells.slice(index, index + 2).map((cell) => ({ ...cell, span: 1 as const }));
+    rows.push(pair.length === 1 ? [{ ...pair[0], span: 2 as const }] : pair);
+  }
+  return rows;
+}
+
+function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit }: {
+  studyId: string;
+  study: VcrStudy;
+  data: TrialData;
+  headline: NotePart[];
+  noneRan: boolean;
+  failed: boolean;
+  onOpen: (design: VcrDesign) => void;
+  onEdit: ((design: VcrDesign) => void) | null;
+}) {
+  const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
+  // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
+  // draws nothing is a title over an empty box.
+  const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
+  const powerCurve = data.powerCurve && data.powerCurve.series.length > 0 ? data.powerCurve : null;
+  const cells: ChartGridCell[] = [];
+  if (powerCurve) {
+    cells.push({
+      key: "power-curve",
+      node: (
+        <ChartCard title="功效随真实效应的变化" legend={<VcrSeriesLegend series={powerCurve.series} />}>
+          <VcrTrajectoryChart
+            series={powerCurve.series}
+            xLabel={powerCurve.xLabel}
+            yLabel={powerCurve.yLabel}
+            // The server sends the curve as percentages, like every design measure: 0 to 100 is its whole range.
+            domain={[0, 100]}
+            formatY={(value) => `${Math.round(value)}%`}
+          />
+          {powerCurve.markers && powerCurve.markers.length > 0 && (
+            <p className="mt-2 flex flex-wrap gap-x-4 text-caption text-text-3">
+              {powerCurve.markers.map((marker) => (
+                <span key={marker.label} data-vcr-marker={marker.kind ?? ""} className="inline-flex items-center gap-1.5">
+                  {marker.label}
+                  {marker.kind === "assumed" && <Tag>假设</Tag>}
+                </span>
+              ))}
+            </p>
+          )}
+        </ChartCard>
+      ),
+    });
+  }
+  if (tradeoff) {
+    cells.push({
+      key: "tradeoff",
+      node: (
+        <ChartCard title="周期、成本与成功把握的取舍">
+          <VcrTradeoffScatter
+            designs={data.designs}
+            xKey="duration_months"
+            yKey="assurance"
+            sizeKey="cost"
+            xLabel="末例入组中位（月）"
+            yLabel="成功把握"
+            sizeLabel="气泡面积 = 成本"
+          />
+        </ChartCard>
+      ),
+    });
+  }
+  if (data.grid && data.grid.rows.length > 0) {
+    cells.push({
+      key: "grid",
+      node: (
+        <Card title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
+          {data.grid.xLabel && <p className="mb-2 text-caption text-text-3">{data.grid.xLabel}</p>}
+          <HeatGrid
+            label={data.grid.measure ?? "设计网格"}
+            columns={data.grid.columns}
+            rows={data.grid.rows.map((row) => ({ key: row.key, header: row.header, cells: row.cells }))}
+            legend={{ low: "低", high: "高" }}
+          />
+        </Card>
+      ),
+    });
+  }
+  if (data.milestones.length > 0) {
+    cells.push({ key: "milestones", node: <Card title="里程碑"><VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} /></Card> });
+  }
+
+  const setup: Fact[] = data.ademp.map((line) => ({ label: line.label, value: line.text }));
+  return (
+    <div className="flex flex-col gap-6">
+      {headline.length > 0 && <Headline parts={headline} />}
+
+      {noneRan
+        ? <NotComputedDesigns designs={data.designs} studyId={studyId} study={study} failed={failed} />
+        : (
+          <div>
+            <DataTable
+              label="方案的对比"
+              columns={designColumns(data, onEdit)}
+              rows={data.designs}
+              rowKey={(design) => design.id}
+              highlight={(design) => Boolean(design.chosen)}
+              rowAttrs={(design) => ({
+                "data-vcr-design": design.code,
+                ...(design.dominated ? { "data-vcr-dominated": "" } : {}),
+                ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
+              })}
+              onRowOpen={(design) => { if (design.record || design.replicates != null || design.method) onOpen(design); }}
+            />
+            {data.footnotes?.map((note, index) => (
+              <p key={note} className="mt-1.5 text-caption text-text-3">
+                <span aria-hidden="true" className="mr-1 tabular-nums">{index + 1}</span>
+                {note}
+              </p>
+            ))}
+          </div>
+        )}
+
+      {/* How the simulation was set up, folded under the comparison it explains: the lines are what a reviewer checks, not what a
+          reader of the table needs first. */}
+      {setup.length > 0 && (
+        <Disclosure summary="模拟设定">
+          <div data-vcr-setup=""><FactList rows={setup} max={setup.length} /></div>
+        </Disclosure>
+      )}
+
+      {cells.length > 0 && <ChartGrid rows={pairRows(cells)} />}
+    </div>
+  );
+}
+
 /**
  * The designs a conversation wrote that nothing has computed: each with 「还没算」, and under them what is happening to that — being
- * done now, did not finish, or waiting for 让 AI 做. No table, no metric column and no choice: there is nothing to compare yet.
+ * done now, did not finish, or waiting for its start. No table, no metric column and no choice: there is nothing to compare yet.
  */
 function NotComputedDesigns({ designs, studyId, study, failed }: { designs: readonly VcrDesign[]; studyId: string; study: VcrStudy; failed: boolean }) {
   if (designs.length === 0) return null;
   return (
     <div data-vcr-not-computed="">
-      <ul className="divide-y divide-faint">
+      <List label="还没算的方案" divided>
         {designs.map((design) => (
-          <li key={design.id} data-vcr-design={design.code} className="flex items-center gap-2 py-2.5">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta font-semibold text-text-2">{design.code}</span>
-            <span className="min-w-0 flex-1 text-ui text-text">{design.name}</span>
-            <Tag>{NOT_RUN}</Tag>
-          </li>
+          <ListRow
+            key={design.id}
+            title={design.name}
+            leading={<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta font-semibold text-text-2">{design.code}</span>}
+            trailing={<Tag>{NOT_RUN}</Tag>}
+            titleProps={{ "data-vcr-design": design.code }}
+          />
         ))}
-      </ul>
+      </List>
       {/* A step that did not finish already says so at the top of the tab, with 接着做. */}
-      {!failed && <VcrStepPending studyId={studyId} study={study} step="trial" />}
+      {!failed && <div className="mt-4"><VcrStepPending studyId={studyId} study={study} step="trial" /></div>}
     </div>
   );
 }
@@ -346,8 +404,8 @@ function dominatedSentence(design: VcrDesign): string {
 }
 
 /**
- * The grid's columns, from the payload's own list. A dominated design prints
- * one sentence across the measure columns instead of numbers.
+ * The grid's columns, from the payload's own list. A dominated design prints one sentence across the measure columns instead of
+ * numbers; power is a bar and its number.
  */
 function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | null): Array<DataColumn<VcrDesign>> {
   return [
@@ -376,8 +434,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       align: "right",
       isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text,
       cell: (design) => {
-        // A dominated design says why once, across the row, and gives no
-        // numbers at all.
+        // A dominated design says why once, across the row, and gives no numbers at all.
         if (design.dominated) {
           return column.key === data.columns[0]?.key
             ? <span data-vcr-dominated-note="" className="text-text-3">{dominatedSentence(design)}</span>
@@ -386,8 +443,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
         const value = design.measures[column.key];
         if (!value) return <span data-vcr-not-run={designRan(design) ? undefined : ""} className="text-text-3">{designRan(design) ? "—" : NOT_RUN}</span>;
         const mcse = mcseText(value.mcse);
-        // A Monte-Carlo interval is the standard error said again (±1.96 of
-        // it); a predicted one — when the last patient comes in — is a
+        // A Monte-Carlo interval is the standard error said again (±1.96 of it); a predicted one — when the last patient comes in — is a
         // different claim, and is printed under its number with its name.
         const interval = value.interval && value.interval.kind !== "monte_carlo" ? intervalText(value.interval, value.precision) : "";
         return (
@@ -396,8 +452,18 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               <VcrNumber value={value} label={`${design.code} ${column.label}`}>
                 <span className={cn("tabular-nums", design.chosen && "font-medium")}>{valueText(value)}</span>
               </VcrNumber>
-              {mcse && <span data-vcr-mcse="" className="text-meta font-normal text-text-3">{mcse}</span>}
+              {mcse && (
+                <Tooltip content="蒙特卡洛标准误">
+                  <span data-vcr-mcse="" className="text-meta font-normal text-text-3">{mcse}</span>
+                </Tooltip>
+              )}
             </span>
+            {/* Power is the measure the page is read for, so it is drawn as a length as well as a number (a table with bars). */}
+            {column.key === "power" && typeof value.value === "number" && (
+              <span className="mt-1 block w-24">
+                <InlineBar value={value.value} max={100} tone={design.chosen ? "own" : "rival"} label={`${design.code} 功效 ${valueText(value)}`} />
+              </span>
+            )}
             {interval && <span data-vcr-interval="" className="text-meta font-normal text-text-3">{interval}</span>}
           </span>
         );
@@ -430,13 +496,54 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
 }
 
 /**
- * 选定方案: the reader's comparison goal, the design they chose, and why — in a drawer opened from the conclusion.
+ * 方案记录: the run behind a row — how the numbers were made, how many replicates, the seed that makes them again, and the check of
+ * the closed form against the simulation, as the two numbers and a mark (✓ they agree within what was allowed, ⚠ they do not). It
+ * used to stand under the table as a card of sentences; a reader checking a run opens it, a reader choosing a design does not need it.
+ */
+function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; onClose: () => void; onEdit: (() => void) | null }) {
+  const record = design.record;
+  const check = record?.check ?? null;
+  const rows: Fact[] = [];
+  const method = record?.method ?? design.method;
+  if (method) rows.push({ label: "方法", value: method });
+  const replicates = record?.replicates ?? design.replicates;
+  if (replicates != null) rows.push({ label: "模拟次数", value: numberText(replicates, 0) });
+  if (record?.seed != null) rows.push({ label: "随机种子", value: String(record.seed) });
+  if (check && check.analytic != null && check.simulated != null) {
+    const ok = check.agrees;
+    rows.push({
+      label: "与解析值核对",
+      value: (
+        <span data-vcr-check={ok === null ? "unknown" : ok ? "agrees" : "differs"} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="tabular-nums">{`解析 ${numberText(check.analytic)} · 仿真 ${numberText(check.simulated)}`}</span>
+          {check.differencePoints != null && (
+            <span className="tabular-nums text-text-2">{`相差 ${numberText(check.differencePoints)} 个百分点${check.allowedPoints != null ? `（容许 ${numberText(check.allowedPoints)}）` : ""}`}</span>
+          )}
+          {ok === true && <span role="img" aria-label="一致" className="inline-flex text-ok"><CircleCheck size={16} aria-hidden="true" /></span>}
+          {ok === false && <span role="img" aria-label="不一致" className="inline-flex text-warn-strong"><TriangleAlert size={16} aria-hidden="true" /></span>}
+          {check.approximate && <Tag>一阶近似</Tag>}
+        </span>
+      ),
+    });
+  }
+  return (
+    <Drawer title={`方案 ${design.code} · ${design.name}`} onClose={onClose} widthClassName="max-w-md">
+      <div data-vcr-design-record={design.code} className="flex flex-col gap-4">
+        {rows.length > 0 && <FactList rows={rows} />}
+        {onEdit && <div><Button variant="secondary" size="sm" onClick={onEdit}>改设定</Button></div>}
+      </div>
+    </Drawer>
+  );
+}
+
+/* ------------------------------------------------------------------------- the decision */
+
+/**
+ * 选定方案: the reader's comparison goal, the design they chose, and why — in a drawer opened from the band.
  *
- * The goal comes first and is required — a decision with no goal is a pick,
- * not a decision (plan §5.4) — and the other reasonable designs are recorded
- * beside the choice. The platform records the decision; it does not make it,
- * and the brand blue on the page follows the record, never this form's own
- * state. One request at a time: a decision written twice is two records.
+ * The goal comes first and is required — a decision with no goal is a pick, not a decision (plan §5.4) — and the other reasonable
+ * designs are recorded beside the choice. The platform records the decision; it does not make it, and the brand blue on the page
+ * follows the record, never this form's own state. One request at a time: a decision written twice is two records.
  */
 function DecisionForm({ studyId, decision, designs, onRecorded }: {
   studyId: string;
@@ -498,7 +605,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
         value={goal}
         onChange={(event) => setGoal(event.target.value)}
         rows={3}
-        placeholder="例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……"
+        placeholder="先写比较目标，再选一个方案。例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……"
       />
       <fieldset>
         <legend className="text-caption text-text-3">选定方案</legend>

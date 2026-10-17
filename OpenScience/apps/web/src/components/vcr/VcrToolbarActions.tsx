@@ -18,6 +18,8 @@ export interface VcrToolbarAction {
   loading?: boolean;
   /** `text` for the quiet ones (a record's opener), `secondary` otherwise. */
   quiet?: boolean;
+  /** The one thing the page asks of the reader next: the brand colour (at most one per page). */
+  primary?: boolean;
 }
 
 export function VcrToolbarActions({ actions, label = "更多操作", menu = false }: {
@@ -39,7 +41,7 @@ export function VcrToolbarActions({ actions, label = "更多操作", menu = fals
   return (
     <>
       {actions.map((action) => (
-        <Button key={action.key} size="sm" variant={action.quiet ? "text" : "secondary"} loading={action.loading} onClick={action.onSelect}>
+        <Button key={action.key} size="sm" variant={action.primary ? "primary" : action.quiet ? "text" : "secondary"} loading={action.loading} onClick={action.onSelect}>
           {action.icon && <action.icon size={16} aria-hidden="true" />}
           {action.label}
         </Button>

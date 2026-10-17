@@ -15,7 +15,8 @@
  *    or a gamma has no outline here and the card says what was declared in words, as it always did.
  *  - A declaration the page cannot read (a missing parameter, a standard deviation of zero) draws nothing and says nothing.
  */
-import type { VcrDeclaredSpec } from "@/lib/vcrClient";
+import type { VcrDeclaredSpec, VcrGeneratedRow } from "@/lib/vcrClient";
+import { numberText } from "../vcrText";
 
 /** The standard normal distribution function, Abramowitz and Stegun 7.1.26 (error under 1.5e-7). */
 export function normalCdf(x: number): number {
@@ -91,4 +92,24 @@ export function declaredShare(spec: VcrDeclaredSpec | null): number | null {
   if (!spec || spec.family !== "bernoulli") return null;
   const prob = param(spec, "prob");
   return prob === null ? null : Math.round(prob * 1000) / 10;
+}
+
+/** The limits a variable was declared to stay within, as a table cell says them: 「限定 18–90」, 「不小于 18」; null when it declared none. */
+export function boundsText(spec: VcrDeclaredSpec | null): string | null {
+  const bounds = spec?.bounds;
+  if (!bounds) return null;
+  if (bounds.min !== null && bounds.max !== null) return `限定 ${numberText(bounds.min)}–${numberText(bounds.max)}`;
+  if (bounds.min !== null) return `不小于 ${numberText(bounds.min)}`;
+  return bounds.max !== null ? `不大于 ${numberText(bounds.max)}` : null;
+}
+
+/**
+ * What the engine counted of a variable's limits, as one mark and its words; null when the variable declared none (nothing was
+ * checked, so neither a tick nor a warning is drawn). ✓ is `violations === 0`; ⚠ is a count above zero or the values passing a
+ * declared bound — the engine's count, never worked out here.
+ */
+export function limitState(row: Pick<VcrGeneratedRow, "violations" | "outOfBounds">): { ok: boolean; text: string } | null {
+  if (row.outOfBounds) return { ok: false, text: "超出限定" };
+  if (row.violations === null) return null;
+  return row.violations === 0 ? { ok: true, text: "没有记录越界" } : { ok: false, text: `违反 ${numberText(row.violations, 0)} 条` };
 }

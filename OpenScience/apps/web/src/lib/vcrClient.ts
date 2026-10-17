@@ -636,6 +636,8 @@ export interface VcrGeneratedLevel {
 export interface VcrDeclaredSpec {
   family: string;
   params: Record<string, number | number[] | string[]>;
+  /** The limits the variable was declared to stay within (`kind: "bounds"`); either end may be open. Null when it declared none. */
+  bounds: { min: number | null; max: number | null } | null;
 }
 
 /** One variable of a generated table: what the study set for it, what came out, a small histogram of it, and what broke its limits. */
@@ -708,7 +710,7 @@ export interface VcrPopulationTab {
   /** Why the undecidable ones are undecidable. */
   unknownReasons: Array<{ key: string; label: string; detail?: string | null; count: number | null }>;
   /** 「最卡人的三条」. */
-  blockers: Array<{ code: string; label: string; text: string; tone?: "attention" | "neutral" }>;
+  blockers: Array<{ code: string; label: string; /** The protocol's own words for the rule. */ quote?: string | null; text: string; tone?: "attention" | "neutral" }>;
   quality: VcrQualityReport | null;
   counts: VcrCounts | null;
   conclusion?: VcrConclusion | null;
@@ -1834,7 +1836,10 @@ function readDeclaredSpec(raw: unknown): VcrDeclaredSpec | null {
     else if (Array.isArray(item) && item.every((entry) => typeof entry === "number")) params[key] = item as number[];
     else if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) params[key] = item as string[];
   }
-  return { family, params };
+  const limit = arr(value.constraints).find((constraint) => constraint.kind === "bounds");
+  const min = limit ? finite(limit.min) : null;
+  const max = limit ? finite(limit.max) : null;
+  return { family, params, bounds: min === null && max === null ? null : { min, max } };
 }
 
 function readGeneratedRow(raw: unknown): VcrGeneratedRow {
