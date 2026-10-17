@@ -75,6 +75,22 @@ test("a step dispatched over the conversation's binding is recorded as the capab
   }
 });
 
+test("the ledger's fold refuses a row whose specialist pin is not its effective identity — after writing it, and for the whole project's run list — which is why a turn routed over the binding carries its own capability's pin", async () => {
+  // The incident that found it (live, first prototype): `reserveRun` was handed the conversation's binding with another capability's
+  // effective identity. The row was written, the fold threw, and every read of the project's runs answered 500 `agent_runs_corrupt`.
+  const { root, project, createStore } = await fixture();
+  const store = createStore();
+  try {
+    await assert.rejects(store.reserveRun(project, BINDING, { baselineCursor: null, dispatchId: "vcr-poison", ...EVIDENCE, effectiveRouteReason: "vcr:turn:evidence" }),
+      (error) => error instanceof HttpError && error.status === 500 && error.code === "agent_runs_corrupt");
+    const text = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    assert.equal(text.trim().split("\n").length, 1, "the row is on disk although the fold refused it");
+    await assert.rejects(store.list(project), (error) => error instanceof HttpError && error.code === "agent_runs_corrupt", "and no read of the project's runs gets past it");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a turn routed over the binding must name the capability it is a turn of, and says so as a boolean", async () => {
   const { root, project, createStore } = await fixture();
   const store = createStore();
