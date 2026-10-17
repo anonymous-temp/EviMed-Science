@@ -593,7 +593,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     : [];
   const graphFilter: ToolbarFilter[] = [{
     kind: "chips", label: "图谱的类型", neutral: "wiki", options: [{ value: "wiki", label: "页面之间" }, { value: "kg", label: "实体和关系" }],
-    value: listState.graph === "kg" ? "kg" : "wiki", onChange: (next) => update({ graph: next === "kg" ? "kg" : null, focus: null, depth: null }),
+    value: listState.graph === "kg" ? "kg" : "wiki", pinned: true, onChange: (next) => update({ graph: next === "kg" ? "kg" : null, focus: null, depth: null }),
   }];
   const clearSearch = () => setQuery("");
   const searchBox = { label: "搜索资料和内容", value: query, onChange: setQuery, onClear: clearSearch };

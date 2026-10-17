@@ -26,7 +26,9 @@ export function rangeLabel(range: string): string {
  * (`ScopeMenu`), not a filter among these. A press on a control changes the shared selection; nothing here is a view of its own.
  *
  * The views are one group of chips, not a second row of tabs: the page's tab row is 记忆胶囊's four tabs, and a page has one.
- * Two things follow from the views being among the filters, and are said here so nobody undoes them:
+ * Three things follow from the views being among the filters, and are said here so nobody undoes them:
+ *  - the views are `pinned`: on a phone every other filter folds into one 「筛选」 chip, and the five views stay on the row — they are how the
+ *    page is used, and a person should not have to open a menu to leave 关系;
  *  - the view is never counted as a filter (`neutral` is the view in force), so 「清除筛选」 does not appear for choosing 主题;
  *  - on the time view the window is the weekly bars' slider, so the 时间 menu is not drawn there and a window that is set is a mark
  *    that lets go of it, like a topic.
@@ -44,7 +46,7 @@ export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, 
   search: { draft: string; setDraft: (value: string) => void; clear: () => void; composition: object };
 }): ToolbarProps {
   const filters: ToolbarFilter[] = [
-    { kind: "chips", label: "地图的视图", options: VIEW_OPTIONS, value: selection.view, neutral: selection.view, onChange: (view) => onView(view as MapView) },
+    { kind: "chips", label: "地图的视图", options: VIEW_OPTIONS, value: selection.view, neutral: selection.view, pinned: true, onChange: (view) => onView(view as MapView) },
   ];
   const windowed = selection.range !== "all";
   if (selection.view === "time") {
