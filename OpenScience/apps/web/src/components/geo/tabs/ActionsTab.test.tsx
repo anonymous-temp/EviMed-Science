@@ -317,6 +317,26 @@ describe("行动: the chain to the wrong statements", () => {
   });
 });
 
+describe("行动: the drawer's questions on a phone", () => {
+  it("give the question its own line and name the engine beside each mark, where the header over the columns is gone", async () => {
+    renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_BRAND.key)}`);
+    const drawer = await screen.findByRole("dialog");
+    const rows = await waitFor(() => {
+      const found = drawer.querySelectorAll("[data-geo-cluster-questions] [data-geo-question]");
+      if (found.length === 0) throw new Error("not yet");
+      return [...found] as HTMLElement[];
+    });
+    const header = drawer.querySelector("[data-geo-cluster-questions] > div") as HTMLElement;
+    expect(header.className).toMatch(/max-sm:hidden/);
+    const row = rows[0];
+    expect(row.className).toMatch(/flex-wrap/);
+    expect(row.firstElementChild!.className).toMatch(/max-sm:basis-full/);
+    // every engine of the row is named at its mark (hidden from 640 px, where the header names the columns)
+    expect(row.querySelectorAll("[data-geo-engine-word]")).toHaveLength(3);
+    expect([...row.querySelectorAll("[data-geo-engine-word]")].every((word) => word.className.includes("sm:hidden"))).toBe(true);
+  });
+});
+
 describe("行动: letting go", () => {
   it("lets go of the stage and the group in one step, whichever the address carried", async () => {
     renderTab(geoProject(), `/app/geo/geo_1/actions?show=live&cluster=${G_SAFETY}`);
