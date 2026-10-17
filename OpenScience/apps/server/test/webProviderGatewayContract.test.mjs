@@ -15,7 +15,7 @@ import { createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../src/w
 
 const recorded = JSON.parse(await readFile(new URL("./fixtures/deepseek-tools/recorded-2026-10-17.json", import.meta.url), "utf8")).answers;
 const caller = { userId: "alice", projectId: "paper1", runId: null, dailyLimit: 0, weeklyLimit: 0 };
-const deepseekAlone = { webSearchTimeoutMs: 5_000, deepseekApiKey: "sk-test-deepseek-key-not-real", deepseekBaseUrl: "https://api.deepseek.com" };
+const deepseekAlone = { webSearchTimeoutMs: 5_000, deepseekApiKey: "sk-test-only-deepseek-key", deepseekBaseUrl: "https://api.deepseek.com" };
 
 /** The gateway's own handler, its DeepSeek engine answering the recorded body. @param {any} body */
 async function gatewayAnswer(body) {

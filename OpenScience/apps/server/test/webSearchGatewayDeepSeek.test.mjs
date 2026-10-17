@@ -10,7 +10,7 @@ import { providerRefusalCount } from "../src/providerRefusals.mjs";
 import { createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../src/webSearchGateway.mjs";
 
 const recorded = JSON.parse(await readFile(new URL("./fixtures/deepseek-tools/recorded-2026-10-17.json", import.meta.url), "utf8")).answers;
-const KEY = "sk-test-deepseek-key-not-real";
+const KEY = "sk-test-only-deepseek-key";
 const caller = { userId: "alice", projectId: "paper1", runId: null, dailyLimit: 0, weeklyLimit: 0 };
 const identifying = { assertActiveModelGatewayToken: () => caller };
 const searxng = { webSearchUrl: "http://open-science-web-search:8080/", webSearchTimeoutMs: 5_000 };
