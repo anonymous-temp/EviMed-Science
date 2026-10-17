@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:8fadef11f9968e4816b2d7b76a58994c19c8c1bff73471999887cf2790355e94",
+  "version": "sha256:4cbcfd436805ef6e6ff87be3fe085b704f38780fb3495e5a9c2e5f93351ea351",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -518,7 +518,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's product, claims, questions, journey, diagnosis, metrics, answers, errors, sources, strategy, targets, articles, orders and monitoring. Cards carry checked quotes and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. clusters: groups, k of n; actions: per-gap work. filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero.",
+      "description": "Read this 循证 GEO project in the shapes its pages show. Cards carry checked quotes and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. snapshots: engine answers. clusters: groups, k of n. actions: lean rows plus counts to quote, never add up; filter.key or groupId reads one whole. filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -595,6 +595,11 @@
                 "minLength": 1,
                 "maxLength": 80,
                 "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
               },
               "limit": {
                 "type": "integer",
