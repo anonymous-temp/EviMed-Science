@@ -275,7 +275,7 @@ const CANDIDATE_CHECK = {
     { version: "0.2.1-alpha.2", tags: ["alpha"], lagDays: 9.9, ageDays: 3.1, verdict: "blocked", reasons: ["cordis 4.0.5-alpha.1 differs from the manifest", "2 unclassified wire methods", "the LoopX plugin's peer range excludes it", "6 dsh-client-* peers unsatisfied"] },
     { version: "0.1.7-rc.2", tags: ["latest"], lagDays: 0, ageDays: 29, verdict: "same-as-pin", reasons: [] },
   ],
-  pins: [{ id: "dsh-cite", kind: "npm", pinned: "0.3.5", latest: "0.4.2", behind: true, lagDays: 6.5 }, { id: "loopx-cli", pinned: "1.3.1", latest: "1.4.0", behind: true, lagDays: 5.4 }, { id: "openlist", pinned: "4.2.6", latest: "4.2.6", behind: false, lagDays: 0 }],
+  pins: [{ id: "dsh-cite", kind: "npm", pinned: "0.3.4", latest: "0.4.2", behind: true, lagDays: 6.5 }, { id: "loopx-cli", pinned: "1.3.1", latest: "1.4.0", behind: true, lagDays: 5.4 }, { id: "openlist", pinned: "4.2.6", latest: "4.2.6", behind: false, lagDays: 0 }],
   unknown: ["the GitHub rate limit stopped the OpenViking poll"],
 };
 
@@ -286,7 +286,7 @@ test("the walk tells the candidate check in its report and its output when one i
     "candidate check (2026-10-17T03:10:00Z): the kernel is pinned at 0.1.7-rc.2; 2 candidate(s)",
     "  0.2.1-alpha.2 (alpha): blocked, 9.9 days after the pin — cordis 4.0.5-alpha.1 differs from the manifest; 2 unclassified wire methods; the LoopX plugin's peer range excludes it",
     "  0.1.7-rc.2 (latest): same-as-pin, 0 days after the pin",
-    "  2 other pin(s) behind upstream: dsh-cite 0.3.5 → 0.4.2 (6.5 days), loopx-cli 1.3.1 → 1.4.0 (5.4 days)",
+    "  2 other pin(s) behind upstream: dsh-cite 0.3.4 → 0.4.2 (6.5 days), loopx-cli 1.3.1 → 1.4.0 (5.4 days)",
     "  could not be learned: the GitHub rate limit stopped the OpenViking poll",
   ]);
   assert.deepEqual(told.summary.pinsBehind.map((pin) => pin.id), ["dsh-cite", "loopx-cli"]);

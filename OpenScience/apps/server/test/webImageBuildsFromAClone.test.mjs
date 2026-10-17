@@ -56,9 +56,14 @@ test("every git-ignored path the web image copies is generated inside the build"
     if (!workspace) return false;
     return new RegExp(`RUN pnpm --filter \\S*${workspace} build`).test(dockerfile);
   };
+  // The GEO method pack's index (R19): `vendor-geo-skills.mjs --index` writes it in the build stage from whatever pack the
+  // context holds, and an index of no skills where it holds none — so a clean clone builds and copies an empty index.
+  const geoIndex = "runtime/skills/geo-private/geo-pack-index.json";
+  const indexes = recipe => /^RUN node scripts\/build\/vendor-geo-skills\.mjs --index$/m.test(recipe);
 
   const unguarded = copied.filter((relative) =>
-    isIgnored(relative) && !(relative === hydratedPath && hydrates(dockerfile)) && !buildProduced(relative));
+    isIgnored(relative) && !(relative === hydratedPath && hydrates(dockerfile)) && !buildProduced(relative)
+    && !(relative === geoIndex && indexes(dockerfile)));
   assert.deepEqual(
     unguarded,
     [],
@@ -66,4 +71,5 @@ test("every git-ignored path the web image copies is generated inside the build"
   );
   assert.equal(hydrates(dockerfile.replace("env -u AI4S_SKILLS_COMMIT bash scripts/dev/fetch-skills.sh", "true")), false);
   assert.equal(hydrates(dockerfile.replace("env -u AI4S_SKILLS_COMMIT", "env")), false, "a caller override cannot move the pinned source");
+  assert.equal(indexes(dockerfile.replace("vendor-geo-skills.mjs --index", "vendor-geo-skills.mjs")), false, "vendoring the pack is not writing its index");
 });
