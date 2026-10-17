@@ -58,5 +58,5 @@ try{
  const snapshot=await call('evimedSkills/snapshotBuiltin',{sessionId,key});assert.equal(Buffer.from(snapshot.entries.find(item=>item.path==='资料/证据.csv').bytesBase64,'base64').toString(),'来源,结果\n真实,1\n');
  const alias=list.items.find(item=>item.name==='alias-control');await assert.rejects(call('evimedSkills/snapshotBuiltin',{sessionId,key:alias.key}));
  await assert.rejects(call('evimedSkills/list',{sessionId:'foreign-session'}));await assert.rejects(call('evimedSkills/read',{sessionId,key,path:'/private-plane'}));
- console.log(JSON.stringify({kernel:'0.2.0-rc.2',uid:process.getuid(),list,body,snapshot,personalBody,physicalNfcNfdAliasRefused:true,modelCalls:0,qualification:'actual Linux read-only SDK scoped catalogue/resource snapshot; no hosted actor/runtime qualification'}));
+ console.log(JSON.stringify({kernel:'0.2.1-rc.2',uid:process.getuid(),list,body,snapshot,personalBody,physicalNfcNfdAliasRefused:true,modelCalls:0,qualification:'actual Linux read-only SDK scoped catalogue/resource snapshot; no hosted actor/runtime qualification'}));
 }finally{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();const timer=setTimeout(()=>child.kill('SIGKILL'),5000);child.once('close',()=>{clearTimeout(timer);resolve();});});}

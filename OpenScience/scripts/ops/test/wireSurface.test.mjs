@@ -3,9 +3,10 @@
 // 0.2.1-rc.1 changed the generator's output: the per-endpoint `id: '<package>#<namespace>/<method>'`
 // lines are gone and one `createTypertRemoteInfo({ package, methods: { … } })` object carries the
 // surface. The reader that only knew the first shape found 0 methods in all 29 host packages of the
-// 0.2.1-rc.2 closure, and the check said so ("0 RPC methods declared") — it did not pass, but only
-// because a floor of 40 stood behind it. Both shapes below are cut from the real files: the first
-// from `@deepseek-ai/dsh-command-feedback@0.2.0-rc.2`, the second from the same package at 0.2.1-rc.2.
+// closure recorded at the next pin, and the check said so ("0 RPC methods declared") — it did not
+// pass, but only because a floor of 40 stood behind it. Both shapes below are cut from the real files
+// of `@deepseek-ai/dsh-command-feedback`: the first as 0.2.0-rc.2 shipped it, the second as recorded
+// from the closure that replaced it.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { typertHostMethods } from "../wire-surface.mjs";

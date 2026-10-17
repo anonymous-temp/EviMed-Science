@@ -38,7 +38,7 @@ function fixtureManifest() {
   descriptor.artifactDigest = extensionToolArtifactDigest(descriptor);
   return {
     schemaVersion: 1,
-    dshVersion: '0.2.0-rc.2',
+    dshVersion: '0.2.1-rc.2',
     generatedAt: '2026-10-02T00:00:00.000Z',
     policy,
     catalogue: [{
@@ -135,7 +135,7 @@ test('valid fixed deployment binds immutable catalogue and artifact identities t
     const proof = deploymentProofIdentity(loaded, loaded.catalogue[0], image);
     assert.equal(proof.packageIntegrity, manifest.catalogue[0].integrity);
     assert.equal(proof.runtimeImageDigest, image);
-    assert.equal(proof.dshVersion, '0.2.0-rc.2');
+    assert.equal(proof.dshVersion, '0.2.1-rc.2');
     assert.equal(proof.adapterRevision,extensionProofAdapterRevision(manifest.admittedArtifacts[0].adapterRevision,identity.adapterRevision,sha));
     assert.notEqual(proof.adapterRevision,extensionProofAdapterRevision(manifest.admittedArtifacts[0].adapterRevision,'sha256:'+'0'.repeat(64),sha));
     assert.notEqual(proof.adapterRevision,manifest.admittedArtifacts[0].adapterRevision);

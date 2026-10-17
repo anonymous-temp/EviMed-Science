@@ -1,6 +1,6 @@
 {
-  "$comment": "Which host namespaces each browser package the composition mounts reaches through its own client bundle (lib/client.js), recorded by record-panel-remotes.mjs; re-record on every DSH pin change. `configForms` marks a package that goes through the generic form client, which reaches `settings`. A package with no entry has no client bundle.",
-  "pin": "0.2.0-rc.2",
+  "$comment": "Which host namespaces each browser package the composition mounts reaches through its own client bundle (its `./client` export: lib/client.js, or lib/client.browser.js where 0.2.1 split it), recorded by record-panel-remotes.mjs; re-record on every DSH pin change. `configForms` marks a package that goes through the generic form client, which reaches `settings`. A package with no entry has no client bundle.",
+  "pin": "0.2.1-rc.2",
   "configFormsProvider": "@deepseek-ai/dsh-client-ui-settings",
   "packages": {
     "@deepseek-ai/dsh-client-connection": {
@@ -80,6 +80,10 @@
       ],
       "configForms": false
     },
+    "@deepseek-ai/dsh-client-ui-deepseek-model-label-1017": {
+      "remotes": [],
+      "configForms": false
+    },
     "@deepseek-ai/dsh-client-ui-deliverables": {
       "remotes": [
         "session"
@@ -153,6 +157,16 @@
       "configForms": false
     },
     "@deepseek-ai/dsh-client-ui-renderer": {
+      "remotes": [],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-schedule": {
+      "remotes": [
+        "schedule"
+      ],
+      "configForms": false
+    },
+    "@deepseek-ai/dsh-client-ui-secret-mask": {
       "remotes": [],
       "configForms": false
     },

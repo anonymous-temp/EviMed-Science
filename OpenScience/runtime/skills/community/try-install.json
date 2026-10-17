@@ -52,7 +52,7 @@
     {
       "name": "dsh-mermaid",
       "repo": "MrmoLabs/dsh-mermaid",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "registers": [],
       "why": "Client-only Mermaid renderer for fenced diagrams in replies (PRISMA flow, study-selection trees). No peers, no network. The counts in a diagram still have to come from the screening ledger, not be typed by the model. Queued 2026-09-15."
     },
@@ -211,7 +211,7 @@
   "installed": [
     "dsh-cite@0.3.5",
     "@changfenhuang/dsh-annotation@1.4.11",
-    "dsh-mermaid@0.4.1"
+    "dsh-mermaid@0.4.2"
   ],
   "notInstalledYet": "dsh-data-quality booted at 0.3.10 and again at 0.3.19 and is not installed: `data_verify` is a rule checker over one table, which a few lines of pandas in the bash tool do, and the number-in-a-document check is a service seam only a plugin of ours could call (dataQualityRetest). academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles).",
   "officeClassTest": {

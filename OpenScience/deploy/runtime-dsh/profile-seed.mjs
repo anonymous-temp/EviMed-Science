@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const SEAL = ".evimed-profile-seed.json";
 const MARKER = ".evimed-seed.json";
+const COMPATIBILITY = "compatibility.json";
 const JOURNAL = ".evimed-seed-journal";
 const STAGING = ".evimed-seed-staging";
 const CLEANUP = ".evimed-seed-cleanup";
@@ -78,7 +79,7 @@ export function sealProfileSeed(seedHome, profile) {
   const packages = Object.keys(manifest.dependencies ?? {}).sort();
   if (!packages.length || packages.some(name => !PACKAGE.test(name))) fail("invalid managed package list");
   const rootHash = createHash("sha256");
-  for (const name of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "node_modules"]) {
+  for (const name of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", COMPATIBILITY, "node_modules"]) {
     const file = path.join(dir, name);
     if (stat(file)) rootHash.update(JSON.stringify([name, hashTree(file)]));
   }
@@ -94,7 +95,7 @@ export function sealProfileSeed(seedHome, profile) {
 }
 
 function safeTarget(profile, relative) {
-  const config = ["package.json", "pnpm-workspace.yaml", MARKER].includes(relative);
+  const config = ["package.json", "pnpm-workspace.yaml", COMPATIBILITY, MARKER].includes(relative);
   if (!config && (!relative.startsWith("node_modules/") || !PACKAGE.test(relative.slice("node_modules/".length)))) fail("invalid journal target");
   const parts = relative.split("/");
   let current = profile;
@@ -218,6 +219,12 @@ export function migrateProfileSeed(seedHome, targetHome, profile, { checkpoint =
   const entries = [...links, { target: "package.json", body: `${JSON.stringify(merged, null, 2)}\n` }];
   if (!stat(path.join(dir, "pnpm-workspace.yaml")) && stat(path.join(source, "pnpm-workspace.yaml"))) {
     entries.push({ target: "pnpm-workspace.yaml", body: readFileSync(path.join(source, "pnpm-workspace.yaml"), "utf8") });
+  }
+  // The image's exact-version exemptions (`compatibility.json`, the kernel's own record): a bundle outside its declared DSH
+  // range is skipped at every start without one, so the seed's record is the profile's. The plugin manager that could
+  // write another is not mounted in a hosted runtime.
+  if (stat(path.join(source, COMPATIBILITY))) {
+    entries.push({ target: COMPATIBILITY, body: readFileSync(path.join(source, COMPATIBILITY), "utf8") });
   }
   entries.push({ target: MARKER, body: `${JSON.stringify({ version: 1, digest: seal.digest })}\n` });
   const operations = entries.map(entry => ({ target: entry.target, before: fingerprint(safeTarget(dir, entry.target)),

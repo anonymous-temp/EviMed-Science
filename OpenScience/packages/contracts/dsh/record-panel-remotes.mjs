@@ -32,7 +32,7 @@ export function recordPanelRemotes(modulesDir) {
     throw new Error(`${CONFIG_FORMS_PROVIDER} no longer reaches remote.settings; the configForms rule in panelRemotes.mjs is stale`);
   }
   return {
-    $comment: "Which host namespaces each browser package the composition mounts reaches through its own client bundle (lib/client.js), recorded by record-panel-remotes.mjs; re-record on every DSH pin change. `configForms` marks a package that goes through the generic form client, which reaches `settings`. A package with no entry has no client bundle.",
+    $comment: "Which host namespaces each browser package the composition mounts reaches through its own client bundle (its `./client` export: lib/client.js, or lib/client.browser.js where 0.2.1 split it), recorded by record-panel-remotes.mjs; re-record on every DSH pin change. `configForms` marks a package that goes through the generic form client, which reaches `settings`. A package with no entry has no client bundle.",
     pin: pins.dsh.version,
     configFormsProvider: CONFIG_FORMS_PROVIDER,
     packages,

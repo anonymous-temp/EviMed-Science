@@ -18,7 +18,7 @@ async function fixture(t) {
   const profile = path.join(root, 'profile')
   const bundle = path.join(root, 'bundle')
   await mkdir(profile); await mkdir(bundle)
-  await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'dsh-native-test', version: '0.2.0-rc.2', dependencies: {} }))
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'dsh-native-test', version: '0.2.1-rc.2', dependencies: {} }))
   await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'native-test-profile', private: true, packageManager: 'pnpm@11.7.0', dsh: { profile: { bundles: [] } } }))
   await writeFile(path.join(profile, 'cordis.patch.yml'), '[]\n')
   await writeFile(path.join(bundle, 'package.json'), JSON.stringify({ name: coordinate.name, version: coordinate.version, dsh: { bundle: { patch: './cordis.patch.yml' } } }))

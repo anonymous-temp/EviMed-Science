@@ -59,6 +59,21 @@ export function referencesIn(source) {
 }
 
 /**
+ * The file a package serves the browser: its `./client` export's browser target. Until 0.2.1 that was always
+ * `lib/client.js`; 0.2.1 split `dsh-client-connection`'s into `lib/client.browser.js` and `lib/client.node.js`, and the
+ * fixed path read it as a package with no client at all.
+ * @param {string} dir @returns {string}
+ */
+export function clientBundleOf(dir) {
+  try {
+    const target = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")).exports?.["./client"];
+    const entry = typeof target === "string" ? target : target?.browser ?? target?.default;
+    if (typeof entry === "string" && entry.startsWith("./")) return path.join(dir, entry);
+  } catch { /* no manifest to read: the conventional path below */ }
+  return path.join(dir, "lib", "client.js");
+}
+
+/**
  * Every client package the composition mounts, with what its bundle reaches.
  * @param {string | ((name: string) => string | null)} where a `node_modules` holding the flat kernel closure, or a
  *   function from a package name to its directory (a pnpm-isolated install)
@@ -75,7 +90,7 @@ export function panelRemotes(where, baselineText) {
     // Only browser-side packages have a client bundle; a host-only package is not a panel.
     if (!/^@deepseek-ai\/dsh-client-/.test(name)) continue;
     const dir = locate(name);
-    const file = dir ? path.join(dir, "lib", "client.js") : null;
+    const file = dir ? clientBundleOf(dir) : null;
     if (!file || !existsSync(file)) { unreadable.push(name); continue; }
     packages[name] = referencesIn(readFileSync(file, "utf8"));
   }

@@ -62,6 +62,9 @@ const WHAT_STOPS_IT = {
   // 0.2.0: a general-settings item over the `session-log-deepseek` configuration form, which the generic settings
   // form service reads and writes through the `settings` namespace.
   "ui-settings-session-log": { namespace: "settings" },
+  // 0.2.1: the automation-tasks page, its right-sidebar tab and the header clock, all over `schedule/*` (its recorded
+  // client reaches that namespace and no other); the `schedule` row that serves it is disabled in the bundle too.
+  "ui-schedule": { namespace: "schedule" },
   // Model selection is visible for the approved thinking controls; the
   // runtime proxy still validates the configured provider/model selection.
   "ui-agent-preset": { methods: ["agentPresets/select", "agentPresets/copy", "agentPresets/deletePreset"], namespace: null },

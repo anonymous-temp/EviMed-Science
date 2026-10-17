@@ -91,7 +91,10 @@ test("every setting the runtime depends on still holds in the composition the im
   // 200 on 2026-10-13: the official OpenViking memory plugin's row and the loopback bridge that serves it.
   // 201 on 2026-10-14 (0.2.0-rc.2): four rows in (the OTLP service, the product-usage pair, the session-log settings
   // leaf) and three out (the schedule rows that left the web app's own patch).
-  assert.equal(report.counts.baselineRows, 201, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
+  // 208 on 2026-10-17 (0.2.1-rc.2): nine in (remote-access, working-directory and its tool, the DeepSeek search/fetch API
+  // provider, the schedule service and its page back in the web app, the harness developers' context, the secret mask
+  // and the 1017 model label), two out (skill-badge, tool-ralph).
+  assert.equal(report.counts.baselineRows, 208, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -163,6 +166,8 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "deepseek-account.disabled=true",
       // 0.2.0's product-usage pair: upstream disables it with a profile-name expression, held off by value here.
       "desktop-product-telemetry.disabled=true",
+      // 0.2.1's guidance for people developing the kernel (its checkout, its page's reload) plus an internal URL.
+      "harness-dev-context.disabled=true",
       "hmr.disabled=true",
       "llm-deepseek-account.disabled=true",
       "loopx-driver.disabled=!!js process.env.EVIMED_LOOPX_ENABLED === '0'",
@@ -196,9 +201,13 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "preset-ptc.disabled=true",
       "preset-standard.disabled=true",
       "product-analytics.disabled=true",
+      // 0.2.1 brought the kernel's own cron-like prompts back into the web app; scheduled work is the control plane's.
+      "schedule.disabled=true",
       // 0.1.7 flipped its default on: the whole session log with every request.
       "session-log-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",
+      // 0.2.1 holds every child to a per-tree cap of its own (8); the run's concurrency budget is handed to it.
+      "subagent.config.maxActiveSubagents=!!js Math.max(1, Math.trunc(Number(process.env.EVIMED_MAX_CONCURRENT_CHILDREN)) || 30)",
       "terminal-controller.disabled=true",
       // Pinned when 0.1.2-alpha.4 flipped `fetch` on by default for custom
       // profiles: an inherited value that changed once can change again, and
@@ -208,14 +217,20 @@ test("the invariant list is read out of the composition, not retyped beside it",
       // merging keys — dropping it would silently reset the timeout.
       "tool-web.config.fetch=false",
       "tool-web.config.searchTimeoutMs=60000",
+      // 0.2.1's `working_directory` tool on the host plane: a session's directory moved anywhere, unconfined.
+      "tool-working-directory.disabled=true",
       "ui-open-in-app.disabled=true",
       "ui-plugin-manager.disabled=true",
       "ui-settings-account.disabled=true",
       "ui-sidebar-browser.disabled=false",
       "ui-sidebar-terminal.disabled=true",
+      // 0.2.1's DeepSeek search/fetch API providers and the model API's own search: not selected (the gateway is), and
+      // not mounted, now that a settings write can change the selection.
+      "web-deepseek-api.disabled=true",
       // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",
       "web-runtime.inject[0]=webStartup",
+      "web-search-deepseek.disabled=true",
       // 2026-09-15: the composition stopped protecting the web row by absence
       // alone and started naming a provider of its own — one that goes to the
       // control-plane gateway. Both halves, because a patch row replaces

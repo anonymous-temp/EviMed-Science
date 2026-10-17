@@ -253,6 +253,7 @@ const nameGroups = {
   "required services": names("required services", "services.required"),
   "optional services": names("optional services", "services.optional"),
   "stream endpoints": names("stream endpoints", "wire.streamEndpoints"),
+  "message source kinds": names("message source kinds", "messageSourceKinds"),
 };
 for (const [group, list] of Object.entries(nameGroups)) {
   if (!list.length) continue;

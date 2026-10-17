@@ -53,9 +53,12 @@ export const inject = ['slots'];
  * `_dock`, `_hero`, `_embeddedBody`, `_scroll`, `_previewBadge`) is in the new
  * client bundles under the same hashed name, and the composer was measured at
  * 1512 and 390 px in a real frame (room under the card, one toolbar line, no
- * statistics for a researcher).
+ * statistics for a researcher). Re-read at 0.2.1-rc.2 (2026-10-17): the same ten
+ * suffixes carry the same hashed names in ui-layout, ui-conversation, ui-chat and
+ * ui-sidebar-right as at 0.2.0-rc.2, and the frame was walked at both sizes on a live
+ * 0.2.1-rc.2 kernel.
  */
-export const GEOMETRY_KERNEL_PIN = '0.2.0-rc.2';
+export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.2';
 
 /**
  * The product's mark as a data URL, for the document's icon.

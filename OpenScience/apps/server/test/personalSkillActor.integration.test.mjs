@@ -16,7 +16,7 @@ test('authenticated skill REST invocation binds the exact native input to the re
     let app, manager, nativeRequest;
     try {
       await fs.mkdir(path.join(directory, '.openscience'), { mode: 0o700 });
-      await fs.writeFile(path.join(directory, '.openscience', 'extensions-deployment.json'), JSON.stringify({ schemaVersion: 1, generatedAt: new Date().toISOString(), dshVersion: '0.2.0-rc.2', policy: currentExtensionSourcePolicy(), catalogue: [], admittedArtifacts: [], admittedDescriptors: [], surfaces: [] }), { mode: 0o400 });
+      await fs.writeFile(path.join(directory, '.openscience', 'extensions-deployment.json'), JSON.stringify({ schemaVersion: 1, generatedAt: new Date().toISOString(), dshVersion: '0.2.1-rc.2', policy: currentExtensionSourcePolicy(), catalogue: [], admittedArtifacts: [], admittedDescriptors: [], surfaces: [] }), { mode: 0o400 });
       app = createWebApiApp({ dataDir: directory, stateStore: 'postgres', databaseUrl: isolated.url, databasePoolMax: 4,
         modelGatewaySigningSecret: 'fixture-only-model-gateway-signing-secret', port: 0, runtimeMode: 'kernel', devAuth: false, bootstrapUser: 'skill-actor-fixture', bootstrapPassword: 'local fixture password only',
         learningEnabled: false, reviewEnabled: false, frontierEnabled: false, geoEnabled: false, vcrEnabled: false,

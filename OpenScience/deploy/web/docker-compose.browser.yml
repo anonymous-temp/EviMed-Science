@@ -10,7 +10,7 @@ services:
       - managed-browser-internal
 
   managed-browser:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.0-rc.2-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.1-rc.2-uv-0.11.26}
     user: "10003:10003"
     entrypoint: ["python3", "-c"]
     command:

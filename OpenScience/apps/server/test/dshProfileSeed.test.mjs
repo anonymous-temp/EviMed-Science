@@ -92,6 +92,31 @@ test("fresh initialization copies no home credentials and an older image can res
   assert.equal(readFileSync(path.join(f.profile, "cordis.patch.yml"), "utf8"), f.userPatch);
 });
 
+// The kernel skips a bundle outside its declared DSH range at every start unless the profile's own `compatibility.json`
+// exempts that exact plugin version for that exact kernel. The image grants the reviewed LoopX pair in the seed; a project
+// volume that did not receive the record would boot without the bundle (0.2.1-rc.2, r19-dsh021).
+test("the seed's exact-version exemption record reaches every project volume and is part of the seal", async (t) => {
+  const f = fixture(t);
+  const { sealProfileSeed, migrateProfileSeed } = await import(helperUrl);
+  const without = sealProfileSeed(f.seed, profileName).digest;
+  const pins = JSON.parse(readFileSync(new URL("../../../deps-version.json", import.meta.url), "utf8"));
+  const { plugin, dsh } = pins.loopx.compatibility.dshVersionExemption;
+  const record = `${JSON.stringify({ [plugin]: [dsh] }, null, 2)}\n`;
+  writeFileSync(path.join(f.seedProfile, "compatibility.json"), record);
+  const sealed = sealProfileSeed(f.seed, profileName).digest;
+  assert.notEqual(sealed, without, "a changed exemption is a changed seed");
+  assert.equal(migrateProfileSeed(f.seed, f.home, profileName).changed, true);
+  assert.equal(readFileSync(path.join(f.profile, "compatibility.json"), "utf8"), record);
+  const fresh = path.join(f.root, "fresh");
+  migrateProfileSeed(f.seed, fresh, profileName);
+  assert.equal(readFileSync(path.join(fresh, "profiles", profileName, "compatibility.json"), "utf8"), record);
+  // A volume whose record went missing is put right by the next boot of the same image.
+  rmSync(path.join(f.profile, "compatibility.json"));
+  rmSync(path.join(f.profile, ".evimed-seed.json"));
+  assert.equal(migrateProfileSeed(f.seed, f.home, profileName).changed, true);
+  assert.equal(readFileSync(path.join(f.profile, "compatibility.json"), "utf8"), record);
+});
+
 test("interrupted journal migration rolls back before retrying the new image", async (t) => {
   const f = fixture(t);
   const { sealProfileSeed, migrateProfileSeed } = await import(helperUrl);

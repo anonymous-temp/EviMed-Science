@@ -185,8 +185,12 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // selection has its own validated proxy policy; the run's wire still
   // classifies these methods as denied. 0.2.0 added five: the product-usage
   // reporter's three (denied on the proxy as well) and the two the page's
-  // question dialog answers with.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 146);
+  // question dialog answers with. 0.2.1 added seven and retired three: the
+  // plugin market's three and chain-of-thought translation's two (both denied
+  // on the proxy as well), `remoteAccess/follow` (open there: the page's own
+  // access snapshot) and `terminal/attach` in place of `follow`, `resize` and
+  // `write`; the adapter calls none of them.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 150);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }

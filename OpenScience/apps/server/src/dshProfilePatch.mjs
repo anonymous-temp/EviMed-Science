@@ -124,8 +124,11 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
 
 /**
  * The DeepSeek models the kernel's adapter lists as taking images: the
- * default catalog of `@deepseek-ai/dsh-llm-deepseek`, confirmed against 0.1.5-rc.2
- * (re-read it when the pin moves).
+ * default catalog of `@deepseek-ai/dsh-llm-deepseek`, confirmed against 0.1.5-rc.2,
+ * and confirmed against 0.2.1-rc.2 again, whose catalog holds `deepseek-flash` (shown there as
+ * DeepSeek-V4.1-Flash; the 1017 build is the same id) and `deepseek-v4-pro`, the
+ * second text-only. The vision preview id is no longer in it and stays listed for
+ * a deployment that still names it (re-read it when the pin moves).
  */
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
@@ -405,6 +408,10 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // the item never draws; hidden anyway, because the preference it would write is the
   // one a hosted runtime must not have a button for.
   "ui-settings-session-log",
+  // 0.2.1: the "automation tasks" page, its right-sidebar tab and the header clock — cron-like prompts
+  // the kernel runs itself, over `schedule/*`. The `schedule` row behind it is disabled in the socket's
+  // bundle; the platform's own scheduled tasks are control-plane jobs, opened from its own pages.
+  "ui-schedule",
   // The composition names this row `ui-permission`, not
   // `ui-permission-presets` after its package. Written from the package name it
   // addressed nothing, and the check that reads the recorded composition is
