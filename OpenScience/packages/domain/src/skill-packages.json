@@ -2039,7 +2039,7 @@
       "id": "curated/drug-discovery-data",
       "name": "drug-discovery-data",
       "origin": "curated",
-      "source": {"kind":"derived","path":"therapeutics-data-commons+deepchem","package":"scientific-agent-skills"},
+      "source": {"kind":"derived","path":"pytdc+deepchem","package":"scientific-agent-skills"},
       "licence": {
         "id": "MIT",
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},

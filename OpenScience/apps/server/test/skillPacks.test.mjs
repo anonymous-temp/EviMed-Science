@@ -86,6 +86,56 @@ test("the curated scientific inventory contains only audited or EviMed-rehabilit
   await assertNoSymlinks(curatedRoot);
 });
 
+test("the curated inventory pins the upstream release it was reviewed against and records that review for every skill", async () => {
+  const inventory = JSON.parse(await readFile(path.join(curatedRoot, "inventory.json"), "utf8"));
+  const { pin, baseline, securityReport } = inventory.source;
+  const review = inventory.policy.upstreamReview;
+  assert.equal(inventory.source.localSnapshot, undefined, "the pin is a commit and a tree, not a path on somebody's disk");
+  for (const value of [pin.commit, pin.rootTree, pin.skillsTree, baseline.commit, baseline.skillsTree]) assert.match(value, /^[0-9a-f]{40}$/);
+  assert.match(pin.archive.sha256, /^[0-9a-f]{64}$/);
+  assert.match(pin.tag, /^v\d+\.\d+\.\d+$/);
+  assert.equal(review.release, pin.tag, "the review is of the pinned release");
+  assert.ok(pin.skillCount > inventory.skills.length, "the pack has more skills than the curated pack takes from it");
+  assert.equal(securityReport.coversPinnedBytes, false, "the upstream scan report is context, and says so");
+  assert.match(inventory.policy.wholePackTest.status, /^unreproduced/, "a figure with no recorded procedure is not claimed");
+  const known = { class: new Set(Object.keys(review.classes)), decision: new Set(Object.keys(review.decisions)), edit: new Set(Object.keys(review.edits)) };
+  for (const skill of inventory.skills) {
+    const record = skill.upstreamReview;
+    assert.ok(record, `${skill.name} has a review record`);
+    assert.ok(known.class.has(record.class), `${skill.name}: class ${record.class}`);
+    assert.ok(known.decision.has(record.decision), `${skill.name}: decision ${record.decision}`);
+    assert.deepEqual(record.counterparts.map((part) => part.name), skill.derivedFrom.split("/")[1].split("+"), `${skill.name}: the review names the directories derivedFrom names`);
+    assert.ok(record.counterparts.every((part) => /^[0-9.]+ -> [0-9.]+$/.test(part.version) && part.scan), `${skill.name}: each counterpart has its versions and scan result`);
+    assert.ok(record.reason.length > 30 && record.changed.startsWith("SKILL.md"), `${skill.name}: a reason and what changed`);
+    if (record.decision === "refreshed") {
+      assert.equal(record.counterparts.length, 1, `${skill.name}: a refreshed skill carries one upstream directory`);
+      assert.ok(record.edits.length > 0 && record.edits.every((edit) => known.edit.has(edit)), `${skill.name}: the standard edits applied`);
+      const text = await readFile(path.join(curatedRoot, skill.name, "SKILL.md"), "utf8");
+      const [, to] = record.counterparts[0].version.split(" -> ");
+      assert.match(text, new RegExp(`^  version: "?${to.replace(/\./g, "\\.")}"?$`, "m"), `${skill.name}: the shipped text is the upstream version the record says`);
+      assert.ok(["A", "A*"].includes(record.class));
+    } else {
+      assert.equal(record.edits, undefined, `${skill.name}: a held skill was not edited`);
+    }
+  }
+});
+
+test("no curated skill tells the agent to cite the publisher or to install packages at run time", async () => {
+  // The runtime has no package registry, and a 'cite us in the user's manuscript' directive is the publisher's, not the user's. A refresh
+  // from upstream brings both back unless the standard edits are applied again, so this reads every text and script the pack ships.
+  const hazards = [/Citing Scientific Agent Skills/, /\buv (?:add|pip install|venv|run --isolated)\b/, /\bpip3? install\b/];
+  async function walk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (!/\.(?:md|py|yaml|yml|json)$/.test(entry.name) || entry.name === "inventory.json" || entry.name === "digest-repins.jsonl") continue;
+      const text = await readFile(full, "utf8");
+      for (const hazard of hazards) assert.doesNotMatch(text, hazard, `${path.relative(curatedRoot, full)}`);
+    }
+  }
+  await walk(curatedRoot);
+});
+
 test("every curated scientific skill has an executable, dependency-pinned, smoke-tested delivery contract", async (t) => {
   const inventory = JSON.parse(await readFile(path.join(curatedRoot, "inventory.json"), "utf8"));
   const delivery = inventory.policy.delivery;
