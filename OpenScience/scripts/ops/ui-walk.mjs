@@ -51,7 +51,7 @@
  * names an empty field in place, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
  * account's data or is a measure of taste is a NOTICE: a page more than twelve viewports tall, more rows on a first screen than the
  * page's ceiling, a headline below 520 px on a phone, the title column of a page against the others'. Pages no walk has measured
- * yet (`PROVISIONAL_PAGES`) report a number past their budget as a notice too. Nothing here writes: the steps that click only open a
+ * yet report... Nothing here writes: the steps that click only open a
  * menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
  * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
  * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
@@ -320,15 +320,6 @@ export const BUDGET_BY_PAGE = Object.fromEntries(PAGE_TEMPLATES.views
   .map((/** @type {any} */ view) => [view.view, { ...(PAGE_TEMPLATES.budgets[view.budget] ?? {}), ...(view.budgetOverride ?? {}) }]));
 
 /**
- * Pages whose budget nobody has measured on a live walk: the numbers are designed, not observed, and a number a provisional page
- * spends past its budget is not yet a failure. Every entry names its owner and the day it stops being accepted (`provisional` in the page
- * table: `{ owner, until }`); the walk fails a page whose day has passed, so the list cannot be a place to forget a page in.
- */
-export const PROVISIONAL_PAGES = new Set(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.provisional).map((/** @type {any} */ view) => view.view));
-/** @type {Record<string, { owner: string, until: string }>} */
-export const PROVISIONAL_TERMS = Object.fromEntries(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.provisional).map((/** @type {any} */ view) => [view.view, view.provisional]));
-
-/**
  * The page a view is held to the budget of. The second study of the virtual-research walk is named `vcr-trial@2` and is the same
  * page as `vcr-trial`.
  * @param {string} name the report's page name
@@ -352,19 +343,6 @@ export const SECTION_SHAPES_BY_PAGE = Object.fromEntries(PAGE_TEMPLATES.views.fi
  * rule 6) — the `rows` of the page table. Not 工具 or the study's own tabs: a click on a card there writes, and their rows are results.
  */
 export const ROW_CLICK_PAGES = new Set(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.rows).map((/** @type {any} */ view) => view.view));
-/**
- * Pages whose first rows are not on the page when it loads. 问题与回答 draws its groups closed, and a group's measured questions — the
- * rows — are inside it: the walk opens the groups (a click on a disclosure toggle, which only shows more of the page) before it looks
- * for a row. The selector names the toggles; at most `ROW_REVEAL_LIMIT` are opened.
- */
-export const ROW_REVEAL_BY_PAGE = { "geo-questions": "[data-geo-group] button[aria-expanded='false']" };
-const ROW_REVEAL_LIMIT = 12;
-/**
- * Pages whose findings are cards, not rows of a list: the one thing on a card that opens is its link. 准确与安全's 讲错清单 draws each
- * finding as an `<article>` with a 「看回答」 link to the answer that says it, in no list and with no row title, so the list probe finds
- * nothing there. The selector names those links; the first one is the page's first "row".
- */
-export const ROW_LINK_BY_PAGE = { "geo-accuracy": { label: "讲错清单", selector: "[data-geo-error-list] a[href*='/answers/']" } };
 /** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
 const ROW_CLICK_LISTS_PER_PAGE = 8;
 
@@ -553,9 +531,10 @@ function shoutedCapabilityKeys(ids) {
 }
 
 /**
- * A finding the walk may accept for now (the baseline, `ui-walk-baseline.json`): the rule that found it, the view it is about, the
- * sentence the report prints and, for a measured rule, the value (the baseline accepts up to a `max`). A finding that is only a sentence
- * is matched by its view and a literal part of the sentence.
+ * A finding is everything the walk saw that is not a plain failure: a measure over a rule's number, a page it could not look at, a
+ * click that showed nothing. It names the rule that found it, the view it is about, the sentence the report prints and, for a measured
+ * rule, the value (the baseline accepts up to a `max`). It fails the walk unless the baseline accepts it (`applyBaseline`): there is
+ * no class of finding that is only reported, because a notice nobody owns is where a defect stays forgotten (audit D, C8 and §4 S8).
  * @typedef {{ rule: string, view: string, text: string, value?: number }} Finding
  */
 
@@ -570,6 +549,133 @@ export function finding(rule, view, text, value) {
 /** The sentence of a finding, whichever form it has. @param {string | Finding} entry */
 export function findingText(entry) {
   return typeof entry === "string" ? entry : entry.text;
+}
+
+/** What a page could not be looked at for want of data on the account: the owner walk may be given these by the baseline, a fixture walk never. */
+export const COVERAGE_RULES = new Set(["not-observable", "not-walked"]);
+/** A probe that did not run proves nothing about the page it was for; no baseline entry accepts it. */
+export const UNACCEPTABLE_RULES = new Set(["step-failed"]);
+/** The two walks the baseline tells apart: the release walk on the owner-view account (many pages hold no data) and the local walk on the data-rich fixture. */
+export const WALK_PROFILES = ["owner", "fixture"];
+
+/**
+ * The marker phrases the walk's own steps write when they could not look: a finding that is only a sentence is classified by them, so
+ * the dozens of sites that say "not observable" need no edit to carry a rule.
+ */
+const NOT_OBSERVABLE_MARKER = ": not observable: ";
+const NOT_WALKED_MARKER = ": not walked — ";
+
+/**
+ * The view a sentence is about: what stands before its first colon (`files@desktop`, `vcr-*@2`, `axe-core`), or `*`.
+ * @param {string} text @returns {string}
+ */
+export function viewOfSentence(text) {
+  const match = /^([^:\s]+):/.exec(String(text));
+  return match ? match[1] : "*";
+}
+
+/**
+ * A finding of whichever form a probe returned it in.
+ * @param {string | Finding} entry @returns {Finding}
+ */
+export function asFinding(entry) {
+  if (typeof entry !== "string") return entry;
+  const view = viewOfSentence(entry);
+  if (entry.includes(NOT_OBSERVABLE_MARKER)) return finding("not-observable", view, entry);
+  if (entry.includes(NOT_WALKED_MARKER)) return finding("not-walked", view, entry);
+  return finding("notice", view, entry);
+}
+
+/**
+ * What is wrong with a baseline file, as sentences (empty when it can be used). An entry says who owns the debt and the day it stops
+ * being accepted; the walk exits 2 on a file that does not, because a baseline that cannot be read would accept nothing silently.
+ * @param {any} baseline @returns {string[]}
+ */
+export function baselineProblems(baseline) {
+  /** @type {string[]} */ const problems = [];
+  if (!baseline || !Array.isArray(baseline.entries)) return ["the baseline has no `entries` list"];
+  baseline.entries.forEach((/** @type {any} */ entry, /** @type {number} */ index) => {
+    const at = `entry ${index + 1}${typeof entry?.view === "string" ? ` (${entry.view})` : ""}`;
+    if (!entry || typeof entry !== "object") { problems.push(`${at} is not an object`); return; }
+    if (typeof entry.view !== "string" || !(entry.view === "*" || /^[^@\s]+@(?:\*|desktop|phone|\d+)$/.test(entry.view))) problems.push(`${at}: \`view\` is \`*\`, \`<name>@*\`, \`<name>@desktop\` or \`<name>@phone\``);
+    if (typeof entry.owner !== "string" || !entry.owner.trim()) problems.push(`${at}: no \`owner\``);
+    if (typeof entry.why !== "string" || !entry.why.trim()) problems.push(`${at}: no \`why\``);
+    if (typeof entry.until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.until) || Number.isNaN(Date.parse(entry.until))) problems.push(`${at}: \`until\` is a date (YYYY-MM-DD)`);
+    const hasRule = typeof entry.rule === "string" && entry.rule !== "";
+    const hasContains = typeof entry.contains === "string" && entry.contains !== "";
+    if (hasRule === hasContains) problems.push(`${at}: name the finding by either \`rule\` or \`contains\``);
+    if (entry.max !== undefined && (!hasRule || !Number.isFinite(entry.max))) problems.push(`${at}: \`max\` is a number and goes with \`rule\``);
+    if (hasRule && UNACCEPTABLE_RULES.has(entry.rule)) problems.push(`${at}: a finding of rule ${entry.rule} is never accepted`);
+    if (entry.profiles !== undefined && (!Array.isArray(entry.profiles) || entry.profiles.length === 0 || entry.profiles.some((/** @type {string} */ name) => !WALK_PROFILES.includes(name)))) problems.push(`${at}: \`profiles\` lists ${WALK_PROFILES.join(" and/or ")}`);
+    if (hasRule && COVERAGE_RULES.has(entry.rule) && !(Array.isArray(entry.profiles) && entry.profiles.every((/** @type {string} */ name) => name === "owner"))) problems.push(`${at}: a coverage gap (${entry.rule}) is accepted for the \`owner\` profile only`);
+  });
+  return problems;
+}
+
+/** Whether a baseline entry is about a finding's view. @param {string} entryView @param {string} view */
+function viewMatches(entryView, view) {
+  if (entryView === "*") return true;
+  if (entryView.endsWith("@*")) return view === entryView.slice(0, -2) || view.startsWith(entryView.slice(0, -1));
+  return entryView === view;
+}
+
+/**
+ * The baseline applied to the walk's findings: which it accepts (and under whose entry), which it does not (they fail the walk), which
+ * entries accepted nothing (delete them), and which have room above what was measured (lower them). An entry past its day accepts
+ * nothing, and the finding says so.
+ * @param {Array<string | Finding>} entries
+ * @param {{ entries: any[] }} baseline
+ * @param {{ profile: string, today: string }} context
+ * @returns {{ accepted: Array<{ finding: Finding, entry: any }>, unaccepted: Array<{ finding: Finding, why: string }>, unused: any[], expired: any[], lowerable: Array<{ entry: any, measured: number }> }}
+ */
+export function applyBaseline(entries, baseline, { profile, today }) {
+  const rules = baseline.entries.filter((/** @type {any} */ entry) => !entry.profiles || entry.profiles.includes(profile));
+  /** @type {Set<any>} */ const used = new Set();
+  /** @type {Map<any, number>} */ const measured = new Map();
+  /** @type {Array<{ finding: Finding, entry: any }>} */ const accepted = [];
+  /** @type {Array<{ finding: Finding, why: string }>} */ const unaccepted = [];
+  for (const raw of entries) {
+    const found = asFinding(raw);
+    if (UNACCEPTABLE_RULES.has(found.rule)) { unaccepted.push({ finding: found, why: "a step that did not run is never accepted" }); continue; }
+    if (COVERAGE_RULES.has(found.rule) && profile !== "owner") { unaccepted.push({ finding: found, why: `a ${profile} walk accepts no coverage gap` }); continue; }
+    const about = rules.filter((/** @type {any} */ entry) => viewMatches(entry.view, found.view)
+      && (entry.rule !== undefined ? entry.rule === found.rule && (entry.max === undefined || found.value === undefined || found.value <= entry.max) : found.text.includes(entry.contains)));
+    const live = about.filter((/** @type {any} */ entry) => entry.until >= today);
+    if (live.length) {
+      const entry = live[0];
+      used.add(entry);
+      if (found.value !== undefined) measured.set(entry, Math.max(measured.get(entry) ?? 0, found.value));
+      accepted.push({ finding: found, entry });
+    } else if (about.length) {
+      unaccepted.push({ finding: found, why: `the baseline entry of ${about[0].owner} expired on ${about[0].until}` });
+    } else {
+      unaccepted.push({ finding: found, why: "no baseline entry accepts it" });
+    }
+  }
+  return {
+    accepted, unaccepted,
+    unused: rules.filter((/** @type {any} */ entry) => !used.has(entry) && entry.until >= today),
+    expired: rules.filter((/** @type {any} */ entry) => entry.until < today),
+    lowerable: [...measured].filter(([entry, value]) => entry.max !== undefined && value < entry.max).map(([entry, value]) => ({ entry, measured: value })),
+  };
+}
+
+/**
+ * The baseline's delta as lines for the walk's output: what it accepted (by entry), what it did not, and what can be tidied.
+ * @param {ReturnType<typeof applyBaseline>} result @param {string} profile
+ * @returns {string[]}
+ */
+export function baselineDelta(result, profile) {
+  const entryName = (/** @type {any} */ entry) => `${entry.view} ${entry.rule ?? `“${entry.contains}”`}${entry.max !== undefined ? ` ≤ ${entry.max}` : ""} (${entry.owner}, until ${entry.until})`;
+  /** @type {Map<any, number>} */ const perEntry = new Map();
+  for (const { entry } of result.accepted) perEntry.set(entry, (perEntry.get(entry) ?? 0) + 1);
+  return [
+    `baseline (${profile} walk): ${result.accepted.length} finding(s) accepted by ${perEntry.size} entry(ies), ${result.unaccepted.length} not accepted`,
+    ...[...perEntry].map(([entry, count]) => `  accepted ${count} × ${entryName(entry)}`),
+    ...result.expired.map((entry) => `  EXPIRED ${entryName(entry)}`),
+    ...result.unused.map((entry) => `  no longer needed, delete: ${entryName(entry)}`),
+    ...result.lowerable.map(({ entry, measured }) => `  can be lowered to ${measured}: ${entryName(entry)}`),
+  ];
 }
 
 /**
@@ -591,7 +697,8 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   const key = budgetKey(name);
   /** @type {string[]} */ const failures = [];
   /** @type {Array<string | Finding>} */ const notices = [];
-  // What a page spends past a designed number: a failure, except on a page whose budget the baseline holds (`PROVISIONAL_PAGES`).
+  // What a page spends past its budget is a failure. A page that has to spend more says so in the page table (`budgetOverride`, with
+  // the measure and the reason behind it), not in a list of pages nobody has measured.
   /** @type {string[]} */ const budgetFindings = [];
   // A page whose own API call is refused shows an error state and otherwise
   // measures clean: the 主动科研 page answered every load with a 400 through
@@ -623,8 +730,7 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     const pairs = measured.sizeWeightPairs ?? [];
     if (pairs.length > TYPE_PAIR_NOTICE) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`, pairs.length));
   }
-  if (PROVISIONAL_PAGES.has(key)) notices.push(...budgetFindings.map((text) => finding("budget", current, text)));
-  else failures.push(...budgetFindings);
+  failures.push(...budgetFindings);
   return { failures, notices };
 }
 
@@ -800,26 +906,25 @@ export function measureStructure() {
 
 /** The pages whose heading order was fixed in R11: a heading that skips a level there fails; elsewhere it is noticed. */
 export const HEADING_ORDER_PAGES = new Set(["geo-overview", "memory"]);
-/** Pages whose first screen of rows has a designed ceiling (R11: 准确与安全's cards, 信源's rows); more is noticed, since rows are data. */
-export const ROW_COUNT_NOTICE_BY_PAGE = { "geo-accuracy": 20, "geo-sources": 40 };
-/** A page this many viewports tall is noticed: GEO's answer page was 69,000 px (R11). */
-export const TALL_PAGE_VIEWPORTS = 12;
+/** Pages whose first screen of rows has a designed ceiling (R11: 准确与安全's cards, 信源's rows); more is a finding the baseline can accept, since rows are data. */
+export const ROW_COUNT_CEILING_BY_PAGE = { "geo-accuracy": 20, "geo-sources": 40 };
 /** The settings list in which two projects must not read alike. */
 export const PROJECT_LIST_PAGES = new Set(["account-projects"]);
 
 /**
- * What the page-wide structure fails on, and what it is only noticed for. The structure that guards a defect R11 fixed and that is
- * measured exactly (an element or an attribute is there or not) fails; the height and the row counts, which depend on the data, are
- * notices.
+ * What the page-wide structure fails on, and what only the baseline accepts. The structure that guards a defect R11 fixed and that is
+ * measured exactly (an element or an attribute is there or not) fails; the row counts, which depend on the data, are findings with a
+ * number (`rows-ceiling`). A page's height is judged against its template's number of viewports, and an outline or a fold is what
+ * excuses a long one (`compositionFindings`, `long-page`).
  * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
  * @param {ReturnType<typeof measureStructure> | null | undefined} s
- * @returns {{ failures: string[], notices: string[] }}
+ * @returns {{ failures: string[], notices: Array<string | Finding> }}
  */
 export function structureFindings(name, viewportName, s) {
   const current = `${name}@${viewportName}`;
   const key = budgetKey(name);
   /** @type {string[]} */ const failures = [];
-  /** @type {string[]} */ const notices = [];
+  /** @type {Array<string | Finding>} */ const notices = [];
   if (!s) return { failures, notices };
   const side = s.sidebar;
   if (side.landmarks !== 1) failures.push(`${current}: ${side.landmarks} sidebar landmarks named 侧栏 (exactly one)`);
@@ -833,13 +938,12 @@ export function structureFindings(name, viewportName, s) {
   const unnamed = s.scrollers.filter((region) => region.stop && !region.named);
   if (unnamed.length) failures.push(`${current}: ${unnamed.length} focusable scrolling region(s) without a name: ${unnamed.map((region) => region.label).join(", ")}`);
   if (s.headingJumps.length) {
-    (HEADING_ORDER_PAGES.has(key) ? failures : notices).push(`${current}: heading levels skip: ${s.headingJumps.join(", ")}`);
+    const text = `${current}: heading levels skip: ${s.headingJumps.join(", ")}`;
+    if (HEADING_ORDER_PAGES.has(key)) failures.push(text);
+    else notices.push(finding("heading-order", current, text, s.headingJumps.length));
   }
-  if (s.viewport > 0 && s.height > TALL_PAGE_VIEWPORTS * s.viewport) {
-    notices.push(`${current}: the page is ${s.height} px tall, ${(s.height / s.viewport).toFixed(1)} viewports (notice above ${TALL_PAGE_VIEWPORTS})`);
-  }
-  const rowCeiling = ROW_COUNT_NOTICE_BY_PAGE[/** @type {keyof typeof ROW_COUNT_NOTICE_BY_PAGE} */ (key)];
-  if (viewportName === "desktop" && rowCeiling !== undefined && s.rows > rowCeiling) notices.push(`${current}: ${s.rows} rows on the first screen of data (notice above ${rowCeiling})`);
+  const rowCeiling = ROW_COUNT_CEILING_BY_PAGE[/** @type {keyof typeof ROW_COUNT_CEILING_BY_PAGE} */ (key)];
+  if (viewportName === "desktop" && rowCeiling !== undefined && s.rows > rowCeiling) notices.push(finding("rows-ceiling", current, `${current}: ${s.rows} rows on the first screen of data (ceiling ${rowCeiling})`, s.rows));
   if (PROJECT_LIST_PAGES.has(key) && s.duplicateTitles.length) failures.push(`${current}: two projects read alike in the list: ${s.duplicateTitles.join(", ")}`);
   if (viewportName === "phone" && s.truncatedCounts > 0) failures.push(`${current}: ${s.truncatedCounts} count label(s) of the study are cut off at 390 px`);
   return { failures, notices };
@@ -923,11 +1027,6 @@ export function pageProbe([kind, arg]) {
   const all = (selector, root = main) => [...root.querySelectorAll(selector)];
   const outside = (el) => !el.closest("[role='dialog'], nav, aside");
 
-  if (kind === "geoRail") {
-    const folded = all("[data-rail-folded]");
-    const details = folded.flatMap((el) => all("details", el));
-    return { folded: folded.length, closed: details.length > 0 && details.every((el) => !el.open), steps: all("[data-rail-step]").filter(visible).length };
-  }
   if (kind === "geoMarketOff") {
     const el = all("[data-geo-market-off]")[0];
     return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
@@ -960,14 +1059,14 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "memoryTabs") {
-    const names = ["关于你", "项目", "做法", "成长"];
+    // The page's tab list is the band's (关于你 · 项目 · 做法 · 地图); the growth tab and its sentence went into the map in R19.
+    const names = ["关于你", "项目", "做法", "地图"];
     const tabs = all("[role='tab']").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
       return { name, count: Number(/^\s*(\d+)/.exec(text.slice(name.length))?.[1] ?? 0), selected: el.getAttribute("aria-selected") === "true" };
     });
-    const headline = /现在有\s*(\d+)\s*条记忆，学会\s*(\d+)\s*种做法/.exec(words(main));
-    return { tabs, headline: headline ? { memories: Number(headline[1]), practices: Number(headline[2]) } : null };
+    return { tabs };
   }
   if (kind === "sharedMissing") {
     const text = words(main);
@@ -977,7 +1076,7 @@ export function pageProbe([kind, arg]) {
   if (kind === "memoryMap") {
     const text = words(main);
     return {
-      radios: all("[role='radio']").filter(visible).map(words),
+      views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       thin: text.includes("再多聊几次，这里会长出你的地图"),
@@ -1056,7 +1155,6 @@ export function pageProbe([kind, arg]) {
 
 /** The pages R11 walks with a probe, by kind, and the viewports each is read at. */
 export const PAGE_PROBES = {
-  "geo-overview": [["geoRail", ["phone"]]],
   "geo-actions": [["geoMarketOff", ["desktop", "phone"]]],
   "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
   "frontier-event": [["eventGroups", ["desktop", "phone"]]],
@@ -1066,7 +1164,6 @@ export const PAGE_PROBES = {
   memory: [["memoryTabs", ["desktop"]]],
   "memory-project": [["memoryTabs", ["desktop"]]],
   "memory-methods": [["memoryTabs", ["desktop"]]],
-  "memory-growth": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
   "memory-map": [["memoryMap", ["desktop", "phone"]]],
   "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
@@ -1074,9 +1171,8 @@ export const PAGE_PROBES = {
   account: [["feishuRows", ["desktop"]]],
   "account-notifications": [["feishuRows", ["desktop"]]],
   "account-connectors": [["connectorRows", ["desktop"]]],
-  "account-ops": [["opsOrder", ["desktop"]]],
-  "account-simulated-membership": [["notFound", ["desktop", "phone"]]],
-  "account-simulated-refunds": [["notFound", ["desktop", "phone"]]],
+  ops: [["opsOrder", ["desktop"]]],
+  "not-found": [["notFound", ["desktop", "phone"]]],
   "extensions-plugin-missing": [["missingRecord", ["desktop"]]],
   "extensions-skill-missing": [["missingRecord", ["desktop"]]],
   "frontier-evidence": [["readingFolds", ["desktop"]]],
@@ -1091,8 +1187,8 @@ export const MISSING_RECORDS = {
 
 /** The five views of 记忆地图, in the order its one row of switches shows them. */
 export const MEMORY_MAP_VIEWS = Object.freeze(["关系", "主题", "维度", "时间", "活跃"]);
-/** The 知识页 filter's two views. */
-export const KNOWLEDGE_VIEWS = Object.freeze(["页面", "图谱"]);
+/** The knowledge base's tabs, in the order its band shows them (R19: 资料 · 知识页 · 图谱, one tab list; the graph is a tab and no longer a second switch). */
+export const KNOWLEDGE_VIEWS = Object.freeze(["资料", "知识页", "图谱"]);
 
 /**
  * What 记忆地图's first mark did, and what the drawer's closing did: the click opens the memory page's own drawer and writes the mark into
@@ -1196,7 +1292,7 @@ async function walkKnowledgeGraph(page, base, route) {
 }
 
 /** The tabs a memory address names, and the one it must open on. */
-const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法", "memory-growth": "成长" };
+const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法" };
 
 /**
  * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
@@ -1212,11 +1308,6 @@ export function probeFindings(name, viewportName, kind, r) {
   /** @type {string[]} */ const notices = [];
   if (!r) return { failures, notices };
   switch (kind) {
-    case "geoRail":
-      if (r.folded === 0) failures.push(`${current}: the progress rail is not folded into one line`);
-      else if (!r.closed) failures.push(`${current}: the folded progress rail is open at first sight`);
-      if (r.steps > 0) failures.push(`${current}: ${r.steps} step(s) of the progress rail are on the first screen`);
-      break;
     case "geoMarketOff":
       if (r.present && r.top >= r.viewport) failures.push(`${current}: the sentence about placing being off is below the first screen (${r.top} px)`);
       break;
@@ -1246,12 +1337,11 @@ export function probeFindings(name, viewportName, kind, r) {
       if (key === "memory" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
       }
-      if (r.headline && r.headline.practices !== count("做法")) failures.push(`${current}: the growth line counts ${r.headline.practices} 做法 and the tab ${count("做法")}`);
       break;
     }
     case "memoryMap": {
-      // The five views are one row of radios, every figure has a name, and a figure has the same marks as a list under it.
-      if (r.radios.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.radios.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
+      // The five views are one group of pressed buttons in the toolbar, every figure has a name, and a figure has the same marks as a list under it.
+      if (r.views.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.views.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
@@ -1943,12 +2033,10 @@ export function routeReady() {
  * address, and how many rows are open in place. A row whose title is not a
  * control — a list of results, not a place to go — is not a target.
  *
- * R13: `["reveal", 0, { selector, limit }]` opens the disclosure toggles that hold
- * a page's rows (`ROW_REVEAL_BY_PAGE`) and says how many it opened; a third
- * argument `{ label, selector }` on the other actions adds the first link of a
- * page whose findings are cards (`ROW_LINK_BY_PAGE`) to the targets.
+ * R19: 循证 GEO's groups and findings are ordinary list rows that open a drawer, so the two ways round a page whose rows were not on it
+ * (opening closed groups first, clicking the first link of cards) are gone with the pages that needed them.
  */
-export function rowProbe([action, index = 0, option = null]) {
+export function rowProbe([action, index = 0]) {
   const visible = (el) => {
     const box = el.getBoundingClientRect();
     const style = getComputedStyle(el);
@@ -1961,13 +2049,6 @@ export function rowProbe([action, index = 0, option = null]) {
       expanded: document.querySelectorAll("main [aria-expanded='true']").length,
     };
   }
-  if (action === "reveal") {
-    // Opens the disclosure toggles that hold the page's rows (`ROW_REVEAL_BY_PAGE`): it only shows more of the page.
-    const { selector = "", limit = 0 } = option && typeof option === "object" ? option : {};
-    const toggles = selector ? [...document.querySelectorAll(selector)].filter((el) => visible(el) && !el.closest("[role='dialog'], nav, aside")).slice(0, limit) : [];
-    for (const toggle of toggles) toggle.click();
-    return toggles.length;
-  }
   const targets = [];
   for (const list of document.querySelectorAll("main ul, main ol")) {
     if (!visible(list) || list.closest("[role='dialog'], nav, aside")) continue;
@@ -1977,11 +2058,6 @@ export function rowProbe([action, index = 0, option = null]) {
     // A list that holds another list (问题与回答's groups hold their questions) finds the inner list's first row as its own: one row, one target.
     if (!control || targets.some((target) => target.control === control)) continue;
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
-  }
-  // A page whose findings are cards (`ROW_LINK_BY_PAGE`): the first link of the cards is its one first row.
-  if (option && typeof option === "object" && typeof option.selector === "string" && action !== "reveal") {
-    const link = [...document.querySelectorAll(option.selector)].find((el) => visible(el) && !el.closest("[role='dialog'], nav, aside"));
-    if (link) targets.push({ control: link, label: String(option.label ?? "").slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
   const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
@@ -2002,20 +2078,44 @@ export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "tas
 const CLEANUP_WALK_WAIT_MS = 135_000;
 
 /**
- * Run one step of the walk that clicks through a page, and keep what it found. A step that cannot run — the page it needs is not
- * there, a control did not answer — is a notice with the reason, never a failure of the release and never a silent pass.
- * @param {any} report @param {string[]} failures @param {string[]} notices @param {string} name
- * @param {() => Promise<{ failures: string[], notices?: string[], read?: any }>} step
+ * What each step of the walk exists to reach, in words: its report entry names it, and a step that throws, times out or finds its
+ * element absent fails the walk saying what it did not reach (R19 S3). A step whose name is not here cannot be run (`recordStep` throws),
+ * so a new step cannot be added without saying what it is for. Per-view steps (`evidence-matrix@desktop`) are looked up without the view.
+ */
+export const STEP_TARGETS = {
+  "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
+  "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
+  "extensions-skills-create": "the new-skill drawer, saved empty with every write refused",
+  "memory-map-drawer": "the first mark of 记忆地图's list, and the drawer it opens",
+  "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
+  "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
+  "address-state": "the choices of the inbox and the memory page in the address, kept through Back",
+  "frontier-event-handoff": "the event page's hand-off of 深入研究 to the conversation",
+  "chat-composer": "the composer inside the kernel's frame, at both widths",
+  "chat-cleanup-cover": "the answer the walk gives to a runtime start refused for a cleanup in progress",
+};
+
+/**
+ * Run one step of the walk that clicks through a page, and keep what it found. A step that cannot run — it throws, a wait runs out
+ * before its target, the element it needs is absent — is a FAILURE with the target it did not reach (`STEP_TARGETS`), never a notice:
+ * 18.1's memory-map step was a `ReferenceError` for a release and the walk stayed green, because a probe that did not run read as a pass.
+ * What the account's data cannot offer (no list, no document) is another thing and the step says so as a `not-observable` finding.
+ * @param {any} report @param {string[]} failures @param {Array<string | Finding>} notices @param {string} name
+ * @param {() => Promise<{ failures: string[], notices?: Array<string | Finding>, info?: string[], read?: any }>} step
  */
 async function recordStep(report, failures, notices, name, step) {
+  const target = STEP_TARGETS[/** @type {keyof typeof STEP_TARGETS} */ (name.replace(/@.*$/, ""))];
+  if (!target) throw new Error(`step ${name} names no target (STEP_TARGETS)`);
   try {
     const result = await step();
     failures.push(...result.failures);
     notices.push(...(result.notices ?? []));
-    (report.steps ||= {})[name] = result.read ?? { ok: result.failures.length === 0 };
+    (report.info ||= []).push(...(result.info ?? []));
+    (report.steps ||= {})[name] = { target, ...(result.read ?? { ok: result.failures.length === 0 }) };
   } catch (error) {
-    notices.push(`${name}: the step could not run (${String(error).slice(0, 140)})`);
-    (report.steps ||= {})[name] = { error: String(error).slice(0, 140) };
+    const why = String(error).replace(/\s+/g, " ").slice(0, 200);
+    failures.push(`${name}: the step could not run, so ${target} was not reached (${why})`);
+    (report.steps ||= {})[name] = { target, error: why };
   }
 }
 
@@ -2156,9 +2256,7 @@ export function knowledgeReturnFindings(title, read) {
 }
 
 /**
- * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`; a page
- * whose rows are inside closed groups has them opened first (`ROW_REVEAL_BY_PAGE`), and one whose findings are cards is clicked on its
- * first link (`ROW_LINK_BY_PAGE`). The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
+ * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`. The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
  * behind a guard that refuses every request that is not a read, so the walk's clicks write nothing even where a row marks itself read on
  * the way (the inbox); what the guard refused is information, not a finding (the walk is read-only by construction).
  * @param {any} page @param {string} base @param {string} route @param {string} name the report's page name
@@ -2170,9 +2268,6 @@ async function walkRowClicks(page, base, route, name, popups) {
   /** @type {Array<string | Finding>} */ const notices = [];
   /** @type {string[]} */ const info = [];
   const guarded = true;
-  const selector = ROW_REVEAL_BY_PAGE[/** @type {keyof typeof ROW_REVEAL_BY_PAGE} */ (name)];
-  const reveal = selector ? { selector, limit: ROW_REVEAL_LIMIT } : null;
-  const link = ROW_LINK_BY_PAGE[/** @type {keyof typeof ROW_LINK_BY_PAGE} */ (name)] ?? null;
   /** @type {string[]} */ const writes = [];
   const guard = (/** @type {any} */ request) => {
     const method = request.request().method();
@@ -2185,28 +2280,21 @@ async function walkRowClicks(page, base, route, name, popups) {
   if (guarded) await page.route("**/api/**", guard);
   /** @type {Array<{ label: string, shown: boolean, after?: any }>} */ const rows = [];
   try {
-    const prepare = async () => {
-      if (!reveal) return;
-      await page.evaluate(rowProbe, ["reveal", 0, reveal]);
-      await page.waitForTimeout(400);
-    };
-    await prepare();
-    const labels = ((await page.evaluate(rowProbe, ["targets", 0, link])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+    const labels = ((await page.evaluate(rowProbe, ["targets", 0])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
     for (let index = 0; index < labels.length; index += 1) {
       if (index > 0) {
         // The last click may have opened a drawer or left the page: start the next from the page as it loads.
         await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
         await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
         await page.waitForTimeout(1_500);
-        await prepare();
       }
       const before = await page.evaluate(rowProbe, ["state"]);
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
-      await page.waitForFunction(rowProbe, ["has", labels[index], link], { timeout: 30_000 });
-      const external = await page.evaluate(rowProbe, ["external", labels[index], link]);
+      await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
+      const external = await page.evaluate(rowProbe, ["external", labels[index]]);
       popups.count = 0;
-      await page.evaluate(rowProbe, ["click", labels[index], link]);
+      await page.evaluate(rowProbe, ["click", labels[index]]);
       await page.waitForTimeout(1_500);
       const after = await page.evaluate(rowProbe, ["state"]);
       rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });
@@ -2232,19 +2320,18 @@ async function walkRowClicks(page, base, route, name, popups) {
   return { rows, failures, notices, info };
 }
 
-/** The marks of 记忆地图's list that open the drawer (a button; a document is a link to a page of its own, which is another walk's). */
-function drawerMarks() {
-  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
-}
-
-/** How many marks 记忆地图's list shows that open the drawer. */
+/**
+ * How many marks 记忆地图's list shows that open the drawer (a button; a document is a link to a page of its own, which is another walk's).
+ * Like every function the walk hands to the browser it is read there as source text, so it names nothing of this module: a helper
+ * shared with the next probe was the `ReferenceError: drawerMarks is not defined` of release 18.1, found by nobody for a release.
+ */
 export function markRowsProbe() {
-  return drawerMarks().length;
+  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']")).length;
 }
 
 /** Presses the first mark that opens the drawer. */
 export function clickFirstMarkProbe() {
-  const mark = drawerMarks()[0];
+  const mark = [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
   if (!mark) return false;
   mark.click();
   return true;
@@ -2378,15 +2465,20 @@ async function main() {
   const playwright = require(required("OPEN_SCIENCE_PLAYWRIGHT_CORE"));
   const out = process.env.OPEN_SCIENCE_WALK_OUT?.trim() || "/tmp/evimed-ui-walk";
   await mkdir(out, { recursive: true });
+  const setting = await walkSetting();
+  if (setting.problems.length) {
+    for (const problem of setting.problems) console.error(`the walk cannot start: ${problem}`);
+    return 2;
+  }
 
   const browser = await playwright.chromium.launch({
     headless: true,
     ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}),
     args: ["--no-sandbox"],
   });
-  const failures = [];
-  const notices = [];
-  const report = { base, startedAt: new Date().toISOString(), pages: {} };
+  /** @type {string[]} */ const failures = [];
+  /** @type {Array<string | Finding>} */ const notices = [];
+  const report = { base, startedAt: new Date().toISOString(), profile: setting.profile, pages: {}, info: /** @type {string[]} */ ([]) };
   /** Per page view, the `start_runtime` calls the browser refused. */
   const runtimeStartsRefused = {};
   let current = "";
@@ -2426,7 +2518,10 @@ async function main() {
     const routes = [...ROUTES, ...found.routes];
     // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
     const axe = await loadAxeSource();
-    if (!axe.source) notices.push(`axe-core not available in this image: ${axe.why}`);
+    if (!axe.source) {
+      if ((process.env.OPEN_SCIENCE_WALK_AXE ?? "").trim() === "off") report.info.push(`axe-core: ${axe.why}`);
+      else notices.push(finding("not-observable", "axe-core", `axe-core: not observable: axe-core is not available in this image (${axe.why})`));
+    }
     /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
     const page = await context.newPage();
@@ -2478,7 +2573,7 @@ async function main() {
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
         try {
-          await navigateForWalk(page, `${base}${route}`, () => notices.push(`${current}: retried once after Chromium reported a host network change`));
+          await navigateForWalk(page, `${base}${route}`, () => report.info.push(`${current}: retried once after Chromium reported a host network change`));
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });
@@ -2541,6 +2636,7 @@ async function main() {
             report.pages[current].rowClicks = clicked.rows;
             failures.push(...clicked.failures);
             notices.push(...clicked.notices);
+            report.info.push(...clicked.info);
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
@@ -2559,7 +2655,9 @@ async function main() {
       }
     }
     notices.push(...leftEdgeNotices(report.pages));
-    notices.push(...axeNotices(axeScans));
+    const axeRead = axeNotices(axeScans);
+    notices.push(...axeRead.findings);
+    if (axeRead.summary) report.info.push(axeRead.summary);
     report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
@@ -2583,7 +2681,7 @@ async function main() {
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
       report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
-      else if (chat.retriedAfterNetworkChange) notices.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
+      else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
@@ -2607,15 +2705,60 @@ async function main() {
   } finally {
     await browser.close();
   }
-  report.failures = failures;
-  report.notices = notices;
+  // Nothing the walk saw is only reported: a finding fails the walk unless the baseline accepts it, with an owner and a day (R19 S4).
+  const decided = applyBaseline(notices, setting.baseline, { profile: setting.profile, today: setting.today });
+  const unaccepted = decided.unaccepted.map(({ finding: found, why }) => `${found.text} [${found.rule}; ${why}]`);
+  report.failures = [...failures, ...unaccepted];
+  report.notices = notices.map(findingText);
+  report.findings = decided.accepted.map(({ finding: found, entry }) => ({ ...found, accepted: { owner: entry.owner, until: entry.until } }))
+    .concat(decided.unaccepted.map(({ finding: found, why }) => ({ ...found, accepted: null, why })));
+  report.baseline = { source: setting.baselineSource, profile: setting.profile, today: setting.today, accepted: decided.accepted.length, unaccepted: decided.unaccepted.length,
+    unused: decided.unused.map(describeEntry), expired: decided.expired.map(describeEntry), lowerable: decided.lowerable.map(({ entry, measured }) => ({ ...describeEntry(entry), measured })) };
   report.runtimeStartsRefused = Object.values(runtimeStartsRefused).reduce((sum, count) => sum + count, 0);
   await writeFile(path.join(out, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   for (const failure of failures) console.log(`FAIL ${failure}`);
-  for (const notice of notices) console.log(`NOTICE ${notice}`);
-  console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s), ${notices.length} notice(s), `
-    + `${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
-  return failures.length ? 1 : 0;
+  for (const line of unaccepted) console.log(`FAIL (not accepted by the baseline) ${line}`);
+  for (const line of report.info) console.log(`INFO ${line}`);
+  for (const line of baselineDelta(decided, setting.profile)) console.log(line);
+  console.log(`${Object.keys(report.pages).length} page views walked, ${report.failures.length} failure(s) (${failures.length} outright, ${unaccepted.length} findings not accepted), `
+    + `${decided.accepted.length} finding(s) accepted by the baseline, ${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
+  return report.failures.length ? 1 : 0;
+}
+
+/** A baseline entry as the report names it. @param {any} entry */
+function describeEntry(entry) {
+  return { view: entry.view, ...(entry.rule !== undefined ? { rule: entry.rule } : { contains: entry.contains }), ...(entry.max !== undefined ? { max: entry.max } : {}), owner: entry.owner, until: entry.until };
+}
+
+/**
+ * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the owner-view release walk unless the local fixture walk says
+ * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
+ * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {Promise<{ profile: string, today: string, baseline: { entries: any[] }, baselineSource: string, problems: string[] }>}
+ */
+export async function walkSetting(env = process.env) {
+  /** @type {string[]} */ const problems = [];
+  const profile = (env.OPEN_SCIENCE_WALK_PROFILE ?? "").trim() || "owner";
+  if (!WALK_PROFILES.includes(profile)) problems.push(`OPEN_SCIENCE_WALK_PROFILE is ${WALK_PROFILES.join(" or ")}, not ${profile}`);
+  const today = (env.OPEN_SCIENCE_WALK_TODAY ?? "").trim() || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) problems.push(`OPEN_SCIENCE_WALK_TODAY is a date (YYYY-MM-DD), not ${today}`);
+  let baselineSource = "embedded";
+  let baseline = WALK_BASELINE;
+  const named = (env.OPEN_SCIENCE_WALK_BASELINE ?? "").trim();
+  if (named === "none") {
+    baselineSource = "none";
+    baseline = { entries: [] };
+  } else if (named) {
+    baselineSource = named;
+    try {
+      baseline = JSON.parse(await readFile(named, "utf8"));
+    } catch (error) {
+      problems.push(`the baseline ${named} cannot be read (${String(error).slice(0, 100)})`);
+    }
+  }
+  problems.push(...baselineProblems(baseline).map((problem) => `baseline: ${problem}`));
+  return { profile, today, baseline, baselineSource, problems };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */
@@ -2722,15 +2865,17 @@ const IMPACT_RANK = { critical: 0, serious: 1, moderate: 2, minor: 3 };
 const impactRank = (impact) => IMPACT_RANK[/** @type {keyof typeof IMPACT_RANK} */ (impact)] ?? 4;
 
 /**
- * What axe found on each page view, as notices (V-6; a scan is never a failure): one line for each page that has something new to say —
- * the rules it violates by impact, with the nodes counted and the first one named by its selector — and one line for the walk. A
- * violation the walk already named on an earlier page view (the same rule at the same first node: the shell's own, which every page
- * carries) is counted, not named again. The report holds every page's whole list.
+ * What axe found on each page view (V-6): a finding for each page that has something new to say — the rules it violates by impact, with
+ * the nodes counted and the first one named by its selector; the number of rules is the finding's value, so a baseline can hold a page
+ * at the count it has and let it only fall — and one summary line for the walk, which is information. A violation the walk already named
+ * on an earlier page view (the same rule at the same first node: the shell's own, which every page carries) is counted, not named
+ * again. The report holds every page's whole list.
  * @param {Array<{ view: string, result: { version: string | null, violations: Array<{ id: string, impact: string | null, nodes: number, target: string, help: string }>, incomplete: number } | null }>} scans
- * @returns {string[]}
+ * @returns {{ findings: Finding[], summary: string | null }}
  */
 export function axeNotices(scans) {
-  /** @type {string[]} */ const notices = [];
+  /** @type {Finding[]} */ const notices = [];
+  /** @type {string | null} */ let summary = null;
   const seen = new Set();
   let scanned = 0;
   let withViolations = 0;
@@ -2739,7 +2884,7 @@ export function axeNotices(scans) {
   let version = null;
   for (const { view, result } of scans) {
     if (!result) {
-      notices.push(`${view}: axe-core could not scan this page`);
+      notices.push(finding("not-observable", view, `${view}: not observable: axe-core could not scan this page`));
       continue;
     }
     scanned += 1;
@@ -2756,13 +2901,13 @@ export function axeNotices(scans) {
     const named = fresh.slice(0, AXE_RULES_PER_NOTICE).map((violation) => `${violation.id} (${violation.impact ?? "unrated"}, ${violation.nodes} node${violation.nodes === 1 ? "" : "s"}, ${violation.target || "no selector"})`);
     const repeated = result.violations.length - fresh.length;
     const more = fresh.length - named.length;
-    notices.push(`${view}: axe-core: ${fresh.length} rule(s) violated: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}${repeated > 0 ? `; ${repeated} more as on an earlier page` : ""}`);
+    notices.push(finding("axe", view, `${view}: axe-core: ${fresh.length} rule(s) violated: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}${repeated > 0 ? `; ${repeated} more as on an earlier page` : ""}`, fresh.length));
   }
   if (scans.length) {
     const common = [...rules.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([id, pages]) => `${id} on ${pages}`);
-    notices.push(`axe-core${version ? ` ${version}` : ""}: ${scanned} page view(s) scanned, ${withViolations} with violations, ${total} node(s) in all${common.length ? ` (${common.join(", ")})` : ""}; never a failure, the whole list is in the report`);
+    summary = `axe-core${version ? ` ${version}` : ""}: ${scanned} page view(s) scanned, ${withViolations} with violations, ${total} node(s) in all${common.length ? ` (${common.join(", ")})` : ""}; the whole list is in the report`;
   }
-  return notices;
+  return { findings: notices, summary };
 }
 
 /**
@@ -2815,7 +2960,7 @@ export function addressAct([kind, first = "", second = ""]) {
 }
 
 /**
- * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's pressed chip, or the memory
+ * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
  * @param {["inbox" | "memory"]} args
  */
@@ -2827,12 +2972,15 @@ export function addressProbe([kind]) {
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
   const base = { path: location.pathname, search: location.search, dialog: [...document.querySelectorAll("[role='dialog']")].some(visible) };
   if (kind === "inbox") {
-    const group = [...document.querySelectorAll("[role='group']")].find((el) => el.getAttribute("aria-label") === "消息筛选" && visible(el));
-    const pressed = group ? [...group.querySelectorAll("button[aria-pressed='true']")].map(words) : [];
-    return { ...base, found: Boolean(group), pressed: pressed[0] ?? null };
+    // 全部 / 未读 is the toolbar's tab list since R19 (it was a group of pressed chips): the selected tab is the choice.
+    const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "消息视图" && visible(el));
+    const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
+    return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
   if (kind === "memory") {
-    const tabs = [...document.querySelectorAll("[role='tab']")].filter(visible);
+    // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
+    const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
+    const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
     const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
     return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
@@ -2846,7 +2994,7 @@ export function addressProbe([kind]) {
  * again. The choices only filter a list; nothing here writes. `state` values match by prefix, because a chip and a tab carry their count.
  */
 export const ADDRESS_CASES = [
-  { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["chip", "消息筛选", "未读"]], fill: null, search: { filter: "unread" }, state: { pressed: "未读" } },
+  { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
   { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
 ];
 
