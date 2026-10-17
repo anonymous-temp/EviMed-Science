@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { EVIDENCE_ZONE_KINDS, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useEvidenceScope } from "@/components/frontier/useEvidenceScope";
 import { ZoneEditor } from "@/components/frontier/EvidenceEditors";
 import { TopicRequests } from "@/components/frontier/TopicRequests";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
-import { Tabs, type TabItem } from "@/components/ui/Tabs";
-import { SearchInput } from "@/components/ui/SearchInput";
+import type { TabItem } from "@/components/ui/Tabs";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
+import { Note } from "@/components/ui/Note";
+import { Section } from "@/components/ui/Section";
+import { ShowMore } from "@/components/ui/ShowMore";
 import {
   listEvidenceZones,
   followEvidenceZone,
@@ -151,56 +155,62 @@ export function EvidenceZonesPage() {
   };
   // Zones are grouped by kind; the group's name is told only where there is more than one group to tell apart.
   const kinds = EVIDENCE_ZONE_KINDS.filter((kind) => items.some((zone) => (zone.kind ?? "user") === kind));
+  const zonePath = (zone: EvidenceZone) =>
+    `/app/frontier/zones/${encodeURIComponent(zone.id)}${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`;
+  const list = (zones: EvidenceZone[]) => (
+    <List divided label="证据专区">
+      {zones.map((zone) => {
+        const counts = [
+          zone.state === "draft" ? "草稿" : null,
+          zone.evidenceCount === null ? null : zone.evidenceCount === 0 ? "暂无证据" : `${zone.evidenceCount} 条证据`,
+        ].filter(Boolean).join(" · ");
+        return (
+          <ListRow
+            key={zone.id}
+            to={zonePath(zone)}
+            title={zone.title}
+            meta={(zone.description || counts) ? (
+              <>
+                {zone.description && <span className="line-clamp-2 max-w-measure text-text-2">{zone.description}</span>}
+                {counts && <span className={zone.description ? "mt-1 block" : "block"}>{counts}</span>}
+              </>
+            ) : undefined}
+            actions={zone.canFollow ? (
+              <Button variant="secondary" size="sm" loading={busy === zone.id} onClick={() => void follow(zone)}>
+                {zone.following ? "取消关注" : "关注"}
+              </Button>
+            ) : undefined}
+          />
+        );
+      })}
+    </List>
+  );
   return (
     <PageShell
-      title="证据专区"
+      title={fromItem ? "选择证据专区" : "证据专区"}
       back={<FrontierBack />}
-      contentClassName="mt-2"
-      actions={
-        (requestable || canCreate) && (
-          <>
-            {requestable && (
-              <Button variant="text" onClick={() => setAsking("")}>
-                申请选题
-              </Button>
-            )}
-            {canCreate && (
-              <Button
-                variant="secondary"
-                onClick={() => setCreating((value) => !value)}
-              >
-                新建专区
-              </Button>
-            )}
-          </>
-        )
-      }
-    >
-      {fromItem && (
-        <p className="mb-3 text-ui font-medium text-text">选择证据专区</p>
-      )}
-      <Tabs
-        label="专区范围"
+      actions={canCreate ? <Menu label="更多操作" items={[{ label: "新建专区", onSelect: () => setCreating((value) => !value) }]} /> : undefined}
+      toolbar={{
+        label: "专区筛选",
         // Choosing a zone for an item offers the reader's own zones only.
-        items={fromItem ? SCOPES.filter((item) => item.value === "owned") : SCOPES}
-        value={scope}
-        onChange={setScope}
-        trailing={(
-          <SearchInput
-            label="搜索"
-            size="sm"
-            value={q}
-            maxLength={200}
-            onChange={(event) => setQ(event.target.value)}
-            onClear={() => { setQ(""); setQuery(""); }}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } }}
-            onCompositionStart={() => { composing.current = true; }}
-            onCompositionEnd={(event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); }}
-          />
-        )}
-      />
+        views: { label: "专区范围", items: fromItem ? SCOPES.filter((item) => item.value === "owned") : SCOPES, value: scope, onChange: setScope },
+        search: {
+          label: "搜索",
+          value: q,
+          maxLength: 200,
+          onChange: setQ,
+          onClear: () => { setQ(""); setQuery(""); },
+          inputProps: {
+            onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } },
+            onCompositionStart: () => { composing.current = true; },
+            onCompositionEnd: (event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); },
+          },
+        },
+        summary: query && total !== null ? `${total} 个匹配专区` : undefined,
+      }}
+    >
       {creating && (
-        <div className="mt-4">
+        <div className="mb-4">
           <ZoneEditor
             onCancel={() => setCreating(false)}
             onSaved={(zone) =>
@@ -210,9 +220,6 @@ export function EvidenceZonesPage() {
             }
           />
         </div>
-      )}
-      {query && total !== null && (
-        <p className="mt-3 text-caption text-text-3">{total} 个匹配专区</p>
       )}
       {error && (
         <EmptyState
@@ -230,69 +237,27 @@ export function EvidenceZonesPage() {
       {loading && items.length === 0 ? (
         <FrontierSkeleton />
       ) : !error && items.length === 0 ? (
-        <EmptyState title={query ? "没有找到匹配的专区" : "暂无证据专区"} />
+        <EmptyState
+          title={query ? "没有找到匹配的专区" : "暂无证据专区"}
+          action={requestable ? <Button variant="secondary" onClick={() => setAsking("")}>申请选题</Button> : undefined}
+        />
       ) : (
-        <div className="mt-4 space-y-6">
+        <div className="space-y-6">
           {kinds.map((kind) => {
             const zones = emptyLast(items.filter((zone) => (zone.kind ?? "user") === kind));
             const label = (EVIDENCE_ZONE_KIND_LABELS_ZH as Record<string, string>)[kind];
-            return (
-              <section key={kind} aria-label={label}>
-                {kinds.length > 1 && <h2 className="text-ui font-medium text-text">{label}</h2>}
-                <ul className="divide-y divide-border">
-                  {zones.map((zone) => (
-                    <li
-                      key={zone.id}
-                      className="flex items-start justify-between gap-4 py-4"
-                    >
-                      <div className="min-w-0">
-                        <Link
-                          to={`/app/frontier/zones/${encodeURIComponent(zone.id)}${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`}
-                          className="text-ui font-medium text-text hover:text-accent"
-                        >
-                          {zone.title}
-                        </Link>
-                        {zone.description && (
-                          <p className="mt-1 max-w-measure text-caption text-text-2 line-clamp-2">
-                            {zone.description}
-                          </p>
-                        )}
-                        {(zone.state === "draft" || zone.evidenceCount !== null) && (
-                          <p className="mt-2 text-caption text-text-3">
-                            {[
-                              zone.state === "draft" ? "草稿" : null,
-                              zone.evidenceCount === null ? null : zone.evidenceCount === 0 ? "暂无证据" : `${zone.evidenceCount} 条证据`,
-                            ].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                      {zone.canFollow && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          loading={busy === zone.id}
-                          onClick={() => void follow(zone)}
-                        >
-                          {zone.following ? "取消关注" : "关注"}
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
+            // A group is told by name only where there is more than one to tell apart.
+            return kinds.length > 1
+              ? <Section key={kind} title={label}>{list(zones)}</Section>
+              : <section key={kind} aria-label={label}>{list(zones)}</section>;
           })}
         </div>
       )}
-      {cursor && (
-        <div className="mt-4">
-          <Button
-            variant="secondary"
-            loading={loading}
-            onClick={() => void more()}
-          >
-            加载更多
-          </Button>
+      {cursor && <ShowMore remaining={typeof total === "number" ? Math.max(1, total - items.length) : null} unit="个" loading={loading} onMore={() => void more()} />}
+      {/* The way to a topic nobody has written yet: the end of the list, where a reader who did not find theirs has arrived. */}
+      {requestable && items.length > 0 && !cursor && (
+        <div className="mt-6">
+          <Note action={<Button variant="secondary" size="sm" onClick={() => setAsking("")}>申请选题</Button>}>没有找到想看的主题？</Note>
         </div>
       )}
       {asking !== null && requestable && (

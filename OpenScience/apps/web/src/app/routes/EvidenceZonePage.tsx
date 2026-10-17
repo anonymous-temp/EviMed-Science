@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useEvidenceScope,
@@ -23,9 +23,11 @@ import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
-import { Menu } from "@/components/ui/Menu";
+import { Drawer } from "@/components/ui/Drawer";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Textarea } from "@/components/ui/Input";
-import { SearchInput } from "@/components/ui/SearchInput";
+import { ShowMore } from "@/components/ui/ShowMore";
 import {
   fetchEvidenceZoneDetail,
   publishEvidenceZone,
@@ -46,7 +48,6 @@ export function EvidenceZonePage() {
 function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const feedbackRequestId = useEvidenceRequestId();
   const features = useEvidenceFeatures();
-  const [logOpened, setLogOpened] = useState(false);
   const [params] = useSearchParams();
   const fromItem = params.get("fromItem");
   const [sourceItem, setSourceItem] = useState<FrontierItem | null>(null);
@@ -60,6 +61,16 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
+  // The box commits to the query a moment after typing stops — the same live search as the zone list — never in the middle of an
+  // IME composition (pinyin is not a query); Enter commits at once. There is no 「搜索」 button (R19, audit D C5).
+  const composing = useRef(false);
+  const [composed, setComposed] = useState(0);
+  useEffect(() => {
+    const text = q.trim();
+    if (composing.current || text === query) return;
+    const timer = setTimeout(() => setQuery(text), 300);
+    return () => clearTimeout(timer);
+  }, [q, composed, query]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -67,7 +78,8 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const capture = useEvidenceScope(`${zoneId}:${query}:${refresh}`);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // What the header's 「⋯」 opens: the zone's background and experts, its change log, and a suggestion to its owner.
+  const [panel, setPanel] = useState<"background" | "log" | "suggest" | null>(null);
   const [feedback, setFeedback] = useState("");
   const [sent, setSent] = useState(false);
   useEffect(() => {
@@ -164,28 +176,42 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
       : zone.following
         ? "这个专区还没有证据。有新证据时，会出现在“前沿动态”的“关注”里。"
         : "这个专区还没有证据。";
-  const publicLink =
-    features.publicPages && zone?.state === "published" && zone.visibility === "internet" ? (
-      <a
-        className="text-accent underline"
-        href={`${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        公开页
-      </a>
-    ) : null;
+  const publicUrl =
+    features.publicPages && zone?.state === "published" && zone.visibility === "internet"
+      ? `${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`
+      : null;
   const metaParts = zone
     ? [
         zone.state === "draft" ? "草稿" : null,
         zone.creator || null,
         zone.createdAt ? evidenceDay(zone.createdAt) : null,
-        publicLink,
       ].filter((part) => part !== null)
     : [];
+  // The header's 「⋯」: what a reader may do about the zone besides following and asking it, and, for its owner, to edit and publish it.
+  const forReaders: MenuEntry[] = zone ? [
+    ...(publicUrl ? [{ label: "公开页", onSelect: () => { window.open(publicUrl, "_blank", "noopener,noreferrer"); } }] : []),
+    ...(zone.background || zone.experts.length > 0 ? [{ label: "领域背景与专家", onSelect: () => setPanel("background") }] : []),
+    ...(features.upkeep && zone.state === "published" && !bare ? [{ label: "变更记录", onSelect: () => setPanel("log") }] : []),
+    ...(zone.canFeedback ? [{ label: "给专区提建议", onSelect: () => { setSent(false); setPanel("suggest"); } }] : []),
+  ] : [];
+  const forOwner: MenuEntry[] = zone?.canEdit ? [
+    { label: "编辑专区", disabled: editing || adding, onSelect: () => setEditing(true) },
+    {
+      label: zone.state === "published" ? "撤回专区" : "发布专区",
+      disabled: editing || adding || busy,
+      onSelect: () =>
+        void act(async (current) => {
+          const updated = await publishEvidenceZone(zone, zone.state === "published" ? "draft" : "published");
+          if (current()) setZone(updated);
+        }),
+    },
+  ] : [];
+  const more: MenuEntry[] = [...forReaders, ...(forReaders.length > 0 && forOwner.length > 0 ? ["separator" as const] : []), ...forOwner];
+  const searchable = !!zone && !bare && (items.length > 0 || !!query);
   return (
     <PageShell
       title={zone?.title ?? "证据专区"}
+      meta={metaParts.length > 0 ? metaParts.join(" · ") : undefined}
       back={
         <FrontierBack
           trail={[
@@ -232,33 +258,31 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 问这个专区
               </Button>
             )}
-            {zone.canEdit && (
-              <Menu
-                label="更多操作"
-                items={[
-                  {
-                    label: "编辑专区",
-                    disabled: editing || adding,
-                    onSelect: () => setEditing(true),
-                  },
-                  {
-                    label: zone.state === "published" ? "撤回专区" : "发布专区",
-                    disabled: editing || adding || busy,
-                    onSelect: () =>
-                      void act(async (current) => {
-                        const updated = await publishEvidenceZone(
-                          zone,
-                          zone.state === "published" ? "draft" : "published",
-                        );
-                        if (current()) setZone(updated);
-                      }),
-                  },
-                ]}
-              />
-            )}
+            {more.length > 0 && <Menu label="更多操作" items={more} />}
           </>
         )
       }
+      // The list's controls, over the list: a live search and the count after it, and the owner's way to add to it.
+      toolbar={zone && !bare ? {
+        label: "专区证据筛选",
+        search: searchable ? {
+          label: "搜索当前专区证据",
+          value: q,
+          maxLength: 200,
+          onChange: setQ,
+          onClear: () => { setQ(""); setQuery(""); },
+          inputProps: {
+            disabled: editing || adding,
+            onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } },
+            onCompositionStart: () => { composing.current = true; },
+            onCompositionEnd: (event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); },
+          },
+        } : undefined,
+        summary: countLine ?? undefined,
+        actions: zone.canEdit ? (
+          <Button variant="secondary" size="sm" disabled={editing || adding} onClick={() => setAdding(true)}>添加证据</Button>
+        ) : undefined,
+      } : undefined}
     >
       {error && (
         <EmptyState
@@ -288,50 +312,20 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 }}
               />
             )}
-            <header className="space-y-2">
-              {metaParts.length > 0 && (
-                <p className="text-caption text-text-3">
-                  {metaParts.map((part, index) => (
-                    <Fragment key={index}>
-                      {index > 0 && " · "}
-                      {part}
-                    </Fragment>
-                  ))}
-                </p>
-              )}
-              {zone.description && (
-                <p className="max-w-measure text-ui text-text-2">
-                  {zone.description}
-                </p>
-              )}
-              {zone.state === "published" && !bare && (
-                <div className="pt-1">
-                  <ZoneSubscription zoneId={zone.id} />
-                </div>
-              )}
-              {(zone.background || zone.experts.length > 0) && (
-                <details className="text-ui">
-                  <summary className="cursor-pointer text-text-3">
-                    领域背景与专家
-                  </summary>
-                  {zone.background && (
-                    <p className="mt-3 max-w-measure whitespace-pre-wrap leading-relaxed text-text-2">
-                      {zone.background}
-                    </p>
-                  )}
-                  {zone.experts.length > 0 && (
-                    <ul className="mt-3 text-caption text-text-2">
-                      {zone.experts.map((expert, index) => (
-                        <li key={index}>
-                          {expert.name}
-                          {expert.institution && ` · ${expert.institution}`}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </details>
-              )}
-            </header>
+            {(zone.description || (zone.state === "published" && !bare)) && (
+              <header className="space-y-2">
+                {zone.description && (
+                  <p className="max-w-measure text-ui text-text-2">
+                    {zone.description}
+                  </p>
+                )}
+                {zone.state === "published" && !bare && (
+                  <div className="pt-1">
+                    <ZoneSubscription zoneId={zone.id} />
+                  </div>
+                )}
+              </header>
+            )}
             {zone.canEdit && <EvidenceVisibility zone={zone} onChanged={setZone} />}
             {zone.canEdit && (
               <EvidenceMaintenance
@@ -356,20 +350,6 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
               />
             ) : (
               <section aria-label="专区证据">
-                {countLine && (
-                  <p className="mb-3 text-caption text-text-3">{countLine}</p>
-                )}
-                {zone.canEdit && (
-                  <div className="mb-3">
-                    <Button
-                      variant="secondary"
-                      disabled={editing || adding}
-                      onClick={() => setAdding(true)}
-                    >
-                      添加证据
-                    </Button>
-                  </div>
-                )}
                 {adding && zone.canEdit && (
                   <div className="mb-4">
                     <CardEditor
@@ -386,37 +366,12 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                     />
                   </div>
                 )}
-                {(items.length > 0 || query) && (
-                  <form
-                    className="flex gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      setQuery(q.trim());
-                    }}
-                  >
-                    <SearchInput
-                      disabled={editing || adding}
-                      label="搜索当前专区证据"
-                      className="flex-1"
-                      value={q}
-                      onChange={(event) => setQ(event.target.value)}
-                      onClear={() => { setQ(""); setQuery(""); }}
-                    />
-                    <Button
-                      disabled={editing || adding}
-                      type="submit"
-                      variant="secondary"
-                    >
-                      搜索
-                    </Button>
-                  </form>
-                )}
                 {!items.length ? (
                   <EmptyState
                     title={query ? "没有找到匹配的证据" : "专区暂无证据"}
                   />
                 ) : (
-                  <ul className="divide-y divide-border">
+                  <List divided label="专区证据">
                     {items.map((card) => {
                       const tally = evidenceVerificationTally(card);
                       const meta = [
@@ -424,34 +379,31 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                         evidenceNatureLabel(card),
                         tally ? `引文已核对 ${tally.verified}/${tally.checkable}` : null,
                       ].filter(Boolean);
+                      // The line under the question is the card's own summary (what the server wrote for lists), not the answer: a
+                      // card that has no headline claim answers with one neutral sentence, the same on every such card.
+                      const line = card.summary || card.content?.answer;
                       return (
-                        <li key={card.id} className="py-3">
-                          <Link
-                            to={`/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`}
-                            className="text-ui font-medium text-text hover:text-accent"
-                          >
-                            {card.content?.question || card.title}
-                          </Link>
-                          {(card.content?.answer || card.summary) && (
-                            <p className="mt-1 line-clamp-2 max-w-measure text-ui leading-relaxed text-text-2">
-                              {card.content?.answer || card.summary}
-                            </p>
-                          )}
-                          {meta.length > 0 && (
-                            <p className="mt-1.5 text-caption text-text-3">
-                              {meta.join(" · ")}
-                            </p>
-                          )}
-                        </li>
+                        <ListRow
+                          key={card.id}
+                          to={`/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`}
+                          title={card.content?.question || card.title}
+                          meta={(line || meta.length > 0) ? (
+                            <>
+                              {line && <span className="line-clamp-2 max-w-measure text-ui leading-relaxed text-text-2">{line}</span>}
+                              {meta.length > 0 && <span className={line ? "mt-1.5 block" : "block"}>{meta.join(" · ")}</span>}
+                            </>
+                          ) : undefined}
+                        />
                       );
                     })}
-                  </ul>
+                  </List>
                 )}
                 {cursor && (
-                  <Button
-                    variant="secondary"
+                  <ShowMore
+                    remaining={typeof total === "number" ? Math.max(1, total - items.length) : null}
+                    unit="条"
                     loading={busy}
-                    onClick={() =>
+                    onMore={() =>
                       void act(async (current) => {
                         const page = await listZoneEvidence(
                           zone.id,
@@ -465,104 +417,92 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                         }
                       })
                     }
-                  >
-                    加载更多
-                  </Button>
+                  />
                 )}
               </section>
             )}
             {zone.kind === "official" && zone.state === "published" && (
               <EvidenceCommunityCards zoneId={zone.id} from={{ to: zonePath, label: zone.title }} />
             )}
-            {features.upkeep && zone.state === "published" && !bare && (
-              <details
-                className="text-ui"
-                onToggle={(event) => {
-                  if (event.currentTarget.open) setLogOpened(true);
-                }}
-              >
-                <summary className="cursor-pointer text-text-3">变更记录</summary>
-                {logOpened && (
-                  <div className="mt-3">
-                    <EvidenceChangeLog zoneId={zone.id} />
-                  </div>
-                )}
-              </details>
-            )}
             {zone.canEdit && suggestions.length > 0 && (
               <section>
-                <h3 className="mb-2 text-ui font-medium text-text">
-                  收到的专区建议
-                </h3>
-                <ul className="divide-y divide-border">
+                <h2 className="mb-2 text-section font-semibold text-text">收到的专区建议</h2>
+                <List divided label="收到的专区建议">
                   {suggestions.map((suggestion) => (
-                    <li key={suggestion.id} className="py-3">
-                      <p className="text-caption text-text-3">
-                        {suggestion.author} ·{" "}
-                        {evidenceDay(suggestion.createdAt)}
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-ui text-text-2">
-                        {suggestion.text}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {zone.canFeedback && (
-              <section className="border-t border-border pt-4">
-                <Button
-                  variant="text"
-                  onClick={() => {
-                    setFeedbackOpen((value) => !value);
-                    setSent(false);
-                  }}
-                >
-                  给专区提建议
-                </Button>
-                {feedbackOpen && (
-                  <form
-                    className="mt-3 space-y-3"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void act(async (current) => {
-                        await submitEvidenceZoneFeedback(
-                          zone,
-                          feedback.trim(),
-                          feedbackRequestId(`${zone.id}:${feedback.trim()}`),
-                        );
-                        if (current()) {
-                          setFeedback("");
-                          setSent(true);
-                        }
-                      });
-                    }}
-                  >
-                    <Textarea
-                      label="专区建议"
-                      maxLength={4000}
-                      value={feedback}
-                      onChange={(event) => setFeedback(event.target.value)}
+                    <ListRow
+                      key={suggestion.id}
+                      title={<span className="whitespace-pre-wrap font-normal text-text-2">{suggestion.text}</span>}
+                      meta={`${suggestion.author} · ${evidenceDay(suggestion.createdAt)}`}
                     />
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      loading={busy}
-                      disabled={!feedback.trim()}
-                    >
-                      提交建议
-                    </Button>
-                    {sent && (
-                      <p role="status" className="text-caption text-text-2">
-                        建议已提交
-                      </p>
-                    )}
-                  </form>
-                )}
+                  ))}
+                </List>
               </section>
             )}
           </div>
         )
+      )}
+      {zone && panel === "background" && (
+        <Drawer title="领域背景与专家" onClose={() => setPanel(null)}>
+          <div className="space-y-4 text-ui text-text-2">
+            {zone.background && <p className="whitespace-pre-wrap leading-relaxed">{zone.background}</p>}
+            {zone.experts.length > 0 && (
+              <ul className="text-caption">
+                {zone.experts.map((expert, index) => (
+                  <li key={index}>
+                    {expert.name}
+                    {expert.institution && ` · ${expert.institution}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Drawer>
+      )}
+      {zone && panel === "log" && (
+        <Drawer title="变更记录" onClose={() => setPanel(null)}>
+          <EvidenceChangeLog zoneId={zone.id} />
+        </Drawer>
+      )}
+      {zone && panel === "suggest" && (
+        <Drawer title="给专区提建议" onClose={() => setPanel(null)}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(async (current) => {
+                await submitEvidenceZoneFeedback(
+                  zone,
+                  feedback.trim(),
+                  feedbackRequestId(`${zone.id}:${feedback.trim()}`),
+                );
+                if (current()) {
+                  setFeedback("");
+                  setSent(true);
+                }
+              });
+            }}
+          >
+            <Textarea
+              label="专区建议"
+              maxLength={4000}
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              loading={busy}
+              disabled={!feedback.trim()}
+            >
+              提交建议
+            </Button>
+            {sent && (
+              <p role="status" className="text-caption text-text-2">
+                建议已提交
+              </p>
+            )}
+          </form>
+        </Drawer>
       )}
     </PageShell>
   );

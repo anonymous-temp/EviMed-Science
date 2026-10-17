@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
 import { WebApiError } from "@/lib/apiClient";
 import { fetchEvidenceCommunity, type EvidenceCommunityCard } from "@/lib/evidenceCommunityClient";
 import type { EvidenceFrom } from "./FrontierBack";
@@ -50,23 +51,27 @@ export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?
   if (!items?.length) return null;
   return (
     <section aria-label="社区卡片" className="space-y-3">
-      <div>
-        <h3 className="text-ui font-medium text-text">社区卡片</h3>
-        <p className="mt-1 text-caption text-text-3">其他用户公开发布的相关卡片；点开卡片可以看到来源和核对结果。</p>
-      </div>
-      <ul className="divide-y divide-border">
+      <h3 className="text-ui font-medium text-text">社区卡片</h3>
+      <List divided label="社区卡片">
         {items.map((card) => (
-          <li key={card.id} className="py-3">
-            <Link className="text-ui text-accent hover:underline" to={cardPath(card)}>{card.title}</Link>
-            <p className="mt-1 text-caption text-text-3">
-              <Link className="hover:underline" to={`/app/frontier/authors/${encodeURIComponent(card.author.id)}`} state={from ? { evidenceFrom: from } : undefined}>{card.author.name}</Link>
-              {` · ${card.zoneTitle}`}
-              {standing(card) && ` · ${standing(card)}`}
-            </p>
-            {card.summary && <p className="mt-1 line-clamp-2 text-ui text-text-2">{card.summary}</p>}
-          </li>
+          <ListRow
+            key={card.id}
+            to={cardPath(card)}
+            title={card.title}
+            meta={(
+              <>
+                <span className="block">
+                  {/* The author is a link of its own, above the row's stretched one. */}
+                  <Link className="relative z-sticky hover:underline" to={`/app/frontier/authors/${encodeURIComponent(card.author.id)}`} state={from ? { evidenceFrom: from } : undefined}>{card.author.name}</Link>
+                  {` · ${card.zoneTitle}`}
+                  {standing(card) && ` · ${standing(card)}`}
+                </span>
+                {card.summary && <span className="mt-1 line-clamp-2 block text-ui text-text-2">{card.summary}</span>}
+              </>
+            )}
+          />
         ))}
-      </ul>
+      </List>
     </section>
   );
 }

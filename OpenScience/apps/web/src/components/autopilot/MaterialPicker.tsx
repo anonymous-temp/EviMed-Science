@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SourceRecord } from "@/lib/sourceClient";
 import { listAllSources } from "@/lib/sourceList";
 import { productErrorMessage } from "@/lib/productClient";
-import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 
@@ -32,7 +34,9 @@ export function MaterialPicker({ projectId, taken, busy, onChoose, onCancel }: {
   return <div className="space-y-4">
     {error && <LoadError message={error} onRetry={load} />}
     {!error && sources === null && <FilesSkeleton />}
-    {sources !== null && choices.length === 0 && <p className="text-ui text-text-3">知识库里没有可以再添加的资料。</p>}
+    {sources !== null && choices.length === 0 && (
+      <Note action={<Link to="/app/files" className={buttonClasses({ variant: "secondary", size: "sm" })}>去知识库添加</Link>}>知识库里没有可以再添加的资料。</Note>
+    )}
     {choices.length > 0 && <ul aria-label="知识库资料" className="max-h-72 space-y-1 overflow-y-auto">{choices.map(source => <li key={source.id}>
       <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-ui text-text hover:bg-surface-2">
         <input type="checkbox" checked={chosen.includes(source.id)} onChange={event => setChosen(event.target.checked ? [...chosen, source.id] : chosen.filter(id => id !== source.id))} />

@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 85,
+    "total": 83,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -8,10 +8,8 @@
       "app/routes/OpsPage.tsx": 1,
       "app/routes/RunFilePage.tsx": 1,
       "app/routes/SimulatedWalletPage.tsx": 1,
-      "components/autopilot/MaterialPicker.tsx": 1,
       "components/autopilot/TaskForm.tsx": 1,
       "components/frontier/EvidenceChallenge.tsx": 1,
-      "components/frontier/EvidenceCommunityCards.tsx": 1,
       "components/frontier/EvidenceEditors.tsx": 1,
       "components/frontier/EvidenceVisibility.tsx": 1,
       "components/frontier/FrontierFeed.tsx": 1,

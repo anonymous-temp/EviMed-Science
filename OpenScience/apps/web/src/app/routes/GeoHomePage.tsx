@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Plus, Radar } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { createGeoProject, GEO_STEP_KEYS, isGeoOff, listGeoProjects, patchGeoProject, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
@@ -18,6 +19,20 @@ import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation"
 /** What the module is for, said to a pharma company or a doctor who has not started: the work, and what they get to see. */
 const EMPTY_SENTENCE = "药企和医生在这里研究并传播自己产品的循证依据，也能看到各家 AI 是怎么表达的。";
 
+type Sort = "recent" | "state";
+
+/** What needs the reader first: a severe error, then an open one, then a stopped article, then the rest; a paused project last. */
+function stateRank(project: GeoProjectSummary): number {
+  if (project.status === "paused") return 4;
+  if (project.alert.severe > 0) return 0;
+  if (project.alert.wrongOurs > 0) return 1;
+  if (project.alert.safety > 0) return 2;
+  return 3;
+}
+
+const sortProjects = (projects: GeoProjectSummary[], sort: Sort): GeoProjectSummary[] =>
+  [...projects].sort((a, b) => (sort === "state" ? stateRank(a) - stateRank(b) : 0) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
 type Listing =
   | { kind: "loading" }
   | { kind: "off" }
@@ -31,7 +46,10 @@ type Listing =
  * engine still makes about it), and on the right the 综合可见度指数 with its
  * trend against the target and the 品牌提及率 over P2 + P3. A number that does
  * not exist yet is “—”; a project that has only done one step is in the list
- * all the same. A paused project's row carries 继续.
+ * all the same. A paused project's row says 已暂停 under its name and carries 继续
+ * right after it — a row's action, not a cell among the values (R19, audit D C4: it
+ * stood where the numbers do and read 「继续 | 未测 | 未测」). Two or more projects
+ * are ordered by the latest activity, or by what needs the reader first (`?sort=state`).
  *
  * “新建项目” creates the project and lands in its conversation, where the
  * composer already carries the “循证 GEO” chip: no form. With no project yet the
@@ -44,6 +62,8 @@ export function GeoHomePage() {
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const sort: Sort = params.get("sort") === "state" ? "state" : "recent";
 
   useEffect(() => {
     // `error`: `/api/me` could not be read. The list is asked anyway — the
@@ -88,20 +108,39 @@ export function GeoHomePage() {
     </Button>
   );
 
+  const projects = listing.kind === "ready" ? listing.projects : [];
   return (
-    <PageShell title="循证 GEO" actions={none ? undefined : newProject}>
+    <PageShell
+      title="循证 GEO"
+      actions={none ? undefined : newProject}
+      // The one row of controls, over the list: how it is ordered, and how many there are. With one project there is nothing to order.
+      toolbar={projects.length > 1 ? {
+        label: "项目排序",
+        filters: [{
+          kind: "chips", label: "排序", value: sort, neutral: "recent",
+          options: [{ value: "recent", label: "最近活动" }, { value: "state", label: "需要处理的在前" }],
+          onChange: (next) => setParams((current) => {
+            const updated = new URLSearchParams(current);
+            if (next === "recent") updated.delete("sort"); else updated.set("sort", next);
+            return updated;
+          }, { replace: true }),
+        }],
+        summary: `${projects.length} 个项目`,
+      } : undefined}
+    >
       {feature === "loading" || listing.kind === "loading" ? <GeoListSkeleton />
         : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
           : listing.projects.length === 0
             ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" description={EMPTY_SENTENCE} action={newProject} />
-            : <ProjectList projects={listing.projects} onResumed={resumed} />}
+            : <ProjectList projects={listing.projects} sort={sort} onResumed={resumed} />}
     </PageShell>
   );
 }
 
-function ProjectList({ projects, onResumed }: { projects: GeoProjectSummary[]; onResumed: (id: string) => void }) {
+function ProjectList({ projects, sort, onResumed }: { projects: GeoProjectSummary[]; sort: Sort; onResumed: (id: string) => void }) {
   // Two projects of one name are told apart by the day they started.
   const labels = withStartDate(projects);
+  const ordered = useMemo(() => sortProjects(projects, sort), [projects, sort]);
   return (
     <div>
       <div aria-hidden="true" className="flex items-center gap-3 border-b border-border px-2 pb-2 text-caption text-text-3">
@@ -117,7 +156,7 @@ function ProjectList({ projects, onResumed }: { projects: GeoProjectSummary[]; o
         </span>
       </div>
       <List divided label="循证 GEO 项目">
-        {projects.map((project) => <ProjectRow key={project.id} project={project} label={labels.get(project.id) ?? project.name} onResumed={() => onResumed(project.id)} />)}
+        {ordered.map((project) => <ProjectRow key={project.id} project={project} label={labels.get(project.id) ?? project.name} onResumed={() => onResumed(project.id)} />)}
       </List>
     </div>
   );
@@ -128,6 +167,7 @@ function ProjectRow({ project, label, onResumed }: { project: GeoProjectSummary;
   const alert = alertText(project);
   const line = subline(project);
   const [resuming, setResuming] = useState(false);
+  const paused = project.status === "paused";
   const resume = () => {
     setResuming(true);
     void patchGeoProject(project.id, { status: "active" })
@@ -142,9 +182,6 @@ function ProjectRow({ project, label, onResumed }: { project: GeoProjectSummary;
     <ListRow
       to={`/app/geo/${encodeURIComponent(project.id)}`}
       title={label}
-      actions={project.status === "paused"
-        ? <Button variant="text" size="sm" loading={resuming} onClick={resume} aria-label={`继续“${label}”`}>继续</Button>
-        : undefined}
       meta={(
         <span data-geo-subline="">
           {line}
@@ -154,6 +191,14 @@ function ProjectRow({ project, label, onResumed }: { project: GeoProjectSummary;
               {/* The badge carries the red; the sentence is body text (F-G10). */}
               {project.alert.severe > 0 && project.alert.severity && <SeverityBadge level={project.alert.severity} className="mr-1.5 align-middle" />}
               <span data-geo-alert="" className="text-text-2">{alert}</span>
+            </>
+          )}
+          {/* The status and the one thing to do about it, together and under the name — above the row's stretched link, so it is pressed on its own. */}
+          {paused && (
+            <>
+              {(line || alert) && " · "}
+              <span>已暂停</span>
+              <Button variant="text" size="sm" loading={resuming} onClick={resume} aria-label={`继续“${label}”`} className="relative z-sticky -my-1 ml-1">继续</Button>
             </>
           )}
         </span>
@@ -200,5 +245,5 @@ function subline(project: GeoProjectSummary): string {
   if (touched.length === 0) return "还没开始";
   const start = project.startedAt ?? project.createdAt ?? null;
   const week = weekOf(start);
-  return [coverageText(project.coverageDays, start), ...(week ? [`第 ${week} 周`] : []), ...(project.status === "paused" ? ["已暂停"] : [])].join(" · ");
+  return [coverageText(project.coverageDays, start), ...(week ? [`第 ${week} 周`] : [])].join(" · ");
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Section } from "@/components/ui/Section";
+import { Toolbar } from "@/components/ui/Toolbar";
 import type {
   EvidenceAbsoluteEffect,
   EvidenceCard,
@@ -202,23 +203,28 @@ export function evidenceViewsHaveContent(views: EvidenceCard["views"]): boolean 
   return views.clinical.rows.length > 0 || views.public.panels.some((panel) => panel.status === "written" && panel.key !== "sourcesAndCheckDate") || views.public.factBox.status === "available";
 }
 
-/** 临床版 / 公众版: two readings of the same verified claims, switched by the reader. */
+const VIEW_ITEMS = [{ value: "clinical", label: "临床版" }, { value: "public", label: "公众版" }] as const;
+
+/**
+ * 证据概要: 临床版 / 公众版, two readings of the same verified claims, switched by the reader. The switch is the section's own row of
+ * views, above what it switches (R19, audit D C1e: it was a segmented control, and a view switch is a tab list).
+ */
 export function EvidenceCardViews({ evidence }: { evidence: EvidenceCard }) {
   const [which, setWhich] = useState<"clinical" | "public">("clinical");
   const views = evidence.views;
   if (!views || !evidenceViewsHaveContent(views)) return null;
+  const panelId = `evidence-views-${evidence.id}`;
   return (
-    <section className="space-y-3" aria-label="证据卡视图">
-      <SegmentedControl
-        aria-label="证据卡视图"
-        size="sm"
-        value={which}
-        onChange={setWhich}
-        options={[{ value: "clinical", label: "临床版" }, { value: "public", label: "公众版" }]}
+    <Section title="证据概要">
+      <Toolbar
+        label="证据卡视图"
+        views={{ label: "证据卡视图", items: VIEW_ITEMS, value: which, onChange: (value) => setWhich(value === "public" ? "public" : "clinical"), panelId }}
       />
-      {which === "clinical"
-        ? <EvidenceClinicalTable evidence={evidence} view={views.clinical} />
-        : <EvidencePublicLayout view={views.public} />}
-    </section>
+      <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${which}`} className="mt-4">
+        {which === "clinical"
+          ? <EvidenceClinicalTable evidence={evidence} view={views.clinical} />
+          : <EvidencePublicLayout view={views.public} />}
+      </div>
+    </Section>
   );
 }

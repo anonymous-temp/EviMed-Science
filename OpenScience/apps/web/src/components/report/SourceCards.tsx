@@ -4,7 +4,7 @@ import { Check, Copy, ExternalLink, FileText } from "lucide-react";
 import { EVIDENCE_SOURCE_TYPES, EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
 import { claimSources, type ClaimEvidence, type ClaimSource, type SourceUpdate, type SourceUpdateStatus } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
-import { tagClasses } from "@/components/ui/Tag";
+import { Tag } from "@/components/ui/Tag";
 import { Menu } from "@/components/ui/Menu";
 import { formatGbt7714, formatVancouver, identifiersOf, type ReferenceMetadata } from "@/lib/references";
 import { toast } from "@/lib/toast";
@@ -197,7 +197,7 @@ export function SourceCard({ entry, runId }: { entry: SourceCardEntry; runId?: s
             {facts.map((fact) => <span key={fact}>{fact}</span>)}
             {entry.identifier && <IdentifierCopy value={entry.identifier} />}
             {/* Industry funding is a fact a reader weighs, not a verdict. */}
-            {entry.funding === "industry" && <span className={tagClasses({ tone: "warn" })}>企业资助</span>}
+            {entry.funding === "industry" && <Tag tone="warn">企业资助</Tag>}
           </p>
           {/* A work that no longer stands as published is the one thing on a
             * card a reader must not miss, so it is a strip of its own. */}

@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
 import { useToastStore } from "@/lib/toast";
+import { expectComposed } from "@/test/expectComposed";
 
 const operator = vi.hoisted(() => ({ value: false }));
 vi.mock("@/lib/inboxClient");
@@ -81,13 +82,13 @@ it("sits in the one page column with a one-line header and no subtitle", async (
   expect(readAll.className).not.toMatch(/(^|\s)border(\s|$)/);
 });
 
-it("filters with two quiet chips, 全部 and 未读 with its count, and no segmented control", async () => {
+it("switches with two tabs, 全部 and 未读 with its count — the views of the page's toolbar, not chips and not a segmented control", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
   open();
-  expect(await screen.findByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "false");
+  expect(await screen.findByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: /^未读\s*2$/ })).toHaveAttribute("aria-selected", "false");
   expect(screen.queryAllByRole("radio")).toEqual([]);
-  await userEvent.click(screen.getByRole("button", { name: /^未读\s*2$/ }));
+  await userEvent.click(screen.getByRole("tab", { name: /^未读\s*2$/ }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
 });
 
@@ -234,14 +235,14 @@ it("opens a notice that points nowhere in place, whole, and reads it", async () 
 it("keeps the filter in the address and reads it back from there", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 2 });
   const { unmount } = open();
-  await userEvent.click(await screen.findByRole("button", { name: /^未读\s*2$/ }));
+  await userEvent.click(await screen.findByRole("tab", { name: /^未读\s*2$/ }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread"));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/inbox$/));
   unmount();
   vi.mocked(api.listInbox).mockClear();
   open("?filter=unread");
-  expect(await screen.findByRole("button", { name: /^未读\s*2$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByRole("tab", { name: /^未读\s*2$/ })).toHaveAttribute("aria-selected", "true");
   expect(api.listInbox).toHaveBeenCalledWith({ unread: true });
 });
 
@@ -262,7 +263,7 @@ it("keeps the row that is open in place in the address, and opens it again from 
   expect(await screen.findByRole("button", { name: /飞书机器人已绑定到你的账号/ })).toHaveAttribute("aria-expanded", "true");
 });
 
-it("brings back the pages the address names, in turn, and keeps count as 「加载更多」 adds one", async () => {
+it("brings back the pages the address names, in turn, and keeps count as 「显示更多」 adds one", async () => {
   const note = (id: string) => runNotice({ id, title: `第 ${id} 条通知`, readAt: at(0) });
   vi.mocked(api.listInbox).mockImplementation(async ({ cursor = null } = {}) => {
     if (cursor === "c2") return { items: [note("2")], nextCursor: "c3" };
@@ -270,7 +271,7 @@ it("brings back the pages the address names, in turn, and keeps count as 「加�
     return { items: [note("1")], nextCursor: "c2" };
   });
   const { unmount } = open();
-  await userEvent.click(await screen.findByRole("button", { name: "加载更多" }));
+  await userEvent.click(await screen.findByRole("button", { name: "显示更多" }));
   expect(await screen.findByText("第 2 条通知")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?pages=2"));
   unmount();
@@ -281,7 +282,7 @@ it("brings back the pages the address names, in turn, and keeps count as 「加�
   expect(screen.getByText("第 2 条通知")).toBeInTheDocument();
   expect(vi.mocked(api.listInbox).mock.calls.filter(([args]) => args?.severity !== "safety")).toEqual([[{ unread: false }], [{ unread: false, cursor: "c2" }], [{ unread: false, cursor: "c3" }]]);
   // The next page is still one tap away.
-  expect(screen.getByRole("button", { name: "加载更多" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "显示更多" })).toBeInTheDocument();
 });
 
 it("reads one page for a pages value that is not a small number, and keeps the pages it could read when a later one fails", async () => {
@@ -298,7 +299,7 @@ it("reads one page for a pages value that is not a small number, and keeps the p
   expect(await screen.findByText("第 1 条通知")).toBeInTheDocument();
   // The second page failed quietly: the first stays, with the way to ask again.
   expect(screen.queryByRole("alert")).toBeNull();
-  expect(screen.getByRole("button", { name: "加载更多" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "显示更多" })).toBeInTheDocument();
 });
 
 it("comes back to the place in the list the reader had scrolled to, and a new visit opens at the top", async () => {
@@ -329,7 +330,7 @@ it("comes back from the row's destination to the list as it was", async () => {
   await userEvent.click(await screen.findByRole("link", { name: /已完成/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
   await act(async () => { await router.navigate(-1); });
-  expect(await screen.findByRole("button", { name: /^未读\s*1$/ })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByRole("tab", { name: /^未读\s*1$/ })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByTestId("where")).toHaveTextContent("/app/inbox?filter=unread");
 });
 
@@ -337,7 +338,7 @@ it("empties the view with one sentence and no button", async () => {
   serve({ items: [], nextCursor: null });
   open();
   expect(await screen.findByText("收件箱为空")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
   expect(screen.queryByText(/新的研究结果和待决事项/)).not.toBeInTheDocument();
@@ -365,13 +366,13 @@ it("discards a late page after changing filters and prevents duplicate page requ
     return { items: [review], nextCursor: "old-page" };
   });
   open();
-  const more = await screen.findByRole("button", { name: "加载更多" });
+  const more = await screen.findByRole("button", { name: "显示更多" });
   await userEvent.click(more);
   expect(more).toBeDisabled();
   await userEvent.click(more);
   // The page, the unread safety findings it pins, and the one next page — not two.
   expect(api.listInbox).toHaveBeenCalledTimes(3);
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
   finishPage({ items: [{ ...review, id: "late-review", title: "旧筛选消息" }], nextCursor: null });
   await waitFor(() => expect(screen.queryByText("旧筛选消息")).not.toBeInTheDocument());
@@ -383,13 +384,13 @@ it("removes a read item from the unread view and ignores a late mutation after r
   let finishRead!: (value: api.InboxItem) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((resolve) => { finishRead = resolve; }));
   open();
-  await userEvent.click(await screen.findByRole("button", { name: "未读" }));
+  await userEvent.click(await screen.findByRole("tab", { name: "未读" }));
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   finishRead({ ...notice, readAt: "2026-09-06T00:01:00Z", revision: 2 });
   await waitFor(() => expect(screen.getByText("研究完成")).toBeInTheDocument());
 
-  await userEvent.click(screen.getByRole("button", { name: "未读" }));
+  await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: "2026-09-06T00:01:00Z", revision: 2 });
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
   await waitFor(() => expect(screen.queryByText("研究完成")).not.toBeInTheDocument());
@@ -401,9 +402,9 @@ it("does not leak an old mutation failure or busy state into a reloaded filter",
   let failRead!: (error: Error) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((_resolve, reject) => { failRead = reject; }));
   open();
-  await userEvent.click(await screen.findByRole("button", { name: "未读" }));
+  await userEvent.click(await screen.findByRole("tab", { name: "未读" }));
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  await userEvent.click(screen.getByRole("button", { name: "全部" }));
+  await userEvent.click(screen.getByRole("tab", { name: "全部" }));
   expect(await screen.findByRole("button", { name: "标为已读" })).toBeEnabled();
   failRead(new Error("old request failed"));
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
@@ -414,7 +415,7 @@ it("reads the whole inbox in one request", async () => {
   serve({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 7 });
   vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 7 });
   open();
-  expect(await screen.findByRole("button", { name: /^未读\s*7$/ })).toBeInTheDocument();
+  expect(await screen.findByRole("tab", { name: /^未读\s*7$/ })).toBeInTheDocument();
   serve({ items: [runNotice({ id: "a", readAt: at(0) })], nextCursor: null, unreadTotal: 0 });
   await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
   await waitFor(() => expect(api.markAllInboxRead).toHaveBeenCalledTimes(1));
@@ -485,10 +486,10 @@ it("finds an unread safety finding that is not on the loaded page, and counts wh
     { items: [{ ...review, id: "briefing", title: "主动科研简报：GLP-1" }], nextCursor: "page-2", unreadTotal: 306 },
     { items: [hidden("s3", "Qwen 讲错替尔泊肽")], nextCursor: null, unreadTotal: 27 },
   );
-  await userEvent.click(within(section).getByRole("button", { name: "显示更多需要优先查看的消息" }));
+  await userEvent.click(within(section).getByRole("button", { name: "显示更多" }));
   expect(await within(section).findByText("Qwen 讲错替尔泊肽")).toBeInTheDocument();
   expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true, severity: "safety", cursor: "safety-2" });
-  expect(within(section).queryByRole("button", { name: "显示更多需要优先查看的消息" })).not.toBeInTheDocument();
+  expect(within(section).queryByRole("button", { name: "显示更多" })).not.toBeInTheDocument();
 });
 
 it("lowers the section's number when a pinned finding is read, and shows no section once none is unread", async () => {
@@ -573,4 +574,87 @@ it("opens a share where it lives: a delivery on its own page, a withdrawal or ta
   expect(screen.getByRole("link", { name: "一条想跳出去的通知" })).toHaveAttribute("href", "/app/memory");
   await userEvent.click(screen.getByRole("link", { name: "李主任 向你分享了一套工作方式" }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/delivered/dlv_abc123");
+});
+
+// R19 (audit D C2): the first screen was eleven rows of one GEO project's wrong statements, one for each engine and each fact.
+describe("a module's repeating notices", () => {
+  const wrong = (id: number, over: Partial<api.InboxItem> = {}): api.InboxItem => ({
+    ...review, id: `wrong-${id}`, noticeType: "notify", severity: "safety", title: `${["豆包", "Kimi", "文心"][id % 3]}讲错信尔美：第 ${id} 条错话`, body: "依据：“原文”",
+    source: { type: "geo", id: `geo_x/answers/snap_${id}` }, projectId: "p1", actions: [{ id: "open", label: "打开", style: "primary" }], createdAt: at(id), ...over,
+  });
+  const eleven = Array.from({ length: 11 }, (_, index) => wrong(index + 1));
+
+  it("is one row for the project and the kind, in the section that comes first, whose number is still the bell's", async () => {
+    serve({ items: [...eleven, runNotice({ id: "later", createdAt: at(30) })], nextCursor: null });
+    open();
+    const pinned = await screen.findByRole("heading", { name: /需要优先查看 · 未读 11 条/ });
+    const section = pinned.closest("section")!;
+    const rows = within(section).getAllByRole("listitem");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("11 条新的讲错");
+    expect(rows[0]).toHaveTextContent("11 条未读");
+    // The newest of them is the line under it.
+    expect(rows[0]).toHaveTextContent("讲错信尔美：第 1 条错话");
+    expect(within(screen.getByRole("list", { name: "消息" })).getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("opens the notices it holds in a drawer, one row each, newest first — and a safety finding is read by opening it, not by a sweep", async () => {
+    vi.mocked(api.markInboxRead).mockImplementation(async (id) => ({ ...eleven.find((entry) => entry.id === id)!, readAt: at(0), revision: 2 }));
+    serve({ items: eleven, nextCursor: null });
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: /11 条新的讲错/ }));
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer).toHaveTextContent("11 条，11 条未读");
+    const members = within(drawer).getAllByRole("listitem");
+    expect(members).toHaveLength(11);
+    expect(members[0]).toHaveTextContent("第 1 条错话");
+    // No bulk 「已读」 for findings that must each be opened.
+    expect(within(drawer).queryByRole("button", { name: "全部标为已读" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("group=geo%3Ageo_x%3Aanswers%3Asafety");
+    await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("is read at once for a group that is not clinical safety, from the row and from its drawer", async () => {
+    const quiet = Array.from({ length: 4 }, (_, index) => wrong(index + 1, { severity: "info" }));
+    vi.mocked(api.markInboxRead).mockImplementation(async (id) => ({ ...quiet.find((entry) => entry.id === id)!, readAt: at(0), revision: 2 }));
+    serve({ items: quiet, nextCursor: null, unreadTotal: 4 });
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "全部标为已读" }));
+    await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(4));
+    expect(await screen.findByText(/4 条新的讲错/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "全部标为已读" })).not.toBeInTheDocument();
+    expect(api.announceInboxChanged).toHaveBeenCalled();
+  });
+
+  it("narrows to a source by chips, drawn only for the sources the notices come from, and not at all for one", async () => {
+    serve({ items: [...eleven, runNotice({ id: "r1", createdAt: at(30) }), runNotice({ id: "r2", createdAt: at(31) })], nextCursor: null });
+    open();
+    const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
+    expect(within(toolbar).getByRole("button", { name: "循证 GEO 11" })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: "研究运行 2" })).toBeInTheDocument();
+    expect(within(toolbar).queryByRole("button", { name: /简报|记忆|分享|虚拟临床研究/ })).not.toBeInTheDocument();
+    await userEvent.click(within(toolbar).getByRole("button", { name: "研究运行 2" }));
+    expect(screen.queryByRole("heading", { name: /需要优先查看/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "消息" })).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByTestId("where")).toHaveTextContent("source=run");
+  });
+
+  it("draws no source chips where every notice comes from one place, and the toolbar comes before the list", async () => {
+    serve({ items: [runNotice({ id: "r1" }), runNotice({ id: "r2" })], nextCursor: null });
+    open();
+    const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
+    expect(within(toolbar).queryByRole("button", { name: /全部来源/ })).not.toBeInTheDocument();
+    expect(toolbar.compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("the inbox's composition", () => {
+  it("has its header, then the toolbar with the views over the list, and one primary action at most", async () => {
+    serve({ items: [runNotice({ id: "a" }), runNotice({ id: "b" })], nextCursor: null });
+    const { container } = open();
+    await screen.findByRole("list", { name: "消息" });
+    const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
+    expect(facts.toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

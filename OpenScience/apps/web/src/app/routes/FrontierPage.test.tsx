@@ -16,6 +16,7 @@ import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierPage } from "./FrontierPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(),
@@ -170,12 +171,18 @@ const viewTabs = () => within(screen.getByRole("tablist", { name: "动态视图"
 const controlRow = () => screen.getByRole("tablist", { name: "动态视图" }).parentElement!;
 
 describe("the page and its views", () => {
-  it("opens on 精选 under a one-line header — the title, a link to the evidence zones and the search box, no sentence under it", async () => {
+  it("opens on 精选 under a one-line header — the title and a link to the evidence zones — with the search in the toolbar of the sticky band, no sentence under it", async () => {
     renderPage();
     const title = screen.getByRole("heading", { level: 1, name: "前沿动态" });
     const header = title.closest("header")!;
-    expect(header).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
     expect(within(header).getByRole("link", { name: "证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+    // The views, the filters and the search are one toolbar, in the band the shell keeps at the top of the page (R19, audit D C1d).
+    const toolbar = screen.getByRole("group", { name: "动态筛选与搜索" });
+    expect(toolbar).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
+    expect(toolbar).toContainElement(screen.getByRole("tablist", { name: "动态视图" }));
+    expect(toolbar.closest("[data-page-chrome]")).toHaveClass("sticky", "top-0");
+    expect(header).not.toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
+    expect(toolbar.compareDocumentPosition(screen.getByRole("tabpanel")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await screen.findByText("今天的一条 RCT");
     expect(screen.queryByText(/每天替你读/)).not.toBeInTheDocument();
     expect(header.querySelector("p")).toBeNull();
@@ -1052,4 +1059,20 @@ it("discards pagination replies after leaving a listing view", async () => {
   expect(screen.queryByText("Late pagination reply")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "加载更多" })).toBeEnabled();
   await act(async () => resolveRefresh(page([today])));
+});
+
+describe("the feed's composition", () => {
+  it("has its header, then one toolbar in the sticky band — views, filters and the search — then the feed, in every view", async () => {
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const feed = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
+    expect(feed.toolbars).toHaveLength(1);
+    expect(feed.chrome).toContainElement(feed.toolbars[0]);
+    for (const name of ["热榜", "简报", "关注"]) {
+      await userEvent.click(viewTabs().getByRole("tab", { name }));
+      const facts = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
+      expect(facts.toolbars, `${name}: one toolbar`).toHaveLength(1);
+      expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" }), `${name}: the search is in it`).toBeInTheDocument();
+    }
+  });
 });
