@@ -62,6 +62,7 @@ import {
 import { capabilityCatalogue } from './guidance.mjs'
 import { MEMORY_SERVICE as CAPSULE_MEMORY_SERVICE } from './capsule.mjs'
 import {
+  agentJobs,
   agentSeesTool,
   configSchema,
   defineTool,
@@ -90,6 +91,7 @@ import {
   startedChildId,
   stepIsSettlementOnly,
   steerContext,
+  stopJobQuietly,
   toSubagentOutcome,
   toUsage,
   writeFileAt,
@@ -126,6 +128,7 @@ import {
   toolPolicy,
   unmetDependencies,
   NATIVE_CHILD_TOOL_DENY,
+  CANCELLED_JOB_STOP_WAIT_MS,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { collectSubagentRun } from '../src/subagentRun.mjs'
@@ -418,6 +421,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         agentId: '',
         /** Set when the researcher cancelled: nothing may wake the run again. */
         wakeSuppressed: false,
+        /** The root's background jobs that were already there when its current turn began: a cancel stops only the
+         *  jobs the cancelled turn started, never one an earlier turn left running. */
+        jobsBeforeTurn: new Set(),
+        /** Every `subagent` child the current turn started, settled or not: their jobs are the turn's work too. */
+        turnChildren: new Set(),
         completed: false,
         /** Capabilities whose method is already in front of this session. */
         inlineCapabilities: new Set(),
@@ -939,6 +947,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (entry.turn !== step.turn) {
           entry.turn = step.turn
           entry.frozen = false
+          // What was already running when this turn began; anything else this turn's tools start (synchronously
+          // here: no tool of this turn has run yet).
+          entry.jobsBeforeTurn = new Set(jobsOf(entry.agentId, step.sessionId).map((job) => job.id))
+          entry.turnChildren = new Set()
           // And a new allowance of submissions. The ceiling bounds one turn's
           // loop on one package; it is not a lifetime quota on a conversation.
           // Kept across turns, a follow-up asking to fix the report met
@@ -1080,6 +1092,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const settledEarly = new Set()
   /** @param {Record<string, any>} entry @param {string} childId */
   const trackNativeChild = (entry, childId) => {
+    entry.turnChildren?.add(childId)
     if (settledEarly.delete(childId)) return
     entry.nativeChildren ??= new Map()
     entry.nativeChildren.set(childId, { startedAt: new Date().toISOString() })
@@ -1110,6 +1123,41 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     ;(entry.nativeChildWaiters ??= []).push(done)
     signal?.addEventListener?.('abort', done, { once: true })
   })
+
+  // ---- background jobs: a cancel stops the ones its turn started ------------
+  /**
+   * The background jobs an agent owns; none when the composition has no job registry or it cannot be read.
+   * @param {string} agentId @param {string} sessionId @returns {{ id: string, status: string }[]}
+   */
+  const jobsOf = (agentId, sessionId) => {
+    try {
+      return agentJobs(ctx, agentId || sessionId)
+    } catch (error) {
+      diagnostics(sessionId)?.degrade?.(`background jobs not read: ${errorMessage(error)}`)
+      return []
+    }
+  }
+  /**
+   * Stops every background job the cancelled turn started — the root's that were not there when it began, and every
+   * job of each child it started — on the person's account, each awaited so that its settlement raises no notice.
+   * Synchronous up to each kill and its wait; what the waits find is recorded, never awaited by the turn.
+   * @param {Record<string, any>} entry @param {string} sessionId
+   */
+  const stopCancelledTurnJobs = (entry, sessionId) => {
+    const before = entry.jobsBeforeTurn ?? new Set()
+    /** @type {[string, { id: string, status: string }][]} */
+    const owned = [
+      ...jobsOf(entry.agentId, sessionId).filter((job) => !before.has(job.id)).map((job) => /** @type {[string, any]} */ ([entry.agentId || sessionId, job])),
+      ...[...(entry.turnChildren ?? [])].flatMap((childId) => jobsOf(childId, sessionId).map((job) => /** @type {[string, any]} */ ([childId, job]))),
+    ]
+    for (const [ownerId, job] of owned) {
+      if (job.status !== 'running' && job.status !== 'stopping') continue
+      // The kill and its wait happen before `stopJobQuietly` first awaits, i.e. now.
+      void stopJobQuietly(ctx, ownerId, job.id, '研究者停止了本次运行', CANCELLED_JOB_STOP_WAIT_MS).then((status) => {
+        if (status === 'running' || status === 'stopping') diagnostics(sessionId)?.degrade?.(`a background job had not stopped ${CANCELLED_JOB_STOP_WAIT_MS / 1000} s after its run was stopped: ${job.id}`)
+      }, (error) => diagnostics(sessionId)?.degrade?.(`a background job was not stopped with its run: ${job.id}: ${errorMessage(error)}`))
+    }
+  }
 
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
@@ -1362,6 +1410,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           diagnostics(session.sessionId)?.degrade?.(`a sub-agent was not stopped with its run: ${errorMessage(error)}`)
         }
       }
+      // Nor does it stop a background job (a `bash` call with `run_in_background`, or one promoted when its wait ran
+      // out): the job works on, and when it settles on an idle agent `tool-jobs` follows its notice up as a new turn —
+      // the assistant starts again by itself after the person pressed 取消, and the next question queues behind it.
+      // The jobs this turn started, the root's and its children's, are stopped here as part of the person's stop, in
+      // this synchronous run (before the agent is idle and before any of them can settle on its own), quietly: the
+      // stop's settlement is awaited, so it raises no notice. A job an earlier turn left running is not this turn's
+      // work and keeps reporting as the kernel intends.
+      stopCancelledTurnJobs(entry, session.sessionId)
     } else if (runningDelegations(entry).length) {
       // Recorded: the turn ended with work still out, after the stopping
       // reminders. The settlement will wake the root (`wakeForSettlements`);

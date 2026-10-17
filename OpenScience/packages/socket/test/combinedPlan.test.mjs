@@ -2337,6 +2337,129 @@ test("a sub-agent the kernel started is counted once, holds the root's turn open
   assert.equal((await preStep([{ role: "user", source: { kind: "subagent-settled" } }, { role: "user", source: { kind: "user", rpcId: "r2" }, content: [] }]))?.kind, "enter");
 });
 
+// ---- background jobs and the person's cancel ---------------------------------------------------------------------
+//
+// 0.2.1-rc.2: `session/cancel` stops the turn and nothing else (`agent.cancel({ kind: 'user' }, { keepInbox: true })`);
+// a background job works on, and when it settles `tool-jobs` writes a completion notice — injected into a running turn,
+// followed up as a NEW turn on an idle agent (`completionDelivery: 'wakeup'`) — unless the settlement was awaited or the
+// model killed it with `job_kill`; a kill on anyone else's behalf still notifies. This double keeps exactly those rules
+// (`dsh-jobs-local` `kill` / `wait` / `settle`, `dsh-tool-jobs` `apply`), so "a wake" here is the turn the person saw
+// start by itself after pressing 取消 (r19-acceptb, cc/int, live).
+function kernelJobs(/** @type {() => "idle" | "running"} */ agentStatus) {
+  /** @type {Map<string, any>} */
+  const store = new Map();
+  /** Notices that started a turn of their own, and notices injected into a running turn. */
+  /** @type {string[]} */ const wakes = [];
+  /** @type {string[]} */ const injected = [];
+  const view = (/** @type {any} */ job) => ({ id: job.id, kind: "bash", label: job.id, owner: job.owner, status: job.status, startedAt: job.startedAt });
+  const terminal = (/** @type {string} */ status) => status !== "running" && status !== "stopping";
+  const settle = (/** @type {any} */ job, /** @type {string} */ status) => {
+    if (terminal(job.status)) return;
+    job.status = status;
+    const awaited = job.waiters.size > 0;
+    for (const resolve of [...job.waiters]) resolve(view(job));
+    job.waiters.clear();
+    if (awaited) return;
+    if (agentStatus() === "idle") wakes.push(job.id);
+    else injected.push(job.id);
+  };
+  const expect = (/** @type {string} */ id, /** @type {string} */ caller) => {
+    const job = store.get(id);
+    if (!job) throw new Error(`unknown job ${id}`);
+    if (job.owner !== caller) throw new Error(`job ${id} belongs to another session`);
+    return job;
+  };
+  return {
+    wakes,
+    injected,
+    /** A tool of the owner's started background work. */
+    start: (/** @type {string} */ owner, /** @type {string} */ id) => store.set(id, { id, owner, status: "running", startedAt: Date.now(), waiters: new Set() }),
+    /** The work finished on its own. */
+    finish: (/** @type {string} */ id) => settle(store.get(id), "completed"),
+    status: (/** @type {string} */ id) => store.get(id)?.status,
+    service: {
+      list: (/** @type {string} */ caller) => [...store.values()].filter((job) => job.owner === caller).map(view),
+      get: (/** @type {string} */ id, /** @type {string} */ caller) => view(expect(id, caller)),
+      kill(/** @type {string} */ id, /** @type {string} */ caller, /** @type {string} */ reason) {
+        const job = expect(id, caller);
+        if (terminal(job.status)) return "already-finished";
+        job.status = "stopping";
+        job.reason = reason;
+        // The producer settles after the process exits: never inside the kill.
+        setTimeout(() => settle(job, "killed"), 5);
+        return "requested";
+      },
+      wait(/** @type {string} */ id, /** @type {number} */ timeoutMs, /** @type {string} */ caller) {
+        const job = expect(id, caller);
+        if (terminal(job.status)) return Promise.resolve(view(job));
+        return new Promise((resolve) => {
+          const timer = setTimeout(() => { job.waiters.delete(done); resolve(view(job)); }, timeoutMs);
+          const done = (/** @type {any} */ settled) => { clearTimeout(timer); resolve(settled); };
+          job.waiters.add(done);
+        });
+      },
+    },
+    reason: (/** @type {string} */ id) => store.get(id)?.reason,
+  };
+}
+
+test("the person's cancel stops the background jobs its turn started, quietly; a job an earlier turn left running still reports", async () => {
+  const f = await combinedFixture();
+  let agentStatus = /** @type {"idle" | "running"} */ ("running");
+  const jobs = kernelJobs(() => agentStatus);
+  f.ctx.provide("jobs", jobs.service);
+  /** @type {any[]} */ const interrupted = [];
+  /** @type {any} */ (f.ctx).subagents.interrupt = (/** @type {string} */ childId, /** @type {any} */ authority) => interrupted.push([childId, authority]);
+  f.ctx.tools.register(nativeSubagentTool(["native-1"]));
+  const sleep = (/** @type {number} */ ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Turn 1 starts a long download in the background on purpose and ends normally.
+  await f.step(1);
+  jobs.start(f.agent.id, "bash-download");
+  await f.endTurn("completed");
+  agentStatus = "idle";
+
+  // Turn 2 (the person asks again) starts `sleep 20 && echo done` in the background and a child that starts its own.
+  agentStatus = "running";
+  await f.step(2);
+  jobs.start(f.agent.id, "bash-sleep");
+  await f.execute("subagent", { description: "d", prompt: "p" });
+  jobs.start("native-1", "bash-child");
+  // The person presses 取消 five seconds in. The turn ends `aborted` while the agent is still unwinding, then it is idle.
+  await f.endTurn("aborted");
+  agentStatus = "idle";
+  await sleep(30);
+  assert.deepEqual(interrupted.map(([id]) => id), ["native-1"]);
+  assert.equal(jobs.status("bash-sleep"), "killed", "the cancelled turn's job is stopped with it");
+  assert.equal(jobs.status("bash-child"), "killed", "and its child's");
+  assert.equal(jobs.reason("bash-sleep"), "研究者停止了本次运行");
+  assert.deepEqual(jobs.wakes, [], "no notice starts a turn the person did not ask for");
+  assert.deepEqual(jobs.injected, [], "and none waits in the inbox for the next question: the stop was awaited");
+  // The job turn 1 left running is not the cancelled turn's work: it runs on, and reports when it settles.
+  assert.equal(jobs.status("bash-download"), "running");
+  jobs.finish("bash-download");
+  assert.deepEqual(jobs.wakes, ["bash-download"], "the kernel's own report of a job left running on purpose");
+});
+
+test("a turn that ends normally stops nothing: its background job reports when it settles, in the turn or after it", async () => {
+  const f = await combinedFixture();
+  let agentStatus = /** @type {"idle" | "running"} */ ("running");
+  const jobs = kernelJobs(() => agentStatus);
+  f.ctx.provide("jobs", jobs.service);
+  await f.step(1);
+  jobs.start(f.agent.id, "bash-fast");
+  jobs.start(f.agent.id, "bash-slow");
+  // One settles while the turn still runs: the kernel hands its notice to this turn.
+  jobs.finish("bash-fast");
+  assert.deepEqual(jobs.injected, ["bash-fast"]);
+  await f.endTurn("completed");
+  agentStatus = "idle";
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(jobs.status("bash-slow"), "running", "an uncancelled turn's job is left running");
+  jobs.finish("bash-slow");
+  assert.deepEqual(jobs.wakes, ["bash-slow"], "and reports by itself when it settles on an idle agent");
+});
+
 test("a child is composed at its creation: a delegation's own tools and persona, the kernel's sub-agent without the orchestration tools", async () => {
   const f = await combinedFixture();
   const { startSubagent, reservedChildComposition } = await import("@evimed/harness-port");
