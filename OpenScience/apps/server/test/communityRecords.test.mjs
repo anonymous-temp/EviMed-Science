@@ -41,3 +41,16 @@ test("a candidate tried and not taken carries the version it was tried at, in bo
     if (candidate?.version && /^\d+\.\d+\.\d+/.test(candidate.version)) assert.equal(entry.version, candidate.version, entry.name);
   }
 });
+
+test("a retest block records the version its candidate carries, and what it found is in the verdict record too", () => {
+  const records = readRecords();
+  const retest = records.tryInstall.dataQualityRetest;
+  const candidate = records.tryInstall.candidates.find((/** @type {any} */ row) => row.name === "dsh-data-quality");
+  assert.ok(retest && candidate);
+  assert.deepEqual(Object.keys(retest.results), [`dsh-data-quality@${candidate.version}`], "the retest was at the version the candidate now carries");
+  assert.deepEqual(Object.keys(retest.scan), Object.keys(retest.results));
+  const verdict = records.support.communityToolBundles.find((/** @type {any} */ row) => row.name === "dsh-data-quality");
+  assert.equal(verdict?.version, candidate.version);
+  assert.equal(verdict?.testedOn, retest.testedAt);
+  assert.ok(records.sources.deferred.some((/** @type {any} */ row) => row.name === "dsh-data-quality"), "sources.json says why it is not vendored");
+});

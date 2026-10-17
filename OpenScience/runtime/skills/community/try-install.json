@@ -59,14 +59,14 @@
     {
       "name": "dsh-data-quality",
       "repo": "PerryLink/dsh-data-quality",
-      "version": "0.3.10",
+      "version": "0.3.19",
       "registers": [
         "data_profile",
         "data_clean",
         "data_verify",
         "data_report"
       ],
-      "why": "Deterministic in-process profiling and, the part we lack, `data_verify`: numbers quoted in a document checked against a dataset snapshot with a tolerance and a four-value verdict. csv/tsv/json/jsonl only, so it complements rather than replaces `profile_dataset.py`. We do not `inject` its `dataQuality` service; only the model calls the tools. Queued 2026-09-15."
+      "why": "Deterministic in-process profiling of csv/tsv/json/jsonl, declarative rule checks and metric reconciliation (`data_verify`), and durable reports in its own storage domain. Queued 2026-09-15 for what was believed to be a check of numbers quoted in a document against a dataset; that check is `verifyCitations`, a service other plugins may consume, and is not a tool the model can call (corrected 2026-10-17, see dataQualityRetest). Complements rather than replaces `profile_dataset.py`."
     },
     {
       "name": "dsh-univer-office",
@@ -205,14 +205,15 @@
       "dsh-mermaid@0.4.0": "4 files; net=1 proc=1 fsWrite=1 httpRoute=2 read one by one as the browser-side Mermaid+KaTeX build and the package CLI; installScripts=prepare never runs from the registry tarball",
       "dsh-data-quality@0.3.10": "67 files, no network, Apache-2.0, peers list @deepseek-ai/*"
     },
-    "recordedFrom": "docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md, execution results of 2026-09-15"
+    "recordedFrom": "docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md, execution results of 2026-09-15",
+    "note": "The academic-writing and translation rows above were tried at 0.2.0 on kernel 0.1.5-rc.2, and refused over a peer range naming @deepseek-ai/dsh-fs, a package the 0.1.7 kernel no longer ships. Both were tried again at 0.3.2 on kernel 0.1.7-rc.2 on 2026-10-13 and booted (officeClassTest below); 0.3.2 is the version every other record carries, and plugin-support.json and sources.json read it from this file's candidates."
   },
   "installed": [
     "dsh-cite@0.3.5",
     "@changfenhuang/dsh-annotation@1.4.11",
     "dsh-mermaid@0.4.1"
   ],
-  "notInstalledYet": "dsh-data-quality booted and is not installed: its value is `data_verify`, which needs a real run to measure. academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles).",
+  "notInstalledYet": "dsh-data-quality booted at 0.3.10 and again at 0.3.19 and is not installed: `data_verify` is a rule checker over one table, which a few lines of pandas in the bash tool do, and the number-in-a-document check is a service seam only a plugin of ours could call (dataQualityRetest). academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles).",
   "officeClassTest": {
     "testedAt": "2026-10-13",
     "kernel": "@deepseek-ai/dsh@0.1.7-rc.2",
@@ -250,5 +251,22 @@
       "@deepseek-ai/dsh-skill-office structural checker (kernel closure; office_kit.py check)"
     ],
     "notAdopted": "every other row above; reasons are in plugin-support.json communityToolBundles"
+  },
+  "dataQualityRetest": {
+    "testedAt": "2026-10-17",
+    "kernel": "@deepseek-ai/dsh@0.2.0-rc.2",
+    "method": "No container runtime on the dev box (the same method as officeClassTest): a profile seeded the way install-runtime.sh profile_seed does it at the repository's pins, hard-linked, then `dsh plugin add --save-prod --save-exact dsh-data-quality@0.3.19`, `dsh --dump-config` diffed against the committed baseline (one row added), then `dsh --profile evimed-runtime --no-open` until the `dsh web:` line. The source scan is the lane's own greps run on the installed package. The plugin's README and CHANGELOG were read for what `data_verify` and `verifyCitations` are.",
+    "results": {
+      "dsh-data-quality@0.3.19": "booted"
+    },
+    "scan": {
+      "dsh-data-quality@0.3.19": "files=67 net=0 proc=0 fsWrite=3 eval=0 env=0 httpRoute=0 installScripts=prepare bundle=yes client=no license=Apache-2.0 deps=3 peers=@deepseek-ai/cordis,@deepseek-ai/dsh-session,@deepseek-ai/dsh-storage,@deepseek-ai/dsh-storage-domain,@deepseek-ai/dsh-storage-json,@deepseek-ai/dsh-tools,@deepseek-ai/schemastery"
+    },
+    "found": [
+      "Its peers name the alpha line (cordis ^4.0.5-alpha.1, schemastery ^3.18.5-alpha.1); the pinned kernel closure has cordis 4.0.4 and schemastery 3.18.4. pnpm resolved the peers to ours without complaint and the kernel booted, so the range is not enforced here, but it is a package written for 0.2.1-alpha.",
+      "`data_verify` is declarative rule checking over one table (not-null, unique, range, regex, enum, cross-column, freshness) plus reconciliation of rowCount/columnSum/columnMean/uniqueCount/nullCount with a relative tolerance. The check of numbers quoted in a document against a dataset snapshot, with a tolerance and the statuses verified/mismatch/not-found/unverifiable, is `ctx.dataQuality.verifyCitations`, a Cordis service for other plugins; no tool exposes it. The 2026-09-15 candidate note had the two the wrong way round.",
+      "`typescript`, `tsdown` and `zod` are runtime dependencies (about 100 MB of toolchain in the profile for a CSV profiler), `storeReports` writes every run into a `data_quality` storage domain under the home, and four tool schemas would join every first request."
+    ],
+    "verdict": "Not adopted. data_verify is not worth a separate integration today: its rules are what the model already writes against a table with pandas, our dataset_semantics checks and the result engine's receipts cover the platform's own numbers with provenance, and the one thing it has that we lack, verifyCitations, would need a socket tool of ours to call the service and a locator for every quoted number in the report. Revisit if a measured gap appears in numbers quoted from datasets that the receipts do not cover."
   }
 }
