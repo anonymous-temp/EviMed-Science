@@ -329,7 +329,7 @@ describe("记忆地图", () => {
       const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
       // No 时间 menu (it would be a second entry); the window is a mark that lets go of it.
       expect(windowMenus(toolbar)).toHaveLength(0);
-      await userEvent.click(within(toolbar).getByRole("button", { name: /^时间：2026-09-01 至 2026-09-30/u }));
+      await userEvent.click(within(toolbar).getByRole("button", { name: /^时间：.+ 至 .+/u }));
       expect(where()).toBe("/app/memory/map?view=time");
     });
   });

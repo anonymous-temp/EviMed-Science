@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
+import { formatDay } from "@/lib/format";
 import { kindTitle } from "@/lib/memoryGroups";
 import { MAP_VIEWS, type MapView, type MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
@@ -12,11 +13,11 @@ const RANGES: FilterOption<string>[] = [
   { value: "30d", label: "近 30 天" }, { value: "90d", label: "近 90 天" }, { value: "1y", label: "近一年" },
 ];
 
-/** What the range chip says when the range is not one of the named ones. */
+/** What the range chip says when the range is not one of the named ones: the days as a list dates them (「9月14日 至 9月20日」). */
 export function rangeLabel(range: string): string {
   const match = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/u.exec(range);
   if (!match) return "全部时间";
-  return match[1] === match[2] ? match[1] : `${match[1]} 至 ${match[2]}`;
+  return match[1] === match[2] ? formatDay(match[1]) : `${formatDay(match[1])} 至 ${formatDay(match[2])}`;
 }
 
 /**
