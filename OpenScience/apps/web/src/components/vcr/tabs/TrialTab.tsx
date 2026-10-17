@@ -156,7 +156,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   if (data.headline) headline.push(data.headline);
   if (decided && data.decision?.recordedAt) {
     headline.push(data.headline ? " 已选定方案 " : "已选定方案 ");
-    headline.push(chosenDesign ? { n: chosenDesign.code, onOpen: () => setOpened(chosenDesign), label: `方案 ${chosenDesign.code}，看它的运行记录` } : (data.decision.chosenLabel ?? ""));
+    headline.push(chosenDesign ? { n: chosenDesign.code, onOpen: () => setOpened(chosenDesign), label: `方案 ${chosenDesign.code}，看它是怎么算的` } : (data.decision.chosenLabel ?? ""));
     if (data.decision.rationale) headline.push(`，理由：${data.decision.rationale}`);
   }
 
@@ -417,7 +417,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
             {/* The keyboard's way into the run behind the row; a press anywhere else on the row does the same for a pointer. */}
             {onOpen && hasRun(design)
               ? (
-                <button type="button" aria-label={`打开方案 ${design.code} 的运行记录`} onClick={() => onOpen(design)} className={cn("rounded text-left hover:underline", design.dominated ? "text-text-3" : "text-text")}>
+                <button type="button" aria-label={`打开方案 ${design.code} 的计算详情`} onClick={() => onOpen(design)} className={cn("rounded text-left hover:underline", design.dominated ? "text-text-3" : "text-text")}>
                   {design.name}
                 </button>
               )

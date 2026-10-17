@@ -187,7 +187,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   if (data.available === false) {
     return (
       <div data-vcr-matching-unavailable="">
-        <EmptyState title={data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"} reason="接入之后，这一步的候选患者和转诊会出现在这里。" />
+        <EmptyState title={data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"} />
       </div>
     );
   }
@@ -406,7 +406,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
         <div className="flex flex-col gap-4">
           {data.candidates.length > 0 && (
             <Section title={referralStateLabel("candidate")} count={data.candidates.length}>
-              <List label="候选患者">
+              <List label="患者名单">
                 {data.candidates.map((candidate) => (
                   <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
                 ))}

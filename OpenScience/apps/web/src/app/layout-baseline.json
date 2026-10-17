@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 102,
+    "total": 83,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -34,28 +34,20 @@
       "components/sources/KnowledgePageView.tsx": 1,
       "components/sources/SourceOriginal.tsx": 1,
       "components/sources/SourcePdf.tsx": 2,
-      "components/vcr/ClinicalMatchingDetails.tsx": 1,
       "components/vcr/VcrCorrectionCasesActions.tsx": 3,
-      "components/vcr/VcrFilePrediction.tsx": 1,
       "components/vcr/VcrForecastComparison.tsx": 6,
       "components/vcr/VcrForecastEvaluation.tsx": 6,
-      "components/vcr/VcrKnowledge.tsx": 3,
-      "components/vcr/VcrLongitudinalPanel.tsx": 6,
-      "components/vcr/VcrModelAssessments.tsx": 3,
-      "components/vcr/VcrModelsPanel.tsx": 1,
+      "components/vcr/VcrKnowledge.tsx": 2,
       "components/vcr/VcrPublishSimulation.tsx": 1,
       "components/vcr/VcrRegistryCoverage.tsx": 1,
       "components/vcr/VcrSettingsDrawer.tsx": 2,
       "components/vcr/data/CloudDocuments.tsx": 4,
       "components/vcr/data/FieldMapEditor.tsx": 1,
-      "components/vcr/data/SourceCard.tsx": 6,
-      "components/vcr/tabs/DataTab.tsx": 2,
-      "components/vcr/tabs/PopulationTab.tsx": 2,
-      "components/vcr/tabs/TrialTab.tsx": 1
+      "components/vcr/data/SourceCard.tsx": 6
     }
   },
   "handwrittenLists": {
-    "total": 42,
+    "total": 31,
     "files": {
       "app/routes/CapsuleTransferPanel.tsx": 1,
       "app/routes/EvidenceAuthorPage.tsx": 2,
@@ -74,16 +66,11 @@
       "components/geo/tabs/ValueSection.tsx": 2,
       "components/geo/tabs/VisibilityTab.tsx": 1,
       "components/report/EvidenceMatrixTable.tsx": 1,
-      "components/vcr/ClinicalMatchingDetails.tsx": 2,
+      "components/vcr/ClinicalMatchingDetails.tsx": 1,
       "components/vcr/VcrBudgetDialog.tsx": 1,
-      "components/vcr/VcrKnowledge.tsx": 3,
       "components/vcr/VcrMembersDialog.tsx": 1,
-      "components/vcr/VcrRegulatoryLog.tsx": 1,
       "components/vcr/data/CloudDocuments.tsx": 2,
-      "components/vcr/data/SourceCard.tsx": 3,
-      "components/vcr/tabs/DataTab.tsx": 3,
-      "components/vcr/tabs/MatchingTab.tsx": 2,
-      "components/vcr/tabs/TrialTab.tsx": 1
+      "components/vcr/data/SourceCard.tsx": 3
     }
   }
 }

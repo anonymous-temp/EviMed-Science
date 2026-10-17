@@ -237,7 +237,7 @@ describe("试验 · the run behind a row", () => {
     expect(record.textContent).not.toMatch(/一阶近似|容许的/);
     await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await userEvent.click(screen.getByRole("button", { name: "打开方案 C 的运行记录" }));
+    await userEvent.click(screen.getByRole("button", { name: "打开方案 C 的计算详情" }));
     expect(await screen.findByRole("dialog", { name: /方案 C/ })).toBeInTheDocument();
   });
 
@@ -316,7 +316,7 @@ describe("试验 · the decision", () => {
     expect(ours).toEqual(["B"]);
     const sentence = container.querySelector("[data-headline]") as HTMLElement;
     expect(sentence).toHaveTextContent("已选定方案 B，理由：成功把握与样本量的折中；方案 C 周期更长。");
-    await userEvent.click(within(sentence).getByRole("button", { name: "方案 B，看它的运行记录" }));
+    await userEvent.click(within(sentence).getByRole("button", { name: "方案 B，看它是怎么算的" }));
     expect(await screen.findByRole("dialog", { name: /方案 B/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "关闭" }));
     // The decision form is behind the button, not a card under the table.
