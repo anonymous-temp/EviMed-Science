@@ -50,7 +50,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.1.3'
+export const DESIGN_TOKENS_VERSION = '2.1.4'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -383,7 +383,9 @@ export const CHART_COLORS = Object.freeze({
   // 3:1 on the dark canvas.
   rivals: Object.freeze(['#5a626b', '#737c85', '#8a939c']),
   series: Object.freeze(['#0a5dc1', '#e07b39', '#1d9a87', '#7b5cd6', '#c94f7c', '#c7a12b', '#5a626b', '#b4bcc5']),
-  heat: Object.freeze(['#f3f6fa', '#dce8f7', '#b3cdef', '#7fa9e3', '#3e7ed4', '#0a5dc1']),
+  // Step 4 was #3e7ed4: white on it was 4.09:1 and the body colour 4.06:1, so the number in a heat cell of that step failed both
+  // (axe color-contrast on the 引擎读数 and 试验设计 heat tables, r19-guards2). #2e73cf carries white at 4.70:1.
+  heat: Object.freeze(['#f3f6fa', '#dce8f7', '#b3cdef', '#7fa9e3', '#2e73cf', '#0a5dc1']),
   /** Only for defects and safety: S3 severe, S2 moderate, S1 minor. */
   severity: Object.freeze({ s3: '#c0362c', s2: '#e0877f', s1: '#939ca6' }),
   /**

@@ -82,7 +82,7 @@ describe("人群 · a real cohort", () => {
     const { container } = draw();
     await screen.findByText("逐条筛选");
     expect(container.querySelector("[data-vcr-stale]")).toHaveTextContent("入排条件已变更 · 输入已变更，排队重算中");
-    const greyed = container.querySelector("[data-vcr-stale-block] .opacity-disabled") as HTMLElement;
+    const greyed = container.querySelector("[data-vcr-stale-block] [data-vcr-stale-results]") as HTMLElement;
     expect(greyed).not.toBeNull();
     expect(within(greyed).getByText("逐条筛选")).toBeInTheDocument();
     expect(greyed.querySelector("[data-vcr-outcome]")).toHaveTextContent("2,743");

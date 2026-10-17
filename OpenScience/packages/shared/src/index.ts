@@ -413,7 +413,7 @@ export interface ChartPalette {
  */
 export const CHART_PALETTE_LIGHT: ChartPalette = {
   categorical: ["#0a5dc1", "#e07b39", "#1d9a87", "#7b5cd6", "#c94f7c", "#c7a12b", "#5a626b", "#b4bcc5"],
-  sequential: ["#f3f6fa", "#dce8f7", "#b3cdef", "#7fa9e3", "#3e7ed4", "#0a5dc1"],
+  sequential: ["#f3f6fa", "#dce8f7", "#b3cdef", "#7fa9e3", "#2e73cf", "#0a5dc1"],
   status: { good: "#1e7a4c", warning: "#a15c00", serious: "#d1594e", critical: "#c0362c" },
 };
 

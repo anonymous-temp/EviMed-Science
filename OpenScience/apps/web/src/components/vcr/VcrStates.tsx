@@ -304,16 +304,19 @@ export function StaleBar({ reason, queued = false, className }: { reason?: strin
 
 /**
  * A stale block of results: the bar, then the results themselves in the
- * secondary colour. Every result block of every tab is wrapped in one, driven
- * by the payload's own `stale` note — a stale number that was merely dimmed,
- * with no bar to say why, was the defect this replaces.
+ * secondary colour and without their hues. Every result block of every tab is
+ * wrapped in one, driven by the payload's own `stale` note — a stale number
+ * that was merely dimmed, with no bar to say why, was the defect this replaces.
+ * Greyed, not faded: an opacity took every line of the block under 4.5:1 (axe
+ * color-contrast, 147 lines of a study's 人群 tab, r19-guards2); a grey scale
+ * keeps each colour's lightness, so what was legible stays legible.
  */
 export function Stale({ note, children }: { note: VcrStaleNote | null | undefined; children: ReactNode }) {
   if (!note) return <>{children}</>;
   return (
     <div data-vcr-stale-block="">
       <StaleBar reason={note.reason} queued={note.queued} className="mb-3" />
-      <div className="text-text-2 opacity-disabled">{children}</div>
+      <div data-vcr-stale-results="" className="text-text-2 grayscale">{children}</div>
     </div>
   );
 }

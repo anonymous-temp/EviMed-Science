@@ -77,7 +77,9 @@ describe("a stale result", () => {
     expect(screen.getByText("成功把握 71%")).toBeInTheDocument();
     expect(screen.getByText(/入排条件已变更 · 输入已变更，排队重算中/)).toBeInTheDocument();
     expect(document.querySelector("[data-vcr-stale]")).not.toBeNull();
-    expect(document.querySelector("[data-vcr-stale-block] .opacity-disabled")).toHaveTextContent("成功把握 71%");
+    expect(document.querySelector("[data-vcr-stale-block] [data-vcr-stale-results]")).toHaveTextContent("成功把握 71%");
+    // Greyed without fading: an opacity put every line of the block under 4.5:1 (axe, r19-guards2).
+    expect(document.querySelector("[data-vcr-stale-results]")!.className).not.toMatch(/opacity/);
   });
 
   // The bar promises a queue only when one exists (CW-16).
