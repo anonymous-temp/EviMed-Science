@@ -171,8 +171,10 @@ test("the overview carries the counts, the results with their staleness, and the
   const { study, result } = await furnish("overview");
   const view = await service.studyView({ id: study.userId }, study.id);
   assert.equal(view.tier, "T0");
-  assert.deepEqual(Object.keys(view.overview.counts).slice(0, 4), ["realPatients", "events", "effectiveSampleSize", "generatedRecords"]);
-  assert.equal(view.overview.counts.events, 138);
+  // A T0 study counts its generated records and nothing else on the band; the real patients, the events and the effective
+  // sample size appear from T1 (countsView, R19 VCRS) — the stored result still holds them.
+  assert.deepEqual(Object.keys(view.overview.counts), ["generatedRecords", "scope"]);
+  assert.equal(view.overview.counts.events, undefined);
   assert.equal(view.ceiling.ceiling, "submission_preparation", "review absence does not change the method/evidence ceiling");
   assert.equal(view.ceiling.withinCeiling, true);
   assert.equal(view.budget.limitSeconds, 100_000);
