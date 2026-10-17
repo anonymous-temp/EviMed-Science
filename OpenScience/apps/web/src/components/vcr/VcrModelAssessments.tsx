@@ -6,7 +6,6 @@ import { saveVcrModelAssessment, type VcrAssessmentRecord, type VcrAssessments }
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -27,50 +26,32 @@ const NOT_WRITTEN = "未填写";
 /** The model's name as a reader says it: the library's Chinese title, and the id only when the library no longer holds the model. */
 const modelTitleOf = (record: VcrAssessmentRecord) => record.modelTitle || record.modelName;
 
-/** What a record says in one line when it is folded: the model, and the risk the platform worked out. */
-const recordLine = (record: VcrAssessmentRecord) => `${modelTitleOf(record)} · 模型风险 ${record.riskLabel ?? "待评级"}`;
-
 /**
  * 模型评估: each model's assessment record of ICH M15 — the nine elements in the guideline's order, the model risk the platform
  * worked out from the two ratings that drive it, and the one rule that settled it. The AI writes the records while it analyses; the
- * study's lead may edit one, and an edit is the next version of that record by that person. The risk is never typed (the form has
- * no field for it and says why), and a frozen model analysis plan is not touched by an edit: the next freeze lists it.
+ * study's lead may edit one, and an edit is the next version of that record by that person. The risk is never typed (the form
+ * shows what the two ratings make it), and a frozen model analysis plan is not touched by an edit: the next freeze lists it.
  *
- * It is a record to check, not the page's result, so it is folded: the line names each model in Chinese with its risk, and the nine
- * rows open under it. `withoutPatients` is the patients tab saying that the assessment is about the models the study already uses
- * (a trial simulation's, say) and that no virtual patients have been generated — the two are different objects.
+ * It is a record to check, not the page's result: it is drawn inside the model's record drawer (`ModelRecordDrawer`), under the
+ * model it is about, one card per model.
  */
-export function VcrModelAssessments({ studyId, assessments, canEdit, onSaved, withoutPatients = false }: {
+export function VcrModelAssessments({ studyId, assessments, canEdit, onSaved }: {
   studyId: string;
   assessments: VcrAssessments;
   canEdit: boolean;
   onSaved: () => void;
-  withoutPatients?: boolean;
 }) {
   const [editing, setEditing] = useState<VcrAssessmentRecord | null>(null);
   if (assessments.records.length === 0) return null;
   return (
     <div data-vcr-assessments="" className="flex flex-col gap-4">
-      <Disclosure
-        summary={(
-          <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <span className="font-medium text-text">{`模型评估 · ${assessments.records.length} 个模型`}</span>
-            <span data-vcr-assessments-line="" className="text-caption text-text-3">{assessments.records.map(recordLine).join("；")}</span>
-          </span>
-        )}
-      >
-        <div className="flex flex-col gap-4">
-          {withoutPatients && <p className="text-ui text-text-2">这些评估写的是本研究已经用到的模型；虚拟患者还没有生成。</p>}
-          {assessments.records.map((record) => (
-            <AssessmentCard key={record.key} record={record} canEdit={canEdit} onEdit={() => setEditing(record)} />
-          ))}
-        </div>
-      </Disclosure>
+      {assessments.records.map((record) => (
+        <AssessmentCard key={record.key} record={record} canEdit={canEdit} onEdit={() => setEditing(record)} />
+      ))}
       {editing && (
         <EditAssessment
           studyId={studyId}
           record={editing}
-          plan={assessments.plan}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); onSaved(); }}
         />
@@ -132,10 +113,9 @@ function startFrom(record: VcrAssessmentRecord) {
   };
 }
 
-function EditAssessment({ studyId, record, plan, onClose, onSaved }: {
+function EditAssessment({ studyId, record, onClose, onSaved }: {
   studyId: string;
   record: VcrAssessmentRecord;
-  plan: VcrAssessments["plan"];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -176,8 +156,8 @@ function EditAssessment({ studyId, record, plan, onClose, onSaved }: {
           <p className="text-ui text-text">
             模型风险
             <span data-vcr-assessment-risk="" className="ml-2 font-medium">{derived ? VCR_RATING_LABELS_ZH[derived.risk] : "待评级"}</span>
+            <span className="ml-2 text-caption text-text-3">由影响力和后果推算</span>
           </p>
-          <p className="text-caption text-text-3">模型风险由影响力和后果两项评级推算，不能直接填写。</p>
           <Textarea label="模型风险的理由" rows={2} value={form.riskJustification} onChange={(event) => set("riskJustification", event.target.value)} />
         </div>
 
@@ -209,7 +189,6 @@ function EditAssessment({ studyId, record, plan, onClose, onSaved }: {
         <Textarea label="模型与模型结果的评价" rows={2} value={form.evaluation} onChange={(event) => set("evaluation", event.target.value)} />
         <Textarea label="证据评估的结论" rows={2} value={form.outcome} onChange={(event) => set("outcome", event.target.value)} />
 
-        {plan && <p className="text-caption text-text-3">已冻结的模型分析计划不会改动；下次冻结时会列出这次修改。</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
           <Button type="submit" loading={busy} disabled={busy}>保存</Button>

@@ -1,13 +1,14 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { VCR_SIMULATION_NOT_EVIDENCE_ZH } from "@evimed/domain";
 import { DataTab } from "./tabs/DataTab";
 import { TrialTab } from "./tabs/TrialTab";
 import { VcrPackageReader } from "./VcrPackageReader";
 import { fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
+import { fakeRoom, renderTab } from "./__fixtures__/tabFrame";
 
 // The evidence flywheel's edges of 虚拟临床研究 (F23, F24, the 模拟研究 column, F25): each renders from a copy of the server's own fixture
 // with the one field the feature adds, and the browser is held to what it sends.
@@ -16,15 +17,19 @@ vi.mock("@/lib/productClient", () => network);
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
-const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
+const draw = (node: React.ReactElement) => renderTab(node);
+const plain = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
 const ev201 = (patch: Partial<VcrStudy> = {}): VcrStudy => ({ ...readVcrStudy(fixture("ev201/study.json")), ...patch });
 const sent = (method: string, path: string) => network.productRequest.mock.calls.filter((call) => call[0] === path && (call[1] ?? "GET") === method);
 
+let restoreRoom: () => void;
 beforeEach(() => {
+  restoreRoom = fakeRoom();
   installVcrServer(network.productRequest);
   toasts.success.mockReset();
   toasts.error.mockReset();
 });
+afterEach(() => restoreRoom());
 
 describe("the data tab (F23, F24)", () => {
   it("labels a card 有新证据 with what bears on it, and says where the new version is when the plan has frozen", async () => {
@@ -43,7 +48,9 @@ describe("the data tab (F23, F24)", () => {
     expect(news).toHaveTextContent("有新证据");
     expect(news).toHaveTextContent("新的结果");
     expect(news).toHaveTextContent("Final overall survival of NCT09900001");
-    expect(news).toHaveTextContent("分析计划已经冻结：新版本放在冻结的版本旁边，研究仍按冻结的版本计算。");
+    // That a version was added after the freeze is a chip on the card, not a paragraph about the plan.
+    expect(news.querySelector("[data-vcr-after-freeze]")).toHaveTextContent("冻结后新增 v2");
+    expect(news).not.toHaveTextContent("分析计划已经冻结");
     // The row's own line carries the label (the title is the card's name).
     expect(container.querySelector(`[data-vcr-assumption='${card.id}']`)?.closest("li")).toHaveTextContent("有新证据");
     expect(screen.getByText("冻结后新增，不影响已冻结的计划")).toBeInTheDocument();
@@ -69,7 +76,8 @@ describe("the data tab (F23, F24)", () => {
     expect(candidates[0]).toHaveTextContent("待核对");
     expect(candidates[0]).toHaveTextContent("结果发布 · NCT05550002");
     expect(candidates[1]).toHaveTextContent("说明书变更 · DOI 10.1000/x");
-    expect(screen.getByText(/只是线索，不是先例/)).toBeInTheDocument();
+    // A candidate is a pointer, and the mark is in its row: no sentence says so.
+    expect(document.body.textContent).not.toContain("只是线索，不是先例");
   });
 });
 
@@ -83,7 +91,7 @@ describe("发布到模拟研究", () => {
 
   it("says the fixed sentence, sends words only, and lets the lead withdraw", async () => {
     withPublication({ canPublish: true, live: null });
-    draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
+    plain(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     const publish = await screen.findByRole("button", { name: "发布到模拟研究" });
     expect(screen.getAllByText(VCR_SIMULATION_NOT_EVIDENCE_ZH).length).toBeGreaterThan(0);
     await userEvent.click(publish);
@@ -97,20 +105,20 @@ describe("发布到模拟研究", () => {
 
   it("offers the withdrawal for a live publication and nothing at all to anyone who may not publish", async () => {
     withPublication({ canPublish: true, live: { id: "sim_1", publishedAt: "2026-10-06T00:00:00Z" } });
-    const { unmount } = draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
+    const { unmount } = plain(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     expect(await screen.findByText("已发布到模拟研究")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "撤回" }));
     await waitFor(() => expect(sent("DELETE", `/vcr/studies/${STUDY_ID}/publications/sim_1`)).toHaveLength(1));
     unmount();
     withPublication({ canPublish: false, live: null });
-    draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
+    plain(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     await screen.findByRole("heading", { name: "研究包 v1" });
     expect(document.querySelector("[data-vcr-publish]")).toBeNull();
   });
 
   it("is absent where the column is off: no publication block in the payload, no act on the page", async () => {
     withPublication(null);
-    draw(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
+    plain(<VcrPackageReader studyId={STUDY_ID} exportId="exp_2" onBack={() => undefined} />);
     await screen.findByRole("heading", { name: "研究包 v1" });
     expect(screen.queryByRole("button", { name: "发布到模拟研究" })).toBeNull();
   });
@@ -120,7 +128,7 @@ describe("登记预测", () => {
   /** The trial tab's 「登记预测」 button, pressed: the registry is in a drawer, not under the results. */
   const openDrawer = async () => {
     await screen.findByRole("table", { name: "方案的对比" });
-    await userEvent.click(within(document.querySelector("[data-vcr-conclusion]") as HTMLElement).getByRole("button", { name: "登记预测" }));
+    await userEvent.click(within(document.querySelector("[data-page-chrome]") as HTMLElement).getByRole("button", { name: "登记预测" }));
     return screen.findByRole("dialog", { name: "登记预测" });
   };
 

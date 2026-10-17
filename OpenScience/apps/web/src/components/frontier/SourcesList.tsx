@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { fetchFrontierSources, frontierErrorMessage, type FrontierSource, type FrontierSources } from "@/lib/frontierClient";
 import { LoadError } from "@/components/cards/LoadError";
 import { Drawer } from "@/components/ui/Drawer";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { INLINE_ACTION } from "./frontierText";
 
@@ -90,7 +90,7 @@ function SourcesDrawer({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {counted && <FilterChips label="排序" options={ORDERS} value={order} onChange={setOrder} />}
+          {counted && <Toolbar label="排序" filters={[{ kind: "chips", label: "排序", options: ORDERS, value: order, onChange: (next) => setOrder(next as Order) }]} />}
           <List label="信源" divided>
             {rows.map((institution) => (
               <ListRow

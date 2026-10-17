@@ -78,7 +78,7 @@ describe("病种定义包 on 定义与证据", () => {
   it("says, without a version number, that the study now reads the newest edition when the one it chose is no longer in the catalogue (E-11)", () => {
     const pack = { origin: "shipped", id: "nsclc", diseaseKey: "nsclc", name: "NSCLC", nameZh: "非小细胞肺癌", version: 3, status: "curated", counts: { terms: 42 }, sources: [], canPromote: false };
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf({ pack: { ...pack, binding: { version: 2, resolution: "newest_compatible" } } })} canWrite onChanged={() => undefined} />);
-    expect(document.querySelector("[data-vcr-pack-edition]")).toHaveTextContent("现按最新的一版读取");
+    expect(document.querySelector("[data-vcr-pack-edition]")).toHaveTextContent("改按最新一版读取");
     expect(within(document.querySelector("[data-vcr-pack]") as HTMLElement).queryByText(/v\d|第 \d 版/)).toBeNull();
   });
 
@@ -90,7 +90,7 @@ describe("病种定义包 on 定义与证据", () => {
 
   it("names the library definitions the study used, with their versions and uses and the pack entries they rest on", () => {
     draw(<VcrKnowledgeSection studyId={STUDY_ID} knowledge={knowledgeOf()} canWrite={false} onChanged={() => undefined} />);
-    const used = document.querySelector("[data-vcr-used-definition]") as HTMLElement;
+    const used = (document.querySelector("[data-vcr-used-definition]") as HTMLElement).closest("li") as HTMLElement;
     expect(used).toHaveTextContent("成人 ECOG 0–1 v2");
     expect(used).toHaveTextContent("定义库");
     expect(used).toHaveTextContent("共 3 个版本 · 用于 2 个研究");
@@ -285,9 +285,10 @@ describe("人群定义库 on the module home", () => {
     installVcrServer(network.productRequest, { "GET /vcr/definitions": { definitions: [] } });
     const { unmount } = draw(<VcrDefinitionsPanel />);
     expect(await screen.findByText("还没有人群定义")).toBeInTheDocument();
-    // It says where a definition comes from and why none exists yet, and offers no button of its own.
-    expect(screen.getByText(/点“存入定义库”/)).toBeInTheDocument();
-    expect(screen.getByText(/公开资料（T0）的研究用的是生成人群，不能存入/)).toBeInTheDocument();
+    // One sentence and one way to where a definition comes from — the studies, whose 人群 page saves it — and no paragraph of instructions.
+    expect(screen.getByRole("link", { name: "去研究里存入" })).toHaveAttribute("href", "/app/virtual-research");
+    expect(screen.queryByText(/点“存入定义库”/)).toBeNull();
+    expect(screen.queryByText(/公开资料（T0）的研究用的是生成人群/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     unmount();
     installVcrServer(network.productRequest, { "GET /vcr/definitions": () => { throw Object.assign(new Error("off"), { status: 404, code: "vcr_not_enabled" }); } });

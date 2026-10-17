@@ -98,8 +98,8 @@ describe("收到的分享", () => {
   it("a share that does not exist offers no retry — it says what it can be, and leads back to 记忆胶囊", async () => {
     share.openShareLink.mockRejectedValue(Object.assign(new Error("这个分享不存在，或已经不能用了。"), { status: 404, code: "capsule_share_not_found" }));
     page(`/app/memory/shared/${"T".repeat(32)}`);
-    // One sentence and the way back: the page's own anatomy for a link that cannot be what it was.
-    expect(await screen.findByText("链接可能已失效、已被撤回，或不是发给这个账号的。")).toBeInTheDocument();
+    // One sentence on a screen of its own: the refusal and what it can be, not a heading and a second line.
+    expect(await screen.findByText("这个分享不能打开：链接可能已失效、已被撤回，或不是发给这个账号的。")).toBeInTheDocument();
     expect(document.querySelector("[data-state-screen]")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -110,8 +110,7 @@ describe("收到的分享", () => {
   it("a delivery that is gone is the same card, and a refusal that names itself says what it is", async () => {
     share.openDelivery.mockRejectedValue(Object.assign(new Error("这个分享链接已过期，请向分享的人要一个新的。"), { status: 410, code: "capsule_share_link_expired" }));
     page("/app/memory/delivered/dlv_gone");
-    expect(await screen.findByText("这个分享链接已过期，请向分享的人要一个新的。")).toBeInTheDocument();
-    expect(document.querySelector("[data-state-screen]")).not.toBeNull();
+    expect(await screen.findByText("这个分享不能打开：这个分享链接已过期，请向分享的人要一个新的。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "回到记忆胶囊" })).toHaveAttribute("href", "/app/memory");
     expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
@@ -120,7 +119,7 @@ describe("收到的分享", () => {
     share.openShareLink.mockRejectedValueOnce(Object.assign(new Error("服务暂时不可用"), { status: 503 })).mockResolvedValue({ preview, link: { expiresAt: "", usesLeft: 1 } });
     page(`/app/memory/shared/${"T".repeat(32)}`);
     expect(await screen.findByText("服务暂时不可用")).toBeInTheDocument();
-    expect(document.querySelector("[data-state-screen]")).toBeNull();
+    expect(screen.queryByText(/^这个分享不能打开：/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("来自李主任 · 2 条做法")).toBeInTheDocument();
     cleanup();

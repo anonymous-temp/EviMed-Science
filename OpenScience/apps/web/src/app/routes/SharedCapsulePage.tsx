@@ -4,10 +4,11 @@ import { Share2 } from "lucide-react";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
+import { PageTitle } from "@/components/layout/PageTitle";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { StateScreen } from "@/components/ui/StateScreen";
 import { Input } from "@/components/ui/Input";
+import { StateScreen } from "@/components/ui/StateScreen";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
 } from "@/lib/capsuleShareClient";
@@ -86,20 +87,28 @@ export function SharedCapsulePage() {
   const sender = preview?.card?.author ?? shared?.delivery?.sender.name ?? null;
   const taken = preview ? takenEntries(preview.entries, preview.scan) : [];
 
+  // A share that cannot be opened — refused, withdrawn, taken down — is a screen of its own: an icon, one sentence, and the way back
+  // to the page it was reached from. Trying again cannot change a refusal of the share itself (R19, audit D C5).
+  const back = <Link to={MEMORY_PATH} className={buttonClasses({ variant: "secondary" })}>回到记忆胶囊</Link>;
+  if (failed && !failed.retry) {
+    return (
+      <StateScreen icon={Share2} title={`这个分享不能打开：${failed.unknown ? NOT_FOUND_TEXT : failed.message}`} titleAs="h1" action={back}>
+        <PageTitle page="收到的分享" />
+      </StateScreen>
+    );
+  }
+  if (closed) {
+    return (
+      <StateScreen icon={Share2} role="status" title={closed} titleAs="h1" action={back}>
+        <PageTitle page="收到的分享" />
+      </StateScreen>
+    );
+  }
+
   return (
     <PageShell title="收到的分享">
       {failed?.retry && <LoadError message={failed.message} onRetry={() => setAttempt((value) => value + 1)} />}
-      {failed && !failed.retry && (
-        // Trying again cannot change a refusal of the share itself: the way out is back to the page it was reached from.
-        <StateScreen icon={Share2} title={failed.unknown ? NOT_FOUND_TEXT : failed.message} titleAs="h2" back={{ to: MEMORY_PATH, label: "回到记忆胶囊" }} />
-      )}
       {!failed && shared === null && <RunsSkeleton filter={false} />}
-      {closed && (
-        <div className="space-y-3">
-          <p role="status" className="max-w-measure text-ui text-text">{closed}</p>
-          <Link to={MEMORY_PATH} className={buttonClasses({ variant: "secondary" })}>回到记忆胶囊</Link>
-        </div>
-      )}
       {preview && (
         <div className="max-w-measure space-y-4">
           <div className="space-y-1">

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceZonesPage } from "./EvidenceZonesPage";
+import { expectComposed } from "@/test/expectComposed";
 const client = vi.hoisted(() => ({ listEvidenceZones: vi.fn(), followEvidenceZone: vi.fn() }));
 const features = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn() }));
 const topics = vi.hoisted(() => ({ listTopicRequests: vi.fn() }));
@@ -86,10 +87,10 @@ describe("evidence zone directory", () => {
     expect(await screen.findByText("暂无证据专区")).toBeInTheDocument();
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "急诊{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "关注" })); expect(await screen.findByRole("button", { name: "取消关注" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "加载更多" })); expect(await screen.findByRole("link", { name: "急诊药学" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多" })); expect(await screen.findByRole("link", { name: "急诊药学" })).toBeInTheDocument();
     expect(client.listEvidenceZones).toHaveBeenLastCalledWith("急诊", "next", undefined);
   });
-  it("offers 「申请选题」 as a header button only where the public pages are on, and opens it in a drawer with the official zones to choose from", async () => {
+  it("offers 「申请选题」 at the end of the list only where the public pages are on, and opens it in a drawer with the official zones to choose from", async () => {
     client.listEvidenceZones.mockResolvedValue({ items: [
       { ...zone, id: "o1", title: "房颤抗凝", kind: "official", state: "published" },
       { ...zone, id: "o2", title: "还没发布", kind: "official", state: "draft" },
@@ -103,10 +104,11 @@ describe("evidence zone directory", () => {
     features.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     mount();
     const header = (await screen.findByRole("heading", { level: 1, name: "证据专区" })).closest("header")!;
-    // Nothing of it is on the page until it is asked for; the page is the list.
+    // Nothing of it is on the page until it is asked for; the page is the list, and the way to ask is its last line (R19: it was a header button).
+    expect(within(header).queryByRole("button", { name: "申请选题" })).not.toBeInTheDocument();
     expect(topics.listTopicRequests).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "申请选题" })).not.toBeInTheDocument();
-    await userEvent.click(await within(header).findByRole("button", { name: "申请选题" }));
+    await userEvent.click(await screen.findByRole("button", { name: "申请选题" }));
     const drawer = await screen.findByRole("dialog", { name: "申请选题" });
     const choose = within(drawer).getByRole("combobox", { name: "关联专区（可选）" });
     expect(choose).toHaveTextContent("房颤抗凝");
@@ -179,5 +181,17 @@ describe("evidence zone directory", () => {
     expect(within(rows[0]).getByText("6 条证据")).toBeInTheDocument();
     expect(within(rows[2]).getByText("草稿 · 1 条证据")).toBeInTheDocument();
     expect(screen.queryByText("0 条证据")).not.toBeInTheDocument();
+  });
+});
+
+describe("the zone directory's composition", () => {
+  it("is one row of views and a live search above the list, with at most one action in the header", async () => {
+    client.listEvidenceZones.mockResolvedValue({ items: [{ ...zone, kind: "official" }], nextCursor: null, total: 1, canCreate: true });
+    const { container } = mount();
+    await screen.findByRole("link", { name: "急诊医学" });
+    const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
+    expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" })).toBeInTheDocument();
+    // 新建专区 is in the header's menu, with nothing else beside it.
+    expect(within(container.querySelector("[data-page-header]") as HTMLElement).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["更多操作"]);
   });
 });

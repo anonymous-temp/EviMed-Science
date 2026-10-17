@@ -1,16 +1,16 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, readVcrTrial, type VcrStudy } from "@/lib/vcrClient";
 import { TrialTab } from "./TrialTab";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
+import { renderTab } from "../__fixtures__/tabFrame";
 
 /**
- * 监管沟通, on the trial tab: the log of regulatory contacts as a small list with its own 添加. A record of the study that the
- * conversation (or the researcher) writes; the page shows what was written and takes a new entry. Rendered from the server's own trial
- * page with the log filled in.
+ * 监管沟通, on the trial tab: the log of regulatory contacts as a table, one of the step's three kinds of record (the band's switch
+ * 方案 · 访视 · 监管), and the band's 添加 for a new entry. A record of the study that the conversation (or the researcher) writes;
+ * the page shows what was written and takes a new entry. Rendered from the server's own trial page with the log filled in.
  */
 
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
@@ -23,7 +23,12 @@ vi.mock("@/lib/projects", () => ({
   useProjectStore: { getState: () => ({ projects: [{ id: "prj_ev201" }], select: vi.fn(), load: vi.fn() }) },
 }));
 
-const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
+const draw = (node: React.ReactElement) => renderTab(node);
+const band = (container: HTMLElement) => container.querySelector("[data-page-chrome]") as HTMLElement;
+/** The log, open: the band's 监管 is pressed. */
+const openLog = async (container: HTMLElement) => {
+  await userEvent.click(await within(await waitFor(() => { const node = band(container); if (!node) throw new Error("no band"); return node; })).findByRole("button", { name: /^监管/ }));
+};
 const study = (change?: (raw: any) => void): VcrStudy => {
   const raw = fixture("ev201/study.json");
   raw.abilities = [...new Set([...raw.abilities, "write"])];
@@ -57,21 +62,28 @@ describe("the regulatory log", () => {
   it("lists the contacts as recorded, the latest first, with the agency's own conclusion and the references it left", async () => {
     installVcrServer(network.productRequest, { [trialRoute]: { ...fixture<Record<string, unknown>>("ev201/trial.json"), regulatory: CONTACTS } });
     const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
-    await screen.findByRole("heading", { name: "监管沟通" });
+    await screen.findByRole("table", { name: "方案的对比" });
+    await openLog(container);
+    await screen.findByRole("table", { name: "监管沟通" });
     const items = [...container.querySelectorAll("[data-vcr-regulatory-contact]")];
     expect(items.map((item) => item.getAttribute("data-vcr-regulatory-contact"))).toEqual(["reg_2", "reg_1"]);
     const first = items[0].textContent ?? "";
-    for (const piece of ["2026-08-14", "药审中心（CDE）", "Pre-IND 沟通交流", "讨论单臂加外部对照的可行性", "结论：同意以外部对照作支持性证据", "附件：minutes.pdf；briefing/package.zip"]) expect(first).toContain(piece);
+    for (const piece of ["2026-08-14", "药审中心（CDE）", "Pre-IND 沟通交流", "讨论单臂加外部对照的可行性", "同意以外部对照作支持性证据", "minutes.pdf；briefing/package.zip"]) expect(first).toContain(piece);
     // Who recorded a contact is the ledger's record (R36): a contact a run wrote reads like any other, with no chip saying an AI set it.
     for (const item of items) expect(item.textContent).not.toContain("AI 设定");
     expect(items[1].textContent).toContain("FDA");
-    // the log has its own 添加; the action row no longer offers the first-entry button
-    expect(screen.getByRole("button", { name: "添加" })).toBeInTheDocument();
+    // A column nothing fills is not drawn: the second contact has no type, summary, conclusion or attachment, the first has them all.
+    expect(screen.getByRole("columnheader", { name: "机构的结论" })).toBeInTheDocument();
+    // The band holds the one button that adds, and the log has none of its own.
+    expect(within(band(container)).getByRole("button", { name: "添加监管沟通" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加" })).toBeNull();
     expect(screen.queryByRole("button", { name: "记录监管沟通" })).toBeNull();
   });
 
-  it("is added to from the action row while the log is empty, and the entry is posted as the form says it", async () => {
-    draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+  it("is added to from the empty log, and the entry is posted as the form says it", async () => {
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("table", { name: "方案的对比" });
+    await openLog(container);
     await userEvent.click(await screen.findByRole("button", { name: "记录监管沟通" }));
     const drawer = await screen.findByRole("dialog", { name: "添加监管沟通记录" });
     const add = within(drawer).getByRole("button", { name: "添加" });
@@ -97,7 +109,9 @@ describe("the regulatory log", () => {
     installVcrServer(network.productRequest, {
       [`POST /vcr/studies/${STUDY_ID}/regulatory-contacts`]: () => new Promise((resolve) => { release = resolve; }),
     });
-    draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("table", { name: "方案的对比" });
+    await openLog(container);
     await userEvent.click(await screen.findByRole("button", { name: "记录监管沟通" }));
     const drawer = await screen.findByRole("dialog", { name: "添加监管沟通记录" });
     await userEvent.type(within(drawer).getByLabelText("日期"), "2026-08-14");
@@ -115,7 +129,9 @@ describe("the regulatory log", () => {
     installVcrServer(network.productRequest, {
       [`POST /vcr/studies/${STUDY_ID}/regulatory-contacts`]: () => { throw new WebApiError("2026-02-30 不是一个真实存在的日期。", { status: 400, code: "vcr_regulatory_contact_invalid" }); },
     });
-    draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("table", { name: "方案的对比" });
+    await openLog(container);
     await userEvent.click(await screen.findByRole("button", { name: "记录监管沟通" }));
     const drawer = await screen.findByRole("dialog", { name: "添加监管沟通记录" });
     await userEvent.type(within(drawer).getByLabelText("日期"), "2026-02-28");
@@ -129,9 +145,11 @@ describe("the regulatory log", () => {
   it("is offered to a reader who may write and to nobody else", async () => {
     const readOnly = study((raw) => { raw.abilities = raw.abilities.filter((ability: string) => ability !== "write"); });
     installVcrServer(network.productRequest, { [trialRoute]: { ...fixture<Record<string, unknown>>("ev201/trial.json"), regulatory: CONTACTS } });
-    draw(<TrialTab studyId={STUDY_ID} study={readOnly} />);
-    await screen.findByRole("heading", { name: "监管沟通" });
-    expect(screen.queryByRole("button", { name: "添加" })).toBeNull();
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={readOnly} />);
+    await screen.findByRole("table", { name: "方案的对比" });
+    await openLog(container);
+    await screen.findByRole("table", { name: "监管沟通" });
+    expect(within(band(container)).queryByRole("button", { name: "添加监管沟通" })).toBeNull();
     expect(screen.queryByRole("button", { name: "记录监管沟通" })).toBeNull();
   });
 });

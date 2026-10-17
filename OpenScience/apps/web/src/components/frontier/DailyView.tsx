@@ -1,7 +1,7 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { CalendarDays, Copy } from "lucide-react";
+import { CalendarDays, ChevronDown, Copy } from "lucide-react";
 import {
   fetchFrontierDaily,
   frontierErrorMessage,
@@ -17,8 +17,8 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
-import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
@@ -101,6 +101,45 @@ async function copyMarkdown(markdown: string) {
   }
 }
 
+/** The lanes an issue has, safety first, each with its count: what 「分类」 lists. */
+function issueLanes(issue: FrontierDaily) {
+  return [
+    ...(issue.safety.length > 0 ? [{ id: "safety-alerts", title: "安全警示", count: issue.safety.length }] : []),
+    ...issue.sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
+  ];
+}
+
+/** A week's range, 「9月21日—9月27日」, from the day it starts. */
+function weekRange(day: string): string {
+  const last = new Date(`${day}T00:00:00Z`);
+  last.setUTCDate(last.getUTCDate() + 6);
+  return `${shortDate(day)}—${shortDate(last.toISOString().slice(0, 10))}`;
+}
+
+/**
+ * The controls of the issue on screen, for the page's toolbar (R19, audit D C1c): 「分类」 (the lanes with their counts, each one tap
+ * from its heading), 「往期」 (the issues before) and 「复制」. They were a second group of controls in the issue's own header, beside
+ * the page's 日报 / 周报 chips; there is one row of controls now, and it stays at the top while the issue scrolls — which is what the
+ * sticky header was for. A day with no issue has none of them (its past issues are the empty state's own button).
+ */
+export function dailyControls(state: DailyState, { weekly = false, onDay }: { weekly?: boolean; onDay: (day: string) => void }): { filters: ToolbarFilter[]; actions: ReactNode } {
+  const issue = state.issue;
+  if (!issue || state.error || state.index === null) return { filters: [], actions: null };
+  const lanes = issueLanes(issue);
+  const archive = state.index.slice(0, ARCHIVE_SHOWN);
+  return {
+    filters: [
+      ...(lanes.length >= 3 ? [{ kind: "select" as const, label: "分类", options: lanes.map((lane) => ({ value: lane.id, label: `${lane.title} ${lane.count}` })), value: null, onChange: (id: string | null) => { if (id) goToLane(id); } }] : []),
+      ...(archive.length > 0 ? [{ kind: "select" as const, label: "往期", options: archive.map((entry) => ({ value: entry.day, label: weekly ? weekRange(entry.day) : shortDate(entry.day) })), value: null, onChange: (day: string | null) => { if (day) onDay(day); } }] : []),
+    ],
+    actions: (
+      <Button variant="text" size="sm" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
+        <Copy size={16} aria-hidden="true" />复制
+      </Button>
+    ),
+  };
+}
+
 /**
  * 日报 (plan 2026-09-23 §6.2; research B §8 #28): the day, how many items and
  * how long they take to read, 「复制」, 「分类 ▾」 and 「往期 ▾」; the lead story; the
@@ -117,23 +156,18 @@ async function copyMarkdown(markdown: string) {
  */
 export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number }) {
   const origin = useFrontierOrigin();
-  const rangeLabel = (day: string) => {
-    const last = new Date(`${day}T00:00:00Z`);
-    last.setUTCDate(last.getUTCDate() + 6);
-    return `${shortDate(day)}—${shortDate(last.toISOString().slice(0, 10))}`;
-  };
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
   if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "暂无日报"} />;
   const archive = state.index.slice(0, ARCHIVE_SHOWN);
   const pastIssues = (current: string | null) => archive.length > 0 && (
-    <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? rangeLabel(entry.day) : shortDate(entry.day), checked: entry.day === current, onSelect: () => onDay(entry.day) }))}>
-      <FilterChip menu>往期</FilterChip>
+    <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? weekRange(entry.day) : shortDate(entry.day), checked: entry.day === current, onSelect: () => onDay(entry.day) }))}>
+      <Button variant="secondary">往期<ChevronDown size={16} aria-hidden="true" /></Button>
     </Menu>
   );
   if (!state.issue) {
-    // Only a durable publication outcome distinguishes an empty day from a failed issue.
-    // Past issues stay one tap away whenever there are any.
+    // Only a durable publication outcome distinguishes an empty day from a failed issue. One sentence says which, once, and past
+    // issues stay one tap away whenever there are any (R19, audit D C3: it was the same fact twice, and 「周三日报」 joined).
     const when = state.schedule ? scheduleLabel(state.schedule) : null;
     const asked = !weekly ? state.day ?? state.publication?.day ?? null : null;
     const outcome = !weekly ? state.publication?.state : null;
@@ -141,8 +175,12 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
     return (
       <EmptyState
         icon={CalendarDays}
-        title={outcome === "failed" ? `${dateLabel}日报生成失败` : outcome === "empty" ? `${dateLabel}没有符合条件的内容` : outcome === "pending" ? (when ? `${dateLabel}日报尚未发布，每天 ${when}发布` : `${dateLabel}日报尚未发布`) : weekly ? "暂无周报" : asked ? `${shortDate(asked)}没有日报` : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
-        description={outcome === "failed" ? "暂未生成这一期日报，可以先阅读往期。" : outcome === "empty" ? `${asked ? shortDate(asked) : "这一天"}未出刊，可以阅读往期。` : weekly ? undefined : asked && when ? `日报每天 ${when}发布；当天没有符合条件的内容时不出刊。` : "当天没有符合条件的内容时不出刊。"}
+        title={outcome === "failed" ? `${dateLabel}的日报生成失败。`
+          : outcome === "empty" ? `${dateLabel}没有符合条件的内容，没有出刊。`
+            : outcome === "pending" ? `${dateLabel}的日报尚未发布${when ? `，每天 ${when}发布` : ""}。`
+              : weekly ? "暂无周报"
+                : asked ? `${dateLabel}没有日报：当天没有符合条件的内容时不出刊。`
+                  : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
         action={pastIssues(asked) || undefined}
       />
     );
@@ -150,26 +188,11 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   const issue = state.issue;
   const { previous, next } = neighbours(issue, state.index);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
-  const lanes = [
-    ...(issue.safety.length > 0 ? [{ id: "safety-alerts", title: "安全警示", count: issue.safety.length }] : []),
-    ...issue.sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
-  ];
   return (
     <article aria-labelledby="frontier-daily-title">
-      <header className="sticky top-0 z-sticky flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-bg py-2">
-        <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? rangeLabel(issue.day) : shortDate(issue.day)}</h2>
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border pb-2">
+        <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? weekRange(issue.day) : shortDate(issue.day)}</h2>
         <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
-        <span className="ml-auto flex items-center gap-1">
-          <Button variant="text" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
-            <Copy size={16} aria-hidden="true" />复制
-          </Button>
-          {lanes.length >= 3 && (
-            <Menu label="分类" items={lanes.map((lane) => ({ label: `${lane.title} ${lane.count}`, onSelect: () => goToLane(lane.id) }))}>
-              <FilterChip menu>分类</FilterChip>
-            </Menu>
-          )}
-          {pastIssues(issue.day)}
-        </span>
       </header>
 
       {issue.lead && (

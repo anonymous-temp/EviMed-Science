@@ -117,6 +117,15 @@ UPDATE evimed_frontier.evidence_cards c SET producer=CASE
   FROM evimed_control.users u WHERE u.id=c.user_id AND c.producer IS NULL;
 UPDATE evimed_frontier.evidence_cards SET originality=CASE WHEN editorial->'author'->>'kind'='ai' THEN 'brief' ELSE 'synthesis' END
   WHERE originality IS NULL;
+-- A programme card with no headline claim carried one neutral sentence as its list line — the same words on every such card, so a zone
+-- listed nineteen identical rows (R19, audit D C3). The builder now writes the card's first conclusion (evidenceProgrammeCard.mjs); this
+-- takes the cards an earlier release wrote to the same line. The sentence is the builder's own code-built string, matched exactly, and
+-- only a card whose first claim is a direct quotation is touched (a synthesis keeps its confidence label, which only the builder adds).
+-- Idempotent: a row that no longer carries the sentence is not selected, and the zones' version moves only when a row changed.
+WITH relined AS (UPDATE evimed_frontier.evidence_cards SET summary=left(claims->0->>'claim',600)
+  WHERE summary LIKE '这张卡汇总了 % 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。'
+    AND jsonb_typeof(claims)='array' AND COALESCE(claims->0->>'claimType','direct')='direct' AND COALESCE(claims->0->>'claim','')<>'' RETURNING 1)
+UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE EXISTS (SELECT 1 FROM relined);
 -- Keeping a card current (flywheel F13, F14, §4.4, §8, 2026-10-05). A card carries its own 时效 — one of the five labels of
 -- \`currencyLabel\` — with the frontier items that bear on it, when the platform last looked, and, for a card taken back,
 -- why. \`source_keys\` are the identifiers its sources name in the form the source-change record uses, so a change in that

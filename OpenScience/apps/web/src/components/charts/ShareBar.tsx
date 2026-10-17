@@ -90,18 +90,20 @@ export function ShareBar({
                 <span className="tabular-nums text-text">{format(segment.value)}</span>
               </>
             );
+            // Without `onSelect` the entry is the plain swatch + words it always was (the contrast-theme test reads `li > span`).
+            if (!onSelect) {
+              return <li key={segment.key} className="inline-flex items-center gap-1.5 text-caption text-text-2">{body}</li>;
+            }
             return (
               <li key={segment.key} className="inline-flex items-center text-caption text-text-2">
-                {onSelect ? (
-                  <button
-                    type="button"
-                    aria-pressed={selected === segment.key}
-                    onClick={() => onSelect(selected === segment.key ? null : segment.key)}
-                    className={cn("-mx-1.5 inline-flex min-h-sm items-center gap-1.5 rounded px-1.5 hover:bg-surface-2", selected === segment.key && "bg-accent-soft")}
-                  >
-                    {body}
-                  </button>
-                ) : <span className="inline-flex items-center gap-1.5">{body}</span>}
+                <button
+                  type="button"
+                  aria-pressed={selected === segment.key}
+                  onClick={() => onSelect(selected === segment.key ? null : segment.key)}
+                  className={cn("-mx-1.5 inline-flex min-h-sm items-center gap-1.5 rounded px-1.5 hover:bg-surface-2", selected === segment.key && "bg-accent-soft")}
+                >
+                  {body}
+                </button>
               </li>
             );
           })}

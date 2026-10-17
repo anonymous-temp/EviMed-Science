@@ -7,7 +7,7 @@ import { availableFactBox, card, clinicalView, publicView, reasonedFactBox } fro
 describe("the two views of one card", () => {
   it("opens on the clinical summary-of-findings table, with the server's absolute effects and the reason where there is none", () => {
     render(<EvidenceCardViews evidence={card} />);
-    expect(screen.getByRole("radio", { name: "临床版" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "临床版" })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table", { name: "结局总结表" });
     const [stroke, bleeding] = within(table).getAllByRole("row").slice(1);
     expect(within(stroke).getByText("RR 0.58")).toBeInTheDocument();
@@ -21,7 +21,7 @@ describe("the two views of one card", () => {
   });
   it("switches to the public view: the written panels, the trace marks and the fact box per 1000 people", async () => {
     render(<EvidenceCardViews evidence={card} />);
-    await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
+    await userEvent.click(screen.getByRole("tab", { name: "公众版" }));
     expect(screen.queryByRole("table", { name: "结局总结表" })).not.toBeInTheDocument();
     expect(screen.getByText("一句话回答")).toBeInTheDocument();
     expect(screen.getByText("试验显示卒中减少，但大出血增多。")).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("the two views of one card", () => {
     const { container } = render(<EvidenceCardViews evidence={withCalculation} />);
     expect(screen.getByText("无法计算")).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/drug_safety_analysis|faers\.signals|回执|引擎/);
-    await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
+    await userEvent.click(screen.getByRole("tab", { name: "公众版" }));
     expect(screen.getByText("平台计算")).toBeInTheDocument();
     expect(screen.getByText("报告比值比为 2.40。")).toBeInTheDocument();
     expect(screen.getByText("比较里的数字没有核对上，所以没有事实框。")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("the two views of one card", () => {
   it("tells a reader of the public view that the author has written nothing there when it has only a fact box", async () => {
     const onlyBox = { clinical: { ...clinicalView, rows: [] }, public: { ...publicView, panels: publicView.panels.map((panel) => ({ ...panel, status: "missing" as const })), factBox: availableFactBox } };
     render(<EvidenceCardViews evidence={{ ...card, views: onlyBox }} />);
-    await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
+    await userEvent.click(screen.getByRole("tab", { name: "公众版" }));
     expect(screen.getByText("作者还没有写公众版内容。")).toBeInTheDocument();
     expect(screen.getByText("每 1000 人里")).toBeInTheDocument();
   });

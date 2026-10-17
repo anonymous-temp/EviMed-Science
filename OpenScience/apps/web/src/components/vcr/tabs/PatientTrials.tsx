@@ -9,10 +9,11 @@ import {
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Section } from "@/components/ui/Section";
 import { Tag, type TagTone } from "@/components/ui/Tag";
+import { EmptyState } from "@/components/cards/EmptyState";
 import { CriterionTable } from "../ClinicalMatchingDetails";
 import { useVcrRun } from "../useVcrRun";
-import { VcrSection } from "../vcrTabKit";
 import {
   eligibilityLabel,
   patientTrialsNoneSentence,
@@ -126,7 +127,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
   const mayRun = study.abilities.includes("run");
 
   if (!page.available) {
-    return <p data-vcr-patient-trials-unavailable="" className="py-12 text-center text-ui text-text-3">{VCR_PATIENT_TRIALS_OFF}</p>;
+    return <div data-vcr-patient-trials-unavailable=""><EmptyState title={VCR_PATIENT_TRIALS_OFF} /></div>;
   }
 
   const ask = () => {
@@ -135,22 +136,22 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
   };
 
   if (!subject) {
-    // Nobody is chosen — or the study holds nobody to choose. The button is there and says, by the sentence beside it, why it cannot be pressed.
+    // Nobody is chosen — or the study holds nobody to choose. The way to a patient is the patient's chip in the band, so there is no
+    // button here that would be grey: the sentence says what the page waits for.
     return (
-      <div data-vcr-patient-trials-empty="nobody" className="flex flex-col items-center gap-4 py-12 text-center">
-        <p id="vcr-patient-trials-ask" className="max-w-measure text-ui text-text-2">
-          {roster.length > 0 ? VCR_PATIENT_TRIALS_CHOOSE : VCR_PATIENT_TRIALS_NOBODY}
-        </p>
-        {mayRun && <Button disabled aria-describedby="vcr-patient-trials-ask">为该患者找试验</Button>}
+      <div data-vcr-patient-trials-empty="nobody">
+        <EmptyState title={roster.length > 0 ? VCR_PATIENT_TRIALS_CHOOSE : VCR_PATIENT_TRIALS_NOBODY} />
       </div>
     );
   }
 
   if (page.trials.length === 0) {
     return (
-      <div data-vcr-patient-trials-empty="none" className="flex flex-col items-center gap-4 py-12 text-center">
-        <p className="max-w-measure text-ui text-text-2">{patientTrialsNoneSentence(subject)}</p>
-        {mayRun && <Button loading={busy} onClick={ask}>为该患者找试验</Button>}
+      <div data-vcr-patient-trials-empty="none">
+        <EmptyState
+          title={patientTrialsNoneSentence(subject)}
+          action={mayRun ? <Button loading={busy} onClick={ask}>为该患者找试验</Button> : undefined}
+        />
       </div>
     );
   }
@@ -165,16 +166,12 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
   const where = shownTrial ? placeAndConditions(shownTrial) : "";
 
   return (
-    <VcrSection
+    <Section
       title={`${subject} 的试验`}
-      meta={(
-        <span className="inline-flex items-center gap-3">
-          <span>{`${page.trials.length} 项`}</span>
-          {mayRun && <Button variant="secondary" loading={busy} onClick={ask}>为该患者找试验</Button>}
-        </span>
-      )}
+      count={`${page.trials.length} 项`}
+      toolbar={mayRun ? <Button variant="secondary" size="sm" loading={busy} onClick={ask}>为该患者找试验</Button> : undefined}
     >
-      <div data-vcr-patient-trials={subject} className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+      <div data-vcr-patient-trials={subject} className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
         <ul aria-busy={staleList || undefined} className={cn("flex flex-col gap-2", staleList && "opacity-60")}>
           {page.trials.map((trial) => (
             <TrialRow key={trial.id} trial={trial} current={chosen?.id === trial.id} onPick={() => onPick(trial.id)} />
@@ -216,6 +213,6 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
           </div>
         )}
       </div>
-    </VcrSection>
+    </Section>
   );
 }

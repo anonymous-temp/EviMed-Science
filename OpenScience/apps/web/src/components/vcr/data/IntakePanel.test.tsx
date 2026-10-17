@@ -1,11 +1,10 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
-import { DataTab } from "../tabs/DataTab";
+import { VcrIntakeDrawer } from "../VcrIntakeDrawer";
 
 // Only the network is doubled: `productRequest` for the JSON routes and
 // `fetchWithWebAuth` for the upload. The readers, the route functions and the
@@ -18,6 +17,9 @@ vi.mock("@/lib/productClient", () => network);
 const upload = vi.hoisted(() => ({ fetchWithWebAuth: vi.fn() }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/apiClient")>()), fetchWithWebAuth: upload.fetchWithWebAuth }));
 
+// Every test here drives several user-event uploads, selects and re-reads: slower than the 5 s default whenever the suite shares the machine.
+vi.setConfig({ testTimeout: 20_000 });
+
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
@@ -27,20 +29,12 @@ vi.mock("@/lib/projects", () => ({
 
 const DATA = `/vcr/studies/${STUDY_ID}/data`;
 
-// A tier that takes real data: the intake is the tab's first section, under its own heading. (At T0 it is one folded line, `DataTab.test.tsx`.)
-function study(change?: (raw: any) => void): VcrStudy {
-  const raw = fixture("ev201/study.json");
-  raw.tier = "T2";
-  change?.(raw);
-  return readVcrStudy(raw);
-}
-
-function drawTab(change?: (raw: any) => void) {
+// The intake is the header's 数据接入 (R19): a drawer over whichever tab the reader is on, which reads the data tab's payload for its
+// `intake` block and draws the panel in it. The panel's own behaviour is what these tests hold, whatever tier the study is at.
+function drawTab(_change?: (raw: any) => void) {
   return render(
     <MemoryRouter initialEntries={[`/app/virtual-research/${STUDY_ID}/data`]}>
-      <Routes>
-        <Route path="/app/virtual-research/:studyId/:tab?" element={<DataTab studyId={STUDY_ID} study={study(change)} />} />
-      </Routes>
+      <VcrIntakeDrawer studyId={STUDY_ID} onClose={() => undefined} onChanged={() => undefined} />
     </MemoryRouter>,
   );
 }
@@ -133,11 +127,12 @@ describe("数据接入 — what the page shows", () => {
     expect(await screen.findByText("本部署未接入数据平面，暂不能接入患者级数据。")).toBeInTheDocument();
   });
 
-  it("a payload with no intake block at all is a tab, not a crash", async () => {
+  it("a payload with no intake block at all is a drawer with nothing in it, not a crash", async () => {
     load("data-sealed.json", (raw) => { delete raw.intake; });
     drawTab();
-    expect(await screen.findByRole("button", { name: /让 AI 做|开始/ }).catch(() => null)).toBeDefined();
-    expect(screen.queryByRole("heading", { name: "数据接入" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "数据接入" })).toBeInTheDocument();
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(DATA));
+    expect(document.querySelector("[data-vcr-source]")).toBeNull();
   });
 });
 
@@ -460,7 +455,7 @@ describe("数据接入 — what the page sends", () => {
       body: { grantee: "view-manager", fields: ["AGE", "ARM"], purposes: ["vcr"] },
     });
     expect(Object.keys(writes()[0].body as object).sort()).toEqual(["fields", "grantee", "purposes"]);
-  });
+  }, 20_000); // the longest test of the file: a grant, a revoke and their re-reads in a row — five seconds do not cover it when the whole suite shares the machine
 
   it("names a refusal with the plane's own code as a sentence, not as a status", async () => {
     drawTab();

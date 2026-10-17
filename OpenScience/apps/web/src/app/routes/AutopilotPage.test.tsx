@@ -143,6 +143,9 @@ describe("scheduled tasks", () => {
         render("/app/autopilot");
         const header = screen.getByRole("heading", { name: "定时任务", level: 1 }).closest("header")!;
         expect(within(header).getByText("我的研究")).toBeInTheDocument();
+        // The page's standard header (R19, audit D C5), not one drawn with the title class by hand; the browser tab is named once, by the page.
+        expect(header).toHaveAttribute("data-page-header");
+        expect(document.querySelectorAll("title")).toHaveLength(1);
         // One button, an icon: no solid 新建任务 button, no second action.
         expect(within(header).getAllByRole("button").map(button => button.getAttribute("aria-label"))).toEqual(["新建"]);
         expect(within(header).queryByText("新建任务")).not.toBeInTheDocument();
@@ -592,6 +595,9 @@ describe("scheduled tasks", () => {
       expect(document.querySelector("[data-autopilot-layout]")).toHaveAttribute("data-autopilot-layout", "single");
       expect(document.querySelector("[data-task-list]")).toBeNull();
       expect(within(bar()).getByRole("link", { name: "定时任务" })).toHaveAttribute("href", "/app/autopilot?q=%E5%BF%83");
+      // Alone on the page, the task's header is the standard one, with the way back over it.
+      expect(bar().querySelector("[data-page-header]")).toContainElement(within(bar()).getByRole("heading", { name: "心衰证据追踪", level: 1 }));
+      expect(bar().querySelector("[data-page-header]")).toContainElement(within(bar()).getByRole("button", { name: "立即运行" }));
       cleanup(); identity.width = 800; render("/app/autopilot");
       expect(await screen.findByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(document.querySelector("[data-task-main]")).toBeNull();

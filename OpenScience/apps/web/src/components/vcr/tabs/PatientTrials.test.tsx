@@ -1,10 +1,9 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
-import { VCR_DEFERRED_SENTENCE } from "../useVcrRun";
+import { renderTab } from "../__fixtures__/tabFrame";
 import { MatchingTab } from "./MatchingTab";
 
 // 「给患者找试验」, drawn from the pages the server sends: only the network is doubled. The readers, the route functions and the tab are the
@@ -35,14 +34,7 @@ function study(change?: (raw: any) => void): VcrStudy {
 }
 
 function drawTab(node: React.ReactElement) {
-  return render(
-    <MemoryRouter initialEntries={[`/app/virtual-research/${STUDY_ID}/matching`]}>
-      <Routes>
-        <Route path="/app/virtual-research/:studyId/:tab?" element={node} />
-        <Route path="*" element={<p data-testid="elsewhere" />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  return renderTab(node, { route: `/app/virtual-research/${STUDY_ID}/matching` });
 }
 
 const reads = (server: ReturnType<typeof installVcrServer>) =>
@@ -60,35 +52,39 @@ beforeEach(() => {
   store.select.mockClear();
 });
 
-/** The tab as the reader finds it, then the direction chosen. */
+/** The tab as the reader finds it, then the direction chosen in the band. */
 async function openDirection() {
-  drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+  const view = drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
   await screen.findByRole("heading", { name: "P-0201" });
-  await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+  await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
+  return view;
 }
 
+/** The patient's chip in the band, opened, and one patient chosen from its menu. */
 async function choose(patient: string) {
-  await userEvent.selectOptions(await screen.findByLabelText("患者"), patient);
+  await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+  await userEvent.click(await screen.findByRole("menuitemradio", { name: patient }));
 }
 
 describe("给患者找试验 — before a patient is chosen", () => {
-  it("is a page of its own, not the other direction's: one sentence, the one action waiting for a patient, no candidate list", async () => {
+  it("is a page of its own, not the other direction's: one sentence waiting for a patient — and no button that would be grey — and no candidate list", async () => {
     await openDirection();
     expect(await screen.findByText("选一位患者，看有哪些试验可以参加。")).toBeInTheDocument();
     expect(reads(server).at(-1)?.get("direction")).toBe("patient_to_trial");
     expect(reads(server).at(-1)?.has("candidate")).toBe(false);
-    expect(screen.getByRole("button", { name: "为该患者找试验" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
     // The funnel, the candidate list and the protocol's criterion table of the other direction are not drawn under it.
     expect(screen.queryByRole("heading", { name: "P-0201" })).toBeNull();
     expect(document.querySelector("[data-vcr-candidate]")).toBeNull();
     expect(document.querySelector("[data-vcr-criterion]")).toBeNull();
-    expect(screen.getByRole("radio", { name: "给患者找试验" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "给患者找试验" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("offers the patients the study holds, and nothing is asked of the server until one is chosen", async () => {
     await openDirection();
-    const select = await screen.findByLabelText("患者");
-    expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["请选择患者", "P-0192", "P-0201"]);
+    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+    const menu = await screen.findByRole("menu", { name: "患者" });
+    expect(within(menu).getAllByRole("menuitemradio").map((option) => option.textContent)).toEqual(["请选择患者", "P-0192", "P-0201"]);
     expect(searches(server)).toHaveLength(0);
   });
 });
@@ -182,8 +178,8 @@ describe("给患者找试验 — a patient with trials", () => {
 });
 
 describe("给患者找试验 — a patient the study has found no trial for", () => {
-  it("is one sentence and the one button, and the button starts the search for that patient", async () => {
-    await openDirection();
+  it("is one sentence and the one button, and the button starts the search for that patient — and the reader stays where they are", async () => {
+    const { spies } = await openDirection();
     await choose("P-0201");
     expect(await screen.findByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
     expect(document.querySelector("[data-vcr-trial]")).toBeNull();
@@ -191,8 +187,10 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     expect(button).toBeEnabled();
     await userEvent.click(button);
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(SEARCH, "POST", { subjectKey: "P-0201" }));
-    // The run is the study's own conversation's, like 让 AI 做: the reader is taken there.
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
+    // The run is the study's, and the strip under the tabs says what it is doing: nobody is taken to a conversation.
+    await waitFor(() => expect(spies.refresh).toHaveBeenCalled());
+    expect(store.select).not.toHaveBeenCalled();
+    expect(screen.getByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
   });
 
   it("is one request however often the button is pressed while the first is out", async () => {
@@ -204,18 +202,19 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     await userEvent.click(button);
     await userEvent.click(button);
     expect(searches(server)).toHaveLength(1);
-    release({ sessionId: "ses_1", runId: "run_3", deferred: null, evaluated: 0 });
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
+    release({ accepted: true, runId: "run_3", step: null, queuedBehind: [], evaluated: 0 });
+    await waitFor(() => expect(button).toBeEnabled());
   });
 
-  it("stays on the page and says the run waits for the one before it, when the study's run is taken", async () => {
-    server = installVcrServer(network.productRequest, { [`POST ${SEARCH}`]: { sessionId: null, runId: null, deferred: "another_run_active", evaluated: 0 } });
-    await openDirection();
+  it("stays on the page when the study's run is taken: the request waits in line, which the strip says — no toast, no navigation", async () => {
+    server = installVcrServer(network.productRequest, { [`POST ${SEARCH}`]: { accepted: true, runId: null, step: null, queuedBehind: [{ step: null, waitingFor: "run" }], evaluated: 0 } });
+    const { spies } = await openDirection();
     await choose("P-0201");
     const button = await screen.findByRole("button", { name: "为该患者找试验" });
     const before = reads(server).length;
     await userEvent.click(button);
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith(VCR_DEFERRED_SENTENCE));
+    await waitFor(() => expect(spies.refresh).toHaveBeenCalled());
+    expect(toasts.success).not.toHaveBeenCalled();
     expect(store.select).not.toHaveBeenCalled();
     // What the study already held was judged at once: the page reads again to show it.
     await waitFor(() => expect(reads(server).length).toBeGreaterThan(before));
@@ -234,7 +233,7 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
   it("offers no search to a reader who may not start a run, and still says what there is", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study((raw) => { raw.abilities = ["read", "read_patient_level"]; })} />);
     await screen.findByRole("heading", { name: "P-0201" });
-    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
     await choose("P-0201");
     expect(await screen.findByText("还没有为 P-0201 找过试验。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
@@ -246,7 +245,7 @@ describe("给患者找试验 — the other direction is the way back", () => {
     await openDirection();
     await choose("P-0192");
     await screen.findByRole("heading", { name: "P-0192 的试验" });
-    await userEvent.click(screen.getByRole("radio", { name: "给试验找患者" }));
+    await userEvent.click(screen.getByRole("button", { name: "给试验找患者" }));
     expect(await screen.findByRole("heading", { name: "P-0201" })).toBeInTheDocument();
     expect(document.querySelector("[data-vcr-trial]")).toBeNull();
     expect(reads(server).at(-1)?.get("direction")).toBe("trial_to_patient");
@@ -258,7 +257,7 @@ describe("给患者找试验 — the other direction is the way back", () => {
     });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
-    await userEvent.click(screen.getByRole("radio", { name: "给患者找试验" }));
+    await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
     await waitFor(() => expect(reads(server).some((query) => query.get("direction") === "patient_to_trial")).toBe(true));
     expect(screen.getByRole("heading", { name: "P-0201" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "为该患者找试验" })).toBeNull();
