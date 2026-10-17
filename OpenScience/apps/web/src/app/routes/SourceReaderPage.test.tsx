@@ -818,13 +818,15 @@ describe("a document's page", () => {
       expect(mocks.getSource.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    it("says that nothing can be shown for a readable document the reading has nothing on", async () => {
+    it("writes no sentence for a readable document the reading has nothing on: the column holds what there is, and there is none", async () => {
       mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_image"), current: null });
       mocks.getSource.mockResolvedValue(picture);
       renderReader(readerAt("src_image"));
       await screen.findByRole("heading", { level: 1, name: picture.display.title });
       resize(TWO_COLUMN_MIN_WIDTH);
-      expect(await within(columnOf("points")!).findByText("没有可以显示的内容。")).toBeInTheDocument();
+      await waitFor(() => expect(mocks.getSourceUnderstanding).toHaveBeenCalled());
+      await waitFor(() => expect(within(columnOf("points")!).queryByRole("status", { name: "正在加载内容" })).toBeNull());
+      expect(columnOf("points")!.textContent?.trim()).toBe("");
     });
 
     it("says it could not load the key points, with a way to try again, and the original still shows", async () => {
