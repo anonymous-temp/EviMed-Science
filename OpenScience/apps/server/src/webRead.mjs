@@ -508,7 +508,12 @@ function upstreamStatusError(status, url) {
   if (status === 401) {
     return webReadError(403, "web_read_login_required", `${url.hostname} requires a login for this page; web reading never logs in.`);
   }
-  return webReadError(status >= 500 ? 502 : 400, "web_read_upstream_error", `${url.hostname} answered HTTP ${status}.`, { retryable: status >= 500 || status === 429 });
+  // The site's own status rides along: a 403 or 429 is a refusal of this reader that a reader elsewhere may not meet
+  // (`webReadFallbackReason`), which no other status of this code says.
+  return Object.assign(
+    webReadError(status >= 500 ? 502 : 400, "web_read_upstream_error", `${url.hostname} answered HTTP ${status}.`, { retryable: status >= 500 || status === 429 }),
+    { siteStatus: status },
+  );
 }
 
 /**

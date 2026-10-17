@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:d4006209ffc346bf3bc0e984f138a59323f590fed5cb724a596624d1655b0b65",
+  "version": "sha256:273f2480f6e80e36ff30c0300a2200dbacfc7b8b328978f4e61d6e2b1f364b69",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -1680,7 +1680,7 @@
     {
       "name": "mcp__evimed__web_search",
       "source": "mcp",
-      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address.",
+      "description": "Search the open web through the platform's search gateway. Use it for current information and anything public: official sites, documentation and release pages, policy and regulatory notices, companies and markets, news, and what bibliographic indexes do not carry. Results are search hits, not the pages themselves: read one with web_read before relying on it, and give the reader the page's own address. A hit may carry its date, its site and authority (0-4, the engine's rating of the site).",
       "inputSchema": {
         "type": "object",
         "properties": {

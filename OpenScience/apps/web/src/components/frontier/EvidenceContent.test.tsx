@@ -95,6 +95,8 @@ describe("question-based evidence content", () => {
     ).toBeInTheDocument();
     // Every [n] on the page opens its source: the title in the drawer's heading, the excerpt in its body.
     for (const link of screen.getAllByRole("link", { name: "查看来源 1" })) {
+      // A 24 px target (WCAG 2.5.8): the marks of a claim citing several sources stood too close (axe target-size, r19-guards2).
+      expect(link.className).toMatch(/\bmin-h-6\b.*\bmin-w-6\b/);
       await userEvent.click(link);
       const drawer = screen.getByRole("dialog", { name: "来源 1" });
       expect(drawer).toHaveTextContent("Primary trial");

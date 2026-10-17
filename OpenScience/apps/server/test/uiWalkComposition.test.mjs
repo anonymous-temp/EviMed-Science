@@ -183,6 +183,14 @@ test("a module's tabs show the same steps and stand at the same height, and the 
   // Only desktops are compared for the edge; a module's second study is its own group.
   const phone = Object.fromEntries(Object.entries(moduleTabs([8, 8, 8], { lefts: [16, 16, 24] })).map(([view, page]) => [view.replace("@desktop", "@phone"), page]));
   assert.deepEqual(familyFindings(phone), []);
+  // One answer is read inside the band (`band: "geo"` in the page table): its band is held to the tabs', and a taller one is named.
+  const withAnswer = (height) => ({ ...moduleTabs([8, 8, 8]), "geo-answer@desktop": { composition: good({
+    title: { text: "测试品牌", ...box(26, 32, 296) }, stepRail: { ...box(60), folded: false, count: 8, inChrome: true, steps: [] },
+    chrome: { ...box(60, height, 272, 1200), position: "sticky", sticky: true, held: null },
+    tablists: [{ label: "项目视图", tabs: 8, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100) }],
+  }) } });
+  assert.deepEqual(familyFindings(withAnswer(124)), []);
+  assert.match(familyFindings(withAnswer(160)).find((entry) => entry.rule === "module-chrome")?.text ?? "", /geo-answer 160 px/);
 });
 
 test("a finding of a rule is accepted by the baseline entry that names the rule, the page and a number it may not exceed", () => {

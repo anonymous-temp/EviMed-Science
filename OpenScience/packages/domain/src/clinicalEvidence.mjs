@@ -2323,6 +2323,24 @@ export function claimEvidenceSources(claim) {
 }
 
 /**
+ * The header line `web_read` writes into the snapshot of a page it got as
+ * DeepSeek Fetch's rendition rather than as the page's own bytes (2026-10-17;
+ * `RENDITION_LINE` in the MCP's web_read.py, held equal by its test). Compared
+ * character for character, and only among the snapshot's header lines — the
+ * block between its title and the page's text — so a page cannot label itself.
+ */
+export const RENDITION_SNAPSHOT_LINE = "- Read through: DeepSeek Fetch, a rendition of the page by another reader, not the page's own bytes";
+
+/**
+ * Which reader's rendition a preserved snapshot is, or null for the source's
+ * own bytes. @param {string} artifact @returns {"deepseek-fetch" | null}
+ */
+function snapshotRendition(artifact) {
+  const header = artifact.slice(0, 4096).split("\n\n", 3)[1];
+  return typeof header === "string" && header.split("\n").includes(RENDITION_SNAPSHOT_LINE) ? "deepseek-fetch" : null;
+}
+
+/**
  * Whether each claim's quotation is in the source it names, per claim, for a
  * reader (2026-09-17).
  *
@@ -2340,8 +2358,12 @@ export function claimEvidenceSources(claim) {
  *
  * A synthesized claim is `verified` only when every source it lists is.
  *
+ * A source that is another reader's rendition of a page (`RENDITION_SNAPSHOT_LINE`)
+ * carries `rendition: "deepseek-fetch"`: its quotation was checked against that
+ * rendition, not the page's own bytes. A label; it changes no status.
+ *
  * @param {{ matrix?: any, sourceArtifacts?: Map<string, string> | Record<string, string> }} input
- * @returns {{ claims: { claimId: string, claimType: string, status: string, sources: { artifactPath: string | null, status: string }[] }[], counts: Record<string, number> }}
+ * @returns {{ claims: { claimId: string, claimType: string, status: string, sources: { artifactPath: string | null, status: string, rendition?: "deepseek-fetch" }[] }[], counts: Record<string, number> }}
  */
 export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
   const artifactText = sourceArtifacts instanceof Map
@@ -2353,7 +2375,8 @@ export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
     if (!artifactPath || !validSupportingPassage(source?.supportQuote)) return { artifactPath, status: "no_quote" };
     const artifact = artifactText.get(artifactPath);
     if (!artifact) return { artifactPath, status: "source_unavailable" };
-    return { artifactPath, status: quoteIsPresent(artifact, source.supportQuote) ? "verified" : "quote_not_found" };
+    const rendition = snapshotRendition(artifact);
+    return { artifactPath, status: quoteIsPresent(artifact, source.supportQuote) ? "verified" : "quote_not_found", ...(rendition ? { rendition } : {}) };
   };
   const worst = ["quote_not_found", "source_unavailable", "no_quote", "verified"];
   /** @type {Record<string, number>} */
@@ -2362,7 +2385,7 @@ export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
     .filter((/** @type {any} */ claim) => claim && typeof claim === "object" && nonEmpty(claim.claimId))
     .map((/** @type {any} */ claim) => {
       const claimType = String(claim.claimType ?? "direct");
-      /** @type {{ artifactPath: string | null, status: string }[]} */
+      /** @type {{ artifactPath: string | null, status: string, rendition?: "deepseek-fetch" }[]} */
       let sources = [];
       let status = "derived";
       if (claimType !== "derived") {

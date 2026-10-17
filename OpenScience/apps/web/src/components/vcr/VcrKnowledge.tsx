@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, UsersRound } from "lucide-react";
 import {
   bindVcrPack,
   compareVcrDefinition,
@@ -493,13 +493,14 @@ export function ComparisonCard({ comparison, name }: { comparison: VcrComparison
 /** 人群定义库 on the module home: the account's definitions, their versions and the studies that used them. */
 export function VcrDefinitionsPanel() {
   const { state, reload } = useVcrLoad("vcr:library", () => getVcrLibrary());
-  if (state.kind === "error" && state.off) return <EmptyState title={VCR_OFF_SENTENCE} />;
+  if (state.kind === "error" && state.off) return <EmptyState icon={UsersRound} title={VCR_OFF_SENTENCE} />;
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   if (state.data.length === 0) {
     // The library is filled from a study (「存入定义库」 on its 人群 page, for a real cohort with rules), so the way to fill it is the studies.
     return (
       <EmptyState
+        icon={UsersRound}
         title="还没有人群定义"
         action={<Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "secondary" })}>去研究里存入</Link>}
       />

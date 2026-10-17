@@ -177,7 +177,8 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
           // drawer over it, which is what the address says (page-structure rule 6).
           narrow="drawer"
           selected={asked !== null && selected !== null}
-          listLabel="假设卡"
+          // Not 「假设卡」: the list's own Section is the region of that name (axe landmark-unique, r19-guards2).
+          listLabel="假设卡列表"
           detailLabel="假设卡的记录"
           detailTitle={selected?.name ?? "假设卡"}
           onCloseDetail={close}

@@ -34,17 +34,9 @@
     }
   },
   "handwrittenLists": {
-    "total": 28,
+    "total": 17,
     "files": {
-      "app/routes/EvidenceAuthorPage.tsx": 2,
-      "app/routes/EvidenceZonePage.tsx": 2,
-      "app/routes/EvidenceZonesPage.tsx": 1,
       "app/routes/GeoAnswerPage.tsx": 2,
-      "components/frontier/EvidenceChangeLog.tsx": 1,
-      "components/frontier/EvidenceCommunityCards.tsx": 1,
-      "components/frontier/EvidenceDiscussion.tsx": 1,
-      "components/frontier/FollowedEvidenceZones.tsx": 2,
-      "components/frontier/TopicRequests.tsx": 1,
       "components/geo/MembersDialog.tsx": 1,
       "components/geo/tabs/JourneyTab.tsx": 1,
       "components/geo/tabs/QuestionsTab.tsx": 1,

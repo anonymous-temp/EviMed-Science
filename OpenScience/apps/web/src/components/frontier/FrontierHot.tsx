@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
+import { buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
@@ -99,8 +100,8 @@ export function HotBoard({ state, onRetry }: {
   const board = state?.board ?? null;
   const body = !state ? <FrontierSkeleton />
     : state.error && !board ? <LoadError message={state.error} onRetry={onRetry} />
-      : !board ? <EmptyState icon={Flame} title="热榜还在准备" />
-        : board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" />
+      : !board ? <EmptyState icon={Flame} title="热榜还在准备" reason="准备好后会出现在这里。" />
+        : board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" action={<Link to="/app/frontier?view=all" className={buttonClasses({ variant: "secondary" })}>看全部动态</Link>} />
           : (
             <ol aria-label="热榜">
               {board.events.map((event) => <HotRow key={event.id} event={event} />)}

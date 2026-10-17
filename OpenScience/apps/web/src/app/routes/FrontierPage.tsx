@@ -635,6 +635,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       onFresh={() => { if (fresh) { pages.current = 1; show(fresh.listing); scrollToListTop(); } }}
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
+      onClear={() => { setFilters({ lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); }}
     />
   );
 

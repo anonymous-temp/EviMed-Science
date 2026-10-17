@@ -278,6 +278,8 @@ describe("the study list", () => {
     draw();
     // The header's button stands until the empty state has taken its place: wait for the state before pressing.
     await screen.findByText("还没有研究");
+    // A tab that counts nothing does not say 0: the number is for a list with something in it.
+    expect(screen.getAllByRole("tab")[0].textContent).toBe("研究");
     await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
     await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === "/vcr/studies")).toBe(true));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_9/chat"));
@@ -340,6 +342,31 @@ describe("the home's other views", () => {
     draw("/app/virtual-research?tab=precedents");
     await waitFor(() => expect(server.calls.some((call) => call.path === "/vcr/precedents")).toBe(true));
     expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
+  });
+
+  // The page has one row of controls (DESIGN.md rule 7): the libraries hand theirs to it instead of drawing a second under it.
+  it("puts 方法库's tier chips, count and 引入文献模型 in the page's one toolbar, beside the views", async () => {
+    draw("/app/virtual-research?tab=models");
+    await screen.findByRole("button", { name: /二线 NSCLC 多西他赛组 PFS · Weibull/ });
+    const toolbars = document.querySelectorAll("[data-toolbar]");
+    expect(toolbars).toHaveLength(1);
+    expect(toolbars[0]).toContainElement(screen.getByRole("tablist"));
+    expect(toolbars[0]).toContainElement(screen.getByRole("button", { name: "引入文献模型" }));
+    expect(toolbars[0]).toHaveTextContent(/\d+ 个模型/);
+    // And it is above the list it acts on.
+    expect(toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "模型" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("puts 试验先例's search in the same one toolbar, and takes 方法库's controls away when the view changes", async () => {
+    draw("/app/virtual-research?tab=models");
+    await screen.findByRole("button", { name: "引入文献模型" });
+    await userEvent.click(screen.getByRole("tab", { name: "试验先例" }));
+    expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
+    const toolbars = document.querySelectorAll("[data-toolbar]");
+    expect(toolbars).toHaveLength(1);
+    expect(toolbars[0]).toContainElement(screen.getByRole("tablist"));
+    expect(toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索先例" }));
+    expect(screen.queryByRole("button", { name: "引入文献模型" })).toBeNull();
   });
 
   it("calls the definitions' view 人群定义", async () => {

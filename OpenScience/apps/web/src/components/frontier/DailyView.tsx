@@ -16,7 +16,7 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
@@ -158,7 +158,9 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   const origin = useFrontierOrigin();
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
-  if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "暂无日报"} />;
+  // Nothing to read here is not a dead end: the page's own feed is a link away (DESIGN.md rule 8).
+  const toFeed = <Link to="/app/frontier" className={buttonClasses({ variant: "secondary" })}>看精选动态</Link>;
+  if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "暂无日报"} action={toFeed} />;
   const archive = state.index.slice(0, ARCHIVE_SHOWN);
   const pastIssues = (current: string | null) => archive.length > 0 && (
     <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? weekRange(entry.day) : shortDate(entry.day), checked: entry.day === current, onSelect: () => onDay(entry.day) }))}>
@@ -181,7 +183,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
               : weekly ? "暂无周报"
                 : asked ? `${dateLabel}没有日报：当天没有符合条件的内容时不出刊。`
                   : when ? `今日日报 ${when}发布` : "今日日报尚未发布"}
-        action={pastIssues(asked) || undefined}
+        action={pastIssues(asked) || toFeed}
       />
     );
   }
@@ -201,7 +203,8 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
           <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
           {(leadText || issue.lead.event) && (
-            <p className="mt-2 max-w-measure text-ui text-text-2">
+            // The issue's own text (`data-prose`), as a row's summary is: content of the issue, not a sentence of the page's.
+            <p data-prose="" className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}
               {issue.lead.event && (
                 <Link state={origin} onClick={rememberFrontierPosition} to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
@@ -221,7 +224,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
       {issue.aiMinute && (
         <section aria-labelledby="daily-ai-minute" className="mt-8">
           <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
-          <p className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
+          <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
       )}
 

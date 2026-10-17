@@ -16,7 +16,7 @@ import { compositionFacts, PAGES } from "@/test/compositionFixtures";
 const here = dirname(fileURLToPath(import.meta.url));
 const table = JSON.parse(readFileSync(join(here, "../../../../scripts/ops/page-templates.json"), "utf8")) as {
   templates: Record<string, { name: string; tablist: string; toolbar: string; stepRail: string; outline: string; longViewports: number }>;
-  views: Array<{ view: string; template: string; module?: string }>;
+  views: Array<{ view: string; template: string; module?: string; band?: string }>;
 };
 
 describe("the page table's templates", () => {
@@ -43,8 +43,9 @@ describe("the page table's templates", () => {
   it("give a module page the template that has a step rail on every tab, and nothing else", () => {
     const withRail = Object.entries(table.templates).filter(([, rule]) => rule.stepRail === "every-tab").map(([id]) => id);
     expect(withRail).toEqual(["T3"]);
-    for (const view of table.views.filter((entry) => entry.module)) expect(view.template, view.view).toBe("T3");
-    for (const view of table.views.filter((entry) => !entry.module)) expect(view.template, view.view).not.toBe("T3");
+    // A module's tabs, and a record read inside the module's band (`band`: one 循证 GEO answer, under 问题与回答).
+    for (const view of table.views.filter((entry) => entry.module || entry.band)) expect(view.template, view.view).toBe("T3");
+    for (const view of table.views.filter((entry) => !entry.module && !entry.band)) expect(view.template, view.view).not.toBe("T3");
   });
 
   it("let a reading page be read from the top in six windows and anything else in twelve", () => {

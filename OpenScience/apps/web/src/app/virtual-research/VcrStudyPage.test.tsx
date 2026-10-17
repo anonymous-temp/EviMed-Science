@@ -426,17 +426,31 @@ describe("what the study is doing, in the strip under the header", () => {
 });
 
 describe("what waits for the lead's word", () => {
-  it("is one line over the tab, with the number of computations and the CPU time they need, and the button that gives it", async () => {
+  it("is one line over the tab, with the number of computations and the CPU time they need — and the header's primary action is the button that gives it", async () => {
     draw();
     await heading();
     const note = document.querySelector("[data-note]") as HTMLElement;
     expect(note).toHaveTextContent("有 1 项计算等你确认预算，需 2.5 小时 CPU 时间");
     // The budget is CPU time; there is no money anywhere on it.
     expect(note.textContent).not.toMatch(/¥|元/);
-    expect(within(note).getByRole("button", { name: "确认预算" })).toBeInTheDocument();
+    // One primary action on a module page, and it is in the header's row — not in the body (DESIGN.md, template T3).
+    expect(within(note).queryByRole("button", { name: "确认预算" })).toBeNull();
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const confirm = within(header).getByRole("button", { name: "确认预算" });
+    expect(confirm.className).toMatch(/bg-accent/);
+    expect(document.querySelectorAll("main .bg-accent, [data-page-header] .bg-accent")).toHaveLength(1);
     // The figure opens what it counts: the same dialog.
     await userEvent.click(within(note).getByRole("button", { name: "1 项计算等待预算确认" }));
     expect(await screen.findByRole("dialog", { name: "计算预算" })).toBeInTheDocument();
+  });
+
+  it("makes the next step the quiet button while the budget waits, so the header still has one primary", async () => {
+    draw();
+    await heading();
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const next = within(header).queryByRole("button", { name: /^(下一步|接着做|重新做)：/ });
+    if (next) expect(next.className).not.toMatch(/bg-accent/);
+    expect(header.querySelectorAll(".bg-accent")).toHaveLength(1);
   });
 
   it("is not said to a reader who cannot confirm it: there is nothing for them to press and the sentence is the lead's", async () => {

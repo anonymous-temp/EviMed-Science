@@ -638,7 +638,8 @@ function probe(kind, arg, search) {
 function compositionRead(pathname) {
   const mode = process.env.FAKE_COMPOSITION || "";
   const box = (top, height, left, width) => ({ top, bottom: top + height, left: left === undefined ? 296 : left, right: (left === undefined ? 296 : left) + (width === undefined ? 1152 : width), width: width === undefined ? 1152 : width, height });
-  const geo = /^\/app\/geo\/geo_1(\/(visibility|accuracy|questions|sources|actions|plan|evidence))?$/.test(pathname);
+  // One answer is read inside the module band too (/answers/:id, band "geo" in the page table).
+  const geo = /^\/app\/geo\/geo_1(\/(visibility|accuracy|questions|sources|actions|plan|evidence|answers\/[^/]+))?$/.test(pathname);
   const vcr = /^\/app\/virtual-research\/std_/.test(pathname);
   const read = { viewport: { width: 1512, height: 945 }, height: 945, title: { text: "页面", ...box(26, 32) }, chrome: null, stepRail: null, tablists: [], viewGroups: [], toolbars: [],
     controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
@@ -967,9 +968,21 @@ test("the walk refuses every runtime start a page makes, and says how many", asy
   assert.deepEqual(report.failures, []);
 });
 
+test("a partial walk (OPEN_SCIENCE_WALK_ONLY) reads the views it names at both widths, takes no step that is not a page, and says that it is not a release walk", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_ONLY: "files,geo-visibility" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.only, ["files", "geo-visibility"]);
+  assert.deepEqual(Object.keys(report.pages).filter((name) => /@(desktop|phone)$/.test(name)).sort(), ["files@desktop", "files@phone", "geo-visibility@desktop", "geo-visibility@phone"]);
+  // The stale-chunk probe and the address-state steps are about the shell and the router, not about these pages.
+  assert.equal(log.filter((entry) => entry.goto).some((entry) => /inbox/.test(entry.goto)), false);
+  assert.match(stdout, /PARTIAL WALK \(files, geo-visibility\): not a release walk/);
+  const unknown = await walk({ OPEN_SCIENCE_WALK_ONLY: "no-such-view" }).catch((error) => error);
+  assert.match(String(unknown.message ?? unknown), /the walk wrote no report \(exit 2\)[\s\S]*names no view: no-such-view/);
+});
+
 test("a finding the baseline does not accept fails the walk, whatever kind of notice it used to be, and the delta says what", async () => {
   // R19 S4: 115 notices a run blocked nothing and belonged to nobody. With no baseline the same walk fails on every one of them.
-  const { code, stdout, report } = await walk({ OPEN_SCIENCE_WALK_BASELINE: "none" });
+  const { code, stdout, report } = await walk({ OPEN_SCIENCE_WALK_BASELINE: "none", FAKE_ROWS: "none" });
   assert.equal(code, 1);
   assert.deepEqual(report.baseline, { ...report.baseline, source: "none", profile: "owner", accepted: 0 });
   assert.ok(report.baseline.unaccepted > 20, `${report.baseline.unaccepted} findings were not accepted`);
@@ -1180,7 +1193,9 @@ test("a row that shows nothing when clicked fails the page it is on, on every pa
   for (const name of ROW_CLICK_PAGES) assert.ok(report.failures.includes(sentence(name)), name);
   assert.ok(report.failures.includes("memory-map@desktop: pressing the first mark opened no drawer"));
   assert.equal(report.failures.length, ROW_CLICK_PAGES.size + 2, report.failures.filter((line) => !line.includes("showed nothing")).join("\n"));
-  for (const name of ["account", "frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "autopilot", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
+  for (const name of ["frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "autopilot", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
+  // 设置 › 账户 is rows with their own buttons and no list that opens anything (the fixture walk could only report it unobservable).
+  assert.equal(ROW_CLICK_PAGES.has("account"), false);
 });
 
 test("a row that is a link to an outside address is not a row that shows nothing, even when the browser reports no new tab", async () => {
@@ -1206,11 +1221,13 @@ test("R13 first-row clicks: 循证 GEO's groups and findings are clicked like an
   assert.ok(!log.some((entry) => entry.reveal || entry.link), "no page is revealed or linked before its first row is clicked");
   for (const page of ["geo-questions", "geo-accuracy"]) assert.ok(log.some((entry) => entry.rowClick === `/app/geo/geo_1/${page.replace("geo-", "")}`), page);
   // Every R13 page was clicked, and what the first click opened was read where the page has a reading (the source's drawer, the task's page).
-  for (const name of ["geo-questions", "geo-accuracy", "inbox", "account", "geo", "frontier-zones"]) assert.deepEqual(report.pages[`${name}@desktop`].rowClicks, [{ label: "资料清单", shown: true }], name);
+  for (const name of ["geo-questions", "geo-accuracy", "inbox", "geo", "frontier-zones"]) assert.deepEqual(report.pages[`${name}@desktop`].rowClicks, [{ label: "资料清单", shown: true }], name);
   assert.deepEqual(report.pages["geo-sources@desktop"].rowClicks[0].after, { dialog: true, drawers: 1 });
   assert.equal(report.pages["autopilot@desktop"].rowClicks[0].after.pane, "conversation");
-  // The walk starts no runtime, so the task's frame container is compared and the notice says there was no iframe to compare.
-  assert.ok(report.notices.includes("autopilot@desktop: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"), report.notices.join("\n"));
+  // The walk starts no runtime, so the task's frame container is compared and an INFO line says there was no iframe to compare: no walk
+  // could fill it, so it is not a coverage gap (a fixture walk accepts none).
+  assert.ok(report.info.includes("autopilot@desktop: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"), report.info.join("\n"));
+  assert.equal(report.notices.some((line) => line.includes("holds no iframe")), false);
   // The knowledge base: a PDF opened on its own page, then the way back to a long list with the search it was found by.
   assert.ok(report.steps["files-return"].browserBack && report.steps["files-return"].back);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索资料和内容"), [["搜索资料和内容", "一份指南"]]);
@@ -1640,12 +1657,12 @@ test("the task page is read for its hooks, its pane, the frame over it and what 
     editors: 0, inputsInMain: 0, dialogs: 0, zoneIds: [],
   });
   // With the runtime up the iframe is compared; the same rectangle passes in silence.
-  assert.deepEqual(taskPageFindings("autopilot", good), { failures: [], notices: [] });
+  assert.deepEqual(taskPageFindings("autopilot", good), { failures: [], notices: [], info: [] });
 
   // The walk starts no runtime: the container is over the pane and holds no iframe, and the notice says what was and was not compared.
   const bare = read(taskPage({ frame: false }));
   assert.equal(bare.frameBox, null);
-  assert.deepEqual(taskPageFindings("autopilot", bare), { failures: [], notices: ["autopilot@desktop: not observable: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"] });
+  assert.deepEqual(taskPageFindings("autopilot", bare), { failures: [], notices: [], info: ["autopilot@desktop: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"] });
 
   // A frame that is not over the pane, a text box of the page's own, a dialog, an unmarked row, a missing surface: each its own notice.
   const off = { ...good, frameBox: { ...good.frameBox, top: 40 } };
@@ -1680,8 +1697,8 @@ test("the task page is read for its hooks, its pane, the frame over it and what 
   // A click that did not go to a task's page reads nothing of it.
   assert.deepEqual(taskPageFindings("autopilot", { ...good, path: "/app/autopilot" }).notices,
     ["autopilot@desktop: not observable: the first row did not go to a task's own page (the address is /app/autopilot), so the task page was not read"]);
-  assert.deepEqual(taskPageFindings("autopilot", null), { failures: [], notices: [] });
-  assert.deepEqual(afterClickFindings("autopilot", "taskPage", good), { failures: [], notices: [] });
+  assert.deepEqual(taskPageFindings("autopilot", null), { failures: [], notices: [], info: [] });
+  assert.deepEqual(afterClickFindings("autopilot", "taskPage", good), { failures: [], notices: [], info: [] });
   assert.deepEqual(afterClickFindings("autopilot", "taskPage", null), { failures: [], notices: [] });
 
   // The one failure is carried over from the drawer: a time zone is named, never shown by its identifier.
@@ -2204,7 +2221,7 @@ test("where a list page keeps its place is read from the address and from what i
   assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened, closed: null }).notices, ["memory@desktop: not observable: Back was not taken"]);
 });
 
-test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", () => {
+test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", async () => {
   const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "深入研究" })] : [])])]);
   assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
   assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
@@ -2214,7 +2231,9 @@ test("the event page's 深入研究 is read at the hand-off: the title, a link t
   assert.deepEqual(withState({ runtimeUiIntent: intent }), { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } });
   assert.deepEqual(withState({}), { path: "/app/chat", intent: null });
   assert.deepEqual(withState(undefined), { path: "/app/chat", intent: null });
-  assert.deepEqual(HANDOFF_FIELDS, ["draft", "kind", "projectId", "requestId", "resultRevision", "sessionId"]);
+  // The fields of the web's `RuntimeUiIntent`, read from its declaration: a field added there is a field the walk accepts.
+  const declared = (await readFile(path.join(repoRoot, "apps/web/src/lib/runtimeUiNavigation.ts"), "utf8")).match(/export interface RuntimeUiIntent \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.deepEqual(HANDOFF_FIELDS, [...declared.matchAll(/^\s+(\w+)\??:/gm)].map((match) => match[1]).sort());
 
   const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
   const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };

@@ -20,6 +20,7 @@ import { capsuleMethodsDirName, materializeCapsuleMethods, runtimeCapsuleMethods
 import { learnedMethodFamilyForRuntime } from "./learnedMethodMount.mjs";
 import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
+import { webSearchHasEngine } from "./webSearchGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
 import { rebaseRuntimeUiDocument } from "./runtimeUiDocument.mjs";
@@ -1591,10 +1592,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (publicSourceGatewayUrl) {
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;
     // Open-web search rides the same runtime token as the source gateway, and
-    // is only offered when the deployment actually has a metasearch backend.
-    // Its URL is the server's own route: the runtime never learns which
-    // aggregator, or which engines, sit behind it.
-    if (String(config.webSearchUrl ?? "").trim()) {
+    // is only offered when the deployment actually has an engine behind it
+    // (`webSearchHasEngine`). Its URL is the server's own route: the runtime
+    // never learns which aggregator, or which engines, sit behind it.
+    if (webSearchHasEngine(config)) {
       const webSearchGatewayUrl = String(gateways ? gateways.webSearch ?? "" : config.webSearchGatewayInternalUrl ?? "").trim();
       let parsedSearch;
       try {
@@ -1956,7 +1957,7 @@ function modelGatewayProviderUrl(config) {
  * @param {any} config @returns {string}
  */
 export function webSearchGatewayProviderUrl(config) {
-  if (!String(config.webSearchUrl ?? "").trim()) return "";
+  if (!webSearchHasEngine(config)) return "";
   const value = String(config.webSearchGatewayInternalUrl ?? "").trim();
   if (!value) return "";
   let url;

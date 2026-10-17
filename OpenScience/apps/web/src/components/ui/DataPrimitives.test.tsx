@@ -394,6 +394,13 @@ describe("HeatGrid sideways", () => {
     expect(within(table).getAllByRole("columnheader")[1]).not.toHaveClass("sticky");
   });
 
+  it("sets a row name in the regular weight unless it is the one in view: a th is bold by default, a seventh type pair (13/700)", () => {
+    render(<HeatGrid {...props} emphasis={{ row: "kimi" }} />);
+    const [kimi, off] = within(screen.getByRole("table")).getAllByRole("rowheader");
+    expect(kimi).toHaveClass("font-semibold");
+    expect(off).toHaveClass("font-normal");
+  });
+
   it("takes the page's ground when it is drawn on the page", () => {
     render(<HeatGrid {...props} ground="bg" />);
     for (const header of within(screen.getByRole("table")).getAllByRole("rowheader")) expect(header).toHaveClass("bg-bg");

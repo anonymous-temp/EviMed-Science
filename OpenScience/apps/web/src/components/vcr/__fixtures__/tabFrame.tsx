@@ -3,7 +3,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { vi } from "vitest";
 import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
-import { StudyFrameContext, type StudyFrameApi } from "../studyFrameContext";
+import { StudyFrameContext, ToolbarSlotContext, type StudyFrameApi } from "../studyFrameContext";
 
 /**
  * What the study frame gives a tab, for a test that renders one tab on its own (R19).
@@ -46,6 +46,20 @@ export function TabFrame({ studyId, spies, version = "v1", children }: {
       {toolbar ? <div data-page-chrome=""><Toolbar {...toolbar} /></div> : null}
       <div data-page-body="">{children}</div>
     </StudyFrameContext.Provider>
+  );
+}
+
+/**
+ * The toolbar slot of the module home (`HomeFrame`), for a test that renders one of its libraries (方法库, 试验先例) on its own: the same
+ * context, and the same real `Toolbar` above the body in document order.
+ */
+export function ToolbarSlotFrame({ children }: { children: ReactNode }) {
+  const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
+  return (
+    <ToolbarSlotContext.Provider value={setToolbar}>
+      {toolbar ? <div data-page-chrome=""><Toolbar {...toolbar} /></div> : null}
+      <div data-page-body="">{children}</div>
+    </ToolbarSlotContext.Provider>
   );
 }
 

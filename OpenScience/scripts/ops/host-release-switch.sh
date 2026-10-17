@@ -457,7 +457,9 @@ echo "=== switched to ${EXPECTED_RELEASE_ID} ==="
 # `start_runtime`, logs out, and writes its report and screenshots to
 # `shared/ui-walk/<release>/`. After retention on purpose: the walk judges the
 # pages, not whether the switch may finish, and its failure leaves the release
-# in front — it says so, and exits non-zero.
+# in front — it says so, and exits non-zero. It is always the whole walk:
+# `OPEN_SCIENCE_WALK_ONLY` (a partial walk, for the one who changed a page) is
+# emptied here whatever ui-walk.env says.
 WALK_ENV="${ROOT}/shared/ui-walk.env"
 if [ ! -f "$WALK_ENV" ]; then
   echo "=== UI WALK NOT RUN: ${WALK_ENV} is missing (docs/WEB_OPERATIONS_RUNBOOK.md, \"Post-release UI walk\") ==="
@@ -472,7 +474,7 @@ mkdir -p "$walk_out"
 set +e
 docker run --rm --network host --env-file "$WALK_ENV" \
   -e OPEN_SCIENCE_WALK_PASSWORD_FILE=/run/walk/password -e OPEN_SCIENCE_WALK_OUT=/walk-out \
-  -e OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/chromium \
+  -e OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/chromium -e OPEN_SCIENCE_WALK_ONLY= \
   -v "${walk_password}:/run/walk/password:ro" -v "${walk_out}:/walk-out" \
   -v "${ROOT}/current/OpenScience/scripts/ops/ui-walk.mjs:/walk/ui-walk.mjs:ro" \
   --entrypoint sh "$walk_image" -c \

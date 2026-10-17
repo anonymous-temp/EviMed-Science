@@ -1,17 +1,17 @@
 {
-  "version": "2.1.3",
+  "version": "2.1.4",
   "artifacts": {
     "dsh-theme.json": "sha256:2beb7f3f91abe7ee27dbffb2447f5bc9def6c5cc64ec8c2ea376455ab24fff37",
-    "dtcg/base.tokens.json": "sha256:5763d689d47032b869a21f2a826d93c58cd57cf6600c8603ccda4b5a4ea5edf3",
-    "dtcg/dark.tokens.json": "sha256:e4ae6427653bea5ed720841e979718ef1eb89c461bfe81ba59a13c25fedfadc9",
-    "dtcg/evimed.resolver.json": "sha256:46016e230d37057d9e6a377f489796ad53f6c1205ae942e696dc5ffc611682a6",
-    "dtcg/light.tokens.json": "sha256:f83bfb32b8dd3277eafec3cf07ab985cbf5b8d0239a6ab1c3182507d996a40fc",
-    "dtcg/motion-full.tokens.json": "sha256:f5dcd7d1ef629661fa7cdf98608d7a5bd273ff77cabf814a722e8f59c7f1665b",
-    "dtcg/motion-reduced.tokens.json": "sha256:cd8d229cf43791e49e30c3ed0d1ffe6ebd8776c9d4883fb03752ee1945cab776",
-    "echarts-theme.json": "sha256:6dca44fdb195628e55546990a9e3c612c49075f4af6453eab8e0675a44bf4fe6",
-    "element-plus.css": "sha256:847ed701297f840b71414f7bd38628a96d3dd12ad6974a279d3922922c64fca2",
-    "figma-tokens.json": "sha256:a5cea3213ca9d732a8ca838f3ce3ea4a88e5c2a011c8ba4ed61b5d2a335f1bf7",
-    "tailwind-preset.js": "sha256:7391287adaa7c13df119d3bd7ed255374db36472582e8a414e3d36287d935d20",
-    "tokens.css": "sha256:abd99b30c61ad4a8b67a2112d35a2da436fc4ceeb96f37b22ae489c17a7834ac"
+    "dtcg/base.tokens.json": "sha256:d999e8ad2c05f3e487a4f9b3ed28181bde61cb82c130a34f8e833dfe6e7cfaa9",
+    "dtcg/dark.tokens.json": "sha256:1e7cfa4173d8f1ca9f8182eb57802a057b936b2c8d9ea53e7520c933a1178e90",
+    "dtcg/evimed.resolver.json": "sha256:7e4a9a7ac41fc27a57d6e12b9f42bce8c9420cace4219c3873e90ac1c73cecc6",
+    "dtcg/light.tokens.json": "sha256:cc62df04022b069754a306c85335022c896deb937a79ddf5ac9bb062b6dc7a9b",
+    "dtcg/motion-full.tokens.json": "sha256:13472e97363b12b0012145d68f588c038ad59e5a3a159f456a9f9abbb35fb9fb",
+    "dtcg/motion-reduced.tokens.json": "sha256:f3495d2802384fec4c2f132a7f1323440314b7ef1730baa85c407241984103dc",
+    "echarts-theme.json": "sha256:dcfb53553c7ec5cd49f32f6010fbd44574ac64154e090f6edc17bab437c2bd03",
+    "element-plus.css": "sha256:fc0e500e8fc2558e533b6dd7e1b0b0503e0a3e1e6cac2db5eea4bc2ba74e6b32",
+    "figma-tokens.json": "sha256:97603ffac2a53d07f3539fcc76ec3dec181fbc188c49f80f3c46c6865081b1cd",
+    "tailwind-preset.js": "sha256:8eef8f3a78890f4bc49eb97d42290a48c3154a7819ad87fe62f96ae7724218f9",
+    "tokens.css": "sha256:47d2bdcd1759b9f09bb254d55e7a567d4e45b5fbbcb89248deacf2393510d5f1"
   }
 }

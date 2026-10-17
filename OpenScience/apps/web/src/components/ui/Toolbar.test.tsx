@@ -95,6 +95,17 @@ describe("Toolbar", () => {
     expect(screen.getByRole("button", { name: "筛选，已选 2 项" })).toBeInTheDocument();
   });
 
+  it("keeps the search in the row on a phone, taking what is left, so a band with a search is as tall as one without", () => {
+    // 循证 GEO at 390 px: the search took a row of its own and the band of five tabs was 160 px, of three 124 (module-chrome).
+    narrow();
+    render(<Page onSelect={vi.fn()} />);
+    const end = screen.getByRole("searchbox").closest("div.ml-auto") as HTMLElement;
+    expect(end.className).toMatch(/max-sm:flex-1/);
+    expect(end.className).not.toMatch(/basis-full/);
+    // The search keeps room to type in (112 px); the count beside it gives way first.
+    expect(screen.getByRole("searchbox").closest("label")!.className).toMatch(/max-sm:min-w-28/);
+  });
+
   it("keeps a pinned group of chips on the row on a phone — the page's own views — and folds the rest", async () => {
     narrow();
     const changed = vi.fn();

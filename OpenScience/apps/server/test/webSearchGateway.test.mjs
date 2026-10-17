@@ -4,6 +4,7 @@
 // from "nothing has been published on this".
 import assert from "node:assert/strict";
 import test from "node:test";
+import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { createWebSearchGatewayHandler, WEB_SEARCH_GATEWAY_PATH } from "../src/webSearchGateway.mjs";
 
 const runtimeManager = { assertActiveModelGatewayToken() {} };
@@ -325,7 +326,7 @@ test("a Bailian search is reserved against the researcher's caps and settled on 
   assert.equal(reserve.userId, "alice");
   assert.equal(reserve.projectId, "paper1");
   assert.equal(reserve.runId, "run-7", "charged to the run the project is running, like the kernel's calls");
-  assert.equal(reserve.priceVersion, "evimed-reference-2026-09-28");
+  assert.equal(reserve.priceVersion, REFERENCE_PRICE_LIST.version);
   assert.equal(reserve.dailyLimit, 20);
   assert.equal(reserve.weeklyLimit, 100);
   assert.equal(reserve.runLimit, 5);

@@ -29,6 +29,15 @@ const showWithToolbar = (daily: FrontierDaily, props: { weekly?: boolean; onDay?
   return render(<MemoryRouter><Toolbar label="简报的控制" filters={controls.filters} actions={controls.actions} /><DailyIssue state={current} onDay={() => {}} {...props} /></MemoryRouter>);
 };
 
+describe("the issue's own text", () => {
+  it("marks the lead's summary and AI 一分钟 as the issue's prose, as a row's summary is content and not a sentence of the page", () => {
+    // The fixture walk read both as sentences standing alone at 390 px (orphan-sentence, r19-guards2).
+    show(issue({ lead: { item: frontierItem({ id: "lead", title: "头条试验" }), text: "随机、双盲、对照试验纳入 1,264 名成人。", event: null }, aiMinute: "今天与临床相关的 AI 进展有 3 条。" }));
+    expect(screen.getByText("随机、双盲、对照试验纳入 1,264 名成人。").closest("[data-prose]")).not.toBeNull();
+    expect(screen.getByText("今天与临床相关的 AI 进展有 3 条。").closest("[data-prose]")).not.toBeNull();
+  });
+});
+
 describe("the issue's header", () => {
   it("is the date and how long the issue takes to read, and holds no control: they are the page toolbar's (R19, audit D C1c)", () => {
     show(issue());
@@ -181,8 +190,9 @@ describe("a day without an issue", () => {
     showEmpty(empty());
     expect(screen.getByText("今日日报尚未发布")).toBeInTheDocument();
     expect(screen.queryByText(/\d{2}:\d{2}/)).not.toBeInTheDocument();
-    // With nothing published at all there is no past to open.
+    // With nothing published at all there is no past to open — and the page is still not a dead end: the feed is a link away.
     expect(screen.queryByRole("button", { name: "往期" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "看精选动态" })).toHaveAttribute("href", "/app/frontier");
   });
 
   it("lets the reader open a past issue from the empty state when there are any, for the real day that has none", async () => {
@@ -202,6 +212,7 @@ describe("a day without an issue", () => {
   it("keeps saying 暂无日报 where the server has no daily at all, and 暂无周报 for a week", () => {
     showEmpty(empty({ index: null }));
     expect(screen.getByText("暂无日报")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "看精选动态" })).toBeInTheDocument();
     cleanup();
     showEmpty(empty(), { weekly: true });
     expect(screen.getByText("暂无周报")).toBeInTheDocument();

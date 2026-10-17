@@ -241,6 +241,18 @@ test("a module's tabs read in the browser show the same steps at the same height
   assert.match(familyFindings(lower).map((entry) => entry.text).join("\n"), /geo@desktop: the tab row stands at a different height on some tabs: geo-overview \d+ px, geo-visibility \d+ px, geo-plan \d+ px/);
 });
 
+test("a page that scrolled itself on load is read from its top and put back where it was", { skip }, async () => {
+  // A GEO answer brings its first wrong sentence up as it opens: read where it had moved to, its band stood 10 px above its tabs'.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setContent(framed({ body: section(rows(3)) + LONG }));
+  const atTop = await page.evaluate(measureComposition, [{ hold: true }]);
+  await page.evaluate(() => { globalThis.document.querySelector("main").scrollTop = 10; });
+  const moved = await page.evaluate(measureComposition, [{ hold: true }]);
+  assert.equal(moved.tablists[0].top, atTop.tablists[0].top);
+  assert.equal(moved.title.top, atTop.title.top);
+  assert.equal(await page.evaluate(() => globalThis.document.querySelector("main").scrollTop), 10, "put back where it was");
+});
+
 test("the page's scroll area is found, measured and moved: the app scrolls inside a container, not the window", { skip }, async () => {
   await page.setViewportSize({ width: 1512, height: 945 });
   await page.setContent(framed({ body: section(rows(3)) + LONG }));

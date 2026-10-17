@@ -13,6 +13,8 @@ vi.mock("@/lib/evidenceUpkeepClient", async (importOriginal) => ({ ...(await imp
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), fetchFrontierItem: vi.fn() }));
 const capsule = vi.hoisted(() => ({ subscribeZone: vi.fn(), unsubscribeZone: vi.fn(), zoneSubscriptionStatus: vi.fn() }));
 vi.mock("@/lib/capsuleShareClient", () => capsule);
+// The deployment offers the project reference and the community column (`/api/me` features); the components ask before they call.
+vi.mock("@/lib/meFeature", () => ({ useMeFeature: () => "on" }));
 vi.mock("@/lib/projects", () => {
   const state = { currentId: "project-a", projects: [{ id: "project-a", name: "房颤研究" }] };
   return { useProjectStore: (select: (value: typeof state) => unknown) => select(state) };

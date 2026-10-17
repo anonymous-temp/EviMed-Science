@@ -21,8 +21,9 @@
  * @module @evimed/domain/metering
  */
 
-/** What a metered request consumed. */
-export const RESOURCE_TYPES = Object.freeze(['model', 'asr', 'embedding', 'specialist-job', 'storage'])
+/** What a metered request consumed. `tool-request` is a provider tool billed per successful call (DeepSeek's
+ *  Search and Fetch), not per token. */
+export const RESOURCE_TYPES = Object.freeze(['model', 'asr', 'embedding', 'specialist-job', 'storage', 'tool-request'])
 
 /** Why a credit ledger row exists. */
 export const CREDIT_REASONS = Object.freeze(['topup', 'run', 'episode', 'refund', 'adjust'])
@@ -125,6 +126,8 @@ export function isPeak(at) {
  * @property {number} embeddingPerMillion
  * @property {Record<string, number>} specialistJob
  * @property {number} storagePerGigabyteDay
+ * @property {Record<string, { perThousand: number, currency?: string }>} [toolRequest]  price per 1,000 successful
+ *   requests of a provider tool billed by the call; `currency` as for a model row
  */
 
 /**
@@ -260,7 +263,7 @@ const referencePrices20260924 = deepFreeze({
  * (https://help.aliyun.com/zh/model-studio/context-cache). No night rate.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20260928 = deepFreeze({
   ...referencePrices20260924,
   version: 'evimed-reference-2026-09-28',
   effectiveFrom: '2026-09-28T00:00:00.000Z',
@@ -268,6 +271,33 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   model: {
     ...referencePrices20260924.model,
     'qwen-plus': { cacheHit: 0.16, cacheMiss: 0.8, output: 2, offPeak: false },
+  },
+})
+
+/**
+ * The 2026-09-28 rates plus DeepSeek's two tool APIs, opened on 2026-10-17 and
+ * asked by the control plane's gateways: Search behind the web-search gateway,
+ * Fetch as the second reader of `web_read`. Each is billed per successful
+ * request — HTTP 200 with a result: a search with at least one row, a fetch
+ * with the page's text; a failure, an empty search or a timeout is not billed
+ * — at ¥5 per thousand, with no token count, no cache tier and no night rate
+ * (https://api-docs.deepseek.com/zh-cn/guides/search, 计费, read 2026-10-17
+ * through this platform's own web_read). In yuan, like the model rows: the
+ * account is billed in yuan, so its own table is the price, not the English
+ * page's $0.75 converted.
+ *
+ * `deepseek-flash` is served by DeepSeek-V4.1-Flash-1017 from 2026-10-17 at
+ * the same price and through the same method, so its row does not move.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20260928,
+  version: 'evimed-reference-2026-10-17',
+  effectiveFrom: '2026-10-17T00:00:00.000Z',
+  modelSource: `${referencePrices20260928.modelSource} · https://api-docs.deepseek.com/zh-cn/updates/ · https://api-docs.deepseek.com/zh-cn/guides/search`,
+  toolRequest: {
+    'deepseek-search': { perThousand: 5 },
+    'deepseek-fetch': { perThousand: 5 },
   },
 })
 
@@ -299,7 +329,8 @@ const priceLists = deepFreeze({
   'evimed-reference-2026-09-10': referencePrices20260910,
   'evimed-reference-2026-09-23': referencePrices20260923,
   'evimed-reference-2026-09-24': referencePrices20260924,
-  'evimed-reference-2026-09-28': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-09-28': referencePrices20260928,
+  'evimed-reference-2026-10-17': REFERENCE_PRICE_LIST,
 })
 
 /**
@@ -382,7 +413,7 @@ export function priceListAt(instant, registry = priceLists) {
  * from `priceListFor`, or an `undefined` from a lookup that missed — and
  * nothing is priced.
  *
- * @param {{ resourceType: string, model?: string, cacheHit?: number, cacheMiss?: number, output?: number, minutes?: number, tokens?: number, jobType?: string, gigabyteDays?: number, peak: boolean }} usage
+ * @param {{ resourceType: string, model?: string, cacheHit?: number, cacheMiss?: number, output?: number, minutes?: number, tokens?: number, jobType?: string, gigabyteDays?: number, tool?: string, requests?: number, peak: boolean }} usage
  * @param {...(PriceList | null | undefined)} prices  omit to price at the current list; otherwise the resolved list to price against
  * @returns {{ cost: number, priced: boolean, currency: string }}
  */
@@ -421,6 +452,15 @@ export function priceUsage(usage, ...prices) {
       // Storage is not a request and has no peak window; applying one would
       // charge a user less for the same disk at night, which is nonsense.
       return { cost: round((Number(usage.gigabyteDays) || 0) * list.storagePerGigabyteDay), priced: true, currency }
+    case 'tool-request': {
+      // Billed by the call, around the clock: no night rate applies. A list
+      // from before the tool existed cannot price it, and says so.
+      const rate = list.toolRequest?.[String(usage.tool ?? '')]
+      if (!rate) return { cost: 0, priced: false, currency }
+      const exchange = !rate.currency || rate.currency === currency ? 1 : Number(list.exchangeRates?.[rate.currency]?.rate)
+      if (!Number.isFinite(exchange) || exchange <= 0) return { cost: 0, priced: false, currency }
+      return { cost: round(((Number(usage.requests) || 0) / 1_000) * rate.perThousand * exchange), priced: true, currency }
+    }
     default:
       return { cost: 0, priced: false, currency }
   }

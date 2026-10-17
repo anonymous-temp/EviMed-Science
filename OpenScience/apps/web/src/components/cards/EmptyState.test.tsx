@@ -22,10 +22,11 @@ describe("EmptyState", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("renders the title alone when icon, description, and action are omitted", () => {
+  it("draws the empty tray as its mark when a page names none, so no empty state is left without one", () => {
     const { container } = render(<EmptyState title="知识库服务暂时不可用" />);
     expect(screen.getByText("知识库服务暂时不可用")).toBeInTheDocument();
-    expect(container.querySelector("svg")).not.toBeInTheDocument();
+    // The mark is the state's first child, ahead of the title: the walk reads it from there.
+    expect(container.firstElementChild?.firstElementChild?.tagName.toLowerCase()).toBe("svg");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

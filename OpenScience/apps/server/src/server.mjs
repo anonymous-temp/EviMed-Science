@@ -187,6 +187,7 @@ import {
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools.mjs";
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
@@ -5045,6 +5046,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const repositoryImport = new PersonalSkillRepositoryImport({ transport: webTransport, skills: skillLibraryService });
     skillLibraryService.repositoryPreview = (user, body) => repositoryImport.preview(user, body);
   }
+  // DeepSeek's Search and Fetch (2026-10-17): one client for the process, because its pacers are the account's rate.
+  // Search answers beside SearXNG and Bailian; Fetch is web_read's second reader. Booked like the Bailian search.
+  const deepseekTools = createDeepSeekTools(config, {
+    fetchImpl: overrides.deepseekToolsFetch ?? globalThis.fetch,
+    usageLedger,
+    attributeRun,
+    runPurpose,
+    runScope: autopilotRunScope,
+  });
   const webReader = createWebReader(config, {
     transport: webTransport,
     renderer: overrides.webRenderer ?? createConfiguredWebRenderer(config),
@@ -5061,6 +5071,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     pdfTransport: webTransport,
     connectorCredentials,
     webReader,
+    deepseekTools,
     documentParser,
     // What a run preserved becomes a knowledge-base source the way an upload
     // does (`writeProjectUpload`), re-verified against its capture manifest on
@@ -5099,6 +5110,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageLedger,
     attributeRun,
     runScope: autopilotRunScope,
+    deepseekTools,
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
@@ -6325,6 +6337,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runMetrics,
           imMetrics: im.service ? () => im.service.metrics() : null,
           webReader,
+          deepseekTools,
           sourceUpdates,
           sourceChanges,
           edgeProxy,
@@ -6584,6 +6597,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
+              // The community column of an official zone, as its route decides (evidenceCommunity.mjs): its switch and the frontier's audience.
+              evidenceCommunity: Boolean(evidenceCommunity) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).
@@ -9337,7 +9352,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null, capsuleService = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -9497,6 +9512,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   });
   // Web reading's outcomes and limits (webRead.mjs).
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  // DeepSeek's Search and Fetch: how each request ended, and the account's rate biting (deepseekTools.mjs).
+  for (const family of deepseekToolMetricFamilies(deepseekTools?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of alertReceiver?.metricFamilies() ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceChangeMetricFamilies(sourceChanges?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);

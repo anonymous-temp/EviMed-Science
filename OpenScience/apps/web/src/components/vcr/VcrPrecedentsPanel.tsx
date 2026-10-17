@@ -1,6 +1,6 @@
 import { registryCoverageSummary, VcrRegistryCoverage } from "./VcrRegistryCoverage";
 import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Library } from "lucide-react";
 import { getVcrPrecedents, type VcrPrecedent } from "@/lib/vcrClient";
 import { safeLink } from "@/lib/frontierClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -8,8 +8,8 @@ import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { FactList, type Fact } from "@/components/ui/FactList";
-import { Toolbar } from "@/components/ui/Toolbar";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { useVcrToolbar } from "./studyFrameContext";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { numberText } from "./vcrText";
@@ -36,37 +36,42 @@ export function VcrPrecedentsPanel() {
   const [query, setQuery] = useState("");
   const [asked, setAsked] = useState("");
   const { state, reload } = useVcrLoad(`vcr:precedents:${asked}`, () => getVcrPrecedents(asked ? { q: asked } : {}));
-  if (state.kind === "error" && state.off) return <EmptyState title={VCR_OFF_SENTENCE} />;
+  const off = state.kind === "error" && state.off === true;
+  const unavailable = state.kind === "ready" && !state.data.available;
+  // The search and the count are the page's one toolbar, beside its views; a library that is not composed here has neither.
+  useVcrToolbar(off || unavailable
+    ? null
+    : {
+      label: "试验先例的检索",
+      search: {
+        label: "搜索先例",
+        value: query,
+        onChange: (next) => {
+          setQuery(next);
+          if (!next.trim()) setAsked("");
+        },
+        onClear: () => { setQuery(""); setAsked(""); },
+        inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
+      },
+      summary: state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined,
+    });
+  if (off) return <EmptyState icon={Library} title={VCR_OFF_SENTENCE} />;
   if (state.kind === "ready" && !state.data.available) {
     return (
       <div data-vcr-precedents-unavailable="">
-        <EmptyState title={state.data.message ?? "试验先例库在本部署尚未接入。"} />
+        <EmptyState icon={Library} title={state.data.message ?? "试验先例库在本部署尚未接入。"} />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <Toolbar
-        label="试验先例的检索"
-        search={{
-          label: "搜索先例",
-          value: query,
-          onChange: (next) => {
-            setQuery(next);
-            if (!next.trim()) setAsked("");
-          },
-          onClear: () => { setQuery(""); setAsked(""); },
-          inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
-        }}
-        summary={state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined}
-      />
-
       {state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
           : state.data.precedents.length === 0
             ? (
               <EmptyState
+                icon={Library}
                 title={asked ? "没有找到先例" : "先例库里还没有先例"}
                 action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
               />

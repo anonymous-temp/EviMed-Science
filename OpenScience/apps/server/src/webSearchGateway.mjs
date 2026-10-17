@@ -26,10 +26,17 @@
 //
 // The Bailian half is a paid model call, and it is metered like one (purpose
 // `web-search`, 2026-09-28): until then its spend reached no ledger.
-import { createHash, randomUUID } from "node:crypto";
+//
+// A third since 2026-10-17: DeepSeek's own search API (deepseekTools.mjs),
+// asked with the deployment's DeepSeek key beside the other two. It knows each
+// result's day and its site, and ranks them itself (`rerank_score`), so its
+// rows lead each round of the merge; it is paid per request and metered the
+// same way, and a query over its 128-character limit is not sent to it.
 import { setTimeout as delay } from "node:timers/promises";
-import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
+import { isPeak, priceUsage } from "@evimed/domain";
 import { edgeFetch, edgeStats } from "./edgeProxy.mjs";
+import { DEEPSEEK_SEARCH_MAX_QUERY, DeepSeekToolError, createDeepSeekTools } from "./deepseekTools.mjs";
+import { GatewaySpendRefusal, reserveGatewaySpend } from "./gatewaySpend.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 const gatewayPath = "/internal/search/v1/query";
@@ -172,8 +179,10 @@ function searchEndpoint(value) {
 
 /** Trim one result to what a reader of the report needs. Raw SearXNG results
  *  carry parsed engine internals, per-engine scores, and repeated metadata;
- *  passing that through would spend the run's context on bookkeeping.
- *  @returns {{ title: string, url: string, snippet: string, engine: string | null, publishedDate: string | null } | null} */
+ *  passing that through would spend the run's context on bookkeeping. A
+ *  DeepSeek row also says which site it is and how DeepSeek rates that site's
+ *  authority (0–4); those two are kept only where an engine gave them.
+ *  @returns {{ title: string, url: string, snippet: string, engine: string | null, publishedDate: string | null, site?: string, authority?: number } | null} */
 function normalizedRow(row) {
   const url = typeof row?.url === "string" ? row.url.trim() : "";
   if (!url || !/^https?:\/\//i.test(url)) return null;
@@ -184,20 +193,32 @@ function normalizedRow(row) {
     snippet: snippet.length > maxSnippetLength ? `${snippet.slice(0, maxSnippetLength)}…` : snippet,
     engine: String(row?.engine ?? "").trim() || null,
     publishedDate: typeof row?.publishedDate === "string" ? row.publishedDate : null,
+    ...(typeof row?.site === "string" && row.site ? { site: row.site } : {}),
+    ...(Number.isInteger(row?.authority) ? { authority: row.authority } : {}),
   };
 }
 
-/** Interleave the sources' results, first-come per URL, up to `limit`: neither
- *  source's ranking outranks the other's, and a page both found appears once. */
+/** Interleave the sources' results up to `limit`: neither source's ranking
+ *  outranks the other's, and a page several found appears once. The lists come
+ *  in the order they lead each round — DeepSeek's (already in its own
+ *  `rerank_score` order), then SearXNG's, then Bailian's — and a page found by
+ *  more than one keeps the row of the earliest list, so DeepSeek's day, site
+ *  and authority are not lost to a plainer copy of the same page. */
 function mergedResults(lists, limit) {
+  const keyOf = (/** @type {{ url: string }} */ row) => row.url.replace(/[#?].*$/, "").toLowerCase();
+  const claimed = new Set();
+  const queues = lists.map((rows) => {
+    const queue = rows.map(normalizedRow).filter((row) => row !== null && !claimed.has(keyOf(row)));
+    for (const row of queue) claimed.add(keyOf(row));
+    return queue;
+  });
   const seen = new Set();
   const results = [];
-  const queues = lists.map((rows) => rows.map(normalizedRow).filter(Boolean));
   for (let index = 0; results.length < limit && queues.some((queue) => index < queue.length); index += 1) {
     for (const queue of queues) {
       const row = queue[index];
       if (!row) continue;
-      const key = row.url.replace(/[#?].*$/, "").toLowerCase();
+      const key = keyOf(row);
       if (seen.has(key)) continue;
       seen.add(key);
       results.push(row);
@@ -284,12 +305,6 @@ const bailianMaxTokens = 8;
  */
 const bailianReservedPromptTokens = 16_000;
 
-/** @param {...unknown} values the smallest positive limit, or 0 for none */
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
-}
-
 /** The provider's own count from a DashScope answer, or null when it sent none.
  *  @param {any} usage */
 function bailianUsage(usage) {
@@ -358,49 +373,19 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * @returns {Promise<any[]>}
  */
 async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose, runScope = null }) {
-  if (!usageLedger) {
-    if (config.requireDurableUsageLedger === true) {
-      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: its spend cannot be recorded right now.");
-    }
-    return (await bailianSearch(config, request, fetcher, signal)).rows;
-  }
   const model = String(config.webSearchBailianModel ?? "").trim() || "qwen-plus";
   const at = new Date();
   const peak = isPeak(at);
-  const attributed = caller.runId == null && attributeRun
-    ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
-    : null;
-  let runId = caller.runId ?? attributed ?? null;
-  let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
-  // A scheduled execution in the researcher's own runtime is booked under its episode and held to its limit, as its model calls are
-  // (`autopilotEpisodeScope.mjs`). A scope that cannot be read makes this search unavailable rather than uncapped.
-  if (caller.runId == null && attributed && runScope) {
-    const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch(() => {
-      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: the spending limit of this run cannot be read.");
-    });
-    if (scope) { runId = scope.usageRunId; runLimit = Number(scope.runLimit) || 0; }
-  }
-  // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
-  // than costing the call, and so does this one — a search is never lost for a column it writes.
-  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";
   const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
   let reservation;
   try {
-    reservation = await usageLedger.reserveModel({
-      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose, model,
-      priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
-      requestFingerprint: createHash("sha256").update(JSON.stringify({ model, query: request.query, strategy: "turbo" })).digest("hex"),
-      estimatedCost: estimate.cost,
-      dailyLimit: purpose === "evolution" ? Number(config.evolutionDailyBudgetCny) || 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-      weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-      runLimit: purpose === "evolution" ? 0 : runLimit,
-      now: at,
-    });
+    reservation = await reserveGatewaySpend({ config, usageLedger, caller, attributeRun, runPurpose, runScope, model, estimatedCost: estimate.cost,
+      fingerprint: { model, query: request.query, strategy: "turbo" }, at });
   } catch (error) {
-    throw gatewayError(503, "web_search_unavailable", error?.code === "usage_budget_exceeded"
-      ? "The Bailian search is unavailable: this account's spending limit is reached."
-      : "The Bailian search is unavailable: its spend cannot be recorded right now.");
+    if (!(error instanceof GatewaySpendRefusal)) throw error;
+    throw gatewayError(503, "web_search_unavailable", `The Bailian search is unavailable: ${error.message}`);
   }
+  if (!reservation) return (await bailianSearch(config, request, fetcher, signal)).rows;
   let dispatched = false;
   let outcome;
   try {
@@ -428,13 +413,62 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
 }
 
 /**
- * @param {any} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null }} [options]
- *   `usageLedger` / `attributeRun`: what the Bailian call is booked in and
- *   which run it is charged to, as for the model gateway
+ * Whether this deployment's gateway has any engine to ask: a SearXNG of its
+ * own, the node's, Bailian with a DashScope key, or DeepSeek with a DeepSeek
+ * key. What decides whether a runtime is offered `web_search` at all
+ * (runtimeManager): until 2026-10-17 that was a SearXNG URL alone, so a
+ * deployment whose only engines were the paid ones had a gateway that would
+ * answer and a runtime told search was not configured.
+ * @param {any} config
  */
-export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null, runScope = null } = {}) {
+export function webSearchHasEngine(config) {
+  const set = (/** @type {unknown} */ value) => Boolean(String(value ?? "").trim());
+  return set(config.webSearchUrl)
+    || (set(config.webSearchEdgeUrl) && set(config.edgeProxyUrl))
+    || (config.webSearchBailianEnabled === true && set(config.dashscopeApiKey))
+    || (config.webSearchDeepseekEnabled !== false && set(config.deepseekApiKey));
+}
+
+/**
+ * The search refused in DeepSeek's words when DeepSeek was the only engine
+ * asked. A content-policy refusal (403) is its own named code: rewording the
+ * query is the one thing that can change it.
+ * @param {unknown} error
+ */
+function deepseekSearchError(error) {
+  if (!(error instanceof DeepSeekToolError)) return error;
+  const upstream = error.upstream ? { upstream: error.upstream } : {};
+  switch (error.outcome) {
+    case "content_refused":
+      return Object.assign(gatewayError(403, "web_search_content_refused", "The search engine declined this query under its content policy; reword it, or read a known page directly."), upstream);
+    case "shed":
+    case "rate_limited":
+      return Object.assign(gatewayError(429, "web_search_rate_limited", "The search engine is at its request rate; retry in a moment."), upstream);
+    case "timeout":
+      return Object.assign(gatewayError(504, "web_search_timeout", "The web-search backend timed out."), upstream);
+    case "budget":
+    case "unrecordable":
+      return gatewayError(503, "web_search_unavailable", error.message);
+    case "unavailable":
+      return gatewayError(502, "web_search_unavailable", "The web-search backend is temporarily unavailable.");
+    case "response_invalid":
+      return Object.assign(gatewayError(502, "web_search_response_invalid", "The web-search backend returned an unreadable response."), upstream);
+    default:
+      return Object.assign(gatewayError(502, "web_search_upstream_error", `The web-search backend returned HTTP ${error.status || "an error"}.`), upstream);
+  }
+}
+
+/**
+ * @param {any} config @param {any} runtimeManager
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null, deepseekTools?: ReturnType<typeof createDeepSeekTools> | null }} [options]
+ *   `usageLedger` / `attributeRun`: what the paid engines' calls are booked in
+ *   and which run they are charged to, as for the model gateway.
+ *   `deepseekTools`: the process's one DeepSeek tools client (its pacer is the
+ *   account's rate); without one, a client of this handler's own is made.
+ */
+export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null, runScope = null, deepseekTools = null } = {}) {
   const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
+  const deepseek = deepseekTools ?? createDeepSeekTools(config, { fetchImpl, usageLedger, attributeRun, runPurpose, runScope });
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -456,12 +490,18 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
       const localUrl = String(config.webSearchUrl ?? "").trim();
       const edgeUrl = edge ? String(config.webSearchEdgeUrl ?? "").trim() : "";
       const bailianOn = config.webSearchBailianEnabled === true && Boolean(String(config.dashscopeApiKey ?? "").trim());
-      if (!localUrl && !edgeUrl && !bailianOn) {
+      const deepseekOn = deepseek.searchEnabled;
+      if (!localUrl && !edgeUrl && !bailianOn && !deepseekOn) {
         throw gatewayError(
           503,
           "web_search_unconfigured",
           "Open-web search is not configured for this deployment. A page whose address is known can still be read; for published literature the bibliographic databases are one option.",
         );
+      }
+      // DeepSeek refuses a query over 128 characters (400); the other engines are still asked it.
+      const deepseekAsked = deepseekOn && request.query.length <= DEEPSEEK_SEARCH_MAX_QUERY;
+      if (!localUrl && !edgeUrl && !bailianOn && !deepseekAsked) {
+        throw gatewayError(400, "web_search_query_invalid", `This deployment's search engine takes a query of at most ${DEEPSEEK_SEARCH_MAX_QUERY} characters; shorten it.`);
       }
       const searx = localUrl || edgeUrl ? (async () => {
         if (edgeUrl) {
@@ -479,11 +519,13 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
       const bailian = bailianOn
         ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runPurpose, runScope })
         : Promise.resolve(null);
-      const [searxOutcome, bailianOutcome] = await Promise.allSettled([searx, bailian]);
+      const deepseekSearch = deepseekAsked ? deepseek.search(request, { caller, signal: controller.signal }) : Promise.resolve(null);
+      const [searxOutcome, bailianOutcome, deepseekOutcome] = await Promise.allSettled([searx, bailian, deepseekSearch]);
       const bailianAnswered = bailianOn && bailianOutcome.status === "fulfilled";
+      const deepseekAnswered = deepseekAsked && deepseekOutcome.status === "fulfilled";
       // One source failing is a thinner answer, not a failed search; only when
       // nothing answered is the search itself refused, with the first reason.
-      if (searxOutcome.status === "rejected" && !bailianAnswered) {
+      if (searxOutcome.status === "rejected" && !bailianAnswered && !deepseekAnswered) {
         const error = searxOutcome.reason;
         if (controller.signal.reason?.name === "TimeoutError" && !(error instanceof WebSearchGatewayError)) {
           throw gatewayError(504, "web_search_timeout", "The web-search backend timed out.");
@@ -491,9 +533,11 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         throw error;
       }
       const payload = searxOutcome.status === "fulfilled" ? searxOutcome.value : null;
-      if (!payload && bailianOutcome.status === "rejected") throw bailianOutcome.reason;
+      if (!payload && !deepseekAnswered && bailianOutcome.status === "rejected") throw bailianOutcome.reason;
+      if (!payload && !bailianAnswered && deepseekOutcome.status === "rejected") throw deepseekSearchError(deepseekOutcome.reason);
       const bailianRows = bailianAnswered ? bailianOutcome.value ?? [] : [];
-      let results = mergedResults([Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
+      const deepseekRows = deepseekAnswered ? deepseekOutcome.value ?? [] : [];
+      let results = mergedResults([deepseekRows, Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
       // Which engines actually answered is part of the finding, not
       // diagnostics: a result set assembled from one engine that happened to be
       // up is a different claim about the web than one assembled from four.
@@ -503,6 +547,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         ...unresponsiveEnginesOf(payload),
         ...(searxOutcome.status === "rejected" ? ["searxng"] : []),
         ...(bailianOn && bailianOutcome.status === "rejected" ? ["bailian"] : []),
+        ...(deepseekAsked && deepseekOutcome.status === "rejected" ? ["deepseek"] : []),
       ])].sort();
       sendJson(res, 200, {
         data: {
@@ -520,6 +565,9 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
           "Results are search hits, not the pages themselves: read a page before relying on it, and cite the page's own address.",
           ...(results.length === 0
             ? ["No engine returned a result for this query; this is not evidence that the topic is unoccupied."]
+            : []),
+          ...(deepseekOn && !deepseekAsked
+            ? [`The query is longer than ${DEEPSEEK_SEARCH_MAX_QUERY} characters, so one engine was not asked; a shorter query reaches it.`]
             : []),
         ],
       });

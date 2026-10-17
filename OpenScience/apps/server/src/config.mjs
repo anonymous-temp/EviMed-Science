@@ -2598,6 +2598,10 @@ export function loadConfig(overrides = {}) {
     // reranker already uses; its results are merged with SearXNG's.
     webSearchBailianEnabled: overrides.webSearchBailianEnabled ?? boolEnv("OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED", false),
     webSearchBailianModel: String(overrides.webSearchBailianModel ?? process.env.OPEN_SCIENCE_WEB_SEARCH_BAILIAN_MODEL ?? "qwen-plus").trim(),
+    // DeepSeek's own search API (deepseekTools.mjs, 2026-10-17) as a third engine, asked with the deployment's DeepSeek
+    // key: on wherever that key is set, false leaves it out and the other engines answer as before. Paid per request
+    // and metered (purpose web-search); held to DeepSeek's five requests a second for the whole process.
+    webSearchDeepseekEnabled: overrides.webSearchDeepseekEnabled ?? boolEnv("OPEN_SCIENCE_WEB_SEARCH_DEEPSEEK_ENABLED", true),
     // The GEO probe origin: an internal service this platform runs, not a
     // public source. Empty means the deployment has no measured-visibility
     // channel, and the tool says so instead of the runtime silently getting
@@ -3362,6 +3366,11 @@ export function loadConfig(overrides = {}) {
     // within the direct attempt's own deadline) is read once more through the
     // Tokyo node when one is configured.
     webReadEdgeFallback: overrides.webReadEdgeFallback ?? boolEnv("OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK", true),
+    // DeepSeek's Fetch (deepseekTools.mjs, 2026-10-17) as web_read's second reader, with the deployment's DeepSeek key:
+    // a page our own read found a challenge, an application shell, a 403/429 or out of time is asked of it once, after
+    // robots.txt, the public-address pin and the size caps have run; on wherever the key is set. The result says it is
+    // DeepSeek's rendition. Paid per request and metered like the search.
+    webReadDeepseekFallbackEnabled: overrides.webReadDeepseekFallbackEnabled ?? boolEnv("OPEN_SCIENCE_WEB_READ_DEEPSEEK_FALLBACK_ENABLED", true),
     webReadDirectTimeoutMs: Math.max(1_000, Number(
       overrides.webReadDirectTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS ?? 12_000,
     )),

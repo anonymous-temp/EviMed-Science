@@ -38,6 +38,7 @@ const MAX_TITLE_CHARS = 120;
  * @property {boolean} rendered
  * @property {string} [snapshotPath]
  * @property {string} sha256
+ * @property {"deepseek-fetch"} [via] the text is DeepSeek Fetch's rendition of the page, not its own bytes (2026-10-17)
  */
 
 /** @param {unknown} value @returns {string | null} */
@@ -87,6 +88,8 @@ export function normalizePageRead(value) {
     rendered: value.rendered === true,
     ...(snapshot ? { snapshotPath: snapshot } : {}),
     sha256: value.sha256,
+    // A closed vocabulary of one: the only other reader `web_read` has.
+    ...(value.via === "deepseek-fetch" ? { via: "deepseek-fetch" } : {}),
   };
 }
 

@@ -180,7 +180,8 @@ per-project workspace + JSONL provenance.
   `ChartGrid`, `Outline`, `MasterDetail`, `ScopeMenu` and `StateScreen` in `components/ui/`. A page does not write its own
   filter row, step rail, tab bar or standalone grey sentence. `DESIGN.md` 「页面结构」 holds the six templates and rules 7–13;
   `layoutRules.test.ts` (a count that may only fall) and `pageComposition.test.tsx` (document order, via
-  `expectComposed`) hold them; `LAYOUT_RULES=1 pnpm lint` lists the pages still drawing their own controls.
+  `expectComposed`) hold them; the layout lint rules are errors, and the files still drawing their own controls are
+  `layout-lint-baseline.json` (warnings there, each count held by `layoutLint.test.ts`).
 - **Module names** (the owner's rulings of 2026-10-07): the product calls its two modules 「循证 GEO」
   (code `geo`; it was 「循证传播」 only from 2026-10-06) and 「虚拟临床研究」 (code `vcr`; it was
   「虚拟临研」) everywhere a reader or a model sees them — pages, notices, e-mails, error sentences,

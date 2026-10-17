@@ -457,14 +457,20 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 |---|---|---|---|---|
 | T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
-| T3 模块页 | 循证 GEO, 虚拟临床研究 | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
+| T3 模块页 | 循证 GEO, 虚拟临床研究 (and one GEO answer, read inside the band under 问题与回答) | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
 | T4 数据页 | 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
-| T5 阅读页 | a knowledge-base document, a report, an evidence card, an event, a GEO answer | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
+| T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 
 **What each template forbids.** The walk reads the components' markers (`data-toolbar`, `data-step-rail`,
 `data-note`, `data-tag`, `data-outline`, `data-empty`, `data-chart-grid` — listed in `PageShell.tsx`), not
-the words on the page.
+the words on the page. Three of the prohibitions are also lint errors (`apps/web/.eslintrc.cjs`, the layout block): a
+page or tab component imports no `FilterChips`, `FilterSelect`, `SearchInput`, `SegmentedControl` or `Tabs` (its tabs,
+filters and search are `PageShell`'s slots or a `Toolbar`); nothing outside `Tag.tsx` imports `tagClasses`; a
+虚拟临床研究 component does not navigate to the conversation. The files that still break the first two are on
+`src/app/layout-lint-baseline.json` with their number of sites (14 in 14 files on 2026-10-17), where the rule is a
+warning; `layoutLint.test.ts` holds each number. Two more are counts that only fall (`layout-baseline.json`, held by
+`layoutRules.test.ts`): grey sentences with no action, and hand-written `divide-y` lists.
 
 | | Required | Forbidden |
 |---|---|---|
@@ -620,12 +626,13 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 
 ## Known gaps
 
-- The page framework (R19) landed as components, slots and counts before the pages moved: the hand-written grey
-  sentences and divided lists are a per-file baseline (`apps/web/src/app/layout-baseline.json`) that only falls, the
-  lint rules that keep a page from drawing its own tabs, filters and search are off until `LAYOUT_RULES=1`, and
-  `StepPending`, `VcrStepPending`, `FilterRow`, `VcrToolbar`, `TabSection` and `VcrSection` are
-  still in place. Each migration batch deletes what it replaces; the last turns the counts into zero and the rules into
-  errors.
+- The page framework (R19) is enforced, with what is left as counts that only fall: the hand-written grey sentences
+  (65) and divided lists (17) are a per-file baseline (`apps/web/src/app/layout-baseline.json`), and the lint rules
+  that keep a page from drawing its own tabs, filters and search are errors except in the 14 files of
+  `layout-lint-baseline.json` (2026-10-17, from 78 sites when they were warnings). `FilterRow`, `VcrToolbar`,
+  `VcrHeadline`, `VcrJobLine`, `PluginsList`, `KnowledgeScopeMenu`, `ProjectScope` and `useOpenVcrConversation` are
+  gone; `StepPending` (循证 GEO's tabs), `VcrStepPending` (the study tabs), `TabSection` (`ValueSection`) and
+  `VcrSection` (`IntakePanel`) are still in use, and go when their last caller moves to `StepState` / `Section`.
   The framework's components are drawn by `src/test/compositionFixtures.tsx` (one sample per template, in tests), not
   in `/__gallery`: adding rows re-records both reference images, which CI re-diffs on its own environment, so the first
   batch that re-records the gallery adds them.

@@ -309,6 +309,10 @@ describe("scheduled tasks", () => {
     it("keeps asking for a task to be chosen when a later read fails with tasks on screen — the pane does not go blank", async () => {
       render("/app/autopilot");
       await screen.findByText("选择一项任务");
+      // Asking for a choice leaves a way to make it: the pane is a recipe with a button, not a dead end.
+      const pane = document.querySelector("[data-task-main] [data-empty]") as HTMLElement;
+      expect(pane.querySelector("svg")).not.toBeNull();
+      expect(within(pane).getByRole("link", { name: "打开第一项任务" })).toHaveAttribute("href", expect.stringMatching(/^\/app\/autopilot\/[^/]+$/));
       mocks.listAgendas.mockRejectedValue(new Error("offline"));
       await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
       expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");

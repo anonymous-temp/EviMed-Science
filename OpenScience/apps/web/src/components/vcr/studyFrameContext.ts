@@ -43,6 +43,13 @@ export function useStudyFrame(): StudyFrameApi | null {
 }
 
 /**
+ * The same door for a page that is not a study: 虚拟临床研究's home, whose libraries (方法库, 试验先例) load their own data and so know
+ * their own filters. The page supplies the setter and merges what it is given into its one toolbar, next to its views; a panel calls
+ * `useVcrToolbar` exactly as a tab does and draws no `Toolbar` of its own.
+ */
+export const ToolbarSlotContext = createContext<((toolbar: ToolbarProps | null | undefined) => void) | null>(null);
+
+/**
  * The tab's one row of controls — its filters, its search, its count, its buttons — drawn **in the sticky band, above the body**:
  * the frame renders it as `PageShell`'s `toolbar` slot, so it neither scrolls away nor sinks (DESIGN.md rule 7). A tab calls this
  * and does not render a `Toolbar` of its own; a tab that calls nothing leaves its row reserved and empty, so the band's height is
@@ -55,7 +62,10 @@ export function useStudyFrame(): StudyFrameApi | null {
  * re-render the tab for it.
  */
 export function useVcrToolbar(toolbar: ToolbarProps | null): void {
-  const set = useContext(StudyFrameContext)?.setToolbar;
+  const frame = useContext(StudyFrameContext)?.setToolbar;
+  const slot = useContext(ToolbarSlotContext);
+  const set = frame ?? slot;
   useLayoutEffect(() => { set?.(toolbar); });
   useLayoutEffect(() => () => { set?.(undefined); }, [set]);
 }
+
