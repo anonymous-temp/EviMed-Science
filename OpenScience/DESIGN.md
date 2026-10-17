@@ -379,7 +379,7 @@ pages after every release.
 1. **One page, one kind of object, as a list.** Content of a different kind goes in a tab or on its
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
-   budget (`SECTION_SHAPES_BY_PAGE`); groups of one shape — a group per use, a group per day — are
+   budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
    one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
@@ -387,7 +387,7 @@ pages after every release.
    its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`DATA_BUDGET` in the walk): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
+   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
    switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
    scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's

@@ -2178,6 +2178,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // OPEN_SCIENCE_RUNTIME_ASK_USER or ..._REVIEW_ENABLED and nothing
       // downstream would ever look at the result.
       askUser: Boolean(config.runtimeAskUserEnabled),
+      askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
       review: Boolean(config.runtimeReviewEnabled),
       // Not a setting: the capsule is active when a recall endpoint is
       // configured, and the plugin reports its own absence.
@@ -2811,6 +2812,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
+            askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
             review: Boolean(config.runtimeReviewEnabled),
             capsule: Boolean(capsuleGatewayUrl),
             operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),

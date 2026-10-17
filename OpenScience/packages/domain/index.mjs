@@ -1335,11 +1335,12 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
+// geoVocabulary — 84 exports: 「循证 GEO」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
-// labels, the metric ids the platform's own views read, and the one
-// publishability rule the content store, the orchestrator and the market share.
+// labels, the metric ids the platform's own views read, the one
+// publishability rule the content store, the orchestrator and the market share,
+// and the sentence a programme run is asked in (`geoVisibleQuestion`).
 export {
   GEO_ARMS,
   GEO_ARM_METRIC_ID,
@@ -1439,6 +1440,7 @@ export {
   GEO_SOURCE_LAYER_LABELS_ZH,
   GEO_STATEMENT_VERDICTS,
   GEO_STEPS,
+  GEO_STEP_ACTION_LABELS_ZH,
   GEO_STEP_LABELS_ZH,
   GEO_STEP_STATUSES,
   GEO_TARGET_DATA_TYPES,
@@ -1451,6 +1453,8 @@ export {
   GEO_WRITE_WHAT_LABELS_ZH,
   geoArticlePublishable,
   geoSpecifiedInfoAccuracy,
+  geoVisibleQuestion,
+  geoVisibleQuestionOfReason,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
 // geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's

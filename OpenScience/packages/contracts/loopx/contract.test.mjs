@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { verifyLoopxArchive, verifyLoopxWorkflowSkills } from '../../../deploy/runtime-dsh/install-loopx.mjs';
+import { installLoopx, keptLoopxSkills, pruneSkillInstallReadback, verifyLoopxArchive, verifyLoopxWorkflowSkills } from '../../../deploy/runtime-dsh/install-loopx.mjs';
 import { verifyHostedLoopx, registerHostedLoopx } from '../../harness-port/src/loopxBootstrap.mjs';
 import { runtimeUiMethodFromPath } from '../../domain/src/runtimeUiSurface.mjs';
 import { isSuccessfulLoopxSkillResult } from '../../harness-port/src/loopxEvents.mjs';
@@ -177,4 +178,90 @@ test('the recorded workflow skills are the pinned CLI\'s, the build holds the in
     assert.ok(body.includes('COPY packages/contracts/loopx/workflow-skills.json /usr/local/lib/evimed/loopx-workflow-skills.json'), `${file} carries the record to the build step that holds the folders to it`);
     assert.ok(body.indexOf('loopx-workflow-skills.json') < body.indexOf('install-runtime.sh loopx'));
   }
+});
+
+test('the model\'s catalogue keeps the entry skill and the goal lifecycle, and the other LoopX folders never reach the image', async t => {
+  const record = JSON.parse(await read('packages/contracts/loopx/workflow-skills.json'));
+  // The pinned record: six of the eight folders are the repository-management workflows nothing on this platform starts.
+  assert.deepEqual(keptLoopxSkills(record), ['loopx', 'loopx-project']);
+  assert.throws(() => keptLoopxSkills({ ...record, kept: [] }), /keeps no skill/);
+  assert.throws(() => keptLoopxSkills({ ...record, kept: ['loopx', 'loopx-unknown'] }), /does not install: loopx-unknown/);
+  assert.throws(() => keptLoopxSkills({ ...record, kept: ['loopx-project'] }), /must keep the entry skill/);
+
+  // The build itself, against a CLI that writes the recorded folders: what is not kept is removed, the receipt names both.
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-install-'));
+  // The kept folders stay as read-only as the CLI copied them.
+  t.after(() => { execFileSync('chmod', ['-R', 'u+w', dir]); return rm(dir, { recursive: true, force: true }); });
+  const bin = path.join(dir, 'bin');
+  await mkdir(bin);
+  await writeFile(path.join(bin, 'uv'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const cli = path.join(bin, 'loopx');
+  await writeFile(cli, `#!${process.execPath}
+const fs = require('node:fs'), path = require('node:path');
+const argv = process.argv.slice(2);
+if (argv[0] === '--version') { console.log('loopx ${deps.loopx.version}'); process.exit(0); }
+if (argv[0] === 'workflow-skills') {
+  const target = argv[argv.indexOf('--skills-dir') + 1];
+  const names = ${JSON.stringify(record.installed)};
+  for (const name of names) {
+    fs.mkdirSync(path.join(target, name), { recursive: true });
+    fs.writeFileSync(path.join(target, name, 'SKILL.md'), 'skill ' + name);
+    // What the real CLI does when it copies out of a read-only package: the copies keep their modes.
+    fs.chmodSync(path.join(target, name, 'SKILL.md'), 0o444);
+    fs.chmodSync(path.join(target, name), 0o555);
+  }
+  const items = Object.fromEntries(names.map(name => [name, { available: true, file_count: 1, sha256: name.length.toString(16).padStart(64, '0') }]));
+  fs.writeFileSync(path.join(target, '.loopx-skill-install.json'), JSON.stringify({ schema_version: 'loopx_skill_install_readback_v1',
+    materialized_skill_ids: names, skills: { digest: 'stale', items } }));
+  console.log(JSON.stringify({ ok: true }));
+  process.exit(0);
+}
+process.exit(2);
+`, { mode: 0o755 });
+  const archives = path.join(dir, 'archives');
+  await mkdir(archives);
+  const pins = { loopx: { ...deps.loopx } };
+  for (const key of ['wheel', 'plugin']) {
+    const body = `archive ${key}`;
+    await writeFile(path.join(archives, pins.loopx[key].filename), body);
+    pins.loopx[key] = { ...pins.loopx[key], sha256: createHash('sha256').update(body).digest('hex') };
+  }
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  let receipt;
+  try {
+    receipt = installLoopx({ pins, root: path.join(dir, 'loopx-root'), archives, python: path.join(bin, 'python'), cli });
+  } finally { process.env.PATH = saved; }
+  const present = (await readdir(path.join(dir, 'loopx-root', 'skills'))).filter(name => !name.startsWith('.')).sort();
+  assert.deepEqual(present, ['loopx', 'loopx-project'], 'only the kept folders are on disk');
+  assert.deepEqual(receipt.skills.map(skill => skill.name), ['loopx', 'loopx-project']);
+  assert.deepEqual(receipt.shipped.map(skill => skill.name), record.installed, 'the receipt still says what upstream shipped');
+  assert.deepEqual(receipt.kept, ['loopx', 'loopx-project']);
+  assert.deepEqual(receipt.dropped, record.installed.filter(name => !['loopx', 'loopx-project'].includes(name)));
+  assert.ok(receipt.shipped.every(skill => /^[a-f0-9]{64}$/.test(skill.sha256)));
+  const written = JSON.parse(await readFile(path.join(dir, 'loopx-root', 'installation.json'), 'utf8'));
+  assert.deepEqual(written, receipt);
+  // The hosted bootstrap reads the same receipt and the entry skill, and both are still there.
+  assert.equal((await verifyHostedLoopx({ root: path.join(dir, 'loopx-root'), cli })).state, 'ready');
+  // The CLI's own readback manifest is pruned to what is left, as the CLI prunes it itself, so a check of this root does not
+  // report six folders missing.
+  const manifest = JSON.parse(await readFile(path.join(dir, 'loopx-root', 'skills', '.loopx-skill-install.json'), 'utf8'));
+  assert.deepEqual(manifest.materialized_skill_ids, ['loopx', 'loopx-project']);
+  assert.deepEqual(Object.keys(manifest.skills.items).sort(), ['loopx', 'loopx-project']);
+  assert.notEqual(manifest.skills.digest, 'stale');
+});
+
+test('the readback manifest digest is the CLI\'s own: the hash of Python\'s sorted json of the items that are left', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loopx-readback-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const item = (file_count, fill) => ({ available: true, file_count, sha256: fill.repeat(64) });
+  await writeFile(path.join(dir, '.loopx-skill-install.json'), JSON.stringify({ owner: 'x', materialized_skill_ids: ['loopx', 'loopx-pr-review', 'loopx-project'],
+    skills: { digest: 'old', items: { loopx: item(2, 'a'), 'loopx-project': item(3, 'b'), 'loopx-pr-review': item(4, 'c') } } }));
+  assert.equal(pruneSkillInstallReadback(dir, ['loopx', 'loopx-project']), true);
+  const pruned = JSON.parse(await readFile(path.join(dir, '.loopx-skill-install.json'), 'utf8'));
+  // Computed once with `json.dumps(items, ensure_ascii=False, sort_keys=True)` and sha256, in the CLI's own interpreter.
+  assert.equal(pruned.skills.digest, 'bc1932eba58b08d5710aa3ab4f9ecf06c9db7e8e9ed21aca38b04bbabec0f424');
+  assert.deepEqual(pruned.materialized_skill_ids, ['loopx', 'loopx-project']);
+  assert.equal(pruned.owner, 'x', 'what is not about the skills is left as it was');
+  assert.equal(pruneSkillInstallReadback(path.join(dir, 'nowhere'), ['loopx']), false, 'no manifest, nothing to prune');
 });

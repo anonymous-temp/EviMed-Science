@@ -92,6 +92,10 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // Every 「循证 GEO」 dispatch's brief, open runtime or not (`geoRunPrompt`,
   // and the GEO dispatch site in server.mjs, which writes the same text).
   { tag: 'evimed-geo-run', role: 'injected', emitters: ['apps/server/src/geoOrchestrator.mjs', 'apps/server/src/server.mjs'] },
+  // The instruction of a 「循证 GEO」 step's run, in the run's own context (2026-10-17, as 虚拟临床研究's since 10-14): the first
+  // message of its session is the step's sentence (「写第 2 批稿件」) and the orchestrator's brief arrives here, never as anything a
+  // person said.
+  { tag: 'evimed-geo-brief', role: 'injected', emitters: ['apps/server/src/geoOrchestrator.mjs'] },
   // 虚拟临床研究's own mark, written the same way: a brief dispatched by the
   // module's orchestrator is never the researcher's words, and the mark is
   // what the run ledger and the delivery import read it by.

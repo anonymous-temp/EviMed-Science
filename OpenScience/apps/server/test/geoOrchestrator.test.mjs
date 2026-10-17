@@ -4,11 +4,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GEO_SCHEDULE, baselineTooRecent, contentBrief, dispatchIdFor, exportBrief, geoRunPrompt, insightBrief, measurementFreshness, nextWeeklySlot,
+  GEO_SCHEDULE, baselineTooRecent, contentBrief, dispatchIdFor, exportBrief, geoBriefBlock, geoRunPrompt, insightBrief, measurementFreshness, nextWeeklySlot,
   postPublicationCheckpoints, sentinelEngines, sentinelSlot, strategyBrief, topQuestions, wantedSteps, weeklySlot, zonedInstant,
 } from "../src/geoOrchestrator.mjs";
 import { GEO_NOTICE_KINDS, createGeoNotifier, geoNoticeHref, operatorBody, wrongOursTitle } from "../src/geoNotify.mjs";
 import { memorySourceRejection } from "../src/memoryIntelligence.mjs";
+import { carriesPlatformContext } from "@evimed/domain";
 import { geoRoutePattern } from "../src/geoRoutes.mjs";
 
 const SHANGHAI = "Asia/Shanghai";
@@ -361,4 +362,18 @@ test("every GEO dispatch's prompt carries the platform's mark, and memory takes 
     assert.equal(memorySourceRejection(message), "injected", "a brief is never stored as what the researcher said");
   }
   assert.equal(geoRunPrompt("x", "geo-a b<c>").endsWith("<evimed-geo-run>geo-a-b-c-</evimed-geo-run>"), true, "the id is one token");
+});
+
+test("the instruction of a GEO run rides in the run's context as one platform block, and a person's sentence does not carry it", () => {
+  const brief = insightBrief(project, { scope: [{ step: "evidence", fidelity: "full" }], target: null, full: true });
+  const block = geoBriefBlock(brief);
+  assert.ok(block.startsWith("\n\n<evimed-geo-brief>\n") && block.endsWith("\n</evimed-geo-brief>"));
+  assert.ok(block.includes(brief), "the whole instruction, byte for byte");
+  // It is platform text to every reader that tells the person's words from ours (the closed list of platform tags names it).
+  assert.equal(carriesPlatformContext(block), true);
+  assert.equal(carriesPlatformContext("整理产品证据"), false, "the sentence alone is the person's kind of text");
+  // The sentence the person reads, with the mark, is machine text to the memory extractor all the same: it is not what they said.
+  const sentence = geoRunPrompt("整理产品证据", "geo-insight-a1");
+  assert.equal(sentence, "整理产品证据\n\n<evimed-geo-run>geo-insight-a1</evimed-geo-run>");
+  assert.equal(memorySourceRejection({ info: { role: "user", source: "user" }, parts: [{ type: "text", text: sentence }] }), "injected");
 });

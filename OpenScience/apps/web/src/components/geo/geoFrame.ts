@@ -31,8 +31,8 @@ export interface GeoFrameApi {
   setToolbar(toolbar: ToolbarProps | null | undefined): void;
 }
 
-/** The panels the layout opens: the header's 「⋯」 dialogs, the budget's, and the settings drawer. */
-export type GeoPanel = "members" | "producer" | "rename" | "budget" | "settings";
+/** The panels the layout opens: the header's 「⋯」 dialogs, the budget's, the settings drawer and the AI-run record. */
+export type GeoPanel = "members" | "producer" | "rename" | "budget" | "settings" | "runs";
 
 export const GeoFrameContext = createContext<GeoFrameApi | null>(null);
 

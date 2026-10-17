@@ -96,6 +96,82 @@ test("a later automatic turn of the same goal finds the goal's run through the o
   assert.deepEqual((await f.runs()).map((run) => run.id).sort(), runs.map((run) => run.id).sort());
 });
 
+/** The question turn 1 left pending, as a timed `ask_user_question` records it: a call, and a result that is not an answer. */
+function pendingQuestionFrames(callId, turn = 1) {
+  const at = fixture.events[4].time;
+  return [
+    { type: "tool/call", seq: 120, time: at - 20, data: { turn, step: 1, callId, name: "ask_user_question",
+      arguments: JSON.stringify({ questions: [{ id: "lang", question: "Which language should the final report be in?", options: [{ label: "中文" }, { label: "English" }] }] }) } },
+    { type: "tool/result", seq: 121, time: at - 10, data: { turn, step: 1, toolCallId: callId,
+      message: { toolCallId: callId, source: { callId }, content: [{ type: "text", text: JSON.stringify({ pending: true, callId, message: "No answer batch arrived before the timeout." }) }] } } },
+  ];
+}
+
+const lateAnswer = (callId) => JSON.stringify({ kind: "answer_to_pending_question", tool: "ask_user_question", callId,
+  questions: [{ id: "lang", question: "Which language should the final report be in?" }], answers: [{ id: "lang", selected: ["中文"] }] });
+
+test("a late answer to a pending question continues under the turn that asked it, found by the call's id", async (t) => {
+  const callId = "call_ask_late_1";
+  const events = structuredClone(fixture.events);
+  events[1].data.content = [{ type: "text", text: "Goal A: complete the longitudinal study protocol." }];
+  events.splice(4, 0, ...pendingQuestionFrames(callId));
+  // An unrelated question lands between the ask and the answer, so "the latest earlier turn" would be the wrong anchor.
+  events[events.findIndex((event) => event.type === "user/message" && event.data.source.kind === "user" && event.seq === 140)].data.content
+    = [{ type: "text", text: "Unrelated question B: explain a gene expression plot." }];
+  events.push(...anotherTurn(3, 200, lateAnswer(callId), { kind: "user-question-reply", callId, outcome: "answered" }));
+  const f = await setup(t, events);
+  const routes = [];
+  await f.adopt(async (text) => { routes.push(text); return routeByQuestion(text); });
+  const runs = await f.runs();
+  const asker = runs.find((run) => run.kernelRequestIds?.includes(events[1].data.source.rpcId));
+  const reply = runs.find((run) => run.kernelRequestIds?.includes(`reply:${callId}`));
+  assert.equal(runs.length, 3, "the ask, the unrelated question and the work the answer started are three runs");
+  assert.ok(asker && reply && reply.id !== asker.id);
+  assert.equal(reply.question, asker.question, "the answer is no question of its own");
+  assert.equal(reply.effectiveAgentId, "clinical-evidence-synthesis", "it works under the contract of the turn that asked");
+  assert.equal(reply.effectiveRouteReason, "adopted:runtime-ui:ask-user-reply");
+  assert.ok(!reply.automated, "a person answered; this is not an automatic turn");
+  assert.equal(routes.length, 2, "the two questions are routed; the answer is not");
+  assert.ok(!routes.some((text) => text.includes("answer_to_pending_question")));
+  const transcript = normalizeTranscript(fixture.sessionId, events);
+  const message = transcript.messages.find((item) => item.sourceRequestId === `reply:${callId}`);
+  assert.equal(message.source, "user-question-reply");
+  assert.equal(message.answeredCallId, callId);
+  // Replay and a restart find the same rows.
+  f.restart(); await f.adopt(routeByQuestion);
+  assert.deepEqual((await f.runs()).map((run) => run.id).sort(), runs.map((run) => run.id).sort());
+});
+
+test("a late answer whose asking turn is not in the ledger borrows the latest earlier question, or is named by what the person chose, never by the payload", async (t) => {
+  const callId = "call_ask_orphan";
+  const withEarlier = structuredClone(fixture.events);
+  withEarlier.push(...anotherTurn(3, 200, lateAnswer(callId), { kind: "user-question-reply", callId, outcome: "answered" }));
+  const f = await setup(t, withEarlier);
+  await f.adopt();
+  const reply = (await f.runs()).find((run) => run.kernelRequestIds?.includes(`reply:${callId}`));
+  assert.ok(reply && !reply.automated);
+  assert.equal(reply.question, question(inputs[1]), "the call is not in the transcript, so the researcher's latest earlier question is the anchor");
+
+  const alone = await setup(t, anotherTurn(1, 0, lateAnswer(callId), { kind: "user-question-reply", callId, outcome: "answered" }).map((frame) => ({ ...frame, seq: frame.seq, data: frame.data })));
+  await alone.adopt();
+  const only = (await alone.runs()).find((run) => run.kernelRequestIds?.includes(`reply:${callId}`));
+  assert.ok(only, "an answer that is the first thing the ledger sees still starts a run");
+  assert.equal(only.question, "中文", "named by the labels the person chose, not by the JSON the kernel wrote");
+});
+
+test("a late answer steered into a turn that is still working extends that run's ownership and starts no run", async (t) => {
+  const callId = "call_ask_busy";
+  const events = structuredClone(fixture.events);
+  // The answer lands inside turn 2, after its user input and before the assistant's closing message.
+  events.splice(8, 0, { type: "user/message", seq: 150, time: events[8].time - 5, data: { turn: 2, step: 1,
+    content: [{ type: "text", text: lateAnswer(callId) }], source: { kind: "user-question-reply", callId, outcome: "answered" }, role: "user", id: "steered-reply" } });
+  const f = await setup(t, events);
+  await f.adopt();
+  const runs = await f.runs();
+  assert.equal(runs.length, 2, "an answer inside a turn is steering, not a turn");
+  assert.ok(runs.some((run) => run.kernelRequestIds?.includes(`reply:${callId}`)));
+});
+
 async function setup(t, initial = fixture.events) {
   const root = await mkdtemp(path.join(tmpdir(), "native-turns-"));
   const project = { id: "p1", userId: "u1", rootDir: root, metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace") };

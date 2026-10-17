@@ -278,6 +278,9 @@ test("a research task's brief is written like the other briefs, in Chinese, and 
   assert.match(brief, /报告用简体中文写/, "the language of the report is stated");
   assert.match(brief, /geo_read value 与 research/);
   assert.doesNotMatch(brief, /Research the following question|Reuse the available analysis|Do not queue another/, "no English instruction is left in it");
+  // A person reads the research as its question, on one line; the instruction above is the model's.
+  assert.equal(dispatched[0].question, "做专题研究：老年人的低血糖风险有多大");
+  assert.equal(dispatched[0].reason, "geo:research");
 });
 
 test("population change versions a claim; retraction never resurrects an older active claim; frozen rounds keep their basis", options, async () => {

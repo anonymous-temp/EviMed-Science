@@ -26,7 +26,7 @@ export interface Conversation {
 /**
  * Whether a run is one of the person's conversations. A run with a `role` is the platform's own back office in the same ledger — the
  * independent re-check of a scheduled task's claim (`verification`), and a step a module's programme dispatched, whose first message is
- * the sentence of the work and not a conversation (`programme`: 虚拟临床研究's steps) — and no list of conversations draws it: not the
+ * the sentence of the work and not a conversation (`programme`: 虚拟临床研究's and 循证 GEO's steps) — and no list of conversations draws it: not the
  * sidebar's groups, not its search, not the count behind 「展开其余 N 条对话」, not the shelf, not the conversation a visit resumes. The
  * mark is the server's (`role`, from the route reason it wrote), never the title.
  */

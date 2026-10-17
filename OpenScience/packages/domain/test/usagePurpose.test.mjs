@@ -11,6 +11,7 @@ import {
   PLATFORM_ROUTE_PURPOSES,
   AUTOPILOT_VERIFICATION_ROUTE_REASON,
   EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
+  GEO_STEPS,
   RUN_ROLES,
   PROGRAMME_ROUTE_REASON_PREFIXES,
   CONVERSATION_TURN_ROUTE_REASON_PREFIX,
@@ -154,7 +155,7 @@ test('a verification run is the platform\'s work, whichever kind, and the execut
   // The money is untouched: the task's budget pays for it, as the ruling that held a share back for it says.
   assert.equal(isChargeableResearchRun({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON, effectiveAgentId: 'open-domain-answer' }), true)
   // The episode itself, and every other reason, is as it was.
-  for (const effectiveRouteReason of ['autopilot:literature-sentinel', 'autopilot:routine', 'geo:content', 'unrouted:open-domain', 'session-binding', 'choice:literature-search', 'autopilot-verifyx', 'autopilot-verify:', '']) {
+  for (const effectiveRouteReason of ['autopilot:literature-sentinel', 'autopilot:routine', 'unrouted:open-domain', 'session-binding', 'choice:literature-search', 'autopilot-verifyx', 'autopilot-verify:', '']) {
     const run = { effectiveRouteReason, effectiveAgentId: 'open-domain-answer' }
     assert.equal(isVerificationRun(run), false, effectiveRouteReason)
     assert.equal(runRoleOf(run), null, effectiveRouteReason)
@@ -183,7 +184,7 @@ test('a 虚拟临床研究 programme step is a programme run, by the route reaso
     { effectiveRouteReason: 'xvcr:analysis' }, { effectiveRouteReason: '' }, { effectiveRouteReason: null }, {},
   ]) assert.equal(isProgrammeRun(run), false, JSON.stringify(run))
   assert.equal(isProgrammeRun(null), false)
-  assert.deepEqual([...PROGRAMME_ROUTE_REASON_PREFIXES], ['vcr:'])
+  assert.deepEqual([...PROGRAMME_ROUTE_REASON_PREFIXES], ['vcr:', 'geo:'])
   // A verification stays a verification.
   assert.equal(runRoleOf({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON }), 'verification')
 })
@@ -217,4 +218,35 @@ test('a 虚拟临床研究 step that ran in the study\'s conversation is a turn 
   }
   assert.equal(isConversationTurnRun(null), false)
   assert.ok(conversationTurnRouteReason(`vcr:${'x'.repeat(100)}`).length <= 64, 'a route reason is at most 64 characters')
+})
+
+// 2026-10-17 (R19 geoq, the second instance of the class): the 循证 GEO orchestrator's steps opened as conversations of their own,
+// titled by the brief they were sent with, in the GEO project's group of the sidebar.
+test('a 循证 GEO programme step is a programme run, by the route reason the orchestrator wrote and by nothing a text says', () => {
+  // Every reason `GeoOrchestrator` writes: `geo:<step>` for the insight run (its first step) and the strategy run (`sources`), `geo:content`,
+  // `geo:research`, `geo:export-<kind>` — the steps come from the vocabulary, so a step added there is walked here.
+  const reasons = [...GEO_STEPS.map((step) => `geo:${step}`), 'geo:content', 'geo:sources', 'geo:research', 'geo:export-weekly', 'geo:export-proposal']
+  assert.ok(reasons.length >= 13, `only ${reasons.length} reasons were walked`)
+  for (const effectiveRouteReason of reasons) {
+    for (const effectiveAgentId of ['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal', 'clinical-evidence-synthesis']) {
+      const run = { effectiveRouteReason, effectiveAgentId, automated: true }
+      assert.equal(isProgrammeRun(run), true, effectiveRouteReason)
+      assert.equal(runRoleOf(run), 'programme', effectiveRouteReason)
+      // Researcher-owned and charged as before: only the lists change.
+      assert.equal(isResearcherOwnedWork(run), true, effectiveRouteReason)
+      assert.equal(isVerificationRun(run), false, effectiveRouteReason)
+    }
+  }
+  // The prefix is a fact about who started the run, never about its text: a person's own turn in a GEO project, a conversation that
+  // names the prefix, and reasons that merely contain it are ordinary.
+  for (const run of [
+    { effectiveRouteReason: 'session-binding', effectiveAgentId: 'geo-insight', question: 'geo:content 写第 2 批稿件' },
+    { effectiveRouteReason: 'unrouted:open-domain', effectiveAgentId: 'open-domain-answer', question: 'geo:research' },
+    { effectiveRouteReason: 'choice:geo-insight', effectiveAgentId: 'geo-insight' },
+    { effectiveRouteReason: 'xgeo:content' }, { effectiveRouteReason: 'autopilot:geo:content' }, { effectiveRouteReason: 'GEO:content' },
+    { effectiveRouteReason: 'geo' }, { effectiveRouteReason: null }, {},
+  ]) assert.equal(isProgrammeRun(run), false, JSON.stringify(run))
+  // The two modules do not take each other's reasons, and a verification stays a verification.
+  assert.equal(runRoleOf({ effectiveRouteReason: 'vcr:definition' }), 'programme')
+  assert.equal(runRoleOf({ effectiveRouteReason: AUTOPILOT_VERIFICATION_ROUTE_REASON }), 'verification')
 })

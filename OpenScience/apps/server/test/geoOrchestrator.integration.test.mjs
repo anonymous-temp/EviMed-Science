@@ -16,6 +16,7 @@ import { createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
 import { createGeoNotifier } from "../src/geoNotify.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { HttpError } from "../src/security.mjs";
+import { runRoleOf } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -88,7 +89,6 @@ function harness({ at = null, geoStore = store, runStatus = null, importRun = nu
       dispatched.push(input);
       return { runId: `run-${dispatched.length}-${input.dispatchId}`, sessionId: `session-${dispatched.length}`, status: "running" };
     },
-    latestSessionId: async () => "session-latest",
     ...(runStatus ? { runStatus } : {}),
     ...(importRun ? { importRun } : {}),
     ...(placementChoices ? { placementChoices } : {}),
@@ -104,6 +104,22 @@ function harness({ at = null, geoStore = store, runStatus = null, importRun = nu
     now: () => (clock == null ? new Date() : new Date(clock)),
   });
   return { orchestrator, dispatched, enqueued, notices, citations, failures, setClock: (/** @type {string} */ iso) => { clock = Date.parse(iso); } };
+}
+
+/**
+ * What every run the orchestrator sends is, whatever the scenario: a programme run (no conversation list draws it), asked in one line of
+ * the person's words and briefed with a longer instruction that is the model's, in which none of the person's sentence's words is a tool.
+ * @param {Array<{ reason: string, question: string, brief: string }>} dispatched
+ */
+function assertProgrammeRuns(dispatched) {
+  assert.ok(dispatched.length > 0, "the walk walked");
+  for (const input of dispatched) {
+    assert.equal(runRoleOf({ effectiveRouteReason: input.reason }), "programme", input.reason);
+    assert.equal(typeof input.question, "string", input.reason);
+    assert.ok(input.question.trim() && !/[\r\n]/.test(input.question), input.question);
+    assert.ok(input.question !== input.brief && input.brief.length > input.question.length, `${input.reason}: the question is not the brief`);
+    assert.doesNotMatch(input.question, /geo_|evimed|mcp__|<|>|循证 GEO/, input.question);
+  }
 }
 
 /** A GEO project of a fresh account. @param {string} [brand] */
@@ -322,6 +338,10 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.deepEqual([world.dispatched[4].capabilityId, world.dispatched[4].reason, world.dispatched[4].dispatchId],
     ["geo-proposal", "geo:export-weekly", "geo-export-weekly-2026-10-05-a1"]);
   assert.match(world.dispatched[4].brief, /周报/);
+  // What a person reads of each of the five runs is its sentence; the instruction is the model's.
+  assert.deepEqual(world.dispatched.map((run) => run.question), ["整理产品证据、绘制患者旅程、列出测量问题", "分析引用的信源", "写第 1 批稿件", "写第 2 批稿件",
+    "生成10月5日这一周的周报"]);
+  assertProgrammeRuns(world.dispatched);
   await finishRun(world, control, 4);
   await world.orchestrator.advance(project.id);
   const next = (await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:content:w2026-10-05'`, [project.id]))[0];
@@ -448,7 +468,8 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   const world = harness();
   const { project, control, user, userId } = await newProject("诺和盈");
   const answer = await world.orchestrator.runStep(user, project, "sources");
-  assert.deepEqual(answer, { sessionId: "session-1", runId: "run-1-geo-insight-a1" }, "「让 AI 做」 answers the run it dispatched");
+  assert.deepEqual(answer, { accepted: true, runId: "run-1-geo-insight-a1", step: "sources" },
+    "「让 AI 做」 answers the run it dispatched, and no session: starting work takes nobody to a conversation");
   const brief = world.dispatched[0].brief;
   assert.match(brief, /单步模式/);
   assert.match(brief, /关键决策的测量问句/);
@@ -478,6 +499,8 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   assert.deepEqual(steps, { evidence: "minimal", journey: "none", questions: "minimal", diagnosis: "minimal", sources: "minimal", content: "none",
     distribution: "none", monitoring: "none" });
   assert.equal(world.dispatched.length, 2, "nothing else was asked for");
+  assert.deepEqual(world.dispatched.map((run) => run.question), ["整理产品证据、列出测量问题", "分析引用的信源"], "a single step names only the steps it covers");
+  assertProgrammeRuns(world.dispatched);
   // Later, in the same project, the user asks for the full question map: the minimal version is redone.
   await world.orchestrator.runStep(user, project, "questions");
   assert.equal(world.dispatched.length, 3);
@@ -490,7 +513,7 @@ test("the runtime cap defers the dispatch to the next tick, with the same dispat
   const { project, control, user } = await newProject();
   world.failures.push(new HttpError(429, "runtime_limit_exceeded", "Too many running runtimes for this user."));
   const answer = await world.orchestrator.runStep(user, project, "evidence");
-  assert.deepEqual(answer, { sessionId: "session-latest", runId: null }, "nothing dispatched: the latest conversation");
+  assert.deepEqual(answer, { accepted: true, runId: null, step: "evidence" }, "nothing dispatched: the request was taken and waits");
   assert.equal((await statuses(project.id)).evidence, "queued");
   const pending = (await q(`SELECT state, dispatch_id, attempts, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`,
     [project.id]))[0];
@@ -508,6 +531,8 @@ test("the runtime cap defers the dispatch to the next tick, with the same dispat
   assert.equal((await statuses(project.id)).evidence, "failed");
   await world.orchestrator.advance(project.id);
   assert.equal(world.dispatched[1].capabilityId, "geo-proposal", "the export asked for goes first");
+  assert.equal(world.dispatched[1].question, "生成提案资料包");
+  assertProgrammeRuns(world.dispatched);
   await finishRun(world, control, 1);
   await world.orchestrator.advance(project.id);
   assert.equal(world.dispatched[2].dispatchId, "geo-insight-a2");

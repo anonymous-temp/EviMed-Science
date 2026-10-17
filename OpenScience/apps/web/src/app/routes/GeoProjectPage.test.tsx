@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,10 +19,13 @@ const client = vi.hoisted(() => ({
   getGeoDistribution: vi.fn(),
   runGeoStep: vi.fn(),
   exportGeo: vi.fn(),
+  getGeoProgrammeRuns: vi.fn(),
   patchGeoProject: vi.fn(),
   deleteGeoProject: vi.fn(),
   open: vi.fn(),
 }));
+const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -34,6 +37,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   getGeoDistribution: client.getGeoDistribution,
   runGeoStep: client.runGeoStep,
   exportGeo: client.exportGeo,
+  getGeoProgrammeRuns: client.getGeoProgrammeRuns,
   patchGeoProject: client.patchGeoProject,
   deleteGeoProject: client.deleteGeoProject,
 }));
@@ -107,6 +111,7 @@ beforeEach(() => {
   client.getGeoStrategy.mockRejectedValue(new Error("no plan in this test"));
   client.getGeoDistribution.mockResolvedValue({ budget: null, spentCny: 0, reservedCny: 0, suggestedBudgetCny: 5000, market: { configured: true }, orders: [], ownedLinks: [] });
   client.open.mockResolvedValue(true);
+  client.getGeoProgrammeRuns.mockResolvedValue([]);
   client.patchGeoProject.mockResolvedValue({});
   client.deleteGeoProject.mockResolvedValue({});
 });
@@ -460,6 +465,8 @@ describe("a GEO project's page", () => {
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     expect(screen.getByRole("menuitem", { name: "项目设置" })).toBeInTheDocument();
+    // What the AI did in the background is readable by anyone who can read the project.
+    expect(screen.getByRole("menuitem", { name: "AI 运行" })).toBeInTheDocument();
     for (const hidden of ["重命名", "导出提案资料包", "暂停", "删除"]) expect(screen.queryByRole("menuitem", { name: hidden })).not.toBeInTheDocument();
   });
 
@@ -479,23 +486,74 @@ describe("a GEO project's page", () => {
     expect(screen.queryByRole("button", { name: "让 AI 补充结论" })).not.toBeInTheDocument();
   });
 
-  it("“对话” opens the project's latest conversation, “周报” exports it", async () => {
-    client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
+  it("“对话” opens the project's own conversation; “周报” and the pack start the work and keep the reader where they are", async () => {
+    client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
     await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-masi", sessionId: "ses_geo_masi" }));
+    client.open.mockClear();
 
     await userEvent.click(screen.getByRole("button", { name: "周报" }));
     await waitFor(() => expect(client.exportGeo).toHaveBeenCalledWith("geo_masi", "weekly"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已开始生成周报。", expect.objectContaining({ action: expect.objectContaining({ label: "查看" }) })));
+    // The run is a step of the programme, not a conversation: nothing opens, the reader stays on the page.
+    expect(client.open).not.toHaveBeenCalled();
+    expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/);
+    // The page read itself again, so a step that began shows on the rail.
+    await waitFor(() => expect(client.getGeoProject.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it("“⋯” exports the pack, pauses and deletes — deleting only after a confirmation", async () => {
-    client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
+  it("an export that waits for the project's run slot says so, and a refusal says why", async () => {
+    client.exportGeo.mockResolvedValueOnce({ accepted: true, runId: null, step: null }).mockRejectedValueOnce(new WebApiError("no", { status: 409, code: "geo_project_paused" }));
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "周报" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("周报排在前一项之后，做完会自动开始。", expect.anything()));
+    await userEvent.click(await screen.findByRole("button", { name: "周报" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(client.open).not.toHaveBeenCalled();
+  });
+
+  it("a project with no conversation of the person's yet opens a new one", async () => {
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, sessionId: null });
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "对话" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-masi", sessionId: null }));
+  });
+
+  it("“⋯” holds the AI-run record: the steps the programme ran, read where the reader is — and the toast of a start leads to it", async () => {
+    client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
+    client.getGeoProgrammeRuns.mockResolvedValue([
+      { sessionId: "ses_a", label: "写第 1 批稿件", state: "finished", at: "昨天 09:12" },
+      { sessionId: "ses_b", label: "整理产品证据、绘制患者旅程、列出测量问题", state: "finished", at: "9月14日" },
+    ]);
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重命名", "项目设置", "导出提案资料包", "暂停", "删除"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "AI 运行" }));
+    const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
+    const rows = await within(drawer).findAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual(["写第 1 批稿件已完成 · 昨天 09:12", "整理产品证据、绘制患者旅程、列出测量问题已完成 · 9月14日"]);
+    expect(client.getGeoProgrammeRuns).toHaveBeenCalledWith("geo_masi");
+    expect(client.open).not.toHaveBeenCalled();
+    await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "AI 运行" })).toBeNull());
+
+    // The toast a start leaves carries its way to the record.
+    await userEvent.click(screen.getByRole("button", { name: "周报" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalled());
+    const action = (toasts.success.mock.calls.at(-1)?.[1] as { action: { onClick: () => void } }).action;
+    act(() => action.onClick());
+    expect(await screen.findByRole("dialog", { name: "AI 运行" })).toBeInTheDocument();
+  });
+
+  it("“⋯” exports the pack without leaving the page, pauses and deletes — deleting only after a confirmation", async () => {
+    client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
+    renderProject();
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重命名", "项目设置", "导出提案资料包", "AI 运行", "暂停", "删除"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "导出提案资料包" }));
     await waitFor(() => expect(client.exportGeo).toHaveBeenCalledWith("geo_masi", "proposal"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已开始生成提案资料包。", expect.anything()));
+    expect(client.open).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "暂停" }));

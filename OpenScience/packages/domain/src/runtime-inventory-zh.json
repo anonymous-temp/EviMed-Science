@@ -489,15 +489,9 @@
       }
     ],
     "skills": {
-      "reason": "LoopX's own project, PR, benchmark, performance and documentation workflows. 长任务 drives them through the goal bar; the skills page lists the entry skill alone, because none of them is something a person starts.",
+      "reason": "LoopX's goal lifecycle skill, the one its entry skill hands off to. 长任务 drives it through the goal bar; the skills page lists the entry skill alone, because nothing about it is something a person starts. LoopX's six repository workflows (PR review and programmes, benchmark, performance diagnosis, self-repair, document registry) are left out of the image at build time.",
       "ids": [
-        "loopx-benchmark",
-        "loopx-doc-registry",
-        "loopx-performance-diagnosis",
-        "loopx-pr-program",
-        "loopx-pr-review",
-        "loopx-project",
-        "loopx-self-repair"
+        "loopx-project"
       ]
     },
     "toolSets": {

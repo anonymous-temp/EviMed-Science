@@ -4,14 +4,17 @@ import { FileDown, MessageSquare, MoreHorizontal, Radar } from "lucide-react";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import {
+  GEO_STEP_KEYS,
   deleteGeoProject,
   exportGeo,
   getGeoDistribution,
+  getGeoProgrammeRuns,
   getGeoProject,
   isGeoOff,
   patchGeoProject,
   useGeoFeature,
   type GeoProject,
+  type GeoStartAnswer,
   type GeoStepKey,
 } from "@/lib/geoClient";
 import { useProjectStore } from "@/lib/projects";
@@ -20,6 +23,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import { ProgrammeRunsDrawer } from "@/components/runs/ProgrammeRunsDrawer";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -279,16 +283,34 @@ function GeoBand({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
-  /** Runs an action that ends in the project's conversation. */
-  const act = (key: string, work: () => Promise<{ sessionId?: string | null } | void>, failure: string) => {
+  /**
+   * Starts work and keeps the person where they are: the request is taken, the toast says so (and where the run is read), and the page
+   * reads itself again. The run is a step of the programme, not a conversation — there is no session in the answer to go to.
+   */
+  const start = (key: string, work: () => Promise<GeoStartAnswer>, said: { started: string; queued: string }, failure: string) => {
     if (busy) return;
     setBusy(key);
     void work()
-      .then((result) => openConversation({ projectId: project.projectId, sessionId: result?.sessionId ?? project.sessionId }))
+      .then((answer) => {
+        toast.success(answer.runId ? said.started : said.queued, { action: { label: "查看", onClick: () => onPanel("runs") } });
+        reload();
+      })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure })))
       .finally(() => setBusy(null));
   };
+  const startProposal = () => start("proposal", () => exportGeo(geoId, "proposal"),
+    { started: "已开始生成提案资料包。", queued: "提案资料包排在前一项之后，做完会自动开始。" }, "提案资料包无法导出，请稍后重试。");
+  const startWeekly = () => start("weekly", () => exportGeo(geoId, "weekly"),
+    { started: "已开始生成周报。", queued: "周报排在前一项之后，做完会自动开始。" }, "周报无法导出，请稍后重试。");
+  /** The person's own conversation in the project (the server's `sessionId`: never a step the programme ran); none yet opens a new one. */
   const target = { projectId: project.projectId, sessionId: project.sessionId };
+  const openChat = () => {
+    if (busy) return;
+    setBusy("conversation");
+    void openConversation(target).finally(() => setBusy(null));
+  };
+  // What a reader of the AI-run record needs to know to read it again: a step that began or ended, or the project moving on.
+  const runsVersion = [project.updatedAt ?? "", ...GEO_STEP_KEYS.map((step) => `${step}:${project.steps[step]?.status ?? "none"}`)].join("|");
 
   const paused = project.status === "paused";
   // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
@@ -299,7 +321,9 @@ function GeoBand({
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
     { label: "项目设置", onSelect: () => onPanel("settings") },
-    ...(can("run") ? [{ label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") }] : []),
+    ...(can("run") ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
+    // What the programme did in the background, read-only — the steps are in no conversation list.
+    { label: "AI 运行", onSelect: () => onPanel("runs") },
     ...(can("edit") ? [{
       label: paused ? "继续" : "暂停",
       onSelect: () => {
@@ -361,11 +385,11 @@ function GeoBand({
       meta={<Tag>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
       actions={(
         <>
-          <Button variant="secondary" loading={busy === "weekly"} onClick={() => act("weekly", () => exportGeo(geoId, "weekly"), "周报无法导出，请稍后重试。")}>
+          <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>
-          <Button variant="secondary" loading={busy === "conversation"} onClick={() => act("conversation", async () => target, "对话暂时无法打开，请稍后重试。")}>
+          <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>
@@ -402,6 +426,7 @@ function GeoBand({
         />
       )}
       {panel === "members" && <MembersDialog geoId={geoId} onClose={() => onPanel(null)} />}
+      {panel === "runs" && <ProgrammeRunsDrawer projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} version={runsVersion} onClose={() => onPanel(null)} />}
       {panel === "rename" && (
         <RenameDialog
           geoId={geoId}

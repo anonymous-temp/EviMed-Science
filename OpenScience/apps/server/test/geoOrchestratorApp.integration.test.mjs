@@ -86,7 +86,9 @@ test("「让 AI 做」 dispatches the step's run in the project; 导出 waits fo
   const { id, projectId } = created.body.data;
   const run = await call("reader", "POST", `/api/geo/projects/${id}/run`, { step: "evidence" });
   assert.equal(run.status, 200, JSON.stringify(run.body));
-  assert.deepEqual(run.body.data, { sessionId: "session-1", runId: "run-1" });
+  assert.deepEqual(run.body.data, { accepted: true, runId: "run-1", step: "evidence" }, "the run it started, and no session to go to");
+  // What a person is shown of it is the step's sentence; the instruction is the model's.
+  assert.equal(dispatched[0].question, "整理产品证据");
   assert.deepEqual([dispatched[0].capabilityId, dispatched[0].projectId, dispatched[0].userId, dispatched[0].dispatchId],
     ["geo-insight", projectId, accounts.reader, "geo-insight-a1"]);
   assert.match(dispatched[0].brief, /玛仕度肽/);
@@ -96,7 +98,7 @@ test("「让 AI 做」 dispatches the step's run in the project; 导出 waits fo
 
   const exported = await call("reader", "POST", `/api/geo/projects/${id}/export`, { kind: "proposal" });
   assert.equal(exported.status, 200);
-  assert.equal(exported.body.data.runId, null, "one GEO run per project: the export waits");
+  assert.deepEqual(exported.body.data, { accepted: true, runId: null, step: null }, "one GEO run per project: the export is taken and waits");
   assert.equal(dispatched.length, 1);
   // The ledger says the insight run ended; the next advance sends the export.
   await context.app.geo.orchestrator.onRunFinished({ userId: accounts.reader, id: projectId },
@@ -104,6 +106,7 @@ test("「让 AI 做」 dispatches the step's run in the project; 导出 waits fo
   await context.app.geo.orchestrator.advance(id);
   assert.equal(dispatched[1].capabilityId, "geo-proposal");
   assert.match(dispatched[1].brief, /提案资料包/);
+  assert.equal(dispatched[1].question, "生成提案资料包");
 
   const paused = await call("reader", "PATCH", `/api/geo/projects/${id}`, { status: "paused" });
   assert.equal(paused.status, 200);
