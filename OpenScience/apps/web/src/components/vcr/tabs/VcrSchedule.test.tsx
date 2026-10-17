@@ -1,14 +1,16 @@
-import { render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrSchedule, readVcrTrial, readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { TrialTab } from "./TrialTab";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
+import { renderTab } from "../__fixtures__/tabFrame";
 
 /**
  * 访视日程, on the trial tab: the protocol's schedule of activities as a table — the visits by day, the window around each and what is
- * done at it. A record of the protocol that the conversation writes; the page shows what was written. Rendered from the server's own
- * trial page with the schedule filled in.
+ * done at it. A record of the protocol that the conversation writes; the page shows what was written. It is one of the three kinds of
+ * record of the step, and the band's switch (方案 · 访视 · 监管) is how a reader gets to it. Rendered from the server's own trial page
+ * with the schedule filled in.
  */
 
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
@@ -20,7 +22,8 @@ vi.mock("@/lib/projects", () => ({
   useProjectStore: { getState: () => ({ projects: [{ id: "prj_ev201" }], select: vi.fn(), load: vi.fn() }) },
 }));
 
-const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
+const draw = (node: React.ReactElement) => renderTab(node);
+const band = (container: HTMLElement) => container.querySelector("[data-page-chrome]") as HTMLElement;
 const study = (change?: (raw: any) => void): VcrStudy => {
   const raw = fixture("ev201/study.json");
   raw.abilities = [...new Set([...raw.abilities, "write"])];
@@ -63,9 +66,11 @@ describe("the readers", () => {
 });
 
 describe("the schedule", () => {
-  it("is a table of visits with the day, the window and what is done, the version it belongs to and what it adds up to", async () => {
+  it("is a table of visits with the day, the window and what is done, the version it belongs to and what it adds up to — behind the band's 访视", async () => {
     installVcrServer(network.productRequest, { [trialRoute]: { ...fixture<Record<string, unknown>>("ev201/trial.json"), schedule: SCHEDULE } });
     const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("table", { name: "方案的对比" });
+    await userEvent.click(within(band(container)).getByRole("button", { name: "访视" }));
     const table = await screen.findByRole("table", { name: "访视日程" });
     const rows = within(table).getAllByRole("row").slice(1).map((row) => [...row.querySelectorAll("th, td")].map((cell) => cell.textContent));
     expect(rows).toEqual([
@@ -76,13 +81,15 @@ describe("the schedule", () => {
     ]);
     expect(screen.getByText("方案 v2")).toBeInTheDocument();
     expect(container.querySelector("[data-vcr-schedule]")?.textContent).toContain("共 4 次访视，涉及 4 项评估与操作");
-    expect(screen.getByRole("table", { name: "方案的对比" })).toBeInTheDocument();
+    // One kind of record at a time: the designs give way to the schedule.
+    expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
   });
 
-  it("is not drawn while the study has none: no card that is a title over nothing", async () => {
-    draw(<TrialTab studyId={STUDY_ID} study={study()} />);
+  it("is not drawn while the study has none: no card that is a title over nothing, and no 访视 in the switch", async () => {
+    const { container } = draw(<TrialTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("table", { name: "方案的对比" });
     expect(screen.queryByRole("heading", { name: "访视日程" })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: "访视" })).toBeNull();
   });
 
   it("makes a study with a schedule and no designs a page and not a step waiting to be done", async () => {

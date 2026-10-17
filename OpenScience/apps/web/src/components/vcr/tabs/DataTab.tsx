@@ -1,10 +1,9 @@
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { ExternalLink } from "lucide-react";
 import {
   getVcrData,
-  readVcrIntake,
   saveVcrAssumption,
   signVcrReview,
   type VcrAssumption,
@@ -15,35 +14,38 @@ import {
 import { webErrorMessage } from "@/lib/apiClient";
 import { safeLink } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/cn";
 import { Button, buttonClasses } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Disclosure } from "@/components/ui/Disclosure";
-import { FilterSelect } from "@/components/ui/FilterChips";
-import { List, ListRow } from "@/components/ui/ListRow";
+import { DataTable } from "@/components/ui/DataTable";
+import { FactList, type Fact } from "@/components/ui/FactList";
+import { Headline } from "@/components/ui/Headline";
+import type { NotePart } from "@/components/ui/Note";
 import { Input, Textarea } from "@/components/ui/Input";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { MasterDetail } from "@/components/ui/MasterDetail";
+import { Section } from "@/components/ui/Section";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
-import { IntakePanel } from "../data/IntakePanel";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { VcrKnowledgeSection } from "../VcrKnowledge";
 import { VcrNoDefinition } from "../VcrStates";
 import { hasDefinition } from "../vcrTabs";
-import { intendedUseLabel } from "../vcrText";
+import { intendedUseLabel, numberText } from "../vcrText";
 import { VcrForestPlot } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
 import { VcrValueText } from "../VcrNumber";
 import { VcrPrecedentTable } from "../VcrPrecedentsPanel";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
-import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError } from "../vcrTabKit";
+import { useVcrToolbar } from "../studyFrameContext";
+import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
 
 type Filter = "all" | "key";
 
 // Who set a card and whether a person has signed it are not ways to sort the list (owner ruling 2026-10-10): the one filter is the cards that matter most.
-const FILTER_LABELS: ReadonlyArray<{ value: Exclude<Filter, "all">; label: string }> = Object.freeze([
-  { value: "key", label: "关键假设" },
-]);
+const CARDS = "[data-vcr-assumptions]";
+const PRECEDENTS = "[data-vcr-precedents]";
+const scrollTo = (selector: string) => () => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" });
 
 function matches(assumption: VcrAssumption, filter: Filter): boolean {
   switch (filter) {
@@ -87,31 +89,21 @@ export function reviewKindsFor(abilities: readonly string[]): VcrReviewKind[] {
  * from a number's drill-down lands on the card it came from.
  */
 export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [params, setParams] = useSearchParams();
   const { state, reload } = useVcrLoad(`${studyId}:data`, () => getVcrData(studyId));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
-  const data = state.data;
-  const note = data.evidenceNote ? <p data-vcr-evidence-note="" className="text-caption text-text-3">{data.evidenceNote}</p> : null;
-  // 数据接入 is the tab's own work, not an evidence card: it is there whenever the
-  // plane is (or, above T0, whenever it should be), whatever the evidence side holds.
-  const intake = readVcrIntake(data.intake);
-  // A tier that allows real data puts the intake first: the definition below it is matched against what it holds.
-  const realData = study.tier !== "T0";
-  // Freezing a snapshot can move what the study's data support: the header re-reads, so its offer to move up appears with no further step.
-  const changed = () => { reload(); onStudyChanged?.(); };
-  // A study whose tier takes no real data has no use for the intake's form until somebody has data to bring: it is one folded line at the
-  // end of the tab, open when a source is already registered. At a tier that takes real data it is the tab's first section.
-  const intakePanel = intake.available || (data.intake != null && realData)
-    ? (realData
-      ? <IntakePanel studyId={studyId} intake={intake} onChanged={changed} />
-      : (
-        <Disclosure summary={intake.sources.length > 0 ? `数据接入 · ${intake.sources.length} 个数据源` : "数据接入"} defaultOpen={intake.sources.length > 0}>
-          <IntakePanel bare studyId={studyId} intake={intake} onChanged={changed} />
-        </Disclosure>
-      ))
-    : null;
+  return <DataView studyId={studyId} study={study} data={state.data} reload={reload} onStudyChanged={onStudyChanged} />;
+}
+
+function DataView({ studyId, study, data, reload, onStudyChanged }: {
+  studyId: string;
+  study: VcrStudy;
+  data: Awaited<ReturnType<typeof getVcrData>>;
+  reload: () => void;
+  onStudyChanged?: () => void;
+}) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [params, setParams] = useSearchParams();
   const defined = hasDefinition(study);
   const pack = (
     <VcrKnowledgeSection
@@ -121,21 +113,38 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
       onChanged={() => onStudyChanged?.()}
     />
   );
-  if (data.assumptions.length === 0 && data.precedents.length === 0) {
+  const cards = data.assumptions.length > 0;
+  const keyCards = data.assumptions.filter((assumption) => matches(assumption, "key")).length;
+  // The filter only means something while some cards are key and some are not.
+  const active: Filter = keyCards > 0 && keyCards < data.assumptions.length ? filter : "all";
+
+  // --- the band's one row: the one filter a long list earns ------------------------------------------------------------------------
+  // A filter earns its place with a list long enough to need one; with a single choice it is one chip that is pressed or not.
+  const filters: ToolbarFilter[] = data.assumptions.length > 3 && keyCards > 0 && keyCards < data.assumptions.length
+    ? [{ kind: "toggle", label: "关键假设", pressed: active === "key", onChange: (pressed) => setFilter(pressed ? "key" : "all") }]
+    : [];
+  useVcrToolbar(filters.length > 0 ? { label: "假设卡的筛选", filters } : null);
+
+  // The headline is what the page rests on, in the two numbers it has; each opens the section it counts.
+  const headline: NotePart[] = [
+    ...(cards ? [{ n: numberText(data.assumptions.length, 0), onOpen: scrollTo(CARDS), label: "看假设卡" }, " 张假设卡"] : []),
+    ...(cards && data.precedents.length > 0 ? [" · "] : []),
+    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看试验先例" }, " 项试验先例"] : []),
+  ];
+
+  // The intake is not here: it is one entry of the header's 「⋯」 on every tier (`VcrIntakeDrawer`), where the study's data came from.
+  if (!cards && data.precedents.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        {realData && intakePanel}
         {defined ? <DefinitionCard study={study} /> : null}
         {defined ? pack : null}
-        {note}
         <VcrRegistryCoverage sources={data.registryCoverage} />
-        {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" /> : <VcrNoDefinition study={study} />}
-        {!realData && intakePanel}
+        {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
       </div>
     );
   }
   const asked = params.get("card");
-  const shown = data.assumptions.filter((assumption) => matches(assumption, filter));
+  const shown = data.assumptions.filter((assumption) => matches(assumption, active));
   const selected = (asked ? data.assumptions.find((assumption) => assumption.id === asked || assumption.key === asked) : null)
     ?? data.assumptions.find((assumption) => assumption.id === data.selectedId)
     ?? shown[0] ?? data.assumptions[0] ?? null;
@@ -145,96 +154,92 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
       next.set("card", assumption.key || assumption.id);
       return next;
     }, { replace: true });
-    // Below the two-column layout the detail stacks under the list: a press must show its result where the reader is looking
-    // (page-structure rule 6), so the detail is brought into view — a no-op beside the list, where it already is.
-    requestAnimationFrame(() => {
-      const detail = document.querySelector("[data-vcr-assumption-detail]");
-      if (detail && typeof detail.scrollIntoView === "function") detail.scrollIntoView({ block: "nearest" });
-    });
   };
-  const count = (value: Filter) => data.assumptions.filter((assumption) => matches(assumption, value)).length;
+  const close = () => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("card");
+      return next;
+    }, { replace: true });
+  };
+  const changed = () => { reload(); onStudyChanged?.(); };
 
   return (
     <div className="flex flex-col gap-6">
-      {realData && intakePanel}
+      {headline.length > 0 && <Headline parts={headline} />}
       <DefinitionCard study={study} />
       {pack}
-      {note}
-      {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
 
-      {data.assumptions.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-          <Card
-            header={(
-              <div className="flex items-baseline justify-between gap-3">
-                <h2 className="text-section font-semibold text-text">假设卡</h2>
-                <span className="text-caption tabular-nums text-text-3">{data.assumptions.length}</span>
-              </div>
-            )}
-          >
-            {/* A filter earns its place with a list long enough to need one; it is one chip that opens a menu, not a row of five. */}
-            {data.assumptions.length > 3 && (
-              <FilterSelect
-                label="筛选"
-                allLabel="全部"
-                options={FILTER_LABELS.map((option) => ({ ...option, label: `${option.label} ${count(option.value)}` }))}
-                value={filter === "all" ? null : filter}
-                onChange={(next) => setFilter(next ?? "all")}
-              />
-            )}
-            <List label="假设卡" className={cn(data.assumptions.length > 3 && "mt-2")}>
-              {shown.map((assumption) => (
-                <ListRow
-                  key={assumption.id}
-                  title={assumption.name}
-                  onOpen={() => open(assumption)}
-                  selected={selected?.id === assumption.id}
-                  titleProps={{ "data-vcr-assumption": assumption.id }}
-                  trailing={(
-                    <span className="text-ui font-medium tabular-nums text-text">
-                      {valueText(assumption.value)}
-                      {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
-                    </span>
-                  )}
-                  meta={(
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <SourceTag source={assumption.value.source} />
-                      {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
-                      {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
-                    </span>
-                  )}
-                />
-              ))}
-            </List>
-          </Card>
-
-          {selected && (
-            <AssumptionDetail key={`${selected.id}@${selected.version ?? ""}`} studyId={studyId} study={study} assumption={selected} onChanged={reload} />
+      {cards && (
+        <MasterDetail
+          className="h-auto"
+          // The card in view is the address's `?card=`: below the room for both the list is the page and a press opens the card in a
+          // drawer over it, which is what the address says (page-structure rule 6).
+          narrow="drawer"
+          selected={asked !== null && selected !== null}
+          listLabel="假设卡"
+          detailLabel="假设卡的记录"
+          detailTitle={selected?.name ?? "假设卡"}
+          onCloseDetail={close}
+          listAttributes={{ "data-vcr-assumptions": "" }}
+          list={(
+            <div className="pr-4 max-lg:pr-0">
+              <Section title="假设卡" count={data.assumptions.length}>
+                <List label="假设卡">
+                  {shown.map((assumption) => (
+                    <ListRow
+                      key={assumption.id}
+                      title={assumption.name}
+                      onOpen={() => open(assumption)}
+                      selected={selected?.id === assumption.id}
+                      titleProps={{ "data-vcr-assumption": assumption.id }}
+                      trailing={(
+                        <span className="text-ui font-medium tabular-nums text-text">
+                          {valueText(assumption.value)}
+                          {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
+                        </span>
+                      )}
+                      meta={(
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <SourceTag source={assumption.value.source} />
+                          {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
+                          {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
+                        </span>
+                      )}
+                    />
+                  ))}
+                </List>
+              </Section>
+            </div>
           )}
-        </div>
+          detail={({ split }) => {
+            const card = split ? selected : asked !== null ? selected : null;
+            return card ? (
+              <div className="pl-6 max-lg:pl-0">
+                <AssumptionDetail key={`${card.id}@${card.version ?? ""}`} studyId={studyId} study={study} assumption={card} onChanged={changed} />
+              </div>
+            ) : null;
+          }}
+        />
       )}
 
       {data.precedents.length > 0 && (
-        <VcrSection title="试验先例">
-          <VcrPrecedentTable
-            rows={data.precedents}
-            withUse
-            footnote={data.precedentNote ?? "计划值取自登记记录的预计字段，只用于对照；历史基准只用实际值。"}
-          />
-          <VcrRegistryCoverage sources={data.registryCoverage} />
-        </VcrSection>
+        <div data-vcr-precedents="">
+          <Section title="试验先例" count={data.precedents.length}>
+            <VcrPrecedentTable rows={data.precedents} withUse />
+            <VcrRegistryCoverage sources={data.registryCoverage} />
+          </Section>
+        </div>
       )}
 
       {data.precedentCandidates && data.precedentCandidates.length > 0 && <PrecedentCandidates rows={data.precedentCandidates} />}
-
-      {!realData && intakePanel}
     </div>
   );
 }
 
 /**
  * 研究定义: what the study is about, in the words it was described in — the question, the four lines of the PICO, what the result
- * is measured as and what it may be used for. It is the one thing every other tab reads, so it is the first card of the tab that is
+ * is measured as and what it may be used for. It is the one thing every other tab reads, so it is the first block of the tab that is
  * about what the study rests on. Read-only: the definition is written in the conversation, and a change to it is a new one.
  */
 export function DefinitionCard({ study }: { study: VcrStudy }) {
@@ -253,9 +258,9 @@ export function DefinitionCard({ study }: { study: VcrStudy }) {
   ].filter((row): row is { label: string; value: string } => typeof row.value === "string" && row.value.length > 0);
   if (rows.length === 0) return null;
   return (
-    <Card title="研究定义">
-      <div data-vcr-definition=""><VcrFacts rows={rows} /></div>
-    </Card>
+    <Section title="研究定义">
+      <div data-vcr-definition=""><FactList rows={rows} /></div>
+    </Section>
   );
 }
 
@@ -264,25 +269,34 @@ const CANDIDATE_EVENT_LABELS: Readonly<Record<VcrPrecedentCandidate["event"], st
 });
 
 /**
- * 待核对的先例: trial events the frontier feed reported for what the study is about. Each is marked a candidate and says so in a sentence,
- * because a candidate is a pointer — a precedent is a registry record the evidence step fetched and checked against its own text.
+ * 待核对的先例: trial events the frontier feed reported for what the study is about. Each is marked 待核对 — a candidate is a pointer,
+ * and a precedent is a registry record the evidence step fetched and checked against its own text — so the mark is in the row and
+ * no sentence has to say it.
  */
 function PrecedentCandidates({ rows }: { rows: readonly VcrPrecedentCandidate[] }) {
   return (
-    <VcrSection title="待核对的先例" meta={`${rows.length} 项`}>
-      <p className="mb-2 text-caption text-text-3">前沿动态里出现的、与本研究对象有关的试验事件，只是线索，不是先例：证据步骤取回登记记录并逐项核对之后，才会进入试验先例。</p>
-      <ul className="divide-y divide-faint">
-        {rows.map((row) => (
-          <li key={row.id} data-vcr-precedent-candidate={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-            <Tag>待核对</Tag>
-            <span className="min-w-0 flex-1 text-ui text-text">{row.title}</span>
-            <span className="shrink-0 text-caption text-text-3">
-              {[CANDIDATE_EVENT_LABELS[row.event], row.registryId ?? (row.doi ? `DOI ${row.doi}` : null)].filter(Boolean).join(" · ")}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </VcrSection>
+    <Section title="待核对的先例" count={`${rows.length} 项`}>
+      <DataTable
+        label="待核对的先例"
+        minWidth="min-w-0"
+        columns={[
+          { key: "state", header: "状态", width: "w-24", cell: () => <Tag>待核对</Tag> },
+          { key: "title", header: "试验", rowHeader: true, cell: (row) => <span className="text-text">{row.title}</span> },
+          {
+            key: "event",
+            header: "事件",
+            cell: (row) => (
+              <span className="text-caption text-text-3">
+                {[CANDIDATE_EVENT_LABELS[row.event], row.registryId ?? (row.doi ? `DOI ${row.doi}` : null)].filter(Boolean).join(" · ")}
+              </span>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        rowAttrs={(row) => ({ "data-vcr-precedent-candidate": row.id })}
+      />
+    </Section>
   );
 }
 
@@ -302,7 +316,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
   const maySign = kinds.length > 0 && assumption.version != null && assumption.value.review !== "reviewed";
   const quoteLink = safeLink(detail?.quoteLink);
   const review = assumption.review;
-  const facts = [
+  const facts: Fact[] = [
     ...(detail?.subtitle ? [{ label: "终点与口径", value: detail.subtitle }] : []),
     ...(assumption.applicability ? [{ label: "适用人群", value: assumption.applicability }] : []),
     ...(assumption.sensitivity ? [{ label: "敏感性", value: assumption.sensitivity }] : []),
@@ -310,23 +324,22 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
       label: "复核",
       value: [review.kind, review.by, review.at].filter(Boolean).join(" · "),
     }] : []),
+    ...(detail?.distribution ? [{ label: "仿真用分布", value: [detail.distribution.family, detail.distribution.note].filter(Boolean).join(" · ") }] : []),
   ];
 
   return (
-    <Card
-      header={(
-        <div data-vcr-assumption-detail={assumption.id} className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2 className="text-section font-semibold text-text">{assumption.name}</h2>
-          <SourceTag source={assumption.value.source} />
-          {assumption.sourceType && <Tag>{assumption.sourceType}</Tag>}
-          {assumption.isKey && <Tag>关键假设</Tag>}
-          {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
-          <span className="flex-1" />
-          {mode === "read" && mayEdit && <Button size="sm" variant="text" onClick={() => setMode("edit")}>改这张卡</Button>}
-          {mode === "read" && maySign && <Button size="sm" variant="text" onClick={() => setMode("sign")}>签注复核</Button>}
-        </div>
-      )}
-    >
+    <div data-vcr-assumption-detail={assumption.id} className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="min-w-0 text-section font-semibold text-text">{assumption.name}</h2>
+        <SourceTag source={assumption.value.source} />
+        {assumption.sourceType && <Tag>{assumption.sourceType}</Tag>}
+        {assumption.isKey && <Tag>关键假设</Tag>}
+        {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
+        <span className="flex-1" />
+        {mode === "read" && mayEdit && <Button size="sm" variant="text" onClick={() => setMode("edit")}>改这张卡</Button>}
+        {mode === "read" && maySign && <Button size="sm" variant="text" onClick={() => setMode("sign")}>签注复核</Button>}
+      </div>
+
       {mode === "edit" && (
         <EditCard studyId={studyId} assumption={assumption} onClose={() => setMode("read")} onSaved={() => { setMode("read"); onChanged(); }} />
       )}
@@ -334,39 +347,33 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
         <SignCard studyId={studyId} assumption={assumption} kinds={kinds} onClose={() => setMode("read")} onSigned={() => { setMode("read"); onChanged(); }} />
       )}
 
-      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} /></span>
-        {assumption.value.interval && (
-          <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
-        )}
-      </p>
-      {detail?.stats && detail.stats.length > 0 && (
-        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-caption tabular-nums text-text-3">
-          {detail.stats.map((stat) => <span key={stat.label}>{`${stat.label} ${stat.value}`}</span>)}
+      <div>
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} /></span>
+          {assumption.value.interval && (
+            <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
+          )}
         </p>
-      )}
+        {detail?.stats && detail.stats.length > 0 && (
+          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-caption tabular-nums text-text-3">
+            {detail.stats.map((stat) => <span key={stat.label}>{`${stat.label} ${stat.value}`}</span>)}
+          </p>
+        )}
+      </div>
 
-      {facts.length > 0 && <VcrFacts rows={facts} className="mt-3" />}
+      {facts.length > 0 && <FactList rows={facts} />}
 
       {assumption.newEvidence && <NewEvidence news={assumption.newEvidence} />}
 
       {detail?.forest && detail.forest.length > 0 && (
-        <div className="mt-4">
+        <div>
           <VcrForestPlot rows={detail.forest} unit={assumption.value.unit} />
           {detail.forestNote && <p className="mt-2 text-caption text-text-3">{detail.forestNote}</p>}
         </div>
       )}
 
-      {detail?.distribution && (
-        <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-text-3">
-          <Tag>仿真用分布</Tag>
-          {detail.distribution.family}
-          {detail.distribution.note && <span>{detail.distribution.note}</span>}
-        </p>
-      )}
-
       {detail?.quote && (
-        <figure className="mt-4 rounded-card border border-border bg-surface-1 p-3">
+        <figure className="rounded-card border border-border bg-surface-1 p-3">
           <blockquote className="text-ui text-text">{`“${detail.quote}”`}</blockquote>
           <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-caption text-text-3">
             {detail.quoteSource && <span>{`— ${detail.quoteSource}`}</span>}
@@ -383,34 +390,36 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
       )}
 
       {detail?.usedBy && detail.usedBy.length > 0 && (
-        <VcrSection title="被这些结果使用" className="mt-6" meta={`${detail.usedBy.length}`}>
-          <ul className="divide-y divide-faint">
+        <Section title="被这些结果使用" level="sub" count={detail.usedBy.length}>
+          <List label="使用这张卡的结果">
             {detail.usedBy.map((user) => (
-              <li key={user.id} className="flex items-baseline justify-between gap-3 py-2">
-                {user.tab
-                  ? <Link to={vcrTabPath(studyId, user.tab)} className="min-w-0 truncate text-ui text-link hover:underline">{user.label}</Link>
-                  : <span className="min-w-0 truncate text-ui text-text">{user.label}</span>}
-                {user.note && <span className="shrink-0 text-caption text-text-3">{user.note}</span>}
-              </li>
+              <ListRow
+                key={user.id}
+                title={user.label}
+                {...(user.tab ? { to: vcrTabPath(studyId, user.tab) } : {})}
+                trailing={user.note ? <span className="text-caption text-text-3">{user.note}</span> : undefined}
+              />
             ))}
-          </ul>
-        </VcrSection>
+          </List>
+        </Section>
       )}
 
       {detail?.versions && detail.versions.length > 0 && (
-        <VcrSection title="改动记录" className="mt-6">
-          <ol className="divide-y divide-faint">
-            {detail.versions.map((version) => (
-              <li key={version.version} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-                <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{version.at ?? ""}</span>
-                <span className="min-w-0 flex-1 text-ui text-text">{version.text}</span>
-                {version.note && <span className="shrink-0 text-caption text-text-3">{version.note}</span>}
-              </li>
-            ))}
-          </ol>
-        </VcrSection>
+        <Section title="改动记录" level="sub" count={detail.versions.length}>
+          <DataTable
+            label="改动记录"
+            minWidth="min-w-0"
+            columns={[
+              { key: "at", header: "时间", rowHeader: true, width: "w-32", isEmpty: (version) => !version.at, cell: (version) => <span className="tabular-nums text-text-3">{version.at ?? ""}</span> },
+              { key: "text", header: "改动", cell: (version) => <span className="text-text">{version.text}</span> },
+              { key: "note", header: "说明", isEmpty: (version) => !version.note, cell: (version) => <span className="text-caption text-text-3">{version.note ?? ""}</span> },
+            ]}
+            rows={detail.versions}
+            rowKey={(version) => String(version.version)}
+          />
+        </Section>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -438,7 +447,7 @@ function NewEvidence({ news }: { news: NonNullable<VcrAssumption["newEvidence"]>
         </ul>
       )}
       {news.afterFreezeVersion != null && (
-        <p className="mt-1.5 text-caption text-text-3">分析计划已经冻结：新版本放在冻结的版本旁边，研究仍按冻结的版本计算。</p>
+        <p data-vcr-after-freeze="" className="mt-1.5"><Tag>{`冻结后新增 v${news.afterFreezeVersion}`}</Tag></p>
       )}
     </div>
   );
@@ -493,7 +502,7 @@ function EditCard({ studyId, assumption, onClose, onSaved }: {
       className="mb-4 flex flex-col gap-3 rounded-card border border-border bg-surface-1 p-3"
       onSubmit={(event) => { event.preventDefault(); save(); }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input label="取值" type="number" step="any" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} />
         <Input label="单位" value={unit} onChange={(event) => setUnit(event.target.value)} />
       </div>

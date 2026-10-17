@@ -26,6 +26,11 @@ import { ScrollRegion } from "@/components/ui/ScrollRegion";
  * `isEmpty` is always drawn — a column can only disappear when its author
  * said what empty means.
  *
+ * **A row that opens a record** (`onRowOpen`, R19): pressing anywhere on it opens what it is a row of — a patient's record, a design's
+ * run — and it says so with the pointer and a hover ground, like a `ListRow`. The keyboard's way in is a control of the caller's own
+ * in the row's first cell (the id as a button), because a row is not a tab stop; a press that lands on a control inside the row
+ * does that control's work and not the row's.
+ *
  * Four states, like every list on this product: skeleton, empty sentence,
  * error with 重试, content.
  */
@@ -56,6 +61,7 @@ export function DataTable<T>({
   rowKey,
   highlight,
   rowAttrs,
+  onRowOpen,
   state = "content",
   emptyText,
   errorMessage,
@@ -74,6 +80,8 @@ export function DataTable<T>({
   highlight?: (row: T) => boolean;
   /** `data-` attributes a walk or a test reads off the row. */
   rowAttrs?: (row: T) => Record<string, string>;
+  /** Opens the row's record. The row takes the press; the caller puts the keyboard's control in its first cell. */
+  onRowOpen?: (row: T) => void;
   state?: "content" | "loading" | "empty" | "error";
   emptyText?: string;
   errorMessage?: string;
@@ -148,11 +156,21 @@ export function DataTable<T>({
             {rows.map((row) => {
               const ours = highlight?.(row) ?? false;
               return (
+                // The row takes the mouse's press; the keyboard's way in is the caller's control in the first cell (see the header).
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
                 <tr
                   key={rowKey(row)}
                   {...(rowAttrs?.(row) ?? {})}
                   data-row-ours={ours ? "" : undefined}
-                  className={cn(ours && "bg-accent-soft")}
+                  data-row-open={onRowOpen ? "" : undefined}
+                  className={cn(ours && "bg-accent-soft", onRowOpen && !ours && "cursor-pointer hover:bg-surface-1", onRowOpen && ours && "cursor-pointer")}
+                  onClick={onRowOpen
+                    ? (event) => {
+                      // A control inside the row (a link, the id's button, a menu) does its own work.
+                      if ((event.target as Element).closest("a, button, input, select, textarea, label, summary, [role=button]")) return;
+                      onRowOpen(row);
+                    }
+                    : undefined}
                 >
                   {drawn.map((column, index) => {
                     const body = column.cell(row);

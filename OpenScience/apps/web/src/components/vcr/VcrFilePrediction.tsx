@@ -25,7 +25,8 @@ export function hasPredictableDesign(designs: readonly VcrDesign[]): boolean {
  * 登记预测: the lead files a trial scenario's prediction of a registered trial's primary endpoint, in the form of the drawer 「登记预测」
  * opens. The page chooses a design and a measure; **it types no number** — the server reads the estimate (or the success probability)
  * from the engine's own result at the named path, so a prediction can never be a figure somebody chose. Filed with a timestamp, scored
- * when the trial reports, shown to nobody before that.
+ * when the trial reports, shown to nobody before that. The form has no field for the number, which is the whole of what it would
+ * otherwise have to say (audit B §2.4 #28).
  */
 export function VcrFilePrediction({ studyId, designs, onFiled }: { studyId: string; designs: readonly VcrDesign[]; onFiled?: () => void }) {
   const options = predictable(designs);
@@ -53,7 +54,6 @@ export function VcrFilePrediction({ studyId, designs, onFiled }: { studyId: stri
 
   return (
     <div data-vcr-file-prediction="" className="flex flex-col gap-3">
-      <p className="text-caption text-text-3">预测的数取自引擎的结果，这里不输入数字；试验结果出来之前不公开。</p>
       <Select id={ids.design} label="方案" value={design.id} onChange={(event) => setScenarioId(event.target.value)}>
         {options.map((entry) => <option key={entry.id} value={entry.id}>{`${entry.code} · ${entry.name}`}</option>)}
       </Select>
