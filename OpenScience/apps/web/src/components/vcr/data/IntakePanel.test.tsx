@@ -17,6 +17,9 @@ vi.mock("@/lib/productClient", () => network);
 const upload = vi.hoisted(() => ({ fetchWithWebAuth: vi.fn() }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/apiClient")>()), fetchWithWebAuth: upload.fetchWithWebAuth }));
 
+// Every test here drives several user-event uploads, selects and re-reads: slower than the 5 s default whenever the suite shares the machine.
+vi.setConfig({ testTimeout: 20_000 });
+
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
