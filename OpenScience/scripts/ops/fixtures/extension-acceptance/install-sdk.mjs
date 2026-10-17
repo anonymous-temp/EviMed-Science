@@ -14,7 +14,9 @@ const packages=verifiedKernelPins(cli,pins.dsh.version,pins.dsh.cordis);
 for(const source of ['/opt/sdk/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai','/opt/sdk/node_modules/@deepseek-ai']){if(!fs.existsSync(source))continue;for(const name of fs.readdirSync(source)){
  try{const value=JSON.parse(fs.readFileSync(source+'/'+name+'/package.json'));if(packages[value.name]!==value.version)throw Error('fixture_namespace_identity');if(!fs.existsSync(scope+'/'+name))fs.symlinkSync(fs.realpathSync(source+'/'+name),scope+'/'+name);}catch(error){if(error.code!=='ENOENT')throw error;}
 }}
-const count=Object.keys(packages).filter(name=>/^@deepseek-ai\/dsh(?:-|$)/.test(name)).length;if(count!==273)throw Error('fixture_kernel_closure_differs');
+const count=Object.keys(packages).filter(name=>/^@deepseek-ai\/dsh(?:-|$)/.test(name)).length;
+// The installed closure is the recorded closure of the pinned kernel, member for member (name and version).
+const recorded=JSON.parse(fs.readFileSync('/fixture/platform/scripts/ops/kernel-closure.json'));const recordedDsh=recorded.members.filter(member=>/^@deepseek-ai\/dsh(?:-|$)/.test(member.name));if(recorded.root?.version!==pins.dsh.version||count!==recordedDsh.length||recordedDsh.some(member=>packages[member.name]!==member.version))throw Error('fixture_kernel_closure_differs');
 // Citation provider peers resolve only through this verified SDK, never a second npm-selected kernel.
 execFileSync('npm',['install','--prefix','/opt/citation','--ignore-scripts','--no-audit','--no-fund','--legacy-peer-deps','dsh-cite@'+pins.dsh.citeVersion],{stdio:'inherit'});
 fs.symlinkSync('/opt/citation/node_modules/dsh-cite','/fixture/platform/node_modules/dsh-cite');

@@ -5,7 +5,8 @@ import {verifiedKernelPins} from './platform/deploy/runtime-dsh/profile-kernel-p
 import {securityYamlPin,verifyYamlInstallation} from './platform/deploy/runtime-dsh/runtime-yaml-security.mjs';
 const pins=JSON.parse(fs.readFileSync('/fixture/platform/deps-version.json')),global='/usr/local/lib/node_modules',seed='/opt/evimed/dsh-home-seed/profiles/evimed-runtime/node_modules';
 const installed=JSON.parse(fs.readFileSync('/opt/evimed/runtime-deps-version.json'));if(installed.dsh.version!==pins.dsh.version||installed.dsh.publishedBefore!==pins.dsh.publishedBefore||installed.$runtimeSecurity['js-yaml'].integrity!==pins.$runtimeSecurity['js-yaml'].integrity)throw Error('runtime_fixture_pin_differs');
-const packages=verifiedKernelPins(global+'/@deepseek-ai/dsh/package.json',pins.dsh.version,pins.dsh.cordis),namespace=Object.keys(packages).filter(name=>/^@deepseek-ai\/dsh(?:-|$)/.test(name)).length;if(namespace!==273)throw Error('runtime_fixture_namespace_differs');
+const packages=verifiedKernelPins(global+'/@deepseek-ai/dsh/package.json',pins.dsh.version,pins.dsh.cordis),namespace=Object.keys(packages).filter(name=>/^@deepseek-ai\/dsh(?:-|$)/.test(name)).length;
+const recorded=JSON.parse(fs.readFileSync('/fixture/platform/scripts/ops/kernel-closure.json'));const recordedDsh=recorded.members.filter(member=>/^@deepseek-ai\/dsh(?:-|$)/.test(member.name));if(recorded.root?.version!==pins.dsh.version||namespace!==recordedDsh.length||recordedDsh.some(member=>packages[member.name]!==member.version))throw Error('runtime_fixture_namespace_differs');
 const pin=securityYamlPin('/fixture/platform/deps-version.json');
 // Whole official package bytes were verified by the immutable runtime's dedicated security build step.
 // Recheck every current consumer resolution/version without altering either installed closure.

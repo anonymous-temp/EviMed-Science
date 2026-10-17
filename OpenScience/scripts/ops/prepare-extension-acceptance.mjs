@@ -170,6 +170,10 @@ export async function prepareExtensionAcceptance({ platform = 'linux/amd64', out
   for(const name of ['kernel-install.mjs'])await fs.copyFile(path.join(project,'scripts/ops',name),path.join(context,'platform/scripts/ops',name));
   for(const name of ['runtime-yaml-security.mjs','profile-seed.mjs','profile-kernel-pins.mjs'])await fs.copyFile(path.join(project,'deploy/runtime-dsh',name),path.join(context,'platform/deploy/runtime-dsh',name));
   await fs.copyFile(path.join(project,'deps-version.json'),path.join(context,'platform/deps-version.json'));
+  // The recorded closure of the pinned kernel (the one `kernel-install.mjs cutoff` computes and a test holds): the fixtures hold the
+  // installed SDK to it by name and version, so the expected size moves with the pin instead of being a number in a script.
+  const pinnedKernel=JSON.parse(await fs.readFile(path.join(project,'deps-version.json'),'utf8')).dsh.version;
+  await fs.copyFile(path.join(project,'scripts/ops/test/fixtures','kernel-closure-times-'+pinnedKernel+'.json'),path.join(context,'platform/scripts/ops/kernel-closure.json'));
   await fs.copyFile(path.join(project,'scripts/runtime/validate-personal-skill.mjs'),path.join(context,'validate-personal-skill.mjs'));
   for(const[name,target]of [['plugins/skill-catalogue.mjs','catalogue.mjs'],['plugins/plugin-probe.mjs','probe.mjs'],['plugins/citation-bridge.mjs','citation.mjs']])await fs.copyFile(path.join(project,'packages/socket',name),path.join(context,'platform',target));
   // The cowork bridge keeps the socket's own layout: it imports a shared module by relative path
