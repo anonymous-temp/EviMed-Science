@@ -58,11 +58,17 @@
           # our switches the native control arm carried it too. Medicine is one clause:
           # the method that clause names is a skill the model loads when the question is
           # medical (`runtime/skills/evimed/open-domain-answer`), not this sentence.
+          #
+          # No working directory here (2026-10-17, 0.2.1-rc.2): the kernel took `{{cwd}}`
+          # out of the prompt variables (registered: `provider`, `model`), and a section
+          # naming it fails every request of the session before the model is asked. The
+          # directory is now the working-directory service's, which states it in the
+          # runtime context and keeps it current when a session changes it.
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                你是 EviMed 的工作助手，基于 {{model}} 模型，工作目录 {{cwd}}。
+                你是 EviMed 的工作助手，基于 {{model}} 模型。
                 写作、办公文档、表格、幻灯片、代码与脚本、数据分析、网页调研，以及医学和科研问题，都是你的本职工作。
                 能直接回答的直接回答；要做事的任务，默认就在这次对话里把它做完并交付结果；缺的东西让事情根本没法开始时才问，其余照最合理的理解做并写明假设。
                 只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才委派。
