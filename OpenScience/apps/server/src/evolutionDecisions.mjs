@@ -124,7 +124,8 @@ export class EvolutionDecisions {
     // The recommended option is the one marked primary, so a reader (and any channel that draws the actions) sees which it is.
     const notice = await this.notifications.create(await this.service.owner(), { noticeType: 'review', title: clip(row.payload.title, EVOLUTION_NOTICE_LIMITS.title), body: clip(row.payload.body, EVOLUTION_NOTICE_LIMITS.body),
       actions: row.payload.options.map((/** @type {any} */ o) => ({ id: o.id, label: clip(o.label, EVOLUTION_NOTICE_LIMITS.label), style: o.id === row.payload.recommended ? 'primary' : 'neutral' })),
-      source: { type: 'system', id: row.id }, idempotencyKey: row.id });
+      source: { type: 'system', id: row.id }, idempotencyKey: row.id }, { now: new Date(deliveredAt) });
+    // One clock: the item is stamped with the decisions' own time, so the day a card counts against is the day it was delivered on.
     deliveredAt = notice.createdAt ?? deliveredAt;
     const dueAt = new Date(Date.parse(deliveredAt) + (this.config.evolutionDecisionTimeoutMs ?? 86400000)).toISOString();
     const saved = await this.service.save('decision', row.id, { ...row.payload, deliveredAt, dueAt, cardDay: shanghaiDay(new Date(deliveredAt)), notificationId: notice.id }, row);

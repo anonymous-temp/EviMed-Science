@@ -583,3 +583,26 @@ test("a row form the parser cannot read stops it, rather than shrinking the list
     /not a mapping key/,
   );
 });
+
+test("the recorded composition carries the persona the preset says, word for word", async () => {
+  // The image build byte-diffs its own dump against the baseline, so a preset row whose text changed and a baseline left
+  // behind is a build that fails after the work was reviewed (2026-10-17: the persona stopped naming the working directory,
+  // `bbafb0efe`, and the baseline kept `工作目录 {{cwd}}` until the integrated calibration found it). This reads both files
+  // and needs no kernel: the persona is the one row whose text is ours, so it is the one a preset edit changes by hand.
+  const personaOf = (text) => {
+    const found = /prefix: >-\n(?=[ ]+你是 EviMed)/.exec(text);
+    assert.ok(found, "the persona prefix was not found, so this compared nothing");
+    const lines = [];
+    const body = text.slice(found.index + found[0].length).split("\n");
+    const indent = body[0].length - body[0].trimStart().length;
+    for (const line of body) {
+      if (!line.trim() || line.length - line.trimStart().length < indent) break;
+      lines.push(line.trim());
+    }
+    assert.ok(lines.length >= 5, "the persona's folded block is five lines or more");
+    return lines.join(" ");
+  };
+  const preset = personaOf(await readFile(source("preset"), "utf8"));
+  const baseline = personaOf(await readFile(source("baseline"), "utf8"));
+  assert.equal(baseline, preset, "re-record deploy/runtime-dsh/dump-config.baseline.json (and the provenance digest) after a persona edit");
+});

@@ -107,7 +107,9 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const listedFromSecond = (await projectsFromSecond.json()).data;
     // The day a project was made rides along: it is what tells two projects of one name apart.
     for (const item of listedFromSecond) assert.ok(Date.parse(item.createdAt), `${item.id} carries the day it was made`);
-    assert.deepEqual(listedFromSecond.map((item) => withoutCreatedAt(item)), [
+    // And when it was last used, which orders the sidebar (R19): the project used last comes first.
+    for (const item of listedFromSecond) assert.ok(Date.parse(item.lastActiveAt), `${item.id} carries when it was last used`);
+    assert.deepEqual(listedFromSecond.map(({ lastActiveAt: _used, ...item }) => withoutCreatedAt(item)), [
       { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null },
       { id: "default", name: "我的项目", archivedAt: null, runCount: 0, lastActivityAt: null },
     ]);
@@ -167,7 +169,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const bob = await login(second.base, "bob", "abc123");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
-    assert.deepEqual((await bobProjects.json()).data.map((item) => withoutCreatedAt(item)), [{ id: "default", name: "我的项目", archivedAt: null, runCount: 0, lastActivityAt: null }]);
+    assert.deepEqual((await bobProjects.json()).data.map(({ lastActiveAt: _used, ...item }) => withoutCreatedAt(item)), [{ id: "default", name: "我的项目", archivedAt: null, runCount: 0, lastActivityAt: null }]);
     const bobCannotSeeAlice = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: bob.cookie, "X-Open-Science-Project": "paper1" },
     });
