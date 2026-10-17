@@ -1549,6 +1549,8 @@ export function capturePlan({ viewportHeight, clientHeight, scrollHeight }) {
  * @returns {Promise<{ screenshots: string[], capture: any, facts: string }>}
  */
 async function capturePage(page, out, view, viewport, route, composition) {
+  // The pointer is where the last click left it: out of the picture's way, so that no tooltip or hover state is drawn over the page.
+  await page.mouse.move(1, 1);
   const shape = await page.evaluate(scrollPage, ["shape"]);
   const plan = capturePlan(shape);
   /** @type {string[]} */ const screenshots = [];
@@ -3233,6 +3235,13 @@ async function main() {
           const arranged = compositionFindings(name, viewportName, composition);
           failures.push(...arranged.failures);
           notices.push(...arranged.notices);
+          // The page as a reader meets it, from top to bottom: pictures, and what the composition read. Before the phone's two Tab presses, which leave a
+          // focus ring and a tooltip on the sidebar's button, and before anything is clicked.
+          try {
+            report.pages[current].files = await capturePage(page, out, current, viewport, route, composition);
+          } catch (error) {
+            failures.push(`${current}: the whole-page picture could not be taken (${String(error).replace(/\s+/g, " ").slice(0, 120)})`);
+          }
           if (viewportName === "phone") {
             // Focus order is read, never changed: two presses of Tab from the top of the page, and where each landed.
             const stops = [];
@@ -3262,12 +3271,6 @@ async function main() {
             const result = await scanWithAxe(page, axe.source);
             report.pages[current].axe = result;
             axeScans.push({ view: current, result });
-          }
-          // The page as a reader meets it, from top to bottom (before anything is clicked): pictures, and what the composition read.
-          try {
-            report.pages[current].files = await capturePage(page, out, current, viewport, route, composition);
-          } catch (error) {
-            failures.push(`${current}: the whole-page picture could not be taken (${String(error).replace(/\s+/g, " ").slice(0, 120)})`);
           }
           if (viewportName === "desktop" && MISSING_RECORDS[name]) {
             // The way back is a click that only navigates: the button names the list and the address must be that list's.

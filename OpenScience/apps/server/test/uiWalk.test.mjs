@@ -699,6 +699,7 @@ function context() {
     });
     return {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
+      mouse: { move: async () => {} },
       on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
       async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },

@@ -267,9 +267,9 @@ test("the project the app remembers is forgotten at the start of every document,
     await tab.route("http://walk.test/**", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>x</title>" }));
     await tab.goto("http://walk.test/a");
     // The app's own words for it (apiClient.ts), as a click into a study sets them, and a setting of the app's that is not the project.
-    await tab.evaluate(() => { window.sessionStorage.setItem("openScience.projectId", "p-study"); window.localStorage.setItem("openScience.projectId", "p-study"); window.localStorage.setItem("openScience.theme", "dark"); });
+    await tab.evaluate(() => { const page = globalThis; page.sessionStorage.setItem("openScience.projectId", "p-study"); page.localStorage.setItem("openScience.projectId", "p-study"); page.localStorage.setItem("openScience.theme", "dark"); });
     await tab.goto("http://walk.test/b");
-    assert.deepEqual(await tab.evaluate(() => [window.sessionStorage.getItem("openScience.projectId"), window.localStorage.getItem("openScience.projectId"), window.localStorage.getItem("openScience.theme")]), [null, null, "dark"]);
+    assert.deepEqual(await tab.evaluate(() => { const page = globalThis; return [page.sessionStorage.getItem("openScience.projectId"), page.localStorage.getItem("openScience.projectId"), page.localStorage.getItem("openScience.theme")]; }), [null, null, "dark"]);
   } finally {
     await context.close();
   }
