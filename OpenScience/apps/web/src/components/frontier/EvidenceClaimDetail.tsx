@@ -40,8 +40,8 @@ export const safeUrl = (value: string | null) => {
 };
 
 export function ClaimMark({ mark }: { mark: EvidenceClaimMark | undefined }) {
-  if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="引文已核对">✓</span>;
-  if (mark === "⚠") return <span className="mr-1 text-verify-pending" aria-label="未核对上">⚠</span>;
+  if (mark === "✓") return <span role="img" className="mr-1 text-verify-ok" aria-label="引文已核对">✓</span>;
+  if (mark === "⚠") return <span role="img" className="mr-1 text-verify-pending" aria-label="未核对上">⚠</span>;
   return null;
 }
 

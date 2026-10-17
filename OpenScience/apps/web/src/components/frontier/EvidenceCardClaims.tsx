@@ -23,8 +23,8 @@ function RowMark({ claim }: { claim: EvidenceClaim }) {
   const mark = claim.verification?.mark;
   return (
     <span className="inline-flex w-4 justify-center">
-      {mark === "✓" && <span className="text-verify-ok" aria-label="引文已核对">✓</span>}
-      {mark === "⚠" && <span className="text-verify-pending" aria-label="未核对上">⚠</span>}
+      {mark === "✓" && <span role="img" className="text-verify-ok" aria-label="引文已核对">✓</span>}
+      {mark === "⚠" && <span role="img" className="text-verify-pending" aria-label="未核对上">⚠</span>}
     </span>
   );
 }

@@ -34,7 +34,6 @@ import {
 } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
-import type { ToolbarSearch } from "@/components/ui/Toolbar";
 import { frontierToolbar, type PageView } from "@/components/frontier/FrontierControls";
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
@@ -642,17 +641,6 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const openWeek = (next: string) => setParams((current) => {
     const updated = new URLSearchParams(current); updated.set("week", next); return updated;
   });
-  const search: ToolbarSearch = {
-    label: "搜索",
-    value: draft,
-    maxLength: 200,
-    onChange: setDraft,
-    onClear: () => setDraft(""),
-    inputProps: {
-      onCompositionStart: () => { composing.current = true; },
-      onCompositionEnd: (event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); },
-    },
-  };
   const toolbar = frontierToolbar({
     view,
     onView: setView,
@@ -660,7 +648,17 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     onFilters: setFilters,
     showWindow: view === "all",
     searching: Boolean(q),
-    search,
+    search: {
+      label: "搜索",
+      value: draft,
+      maxLength: 200,
+      onChange: setDraft,
+      onClear: () => setDraft(""),
+      inputProps: {
+        onCompositionStart: () => { composing.current = true; },
+        onCompositionEnd: (event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); },
+      },
+    },
     hot: {
       window: hotWindow,
       board: hot[hotWindow]?.board ?? null,
