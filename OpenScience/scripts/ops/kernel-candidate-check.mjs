@@ -46,6 +46,9 @@
  *     }],
  *     pins: [{ id, kind: "npm"|"pypi"|"github", source, pinned, pinnedAt, latest, latestAt, behind, lagDays, note }],
  *     unknown: [string…]   // what could not be learned, said out loud
+ *     // and, once `skill-catalogue-size.mjs --candidate-json candidate-check.json` has run over it (an operator's or a
+ *     // release's step, not this script's: it needs the installed workspace): the model's skill catalogue as a budget —
+ *     skillCatalogue?: { measuredAt, descriptionMax, nonGeo: { skills, chars, total, roots, notMeasured }, geo: … | null, geoNotMeasured }
  *   }
  * `verdict: "movable"` means the static checks pass; it is not a recommendation (the live gates — golden frames, the
  * frame walk, the battery — are what decide).
