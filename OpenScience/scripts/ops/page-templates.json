@@ -73,7 +73,7 @@
     { "view": "geo-actions", "module": "geo", "tab": "/actions", "pattern": "/app/geo/:geoId/:tab", "family": "geo", "template": "T3", "budget": "geo", "rows": false },
     { "view": "geo-plan", "module": "geo", "tab": "/plan", "pattern": "/app/geo/:geoId/:tab", "family": "geo", "template": "T3", "budget": "geo", "rows": false },
     { "view": "geo-evidence", "module": "geo", "tab": "/evidence", "pattern": "/app/geo/:geoId/:tab", "family": "geo", "template": "T3", "budget": "geo", "rows": false },
-    { "view": "geo-answer", "discovered": true, "pattern": "/app/geo/:geoId/answers/:snapshotId", "family": "geo-record", "template": "T5", "budget": "geo", "rows": false },
+    { "view": "geo-answer", "discovered": true, "pattern": "/app/geo/:geoId/answers/:snapshotId", "family": "geo-record", "band": "geo", "template": "T3", "templateNote": "one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk", "budget": "geo", "rows": false },
     { "view": "vcr-overview", "module": "vcr", "tab": "", "pattern": "/app/virtual-research/:studyId/:tab?", "family": "vcr", "template": "T3", "budget": "geo", "shapes": 3, "rows": false },
     { "view": "vcr-population", "module": "vcr", "tab": "/population", "pattern": "/app/virtual-research/:studyId/:tab?", "family": "vcr", "template": "T3", "budget": "geo", "shapes": 3, "rows": false },
     { "view": "vcr-patients", "module": "vcr", "tab": "/patients", "pattern": "/app/virtual-research/:studyId/:tab?", "family": "vcr", "template": "T3", "budget": "geo", "shapes": 3, "rows": false },

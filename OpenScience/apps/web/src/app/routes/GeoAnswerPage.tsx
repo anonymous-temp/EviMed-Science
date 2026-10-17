@@ -241,7 +241,9 @@ function Answer({
         </div>
       </div>
       {target && (
-        <Button data-geo-answer-primary="" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
+        // The answer's own step, not the module's next one: a secondary button in the answer's heading row, as 确认后联系 is in its
+        // person's row (T3: the one primary action of a module page is the band header's).
+        <Button data-geo-answer-primary="" variant="secondary" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
       )}
     </header>
   );

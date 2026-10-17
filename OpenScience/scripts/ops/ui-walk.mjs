@@ -225,7 +225,7 @@ const WALK_TABLES = {
       {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","template":"T5","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -1463,8 +1463,9 @@ export function familyFindings(pages) {
     if (!row) continue;
     // The second study of the module walk is `vcr-trial@2`, the same tabs of another study: its own group.
     const study = /@\d+$/.test(name) ? name.slice(name.lastIndexOf("@")) : "";
-    if (row.module) {
-      const key = `${row.module}${study}@${viewport}`;
+    // A record read inside a module's band (`band`: one 循证 GEO answer) is held to the band of the module's tabs.
+    if (row.module || row.band) {
+      const key = `${row.module ?? row.band}${study}@${viewport}`;
       modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
     }
     if (viewport === "desktop" && c.title) {

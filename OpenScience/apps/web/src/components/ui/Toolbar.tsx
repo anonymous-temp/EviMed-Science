@@ -173,8 +173,10 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
       {onClear && (active > 0 || searching) && <FilterChip onClick={onClear}>清除筛选</FilterChip>}
     </>
   );
+  // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
+  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
   const end = (search || summary != null || actions) && (
-    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:basis-full")}>
+    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:flex-1")}>
       {search && (
         <SearchInput
           size="sm"
