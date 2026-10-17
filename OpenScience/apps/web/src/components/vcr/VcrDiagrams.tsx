@@ -521,11 +521,11 @@ export function VcrTradeoffScatter({
               {design.dominated
                 ? <span className="block text-text-3">{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>
                 : (
+                  // The numbers under a bubble are text: each is a button with its source in the table of the same designs just above, and
+                  // six more buttons of a size nothing else on the page has would be a kind of control for a caption.
                   <span className="block tabular-nums text-text-3">
-                    <VcrNumber value={measure} label={`${design.name || design.code} ${yLabel ?? ""}`.trim()}>
-                      {withUnit(measure)}
-                      {mcse && <span className="ml-1">{mcse}</span>}
-                    </VcrNumber>
+                    {withUnit(measure)}
+                    {mcse && <span className="ml-1">{mcse}</span>}
                     {cost && cost.value != null && <span>{` · ${withUnit(cost)}`}</span>}
                   </span>
                 )}
@@ -628,7 +628,7 @@ export function VcrMilestoneTimeline({
                 )}
               </span>
               <div className="min-w-0 text-right">
-                <p className="text-caption tabular-nums text-text"><VcrNumber value={value} label={`${row.name || row.design} ${item.label}`} /></p>
+                <p className="text-ui tabular-nums text-text"><VcrNumber value={value} label={`${row.name || row.design} ${item.label}`} /></p>
                 {interval && <p className="text-meta tabular-nums text-text-3 sm:truncate">{interval}</p>}
               </div>
             </li>

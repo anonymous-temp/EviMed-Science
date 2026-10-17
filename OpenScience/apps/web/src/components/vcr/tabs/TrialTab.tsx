@@ -414,7 +414,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
             {/* The keyboard's way into the run behind the row; a press anywhere else on the row does the same for a pointer. */}
             {onOpen && hasRun(design)
               ? (
-                <button type="button" aria-label={`打开方案 ${design.code} 的计算详情`} onClick={() => onOpen(design)} className={cn("rounded text-left hover:underline", design.dominated ? "text-text-3" : "text-text")}>
+                <button type="button" aria-label={`打开方案 ${design.code} 的计算详情`} onClick={() => onOpen(design)} className={cn("rounded text-left font-normal hover:underline", design.dominated ? "text-text-3" : "text-text")}>
                   {design.name}
                 </button>
               )
@@ -443,8 +443,8 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
         return (
           <span data-vcr-measure={column.key} data-vcr-source={value.source} className="flex flex-col items-end">
             <span className="inline-flex items-baseline gap-1">
-              <VcrNumber value={value} label={`${design.code} ${column.label}`}>
-                <span className={cn("tabular-nums", design.chosen && "font-medium")}>{valueText(value)}</span>
+              <VcrNumber value={value} label={`${design.code} ${column.label}`} className="font-normal">
+                <span className="tabular-nums">{valueText(value)}</span>
               </VcrNumber>
               {mcse && (
                 <Tooltip content="蒙特卡洛标准误">

@@ -194,7 +194,8 @@ function SortHeader({ label, active, onSort }: { label: string; active: { descen
       aria-label={`按${label}排序${state}`}
       aria-pressed={active !== null}
       onClick={onSort}
-      className={cn("inline-flex items-center gap-0.5 rounded", active ? "text-text" : "hover:text-text")}
+      // One size for every button of the table — the id, the header — and for the numbers a reader opens beside it.
+      className={cn("inline-flex items-center gap-0.5 rounded text-ui", active ? "text-text" : "hover:text-text")}
     >
       {label}
       {Arrow && <Arrow size={16} aria-hidden="true" />}

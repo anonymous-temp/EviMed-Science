@@ -114,7 +114,12 @@ export function VcrSeriesLegend({ series }: {
       ))}
       {dashed.map(([source, word]) => (
         <span key={source} data-vcr-legend-source={source} className="inline-flex items-center gap-1.5 text-caption text-text-2">
-          <span aria-hidden="true" data-forced-colors="preserve" className="inline-block h-0 w-4 border-t-2 border-dashed border-text-3" />
+          <span
+            aria-hidden="true"
+            data-forced-colors="preserve"
+            className="inline-block h-0.5 w-4 text-text-3"
+            style={{ backgroundImage: "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)" }}
+          />
           {`虚线 = ${word}`}
         </span>
       ))}

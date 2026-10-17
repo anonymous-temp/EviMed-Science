@@ -409,11 +409,14 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
         <div className="flex min-w-0 flex-col gap-4">
           {data.candidates.length > 0 && (
             <Section title={referralStateLabel("candidate")} count={data.candidates.length}>
-              <List label="患者名单">
-                {data.candidates.map((candidate) => (
-                  <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
-                ))}
-              </List>
+              {/* A section holds one shape of body: the table beside it is a div, and so is the list. */}
+              <div>
+                <List label="患者名单">
+                  {data.candidates.map((candidate) => (
+                    <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
+                  ))}
+                </List>
+              </div>
             </Section>
           )}
 
