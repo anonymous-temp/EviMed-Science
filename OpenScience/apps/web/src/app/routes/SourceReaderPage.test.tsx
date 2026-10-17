@@ -720,7 +720,7 @@ describe("a document's page", () => {
     it("is the text that was read for a document in the cloud drive, and says so", async () => {
       const column = await original(policy);
       expect(await within(column).findByTestId("preview")).toHaveTextContent("预览：knowledge-base/.evimed-derived/src_policy/read-1-job-aaa/index.md");
-      expect(within(column).getByText("原件在网盘里，这里是从它读出的文本。")).toBeInTheDocument();
+      expect(within(column).getByText("从网盘文件读出的文本")).toBeInTheDocument();
     });
 
     it("is the snapshot for a web page, with the day it was taken and the way to the page itself", async () => {

@@ -68,7 +68,7 @@ function Provenance({ source }: { source: SourceRecord }) {
     );
   }
   if (display.origin === "drive") {
-    return <p className="border-b border-border bg-surface px-4 py-2 text-caption text-text-3">原件在网盘里，这里是从它读出的文本。</p>;
+    return <p className="border-b border-border bg-surface px-4 py-2 text-caption text-text-3">从网盘文件读出的文本</p>;
   }
   return null;
 }

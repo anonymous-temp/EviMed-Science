@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Share2 } from "lucide-react";
-import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { StateScreen } from "@/components/ui/StateScreen";
 import { Input } from "@/components/ui/Input";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
@@ -91,12 +91,7 @@ export function SharedCapsulePage() {
       {failed?.retry && <LoadError message={failed.message} onRetry={() => setAttempt((value) => value + 1)} />}
       {failed && !failed.retry && (
         // Trying again cannot change a refusal of the share itself: the way out is back to the page it was reached from.
-        <EmptyState
-          icon={Share2}
-          title="这个分享不能打开"
-          description={failed.unknown ? NOT_FOUND_TEXT : failed.message}
-          action={<Link to={MEMORY_PATH} className={buttonClasses({ variant: "secondary" })}>回到记忆胶囊</Link>}
-        />
+        <StateScreen icon={Share2} title={failed.unknown ? NOT_FOUND_TEXT : failed.message} titleAs="h2" back={{ to: MEMORY_PATH, label: "回到记忆胶囊" }} />
       )}
       {!failed && shared === null && <RunsSkeleton filter={false} />}
       {closed && (
