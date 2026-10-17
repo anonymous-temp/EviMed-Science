@@ -12,7 +12,7 @@ const skills = vi.hoisted(() => ({
   listPlatformSkills: vi.fn(), readPlatformSkill: vi.fn(), copyPlatformSkill: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn(),
 }));
-const extensions = vi.hoisted(() => ({ pluginInventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), installExtension: vi.fn() }));
+const extensions = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), installExtension: vi.fn() }));
 const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), retryWebPlugin: vi.fn(), rollbackWebPlugin: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
@@ -20,24 +20,39 @@ vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), .
 
 const row = (name: string, group: string, extra: object = {}) => ({ id: `curated:${name}`, name, title: `${group}技能 ${name}`, use: `${name} 的一句话用途`, group, source: "platform", canCopy: true, ...extra });
 const platformList = {
-  groups: ["科研分析", "写作与核查", "办公文档", "社区", "循证 GEO"], geoGroup: "循证 GEO",
+  groups: ["通用", "办公文档", "科研分析", "写作与核查", "长任务", "循证 GEO"], geoGroup: "循证 GEO", loopxGroup: "长任务",
   items: [
     ...["a", "b", "c", "d", "e", "f"].map(name => row(name, "科研分析")),
     row("check", "写作与核查"),
     row("word", "办公文档"),
-    row("ppt", "社区", { id: "community:ppt", source: "community", canCopy: false }),
+    // By what it is for, not where it came from: the community's presentation skill sits with the office documents.
+    row("ppt", "办公文档", { id: "community:ppt", source: "community", canCopy: false }),
   ],
 };
 const mine = { id: "skill:mine", revision: 1, payload: { title: "我的检索方案", description: "自己写的", instructions: "Use sources.", nativeName: "personal-x", digest: "sha256:x", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
+// What the server answers: the platform's items in the platform's own words (runtime-inventory-zh.json), each with its state for
+// this account — the page types none of them.
+const item = (id: string, title: string, use: string, extra: object = {}) => ({
+  id, title, use, icon: "Wrench", state: "on", control: { kind: "none" }, opens: { kind: "drawer" }, does: `${title}做什么`, how: `${title}怎么用`, ...extra,
+});
 const inventory = {
   projectId: "owned-project",
-  items: [{ id: "dsh-cite", management: "project", enabled: true }, { id: "dsh-annotation", management: "deployment", enabled: true }, { id: "dsh-mermaid", management: "deployment", enabled: true }],
-  webRead: true,
-  researchTools: { count: 54, groups: [{ title: "文献与指南检索", tools: ["按关键词在 PubMed 里查论文。"] }, { title: "药品与安全", tools: ["查药品说明书。"] }] },
-  engines: [
-    { id: "meta_analysis", available: true }, { id: "vcr", available: true }, { id: "mendelian_randomization", available: false },
-    { id: "drug_safety_analysis", available: true }, { id: "bibliometric_analysis", available: true }, { id: "peer_review", available: true }, { id: "research_topic_selection", available: true },
-  ],
+  groups: [{
+    id: "conversation", title: "对话里的能力",
+    items: [
+      item("loopx", "长任务", "给一个要做很多步的目标，它会自己一步步做下去，随时可以暂停。", { icon: "Repeat", does: "它会自己一步步做下去。持续运行会消耗灵豆，可随时暂停。", how: "在输入框里输入 /，选择 loopx，写下目标。" }),
+      item("memory", "记忆", "记住你说过的偏好和项目背景，下次对话自动带上。", { icon: "Brain", opens: { kind: "page", to: "/app/memory" } }),
+      item("citations", "文献引用核对", "核对参考文献的 DOI 和 PubMed 记录，并按所需格式排版。", { icon: "Quote", control: { kind: "switch", setting: "dsh-cite" }, toolSentences: { cite_lookup: "按标题、DOI 或 PMID 查找文献书目" } }),
+      item("annotation", "划词批注", "在回答里选中一段话，直接追问或批注。", { icon: "PenLine" }),
+      item("diagrams", "Mermaid 图表", "把回答里的流程图代码画成图。", { icon: "Network" }),
+      item("web", "网页阅读", "读取公开网页和 PDF，遵守网站的抓取规则。", { icon: "Globe" }),
+      item("basics", "基础能力", "待办清单、并行子任务、交付文件、向你确认、整理长对话、文件与命令。", {
+        icon: "Layers", parts: [{ title: "待办清单", does: "做步骤较多的事时，它会先列出步骤。" }, { title: "整理长对话", does: "对话很长时输入 /compact。" }],
+      }),
+      item("research-tools", "内置工具集", "网页、知识库、定时任务，以及文献、药品说明书、试验登记等检索与计算工具。", { showsTools: true }),
+    ],
+  }],
+  researchTools: { count: 2, groups: [{ title: "文献与指南检索", tools: ["按关键词在 PubMed 里查论文。"] }, { title: "药品与安全", tools: ["查药品说明书。"] }] },
 };
 const citePlugin = {
   id: "dsh-cite", binaryVersion: "9.9.9", tools: ["cite_lookup", "cite_bibtex", "cite_health"], settingsSchema: { timeoutMs: { min: 2000, max: 15000 } },
@@ -45,7 +60,7 @@ const citePlugin = {
 };
 
 // The curated tools the catalogue lists, as `GET /api/agents` returns them, and the module-only one it leaves out (`display.listed:
-// false`): the same records 工具 reads.
+// false`): the same records 科研工具 reads.
 const toolRecord = (id: string) => ({
   id, version: "1.0.0", title: id, category: "", description: "", skill: id, estimatedMinutes: [20, 40] as [number, number],
   starterPrompts: [], requiredInputs: [], optionalInputs: [], requiredTools: [], optionalTools: [], dataSources: [], outputs: [],
@@ -75,7 +90,7 @@ beforeEach(() => {
   skills.projectSkills.mockResolvedValue({ revision: 1, payload: { skills: [] } });
   skills.personalSkillSupply.mockResolvedValue(null);
   skills.saveProjectSkills.mockResolvedValue({ revision: 2, payload: { skills: [] } });
-  extensions.pluginInventory.mockResolvedValue(inventory);
+  extensions.inventory.mockResolvedValue(inventory);
   extensions.extensionCatalogue.mockResolvedValue({ items: [], generatedAt: "2026-10-07T00:00:00Z" });
   extensions.extensionInstallations.mockResolvedValue({ items: [], nextCursor: null });
   api.listWebPlugins.mockResolvedValue([citePlugin]);
@@ -100,8 +115,12 @@ it("lists the platform's skills by use with the reader's own first, four to a gr
   // Each row is the Chinese name and one line of use — never an identifier, and not the system word 「平台」 on every line.
   expect(within(analysis).getByText("a 的一句话用途")).toBeInTheDocument();
   expect(screen.queryByText("平台")).not.toBeInTheDocument();
-  // The community group names itself once, in its heading; its row does not say it again (the drawer names the source).
-  expect(within(screen.getByRole("region", { name: "社区" })).getAllByText("社区")).toHaveLength(1);
+  // Skills are listed by what they are for: the community's presentation skill sits with the office documents, and there is no
+  // group named for where a skill came from.
+  const office = screen.getByRole("region", { name: "办公文档" });
+  expect(within(office).getAllByRole("listitem")).toHaveLength(2);
+  expect(within(office).getByText("办公文档技能 ppt")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "社区" })).not.toBeInTheDocument();
 });
 
 it("is one page titled for both tabs, with the counts, and has no runtime section and no learned-methods link", async () => {
@@ -115,7 +134,7 @@ it("is one page titled for both tabs, with the counts, and has no runtime sectio
   expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
 });
 
-// The header says what the page holds in its search box, the way 工具 does, and carries no sentence under the title:
+// The header says what the page holds in its search box, the way 科研工具 does, and carries no sentence under the title:
 // PageHeader has no place for one (DESIGN.md, 页头).
 it("names its search box for what the page holds, and the header has no sentence under the title", async () => {
   open("/app/extensions/skills");
@@ -124,26 +143,26 @@ it("names its search box for what the page holds, and the header has no sentence
   expect(screen.getByRole("heading", { level: 1, name: "插件与技能" }).closest("header")?.querySelectorAll("p")).toHaveLength(0);
 });
 
-// 2026-10-10 ruling: 工具 is the platform's own curated set and 插件与技能 holds everything, so the tools 工具 lists are a group
+// 2026-10-10 ruling: 科研工具 is the platform's own curated set and 插件与技能 holds everything, so the tools 科研工具 lists are a group
 // here too — the same records and filter, and a row opens the conversation its card opens.
-it("lists the curated research tools as a 医学专业 group, after the skills, on the skills tab, four to a group, and counts them with the skills", async () => {
+it("lists the curated research tools as a 科研工具 group, after the skills, on the skills tab, four to a group, and counts them with the skills", async () => {
   api.listWebResearchAgents.mockResolvedValue(catalogue);
   open("/app/extensions/skills");
-  const group = await screen.findByRole("region", { name: "医学专业" });
+  const group = await screen.findByRole("region", { name: "科研工具" });
   expect(within(group).getAllByRole("listitem")).toHaveLength(4);
   await userEvent.click(within(group).getByRole("button", { name: "展开其余 2 个" }));
   expect(within(group).getAllByRole("listitem")).toHaveLength(6);
   for (const id of TOOL_IDS) expect(within(group).getByRole("button", { name: toolTitle(id) })).toBeInTheDocument();
   // The skills come first and open with the general ones; the medical tools follow them.
   expect(screen.getByRole("region", { name: "科研分析" }).compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // Nine platform skills and six tools: the module-only capability is left out, as 工具 leaves it out, and the tab counts what it lists.
+  // Nine platform skills and six tools: the module-only capability is left out, as 科研工具 leaves it out, and the tab counts what it lists.
   expect(await screen.findByRole("tab", { name: /^技能\s*15$/ })).toBeInTheDocument();
 });
 
-it("a tool row opens a new conversation bound to that tool, as its 工具 card does", async () => {
+it("a tool row opens a new conversation bound to that tool, as its 科研工具 card does", async () => {
   api.listWebResearchAgents.mockResolvedValue(catalogue);
   openWithChat("/app/extensions/skills");
-  const group = await screen.findByRole("region", { name: "医学专业" });
+  const group = await screen.findByRole("region", { name: "科研工具" });
   await userEvent.click(within(group).getByRole("button", { name: toolTitle("statistical-analysis") }));
   await waitFor(() => expect(api.putWebResearchSession).toHaveBeenCalledWith(
     expect.stringMatching(/^web-/), { mode: "specialist", agentId: "statistical-analysis", agentVersion: "1.0.0" }));
@@ -156,19 +175,19 @@ it("a catalogue of tools that cannot be read says so with a way to try again, an
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(await screen.findByRole("region", { name: "科研分析" })).toBeInTheDocument();
   await userEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "重试" }));
-  expect(await screen.findByRole("region", { name: "医学专业" })).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "科研工具" })).toBeInTheDocument();
 });
 
 it("the group follows the search box, and a search that matches no tool leaves it out", async () => {
   api.listWebResearchAgents.mockResolvedValue(catalogue);
   open("/app/extensions/skills");
-  await screen.findByRole("region", { name: "医学专业" });
+  await screen.findByRole("region", { name: "科研工具" });
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "统计分析");
-  expect(within(screen.getByRole("region", { name: "医学专业" })).getAllByRole("listitem")).toHaveLength(1);
+  expect(within(screen.getByRole("region", { name: "科研工具" })).getAllByRole("listitem")).toHaveLength(1);
   await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
-  expect(screen.queryByRole("region", { name: "医学专业" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "科研工具" })).not.toBeInTheDocument();
 });
 
 it("one primary action creates or imports, and an empty library says what it can be given", async () => {
@@ -192,6 +211,71 @@ it("a search shows every match across the groups, unfolded", async () => {
   await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
+});
+
+it("the toolbar's chips are the groups the list can fill; a chosen group shows all of its rows, and none is offered with nothing in it", async () => {
+  skills.listPersonalSkills.mockResolvedValue({ items: [mine], nextCursor: null });
+  api.listWebResearchAgents.mockResolvedValue(catalogue);
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "科研分析" });
+  const bar = screen.getByRole("group", { name: "筛选与搜索" });
+  const chips = within(bar).getByRole("group", { name: "技能分类" });
+  const labels = within(chips).getAllByRole("button").map(chip => chip.textContent);
+  // Every group that has rows, in the order the page lists them; 通用 and 长任务 and 循证 GEO have none here and are not drawn.
+  // The headings carry the sizes, so a chip carries none until a search narrows the groups.
+  expect(labels).toEqual(["全部", "我的技能", "办公文档", "科研分析", "写作与核查", "科研工具"]);
+  await userEvent.click(within(chips).getByRole("button", { name: /^科研分析/ }));
+  const analysis = screen.getByRole("region", { name: "科研分析" });
+  expect(within(analysis).getAllByRole("listitem")).toHaveLength(6);
+  expect(within(analysis).queryByRole("button", { name: /展开其余/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "办公文档" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "我的技能" })).not.toBeInTheDocument();
+  await userEvent.click(within(chips).getByRole("button", { name: /^全部/ }));
+  expect(screen.getByRole("region", { name: "办公文档" })).toBeInTheDocument();
+  // While a search narrows the groups each chip says what it would show.
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能");
+  const narrowed = within(screen.getByRole("group", { name: "技能分类" }));
+  expect(narrowed.getByRole("button", { name: /^办公文档\s*2$/ })).toBeInTheDocument();
+  expect(narrowed.getByRole("button", { name: /^科研分析\s*6$/ })).toBeInTheDocument();
+  // A search the chosen group cannot answer falls back to all: the chip is not left selected over an empty list.
+  await userEvent.click(narrowed.getByRole("button", { name: /^办公文档/ }));
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "技能 f");
+  expect(within(screen.getByRole("region", { name: "科研分析" })).getAllByRole("listitem")).toHaveLength(1);
+  // One group is left, so there is nothing to choose between: the chips are not drawn.
+  expect(screen.queryByRole("group", { name: "技能分类" })).not.toBeInTheDocument();
+});
+
+it("each tab's number is the rows its list draws once every group is unfolded", async () => {
+  skills.listPersonalSkills.mockResolvedValue({ items: [mine], nextCursor: null });
+  api.listWebResearchAgents.mockResolvedValue(catalogue);
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "科研工具" });
+  for (const fold of screen.getAllByRole("button", { name: /^展开其余/ })) await userEvent.click(fold);
+  const drawn = screen.getAllByRole("region").flatMap(region => within(region).queryAllByRole("listitem")).length;
+  const tab = screen.getByRole("tab", { name: /^技能\s*\d+$/ });
+  // 我的技能 1, 办公文档 2, 科研分析 6, 写作与核查 1, 科研工具 6.
+  expect(drawn).toBe(16);
+  expect(Number(tab.textContent?.replace(/\D/g, ""))).toBe(drawn);
+});
+
+it("the long task's entry skill is a row under its own group, marked as the long task's, when the server names one", async () => {
+  skills.listPlatformSkills.mockResolvedValue({
+    ...platformList, items: [...platformList.items, row("loopx", "长任务", { id: "loopx:loopx", title: "长任务", canCopy: false })],
+  });
+  open("/app/extensions/skills");
+  const group = await screen.findByRole("region", { name: "长任务" });
+  expect(within(group).getAllByRole("listitem")).toHaveLength(1);
+  expect(group.querySelector("svg.lucide-repeat")).not.toBeNull();
+});
+
+it("an empty library says what a skill is for and offers the one action", async () => {
+  open("/app/extensions/skills");
+  const own = await screen.findByRole("region", { name: "我的技能" });
+  const note = within(own).getByText(/还没有自己的技能/).closest("[data-note]") as HTMLElement;
+  expect(note).not.toBeNull();
+  await userEvent.click(within(note).getByRole("button", { name: "写第一个技能" }));
+  expect(screen.getByRole("dialog", { name: "新建技能" })).toBeInTheDocument();
 });
 
 it("a module's retired name still finds the module's skills, as its current name, and is never shown back", async () => {
@@ -225,10 +309,11 @@ it("a row opens its drawer on what it does, when it is used and its full text, a
 });
 
 it("a skill this image cannot copy offers no copy, and one whose text cannot be read still shows its words", async () => {
-  skills.readPlatformSkill.mockResolvedValue({ ...row("ppt", "社区", { id: "community:ppt", source: "community", canCopy: false }), when: null, instructions: null });
+  skills.readPlatformSkill.mockResolvedValue({ ...row("ppt", "办公文档", { id: "community:ppt", source: "community", canCopy: false }), when: null, instructions: null });
   open("/app/extensions/skills");
-  await userEvent.click(await screen.findByRole("button", { name: "社区技能 ppt" }));
-  const drawer = await screen.findByRole("dialog", { name: "社区技能 ppt" });
+  await userEvent.click(await screen.findByRole("button", { name: "办公文档技能 ppt" }));
+  const drawer = await screen.findByRole("dialog", { name: "办公文档技能 ppt" });
+  expect(within(drawer).getByText("社区 · 办公文档")).toBeInTheDocument();
   expect(within(drawer).getByText("ppt 的一句话用途")).toBeInTheDocument();
   expect(within(drawer).queryByRole("button", { name: "复制为我的技能" })).not.toBeInTheDocument();
   expect(within(drawer).queryByText("全文")).not.toBeInTheDocument();
@@ -244,23 +329,53 @@ it("a list that cannot be read says so with a way to try again, and the reader's
   expect(await screen.findByRole("region", { name: "科研分析" })).toBeInTheDocument();
 });
 
-it("the plugins tab lists what a conversation works with and the engines, each with only what is true of it", async () => {
+it("the plugins tab lists what the server names — the platform's items in its own words — and states nothing that cannot be changed", async () => {
   open("/app/extensions/plugins");
-  const tools = await screen.findByRole("region", { name: "对话里的工具" });
-  for (const name of ["文献引用核对", "内置工具集", "网页阅读", "划词批注", "Mermaid 图表"]) expect(within(tools).getByText(name)).toBeInTheDocument();
-  expect(within(tools).getAllByText("始终开启")).toHaveLength(4);
-  expect(within(tools).getByRole("switch", { name: "在当前项目里使用文献引用核对" })).toBeChecked();
-  const engines = screen.getByRole("region", { name: "计算引擎" });
-  expect(within(engines).getAllByRole("listitem")).toHaveLength(3);
-  expect(within(engines).getByText("Meta 分析引擎")).toBeInTheDocument();
-  await userEvent.click(within(engines).getByRole("button", { name: "展开其余 4 个：药物警戒、文献计量、论文审稿、科研选题" }));
-  expect(within(engines).getAllByRole("listitem")).toHaveLength(7);
-  // Only the engine that cannot take work says so; an engine that can says nothing, because that is not a state to act on.
-  expect(within(engines).getAllByText("暂不可用")).toHaveLength(1);
-  expect(within(engines).queryByText("可用")).not.toBeInTheDocument();
+  const list = await screen.findByRole("region", { name: "对话里的能力" });
+  const titles = within(list).getAllByRole("listitem").map(entry => within(entry).getAllByText(/./)[0].textContent);
+  expect(titles).toEqual(["长任务", "记忆", "文献引用核对", "划词批注", "Mermaid 图表", "网页阅读", "基础能力", "内置工具集"]);
+  // The long task is on the page now, with its line; the citation check is the one switch.
+  expect(within(list).getByText("给一个要做很多步的目标，它会自己一步步做下去，随时可以暂停。")).toBeInTheDocument();
+  expect(within(list).getByRole("switch", { name: "在当前项目里使用文献引用核对" })).toBeChecked();
+  expect(within(list).getAllByRole("switch")).toHaveLength(1);
+  // No engine group, no state nobody can change, no count of tools, no version or phase.
+  expect(screen.queryByRole("region", { name: "计算引擎" })).not.toBeInTheDocument();
   const text = document.body.textContent ?? "";
-  for (const word of ["尚未确认", "版本 0", "毫秒", "技术标识", "已验证生效配置", "内置能力", "发现"]) expect(text).not.toContain(word);
-  expect(screen.getByRole("tab", { name: /^插件\s*12$/ })).toBeInTheDocument();
+  for (const word of ["始终开启", "计算引擎", "共 54 个", "共 2 个", "暂不可用", "尚未确认", "版本 0", "毫秒", "技术标识", "已验证生效配置", "内置能力", "发现", "展开其余"]) expect(text).not.toContain(word);
+  // The tab's number is the rows listed (eight items, no extensions).
+  expect(screen.getByRole("tab", { name: /^插件\s*8$/ })).toBeInTheDocument();
+});
+
+it("memory is a link to its own page, not a drawer", async () => {
+  const where = open("/app/extensions/plugins");
+  const link = await screen.findByRole("link", { name: "记忆" });
+  expect(link).toHaveAttribute("href", "/app/memory");
+  expect(where.container.querySelectorAll("button[data-row-title]").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("button", { name: "记忆" })).not.toBeInTheDocument();
+});
+
+it("the long task opens on what it does, how it is used and its cost line — the only place the cost is said", async () => {
+  open("/app/extensions/plugins");
+  await userEvent.click(await screen.findByRole("button", { name: "长任务" }));
+  const drawer = await screen.findByRole("dialog", { name: "长任务" });
+  expect(within(drawer).getByText("对话里的能力")).toBeInTheDocument();
+  expect(within(drawer).getByText("它会做什么")).toBeInTheDocument();
+  expect(within(drawer).getByText(/持续运行会消耗灵豆，可随时暂停/)).toBeInTheDocument();
+  expect(within(drawer).getByText("怎么用")).toBeInTheDocument();
+  expect(within(drawer).getByText("在输入框里输入 /，选择 loopx，写下目标。")).toBeInTheDocument();
+  await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+  // The row itself carries no cost line.
+  expect(within(screen.getByRole("region", { name: "对话里的能力" })).queryByText(/灵豆/)).not.toBeInTheDocument();
+});
+
+it("the basic abilities are one row; its drawer says each in a sentence", async () => {
+  open("/app/extensions/plugins");
+  await userEvent.click(await screen.findByRole("button", { name: "基础能力" }));
+  const drawer = await screen.findByRole("dialog", { name: "基础能力" });
+  expect(within(drawer).getByText("包括")).toBeInTheDocument();
+  expect(within(drawer).getByText("待办清单")).toBeInTheDocument();
+  expect(within(drawer).getByText("做步骤较多的事时，它会先列出步骤。")).toBeInTheDocument();
+  expect(within(drawer).getByText("对话很长时输入 /compact。")).toBeInTheDocument();
 });
 
 it("the switch on the citation row saves for this project at once and the row says nothing about versions", async () => {
@@ -295,29 +410,31 @@ it("the research tool set opens on its tools by group, one sentence each, with n
   open("/app/extensions/plugins");
   await userEvent.click(await screen.findByRole("button", { name: "内置工具集" }));
   const drawer = await screen.findByRole("dialog", { name: "内置工具集" });
-  expect(within(drawer).getByText("提供的工具 · 54 个")).toBeInTheDocument();
+  expect(within(drawer).getByText("提供的工具")).toBeInTheDocument();
+  expect(drawer.textContent).not.toMatch(/\d+ 个/);
   expect(within(drawer).getByText("文献与指南检索")).toBeInTheDocument();
   expect(within(drawer).getByText("按关键词在 PubMed 里查论文。")).toBeInTheDocument();
   expect(drawer.textContent).not.toMatch(/literature_search|mcp__/);
 });
 
-it("an engine opens on what it does and whether it can take work now", async () => {
+it("an item the deployment turned off is simply not in the server's answer, and the page draws no row for it", async () => {
+  const [group] = inventory.groups;
+  extensions.inventory.mockResolvedValue({ ...inventory, groups: [{ ...group, items: group.items.filter(entry => !["web", "annotation"].includes(entry.id)) }] });
   open("/app/extensions/plugins");
-  const engines = await screen.findByRole("region", { name: "计算引擎" });
-  await userEvent.click(within(engines).getByRole("button", { name: "Meta 分析引擎" }));
-  const drawer = await screen.findByRole("dialog", { name: "Meta 分析引擎" });
-  expect(within(drawer).getByText("计算引擎 · 可用")).toBeInTheDocument();
-  expect(within(drawer).getByText("什么时候会用到")).toBeInTheDocument();
+  const list = await screen.findByRole("region", { name: "对话里的能力" });
+  expect(within(list).queryByText("网页阅读")).not.toBeInTheDocument();
+  expect(within(list).queryByText("划词批注")).not.toBeInTheDocument();
+  expect(within(list).getByText("Mermaid 图表")).toBeInTheDocument();
 });
 
-it("web reading, annotation and diagrams the deployment turned off are not listed", async () => {
-  extensions.pluginInventory.mockResolvedValue({ ...inventory, webRead: false, items: [inventory.items[0], { ...inventory.items[1], enabled: false }, inventory.items[2]], engines: [] });
+it("a search narrows the rows by title and line, and a search that matches none says so", async () => {
   open("/app/extensions/plugins");
-  const tools = await screen.findByRole("region", { name: "对话里的工具" });
-  expect(within(tools).queryByText("网页阅读")).not.toBeInTheDocument();
-  expect(within(tools).queryByText("划词批注")).not.toBeInTheDocument();
-  expect(within(tools).getByText("Mermaid 图表")).toBeInTheDocument();
-  expect(screen.queryByRole("region", { name: "计算引擎" })).not.toBeInTheDocument();
+  await screen.findByRole("region", { name: "对话里的能力" });
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "批注");
+  expect(within(screen.getByRole("region", { name: "对话里的能力" })).getAllByRole("listitem")).toHaveLength(1);
+  await userEvent.clear(screen.getByRole("searchbox", { name: "搜索插件与技能" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "没有这个");
+  expect(await screen.findByText("没有找到插件")).toBeInTheDocument();
 });
 
 it("discovery appears as 「可以添加」 only when the deployment offers a package, and adding one opens it", async () => {
@@ -333,11 +450,11 @@ it("discovery appears as 「可以添加」 only when the deployment offers a pa
 });
 
 it("an inventory that cannot be read says so with a way to try again", async () => {
-  extensions.pluginInventory.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(inventory);
+  extensions.inventory.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(inventory);
   open("/app/extensions/plugins");
   const alert = await screen.findByRole("alert");
   await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
-  expect(await screen.findByRole("region", { name: "对话里的工具" })).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "对话里的能力" })).toBeInTheDocument();
 });
 
 it("switching tabs keeps one page and clears the search", async () => {
@@ -347,14 +464,14 @@ it("switching tabs keeps one page and clears the search", async () => {
   await userEvent.click(screen.getByRole("tab", { name: /^插件/ }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/plugins");
   expect(screen.getByRole("searchbox", { name: "搜索插件与技能" })).toHaveValue("");
-  await screen.findByRole("region", { name: "对话里的工具" });
+  await screen.findByRole("region", { name: "对话里的能力" });
   expect(screen.queryByRole("button", { name: "新建技能" })).not.toBeInTheDocument();
   // Both lists were read once, on arrival: going back and forth reads nothing again.
   await userEvent.click(screen.getByRole("tab", { name: /^技能/ }));
   await screen.findByRole("region", { name: "科研分析" });
   expect(skills.listPlatformSkills).toHaveBeenCalledTimes(1);
   expect(skills.listPersonalSkills).toHaveBeenCalledTimes(1);
-  expect(extensions.pluginInventory).toHaveBeenCalledTimes(1);
+  expect(extensions.inventory).toHaveBeenCalledTimes(1);
 });
 
 it("an address with no such tab goes to the skills tab", async () => {

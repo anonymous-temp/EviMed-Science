@@ -1,25 +1,22 @@
 import {
-  BarChart3,
   BookOpenCheck,
   ClipboardCheck,
-  Code2,
   Database,
   Dna,
   FileSearch,
-  FileText,
   FlaskConical,
   Globe,
   Landmark,
   Layers,
   Lightbulb,
   ListChecks,
+  Microscope,
   Network,
   PenLine,
   Pill,
-  Presentation,
   Scale,
+  Sigma,
   Stethoscope,
-  Table2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,8 +26,11 @@ import {
  * information in a Chinese interface and sat in the brand colour beside the
  * primary button. An icon is recognition, never identity: the name is always
  * printed beside it.
+ *
+ * A hand-written table of the catalogue's capabilities: `capabilityIcons.test.ts` holds it to the listed ones, so a workflow
+ * added to 科研工具 without a mark of its own — drawn as the fallback beaker — or an entry for one that is gone is red.
  */
-const ICONS: Record<string, LucideIcon> = {
+export const CAPABILITY_ICONS: Readonly<Record<string, LucideIcon>> = {
   "clinical-evidence-synthesis": Stethoscope,
   "evidence-appraisal": ClipboardCheck,
   "meta-analysis": Layers,
@@ -39,6 +39,8 @@ const ICONS: Record<string, LucideIcon> = {
   "comprehensive-drug-evaluation": Scale,
   "drug-selection": ListChecks,
   "dataset-research-scoping": Database,
+  "gene-expression-analysis": Microscope,
+  "statistical-analysis": Sigma,
   "research-topic-selection": Lightbulb,
   "mendelian-randomization": Dna,
   "bibliometric-analysis": Network,
@@ -49,19 +51,5 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function capabilityIcon(id: string): LucideIcon {
-  return ICONS[id] ?? FlaskConical;
-}
-
-/** The general tools of the tools page, by their id in `@evimed/domain`'s `GENERAL_TOOLS`. */
-const GENERAL_ICONS: Record<string, LucideIcon> = {
-  documents: FileText,
-  spreadsheets: Table2,
-  slides: Presentation,
-  "data-analysis": BarChart3,
-  "web-research": Globe,
-  code: Code2,
-};
-
-export function generalToolIcon(id: string): LucideIcon {
-  return GENERAL_ICONS[id] ?? Lightbulb;
+  return CAPABILITY_ICONS[id] ?? FlaskConical;
 }

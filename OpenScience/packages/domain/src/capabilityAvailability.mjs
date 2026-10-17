@@ -550,6 +550,63 @@ export function describeAvailability(entry) {
 }
 
 /**
+ * The reasons a reader can do something about, by what they are looking at, and the word each is drawn with (R19, plan §5.6
+ * and S4). A card on 科研工具 is the same for every account: it said 「受限」 and the sentence of the last failed run of
+ * everybody's — `errorCodeMessage` of a run, gate and workspace and all — because the state was what decided it, and a
+ * state is not a reason. Of the nine reasons that make a tool `limited` one is the reader's to mend; the rest are the
+ * deployment's, and they stay in the operators' export.
+ *
+ *   capability  a connector the reader has not given their own key for, an item the catalogue lists and they have not
+ *               installed, and a module their account is not offered (a plain 「暂未开放」, no sentence);
+ *   skill       the same, and the software or data the reader's own package needs and this runtime lacks — it is their
+ *               package, and they can change it.
+ *
+ * `label: null` takes the state's own word (「受限」, 「规划中」).
+ * @type {Readonly<Record<'capability' | 'skill', Readonly<Record<string, { label: string | null, sentence: boolean }>>>>}
+ */
+const PERSON_REASONS = Object.freeze({
+  capability: Object.freeze({
+    'data-source-not-configured': { label: null, sentence: true },
+    'not-installed': { label: null, sentence: true },
+    'module-not-open': { label: '暂未开放', sentence: false },
+  }),
+  skill: Object.freeze({
+    'data-source-not-configured': { label: null, sentence: true },
+    'not-installed': { label: null, sentence: true },
+    'module-not-open': { label: '暂未开放', sentence: false },
+    'dependency-software-missing': { label: null, sentence: true },
+    'dependency-version-differs': { label: null, sentence: true },
+    'dependency-data-missing': { label: null, sentence: true },
+  }),
+})
+
+/**
+ * What a person-facing surface may say about an entry: its word and, where the reason has one a reader can act on, its
+ * sentence — or `null`, which is nothing drawn, whatever state the entry is in. Never a label for how often something ran
+ * or that nothing could be proven, and never the sentence of a run's failure.
+ * The entry's own words (`label`, `text`, written by `describeAvailability` with the facts it had — a version the runtime
+ * carries is not on the reason) are what is drawn when it has them; a bare reason is described here.
+ * @param {{ kind?: string, version?: string | null, state: string, label?: string, text?: string, reason: { code: string, detail?: string, facts?: Record<string, unknown> }, operations?: ReturnType<typeof summarizeOperations> } | null | undefined} entry
+ * @param {'capability' | 'skill'} [surface] what the reader is looking at
+ * @returns {{ label: string, text: string } | null}
+ */
+export function personAvailability(entry, surface = 'capability') {
+  const code = entry?.reason?.code
+  if (!entry || typeof code !== 'string') return null
+  const table = PERSON_REASONS[surface] ?? PERSON_REASONS.capability
+  if (!Object.hasOwn(table, code)) return null
+  const word = table[code]
+  const own = typeof entry.text === 'string' && entry.text !== '' && typeof entry.label === 'string' && entry.label !== ''
+  const described = own ? { label: /** @type {string} */ (entry.label), text: /** @type {string} */ (entry.text) } : describeAvailability(/** @type {any} */ (entry))
+  return { label: word.label ?? described.label, text: word.sentence ? described.text : '' }
+}
+
+/** The reasons each surface draws, for the tests that hold the others out. @param {'capability' | 'skill'} surface */
+export function personAvailabilityReasons(surface) {
+  return Object.keys(PERSON_REASONS[surface] ?? {})
+}
+
+/**
  * The counts of a list of entries by state, every state present, for the
  * operators' gauges and the export's header.
  * @param {readonly { state: string }[]} entries @returns {Record<AvailabilityState, number>}

@@ -50,6 +50,18 @@ function searchBoxes(path: string): { line: number; tag: string; clearable: bool
         found.push({ line, tag, clearable: /label="清除搜索"/.test(text) });
       }
     }
+    // A page that hands its search to the framework's toolbar (`toolbar={{ search: { label, value, onChange, onClear } }}`) has no
+    // `<SearchInput>` of its own to see: the box is the toolbar's, and its way out is the `onClear` in that object (a spread may carry
+    // it). Without it, it is the same box with no way out.
+    if (ts.isPropertyAssignment(node) && node.name.getText(source) === "search" && ts.isObjectLiteralExpression(node.initializer)) {
+      const props = node.initializer.properties;
+      const names = props.map((property) => (property.name ? property.name.getText(source) : ""));
+      const spread = props.some((property) => ts.isSpreadAssignment(property));
+      if (spread || (names.includes("onChange") && names.includes("value"))) {
+        const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        found.push({ line, tag: "Toolbar search", clearable: spread || names.includes("onClear") });
+      }
+    }
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -64,7 +76,16 @@ describe("search boxes can be cleared", () => {
 
   it("walked the product pages and found their search boxes", () => {
     expect(sources.length).toBeGreaterThan(120);
-    expect(all.length).toBeGreaterThanOrEqual(15);
+    // A floor that proves the walk walked, not a count to keep: a page whose search box became the page shell's `Toolbar` `search`
+    // (the GEO tabs, R19) no longer has a `<SearchInput>` of its own; its `search` object is walked below.
+    expect(all.length).toBeGreaterThanOrEqual(8);
+    // The GEO tabs' boxes are the toolbar's now, and are held as the toolbar's.
+    expect(all.filter((box) => box.tag === "Toolbar search").map((box) => box.path)).toEqual(expect.arrayContaining([
+      "components/geo/tabs/EvidenceTab.tsx",
+      "components/geo/tabs/QuestionsTab.tsx",
+      "components/geo/tabs/SourcesTab.tsx",
+      "components/geo/tabs/ContentTab.tsx",
+    ]));
     expect(all.map((box) => box.path)).toEqual(expect.arrayContaining([
       "app/routes/MemoryHubPage.tsx",
       "app/routes/CapabilitiesPage.tsx",

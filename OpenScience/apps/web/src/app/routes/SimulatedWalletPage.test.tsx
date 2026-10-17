@@ -131,14 +131,15 @@ describe("模拟充值", () => {
     expect(mocks.topUp).not.toHaveBeenCalled();
   });
 
-  it("shows the balance, marked, and one button per package of the domain's list", async () => {
+  it("shows the balance and one button per package of the domain's list, none of them marked: the page's line says 模拟 once", async () => {
     await openRecharge();
     expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
-    expect(within(row("可用额度")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(row("可用额度")).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     expect(SIMULATED_TOPUP_PACKAGES.length).toBeGreaterThan(1);
     expect(packages().map((button) => button.textContent)).toEqual(SIMULATED_TOPUP_PACKAGES.map((item) => `${item.credits} 灵豆`));
-    // The amounts on the buttons are simulated too, and say so.
-    expect(within(screen.getByRole("region", { name: "充值额度" })).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    // The amounts on the buttons are simulated too, and the line above the page says so for all of them.
+    expect(screen.queryAllByText(SIMULATED_WALLET_LABEL)).toEqual([]);
+    expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
     expect(mocks.topUp).not.toHaveBeenCalled();
   });
 
@@ -154,7 +155,7 @@ describe("模拟充值", () => {
 
     const done = await screen.findByRole("status");
     expect(done).toHaveTextContent("模拟充值 100.00 灵豆已入账。");
-    expect(within(done).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+    expect(within(done).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
     expect(within(done).getByRole("link", { name: "查看模拟订单" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.orders);
     expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
     expect(screen.queryByText("200.00 灵豆")).not.toBeInTheDocument();
@@ -306,7 +307,7 @@ describe("模拟订单", () => {
   const second = order("ord_1", 50, "2026-10-03T02:05:00.000Z");
   const orderRows = async () => within(await screen.findByRole("list", { name: "模拟充值订单" })).getAllByRole("listitem");
 
-  it("lists the top-ups in the order served, each with its amount, 已入账 and the mark", async () => {
+  it("lists the top-ups in the order served, each with its amount and 已入账, and no mark of its own", async () => {
     mocks.orders.mockResolvedValue({ simulated: true, currency: "CNY", items: [first, second], nextCursor: null });
     open(SIMULATED_WALLET_PAGES.orders);
     const rows = await orderRows();
@@ -316,7 +317,7 @@ describe("模拟订单", () => {
     expect(within(rows[1]).getByText("50.00 灵豆")).toBeInTheDocument();
     for (const each of rows) {
       expect(within(each).getByText("已入账")).toBeInTheDocument();
-      expect(within(each).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(within(each).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
       // When it was made, and nothing to open: an order is not a run.
       expect(within(each).getByText(/\d+月\d+日/)).toBeInTheDocument();
       expect(within(each).queryByRole("link")).not.toBeInTheDocument();

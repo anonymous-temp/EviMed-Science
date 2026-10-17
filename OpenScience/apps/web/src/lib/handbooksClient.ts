@@ -2,7 +2,7 @@ import type { ConversationSource, MethodVersion } from "./methodsClient";
 import { productRequest } from "./productClient";
 
 /**
- * The capability handbooks the platform learned for the account — what 「用在某个工具里」 lists under 做法 — as
+ * The capability handbooks the platform learned for the account — what 「用在某个科研工具里」 lists under 做法 — as
  * `/api/handbooks` shows them to their owner. A handbook is what the learning loop made of a reviewed lesson for one
  * research tool; the researcher reads it and, when it is wrong for them, stops it or goes back, as for a learned method.
  */

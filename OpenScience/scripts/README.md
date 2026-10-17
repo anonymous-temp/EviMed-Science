@@ -18,6 +18,11 @@ forgot to regenerate" from "nothing changed". Except for `vendor-geo-skills.mjs`
 - `generate-skill-packages.mjs` writes `packages/domain/src/skill-packages.json`, the record of
   every package that ships a skill or capability (`pnpm generate:skill-packages`,
   `pnpm check:skill-packages`).
+- `generate-runtime-inventory.mjs` writes `packages/domain/src/runtime-inventory.json`, what a
+  runtime session of the image is made of (the composition snapshot's bundles and rows, the agent
+  preset, the tool sets, the skill roots, the LoopX CLI's skills) — the list the plugins page is
+  held to by `runtime-inventory-zh.json` (`pnpm generate:runtime-inventory`,
+  `pnpm check:runtime-inventory`).
 - `generate-vcr-scenario-help.mjs` renders the 虚拟临床研究 engine scenario help the research
   MCP server reads (`pnpm generate:vcr-scenario-help`, `pnpm check:vcr-scenario-help`).
 - `generate-tcm-caution-rules.mjs` derives the 十八反 / 十九畏 rules in
@@ -27,7 +32,9 @@ forgot to regenerate" from "nothing changed". Except for `vendor-geo-skills.mjs`
   (`pnpm check:skill-digests`); `rewrite-skill-vocabulary.mjs` keeps tool names in every
   `SKILL.md` spelled the way the model sees them (`pnpm check:skill-vocabulary`).
 - `vendor-geo-skills.mjs` is a local step that unpacks the proprietary GEO method pack, which
-  is not in this repository, into the git-ignored `runtime/skills/geo-private/`.
+  is not in this repository, into the git-ignored `runtime/skills/geo-private/`, and writes
+  `geo-pack-index.json` beside it (name and one sentence per skill, `geo-pack-index.mjs`): the web
+  image carries that index and none of the pack (`--index` writes it for a root already vendored).
 
 ## `dev/`
 

@@ -17,6 +17,7 @@ const foldOperation = /** @type {(record: any, observation: any) => any} */ (dom
 const normalizeOperationRecord = /** @type {(value: unknown) => any} */ (domain.normalizeOperationRecord)
 const operationOutcomeOfRun = /** @type {(run: any) => string | null} */ (domain.operationOutcomeOfRun)
 const projectAvailability = /** @type {(input: any) => any} */ (domain.projectAvailability)
+const personAvailability = /** @type {(entry: any, surface?: string) => { label: string, text: string } | null} */ (domain.personAvailability)
 const summarizeOperations = /** @type {(record: any) => any} */ (domain.summarizeOperations)
 
 /** @param {string} at @param {Record<string, any>} [extra] */
@@ -307,4 +308,53 @@ test('no reason a limit is read from describes the platform\'s own confidence in
     assert.equal(entry.state, 'limited', code)
     assert.doesNotMatch(entry.text, /未验证|验证还没有完成|对待/, code)
   }
+})
+
+// What a card says about a tool is a reason the reader can act on and nothing else (R19, plan §5.6 / S4): a deployment whose
+// last run of a tool failed did not make the tool 「受限」 for everyone who opens its page.
+test('a failed last run is the operators\' and no card says so: of the reasons that make a tool limited, one is the reader\'s', () => {
+  const failed = projectAvailability({
+    subject: { kind: 'capability', id: 'meta-analysis', version: '1.0.0' },
+    operations: recordOf(success('2026-10-04T08:00:00Z', { id: 'meta-analysis', version: '1.0.0' }), failure('2026-10-12T08:00:00Z', 'specialist_required_output_missing', { id: 'meta-analysis', version: '1.0.0' })),
+  })
+  assert.equal(failed.state, 'limited')
+  assert.equal(failed.reason.code, 'last-operation-failed')
+  assert.match(failed.text, /质量门/, 'the operators\' export keeps the whole sentence')
+  assert.equal(personAvailability(failed), null)
+  assert.equal(personAvailability(failed, 'skill'), null)
+})
+
+test('a connector the reader has not given a key for is the one limit a card draws, with its own word and sentence', () => {
+  const entry = projectAvailability({ subject: { kind: 'capability', id: 'mendelian-randomization', version: '1.0.0' },
+    reasons: [{ code: 'data-source-not-configured', detail: 'opengwas', source: 'connector-registry' }] })
+  assert.equal(entry.state, 'limited')
+  const drawn = personAvailability(entry)
+  assert.ok(drawn)
+  assert.equal(drawn.label, AVAILABILITY_STATE_LABELS_ZH.limited)
+  assert.match(drawn.text, /添加你自己的凭据/)
+  assert.doesNotMatch(drawn.text, /质量门|引擎|工作区/)
+})
+
+test('a module the account is not offered is a plain tag with no sentence', () => {
+  const entry = projectAvailability({ subject: { kind: 'capability', id: 'geo-insight', version: '1.0.0' },
+    reasons: [{ code: 'module-not-open', source: 'deployment-composition' }] })
+  assert.equal(entry.state, 'unavailable')
+  assert.deepEqual(personAvailability(entry), { label: '暂未开放', text: '' })
+})
+
+test('the reasons a card never draws are every one the deployment holds, and a skill adds only what its own package needs', () => {
+  const cardReasons = domain.personAvailabilityReasons('capability')
+  assert.deepEqual([...cardReasons].sort(), ['data-source-not-configured', 'module-not-open', 'not-installed'])
+  const skillReasons = domain.personAvailabilityReasons('skill')
+  assert.deepEqual(skillReasons.filter((code) => !cardReasons.includes(code)).sort(),
+    ['dependency-data-missing', 'dependency-software-missing', 'dependency-version-differs'])
+  for (const code of AVAILABILITY_REASON_CODES) {
+    const entry = { kind: 'capability', version: null, state: availabilityReasonState(code), reason: { code, detail: 'x', source: 'operation-record' } }
+    assert.equal(personAvailability(entry) !== null, cardReasons.includes(code), `${code} on a card`)
+    assert.equal(personAvailability(entry, 'skill') !== null, skillReasons.includes(code), `${code} on a skill`)
+  }
+  // Nothing a person-facing surface draws embeds the registry's sentence about a run.
+  for (const code of ['last-operation-failed', 'preparation-failed']) assert.equal(personAvailability({ kind: 'tool', state: 'limited', reason: { code, detail: 'specialist_required_output_missing', source: 'x' } }), null)
+  assert.equal(personAvailability(null), null)
+  assert.equal(personAvailability({ state: 'limited', reason: {} }), null)
 })

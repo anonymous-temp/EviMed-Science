@@ -41,6 +41,13 @@ RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
 # The hosted MCP source bundle must contain the same verified dataset as DSH.
 RUN python3 runtime/mcp/evimed-research/build_sider_cache.py
 
+# The 「循证 GEO」 method pack is the owner's and proprietary: this image carries
+# its index (each skill's name and one sentence, `geo-pack-index.json`) and no
+# skill, rule or script of it, so the skills page can list what a session has
+# without the pack. The pack, where the build context holds it, is indexed here;
+# where it does not, the index lists no skill and the group is not drawn.
+RUN node scripts/build/vendor-geo-skills.mjs --index
+
 RUN pnpm --filter @evimed/dsh-socket prepack
 
 ARG VITE_OPEN_SCIENCE_API_URL=/api
@@ -82,6 +89,7 @@ COPY --from=build /app/runtime/skills/curated-scientific ./runtime/skills/curate
 COPY --from=build /app/runtime/skills/office ./runtime/skills/office
 COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
 COPY --from=build /app/runtime/skills/community ./runtime/skills/community
+COPY --from=build /app/runtime/skills/geo-private/geo-pack-index.json ./runtime/skills/geo-private/geo-pack-index.json
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops

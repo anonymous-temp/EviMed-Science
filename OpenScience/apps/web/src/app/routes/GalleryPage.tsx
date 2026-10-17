@@ -382,7 +382,7 @@ export function GalleryPage() {
       <Row name="Drawer" note="从右侧 24 px 滑入；关闭是 36 px 的图标按钮；底栏贴底，离窗口底不少于 16 px。">
         <Stage label="抽屉示例">
           <Drawer
-            title="工具"
+            title="科研工具"
             description="系统综述与 Meta 分析"
             onClose={() => {}}
             widthClassName="max-w-sm"

@@ -1,7 +1,8 @@
 {
-  "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
-  "groups": ["通用", "办公文档", "科研分析", "写作与核查", "社区", "循证 GEO"],
+  "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under — by what the skill is for, never by where it came from. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
+  "groups": ["通用", "办公文档", "科研分析", "写作与核查", "长任务", "循证 GEO"],
   "geoGroup": "循证 GEO",
+  "loopxGroup": "长任务",
   "skills": {
     "open-domain-answer": {
       "group": "通用",
@@ -334,13 +335,13 @@
       "when": "你要处理一张表格、做预算或报表，要的是带公式的 Excel 文件时。"
     },
     "dsh-ppt": {
-      "group": "社区",
+      "group": "办公文档",
       "title": "一键演示稿",
       "use": "一句话或一份 Markdown 生成完整的网页幻灯片和可编辑的 PPTX，内置 5 套主题，支持中英文。",
       "when": "你要做汇报、提案、路演或培训材料，或想把一份文档变成演示稿时。"
     },
     "deep-structural-analysis": {
-      "group": "社区",
+      "group": "写作与核查",
       "title": "多视角结构分析",
       "use": "对复杂的社会、经济、哲学和系统性问题做多视角分析，结论分层，并标明依据的强弱。",
       "when": "你要对一个复杂问题做深入分析、多角度探讨，或套用具体分析框架时。"

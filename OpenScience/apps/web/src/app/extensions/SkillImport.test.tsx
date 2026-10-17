@@ -9,11 +9,11 @@ import { useProjectStore } from "@/lib/projects";
 // is imported, and the migration of an earlier export one version at a time under one retry key. These are those tests, kept.
 const api = vi.hoisted(() => ({
   pendingPersonalSkillTransfers: vi.fn(), uploadPersonalSkillTransfer: vi.fn(), previewPersonalSkillTransfer: vi.fn(), confirmPersonalSkillTransfer: vi.fn(),
-  listPersonalSkills: vi.fn(), uploadPersonalSkill: vi.fn(), previewPersonalSkillImport: vi.fn(), previewPersonalSkillRepository: vi.fn(), importPersonalSkill: vi.fn(), listPlatformSkills: vi.fn(), pluginInventory: vi.fn(),
+  listPersonalSkills: vi.fn(), uploadPersonalSkill: vi.fn(), previewPersonalSkillImport: vi.fn(), previewPersonalSkillRepository: vi.fn(), importPersonalSkill: vi.fn(), listPlatformSkills: vi.fn(), inventory: vi.fn(),
   extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(),
 }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...pick(api, ["pendingPersonalSkillTransfers", "uploadPersonalSkillTransfer", "previewPersonalSkillTransfer", "confirmPersonalSkillTransfer", "listPersonalSkills", "uploadPersonalSkill", "previewPersonalSkillImport", "previewPersonalSkillRepository", "importPersonalSkill", "listPlatformSkills", "getPersonalSkill", "personalSkillHistory", "personalSkillDefaults", "projectSkills", "personalSkillSupply"]) }));
-vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), pluginInventory: api.pluginInventory, extensionCatalogue: api.extensionCatalogue, extensionInstallations: api.extensionInstallations }));
+vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), inventory: api.inventory, extensionCatalogue: api.extensionCatalogue, extensionInstallations: api.extensionInstallations }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), listWebPlugins: vi.fn().mockResolvedValue([]), listWebPluginRevisions: vi.fn().mockResolvedValue([]) }));
 function pick<T extends object, K extends keyof T>(source: T, keys: K[]): Pick<T, K> { return Object.fromEntries(keys.map(key => [key, source[key]])) as Pick<T, K>; }
 const detail = { skill: { instructions: "Preserve actual source quotations.", description: "核对保留来源", invocation: { userInvocable: true, modelInvocable: false }, metadata: {}, whenToUse: "需要核对来源时", resources: [{ path: "参考/证据.csv", size: 12, digest: "sha256:fixture" }], scripts: [{ path: "scripts/check.py", size: 8 }], digest: "sha256:fixture" } };
@@ -27,8 +27,8 @@ beforeEach(() => {
   useProjectStore.setState({ currentId: "project-one", projects: [{ id: "project-one", name: "当前项目" }] });
   api.pendingPersonalSkillTransfers.mockResolvedValue({ items: [] });
   api.listPersonalSkills.mockResolvedValue({ items: [personal], nextCursor: null });
-  api.listPlatformSkills.mockResolvedValue({ groups: [], geoGroup: "", items: [] });
-  api.pluginInventory.mockResolvedValue({ projectId: "project-one", items: [], webRead: false, researchTools: { count: 0, groups: [] }, engines: [] });
+  api.listPlatformSkills.mockResolvedValue({ groups: [], geoGroup: "", loopxGroup: "", items: [] });
+  api.inventory.mockResolvedValue({ projectId: "project-one", groups: [], researchTools: { count: 0, groups: [] } });
   api.extensionCatalogue.mockResolvedValue({ items: [] }); api.extensionInstallations.mockResolvedValue({ items: [], nextCursor: null });
   api.getPersonalSkill.mockResolvedValue(personal); api.personalSkillHistory.mockResolvedValue([]); api.personalSkillDefaults.mockResolvedValue({ revision: 1, payload: { skills: [] } });
   api.projectSkills.mockResolvedValue({ revision: 1, payload: { skills: [] } }); api.personalSkillSupply.mockResolvedValue(null);

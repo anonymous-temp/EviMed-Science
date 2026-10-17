@@ -1,5 +1,5 @@
 import { Tag } from "@/components/ui/Tag";
-import { availabilityIsDrawn } from "@/lib/apiClient";
+import { drawnAvailability } from "@/lib/apiClient";
 import type { SkillAvailabilityView, SkillPackageView } from "@/lib/skillLibraryClient";
 
 /**
@@ -17,20 +17,22 @@ const DEPENDENCY_KIND: Record<string, string> = {
  * A label beside the package, never a gate: a skill that reads 「受限」 is still
  * listed, still selectable and still callable, and the sentence says what is
  * missing and what still works. The label is drawn by the capability page's rule
- * (`availabilityIsDrawn`): where the reader can act on it, not how often the
- * package ran here or that nothing could be proven. A field the record does not
- * know is named as not recorded; it is never left blank to read as "none".
+ * (`drawnAvailability`, by reason): where the reader can act on it — the software
+ * or data their own package needs — not how often the package ran here or that
+ * nothing could be proven. A field the record does not know is named as not
+ * recorded; it is never left blank to read as "none".
  */
 export function SkillPackagePanel({ view, availability }: { view: SkillPackageView | null; availability: SkillAvailabilityView | null }) {
   if (!view && !availability) return <p className="text-ui text-text-2">这个版本保存时没有记录来源和依赖。</p>;
   const missing = view?.unknown.filter((entry) => entry.field !== "digest").map((entry) => UNKNOWN_FIELD[entry.field] ?? entry.field) ?? [];
   const optional = availability?.notes.map((note) => note.detail).filter(Boolean) ?? [];
+  const drawn = drawnAvailability(availability, "skill");
   return (
     <section aria-label="技能来源与依赖" className="flex flex-col gap-3">
-      {availability && availabilityIsDrawn(availability.state) && (
+      {drawn && (
         <p className="flex flex-wrap items-center gap-2 text-ui text-text-2">
-          <Tag>{availability.label}</Tag>
-          <span>{availability.text}</span>
+          <Tag>{drawn.label}</Tag>
+          {drawn.text && <span>{drawn.text}</span>}
         </p>
       )}
       {view && (

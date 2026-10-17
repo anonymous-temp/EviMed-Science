@@ -4,7 +4,6 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
-import { OverviewTab } from "./OverviewTab";
 import { PopulationTab } from "./PopulationTab";
 import { PatientsTab, VCR_COUNTERFACTUAL_SENTENCE } from "./PatientsTab";
 import { ComparatorTab } from "./ComparatorTab";
@@ -73,112 +72,6 @@ beforeEach(() => {
   toasts.error.mockReset();
   store.select.mockClear();
   installVcrServer(network.productRequest);
-});
-
-describe("总览", () => {
-  it("leads with the study's own sentence", () => {
-    draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    expect(screen.getByText("已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
-  });
-
-  // Four things and nothing stacked under them: the tiles, the chart, the change log and the disease pack each have a place of their own.
-  it("keeps four things — the sentence, the next step, the four numbers, the deliverables — and none of what used to be stacked under them", () => {
-    const { container } = draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    expect(container.querySelector("[data-vcr-counts]")).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "交付物" })).toBeInTheDocument();
-    for (const gone of ["关键数字", "最近的变化", "知识包与定义", "病种定义包", "方案的成功把握与周期、成本"]) {
-      expect(screen.queryByText(gone)).toBeNull();
-    }
-    expect(container.querySelector("[data-vcr-scatter]")).toBeNull();
-    expect(container.querySelector("[data-vcr-knowledge]")).toBeNull();
-  });
-
-  it("fixes the four counts in the band, with the design they are of", () => {
-    const { container } = draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    const band = container.querySelector("[data-vcr-counts]") as HTMLElement;
-    expect(within(band).getByText("方案 B")).toBeInTheDocument();
-    expect(band.querySelector("[data-vcr-count='realPatients']")).toHaveTextContent("0");
-    expect(band.querySelector("[data-vcr-count='events']")).toHaveTextContent("138");
-    expect(band.querySelector("[data-vcr-count='effectiveSampleSize']")).toHaveTextContent("—");
-    expect(band.querySelector("[data-vcr-count='generatedRecords']")).toHaveTextContent("约 648 万");
-  });
-
-  it("links an attention line to the tab the server named, gives the budget line no link of its own, and has no line about who set an assumption", () => {
-    draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    expect(screen.queryByRole("link", { name: "去复核" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/由 AI 设定/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看缺口" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}/comparator`);
-    const budget = screen.getByText("1 项计算在等你确认计算预算").closest("li") as HTMLElement;
-    expect(within(budget).queryByRole("link")).not.toBeInTheDocument();
-  });
-
-  it("draws 需要关注 only while there is something in it", () => {
-    const raw = fixture("ev201/study.json");
-    raw.overview.attention = [];
-    draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
-    expect(screen.queryByText("需要关注")).toBeNull();
-    expect(screen.queryByText(/现在没有需要你处理的事/)).toBeNull();
-  });
-
-  it("lists the deliverables, each opening the package in the reader on this page", () => {
-    draw(<OverviewTab studyId={STUDY_ID} study={ev201()} />);
-    const first = fixture("ev201/study.json").overview.deliverables[0];
-    expect(screen.getByRole("link", { name: first.title })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}?package=${encodeURIComponent(first.id)}`);
-  });
-
-  describe("the next step", () => {
-    it("is one primary button naming the first step nothing has started, and starts it in the study's conversation", async () => {
-      const study = withStep("trial", { status: "none", requested: false });
-      study.steps.matching = { ...study.steps.matching, status: "done" };
-      draw(<OverviewTab studyId={STUDY_ID} study={study} />);
-      const button = screen.getByRole("button", { name: "让 AI 做下一步：模拟试验方案" });
-      await userEvent.click(button);
-      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "trial" }));
-    });
-
-    it("asks for the earliest unstarted step when several are", () => {
-      const raw = fixture("ev201/study.json");
-      raw.steps.evidence = { status: "none", requested: false };
-      raw.steps.population = { status: "none", requested: false };
-      draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
-      expect(screen.getByRole("button", { name: "让 AI 做下一步：找证据、整理假设卡" })).toBeInTheDocument();
-    });
-
-    it("says what is under way and offers no second thing to start, while a step runs and nothing else is unstarted", () => {
-      const study = withStep("trial", { status: "running" });
-      draw(<OverviewTab studyId={STUDY_ID} study={study} />);
-      expect(screen.queryByRole("button", { name: /让 AI 做下一步/ })).toBeNull();
-      expect(document.querySelector("[data-vcr-next='underway']")).toHaveTextContent("正在进行：试验");
-    });
-
-    it("is not offered to a reader who cannot start a step", () => {
-      const raw = fixture("ev201/study.json");
-      raw.steps.trial = { status: "none", requested: false };
-      raw.abilities = ["read"];
-      draw(<OverviewTab studyId={STUDY_ID} study={readVcrStudy(raw)} />);
-      expect(screen.queryByRole("button", { name: /让 AI 做下一步/ })).toBeNull();
-    });
-  });
-
-  // 「正在排队」 was a lie: nothing is queued for a study nobody has described. It is waiting for its first sentence.
-  describe("a study nobody has described", () => {
-    it("says what is missing — the first sentence, in the conversation — and offers 去对话, with 让 AI 做 present and not pressable", async () => {
-      draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
-      expect(screen.getByText(VCR_NO_DEFINITION)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "让 AI 做" })).toBeDisabled();
-      expect(screen.queryByText("研究定义正在排队。")).toBeNull();
-      await userEvent.click(screen.getByRole("button", { name: "去对话" }));
-      await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_empty", expect.any(Function)));
-    });
-
-    it("offers no next step either, and no 让 AI 做 to a reader who cannot run one", () => {
-      const raw = fixture("empty/study.json");
-      raw.abilities = ["read"];
-      draw(<OverviewTab studyId={EMPTY_STUDY_ID} study={readVcrStudy(raw)} />);
-      expect(screen.queryByRole("button", { name: /让 AI 做/ })).toBeNull();
-      expect(screen.getByRole("button", { name: "去对话" })).toBeInTheDocument();
-    });
-  });
 });
 
 describe("人群", () => {

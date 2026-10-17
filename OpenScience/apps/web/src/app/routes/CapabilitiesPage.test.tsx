@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_DISPLAY, GENERAL_TOOLS, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, RESEARCH_TOOLS_NAME, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { CapabilitiesPage } from "./CapabilitiesPage";
 import { WebApiError } from "@/lib/apiClient";
 import { forgetResearchBilling } from "@/lib/useResearchBilling";
@@ -155,8 +155,10 @@ function renderPage() {
   );
 }
 
-/** A card, by the tool it opens. */
-const card = (title: string) => screen.getByRole("button", { name: `用“${title}”开始一次对话` });
+/** The button that opens a tool, by its name… */
+const tool = (title: string) => screen.getByRole("button", { name: title });
+/** …and the row it is the title of, which is what says how long the tool takes. */
+const card = (title: string) => tool(title).closest("li")!;
 
 describe("CapabilitiesPage", () => {
   beforeEach(() => {
@@ -188,7 +190,7 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText("GEO 洞察")).not.toBeInTheDocument();
   });
 
-  it("shows the grid's shape while the catalogue loads", async () => {
+  it("shows the list's shape while the catalogue loads", async () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
@@ -197,13 +199,22 @@ describe("CapabilitiesPage", () => {
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
-  // 2026-09-23 plan §5.4: the header is the title and a search box; the
-  // sentence under the title explained how the page worked, and was wrong.
-  it("has a title and a search box in its header, and no sentence under the title", async () => {
+  // 2026-10-14: the page is 科研工具 again (the owner's own name for the medical professional workflows), the controls are one
+  // toolbar above the list they control, and the header is the title and nothing else.
+  it("is titled 科研工具, with the search in the one toolbar above the list and no sentence under the title", async () => {
     renderPage();
-    const heading = await screen.findByRole("heading", { level: 1, name: "工具" });
-    expect(screen.getByRole("searchbox", { name: "搜索工具" })).toHaveAttribute("placeholder", "搜索工具");
+    const heading = await screen.findByRole("heading", { level: 1, name: "科研工具" });
+    expect(RESEARCH_TOOLS_NAME).toBe("科研工具");
+    const search = screen.getByRole("searchbox", { name: "搜索工具" });
+    expect(search).toHaveAttribute("placeholder", "搜索工具");
     expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
+    expect(heading.closest("header")?.querySelector("input")).toBeNull();
+    // Control over content: the toolbar, with the search and the categories in it, comes before the first row.
+    const toolbar = screen.getByRole("group", { name: "科研工具筛选" });
+    expect(toolbar).toContainElement(search);
+    expect(toolbar).toContainElement(screen.getByRole("group", { name: "分类" }));
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    expect(toolbar.compareDocumentPosition(tool("药品安全性分析")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText(/选一项工具/)).not.toBeInTheDocument();
   });
 
@@ -218,34 +229,34 @@ describe("CapabilitiesPage", () => {
     for (const gone of ["能力地图", "进化工具", "循证进化", "尚未验证", "待明确"]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
   });
 
-  // 2026-10-13: the shell is a general work platform first. The general tools come before the medical capabilities, and they are
-  // there without waiting for the catalogue.
-  it("lists the general tools first and the medical capabilities after, each card one sentence and how long it usually takes", async () => {
+  // 2026-10-14: the page lists the medical professional workflows and nothing else — no 「通用」 group and no card for
+  // documents, sheets, slides, data, the web or code, which are what the assistant does in any conversation.
+  it("lists the professional workflows by category, each one sentence and how long it usually takes, and no general tool", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    // No 「N 项」 after a group's name.
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["通用", "医学专业"]);
-    const general = screen.getByRole("heading", { level: 2, name: "通用" }).closest("section")!;
-    expect(within(general).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["文档", "表格", "幻灯片", "数据分析", "网页调研", "代码"].map((title) => `用“${title}”开始一次对话`));
-    expect(general).toHaveTextContent(GENERAL_TOOLS[0].description);
-    expect(general).not.toHaveTextContent(/分钟|灵豆/);
-    const professional = screen.getByRole("heading", { level: 2, name: "医学专业" }).closest("section")!;
-    // Inside the medical group, evidence before pharmacy before writing, not the order the catalogue came in.
-    expect(within(professional).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(
-      ["自动化 Meta 分析", "药品安全性分析", "超说明书用药分析", "论文审稿"].map((title) => `用“${title}”开始一次对话`));
-    const safety = within(professional).getByRole("button", { name: "用“药品安全性分析”开始一次对话" });
-    // The whole sentence, never cut to 「…」 by the card.
+    // The categories in the product's order, not the order the catalogue came in, and a count after each.
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["临床证据", "药学评价", "写作与传播"]);
+    const evidence = screen.getByRole("heading", { level: 2, name: "临床证据" }).closest("section")!;
+    expect(within(evidence).getAllByRole("button").map((button) => button.textContent)).toEqual(["自动化 Meta 分析"]);
+    const pharmacy = screen.getByRole("heading", { level: 2, name: "药学评价" }).closest("section")!;
+    expect(within(pharmacy).getAllByRole("button").map((button) => button.textContent)).toEqual(["药品安全性分析", "超说明书用药分析"]);
+    expect(within(pharmacy).getByText("2")).toBeInTheDocument();
+    const safety = card("药品安全性分析");
+    // The whole sentence, never cut to 「…」 by the row.
     expect(safety).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
     expect(safety).toHaveTextContent("约 20～40 分钟");
     expect(safety.innerHTML).not.toMatch(/truncate|line-clamp/);
-    // What a tool needs from the researcher is the composer's to say, not the card's.
+    // What a tool needs from the researcher is the composer's to say, not the row's.
     expect(card("论文审稿")).not.toHaveTextContent("需要你的资料");
+    for (const general of ["文档", "表格", "幻灯片", "数据分析", "网页调研", "代码"]) {
+      expect(screen.queryByRole("button", { name: general })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole("heading", { name: /通用|医学专业/ })).not.toBeInTheDocument();
     expect(screen.queryByText("SA")).not.toBeInTheDocument();
     expect(screen.queryByText("Drug Safety Analysis")).not.toBeInTheDocument();
   });
 
-  it("filters by search, including example questions, and by group, in one row of chips", async () => {
+  it("filters by search, including example questions, and by category, in one row of chips", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
 
@@ -254,55 +265,33 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "不存在的工具");
-    expect(await screen.findByText("没有符合条件的工具")).toBeInTheDocument();
-
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
-    const filters = screen.getByRole("group", { name: "分类" });
-    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "通用", "医学专业"]);
-    await userEvent.click(within(filters).getByRole("button", { name: "医学专业" }));
-    expect(within(filters).getByRole("button", { name: "医学专业" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("没有符合条件的科研工具")).toBeInTheDocument();
+    // An empty answer to a filter is a recipe: the one button that lets go of it.
+    const empty = screen.getByText("没有符合条件的科研工具").closest("[data-empty]") as HTMLElement;
+    await userEvent.click(within(empty).getByRole("button", { name: "清除筛选" }));
+    expect(screen.getByRole("searchbox", { name: "搜索工具" })).toHaveValue("");
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "用“文档”开始一次对话" })).not.toBeInTheDocument();
-    await userEvent.click(within(filters).getByRole("button", { name: "通用" }));
-    expect(screen.getByRole("button", { name: "用“文档”开始一次对话" })).toBeInTheDocument();
+
+    const filters = screen.getByRole("group", { name: "分类" });
+    // One row: the four categories of the display table, none a tool group of the product's own.
+    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "临床证据", "药学评价", "写作与传播"]);
+    await userEvent.click(within(filters).getByRole("button", { name: "药学评价" }));
+    expect(within(filters).getByRole("button", { name: "药学评价" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "临床证据" })).not.toBeInTheDocument();
+    await userEvent.click(within(filters).getByRole("button", { name: "临床证据" }));
+    expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
   });
 
-  it("finds a general tool by what it does or by a sentence to start from", async () => {
+  it("says how many tools it lists in the toolbar, and the count follows the filter", async () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "合同");
-    expect(card("文档")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "用“代码”开始一次对话" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 2, name: "医学专业" })).not.toBeInTheDocument();
-  });
-
-  // A general tool is not a capability: choosing it binds nothing (no session is written) and fills the composer with a sentence the
-  // reader can change; it is never sent.
-  it("opens a general tool as an ordinary conversation with its first sentence in the composer, bound to nothing", async () => {
-    render(
-      <MemoryRouter initialEntries={["/app/capabilities"]}>
-        <Routes>
-          <Route path="/app/capabilities" element={<CapabilitiesPage />} />
-          <Route path="/app/chat" element={<LocationProbe />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    await userEvent.click(await screen.findByRole("button", { name: "用“表格”开始一次对话" }));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
-    expect(mocks.putWebResearchSession).not.toHaveBeenCalled();
-    expect(screen.getByTestId("capability")).toHaveTextContent("");
-    const intent = JSON.parse(screen.getByTestId("intent").textContent ?? "{}");
-    expect(intent).toMatchObject({ kind: "create", draft: GENERAL_TOOLS[1].starterPrompts[0] });
-  });
-
-  it("keeps the general tools when the medical catalogue could not be read", async () => {
-    mocks.listWebResearchAgents.mockRejectedValue(new WebApiError("later", { status: 503, code: "service_unavailable" }));
-    renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
-    expect(card("文档")).toBeInTheDocument();
-    expect(screen.queryByText("没有符合条件的工具")).not.toBeInTheDocument();
+    const toolbar = screen.getByRole("group", { name: "科研工具筛选" });
+    expect(toolbar).toHaveTextContent("4 个");
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
+    expect(toolbar).toHaveTextContent("1 个");
   });
 
   // The two module names the owner replaced on 2026-10-07 keep finding the tools that carry the new ones until
@@ -334,9 +323,9 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText(/虚拟临研/)).not.toBeInTheDocument();
   });
 
-  // The drawer with its own question box is gone: a card opens the conversation
+  // The drawer with its own question box is gone: a row opens the conversation
   // the reader was going to type in anyway, with that tool on.
-  it("a card opens a new conversation carrying the tool, and asks nothing here", async () => {
+  it("a row opens a new conversation carrying the tool, and asks nothing here", async () => {
     render(
       <MemoryRouter initialEntries={["/app/capabilities"]}>
         <Routes>
@@ -345,7 +334,7 @@ describe("CapabilitiesPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: "用“药品安全性分析”开始一次对话" }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析" }));
     // Bound before the conversation exists, so the router honours the choice
     // rather than re-deciding it.
     await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
@@ -367,81 +356,85 @@ describe("CapabilitiesPage", () => {
     mocks.listWebResearchAgents.mockResolvedValue([...agents, ...geo]);
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    expect(card("论文审稿")).toBeInTheDocument();
+    expect(tool("论文审稿")).toBeInTheDocument();
     for (const entry of geo) {
-      expect(screen.queryByRole("button", { name: `用“${CAPABILITY_DISPLAY[entry.id].title}”开始一次对话` })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: CAPABILITY_DISPLAY[entry.id].title })).not.toBeInTheDocument();
     }
     expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
   });
 
-  // What the deployment can truthfully say about a tool is a label beside it, and only a label: nothing is hidden, and
-  // a card whose tool is unavailable opens the same conversation (the tool reports "blocked" by its own mechanism).
+  // What a row says about a tool's state is a reason the reader can act on, as a word beside it, and only that (2026-10-14): a
+  // deployment's last failed run, a retry budget, an engine that is down, nothing proven here — none of it is the reader's to
+  // mend, and every account opens this page. Nothing is hidden or disabled for what its state says.
   describe("availability", () => {
-    const availability = (id: string, state: string, label: string, text: string, version: string | null = "1.0.0") => ({
-      kind: "capability" as const, id, version, state: state as never, label, text, reason: { code: "x", source: "operation-record" },
+    const availability = (id: string, state: string, label: string, text: string, code: string, detail?: string) => ({
+      kind: "capability" as const, id, version: "1.0.0", state: state as never, label, text, reason: { code, ...(detail ? { detail } : {}), source: "operation-record" },
     });
+    /** One tool for each way a deployment says something about it. */
     const labelled = () => [
-      { ...agents[0], availability: availability("adr-analysis", "executable", "可运行", "1.0.0 版已在这个部署上成功运行过，最近一次是 2026-10-03。") },
-      { ...agents[1], availability: availability("off-label-analysis", "limited", "受限", "分析引擎（一项工具）现在连不上；提交后仍会受理，受阻时会如实说明。") },
-      { ...agents[2], availability: availability("meta-analysis", "unavailable", "不可用", "分析引擎（一项工具）这个部署没有配置。") },
-      { ...agents[3], availability: availability("peer-review", "unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。") },
+      { ...agents[0], availability: availability("adr-analysis", "executable", "可运行", "1.0.0 版已在这个部署上成功运行过，最近一次是 2026-10-03。", "succeeded-here") },
+      { ...agents[1], availability: availability("off-label-analysis", "limited", "受限", "分析引擎（一项工具）现在连不上；提交后仍会受理，受阻时会如实说明。", "engine-not-ready", "meta_analysis") },
+      // The owner's own card (2026-10-14): the last run of the tool failed, on this deployment, for somebody.
+      { ...agents[2], availability: availability("meta-analysis", "limited", "受限",
+        "最近一次运行没有成功（这项能力约定必须产出的文件里，有一个没有写出来，因此这份成果不完整、没有通过质量门。已经写好的部分仍在工作区里。）；此前成功过，最近一次是 2026-10-04。",
+        "last-operation-failed", "specialist_required_output_missing") },
+      { ...agents[3], availability: availability("peer-review", "unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。", "mock-runtime") },
     ];
 
-    // A state a reader can act on is drawn; operational history (ran here / carried / not measured) is not — it is the
-    // system explaining itself and opens the same conversation either way. It is not drawn to the eye, and it is not read out
-    // to assistive technology either (owner ruling 2026-10-10: the platform's confidence in itself is not a line anyone reads).
-    it("draws a state only where the reader can act on it, and nothing of the rest, to the eye or to assistive technology", async () => {
+    it("draws nothing for a deployment's own reasons — a failed last run, an engine, nothing proven — to the eye or to assistive technology", async () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
-      expect(card("超说明书用药分析")).toHaveTextContent("受限");
-      expect(card("自动化 Meta 分析")).toHaveTextContent("不可用");
-      expect(card("超说明书用药分析")).toHaveAccessibleDescription(/现在连不上/);
-      for (const name of ["药品安全性分析", "论文审稿"]) {
-        expect(card(name)).not.toHaveAttribute("aria-describedby");
-        expect(card(name)).not.toHaveAccessibleDescription(/成功运行过|模拟运行环境/);
+      for (const name of ["药品安全性分析", "超说明书用药分析", "自动化 Meta 分析", "论文审稿"]) {
+        expect(tool(name)).not.toHaveAttribute("aria-describedby");
+        expect(card(name).querySelector("[data-tag]")).toBeNull();
       }
-      expect(screen.queryByText(/^(可运行|已安装|未验证)$/)).not.toBeInTheDocument();
-      // The sentences that used to be kept for a screen reader are not in the page at all.
+      expect(screen.queryByText(/^(可运行|已安装|未验证|受限|不可用|规划中)$/)).not.toBeInTheDocument();
       expect(document.querySelectorAll(".sr-only")).toHaveLength(0);
-      expect(document.body.textContent).not.toMatch(/成功运行过|不能证明真实可运行/);
+      // The sentence of a run, with its gate and its workspace, is nowhere on the page.
+      expect(document.body.textContent).not.toMatch(/质量门|能力约定|工作区|现在连不上|成功运行过|不能证明真实可运行/);
     });
 
-    it("draws an installed or planned tool by the same rule: installed says nothing, planned says so", async () => {
+    it("a deployment whose last Meta run failed stamps no limited tag on any card", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue(labelled());
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      expect(document.querySelector("[data-tag]")).toBeNull();
+      expect(card("自动化 Meta 分析")).toHaveTextContent(CAPABILITY_DISPLAY["meta-analysis"].description);
+      expect(card("自动化 Meta 分析")).not.toHaveTextContent(/受限|没有成功/);
+    });
+
+    it("says what the reader can mend — a connector they have not given a key for — as a word, its sentence and the way to add it", async () => {
       mocks.listWebResearchAgents.mockResolvedValue([
-        { ...agents[0], availability: availability("adr-analysis", "installed", "已安装", "1.0.0 版已提供，还没有在这个部署上成功运行过。") },
-        { ...agents[1], availability: availability("off-label-analysis", "source-planned", "规划中", "目录里列了它，这个部署还没有安装。") },
+        { ...agents[0], availability: availability("adr-analysis", "limited", "受限", "用到「OpenGWAS」的数据时需要添加你自己的凭据；可以先开始，缺的部分之后在对话里补上。", "data-source-not-configured", "opengwas") },
+        agents[1],
+      ]);
+      render(
+        <MemoryRouter>
+          <CapabilitiesPage />
+        </MemoryRouter>,
+      );
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      const row = card("药品安全性分析");
+      expect(within(row).getByText("受限")).toBeInTheDocument();
+      expect(row).toHaveTextContent("用到「OpenGWAS」的数据时需要添加你自己的凭据");
+      // The sentence carries its action: the page where a key is given.
+      expect(within(row).getByRole("link", { name: "去添加" })).toHaveAttribute("href", "/app/account?tab=connectors");
+      expect(within(card("超说明书用药分析")).queryByRole("link")).toBeNull();
+    });
+
+    it("tells a module the account is not offered with one plain word and no sentence", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue([
+        { ...agents[0], availability: availability("adr-analysis", "unavailable", "不可用", "对应的功能模块还没有向你的账号开放。", "module-not-open") },
       ]);
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
-      expect(screen.queryByText("已安装")).not.toBeInTheDocument();
-      expect(card("超说明书用药分析")).toHaveTextContent("规划中");
+      const row = card("药品安全性分析");
+      expect(within(row).getByText("暂未开放")).toBeInTheDocument();
+      expect(row).not.toHaveTextContent("功能模块");
     });
 
-    it("leaves a tool with no state to draw with its duration alone in the footer", async () => {
-      mocks.listWebResearchAgents.mockResolvedValue(labelled());
-      renderPage();
-      await screen.findByRole("button", { name: /药品安全性分析/ });
-      // No state to draw and no estimate: how long it takes, and nothing else.
-      expect(card("药品安全性分析")).toHaveTextContent(/约 20～40 分钟$/);
-    });
-
-    it("says why in a sentence only where the reader can act on it", async () => {
-      mocks.listWebResearchAgents.mockResolvedValue(labelled());
-      renderPage();
-      await screen.findByRole("button", { name: /药品安全性分析/ });
-      const sentence = (name: string) => {
-        const id = card(name).getAttribute("aria-describedby");
-        return id ? document.getElementById(id) : null;
-      };
-      expect(sentence("超说明书用药分析")).toHaveTextContent(/现在连不上/);
-      expect(sentence("自动化 Meta 分析")).toHaveTextContent(/这个部署没有配置/);
-      // How often something ran, or that nothing could be proven, is the system explaining itself: no sentence at all.
-      expect(sentence("药品安全性分析")).toBeNull();
-      expect(sentence("论文审稿")).toBeNull();
-    });
-
-    it("never hides a tool or disables its card for what its label says", async () => {
+    it("never hides a tool or disables its row for what its label says", async () => {
       mocks.listWebResearchAgents.mockResolvedValue(labelled());
       render(
         <MemoryRouter initialEntries={["/app/capabilities"]}>
@@ -451,9 +444,10 @@ describe("CapabilitiesPage", () => {
           </Routes>
         </MemoryRouter>,
       );
-      expect(within((await screen.findByRole("heading", { level: 2, name: "医学专业" })).closest("section")!).getAllByRole("listitem")).toHaveLength(4);
-      expect(card("自动化 Meta 分析")).toBeEnabled();
-      await userEvent.click(card("自动化 Meta 分析"));
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      expect(screen.getAllByRole("listitem").filter((item) => item.querySelector("button"))).toHaveLength(4);
+      expect(tool("自动化 Meta 分析")).toBeEnabled();
+      await userEvent.click(tool("自动化 Meta 分析"));
       await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
         expect.stringMatching(/^web-/), { mode: "specialist", agentId: "meta-analysis", agentVersion: "1.0.0" }));
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
@@ -464,7 +458,7 @@ describe("CapabilitiesPage", () => {
       renderPage();
       await screen.findByRole("button", { name: /药品安全性分析/ });
       for (const name of ["药品安全性分析", "超说明书用药分析"]) {
-        expect(card(name)).not.toHaveAttribute("aria-describedby");
+        expect(tool(name)).not.toHaveAttribute("aria-describedby");
         expect(card(name)).not.toHaveTextContent(/可运行|受限|不可用|未验证|已安装|规划中/);
       }
     });
@@ -484,7 +478,7 @@ describe("CapabilitiesPage", () => {
   // characters of 14 px Chinese a line. The sentence is written to fit two
   // lines where it is defined (the capability's `display:` block), because a
   // card that clips it with 「…」 shows half a sentence (plan §5.4).
-  it("every tool's sentence is one sentence that fits two lines of its card", () => {
+  it("every tool's sentence is one complete sentence short enough for its row", () => {
     const entries = Object.entries(CAPABILITY_DISPLAY);
     expect(entries.length).toBeGreaterThanOrEqual(15);
     for (const [id, entry] of entries) {
@@ -508,20 +502,23 @@ describe("CapabilitiesPage", () => {
   describe("what a tool usually takes out of a simulated allowance", () => {
     beforeEach(() => { mocks.allowance.mockResolvedValue(simulatedWallet); });
 
-    it("is said beside how long the tool takes, marked, from one read for every listed tool", async () => {
+    // The 「模拟」 mark is no longer drawn beside each price (2026-10-14): the allowance's own page says once, at the top, that
+    // its amounts are simulated, and a row is a tool and its price.
+    it("is said beside how long the tool takes, from one read for every listed tool, with no mark of its own", async () => {
       // A capability its own module opens is not listed, so it is not asked about either.
       mocks.listWebResearchAgents.mockResolvedValue([...agents, { ...agents[3], id: "geo-insight", skill: "geo-insight", runtimeAgent: "evimed-geo-insight" }]);
       renderPage();
       await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆"));
-      expect(within(card("药品安全性分析")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(within(card("药品安全性分析")).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
       // One figure where the two ends meet, still after the duration.
       expect(card(title("off-label-analysis"))).toHaveTextContent(/分钟 · 约 3 灵豆/);
-      expect(within(card(title("off-label-analysis"))).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(within(card(title("off-label-analysis"))).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+      expect(screen.queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
       expect(mocks.estimates).toHaveBeenCalledWith(LISTED);
     });
 
-    it("rounds the estimate to whole credits, the low end down and the high end up, so a figure never wraps the card", async () => {
+    it("rounds the estimate to whole credits, the low end down and the high end up, so a figure never wraps the row", async () => {
       mocks.estimates.mockResolvedValue({
         ...estimates,
         items: [estimate("adr-analysis", 4.05, 7.02), estimate("off-label-analysis", 0.2, 0.6), estimate("peer-review", 2.4, 2.6)],
@@ -534,7 +531,7 @@ describe("CapabilitiesPage", () => {
       expect(card(title("peer-review"))).toHaveTextContent("约 2～3 灵豆");
     });
 
-    it("is left out for a tool nothing supports an estimate of, which gets no mark and no zero", async () => {
+    it("is left out for a tool nothing supports an estimate of, which gets no zero", async () => {
       renderPage();
       await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("灵豆"));
       // `basis: "none"`, and a tool the answer does not carry at all.
@@ -568,14 +565,14 @@ describe("CapabilitiesPage", () => {
       await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
       expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
       await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
-      await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "医学专业" }));
-      // The card comes back with the price it had.
+      await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "药学评价" }));
+      // The row comes back with the price it had.
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆");
       await act(async () => {});
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
     });
 
-    it("costs the page nothing when it cannot be read: the cards stay as they are, with no error", async () => {
+    it("costs the page nothing when it cannot be read: the rows stay as they are, with no error", async () => {
       mocks.estimates.mockRejectedValue(new WebApiError("later", { status: 503, code: "evimed_credits_unreachable" }));
       renderPage();
       await settled();
@@ -592,7 +589,7 @@ describe("CapabilitiesPage", () => {
       expect(mocks.estimates).toHaveBeenCalledTimes(1);
     });
 
-    it("still opens a conversation with the tool from a card that carries a price", async () => {
+    it("still opens a conversation with the tool from a row that carries a price", async () => {
       render(
         <MemoryRouter initialEntries={["/app/capabilities"]}>
           <Routes>
@@ -602,7 +599,7 @@ describe("CapabilitiesPage", () => {
         </MemoryRouter>,
       );
       await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
-      await userEvent.click(card("药品安全性分析"));
+      await userEvent.click(tool("药品安全性分析"));
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
       expect(screen.getByTestId("capability")).toHaveTextContent("adr-analysis");
     });
@@ -617,7 +614,7 @@ describe("CapabilitiesPage", () => {
       mocks.allowance.mockResolvedValue(answer);
       renderPage();
       await settled();
-      // The cards are there, as they always were…
+      // The rows are there, as they always were…
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
       for (const id of LISTED) expect(card(title(id))).not.toHaveTextContent(/灵豆/);
       // …and nothing of the simulated allowance is.
@@ -647,8 +644,9 @@ describe("CapabilitiesPage", () => {
       expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
       expect(within(prompt).getByRole("link", { name: "去模拟充值" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
       await settled();
-      // Above the categories and the tools.
-      expect(prompt.compareDocumentPosition(screen.getByRole("group", { name: "分类" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Under the one toolbar and above the tools: the first thing the list says is whether there is allowance to start one.
+      const toolbar = screen.getByRole("group", { name: "科研工具筛选" });
+      expect(toolbar.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(prompt.compareDocumentPosition(card("药品安全性分析")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -662,7 +660,7 @@ describe("CapabilitiesPage", () => {
     it("is not shown while the allowance is above the threshold the server names", async () => {
       mocks.allowance.mockResolvedValue(simulatedWallet);
       renderPage();
-      // The allowance was read and is a simulated one: the cards carry prices.
+      // The allowance was read and is a simulated one: the rows carry prices.
       await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });

@@ -4,6 +4,7 @@ import {
   GEO_MONITORING_TABS,
   GEO_STEP_HOME,
   GEO_TAB_REDIRECTS,
+  GEO_TAB_SECTIONS,
   GEO_TAB_STEPS,
   GEO_TABS,
   geoDestinationPath,
@@ -117,6 +118,18 @@ describe("the step ↔ tab map", () => {
     expect(GEO_TAB_STEPS.plan).toEqual(["sources"]);
     expect(GEO_TAB_STEPS.actions).toEqual(["content", "distribution", "monitoring"]);
     expect(GEO_TAB_STEPS.evidence).toEqual(["evidence"]);
+  });
+
+  it("promises every block a step's home names, so the rail never scrolls to something no tab is held to have", () => {
+    expect(Object.keys(GEO_TAB_SECTIONS).sort()).toEqual([...tabs].sort());
+    for (const step of GEO_STEP_KEYS) {
+      const { tab, section } = GEO_STEP_HOME[step];
+      if (section) expect(GEO_TAB_SECTIONS[tab], `${step} → ${tab}#${section}`).toContain(section);
+    }
+    // The to-dos the server names: its `target.section` is one of these, or none (the row opens a dialog or an answer).
+    for (const section of ["budget", "review", "client_actions"]) {
+      expect(Object.values(GEO_TAB_SECTIONS).flat(), section).toContain(section);
+    }
   });
 
   it("derives the measurement tabs from the table: 「AI 回答监测」 is the tabs built from the questions or the diagnosis", () => {

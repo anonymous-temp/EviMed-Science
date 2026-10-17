@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 import { MCP_TOOL_BASE_NAMES } from '../index.mjs'
-import { RESEARCH_TOOL_DISPLAY, RESEARCH_TOOL_GROUPS, researchToolGroups } from '../src/researchToolDisplay.mjs'
-import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, skillDisplay } from '../src/skillDisplay.mjs'
+import { RESEARCH_TOOL_DISPLAY, RESEARCH_TOOL_GROUPS, RESEARCH_TOOL_GROUP_MODULES, researchToolGroups, researchToolsOfModule } from '../src/researchToolDisplay.mjs'
+import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP, skillDisplay } from '../src/skillDisplay.mjs'
 import { SKILL_PACKAGES } from '../src/skillPackages.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -35,9 +35,21 @@ test('every model-visible shipped skill has a Chinese name, a use, a trigger and
   }
 })
 
-test('the method pack\'s group is a listed group no shipped skill belongs to (the pack is not in the table)', () => {
-  assert.ok(SKILL_DISPLAY_GROUPS.includes(SKILL_DISPLAY_GEO_GROUP))
-  assert.ok(Object.values(SKILL_DISPLAY).every((row) => row.group !== SKILL_DISPLAY_GEO_GROUP))
+test('the method pack\'s and the long task\'s groups are listed groups no shipped skill belongs to (neither is in the table)', () => {
+  for (const group of [SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_LOOPX_GROUP]) {
+    assert.ok(SKILL_DISPLAY_GROUPS.includes(group), group)
+    assert.ok(Object.values(SKILL_DISPLAY).every((row) => row.group !== group), `${group} is read from the pack's index / the LoopX record, not from this table`)
+  }
+  assert.equal(SKILL_DISPLAY_LOOPX_GROUP, '长任务')
+})
+
+test('a skill is listed by what it is for, never by where it came from: no 社区 group, the community presentation skill is an office document', () => {
+  assert.ok(!SKILL_DISPLAY_GROUPS.includes('社区'))
+  assert.equal(SKILL_DISPLAY['dsh-ppt'].group, '办公文档')
+  assert.equal(SKILL_DISPLAY['deep-structural-analysis'].group, '写作与核查')
+  for (const group of SKILL_DISPLAY_GROUPS.filter((name) => name !== SKILL_DISPLAY_GEO_GROUP && name !== SKILL_DISPLAY_LOOPX_GROUP)) {
+    assert.ok(Object.values(SKILL_DISPLAY).some((row) => row.group === group), `${group} has a skill`)
+  }
 })
 
 test('the display names are unique within the skills a researcher sees, so two rows are never the same word', () => {
@@ -83,4 +95,14 @@ test('the grouped list carries every tool once, in the groups\' order', () => {
   const groups = researchToolGroups()
   assert.deepEqual(groups.map((group) => group.title), RESEARCH_TOOL_GROUPS.filter((title) => groups.some((group) => group.title === title)))
   assert.equal(groups.reduce((sum, group) => sum + group.tools.length, 0), MCP_TOOL_BASE_NAMES.length)
+})
+
+test('the tools of a module are named by their group, and a list without some tools leaves their groups out when empty', () => {
+  assert.deepEqual(Object.keys(RESEARCH_TOOL_GROUP_MODULES).sort(), ['循证 GEO', '虚拟临床研究'].sort())
+  for (const group of Object.keys(RESEARCH_TOOL_GROUP_MODULES)) assert.ok(RESEARCH_TOOL_GROUPS.includes(group), `${group} is a listed group`)
+  assert.deepEqual(researchToolsOfModule('geo').sort(), ['geo_read', 'geo_visibility_probe', 'geo_write', 'social_posts_search'])
+  assert.deepEqual(researchToolsOfModule('vcr').sort(), ['curve_digitize', 'evidence_pool', 'vcr_read', 'vcr_simulate', 'vcr_write'])
+  const without = researchToolGroups({ without: researchToolsOfModule('geo') })
+  assert.ok(!without.some((group) => group.title === '循证 GEO'))
+  assert.equal(without.reduce((sum, group) => sum + group.tools.length, 0), MCP_TOOL_BASE_NAMES.length - 4)
 })

@@ -16,7 +16,7 @@ import {
   strategyFilled,
   valueFilled,
 } from "@/components/geo/__fixtures__/geoTabs";
-import { GEO_TABS } from "@/components/geo/geoTabs";
+import { GEO_TAB_SECTIONS, GEO_TABS, geoSectionId } from "@/components/geo/geoTabs";
 import { GeoProjectLayout } from "@/app/routes/GeoProjectPage";
 import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precedes } from "./compositionFixtures";
 import { expectComposed } from "./expectComposed";
@@ -243,6 +243,15 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     expect(facts.chrome).toHaveClass("sticky", "top-0");
     // The band's rows: the rail, the tabs and the toolbar's row (drawn, or reserved and empty).
     expect(facts.chrome!.children).toHaveLength(3);
+  });
+
+  // The rail's click and a 「需要你」 row end in `#geo-<block>`; a tab that is rebuilt without the id leaves the link landing at the top
+  // of the tab and nothing says so (the live walk found three: 诊断, 监测 and 去放行). The table of what a tab promises is data.
+  it.each(GEO_TABS.filter((tab) => GEO_TAB_SECTIONS[tab.key].length > 0))("$label has the blocks the rail and 「需要你」 scroll to", async ({ key }) => {
+    const { container } = renderGeo(`/app/geo/geo_masi/${key}`);
+    for (const section of GEO_TAB_SECTIONS[key]) {
+      await waitFor(() => expect(container.querySelector(`#${geoSectionId(section)}`), `${key}: #${geoSectionId(section)}`).not.toBeNull(), { timeout: 4000 });
+    }
   });
 
   it("总览 reads sentence → the numbers → what is asked → the trend, in that order, with the band above all of it", async () => {

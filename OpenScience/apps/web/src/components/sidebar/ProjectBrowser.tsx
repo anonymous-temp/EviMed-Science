@@ -3,13 +3,15 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search, UsersRound, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
-import { useProjectStore } from "@/lib/projects";
+import { projectActivity, sortProjects, useProjectStore } from "@/lib/projects";
 import { PROJECT_NAME_MAX, labelOf, projectErrorMessage, projectLabels, projectNameProblem } from "@/lib/projectNames";
-import { chatPath } from "@/lib/runLocation";
+import { chatPath, chatSessionId } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
-import { groupConversations, isConversationRun, type Conversation } from "@/lib/conversations";
+import { conversationBegan, groupConversations, isConversationRun, type Conversation } from "@/lib/conversations";
+import { vcrChatPath } from "@/lib/studyLocation";
+import { useOpenStudy } from "@/lib/studyPresence";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent, runtimeUiIntentFromState } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
 import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
@@ -77,6 +79,17 @@ function isOpenTask(run: WebAgentRun, pathname: string): boolean {
   return target != null && pathname === target;
 }
 
+/**
+ * Which of a study project's conversations is the study's own — the one its conversation view shows, and whose row opens that view
+ * (R19): the one its open page says it holds, else the oldest of the project's conversations, which is how the server resolves a study
+ * that was made before it recorded one. Null when the project has no conversation to point at yet.
+ */
+function studyConversationOf(rows: readonly Conversation[], heldSessionId: string | null): string | null {
+  if (heldSessionId && rows.some((row) => row.sessionId === heldSessionId)) return heldSessionId;
+  if (rows.length === 0) return null;
+  return [...rows].sort((a, b) => conversationBegan(a) - conversationBegan(b))[0].sessionId;
+}
+
 function without<T>(map: Record<string, T>, key: string): Record<string, T> {
   if (!(key in map)) return map;
   const next = { ...map };
@@ -130,8 +143,10 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoProjectIds = useGeoProjectIds(geo, projectsKey);
-  // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list.
-  const { studies: vcrProjectIds, drafts: vcrDraftIds } = useVcrProjects(vcr, projectsKey);
+  // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list
+  // — unless it is the project the reader is in, which is the one thing they are looking at.
+  const { studies: vcrProjectIds, drafts: vcrDraftIds, studyOf } = useVcrProjects(vcr, projectsKey, currentId);
+  const openStudy = useOpenStudy();
   // A project is one module's at most, GEO first — the order the list below sorts them in.
   const currentModule: ModuleName | null = geoProjectIds.has(currentId) ? "geo" : vcrProjectIds.has(currentId) || vcrDraftIds.has(currentId) ? "vcr" : null;
   useEffect(() => { onCurrentModule?.(currentModule); }, [currentModule, onCurrentModule]);
@@ -171,16 +186,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   // Under 「项目」 only the researcher's own projects; the module's objects (GEO projects, studies) are each one project underneath, but
   // they are not the researcher's to tell apart from the ones they made, so they gather in two groups at the end. A study that is still
   // a draft is not listed at all.
-  const shown = useMemo(() => listed.filter((project) => !vcrDraftIds.has(project.id)), [listed, vcrDraftIds]);
-  // Two projects of one name are told apart by the day they were made (`projectLabels`); the stored name is what a rename starts from.
-  const labels = useMemo(() => projectLabels(shown), [shown]);
-  const ordinary = useMemo(() => shown.filter((project) => !geoProjectIds.has(project.id) && !vcrProjectIds.has(project.id)), [shown, geoProjectIds, vcrProjectIds]);
-  const moduleProjects: Record<ModuleName, WebProject[]> = useMemo(() => ({
-    geo: shown.filter((project) => geoProjectIds.has(project.id)),
-    vcr: shown.filter((project) => vcrProjectIds.has(project.id) && !geoProjectIds.has(project.id)),
-  }), [shown, geoProjectIds, vcrProjectIds]);
-  // A group is open when the reader opened it — or, until they say otherwise, when it holds the project they are in.
-  const isModuleOpen = (name: ModuleName) => moduleOpen[name] ?? moduleProjects[name].some((project) => project.id === currentId);
+  const shown = useMemo(() => listed.filter((project) => !vcrDraftIds.has(project.id) || project.id === currentId), [listed, vcrDraftIds, currentId]);
   const isExpanded = useCallback((projectId: string) => expanded[projectId] ?? projectId === currentId, [expanded, currentId]);
   // The current project is always read, open or not, as the one list before
   // this was: a task started in it must light its header even when folded.
@@ -189,6 +195,48 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     [known, listed, isExpanded, currentId],
   );
   const { byProject, read } = useProjectRuns(wanted, known);
+
+  // The projects in the order of their use (R19, the owner's 「项目会话创建后，还不能自动置顶，还得往下找去」): the one the reader is in
+  // first, then the one that moved last, newest first — by what the server says (`lastActiveAt`) or by a ledger this list has since read
+  // that shows something newer, so a conversation that was just started puts its project where it belongs without a reload. The list
+  // used to be by pinyin, with the two module groups at the end, below every ordinary project.
+  const ordered = useMemo(() => {
+    const stamped = shown.map((project) => {
+      const entry = byProject[project.id];
+      const newest = Math.max(projectActivity(project), ...(entry?.status === "ready" ? entry.runs.map(runMoment) : []));
+      return Number.isFinite(newest) && newest > 0 ? { ...project, lastActiveAt: new Date(newest).toISOString() } : project;
+    });
+    return sortProjects(stamped, currentId);
+  }, [shown, byProject, currentId]);
+  // Two projects of one name are told apart by the day they were made (`projectLabels`); the stored name is what a rename starts from.
+  const labels = useMemo(() => projectLabels(ordered), [ordered]);
+  const ordinary = useMemo(() => ordered.filter((project) => !geoProjectIds.has(project.id) && !vcrProjectIds.has(project.id) && !vcrDraftIds.has(project.id)),
+    [ordered, geoProjectIds, vcrProjectIds, vcrDraftIds]);
+  const moduleProjects: Record<ModuleName, WebProject[]> = useMemo(() => ({
+    geo: ordered.filter((project) => geoProjectIds.has(project.id)),
+    // The draft the reader is in is a study of the group while they are in it; every other draft is not listed at all.
+    vcr: ordered.filter((project) => (vcrProjectIds.has(project.id) || vcrDraftIds.has(project.id)) && !geoProjectIds.has(project.id)),
+  }), [ordered, geoProjectIds, vcrProjectIds, vcrDraftIds]);
+  // A group is open when the reader opened it — or, until they say otherwise, when it holds the project they are in.
+  const isModuleOpen = (name: ModuleName) => moduleOpen[name] ?? moduleProjects[name].some((project) => project.id === currentId);
+
+  // A study or a GEO project that is opened shows itself: its group opens, once, and its row comes into view (`nearest`: a row that is
+  // already in view does not move). Keyed by the project, so going from one of its tabs to another leaves the reader's own scrolling alone.
+  const shownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentModule || shownFor.current === currentId) return;
+    shownFor.current = currentId;
+    setModuleOpen((map) => (map[currentModule] === true ? map : { ...map, [currentModule]: true }));
+  }, [currentId, currentModule]);
+  const groupOpen = currentModule ? isModuleOpen(currentModule) : true;
+  useEffect(() => {
+    if (!currentModule || !groupOpen) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const row = rootRef.current?.querySelector<HTMLElement>("[data-current-project]");
+      if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentId, currentModule, groupOpen]);
 
   // The current project opens by default, and is then remembered as open,
   // so switching away does not fold it behind the reader's back — the
@@ -265,8 +313,9 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     });
   };
 
-  const openTask = (projectId: string, run: WebAgentRun, row: HTMLElement | null) => {
-    const to = taskTarget(run);
+  const openTask = (projectId: string, run: WebAgentRun, row: HTMLElement | null, address?: string) => {
+    // A study's own conversation opens the study's conversation view; every other one is the chat surface's.
+    const to = address ?? taskTarget(run);
     if (!to) return;
     if (row && row === document.activeElement && projectId !== currentId) setRefocus({ projectId, key: taskKey(projectId, run) });
     go(projectId, () => ({ to }));
@@ -384,31 +433,58 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     go(project.id, () => ({ to }));
   };
 
-  const renderProject = (project: WebProject) => (
-    <ProjectGroup
-      key={project.id}
-      project={project}
-      label={labelOf(labels, project)}
-      geo={geoProjectIds.has(project.id)}
-      vcr={vcrProjectIds.has(project.id)}
-      current={project.id === currentId}
-      standIn={projects.length === 0}
-      expanded={isExpanded(project.id)}
-      showAll={showAll.has(project.id)}
-      runs={byProject[project.id]}
-      switching={switching === project.id}
-      failure={failures[project.id] ?? null}
-      isOpen={(run) => project.id === currentId && isOpenTask(run, location.pathname)}
-      onToggle={() => toggle(project.id)}
-      onShowAll={() => toggleShowAll(project.id)}
-      onNewTask={() => startTask(project.id)}
-      onRename={async (name) => { await rename(project.id, name); }}
-      renameFailure={(reason) => projectErrorMessage(reason, projects.length, "项目名没有改成功，请稍后重试。")}
-      onOpenTask={(run, row) => openTask(project.id, run, row)}
-      onRetry={() => read(project.id)}
-      onWarm={() => warm(project.id)}
-    />
-  );
+  // A conversation the reader has just begun and has not yet said a word in is not in the ledger, so it had no row: the one the
+  // address names (`/app/chat/:id`, or the intent of a 「新对话」) is remembered, and its row is drawn until the ledger has it.
+  const intent = runtimeUiIntentFromState(location.state, currentId);
+  const newSession = useRef<string | null>(null);
+  if (intent?.kind === "create") newSession.current = intent.sessionId;
+  const onChatSurface = location.pathname === "/app/chat" || location.pathname.startsWith("/app/chat/");
+  const addressed = onChatSurface ? (chatSessionId(location.pathname) ?? intent?.sessionId ?? null) : null;
+  const pendingSession = addressed !== null && addressed === newSession.current ? addressed : null;
+
+  const renderProject = (project: WebProject) => {
+    const entry = byProject[project.id];
+    const rows = entry?.status === "ready" ? groupConversations(entry.runs.filter((run) => taskTarget(run) != null)) : null;
+    const isCurrent = project.id === currentId;
+    // A study project: its own conversation's row opens the study's conversation view, not the chat surface.
+    const held = openStudy && openStudy.projectId === project.id ? openStudy : null;
+    const studyId = studyOf.get(project.id) ?? held?.studyId ?? null;
+    const studySession = studyId && rows ? studyConversationOf(rows, held?.sessionId ?? null) : null;
+    let placeholder: { to: string } | null = null;
+    if (rows && isCurrent) {
+      if (studyId && held && !studySession) placeholder = { to: vcrChatPath(studyId) };
+      else if (pendingSession && !rows.some((row) => row.sessionId === pendingSession)) placeholder = { to: chatSessionId(location.pathname) ? chatPath(pendingSession) : "/app/chat" };
+    }
+    return (
+      <ProjectGroup
+        key={project.id}
+        project={project}
+        label={labelOf(labels, project)}
+        geo={geoProjectIds.has(project.id)}
+        vcr={vcrProjectIds.has(project.id) || vcrDraftIds.has(project.id)}
+        current={isCurrent}
+        standIn={projects.length === 0}
+        expanded={isExpanded(project.id)}
+        showAll={showAll.has(project.id)}
+        runs={entry}
+        switching={switching === project.id}
+        failure={failures[project.id] ?? null}
+        studyId={studyId}
+        studySession={studySession}
+        placeholder={placeholder}
+        isPath={(to) => isCurrent && location.pathname === to}
+        isOpen={(run) => isCurrent && isOpenTask(run, location.pathname)}
+        onToggle={() => toggle(project.id)}
+        onShowAll={() => toggleShowAll(project.id)}
+        onNewTask={() => startTask(project.id)}
+        onRename={async (name) => { await rename(project.id, name); }}
+        renameFailure={(reason) => projectErrorMessage(reason, projects.length, "项目名没有改成功，请稍后重试。")}
+        onOpenTask={(run, row, address) => openTask(project.id, run, row, address)}
+        onRetry={() => read(project.id)}
+        onWarm={() => warm(project.id)}
+      />
+    );
+  };
 
   return (
     <section
@@ -631,6 +707,10 @@ function ProjectGroup({
   runs,
   switching,
   failure,
+  studyId,
+  studySession,
+  placeholder,
+  isPath,
   isOpen,
   onToggle,
   onShowAll,
@@ -658,13 +738,20 @@ function ProjectGroup({
   /** A switch to this project is waiting on its answer. */
   switching: boolean;
   failure: string | null;
+  /** The study this project is, and which of its conversations is the study's own (its row opens the study's conversation view). */
+  studyId: string | null;
+  studySession: string | null;
+  /** A conversation begun and not yet spoken in has no run in the ledger: its row is drawn from here, where the address says it is. */
+  placeholder: { to: string } | null;
+  /** Whether the address is exactly this one, in this project. */
+  isPath: (to: string) => boolean;
   isOpen: (run: WebAgentRun) => boolean;
   onToggle: () => void;
   onShowAll: () => void;
   onNewTask: () => void;
   onRename: (name: string) => Promise<void>;
   renameFailure: (reason: unknown) => string;
-  onOpenTask: (run: WebAgentRun, row: HTMLElement | null) => void;
+  onOpenTask: (run: WebAgentRun, row: HTMLElement | null, address?: string) => void;
   onRetry: () => void;
   onWarm: () => void;
 }) {
@@ -723,7 +810,12 @@ function ProjectGroup({
   return (
     // Hovering or focusing another project's group starts its runtime ahead of
     // a click (`warmWebRuntime`, which keeps its own rate).
-    <li onPointerEnter={current ? undefined : onWarm} onFocus={current ? undefined : onWarm}>
+    <li
+      data-project-id={project.id}
+      data-current-project={current ? "" : undefined}
+      onPointerEnter={current ? undefined : onWarm}
+      onFocus={current ? undefined : onWarm}
+    >
       {renaming ? (
         <form
           className="flex h-control items-center gap-1 pl-1"
@@ -807,21 +899,33 @@ function ProjectGroup({
               <button type="button" onClick={onRetry} className="shrink-0 rounded px-1 text-link hover:underline">重试</button>
             </li>
           )}
-          {runs?.status === "ready" && rows.length === 0 && (
+          {runs?.status === "ready" && rows.length === 0 && !placeholder && (
             <li className="py-1 pl-11 pr-2 text-caption text-muted">还没有对话</li>
           )}
-          {shown.map((conversation) => (
-            <li key={conversation.sessionId}>
-              <TaskRow
-                conversation={conversation}
-                projectId={project.id}
-                projectName={label}
-                current={current}
-                active={isOpen(conversation.lead)}
-                onOpen={(row) => onOpenTask(conversation.lead, row)}
-              />
+          {placeholder && (
+            <li>
+              <Link to={placeholder.to} aria-current={isPath(placeholder.to) ? "page" : undefined} data-conversation-placeholder="" className={navItemClasses({ current: isPath(placeholder.to), className: "pl-7" })}>
+                <span className="min-w-0 flex-1 truncate text-ui text-text">新对话</span>
+              </Link>
             </li>
-          ))}
+          )}
+          {shown.map((conversation) => {
+            // The study's own conversation is a view of the study's page; every other conversation of its project is the chat surface's.
+            const address = studyId && conversation.sessionId === studySession ? vcrChatPath(studyId) : undefined;
+            return (
+              <li key={conversation.sessionId}>
+                <TaskRow
+                  conversation={conversation}
+                  projectId={project.id}
+                  projectName={label}
+                  current={current}
+                  to={address}
+                  active={address ? isPath(address) : isOpen(conversation.lead)}
+                  onOpen={(row) => onOpenTask(conversation.lead, row, address)}
+                />
+              </li>
+            );
+          })}
           {hidden > 0 && (
             <li>
               <button
@@ -860,6 +964,7 @@ function TaskRow({
   projectId,
   projectName,
   current,
+  to,
   active,
   withProject = false,
   onOpen,
@@ -870,6 +975,8 @@ function TaskRow({
   projectName: string;
   /** The conversation belongs to the project the shell is in. */
   current: boolean;
+  /** Where its row goes when it is not the chat surface's address (a study's own conversation). */
+  to?: string;
   /** This conversation is the one on screen. */
   active: boolean;
   withProject?: boolean;
@@ -886,7 +993,7 @@ function TaskRow({
   // measures its line when the pointer or the focus arrives and adds the title to that sentence.
   const [cut, setCut] = useState(false);
   const measure = (element: Element) => setCut(isTruncated(element));
-  const target = taskTarget(run);
+  const target = to ?? taskTarget(run);
   if (!target) return null;
   const running = conversation.runs.some(isRunning);
   const unseen = !active && isRunUnseen(run);

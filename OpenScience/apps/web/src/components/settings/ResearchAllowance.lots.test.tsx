@@ -70,7 +70,7 @@ beforeEach(() => {
 });
 
 describe("the allowance header on the platform's wallet", () => {
-  it("shows 可用 with the 充值, 赠送 and 冻结 it is made of, and says 模拟 once — in the group's header, not on each row", async () => {
+  it("shows 可用 with the 充值, 赠送 and 冻结 it is made of, and marks none of them: the page's line says 模拟 once", async () => {
     open(lots);
     expect(within(panelRow("可用额度")).getByText("7.80 灵豆")).toBeInTheDocument();
     expect(within(header()).getByText("充值 ＋ 赠送 − 冻结")).toBeInTheDocument();
@@ -78,7 +78,8 @@ describe("the allowance header on the platform's wallet", () => {
       expect(within(panelRow(label)).getByText(amount), label).toBeInTheDocument();
       expect(within(panelRow(label)).queryByText(SIMULATED_WALLET_LABEL), label).not.toBeInTheDocument();
     }
-    expect(within(header()).getAllByText(SIMULATED_WALLET_LABEL)).toHaveLength(1);
+    expect(within(header()).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+    expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
     await rows();
   });
 
@@ -122,7 +123,7 @@ describe("the statement's lines", () => {
     expect(within(item).getByText("6.42 灵豆")).toBeInTheDocument();
     expect(item).toHaveTextContent("赠送 1.20 灵豆 ＋ 充值 5.22 灵豆");
     expect(item).toHaveTextContent("余额 7.80 灵豆");
-    // The list says 「模拟」 once, in its header; a line of a list that is all simulated does not say it again.
+    // The page's line says 「模拟」 once; a line of a list that is all simulated does not say it again.
     expect(within(item).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
   });
 

@@ -7,7 +7,7 @@
  * false and a code path nothing can reach.
  */
 import { formatDuration } from "./format";
-import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, safeAppReturnPath } from "@evimed/domain";
+import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, personAvailability, safeAppReturnPath } from "@evimed/domain";
 import { rememberConversationTitles } from "./conversationTitles";
 
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
@@ -122,6 +122,18 @@ function parseWebApiErrorDetails(code: string | null, value: unknown): WebUsageB
 }
 
 /**
+ * The declared reason of a refusal (`ERROR_DETAIL_FIELDS[code].reason`), or null. Only a value of the closed set the domain declared
+ * for the code is kept: a string the wire holds beyond it is dropped rather than shown.
+ */
+function parseWebApiErrorReason(code: string | null, value: unknown): string | null {
+  const table = ERROR_DETAIL_FIELDS as unknown as Record<string, Record<string, "number" | readonly string[]> | undefined>;
+  const rule = code ? table[code]?.reason : undefined;
+  if (!rule || rule === "number" || !value || typeof value !== "object") return null;
+  const candidate = (value as Record<string, unknown>).reason;
+  return typeof candidate === "string" && rule.includes(candidate) ? candidate : null;
+}
+
+/**
  * How long the control plane says this refusal will keep refusing, in seconds.
  *
  * `Retry-After` is a header (`sendError` in `apps/server/src/security.mjs`) and
@@ -179,6 +191,12 @@ export class WebApiError extends Error {
   /** The machine-readable specifics the control plane declared for this code,
    *  or null for the codes that declare none — see `ERROR_DETAIL_FIELDS`. */
   readonly details: WebUsageBudgetDetails | null;
+  /**
+   * Why the refusal happened, when the code declares a closed set of reasons (`ERROR_DETAIL_FIELDS`): a held runtime says
+   * `scheduled-task`, `module-step` or `platform-task`, and the sentence a person reads says which. Null for every other refusal; a
+   * reason outside the declared set is dropped, never passed on.
+   */
+  readonly reason: string | null;
   /** Seconds until this refusal is worth attempting again, from the
    *  `Retry-After` header or from the declared details, or null when the
    *  control plane said nothing about time. Never invented: a hint nobody sent
@@ -198,6 +216,7 @@ export class WebApiError extends Error {
     this.code = envelope.code ?? null;
     this.requestId = envelope.requestId ?? null;
     this.details = parseWebApiErrorDetails(this.code, envelope.details);
+    this.reason = parseWebApiErrorReason(this.code, envelope.details);
     // The header first: it is what every refusal with a retryAfterSeconds
     // carries today, across all sixteen status classes, while the body detail
     // exists only for the two credits codes that declare it.
@@ -411,6 +430,11 @@ export interface WebProject {
   runCount?: number;
   /** The latest run's start in this project, or null for none yet. */
   lastActivityAt?: string | null;
+  /**
+   * When anything last happened in the project: the latest of its run ledger, its conversations' own last moments and the moment it was
+   * made. What the sidebar orders by — a project made a minute ago sorts above one worked in last week. Absent from an older server.
+   */
+  lastActiveAt?: string | null;
   /** When the project was made, when the control plane keeps it: what tells two projects of one name apart. */
   createdAt?: string | null;
 }
@@ -454,14 +478,27 @@ export interface WebResearchAgentOutput {
 export type WebAvailabilityState = "source-planned" | "installed" | "executable" | "limited" | "unavailable" | "unverified";
 
 /**
- * The states a reader can act on, and so the only ones drawn — a label and its sentence. The rest (installed, executable,
- * unverified) are operational history: how often something ran on this deployment, or that nothing could be proven about
- * it, which opens the same conversation either way and which a researcher could not change — the system explaining itself
- * (AGENTS.md, 「The interface never explains the system」). They are not drawn to the eye and they are not read out to
- * assistive technology; the label stays in the API for operators. Still a label, never a gate.
+ * What a card or a panel may say about an availability: decided by the REASON, not by the state (R19, plan §5.6 / S4).
+ *
+ * It was decided by state — 「受限」, 「不可用」 and 「规划中」 were drawn — and a state is not a reason: a tool is `limited` for
+ * nine reasons and one of them is the reader's to mend. A deployment whose last run of Meta analysis failed stamped
+ * 「受限」 and the sentence of that run (gate, workspace and all) on the card every account opened. Now only a reason a reader
+ * can act on is drawn (`personAvailability`: a connector they have not given their own key for, a catalogue item they have
+ * not installed, a module their account is not offered, and for a skill they brought the software its own package needs),
+ * with the sentence of a small table written for them; everything else stays in the API for operators and in nobody's page.
+ * Still a label, never a gate: a card opens the same conversation whatever it says.
  */
-export const availabilityIsDrawn = (state: WebAvailabilityState | undefined): boolean =>
-  state === "limited" || state === "unavailable" || state === "source-planned";
+export function drawnAvailability(
+  availability: Pick<WebCapabilityAvailability, "state" | "reason" | "label" | "text"> | null | undefined,
+  surface: "capability" | "skill" = "capability",
+): { label: string; text: string } | null {
+  return availability ? personAvailability({ ...availability, kind: surface }, surface) : null;
+}
+
+export const availabilityIsDrawn = (
+  availability: Pick<WebCapabilityAvailability, "state" | "reason" | "label" | "text"> | null | undefined,
+  surface: "capability" | "skill" = "capability",
+): boolean => drawnAvailability(availability, surface) !== null;
 
 export interface WebCapabilityAvailability {
   kind: "capability" | "tool" | "skill" | "extension";
@@ -816,10 +853,11 @@ export interface WebAgentRun {
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   /**
    * What the platform's own bookkeeping calls this run, when it is not the person's conversation (`runRoleOf` in the domain, derived by the
-   * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim. A list of
-   * conversations leaves such a run out (`isConversationRun`); the ledger and the task's page still hold it. Absent on an ordinary run.
+   * server from the route reason it wrote at dispatch): `verification` is the independent re-check of a scheduled task's claim,
+   * `programme` a step a module's programme dispatched (虚拟临床研究). A list of conversations leaves such a run out
+   * (`isConversationRun`); the ledger, the task's page and the study's 「AI 运行」 record still hold it. Absent on an ordinary run.
    */
-  role?: "verification";
+  role?: "verification" | "programme";
   /** Put away by the researcher; the lists leave it out. */
   archived?: boolean;
   /** Removed by the researcher; nothing lists it again. */

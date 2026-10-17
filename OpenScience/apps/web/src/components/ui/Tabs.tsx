@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * A page's views: one row of underlined tabs over a hairline (2026-09-23 plan
@@ -21,6 +22,13 @@ export interface TabItem<V extends string = string> {
   count?: number;
   /** A status dot before the label, when each view is a stage with a state (a study's tabs). */
   dot?: TabDot;
+  /**
+   * What the stage found, after the label (「3,412 名」): one short phrase, one number — a module's step bar says where each stage
+   * stands without opening it. Read out with the label; never a sentence.
+   */
+  note?: string;
+  /** The state in words, as a tooltip over the whole tab (「进行中：构建人群」): the legend of the dot, for a pointer and a keyboard. */
+  hint?: string;
 }
 
 /**
@@ -30,7 +38,7 @@ export interface TabItem<V extends string = string> {
  */
 export type TabDot = "done" | "active" | "partial" | "attention" | "todo";
 
-const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", partial: "部分完成", attention: "需要留意", todo: "未开始" };
+export const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", partial: "部分完成", attention: "需要留意", todo: "未开始" };
 
 const DOT_CLASSES: Record<TabDot, string> = {
   done: "h-2 w-2 rounded-full bg-accent",
@@ -116,6 +124,9 @@ export function Tabs<V extends string>({
     onChange(items[next].value);
     refs.current[next]?.focus();
   };
+  // A view that is not one of the tabs (a study's conversation, which is a view of the page and not a tab) leaves none selected: the
+  // first one stays in the tab order, so the row can be reached from the keyboard.
+  const anySelected = items.some((item) => item.value === value);
   const list = (
     <div
       ref={listRef}
@@ -132,7 +143,7 @@ export function Tabs<V extends string>({
     >
       {items.map((item, index) => {
         const selected = item.value === value;
-        return (
+        const tab = (
           <button
             key={item.value}
             ref={(node) => { refs.current[index] = node; }}
@@ -141,7 +152,7 @@ export function Tabs<V extends string>({
             id={panelId ? `${panelId}-tab-${item.value}` : undefined}
             aria-selected={selected}
             aria-controls={panelId}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={selected || (!anySelected && index === 0) ? 0 : -1}
             onClick={() => onChange(item.value)}
             onKeyDown={onKeyDown}
             className={cn(
@@ -155,10 +166,12 @@ export function Tabs<V extends string>({
             {item.dot && <span aria-hidden="true" data-tab-dot={item.dot} data-forced-colors="preserve" className={cn("mx-0.5 inline-block shrink-0", DOT_CLASSES[item.dot])} />}
             {item.label}
             {item.count !== undefined && <span className="tabular-nums text-text-3">{item.count}</span>}
+            {item.note && <span data-tab-note="" className="ml-0.5 text-caption font-normal tabular-nums text-text-3">{item.note}</span>}
             {/* The state in words, after the name: a screen reader hears 「试验 进行中」, and the dot's shape and colour are not the only way to know. */}
             {item.dot && <span className="sr-only">{DOT_WORDS[item.dot]}</span>}
           </button>
         );
+        return item.hint ? <Tooltip key={item.value} content={item.hint}>{tab}</Tooltip> : tab;
       })}
     </div>
   );

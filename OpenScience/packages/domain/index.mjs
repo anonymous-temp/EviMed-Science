@@ -236,6 +236,7 @@ export {
   CAPSULE_SHARE_ERROR_CODES,
   CONTROL_PLANE_ERROR_CODES,
   CREDIT_ERROR_CODES,
+  ERROR_CODE_AUDIENCES,
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
@@ -270,9 +271,11 @@ export {
   TURN_END_WIRE_ERROR_CODES,
   TURN_END_WIRE_STATUS_ERROR_CODES,
   classifyEvidenceSourceError,
+  errorCodeAudience,
   errorCodeMessage,
   errorCodeOutcome,
   knownErrorCodeMessage,
+  personErrorCodeMessage,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runOutcomeKind,
@@ -362,22 +365,18 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// capabilityDisplay — 5 exports
+// capabilityDisplay — 6 exports
 export {
   CAPABILITY_DISPLAY,
+  RESEARCH_TOOLS_NAME,
   capabilityBrief,
   capabilityBriefTask,
   capabilityListed,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
-// generalTools — 4 exports: the tools page's general group and the blank conversation's example prompts
-export {
-  BLANK_EXAMPLES,
-  GENERAL_TOOL_GROUP,
-  GENERAL_TOOLS,
-  PROFESSIONAL_TOOL_GROUP,
-} from './src/generalTools.mjs'
+// blankExamples — 1 export: the pills on a blank conversation
+export { BLANK_EXAMPLES } from './src/blankExamples.mjs'
 
 // retiredNames — 4 exports: the two module names replaced on 2026-10-07, and the search alias that reads them as the
 // new names until 2027-01-07
@@ -388,7 +387,7 @@ export {
   searchNeedles,
 } from './src/retiredNames.mjs'
 
-// capabilityAvailability — 17 exports: whether a capability, tool, skill or extension has really run on this
+// capabilityAvailability — 19 exports: whether a capability, tool, skill or extension has really run on this
 // deployment, as a label (source-planned / installed / executable / limited / unavailable / unverified)
 export {
   AVAILABILITY_RECORD_SOURCES,
@@ -405,6 +404,8 @@ export {
   foldOperation,
   normalizeOperationRecord,
   operationOutcomeOfRun,
+  personAvailability,
+  personAvailabilityReasons,
   projectAvailability,
   summarizeOperations,
   typicalOf,

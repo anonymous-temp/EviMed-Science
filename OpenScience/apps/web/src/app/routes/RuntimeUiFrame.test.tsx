@@ -1555,7 +1555,7 @@ describe("opening a task", () => {
 
   it("starts the project's runtime from any page, so the conversation is warm when it is opened", async () => {
     // 2026-09-22: a cold start is six to eight seconds, and a researcher who
-    // lands on 知识库 or 工具 first used to pay it on reaching the chat.
+    // lands on 知识库 or 科研工具 first used to pay it on reaching the chat.
     mocks.warm.mockReset();
     mount(null, "/app/files");
     expect(screen.getByText("knowledge base")).toBeInTheDocument();

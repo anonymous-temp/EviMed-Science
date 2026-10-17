@@ -20,6 +20,7 @@ const execFile = promisify(execFileCallback);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const script = path.join(repoRoot, "scripts/build/vendor-geo-skills.mjs");
 const { vendorGeoSkills, readZip, VENDOR_STAMP } = await import(pathToFileURL(script).href);
+const { GEO_PACK_INDEX_FILE, buildGeoPackIndex, geoPackIndexIsCurrent } = await import(pathToFileURL(path.join(repoRoot, "scripts/build/geo-pack-index.mjs")).href);
 
 /**
  * A zip archive, deflated, the way the pack's own packer writes one.
@@ -104,11 +105,12 @@ test("a verified archive is unpacked — skills and shared only — and a second
   assert.deepEqual(await tree(target), [
     "README.md",
     VENDOR_STAMP,
+    GEO_PACK_INDEX_FILE,
     "shared/references/evimed-platform.md",
     "shared/scripts/compute_metrics.py",
     "skills/geo-care-nodes/SKILL.md",
     "skills/geo-verify-product-label/SKILL.md",
-  ], "the pack's own README, docs, caches and test suite stay out; the tracked README stays as it was");
+  ], "the pack's own README, docs, caches and test suite stay out, the index is written beside the pack; the tracked README stays as it was");
   assert.equal(await readFile(path.join(target, "README.md"), "utf8"), "tracked readme\n");
   const stamp = JSON.parse(await readFile(path.join(target, VENDOR_STAMP), "utf8"));
   assert.equal(stamp.version, "3.0.0");
@@ -161,8 +163,59 @@ test("a new version replaces the old tree whole: a skill the new pack dropped is
   t.after(() => Promise.all([old, next, target].map((dir) => rm(dir, { recursive: true, force: true }))));
   await vendorGeoSkills({ dist: old, target });
   assert.equal((await vendorGeoSkills({ dist: next, target })).status, "vendored");
-  assert.deepEqual(await tree(target), ["README.md", VENDOR_STAMP, "shared/references/evimed-platform.md", "skills/geo-care-nodes/SKILL.md"]);
+  assert.deepEqual(await tree(target), ["README.md", VENDOR_STAMP, GEO_PACK_INDEX_FILE, "shared/references/evimed-platform.md", "skills/geo-care-nodes/SKILL.md"]);
+  assert.deepEqual(JSON.parse(await readFile(path.join(target, GEO_PACK_INDEX_FILE), "utf8")).skills.map((skill) => skill.name), ["geo-care-nodes"],
+    "the index follows the tree: a skill the new pack dropped is not listed");
   assert.equal((await vendorGeoSkills({ dist: old, target, check: true })).status, "stale");
+});
+
+test("the index holds each skill's name and the first sentence of its description and nothing of its body", async (t) => {
+  // The web image carries this file and none of the pack (R19, runtime inventory): the skills page lists the method pack from it, so it
+  // must be enough to say what a skill is for and must never be a way to read one.
+  const source = await dist({
+    "geo-skills-3.0.0/skills/geo-care-nodes/SKILL.md": "---\nname: geo-care-nodes\ndescription: Maps the nodes of a patient's care pathway. Then writes one card per node, which the page never shows.\n---\n# the body text, which the index must not hold\n",
+    "geo-skills-3.0.0/skills/geo-verify-product-label/SKILL.md": "---\nname: Verify the product label\ndescription: Checks the claim against the label.\n---\n# another body\n",
+    "geo-skills-3.0.0/shared/references/evimed-platform.md": "# a shared reference the index must not hold\n",
+  });
+  const target = await root();
+  t.after(() => Promise.all([rm(source, { recursive: true, force: true }), rm(target, { recursive: true, force: true })]));
+
+  await vendorGeoSkills({ dist: source, target });
+  const text = await readFile(path.join(target, GEO_PACK_INDEX_FILE), "utf8");
+  const index = JSON.parse(text);
+  assert.equal(index.package, "geo-skills");
+  assert.equal(index.version, "3.0.0");
+  assert.deepEqual(index.skills, [
+    { name: "geo-care-nodes", title: "geo-care-nodes", use: "Maps the nodes of a patient's care pathway." },
+    { name: "geo-verify-product-label", title: "Verify the product label", use: "Checks the claim against the label." },
+  ]);
+  assert.doesNotMatch(text, /body text|another body|shared reference|which the page never shows/, "nothing of a body, a reference or a second sentence");
+  assert.equal(await geoPackIndexIsCurrent(target), true);
+  assert.equal((await vendorGeoSkills({ dist: source, target, check: true })).status, "verified");
+
+  // A root vendored before the index existed is stale for the release's check and mended by the one `--index` step the web image runs.
+  await rm(path.join(target, GEO_PACK_INDEX_FILE));
+  assert.equal((await vendorGeoSkills({ dist: source, target, check: true })).status, "stale");
+  const written = await execFile(process.execPath, [script, "--index", "--target", target]);
+  assert.match(written.stdout, /written: .*geo-pack-index\.json \(2 skills\)/);
+  assert.equal((await vendorGeoSkills({ dist: source, target, check: true })).status, "verified");
+
+  // A tree with no pack gets an index of no skills, so the image's one COPY of it never fails and the group is not drawn.
+  const bare = await root();
+  t.after(() => rm(bare, { recursive: true, force: true }));
+  assert.deepEqual((await buildGeoPackIndex(bare)).skills, []);
+  await execFile(process.execPath, [script, "--index", "--target", bare]);
+  assert.deepEqual(JSON.parse(await readFile(path.join(bare, GEO_PACK_INDEX_FILE), "utf8")).skills, []);
+});
+
+test("the web image carries the pack's index and not the pack", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  const copies = dockerfile.split("\n").filter((line) => /^COPY\b/.test(line) && /geo-private/.test(line));
+  assert.deepEqual(copies, ["COPY --from=build /app/runtime/skills/geo-private/geo-pack-index.json ./runtime/skills/geo-private/geo-pack-index.json"],
+    "one COPY names the private root, and it names the index file");
+  assert.match(dockerfile, /^RUN node scripts\/build\/vendor-geo-skills\.mjs --index$/m, "the build stage writes the index it copies, from the pack the context holds or from none");
+  const runtime = dockerfile.slice(dockerfile.indexOf("AS runtime"));
+  assert.doesNotMatch(runtime, /runtime\/skills\/geo-private\/(skills|shared)/, "no skill, rule or script of the pack reaches the web image");
 });
 
 test("with two versions shipped side by side, the newest one present is taken, and a version can be pinned", async (t) => {
@@ -255,22 +308,25 @@ test("with the private root holding only its README, the GEO capabilities still 
 test("no GEO skill asks a run to write a placement plan while no part of the market reads one; the tool and the table stay (G10g)", async () => {
   // The strategy skill used to list `placement_plan` — preferred layers and outlets, "a proposal; the control plane decides" — and the
   // market never read it (review M-5): a run spent an answer on a preference nobody weighed. The owner ruled on 2026-10-10 that the skill
-  // stops asking until the market reads it. The tool, its vocabulary and its table are untouched, so the day the market ranks by it the
-  // skill can ask again; this is the test to change then.
+  // stops asking until the market reads it. The tool, its vocabulary and its table are untouched. Since R19 (WP-GEOS G4) the market's one
+  // ranking weighs a run's placement plan beside a person's choices (`placementPlanFor` in `geoMarket.mjs`), so the skill MAY ask again;
+  // what stays is the rule itself: a skill that asks for a plan needs a market that reads one.
   const ids = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"];
+  const read = /placement_?plan|latestPlacementPlan/i;
+  let marketReads = false;
+  for (const file of ["geoMarket.mjs", "geoMarketStore.mjs", "geoMarketOperations.mjs", "geoMarketText.mjs"]) {
+    if (read.test(await readFile(path.join(repoRoot, "apps/server/src", file), "utf8"))) marketReads = true;
+  }
   for (const directory of ["capabilities", "capability-skills"]) {
     for (const id of ids) {
       const body = await readFile(path.join(repoRoot, directory, id, "SKILL.md"), "utf8");
-      assert.doesNotMatch(body, /placement[_ ]plan/i, `${directory}/${id}/SKILL.md asks for a placement plan`);
+      if (/placement[_ ]plan/i.test(body)) {
+        assert.ok(marketReads, `${directory}/${id}/SKILL.md asks for a placement plan no part of the market reads`);
+      }
     }
   }
   const { GEO_WRITE_WHATS } = await import("@evimed/domain");
   assert.ok(GEO_WRITE_WHATS.includes("placement_plan"), "the tool still takes a placement plan");
-  const read = /placement_?plan|latestPlacementPlan/i;
-  for (const file of ["geoMarket.mjs", "geoMarketStore.mjs", "geoMarketOperations.mjs", "geoMarketText.mjs"]) {
-    assert.doesNotMatch(await readFile(path.join(repoRoot, "apps/server/src", file), "utf8"), read,
-      `${file} reads a placement plan: the strategy skill can ask a run for one again`);
-  }
 });
 
 test("the release script is not part of the repository; the vendored root is what it must carry", async () => {

@@ -10,7 +10,7 @@ import { AppShell } from "./AppShell";
 /**
  * A click on the sidebar that opens a page whose chunk is still in flight shows that the page is coming: the
  * router navigates in a transition, and with one Suspense boundary for every page the previous page stayed on
- * screen with nothing to say the click was taken (live walk 2026-10-10: 工具 stayed 11 s under
+ * screen with nothing to say the click was taken (live walk 2026-10-10: 科研工具 stayed 11 s under
  * /app/virtual-research while its chunk loaded).
  */
 
@@ -40,7 +40,7 @@ vi.mock("@/components/sidebar/Sidebar", () => ({
     return (
       <aside aria-label="侧栏" data-sidebar="">
         <nav aria-label="工作台">
-          <Link to="/app/tools">工具</Link>
+          <Link to="/app/tools">科研工具</Link>
           <Link to="/app/studies">虚拟临床研究</Link>
           <Link to="/app/geo/one/overview">总览</Link>
           <Link to="/app/geo/one/sources">信源</Link>
@@ -74,7 +74,7 @@ describe("a page whose chunk is still loading", () => {
       path: "/app",
       element: <AppShell />,
       children: [
-        { path: "tools", element: <PageShell title="工具"><p>工具列表</p></PageShell> },
+        { path: "tools", element: <PageShell title="科研工具"><p>工具列表</p></PageShell> },
         { path: "studies", element: <SlowStudies /> },
       ],
     }], { initialEntries: ["/app/tools"] });

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { isVcrTab, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { announceVcrStudyRefresh } from "@/components/vcr/useStudy";
 import { announceInboxChanged, fetchInboxUnreadCount, listInbox, markInboxRead, type InboxItem } from "@/lib/inboxClient";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -82,6 +83,9 @@ export function useVcrFinishedToasts(enabled: boolean): void {
             label: "查看结果",
             onClick: () => {
               goTo.current(vcrTabPath(target.studyId, target.tab));
+              // The reader may be on that very tab, where going to it is no navigation at all: the study is read again in place, so
+              // 「查看结果」 always shows the result and never the page as it was.
+              announceVcrStudyRefresh(target.studyId);
               void markInboxRead(item.id, item.revision).then(announceInboxChanged).catch(() => {});
             },
           },
