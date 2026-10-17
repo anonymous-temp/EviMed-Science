@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { InboxItem } from "@/lib/inboxClient";
-import { dayKey, dayLabel, inboxWhen, orderInbox, severityOf } from "./inboxGroups";
+import { dayKey, dayLabel, groupInbox, inboxGroupTitle, inboxSourceOf, inboxWhen, orderInbox, severityOf } from "./inboxGroups";
 
 const base: InboxItem = {
   id: "x", noticeType: "notify", priority: 2, title: "研究已完成", body: "", actions: [], count: 1,
@@ -69,5 +69,53 @@ describe("orderInbox", () => {
       item({ id: "digest", noticeType: "review", title: "主动科研简报：GLP-1", source: { type: "digest", id: "digest-1" }, readAt: todayAt(9) }),
     ]);
     expect(order.rest.map((entry) => entry.id)).toEqual(["c1", "c2", "digest"]);
+  });
+});
+
+describe("groupInbox", () => {
+  const wrong = (id: string, over: Partial<InboxItem> = {}) => item({ id, severity: "safety", title: `引擎${id}讲错某产品：一句错话`, source: { type: "geo", id: `geo_a/answers/snap_${id}` }, projectId: "p1", createdAt: `2026-09-18T0${id}:00:00Z`, ...over });
+
+  it("folds a module's repeating notices about one subject and kind into one row, where the first of them stood", () => {
+    const entries = groupInbox([item({ id: "run1" }), wrong("1"), wrong("2"), item({ id: "run2" }), wrong("3")]);
+    expect(entries.map((entry) => entry.kind)).toEqual(["item", "group", "item"]);
+    const group = (entries[1] as { kind: "group"; group: ReturnType<typeof Object> }).group as import("./inboxGroups").InboxGroup;
+    expect(group.key).toBe("geo:geo_a:answers:safety");
+    expect(group.items.map((member) => member.id)).toEqual(["3", "2", "1"]);
+    expect(group.latest.id).toBe("3");
+    expect(group.unread).toBe(3);
+    expect(group.safety).toBe(true);
+    expect(group.projectId).toBe("p1");
+  });
+
+  it("leaves two notices as two rows, and a run's, a briefing's or a memory's notices as rows however many there are", () => {
+    expect(groupInbox([wrong("1"), wrong("2")]).map((entry) => entry.kind)).toEqual(["item", "item"]);
+    const runs = Array.from({ length: 5 }, (_, index) => item({ id: `r${index}`, source: { type: "run", id: `run_${index}` } }));
+    expect(groupInbox(runs).every((entry) => entry.kind === "item")).toBe(true);
+  });
+
+  it("keeps different subjects, different pages and safety apart from the rest, and counts the unread ones", () => {
+    const entries = groupInbox([
+      wrong("1"), wrong("2"), wrong("3", { readAt: "2026-09-19T00:00:00Z" }),
+      wrong("4", { source: { type: "geo", id: "geo_b/answers/snap_4" } }), wrong("5", { source: { type: "geo", id: "geo_b/answers/snap_5" } }), wrong("6", { source: { type: "geo", id: "geo_b/diagnosis" } }),
+      wrong("7", { severity: "info", source: { type: "geo", id: "geo_a/answers/snap_7" } }),
+    ]);
+    const groups = entries.flatMap((entry) => (entry.kind === "group" ? [entry.group] : []));
+    expect(groups.map((entry) => [entry.key, entry.items.length, entry.unread])).toEqual([["geo:geo_a:answers:safety", 3, 2]]);
+  });
+
+  it("is stable: the same notices fold to the same key whatever order they arrive in", () => {
+    const list = [wrong("1"), wrong("2"), wrong("3")];
+    const keys = (items: InboxItem[]) => groupInbox(items).flatMap((entry) => (entry.kind === "group" ? [entry.group.key] : []));
+    expect(keys([...list].reverse())).toEqual(keys(list));
+  });
+
+  it("names a group by its subject, the count and what the notices are about", () => {
+    const [entry] = groupInbox([wrong("1"), wrong("2"), wrong("3")]);
+    const group = (entry as { kind: "group"; group: import("./inboxGroups").InboxGroup }).group;
+    expect(inboxGroupTitle(group, "信尔美")).toBe("信尔美：3 条新的讲错");
+    expect(inboxGroupTitle(group, null)).toBe("3 条新的讲错");
+    expect(inboxGroupTitle({ ...group, page: "elsewhere" }, "信尔美")).toBe("信尔美：3 条项目动态");
+    expect(inboxSourceOf(item({ source: null }))).toBe("system");
+    expect(inboxSourceOf(wrong("1"))).toBe("geo");
   });
 });
