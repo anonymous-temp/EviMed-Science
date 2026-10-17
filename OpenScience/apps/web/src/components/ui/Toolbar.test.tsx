@@ -102,6 +102,8 @@ describe("Toolbar", () => {
     const end = screen.getByRole("searchbox").closest("div.ml-auto") as HTMLElement;
     expect(end.className).toMatch(/max-sm:flex-1/);
     expect(end.className).not.toMatch(/basis-full/);
+    // The search keeps room to type in (112 px); the count beside it gives way first.
+    expect(screen.getByRole("searchbox").closest("label")!.className).toMatch(/max-sm:min-w-28/);
   });
 
   it("keeps a pinned group of chips on the row on a phone — the page's own views — and folds the rest", async () => {

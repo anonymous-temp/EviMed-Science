@@ -187,10 +187,12 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           onChange={(event) => search.onChange(event.target.value)}
           onClear={search.onClear}
           {...search.inputProps}
-          className="min-w-0 flex-1 sm:w-56 sm:flex-none"
+          className="min-w-0 flex-1 max-sm:min-w-28 sm:w-56 sm:flex-none"
         />
       )}
-      {summary != null && <span className="shrink-0 text-caption tabular-nums text-text-3">{summary}</span>}
+      {/* On a phone beside a search the count gives way (truncated) before the search does; it has room of its own elsewhere. */}
+      {summary != null && <span className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}
+        title={search && typeof summary === "string" ? summary : undefined}>{summary}</span>}
       {actions}
     </div>
   );
