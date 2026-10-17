@@ -73,7 +73,8 @@ test("the curated scientific inventory contains only audited or EviMed-rehabilit
   assert.ok(inventory.policy.wholePackSecurity.critical > 0);
   assert.ok(inventory.policy.wholePackSecurity.high > 0);
   assert.equal(inventory.policy.digestAlgorithm, "release-directory-v1");
-  assert.equal(expected.length, 38);
+  assert.ok(expected.length > 0);
+  assert.equal(new Set(expected).size, expected.length, "a skill is listed once");
   assert.deepEqual((await directories(curatedRoot)).filter((name) => !supportDirs.has(name)), expected);
   assert.deepEqual(inventory.skills.map((skill) => skill.name).sort(), expected);
   assert.ok(inventory.skills.every((skill) => ["SAFE", "REHABILITATED_SAFE"].includes(skill.security) && skill.reviewed === true && skill.derivedFrom.length > 10 && skill.fills.length > 20));
@@ -85,7 +86,57 @@ test("the curated scientific inventory contains only audited or EviMed-rehabilit
   await assertNoSymlinks(curatedRoot);
 });
 
-test("all 38 curated scientific skills have an executable, dependency-pinned, smoke-tested delivery contract", async (t) => {
+test("the curated inventory pins the upstream release it was reviewed against and records that review for every skill", async () => {
+  const inventory = JSON.parse(await readFile(path.join(curatedRoot, "inventory.json"), "utf8"));
+  const { pin, baseline, securityReport } = inventory.source;
+  const review = inventory.policy.upstreamReview;
+  assert.equal(inventory.source.localSnapshot, undefined, "the pin is a commit and a tree, not a path on somebody's disk");
+  for (const value of [pin.commit, pin.rootTree, pin.skillsTree, baseline.commit, baseline.skillsTree]) assert.match(value, /^[0-9a-f]{40}$/);
+  assert.match(pin.archive.sha256, /^[0-9a-f]{64}$/);
+  assert.match(pin.tag, /^v\d+\.\d+\.\d+$/);
+  assert.equal(review.release, pin.tag, "the review is of the pinned release");
+  assert.ok(pin.skillCount > inventory.skills.length, "the pack has more skills than the curated pack takes from it");
+  assert.equal(securityReport.coversPinnedBytes, false, "the upstream scan report is context, and says so");
+  assert.match(inventory.policy.wholePackTest.status, /^unreproduced/, "a figure with no recorded procedure is not claimed");
+  const known = { class: new Set(Object.keys(review.classes)), decision: new Set(Object.keys(review.decisions)), edit: new Set(Object.keys(review.edits)) };
+  for (const skill of inventory.skills) {
+    const record = skill.upstreamReview;
+    assert.ok(record, `${skill.name} has a review record`);
+    assert.ok(known.class.has(record.class), `${skill.name}: class ${record.class}`);
+    assert.ok(known.decision.has(record.decision), `${skill.name}: decision ${record.decision}`);
+    assert.deepEqual(record.counterparts.map((part) => part.name), skill.derivedFrom.split("/")[1].split("+"), `${skill.name}: the review names the directories derivedFrom names`);
+    assert.ok(record.counterparts.every((part) => /^[0-9.]+ -> [0-9.]+$/.test(part.version) && part.scan), `${skill.name}: each counterpart has its versions and scan result`);
+    assert.ok(record.reason.length > 30 && record.changed.startsWith("SKILL.md"), `${skill.name}: a reason and what changed`);
+    if (record.decision === "refreshed") {
+      assert.equal(record.counterparts.length, 1, `${skill.name}: a refreshed skill carries one upstream directory`);
+      assert.ok(record.edits.length > 0 && record.edits.every((edit) => known.edit.has(edit)), `${skill.name}: the standard edits applied`);
+      const text = await readFile(path.join(curatedRoot, skill.name, "SKILL.md"), "utf8");
+      const [, to] = record.counterparts[0].version.split(" -> ");
+      assert.match(text, new RegExp(`^  version: "?${to.replace(/\./g, "\\.")}"?$`, "m"), `${skill.name}: the shipped text is the upstream version the record says`);
+      assert.ok(["A", "A*"].includes(record.class));
+    } else {
+      assert.equal(record.edits, undefined, `${skill.name}: a held skill was not edited`);
+    }
+  }
+});
+
+test("no curated skill tells the agent to cite the publisher or to install packages at run time", async () => {
+  // The runtime has no package registry, and a 'cite us in the user's manuscript' directive is the publisher's, not the user's. A refresh
+  // from upstream brings both back unless the standard edits are applied again, so this reads every text and script the pack ships.
+  const hazards = [/Citing Scientific Agent Skills/, /\buv (?:add|pip install|venv|run --isolated)\b/, /\bpip3? install\b/];
+  async function walk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (!/\.(?:md|py|yaml|yml|json)$/.test(entry.name) || entry.name === "inventory.json" || entry.name === "digest-repins.jsonl") continue;
+      const text = await readFile(full, "utf8");
+      for (const hazard of hazards) assert.doesNotMatch(text, hazard, `${path.relative(curatedRoot, full)}`);
+    }
+  }
+  await walk(curatedRoot);
+});
+
+test("every curated scientific skill has an executable, dependency-pinned, smoke-tested delivery contract", async (t) => {
   const inventory = JSON.parse(await readFile(path.join(curatedRoot, "inventory.json"), "utf8"));
   const delivery = inventory.policy.delivery;
   assert.equal(delivery.contractVersion, 1);
@@ -94,9 +145,9 @@ test("all 38 curated scientific skills have an executable, dependency-pinned, sm
   const conditional = new Set(Object.keys(delivery.conditional));
   const instructionOnly = new Set(delivery.instructionOnly);
   const all = new Set([...executable, ...conditional, ...instructionOnly]);
-  assert.equal(all.size, 38);
+  assert.equal(all.size, inventory.skills.length, "the inventory is the one list of curated skills");
   assert.deepEqual([...all].sort(), inventory.skills.map((skill) => skill.name).sort());
-  assert.equal(executable.size, 38);
+  assert.equal(executable.size, inventory.skills.length);
   assert.equal(conditional.size, 0);
   assert.equal(instructionOnly.size, 0);
 
@@ -129,14 +180,24 @@ test("all 38 curated scientific skills have an executable, dependency-pinned, sm
   // that happened to host it first.
   const sharedExecutor = await readFile(path.join(curatedRoot, "_runtime/execute_skill.py"), "utf8");
   // The build as the Dockerfile runs it: its install phases read in place.
-  const { expandInstallPhases } = await import("../../../scripts/ops/runtime-install-phases.mjs");
-  const runtimeDockerfile = expandInstallPhases(
-    await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"),
-    await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8"),
-  );
+  const { definedInstallPhases, expandInstallPhases } = await import("../../../scripts/ops/runtime-install-phases.mjs");
+  const installScript = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  const runtimeDockerfile = expandInstallPhases(await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"), installScript);
   assert.match(sharedExecutor, /No deterministic baseline is registered for this skill/);
   assert.match(runtimeDockerfile, /Smoke every shared curated-skill implementation in the production dependency image/);
-  assert.match(runtimeDockerfile, /len\(shared\) != 36/);
+  // The build's guard compares the contracts with the inventory's own list, so adding or removing a skill is one edit...
+  assert.match(runtimeDockerfile, /set\(contracts\) != listed/);
+  assert.doesNotMatch(runtimeDockerfile, /len\(contracts\) != \d+|len\(shared\) != \d+/, "no count of skills is written in the image recipe");
+  // ...and the skills that run their own entrypoints instead of the shared executor are the ones the image smokes by name.
+  const smokedByName = definedInstallPhases(installScript).get("office-smoke") ?? "";
+  const dedicated = Object.entries(delivery.executable).filter(([, contract]) => !contract.entrypoints.includes("../_runtime/execute_skill.py"));
+  assert.ok(dedicated.length > 0 && dedicated.length < executable.size);
+  for (const [name, contract] of dedicated) {
+    assert.ok(
+      contract.entrypoints.some((entry) => smokedByName.includes(`curated-scientific/${name}/${entry}`)),
+      `${name} has entrypoints of its own, so the image's office-smoke phase must run one of them`,
+    );
+  }
 });
 
 test("the original review and remote-run capabilities remain first-party skills", async () => {

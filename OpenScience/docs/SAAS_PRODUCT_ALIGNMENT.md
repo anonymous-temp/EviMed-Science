@@ -72,7 +72,7 @@ boundaries instead of treating authentication alone as isolation.
 | Projects and workspace isolation | Adapted | Tenant-owned, project-scoped paths and runtimes |
 | Agent runtime | Adapted | Per-project Docker sandbox through an isolated controller |
 | Model access | Adapted | Operator key stays server-side; browser and workspace never receive it |
-| 38 curated scientific Skills | Adapted | All 38 have executable contracts; 36 share a bounded deterministic executor and two retain dedicated tested pipelines |
+| Curated scientific Skills (the inventory's list) | Adapted | Every one has an executable contract; most share a bounded deterministic executor, and the others (matplotlib, statistical-power) keep dedicated tested pipelines |
 | Four Office exporters | Adapted | First-party MIT implementations, packaged in the hosted runtime image, each with artifact smoke tests |
 | Seven science connector MCPs | Adapted | Paper Search, BioMCP, Materials Project, FRED, Space Weather, Open-Meteo, and USGS Water are registered by default through the fixed-host server gateway with independent protocol tests |
 | Biomedical public-source routes | Adapted | The current 64-source default registry must pass two traceable queries per source through a controlled route; registry source and ordered-ID hashes prevent stale evidence from passing |
