@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
+import { expectComposed } from "@/test/expectComposed";
+import { precedes } from "@/test/compositionFixtures";
 import { MemoryHubPage } from "./MemoryHubPage";
 
 const fetchMemoryProfile = vi.fn();
@@ -489,6 +491,34 @@ describe("记忆胶囊", () => {
     expect(within(drawer).queryByRole("button", { name: "回到上一版" })).toBeNull();
     expect(within(drawer).queryByText("以前的版本")).toBeNull();
     expect(within(drawer.closest("body")!).queryByText(/效果待观察|对照评估/)).toBeNull();
+  });
+
+  // R19 (plan §3 S10): the page held to the framework's assertions, on each of its tabs.
+  describe("composed as a list page of the framework", () => {
+    it.each(["self", "project", "methods"])("%s: the tabs are the one row of views in the sticky band, the search is the one toolbar under them, and the list is the body", async (tab) => {
+      const { container } = open(`?tab=${tab}`);
+      await screen.findByRole("switch", { name: "记忆" });
+      await screen.findByRole("tab", { name: new RegExp(`^${{ self: "关于你", project: "项目", methods: "做法" }[tab]}`, "u") });
+      const facts = expectComposed(container, { tablists: 1, toolbar: true });
+      expect(facts.toolbars).toHaveLength(1);
+      expect(facts.chrome!.contains(facts.tablists[0]!)).toBe(true);
+      expect(facts.chrome!.contains(facts.toolbars[0]!)).toBe(true);
+      expect(precedes(facts.tablists[0]!, facts.toolbars[0]!)).toBe(true);
+      expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索记忆" }));
+      expect(facts.body!.querySelector("input[type=search]")).toBeNull();
+      // The project is the header's, on the one tab that is about a project.
+      const header = facts.header!;
+      expect(within(header).queryByRole("button", { name: /^项目：/u }) !== null).toBe(tab === "project");
+    });
+
+    it("is the same column and the same band as the map, so the title and the tabs do not move between them", async () => {
+      const { container } = open();
+      await screen.findByRole("switch", { name: "记忆" });
+      // `page` (1040): the map was `wide` (1200) and the title and the tabs stepped 80 px sideways between the two pages.
+      expect(container.querySelector("[data-page-header]")!.parentElement).toHaveClass("max-w-page");
+      expect(container.querySelector("[data-page-header]")!.parentElement).not.toHaveClass("max-w-wide");
+      expect(screen.getByRole("tablist", { name: "记忆" }).closest("[data-page-chrome]")).not.toBeNull();
+    });
   });
 
   describe("成长 is the map's time view", () => {

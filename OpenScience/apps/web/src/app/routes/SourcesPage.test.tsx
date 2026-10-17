@@ -10,6 +10,8 @@ import statusCompiled from "@/components/sources/knowledgeFixtures/status-compil
 import treeMixed from "@/components/sources/knowledgeFixtures/tree-mixed.json";
 import graphKgMedical from "@/components/sources/knowledgeFixtures/graph-kg-medical.json";
 import graphWikiMedical from "@/components/sources/knowledgeFixtures/graph-wiki-medical.json";
+import { expectComposed } from "@/test/expectComposed";
+import { compositionFacts, precedes } from "@/test/compositionFixtures";
 import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -1167,5 +1169,56 @@ describe("知识库", () => {
     expect(within(row).getByText("只保存原件")).toBeInTheDocument();
     expect(within(row).queryByText("没能读取")).toBeNull();
     expect(within(row).queryByRole("button", { name: /重新读取/ })).toBeNull();
+  });
+
+  // R19 (plan §3 S10): the page is held to the framework's own assertions, on the real page and its real tabs.
+  describe("composed as a page of the framework", () => {
+    /** A group of chips or a search box that filters is the toolbar's: none stands in the body. */
+    const looseControls = (container: HTMLElement) => [...container.querySelectorAll("[role=group], input[type=search]")]
+      .filter((node) => !node.closest("[data-toolbar]") && !node.closest("[role=dialog]") && !node.closest("[data-page-header]"))
+      .filter((node) => node.matches("input[type=search]") || node.querySelector("[aria-pressed]"));
+
+    it.each([
+      ["资料", "/app/files"],
+      ["知识页", "/app/files?kind=wiki"],
+      ["图谱", "/app/files?kind=wiki&view=graph"],
+    ])("%s: one row of tabs, one toolbar in the sticky band before the body, and no control that filters stands in the body", async (_name, address) => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline, sheet]), counts: counts({ all: 4, literature: 1, table: 1, wiki: 2 }) });
+      const { container } = renderPage(address);
+      await screen.findByRole("tablist", { name: "知识库" });
+      await waitFor(() => expect(container.querySelector("[data-page-body]")?.textContent?.length ?? 0).toBeGreaterThan(0));
+      const facts = expectComposed(container, { tablists: 1, toolbar: true });
+      expect(facts.toolbars).toHaveLength(1);
+      expect(facts.chrome).toHaveClass("sticky", "top-0");
+      expect(facts.chrome!.contains(facts.tablists[0]!)).toBe(true);
+      expect(facts.chrome!.contains(facts.toolbars[0]!)).toBe(true);
+      expect(precedes(facts.tablists[0]!, facts.toolbars[0]!)).toBe(true);
+      expect(looseControls(container)).toEqual([]);
+    });
+
+    it("draws the graph as the picture first and the same marks as a list under it, both after the toolbar", async () => {
+      context.features = { knowledgePages: true };
+      mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
+      const { container } = renderPage("/app/files?kind=wiki&view=graph");
+      const list = await screen.findByRole("list", { name: "页面" });
+      const { toolbars } = compositionFacts(container);
+      const picture = container.querySelector("[data-chart]")!;
+      expect(precedes(toolbars[0]!, picture)).toBe(true);
+      expect(precedes(picture, list)).toBe(true);
+      // The kind of graph is the toolbar's first chip group, in the one row.
+      expect(toolbars[0]!.querySelector("[role=group]")).toHaveAttribute("aria-label", "图谱的类型");
+    });
+
+    it("replaces the toolbar with the selection while documents are chosen, and the page still has exactly one", async () => {
+      const { container } = renderPage();
+      await userEvent.click(await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` }));
+      const facts = expectComposed(container, { toolbar: true });
+      expect(facts.toolbars).toHaveLength(1);
+      expect(facts.toolbars[0]).toHaveTextContent("已选 1 份");
+      expect(facts.toolbars[0]!.querySelector("input[type=search]")).toBeNull();
+      await userEvent.click(within(facts.toolbars[0]!).getByRole("button", { name: "取消" }));
+      expect(await screen.findByRole("searchbox", { name: "搜索资料和内容" })).toBeInTheDocument();
+    });
   });
 });
