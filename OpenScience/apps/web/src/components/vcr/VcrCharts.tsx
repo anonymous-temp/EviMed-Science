@@ -70,6 +70,9 @@ function bandLevelOf(series: object): number | null {
   return typeof level === "number" && Number.isFinite(level) ? level : null;
 }
 
+/** The sources a chart draws dashed, and the word for what the dash means. */
+const DASHED_SOURCES: ReadonlyArray<readonly [VcrValueSource, string]> = [["reconstructed", "文献重建"], ["aggregate", "汇总数据"]];
+
 /**
  * A chart's legend, from its series: each one in its own colour and mark, an
  * assumption tagged 「假设」, then — once per name — the bands the chart
@@ -86,6 +89,9 @@ export function VcrSeriesLegend({ series }: {
     if (name) bands.set(name, bands.get(name) === true || Boolean(line.ours));
   }
   const unobserved = series.some((line) => (line.unobserved ?? []).length > 0);
+  // A dashed line says what it is drawn from, once: the dash is the encoding for a curve nobody measured, and a legend that names
+  // the series without naming the dash leaves the reader to guess (plan §9.6; audit B §2.4 #18).
+  const dashed = DASHED_SOURCES.filter(([source]) => series.some((line) => line.source === source));
   return (
     <>
       {series.map((line, index) => (
@@ -104,6 +110,12 @@ export function VcrSeriesLegend({ series }: {
             style={{ background: ours ? "var(--chart-own)" : "var(--chart-rival-2)", opacity: 0.28 }}
           />
           {name}
+        </span>
+      ))}
+      {dashed.map(([source, word]) => (
+        <span key={source} data-vcr-legend-source={source} className="inline-flex items-center gap-1.5 text-caption text-text-2">
+          <span aria-hidden="true" data-forced-colors="preserve" className="inline-block h-0 w-4 border-t-2 border-dashed border-text-3" />
+          {`虚线 = ${word}`}
         </span>
       ))}
       {unobserved && (

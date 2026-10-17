@@ -30,7 +30,7 @@ import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
-import { useVcrLoad, VcrTabError } from "../vcrTabKit";
+import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, mcseText, numberText, valueText } from "../vcrText";
 
 /**
@@ -237,16 +237,6 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
 }
 
 /* ------------------------------------------------------------------------- the designs */
-
-/** Two to a row, and a last one alone takes the row: a grid with a hole is a defect (`ChartGrid`). */
-function pairRows(cells: readonly ChartGridCell[]): ChartGridCell[][] {
-  const rows: ChartGridCell[][] = [];
-  for (let index = 0; index < cells.length; index += 2) {
-    const pair = cells.slice(index, index + 2).map((cell) => ({ ...cell, span: 1 as const }));
-    rows.push(pair.length === 1 ? [{ ...pair[0], span: 2 as const }] : pair);
-  }
-  return rows;
-}
 
 function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit }: {
   studyId: string;

@@ -3,6 +3,7 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { isVcrMissing, isVcrOff } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
+import type { ChartGridCell } from "@/components/ui/ChartGrid";
 import { StudyFrameContext } from "./studyFrameContext";
 
 /**
@@ -178,4 +179,17 @@ export function VcrFacts({ rows, className }: { rows: ReadonlyArray<{ label: str
       ))}
     </dl>
   );
+}
+
+/**
+ * Cells laid out two to a row, a last one alone taking the row: a `ChartGrid` row must be full, and a page that has three charts
+ * today and four tomorrow should not need to be told where the hole would be.
+ */
+export function pairRows(cells: readonly ChartGridCell[]): ChartGridCell[][] {
+  const rows: ChartGridCell[][] = [];
+  for (let index = 0; index < cells.length; index += 2) {
+    const pair = cells.slice(index, index + 2).map((cell) => ({ ...cell, span: 1 as const }));
+    rows.push(pair.length === 1 ? [{ ...pair[0], span: 2 as const }] : pair);
+  }
+  return rows;
 }
