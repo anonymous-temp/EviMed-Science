@@ -44,7 +44,7 @@ type Only = "wrong" | "mentions" | "own" | "placeable" | "verified";
 
 const ONLY_OPTIONS: ReadonlyArray<FilterOption<Only>> = [
   { value: "placeable", label: "可投放" },
-  { value: "verified", label: "三条件已核验" },
+  { value: "verified", label: "三条件已核对" },
   { value: "wrong", label: "讲错过我方" },
   { value: "mentions", label: "提到过我方" },
   { value: "own", label: "自有渠道" },

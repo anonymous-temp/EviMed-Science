@@ -160,16 +160,16 @@ describe("信源: the pictures above the list", () => {
 });
 
 describe("信源: what the list can be narrowed to", () => {
-  it("offers 可投放 and 三条件已核验 from the server's own flags, beside the old ones", async () => {
+  it("offers 可投放 and 三条件已核对 from the server's own flags, beside the old ones", async () => {
     renderTab();
     await screen.findByText("3 个信源");
     await userEvent.click(within(toolbar()).getByRole("button", { name: "只看" }));
-    expect((await screen.findAllByRole("menuitemradio")).map((item) => item.textContent)).toEqual(["全部信源", "可投放", "三条件已核验", "讲错过我方", "提到过我方", "自有渠道"]);
+    expect((await screen.findAllByRole("menuitemradio")).map((item) => item.textContent)).toEqual(["全部信源", "可投放", "三条件已核对", "讲错过我方", "提到过我方", "自有渠道"]);
     await userEvent.click(screen.getByRole("menuitemradio", { name: "可投放" }));
     // 39.net is the one the market lists (it has a price there)
     expect(domains()).toEqual(["39.net"]);
     await userEvent.click(within(toolbar()).getByRole("button", { name: /^只看/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "三条件已核验" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "三条件已核对" }));
     expect(domains()).toEqual(["dxy.com", "39.net"]);
   });
 
