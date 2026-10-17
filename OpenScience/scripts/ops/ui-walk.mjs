@@ -213,8 +213,8 @@ const WALK_TABLES = {
       {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","rows":false},
       {"view":"extensions-plugins","route":"/app/extensions/plugins","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
       {"view":"extensions-skills","route":"/app/extensions/skills","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
-      {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","rows":false},
-      {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","rows":false},
+      {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
+      {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
       {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
@@ -593,10 +593,23 @@ export function keylessTitles(connectors) {
     .map((item) => item.title);
 }
 
-/** Read one JSON `data` from the deployment, or null: a page whose id cannot be read is not walked, and the walk says so. */
-async function readData(context, base, pathname) {
-  const answer = await context.request.get(`${base}${pathname}`).catch(() => null);
-  if (!answer || !answer.ok()) return null;
+/**
+ * Read one JSON `data` from the deployment, or null: a page whose id cannot be read is not walked, and the walk says so. A list the
+ * deployment cannot answer (a server error, a read that never arrived) is a failure of its own, not an empty list: the pages it names would
+ * otherwise drop out of the walk as a coverage gap that looks like an account with nothing in it. A refusal (the module is not offered to
+ * this account, the account may not read it) is the account's, and is a coverage gap.
+ * @param {any} context @param {string} base @param {string} pathname @param {string[]} [failures]
+ */
+async function readData(context, base, pathname, failures) {
+  const answer = await context.request.get(`${base}${pathname}`).catch((/** @type {unknown} */ error) => error);
+  if (!answer || typeof /** @type {any} */ (answer).ok !== "function") {
+    failures?.push(`discovery: ${pathname} could not be read (${String(answer ?? "no answer").replace(/\s+/g, " ").slice(0, 80)}), so the pages it names were not found`);
+    return null;
+  }
+  if (!answer.ok()) {
+    if (answer.status() >= 500) failures?.push(`discovery: ${pathname} answered ${answer.status()}, so the pages it names were not found`);
+    return null;
+  }
   return (await answer.json().catch(() => null))?.data ?? null;
 }
 
@@ -605,25 +618,25 @@ async function readData(context, base, pathname) {
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
  * for want of an id is a notice, never a pass that looks like a walk.
- * @param {any} context a logged-in browser context @param {string} base @param {string[]} notices
+ * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures
  * @returns {Promise<{ routes: Array<[string, string]>, matrix: string | null, pdfTitle: string | null, keyless: string[] }>}
  */
-async function discoverRoutes(context, base, notices) {
+async function discoverRoutes(context, base, notices, failures) {
   /** @type {Array<[string, string]>} */
   const routes = [];
   const skip = (name, why) => notices.push(`${name}: not walked — ${why}`);
 
-  const geo = (await readData(context, base, "/api/geo/projects"))?.projects;
+  const geo = (await readData(context, base, "/api/geo/projects", failures))?.projects;
   const geoId = Array.isArray(geo) && typeof geo[0]?.id === "string" ? geo[0].id : null;
   if (geoId) {
     const at = `/app/geo/${encodeURIComponent(geoId)}`;
     routes.push(...GEO_TABS.map(([name, segment]) => /** @type {[string, string]} */ ([name, `${at}${segment}`])));
-    const snapshot = geoAnswerSnapshot(await readData(context, base, `/api/geo/projects/${encodeURIComponent(geoId)}/diagnosis`));
+    const snapshot = geoAnswerSnapshot(await readData(context, base, `/api/geo/projects/${encodeURIComponent(geoId)}/diagnosis`, failures));
     if (snapshot) routes.push(["geo-answer", `${at}/answers/${encodeURIComponent(snapshot)}`]);
     else skip("geo-answer", "the first project lists no wrong sentence with an answer");
   }
 
-  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies"))?.studies);
+  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies", failures))?.studies);
   for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
     if (!id) continue;
     const at = `/app/virtual-research/${encodeURIComponent(id)}`;
@@ -631,12 +644,12 @@ async function discoverRoutes(context, base, notices) {
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
 
-  const zones = await readData(context, base, "/api/frontier/zones");
-  const hot = await readData(context, base, "/api/frontier/hot");
+  const zones = await readData(context, base, "/api/frontier/zones", failures);
+  const hot = await readData(context, base, "/api/frontier/hot", failures);
   const first = frontierTargets({ zones, hot });
-  const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`) : null;
+  const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`, failures) : null;
   const cardId = frontierTargets({ cards }).cardId;
-  const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`) : null;
+  const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`, failures) : null;
   const targets = { ...first, cardId, authorId: frontierTargets({ links }).authorId };
   if (targets.zoneId) routes.push(["frontier-zone", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}`]);
   else skip("frontier-zone", "the evidence zones are not offered to this account or the list is empty");
@@ -647,16 +660,16 @@ async function discoverRoutes(context, base, notices) {
   if (targets.eventId) routes.push(["frontier-event", `/app/frontier/events/${encodeURIComponent(targets.eventId)}`]);
   else skip("frontier-event", "the hot list is empty or not offered");
 
-  const matrix = matrixRoute(await readData(context, base, "/api/agent-runs"));
+  const matrix = matrixRoute(await readData(context, base, "/api/agent-runs", failures));
   if (!matrix) skip("evidence-matrix", "no run of this account delivered a clinical-evidence package");
-  const sources = await readData(context, base, "/api/sources?projectId=default&limit=50");
+  const sources = await readData(context, base, "/api/sources?projectId=default&limit=50", failures);
   const pdfTitle = pdfSourceTitle(sources);
   if (!pdfTitle) skip("files: the original of a PDF", "the knowledge base holds no finished PDF");
   // A document's own page (R13): the reader is a page of the knowledge base, found from its list like the other pages with an id.
   const reader = sourceReaderRoute(sources);
   if (reader) routes.push(["files-reader", reader]);
   else skip("files-reader", "the knowledge base holds no finished document");
-  return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors")) };
+  return { routes, matrix, pdfTitle, keyless: keylessTitles(await readData(context, base, "/api/connectors", failures)) };
 }
 
 /**
@@ -2549,7 +2562,9 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   // the band: the body is `[data-page-body]`, and the band's rows are blocks of the page too (the band itself is wider than the column).
   const band = document.querySelector("[data-page-chrome]");
   const body = document.querySelector("[data-page-body]") ?? (at >= 0 ? siblings[at + 1] ?? null : null);
-  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
+  // A block that is laid over the page (a drawer's backdrop, a dialog's) is not a block of the page: it starts at the window's edge.
+  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])]
+    .filter((el) => el && visible(el) && !["fixed", "absolute"].includes(getComputedStyle(el).position));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
   for (const list of document.querySelectorAll("ul, ol")) {
@@ -3118,7 +3133,7 @@ async function main() {
     // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
-    const found = await discoverRoutes(context, base, notices);
+    const found = await discoverRoutes(context, base, notices, failures);
     const routes = [...ROUTES, ...found.routes];
     // axe-core (V-6): looked for once; its absence is one notice and the walk goes on.
     const axe = await loadAxeSource();

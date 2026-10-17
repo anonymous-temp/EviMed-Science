@@ -500,9 +500,10 @@ default) is the release walk on the owner-view account, whose empty pages
 cannot be observed: an entry for `not-observable` or `not-walked` may be given
 to it. `fixture` is the local walk on the data-rich fixture (`--url` of a
 harness control plane), which accepts no coverage gap. **Rehearse before a
-candidate that changes the walk or the pages is switched**: `rewalk.sh <tag>
-<candidate ui-walk.mjs>` on the host, then on a copy of the repository
-`node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner <who>
+candidate that changes the walk or the pages is switched**: the host's
+`rewalk.sh <tag> <candidate ui-walk.mjs>` (a host script, not in this
+repository) walks the live release with the candidate's file, then on a copy of
+the repository `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner <who>
 --until <day> --why "<reason>" [--write]` writes the entries the report asks for
 (`--write` merges them into the file and re-embeds it); the owner, the day and
 the reason are the person's, there is no default. `node

@@ -885,6 +885,8 @@ function context() {
       async get(url) {
         // FAKE_EMPTY_LISTS: the lists the walk reads its ids from answer nothing, as a module that is off for the account does.
         if (process.env.FAKE_EMPTY_LISTS && /\/api\/(vcr|frontier|agent-runs|sources|connectors)|\/diagnosis$/.test(url)) return json(404, {});
+        // FAKE_DISCOVERY=500|refused: a list that the deployment cannot answer, and one the account may not read.
+        if (process.env.FAKE_DISCOVERY && url.endsWith("/api/geo/projects")) return process.env.FAKE_DISCOVERY === "500" ? json(500, {}) : json(403, {});
         if (url.endsWith("/api/agents")) return json(200, { data: ["a1", "a2", "a3", "a4", "a5"].map((id) => ({ id: "capability-" + id })) });
         if (url.endsWith("/api/geo/projects")) return json(200, { data: { projects: [{ id: "geo_1" }] } });
         if (url.endsWith("/api/geo/projects/geo_1/diagnosis")) return json(200, { data: { errors: [{ snapshotId: "snap_old", firstSnapshotId: "snap_1" }] } });
@@ -1070,6 +1072,17 @@ test("a candidate check named for the walk is in its report and its output, as i
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("a list the walk finds its pages by that the deployment cannot answer is a failure; one the account may not read is a page it was not offered", async () => {
+  // A server error would otherwise drop the project's eight tabs from the walk as a coverage gap that reads like an account with no project.
+  const broken = await walk({ FAKE_DISCOVERY: "500" });
+  assert.equal(broken.code, 1);
+  assert.ok(broken.report.failures.includes("discovery: /api/geo/projects answered 500, so the pages it names were not found"), broken.report.failures.join("\n"));
+  const refused = await walk({ FAKE_DISCOVERY: "refused" });
+  assert.equal(refused.code, 0, "a refusal is the account's");
+  assert.ok(!refused.report.failures.some((line) => line.startsWith("discovery:")));
+  assert.ok(!Object.keys(refused.report.pages).some((view) => view.startsWith("geo-overview@")), "no project was found, so no GEO tab was walked");
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {
