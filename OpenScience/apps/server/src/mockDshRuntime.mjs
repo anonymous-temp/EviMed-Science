@@ -220,7 +220,8 @@ export function startMockDshRuntime(options = {}) {
     running: session.running,
     blank: session.events.length === 0,
     cwd: session.cwd,
-    projections: { asOfSeq: session.seq - 1, values: { agentPreset: session.agentPreset, title: null } },
+    // The mock queues nothing: its inbox is empty, as the real kernel's list says of a session that has nothing waiting.
+    projections: { asOfSeq: session.seq - 1, values: { agentPreset: session.agentPreset, title: null, inbox: { "next-turn": [], "next-step": [] } } },
   });
 
   /**

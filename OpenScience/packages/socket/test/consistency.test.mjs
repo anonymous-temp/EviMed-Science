@@ -948,6 +948,53 @@ test("each session-scoped dispatch revision is logged once before its model step
   assert.deepEqual(f.rows.get("run_followup"), rootMirror, "child activity must not replace the root mirror row");
 });
 
+test("a release revision — a run of the conversation's own, routed nowhere, with no brief and no context — ends the dispatch's run: its owed plan is not asked of the next turn, and the binding is the route again", async () => {
+  // 2026-10-17 (R19 phase 2), found on a real kernel: a step that ran in a study's own conversation was stopped by the person, and the
+  // question typed next resumed it — the plan's reminder arrived at the end of the question's turn and the model delivered the step.
+  // The control plane lets go of a conversation when a step that ran in it ends (`RuntimeManager.releaseDispatchedSession`) by writing
+  // one more revision of the dispatch files; this is what the run policy does with it, and what it does without.
+  const capability = (/** @type {string} */ id, /** @type {string} */ persona) => ({ id, skills: [], tools: [], persona, produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] });
+  const roster = [capability("study-analyst", "Study analyst"), capability("study-evidence", "Evidence analyst")];
+  const root = "/workspace/.evimed-brief/sessions/native-session";
+  const reminder = "计划里还有未通过的交付物";
+  const run = async (/** @type {boolean} */ released) => {
+    const f = await nativePolicyFixture({ capabilities: roster });
+    f.files.set(`${root}/binding.json`, JSON.stringify({ capability: "study-analyst" }));
+    const dispatch = (/** @type {string} */ runId, /** @type {string} */ revision, /** @type {string | null} */ routed, /** @type {string} */ context) => {
+      f.files.set(`${root}/index.json`, JSON.stringify({ protocol: RUN_CONTEXT_PROTOCOL, runId, contextRevision: revision, ...(routed ? { capability: routed } : {}) }));
+      f.files.set(`${root}/context.md`, context);
+      f.files.set(`${root}/research-brief.md`, context ? "<brief>the step's instruction</brief>" : "");
+    };
+    const methods = () => f.injected.map((message) => /<evimed-method capability="([^"]+)"/.exec(String(message.content?.[0]?.text ?? ""))?.[1]).filter(Boolean);
+    // The step: routed to its own capability over the conversation's binding, with a plan whose deliverable is never submitted.
+    dispatch("run_step", "req_step", "study-evidence", "<evimed-vcr-brief>the step</evimed-vcr-brief>");
+    await f.step(1);
+    assert.deepEqual(methods(), ["study-evidence"], "the dispatched turn is the step's capability's, not the binding's");
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "cards", contractKind: "research-brief", capability: "study-evidence", title: "Cards", dependsOn: [] }] });
+    await f.endTurn("aborted");
+    // What the control plane writes when the step ends, or nothing: the person's next question is the next turn.
+    if (released) dispatch("native_conversation", "release_1", null, "");
+    const stepOne = f.injected.length;
+    await f.step(2);
+    const nextTurn = f.injected.slice(stepOne);
+    const injectedBefore = f.injected.length;
+    for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 2 });
+    const nudged = f.injected.slice(injectedBefore).some((message) => JSON.stringify(message).includes(reminder));
+    return { f, methods: methods(), nudged, nextTurn };
+  };
+
+  const kept = await run(false);
+  assert.equal(kept.nudged, true, "without a release the stopped step's plan is asked of the question that follows (the incident)");
+
+  const let_go = await run(true);
+  assert.equal(let_go.nudged, false, "with it the stopped step's owed deliverable is not asked of the next turn");
+  assert.deepEqual(let_go.methods, ["study-evidence", "study-analyst"], "the binding is the route again: the analyst's method is handed to the turn, not the step's a second time");
+  assert.ok(let_go.f.rows.has("native_conversation"), "the next turn is a run of the conversation's own");
+  assert.equal(let_go.nextTurn.some((message) => JSON.stringify(message).includes("the step's instruction")), false, "and the step's instruction is not read again");
+  // Without it the step's brief and method are what the next turn is handed again (a fresh process reads the files on disk the same way).
+  assert.equal(kept.nextTurn.some((message) => JSON.stringify(message).includes("the step's instruction")), false, "in this process the revision was consumed once: the stale state is the plan and the route, not a second brief");
+});
+
 test("a delegation carries the memory file the control plane wrote, and the child keeps the pull channel", async () => {
   /** @type {any[]} */
   const starts = [];

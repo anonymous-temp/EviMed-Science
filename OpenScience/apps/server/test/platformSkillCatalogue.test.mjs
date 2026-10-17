@@ -118,6 +118,26 @@ test("the web image's index lists the method pack where the folder is not, and a
   assert.deepEqual((await catalogue.list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).map((item) => item.name), ["geo-demo"]);
 });
 
+test("the deployment's own index lists the method pack where the image's lists none — the CI web image carries an index of no skills", async () => {
+  const root = await tempRoot(), data = await tempRoot();
+  // What the public CI build writes: the one file, with no skill in it.
+  await fs.mkdir(path.join(root, "runtime/skills/geo-private"), { recursive: true });
+  await fs.writeFile(path.join(root, "runtime/skills/geo-private/geo-pack-index.json"), JSON.stringify({ schemaVersion: 1, package: "geo-skills", version: null, skills: [] }));
+  // What the release step places in the data volume.
+  await fs.mkdir(path.join(data, ".openscience"), { recursive: true });
+  await fs.writeFile(path.join(data, ".openscience/geo-pack-index.json"), JSON.stringify({
+    schemaVersion: 1, package: "geo-skills", version: "3.0.1",
+    skills: [{ name: "geo-care-nodes", title: "geo-care-nodes", use: "Maps the nodes of a care pathway." }, { name: "a/b", title: "x", use: "never" }],
+  }));
+  const member = { id: "member" };
+  const names = async (catalogue) => (await catalogue.list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).map((item) => item.name);
+  assert.deepEqual(await names(createPlatformSkillCatalogue({ rootDir: root, dataDir: data, packAllowed: () => true })), ["geo-care-nodes"]);
+  assert.deepEqual(await names(createPlatformSkillCatalogue({ rootDir: root, packAllowed: () => true })), [], "without a data directory: no such group");
+  assert.deepEqual(await names(createPlatformSkillCatalogue({ rootDir: root, dataDir: await tempRoot(), packAllowed: () => true })), [], "no file there: no such group");
+  // An account outside the module is shown none of it, whichever file the names came from.
+  assert.equal((await createPlatformSkillCatalogue({ rootDir: root, dataDir: data, packAllowed: () => false }).list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP).length, 0);
+});
+
 test("the long task's entry skill is a row of its own group where LoopX is on — the CLI's other skills are not rows — and is told in the item's words", async () => {
   const off = createPlatformSkillCatalogue({ rootDir: repoRoot });
   assert.equal((await off.list(reader)).items.filter((item) => item.group === SKILL_DISPLAY_LOOPX_GROUP).length, 0, "LoopX off: no row");

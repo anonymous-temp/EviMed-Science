@@ -123,7 +123,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -369,7 +369,7 @@ import { availabilityMetricFamilies } from "./availabilityService.mjs";
 import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
-import { VcrOrchestrator, vcrBriefBlock, vcrRunId } from "./vcrOrchestrator.mjs";
+import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
@@ -1224,7 +1224,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
     artifacts: skillArtifacts, supply: skillSupply,
     // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
-    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, packAllowed: user => moduleState(config, user, "geo") === "on", loopxEnabled: config.loopxEnabled !== false }),
+    platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, dataDir: config.dataDir, packAllowed: user => moduleState(config, user, "geo") === "on", loopxEnabled: config.loopxEnabled !== false }),
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -2805,6 +2805,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const winner = (await vcr.store.studyById(study.id))?.conversationSessionId ?? minted.sessionId;
     return { sessionId: winner, exists: winner === minted.sessionId ? minted.bound : true };
   }
+  /**
+   * The id of the study's own conversation when a step may be a turn of it: the conversation that exists in the kernel (made now for the
+   * owner when the study has none), or null — the step then runs in a session of its own.
+   * A conversation with something waiting in it is not taken: the kernel hands an input somebody queued to the next turn to start, so a
+   * step sent in behind it would run under the question's turn (found live), and the step runs in a session of its own instead.
+   * @param {any} project @param {string} studyId @returns {Promise<string | null>}
+   */
+  async function vcrStudyConversationId(project, studyId) {
+    if (!vcr?.store) return null;
+    try {
+      const study = await vcr.store.studyById(studyId);
+      if (!study) return null;
+      const found = await resolveStudyConversation(study, { create: true });
+      if (found?.exists !== true || !found.sessionId) return null;
+      const inbox = await runtimeManager.sessionInbox(project, found.sessionId);
+      return inbox && inbox.running === false && inbox.queued === 0 ? found.sessionId : null;
+    } catch {
+      // isolated: the step runs in its own session, as it did before the conversation was asked
+      return null;
+    }
+  }
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -3807,6 +3828,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           }));
+        }
+        // A step that ran in the study's own conversation lets go of it, before the programme's next step is sent into it (that
+        // dispatch's revision replaces this one): what is typed there next is the conversation's, not the step's.
+        if (isConversationTurnRun(run) && run.sessionId) {
+          // A step the researcher stopped says so in the revision the conversation's next turn reads.
+          const stopped = run.status === "canceled" && run.canceledBy === "user" ? vcrStoppedBlock(run.question ?? "") : "";
+          if (!(await runtimeManager.releaseDispatchedSession(project, run.sessionId, { note: stopped }))) {
+            await securityAudit(config, "vcr.conversation.release", "failed", { userId: project.userId, projectId: project.id, runId: run.id, code: "session_release_failed" }).catch(() => {});
+          }
         }
         if (vcr?.orchestrator) {
           await vcr.orchestrator.onRunFinished(project, run).catch((/** @type {any} */ error) => securityAudit(config, "vcr.run.complete", "failed", {
@@ -5289,11 +5319,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
       queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
-      latestSessionId: async ({ userId, projectId }) => {
-        const owner = await store.userById(userId);
-        if (!owner) return null;
-        return (await researchSessions.list(await store.requireProject(owner, projectId)))[0]?.sessionId ?? null;
-      },
       report: (code) => process.stderr.write(`vcr orchestrator: ${code}\n`),
     });
     vcr.orchestrator = orchestrator;
@@ -5377,12 +5402,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * deterministic step is not a run and does not come through here.
    * `products` are the contract kinds the run is sent for, when its capability produces several: the delivery gate holds the run to
    * those products' files and checks (`agentRegistry.get(id, { products })`) rather than to everything the capability can produce.
+   * With `OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION` the run is a turn of the study's own conversation when the researcher's runtime is
+   * open: the step's sentence is what they read there, the assistant's work and its result follow in the same conversation, and the
+   * ledger records the run as a turn of the step's capability (`routedOverBinding`) although the conversation stays bound to the
+   * analyst — what the person types there next is still the analyst's. A step nobody is present for keeps the hidden session.
    * @param {{ userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string, reason: string, brief: string,
    *   question?: string | null, attended?: boolean, products?: string[] }} input `question`: what a person reads of the run (the step's
    *   sentence); `brief`: what the model works from. `attended`: a person asked for this just now, so the project's runtime is opened for
    *   them and the run takes place in it
    */
-  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief, question = null, attended = false, products = [] }) {
+  async function dispatchVcrRun({ userId, projectId, studyId, capabilityId, dispatchId, reason, brief, question = null, attended = false, products = [] }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "vcr_study_not_found", "The study's account is unavailable.");
     const project = await store.requireProject(user, projectId);
@@ -5414,17 +5443,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await runtimeManager.start(project, { opening: true }).catch(() => null);
     }
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
-    const session = interactive ? { id: randomId("session_") }
+    // The study's own conversation, when the step is to be a turn of it: the researcher's runtime is open (so they are the one it works
+    // for) and the study has a conversation that exists in the kernel. Anything less keeps the hidden session below.
+    const conversationId = config.vcrStepsInStudySession === true && interactive ? await vcrStudyConversationId(project, studyId) : null;
+    const session = conversationId ? { id: conversationId } : interactive ? { id: randomId("session_") }
       : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope, reason: "module-step" });
     const placement = interactive ? "open-runtime" : "bounded";
     // What a person is shown of the run is the sentence of the step; the instruction the model works from is the brief, and it
     // reaches the model in the run's context (as a scheduled execution's does), never as the first thing anybody "said".
     const visible = typeof question === "string" && question.trim() ? question : brief;
     try {
-      await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
+      // A hidden session is bound to the step's capability, which is its whole life; the study's conversation keeps the binding it was
+      // made with, and this run is a turn of the step's capability in it.
+      if (!conversationId) await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
       const run = await agentRuns.dispatch(project, {
         sessionId: session.id, dispatchId, automated: true, question: visible, brief,
-        effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
+        effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent,
+        effectiveRouteReason: conversationId ? conversationTurnRouteReason(reason) : reason,
+        ...(conversationId ? { routedOverBinding: true } : {}),
         ...(products.length ? { effectiveProducts: products } : {}),
         ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
       }, async (binding, dispatchedRun, repairText = null) => {

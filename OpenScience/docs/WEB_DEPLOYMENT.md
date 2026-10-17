@@ -1091,6 +1091,23 @@ provider or another research-memory store. Pause prevents later continuations;
 the current turn may finish its checkpoint. The normal conversation Stop action
 cancels the running turn.
 
+The model's skill catalogue keeps LoopX's entry skill and `loopx-project` only; the build drops the CLI's six
+repository-management workflows and names them in `installation.json` (R19, CLI 1.4.0). The 「循证 GEO」 method
+pack is a skill root of a GEO project's runtime alone: the control plane decides per project and sends
+`geoSkills` to the runtime controller, whose protocol is **14** since R19 — a control plane and a controller of
+different protocol versions refuse each other at the first health call, so a release recreates the web service
+and `open-science-runtime-controller` together (the switch does: both images change). The web image carries the
+pack's **index** only (`runtime/skills/geo-private/geo-pack-index.json`, names and one sentence each), which a
+public CI build writes empty; the release step that lays the owner's pack over the runtime image also writes the
+index to `<dataDir>/.openscience/geo-pack-index.json`, which the skills page reads where the image's lists none.
+
+Two levers of R19, both off by default:
+
+| Variable | Default | What it is |
+|---|---|---|
+| `OPEN_SCIENCE_RUNTIME_ASK_USER_MODE` | `attended` | How the question tool waits: `attended` holds the turn until the person answers or the run stops; `timed` returns "pending" after the wait the model chose (120 s by default), lets it carry on with work that does not depend on the answer, and takes a late answer as a message of its own kind (`user-question-reply`). One-way door: a conversation that took a timed answer cannot be read below the 0.2.0-rc.2 pin. Recreate the controller and project runtimes after changing it. Measured on 21 live samples (r19-upstream2a): equal when the person answers, better only when nobody does, 50–60% more requests otherwise — so `attended` stays the default. |
+| `OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION` | `false` | A 虚拟临床研究 step that runs while the researcher's runtime is open is a turn of the study's own conversation (the sentence they read, the assistant's work, the result) instead of a hidden programme session; a closed runtime, a missing conversation or something waiting in it keeps the hidden session. |
+
 The annotation bundle chooses its interface language by an exact match of the kernel's
 locale id (`zh`, `en`, `ru`; anything else is English), and the product's locale id is
 `zh-x-evimed`. One byte-verified, build-time edit of the pinned bundle's `client.js`
