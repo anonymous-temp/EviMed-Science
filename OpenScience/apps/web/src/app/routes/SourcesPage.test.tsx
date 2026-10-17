@@ -507,15 +507,15 @@ describe("知识库", () => {
       renderPage("/app/files?kind=wiki");
       expect(await screen.findByText("还没有知识页")).toBeInTheDocument();
       const recipe = document.querySelector("[data-step-state='empty']")!;
-      expect(recipe).toHaveTextContent("用 你的 1 份资料");
-      expect(recipe).toHaveTextContent("再加 2 份资料就会开始整理");
+      expect(recipe).toHaveTextContent("用 你的 1 份资料（还差 2 份）");
+      expect(recipe).toHaveTextContent("得到 按类整理好的页面");
       // The sentence that used to stand under the header is gone, and no dot is drawn for a project that merely has too few documents.
       expect(screen.queryByText(/资料还不够：再加 2 份就会开始整理/u)).toBeNull();
       expect(document.querySelector("[data-knowledge-status]")).toBeNull();
       await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: "添加资料" }));
       await waitFor(() => expect(mocks.pickFiles).toHaveBeenCalled());
       // 「你的 1 份资料」 is the way to them.
-      await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: "你的 1 份资料" }));
+      await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: /^你的 1 份资料/ }));
       await waitFor(() => expect(addressOf()).toBe("/app/files"));
     });
 

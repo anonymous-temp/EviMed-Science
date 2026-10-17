@@ -573,11 +573,13 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // says so), and a project that has enough documents is asked to compile, not to add more.
   const readable = knowledge?.readable ?? documentTotal(counts) ?? 0;
   const missing = knowledge ? Math.max(1, knowledge.minSources - knowledge.readable) : null;
-  const recipe = (
+  // Until the compile's own status is read the recipe would first say the documents' count and then the compile's (they can differ: a
+  // document still being read is not one yet), so it waits for it where the deployment compiles at all.
+  const recipe = pagesOffered && !shared && knowledge === null ? <FilesSkeleton /> : (
     <StepState
       phase="empty" step={line?.canCompile ? "整理知识页" : "添加资料"} noun="知识页"
-      uses={[{ label: `你的 ${readable} 份资料`, onOpen: () => goTab("sources") }]}
-      gives={`按类整理好的页面，和页面之间的关系图${knowledge?.state === "below_threshold" && missing ? `（再加 ${missing} 份资料就会开始整理）` : ""}`}
+      uses={[{ label: `你的 ${readable} 份资料${knowledge?.state === "below_threshold" && missing ? `（还差 ${missing} 份）` : ""}`, onOpen: () => goTab("sources") }]}
+      gives="按类整理好的页面，和页面之间的关系图"
       onStart={hasWebApi ? (line?.canCompile ? () => void compileNow() : () => void uploadFiles()) : undefined}
       starting={line?.canCompile ? compileAsking : uploading}
       reason="还不能添加资料。"

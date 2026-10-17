@@ -79,7 +79,9 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
   const hasConflict = doc.lanes.some((lane) => lane.segments.some((segment) => segment.conflict));
   const sentence = weeksSentence(weeks, { from, window, formatDay: (day) => formatDay(day) });
   const title = sentence ?? (window ? `${formatDay(window.from)}到${formatDay(window.to)}，没有记下、合并或忘记什么` : "还没有记下、合并或忘记什么");
-  const counts = `${hasLanes ? `${doc.lanes.length} 条沿革，` : ""}${doc.events.length} 件记下的事`;
+  // Everything that happened — a statement written, replaced, forgotten, a way of working learned — and how many statements changed: the
+  // bars above count the three things that make the account hold more or less, so these are not called 「记下的事」 and do not add up to them.
+  const counts = `${doc.events.length} 次变化${hasLanes ? `，${doc.lanes.length} 条说法改过` : ""}`;
   const week = (index: unknown) => (typeof index === "number" ? weeks[index] : undefined);
 
   const barCard = (
@@ -115,7 +117,7 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
   const lineageCard = lineage && (
     <ChartCard
       level={2}
-      title={counted || rows.length > 0 ? counts : "记下的事"}
+      title={counts}
       legend={(
         <>
           <span className="text-caption text-text-2">◆ 决定</span>
@@ -127,7 +129,6 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
           {hasConflict && <LegendMark shape="band" color="var(--warn)">和另一条说法不一致</LegendMark>}
         </>
       )}
-      footnote={`按 ${timeZone} 的日期`}
     >
       <MapChart
         kind="time" option={lineage} height={Math.max(160, 56 + rows.length * 34)}
@@ -141,6 +142,7 @@ export function TimeView({ doc, range, projectName, onRange, onOpen }: {
         label={`时间线：${counts}，列表在下方。`}
         unpainted={`${counts}。`}
       />
+      <span className="sr-only">{`按 ${timeZone} 的日期`}</span>
     </ChartCard>
   );
   return (

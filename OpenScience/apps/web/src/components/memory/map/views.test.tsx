@@ -52,8 +52,8 @@ describe("时间", () => {
     cleanup();
     render(<TimeView doc={{ ...base, lanes: [], events: [{ id: "e1", at: "2026-10-01T00:00:00.000Z", type: "memory", change: "created", ref: "memory:a", lane: "account", kind: "decision", text: "定了" }] }} range="all" projectName={() => "项目"} onRange={() => {}} onOpen={() => {}} />);
     // An account that has replaced nothing has no lineages: the picture and its words say the events and nothing of bars.
-    expect(screen.getByRole("img", { name: "时间线：1 件记下的事，列表在下方。" })).toBeInTheDocument();
-    expect(screen.getByText("1 件记下的事。")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "时间线：1 次变化，列表在下方。" })).toBeInTheDocument();
+    expect(screen.getByText("1 次变化。")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/蓝条|灰条|琥珀|沿革|一直成立|后来被替代/u);
   });
 
@@ -62,7 +62,7 @@ describe("时间", () => {
     const event = { id: "e1", at: "2026-10-01T00:00:00.000Z", type: "memory" as const, change: "created", ref: "memory:a", lane: "account", kind: "decision", text: "定了" };
     const lane = (conflict: boolean) => ({ id: "l1", label: "写作", projectId: null, segments: [{ recordId: "a", text: "先写摘要", from: "2026-09-01T00:00:00.000Z", to: "2026-10-01T00:00:00.000Z", state: "replaced" as const, conflict }] });
     render(<TimeView doc={{ ...base, lanes: [lane(false)], events: [event] }} range="all" projectName={() => "项目"} onRange={() => {}} onOpen={() => {}} />);
-    expect(screen.getByRole("img", { name: "时间线：1 条沿革，1 件记下的事，列表在下方。" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "时间线：1 次变化，1 条说法改过，列表在下方。" })).toBeInTheDocument();
     // The legend is marks, and only the marks the picture has — it never explains how to read it.
     expect(document.body.textContent).toMatch(/一直成立/u);
     expect(document.body.textContent).toMatch(/后来被替代/u);
@@ -104,7 +104,8 @@ describe("活跃", () => {
     render(<ActivityView doc={doc} range="all" onDay={() => {}} />);
     expect(screen.getByRole("img", { name: /近一年的活跃日历，共 2 天有记录/u })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "近一年有 2 天有记录，共 4 件" })).toBeInTheDocument();
-    expect(screen.getByText("按你的时区（UTC）计日。")).toBeInTheDocument();
+    // The zone the days are counted in is said to a screen reader, and is not a grey line on the page.
+    expect(screen.getByText("按你的时区（UTC）计日")).toHaveClass("sr-only");
     // The scale is the legend's marks; the colours' meaning is not explained in words.
     expect(document.body.textContent).not.toMatch(/颜色越深/u);
     expect(document.body.textContent).not.toMatch(/连续|streak|断了/u);

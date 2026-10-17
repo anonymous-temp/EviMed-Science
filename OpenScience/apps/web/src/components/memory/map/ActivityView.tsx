@@ -30,7 +30,6 @@ export function ActivityView({ doc, range, onDay }: { doc: Pick<MemoryMap, "buck
       title={`近一年有 ${days} 天有记录，共 ${total} 件`}
       meta={chosen ? <button type="button" onClick={() => onDay(null)} className="rounded px-1 text-accent hover:underline">{`看的是 ${chosen}，看全部`}</button> : undefined}
       legend={<span className="inline-flex items-center gap-1 text-caption text-text-3" aria-hidden="true">少{HEAT.map((step) => <span key={step} className={`inline-block h-3 w-3 rounded-tag ${step}`} />)}多</span>}
-      footnote={`按你的时区（${doc.scope.timeZone}）计日。`}
     >
       <MapChart
         kind="activity" option={option} height={196}
@@ -38,6 +37,7 @@ export function ActivityView({ doc, range, onDay }: { doc: Pick<MemoryMap, "buck
         label={`近一年的活跃日历，共 ${days} 天有记录，当天记下的事在下方。`}
         unpainted={`${days} 天有记录。`}
       />
+      <span className="sr-only">{`按你的时区（${doc.scope.timeZone}）计日`}</span>
     </ChartCard>
   );
 }
