@@ -1121,7 +1121,8 @@ export function structureFindings(name, viewportName, s) {
  * one tab, a grey sentence nobody can press), the walk could not see: it counted kinds of control and matched a list of old sentences.
  *
  * With `hold` the page's scroll container is moved by up to 480 px and put back, to see whether the sticky band stays where it is
- * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0.
+ * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0: with `hold`, a page
+ * that scrolled itself on load is moved to its top for the reading and put back.
  * @param {[{ hold?: boolean }?]} [args]
  */
 export function measureComposition([options] = [{}]) {
@@ -1157,6 +1158,12 @@ export function measureComposition([options] = [{}]) {
     }
     return document.scrollingElement ?? document.documentElement;
   };
+  // Reads are at scroll 0. A page that moves itself on load (a GEO answer brings its first wrong sentence up) is read from its top
+  // and put back where it was: read where it had moved to, its band stood 10 px higher than its tabs' (module-chrome, r19-guards2).
+  const anchor = document.querySelector("[data-page-chrome]") ?? document.querySelector("main");
+  const startScroller = hold && anchor ? scrollerOf(anchor) : null;
+  const startTop = startScroller ? startScroller.scrollTop : 0;
+  if (startScroller && startTop) startScroller.scrollTop = 0;
 
   // The page: its height (the tallest thing that scrolls), its title.
   let height = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0);
@@ -1332,11 +1339,13 @@ export function measureComposition([options] = [{}]) {
   // What the report keeps of the page's make-up: its notes (with or without an action or a number) and its headline.
   const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
 
-  return {
+  const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
     orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
     activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
   };
+  if (startScroller && startTop) startScroller.scrollTop = startTop;
+  return read;
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
