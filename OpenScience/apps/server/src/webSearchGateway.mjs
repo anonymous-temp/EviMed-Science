@@ -26,10 +26,10 @@
 //
 // The Bailian half is a paid model call, and it is metered like one (purpose
 // `web-search`, 2026-09-28): until then its spend reached no ledger.
-import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
+import { isPeak, priceUsage } from "@evimed/domain";
 import { edgeFetch, edgeStats } from "./edgeProxy.mjs";
+import { GatewaySpendRefusal, reserveGatewaySpend } from "./gatewaySpend.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 const gatewayPath = "/internal/search/v1/query";
@@ -284,12 +284,6 @@ const bailianMaxTokens = 8;
  */
 const bailianReservedPromptTokens = 16_000;
 
-/** @param {...unknown} values the smallest positive limit, or 0 for none */
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
-}
-
 /** The provider's own count from a DashScope answer, or null when it sent none.
  *  @param {any} usage */
 function bailianUsage(usage) {
@@ -358,49 +352,19 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * @returns {Promise<any[]>}
  */
 async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose, runScope = null }) {
-  if (!usageLedger) {
-    if (config.requireDurableUsageLedger === true) {
-      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: its spend cannot be recorded right now.");
-    }
-    return (await bailianSearch(config, request, fetcher, signal)).rows;
-  }
   const model = String(config.webSearchBailianModel ?? "").trim() || "qwen-plus";
   const at = new Date();
   const peak = isPeak(at);
-  const attributed = caller.runId == null && attributeRun
-    ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
-    : null;
-  let runId = caller.runId ?? attributed ?? null;
-  let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
-  // A scheduled execution in the researcher's own runtime is booked under its episode and held to its limit, as its model calls are
-  // (`autopilotEpisodeScope.mjs`). A scope that cannot be read makes this search unavailable rather than uncapped.
-  if (caller.runId == null && attributed && runScope) {
-    const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch(() => {
-      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: the spending limit of this run cannot be read.");
-    });
-    if (scope) { runId = scope.usageRunId; runLimit = Number(scope.runLimit) || 0; }
-  }
-  // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
-  // than costing the call, and so does this one — a search is never lost for a column it writes.
-  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";
   const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
   let reservation;
   try {
-    reservation = await usageLedger.reserveModel({
-      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose, model,
-      priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
-      requestFingerprint: createHash("sha256").update(JSON.stringify({ model, query: request.query, strategy: "turbo" })).digest("hex"),
-      estimatedCost: estimate.cost,
-      dailyLimit: purpose === "evolution" ? Number(config.evolutionDailyBudgetCny) || 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-      weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-      runLimit: purpose === "evolution" ? 0 : runLimit,
-      now: at,
-    });
+    reservation = await reserveGatewaySpend({ config, usageLedger, caller, attributeRun, runPurpose, runScope, model, estimatedCost: estimate.cost,
+      fingerprint: { model, query: request.query, strategy: "turbo" }, at });
   } catch (error) {
-    throw gatewayError(503, "web_search_unavailable", error?.code === "usage_budget_exceeded"
-      ? "The Bailian search is unavailable: this account's spending limit is reached."
-      : "The Bailian search is unavailable: its spend cannot be recorded right now.");
+    if (!(error instanceof GatewaySpendRefusal)) throw error;
+    throw gatewayError(503, "web_search_unavailable", `The Bailian search is unavailable: ${error.message}`);
   }
+  if (!reservation) return (await bailianSearch(config, request, fetcher, signal)).rows;
   let dispatched = false;
   let outcome;
   try {
