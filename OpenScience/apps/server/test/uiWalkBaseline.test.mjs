@@ -250,3 +250,19 @@ test("every function the walk hands to the browser stands on its own text", asyn
   const messages = linter.verify("const probe = function probe() { return helper(document.title); };\nprobe;", { parserOptions: { ecmaVersion: 2023 }, env: { browser: true, es2023: true }, rules: { "no-undef": "error" } });
   assert.deepEqual(messages.map((message) => message.message), ["'helper' is not defined."]);
 });
+
+test("a page view is photographed whole when it is up to three windows tall, and in slices of a window and a half when it is taller", () => {
+  const { capturePlan, CAPTURE_MAX_SLICES } = walk;
+  const shape = (scrollHeight, over = {}) => ({ viewportHeight: 945, clientHeight: 945, scrollHeight, ...over });
+  assert.deepEqual(capturePlan(shape(945)), { kind: "single" });
+  assert.deepEqual(capturePlan(shape(949)), { kind: "single" }, "four pixels over is the rounding of a scroll height");
+  assert.deepEqual(capturePlan(shape(2200)), { kind: "stretch", height: 2200 });
+  assert.deepEqual(capturePlan(shape(2835)), { kind: "stretch", height: 2835 }, "three windows is still one picture");
+  // The app's own bar above the scroll area (a phone's) stays in the picture: the window is the page and what stands over it.
+  assert.deepEqual(capturePlan(shape(2000, { viewportHeight: 844, clientHeight: 796 })), { kind: "stretch", height: 2048 });
+  assert.deepEqual(capturePlan(shape(2836)), { kind: "slices", tops: [0, 1418, 1891], truncated: false });
+  assert.deepEqual(capturePlan(shape(9450)).tops, [0, 1418, 2836, 4254, 5672, 7090, 8505], "the last slice is the page's end");
+  const many = capturePlan(shape(47250));
+  assert.deepEqual([many.tops.length, many.truncated, many.tops.at(-1)], [CAPTURE_MAX_SLICES, true, 7 * 1418]);
+});
+

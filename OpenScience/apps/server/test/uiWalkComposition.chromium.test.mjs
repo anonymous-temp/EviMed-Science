@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { compositionFindings, familyFindings, measureComposition } from "../../../scripts/ops/ui-walk.mjs";
+import { compositionFindings, familyFindings, measureComposition, scrollPage } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -238,3 +238,24 @@ test("a module's tabs read in the browser show the same steps at the same height
   const lower = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility"), ["geo-plan@desktop", { composition: (await compose(framed({ band: rail() + tabs(TABS), body: section(rows(2)) }).replace("[data-step-rail]{height:40px}", "[data-step-rail]{height:88px}"), { name: "geo-plan" })).facts }]]);
   assert.match(familyFindings(lower).map((entry) => entry.text).join("\n"), /geo@desktop: the tab row stands at a different height on some tabs: geo-overview \d+ px, geo-visibility \d+ px, geo-plan \d+ px/);
 });
+
+test("the page's scroll area is found, measured and moved: the app scrolls inside a container, not the window", { skip }, async () => {
+  await page.setViewportSize({ width: 1512, height: 945 });
+  await page.setContent(framed({ body: section(rows(3)) + LONG }));
+  const shape = await page.evaluate(scrollPage, ["shape"]);
+  assert.deepEqual([shape.viewportHeight, shape.clientHeight], [945, 945]);
+  assert.ok(shape.scrollHeight > 1900, `the container holds ${shape.scrollHeight} px`);
+  assert.deepEqual(await page.evaluate(scrollPage, ["to", 700]), { top: 700 });
+  assert.equal(await page.evaluate(() => document.querySelector("main").scrollTop), 700);
+  assert.deepEqual(await page.evaluate(scrollPage, ["to", 0]), { top: 0 });
+  // A small scroller inside the page (a table's) is not the page's.
+  await page.setContent(framed({ body: `<div style="height:200px;overflow:auto"><div style="height:900px"></div></div>` + section(rows(2)) }));
+  const short = await page.evaluate(scrollPage, ["shape"]);
+  assert.ok(short.scrollHeight <= 1100, `${short.scrollHeight}: the table's own scroller is not the page`);
+  // A page the window scrolls (no container) is the document's.
+  await page.setContent('<!doctype html><body style="margin:0"><div style="height:3000px">x</div>');
+  const plain = await page.evaluate(scrollPage, ["shape"]);
+  assert.deepEqual([plain.clientHeight, plain.scrollHeight], [945, 3000]);
+  assert.deepEqual(await page.evaluate(scrollPage, ["to", 500]), { top: 500 });
+});
+

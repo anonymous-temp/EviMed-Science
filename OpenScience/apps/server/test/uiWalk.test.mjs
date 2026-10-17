@@ -27,7 +27,7 @@ import {
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
-  applyBaseline, asFinding, baselineDelta, baselineProblems, finding, findingText, STEP_TARGETS, walkSetting,
+  applyBaseline, asFinding, baselineDelta, baselineProblems, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, finding, findingText, STEP_TARGETS, walkSetting,
   handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
@@ -721,7 +721,8 @@ function context() {
     return {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
-      async setViewportSize(size) { phone = size.width < 600; }, async close() {}, async screenshot() {}, async waitForTimeout() {},
+      async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
+      async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },
       async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
@@ -749,6 +750,12 @@ function context() {
       },
       async evaluate(fn, arg) {
         if (typeof fn === "function" && fn.name === "measureComposition") return compositionRead(target().pathname);
+        // FAKE_SCROLL=stretch|tall|taller: a page two windows tall (photographed whole), nine, and fifty (photographed in slices, and cut off).
+        if (typeof fn === "function" && fn.name === "scrollPage") {
+          if (arg[0] === "to") { log({ scrollTo: arg[1], at: target().pathname }); return { top: arg[1] }; }
+          const mode = process.env.FAKE_SCROLL || "";
+          return { viewportHeight: phone ? 844 : 945, clientHeight: phone ? 844 : 945, scrollHeight: mode === "stretch" ? 2200 : mode === "tall" ? 9450 : mode === "taller" ? 47250 : phone ? 844 : 945 };
+        }
         // FAKE_THROW=<function name>: that probe throws in the page, as 18.1's memory-map step did (a helper outside the function's own text).
         if (process.env.FAKE_THROW && typeof fn === "function" && fn.name === process.env.FAKE_THROW) throw new ReferenceError(fn.name + "Helper is not defined");
         // axe-core's source is put into the page as a string; the scan is a function. FAKE_AXE=clean|fail: nothing to report, a scan that throws.
@@ -1032,6 +1039,36 @@ test("the walk judges the composition of every page view it reads and hands what
   const worse = await walk({ FAKE_COMPOSITION: "orphans" }, { baseline: { entries: [entry(1)] } });
   assert.equal(found(worse).accepted, null, "a page may not get worse than the baseline holds it at");
   assert.ok(worse.report.baseline.lowerable.length === 0 && worse.report.baseline.unused.length === 1);
+});
+
+test("every page view is photographed whole and its make-up written beside the pictures, and the report links them", async () => {
+  const { code, log, report } = await walk();
+  assert.equal(code, 0);
+  const views = Object.keys(report.pages).filter((view) => report.pages[view].composition);
+  assert.ok(views.length > 100, `${views.length} page views have a composition`);
+  for (const view of views) {
+    assert.deepEqual(report.pages[view].files, { screenshots: [`${view}.jpg`], capture: { kind: "single" }, facts: `${view}.json` }, view);
+  }
+  // Moderate JPEG, and the early first-screen PNG is gone: a page's picture is the page.
+  const shots = log.filter((entry) => entry.screenshot?.startsWith("files@desktop"));
+  assert.deepEqual(shots, [{ screenshot: "files@desktop.jpg", type: "jpeg", quality: CAPTURE_QUALITY }]);
+  assert.ok(!log.some((entry) => /@(desktop|phone)\.png$/.test(entry.screenshot ?? "") && !/^(stale-chunk|chat)@/.test(entry.screenshot)), "no first-screen picture of a page view");
+  // A page two windows tall: the window is stretched to the page for the picture, then put back.
+  const stretch = await walk({ FAKE_SCROLL: "stretch" });
+  assert.deepEqual(stretch.report.pages["files@desktop"].files, { screenshots: ["files@desktop.jpg"], capture: { kind: "stretch" }, facts: "files@desktop.json" });
+  const resize = stretch.log.filter((entry) => entry.viewport);
+  const at = stretch.log.findIndex((entry) => entry.screenshot === "files@desktop.jpg");
+  assert.deepEqual([stretch.log[at - 1], stretch.log[at + 1]], [{ viewport: "1512x2200" }, { viewport: "1512x945" }]);
+  assert.ok(resize.length > 4);
+  // A page nine windows tall: slices of a window and a half from the top, the scroll area put back at the top.
+  const tall = await walk({ FAKE_SCROLL: "tall" });
+  assert.deepEqual(tall.report.pages["files@desktop"].files.capture, { kind: "slices", slices: 7, truncated: false });
+  assert.deepEqual(tall.report.pages["files@desktop"].files.screenshots, [1, 2, 3, 4, 5, 6, 7].map((n) => `files@desktop.${n}.jpg`));
+  const scrolls = tall.log.filter((entry) => entry.scrollTo !== undefined && entry.at === "/app/files");
+  assert.deepEqual(scrolls.slice(0, 8).map((entry) => entry.scrollTo), [0, 1418, 2836, 4254, 5672, 7090, 8505, 0]);
+  // A page of fifty windows: eight slices and the report says the rest was cut off.
+  const taller = await walk({ FAKE_SCROLL: "taller" });
+  assert.deepEqual(taller.report.pages["files@desktop"].files.capture, { kind: "slices", slices: CAPTURE_MAX_SLICES, truncated: true });
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {

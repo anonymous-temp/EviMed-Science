@@ -1334,6 +1334,90 @@ export function familyFindings(pages) {
   return found;
 }
 
+/* ------------------------------------------------------------------------- R19: whole pages */
+
+/** A page up to this many windows tall is photographed whole, in one picture; a taller one in slices. */
+export const CAPTURE_MAX_SCREENS = 3;
+/** A slice of a tall page is this many windows high, so that the end of one is in the next. */
+export const CAPTURE_SLICE_SCREENS = 1.5;
+/** At most this many slices of one page view (twelve windows): a page taller than that has said so in `long-page`. */
+export const CAPTURE_MAX_SLICES = 8;
+/** The pictures are JPEG at this quality: a page is read for its make-up, and the report directory is not kept. */
+export const CAPTURE_QUALITY = 68;
+
+/**
+ * The page's scroll area, read or moved in the page (`page.evaluate`): the element that scrolls the page's content (the largest scroll
+ * height among the elements that scroll and are at least as tall as half the window; the document when none does).
+ * `["shape"]` says how tall the window is, how much of it the scroll area shows and how much it holds; `["to", px]` moves it and says where it is.
+ * @param {["shape" | "to", number?]} [args]
+ */
+export function scrollPage([action, value] = ["shape", 0]) {
+  const root = document.scrollingElement ?? document.documentElement;
+  let scroller = root;
+  for (const el of document.querySelectorAll("body *")) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && el.clientHeight >= window.innerHeight / 2 && el.scrollHeight > el.clientHeight + 1 && el.scrollHeight > scroller.scrollHeight) scroller = el;
+  }
+  if (action === "to") {
+    scroller.scrollTop = Number(value) || 0;
+    return { top: Math.round(scroller.scrollTop) };
+  }
+  return { viewportHeight: window.innerHeight, clientHeight: scroller === root ? window.innerHeight : scroller.clientHeight, scrollHeight: scroller.scrollHeight };
+}
+
+/**
+ * How a page view is photographed: whole in one picture when it is up to `CAPTURE_MAX_SCREENS` windows tall (the window stretched to the
+ * page for the picture, which is the only way to see a page whose content scrolls inside the app), otherwise in slices of
+ * `CAPTURE_SLICE_SCREENS` windows from the top, at most `CAPTURE_MAX_SLICES` of them (and the last one is the page's end when they all fit).
+ * @param {{ viewportHeight: number, clientHeight: number, scrollHeight: number }} shape
+ * @returns {{ kind: "single" } | { kind: "stretch", height: number } | { kind: "slices", tops: number[], truncated: boolean }}
+ */
+export function capturePlan({ viewportHeight, clientHeight, scrollHeight }) {
+  if (scrollHeight <= clientHeight + 4) return { kind: "single" };
+  if (scrollHeight <= CAPTURE_MAX_SCREENS * viewportHeight) return { kind: "stretch", height: Math.max(viewportHeight, viewportHeight - clientHeight + scrollHeight) };
+  const step = Math.max(1, Math.round(CAPTURE_SLICE_SCREENS * clientHeight));
+  const last = scrollHeight - clientHeight;
+  const needed = Math.ceil(last / step) + 1;
+  const tops = Array.from({ length: Math.min(needed, CAPTURE_MAX_SLICES) }, (_, index) => Math.min(index * step, last));
+  return { kind: "slices", tops, truncated: needed > CAPTURE_MAX_SLICES };
+}
+
+/**
+ * Photograph one page view in full and write what the composition read of it next to the pictures (R19 S5): the pictures are
+ * `<view>.jpg` (or `<view>.1.jpg` … for slices) and the facts `<view>.json`; the report links them.
+ * @param {any} page @param {string} out @param {string} view `name@viewport` @param {{ width: number, height: number }} viewport @param {string} route @param {any} composition
+ * @returns {Promise<{ screenshots: string[], capture: any, facts: string }>}
+ */
+async function capturePage(page, out, view, viewport, route, composition) {
+  const shape = await page.evaluate(scrollPage, ["shape"]);
+  const plan = capturePlan(shape);
+  /** @type {string[]} */ const screenshots = [];
+  const shoot = async (/** @type {string} */ file) => {
+    await page.screenshot({ path: path.join(out, file), type: "jpeg", quality: CAPTURE_QUALITY });
+    screenshots.push(file);
+  };
+  if (plan.kind === "single") await shoot(`${view}.jpg`);
+  else if (plan.kind === "stretch") {
+    // The window is as tall as the page for one picture, and put back.
+    await page.setViewportSize({ width: viewport.width, height: plan.height });
+    await page.waitForTimeout(400);
+    try { await shoot(`${view}.jpg`); } finally { await page.setViewportSize(viewport); await page.waitForTimeout(200); }
+  } else {
+    try {
+      for (const [index, top] of plan.tops.entries()) {
+        await page.evaluate(scrollPage, ["to", top]);
+        await page.waitForTimeout(150);
+        await shoot(`${view}.${index + 1}.jpg`);
+      }
+    } finally {
+      await page.evaluate(scrollPage, ["to", 0]);
+    }
+  }
+  const facts = `${view}.json`;
+  await writeFile(path.join(out, facts), `${JSON.stringify({ view, route, viewport, shape, capture: plan, ...composition }, null, 1)}\n`);
+  return { screenshots, capture: plan.kind === "slices" ? { kind: plan.kind, slices: plan.tops.length, truncated: plan.truncated } : { kind: plan.kind }, facts };
+}
+
 /** Where keyboard focus is: what it names and whether it is inside the sidebar. */
 export function focusProbe() {
   const el = document.activeElement;
@@ -2948,7 +3032,6 @@ async function main() {
           await navigateForWalk(page, `${base}${route}`, () => report.info.push(`${current}: retried once after Chromium reported a host network change`));
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
-          await page.screenshot({ path: path.join(out, `${current}.png`) });
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags])]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
@@ -2999,6 +3082,12 @@ async function main() {
             const result = await scanWithAxe(page, axe.source);
             report.pages[current].axe = result;
             axeScans.push({ view: current, result });
+          }
+          // The page as a reader meets it, from top to bottom (before anything is clicked): pictures, and what the composition read.
+          try {
+            report.pages[current].files = await capturePage(page, out, current, viewport, route, composition);
+          } catch (error) {
+            failures.push(`${current}: the whole-page picture could not be taken (${String(error).replace(/\s+/g, " ").slice(0, 120)})`);
           }
           if (viewportName === "desktop" && MISSING_RECORDS[name]) {
             // The way back is a click that only navigates: the button names the list and the address must be that list's.
