@@ -166,7 +166,7 @@ const WALK_TABLES = {
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
-      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T2","budget":"data","rows":false},
+      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -200,7 +200,7 @@ const WALK_TABLES = {
       {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
       {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo","template":"T5","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","template":"T5","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -949,6 +949,391 @@ export function structureFindings(name, viewportName, s) {
   return { failures, notices };
 }
 
+/* ------------------------------------------------------------------------- R19: composition */
+
+/**
+ * The composition of one page view, measured in the page (`page.evaluate`, so it reads nothing from this module) from the attributes the
+ * framework's components carry — `data-page-chrome`, `data-step-rail`, `data-toolbar`, `data-note`, `data-tag`, `data-outline`,
+ * `data-empty`, `data-chart-grid`, `data-prose`, `data-show-more` (the table is in PageShell.tsx) — and from the order and the boxes of
+ * what they mark. Attributes, never phrases: what a sentence says is not read, only whether it stands alone. The rules are
+ * `compositionFindings`; what the page packages did not have, and 18.1's pages had (a filter below the list it filters, a step bar on
+ * one tab, a grey sentence nobody can press), the walk could not see: it counted kinds of control and matched a list of old sentences.
+ *
+ * With `hold` the page's scroll container is moved by up to 480 px and put back, to see whether the sticky band stays where it is
+ * (a `position: sticky` in a parent as short as the band never sticks). Reads are of the page as it loaded, at scroll 0.
+ * @param {[{ hold?: boolean }?]} [args]
+ */
+export function measureComposition([options] = [{}]) {
+  const hold = Boolean(options && options.hold);
+  const cut = (/** @type {unknown} */ text, limit = 40) => String(text ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
+  const rendered = (/** @type {Element} */ el) => {
+    const cs = getComputedStyle(el);
+    return cs.display !== "none" && cs.visibility !== "hidden" && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const visible = (/** @type {Element} */ el) => {
+    const r = el.getBoundingClientRect();
+    // A box of one or two pixels is the screen-reader-only text, not the page.
+    return r.width > 2 && r.height > 2 && rendered(el);
+  };
+  const box = (/** @type {Element} */ el) => {
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) };
+  };
+  const live = (/** @type {string} */ selector, /** @type {ParentNode} */ root = document) => [...root.querySelectorAll(selector)].filter((el) => visible(el) && !el.closest("[role='dialog']"));
+  const inSection = (/** @type {Element} */ el) => el.closest("section, article, [role='region']") !== null;
+  const nameOf = (/** @type {Element} */ el) => cut(el.getAttribute("aria-label") || el.textContent || el.tagName.toLowerCase(), 30);
+  const stickyAbove = (/** @type {Element} */ el) => {
+    for (let at = /** @type {Element | null} */ (el); at && at !== document.body; at = at.parentElement) {
+      const position = getComputedStyle(at).position;
+      if (position === "sticky" || position === "fixed") return true;
+    }
+    return false;
+  };
+  const scrollerOf = (/** @type {Element} */ el) => {
+    for (let at = el.parentElement; at && at !== document.body; at = at.parentElement) {
+      const overflow = getComputedStyle(at).overflowY;
+      if ((overflow === "auto" || overflow === "scroll") && at.scrollHeight > at.clientHeight + 1) return at;
+    }
+    return document.scrollingElement ?? document.documentElement;
+  };
+
+  // The page: its height (the tallest thing that scrolls), its title.
+  let height = Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0);
+  for (const el of document.querySelectorAll("body *")) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && el.clientHeight > 0 && el.scrollHeight > height) height = el.scrollHeight;
+  }
+  const h1 = live("main h1, h1")[0] ?? null;
+  const title = h1 ? { text: cut(h1.textContent), ...box(h1) } : null;
+
+  // The band: the sticky rows under the header (steps, activity, tabs, toolbar), and whether it holds when the page moves.
+  const chromeEl = live("[data-page-chrome]")[0] ?? null;
+  /** @type {null | Record<string, any>} */ let chrome = null;
+  if (chromeEl) {
+    chrome = { ...box(chromeEl), position: getComputedStyle(chromeEl).position, sticky: stickyAbove(chromeEl), held: null };
+    const scroller = scrollerOf(chromeEl);
+    const room = scroller.scrollHeight - scroller.clientHeight;
+    if (hold && room >= 160) {
+      const before = Math.round(chromeEl.getBoundingClientRect().top);
+      const saved = scroller.scrollTop;
+      scroller.scrollTop = Math.min(room, 480);
+      const scrolled = Math.round(scroller.scrollTop - saved);
+      const after = Math.round(chromeEl.getBoundingClientRect().top);
+      scroller.scrollTop = saved;
+      chrome.held = { scrolled, before, after, scrollerTop: scroller === document.scrollingElement ? 0 : Math.round(scroller.getBoundingClientRect().top) };
+    }
+  }
+
+  // The module's rail: its steps (a phone folds them into one chip that says how many there are).
+  const railEl = live("[data-step-rail]")[0] ?? null;
+  /** @type {null | Record<string, any>} */ let stepRail = null;
+  if (railEl) {
+    const steps = [...railEl.querySelectorAll("[data-rail-step]")];
+    const folded = steps.length === 0;
+    const chip = railEl.querySelector("button[aria-label]");
+    const total = Number(/(\d+)\s*\/\s*(\d+)/.exec(chip?.getAttribute("aria-label") ?? "")?.[2] ?? 0);
+    stepRail = {
+      ...box(railEl), folded, count: folded ? total : steps.length, inChrome: railEl.closest("[data-page-chrome]") !== null,
+      steps: steps.map((el) => ({ id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
+    };
+  }
+
+  // The layers of switches: tab lists, view switches written as radio groups, toolbars.
+  const tablists = live("[role='tablist']").map((el) => ({ label: el.getAttribute("aria-label") ?? "", tabs: el.querySelectorAll("[role='tab']").length, dots: el.querySelectorAll("[role='tab'] [data-tab-dot]").length, inChrome: el.closest("[data-page-chrome]") !== null, inToolbar: el.closest("[data-toolbar]") !== null, inSection: inSection(el), ...box(el) }));
+  const viewGroups = live("[role='radiogroup']").filter((el) => /视图|切换/.test(el.getAttribute("aria-label") ?? ""))
+    .map((el) => ({ label: el.getAttribute("aria-label") ?? "", inSection: inSection(el), ...box(el) }));
+  const toolbars = live("[data-toolbar]").map((el) => ({
+    label: el.getAttribute("aria-label") ?? "", inChrome: el.closest("[data-page-chrome]") !== null, inSection: inSection(el), ...box(el),
+    controls: {
+      pressed: el.querySelectorAll("[aria-pressed]").length, menus: el.querySelectorAll("[aria-haspopup]").length, tabs: el.querySelectorAll("[role='tab']").length,
+      inputs: el.querySelectorAll("input, select, textarea").length, buttons: el.querySelectorAll("button, a[href]").length,
+    },
+  }));
+
+  // A control group that stands after the content it controls: the chips, sliders, radios and toolbars against the first table, chart
+  // or list of their block (the nearest section, or the page body). A group inside the content (a row's switch, a column's sort) is part of it.
+  const CONTENT = "canvas, [data-chart], [data-chart-grid], table, ul, ol";
+  const blockOf = (/** @type {Element} */ el) => el.closest("section, article, [role='region'], [data-page-body], main") ?? document.body;
+  const isContent = (/** @type {Element} */ el) => {
+    if (!visible(el) || el.closest("[role='dialog'], nav, aside, header, [data-toolbar], [data-page-chrome], [role='tablist'], [role='menu'], [role='listbox'], [data-outline], [data-note]")) return false;
+    const r = el.getBoundingClientRect();
+    if (el.matches("canvas, [data-chart], [data-chart-grid]")) return r.height >= 80;
+    if (el.matches("table")) return el.querySelectorAll("tr").length >= 2;
+    return el.querySelectorAll(":scope > li").length >= 2 && r.height >= 60 && !el.matches("[role='group'], [role='radiogroup'], [role='toolbar']");
+  };
+  const controlGroups = new Set(live("[data-toolbar]"));
+  for (const el of live("[aria-pressed]")) {
+    const group = el.closest("[role='group'], [role='radiogroup']") ?? el;
+    if (!group.closest("[data-toolbar]")) controlGroups.add(group);
+  }
+  for (const el of live("input[type='range'], [role='radio']")) controlGroups.add(el.closest("[role='radiogroup'], [role='group']") ?? el);
+  /** @type {Array<{ control: string, controlTop: number, content: string, contentTop: number }>} */ const controlsAfterContent = [];
+  for (const group of controlGroups) {
+    if (group.closest("table, ul, ol, [data-chart], canvas, [role='menu'], [role='listbox']")) continue;
+    const region = blockOf(group);
+    const first = [...region.querySelectorAll(CONTENT)].filter((el) => !el.parentElement?.closest(CONTENT) && isContent(el) && !el.contains(group))[0];
+    if (first && (first.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+      controlsAfterContent.push({ control: nameOf(group), controlTop: box(group).top, content: first.tagName.toLowerCase(), contentTop: box(first).top });
+    }
+  }
+
+  // Sentences that stand alone: a block of text with at least twelve Han characters that is not a row, a cell, a label, a heading, a note, an
+  // empty state, a document's own prose or a tag, and has nothing to press in it.
+  const AWAY = "li, tr, dt, dd, button, a, label, h1, h2, h3, h4, h5, h6, figcaption, summary, option, select, textarea, [data-note], [data-empty], [data-headline], [data-tag], [data-step-state], [data-prose], [data-fact-list], [data-chart], [data-chart-empty], [role='tab'], [role='dialog'], nav, aside, header, svg, canvas, pre, code, [aria-hidden='true']";
+  const PRESS = "a, button, input, select, textarea, summary, [role='button'], [role='link'], [role='tab'], [role='switch'], [role='checkbox'], [tabindex]";
+  const mainEl = document.querySelector("main") ?? document.body;
+  const han = /\p{Script=Han}/gu;
+  /** @type {Map<Element, number>} */ const inBlock = new Map();
+  const walker = document.createTreeWalker(mainEl, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const count = (node.nodeValue ?? "").match(han)?.length ?? 0;
+    if (!count) continue;
+    let el = node.parentElement;
+    while (el && el !== mainEl && ["inline", "contents"].includes(getComputedStyle(el).display)) el = el.parentElement;
+    if (el) inBlock.set(el, (inBlock.get(el) ?? 0) + count);
+  }
+  // A block that a control names (`aria-labelledby`, `aria-describedby`) is that control's own text, not a sentence by itself.
+  const named = new Set([...document.querySelectorAll("[aria-labelledby], [aria-describedby]")].flatMap((el) => `${el.getAttribute("aria-labelledby") ?? ""} ${el.getAttribute("aria-describedby") ?? ""}`.split(/\s+/)).filter(Boolean));
+  const namedBy = (/** @type {Element} */ el) => { for (let at = /** @type {Element | null} */ (el); at && at !== mainEl; at = at.parentElement) if (at.id && named.has(at.id)) return true; return false; };
+  // A description beside its switch or button in one row belongs to that control (a settings row: its name, what it does, the switch).
+  const inControlRow = (/** @type {Element} */ el) => {
+    let at = el.parentElement;
+    for (let up = 0; up < 3 && at && at !== mainEl; up += 1, at = at.parentElement) {
+      if (at.getBoundingClientRect().height <= 140 && at.querySelector(PRESS)) return true;
+    }
+    return false;
+  };
+  const orphans = [...inBlock].filter(([el, count]) => count >= 12 && !el.closest(AWAY) && visible(el) && !el.querySelector(PRESS) && !namedBy(el) && !inControlRow(el))
+    .map(([el]) => ({ text: cut(el.textContent), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // Tags and what dresses as a tag: a tag is a label (`data-tag`); one with a pointer, a role or a button around it is a control in a label's
+  // clothes, and a button as high as a tag, with its corner and its type size, is a tag that can be pressed.
+  const tagEls = live("[data-tag]");
+  const tagLook = tagEls[0] ? (() => { const cs = getComputedStyle(tagEls[0]); return { height: Math.round(tagEls[0].getBoundingClientRect().height), radius: cs.borderTopLeftRadius, size: cs.fontSize }; })() : { height: 22, radius: "6px", size: "12px" };
+  const tags = tagEls.map((el) => {
+    const control = el.parentElement?.closest("button, a, [role='button'], [role='tab'], [role='link'], [role='menuitem']");
+    return { text: cut(el.textContent, 24), cursor: getComputedStyle(el).cursor, role: el.getAttribute("role"), insideControl: control ? control.tagName.toLowerCase() : null, ...box(el) };
+  });
+  const tagLike = live("button, a[href], [role='button']").filter((el) => {
+    if (el.closest("[data-tag]") || el.matches("[role='tab']")) return false;
+    const cs = getComputedStyle(el);
+    return Math.abs(el.getBoundingClientRect().height - tagLook.height) <= 1 && cs.borderTopLeftRadius === tagLook.radius && cs.fontSize === tagLook.size && cs.backgroundColor !== "rgba(0, 0, 0, 0)";
+  }).map((el) => ({ text: nameOf(el), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // A word that is the name of a tab or a step, written as plain text that looks pressable: underlined, or in the pointer's cursor.
+  const destinations = new Set([...live("[role='tab']"), ...live("[data-rail-step]")].map((el) => cut(el.textContent, 20).replace(/\s*\d+$/, "")).filter(Boolean));
+  const NOT_WORDS = "a, button, [role='tab'], [role='link'], [role='menuitem'], h1, h2, h3, h4, h5, h6, th, label, legend, option, summary, figcaption, [data-tag], [data-rail-step], [data-headline], [data-note], nav, aside, [role='tablist'], dt, caption, svg";
+  const words = destinations.size === 0 ? [] : [...mainEl.querySelectorAll("span, div, p, td, li")].filter((el) => {
+    if (el.children.length > 0 || !destinations.has(cut(el.textContent, 20)) || !visible(el) || el.closest(NOT_WORDS) || el.closest("[role='dialog']")) return false;
+    const cs = getComputedStyle(el);
+    return cs.cursor === "pointer" || cs.textDecorationLine.includes("underline");
+  }).map((el) => ({ text: cut(el.textContent, 20), tag: el.tagName.toLowerCase(), ...box(el) }));
+
+  // The one primary action of a page stands on the header's row. Empty states, recipes and forms carry their own.
+  const titleBottom = title ? title.bottom : 0;
+  const primaries = live("button, a, [role='button']").filter((el) => el.classList.contains("bg-accent")).map((el) => {
+    const at = box(el);
+    return { text: nameOf(el), ...at, inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+  });
+
+  // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
+  const zeroCounts = live("[role='tab'], [aria-pressed]").filter((el) => {
+    if (/** @type {HTMLButtonElement} */ (el).disabled || el.getAttribute("aria-disabled") === "true") return false;
+    const last = el.lastElementChild;
+    return Boolean(last && /^0$/.test((last.textContent ?? "").trim()));
+  }).map((el) => ({ text: nameOf(el), role: el.getAttribute("role") ?? "chip" }));
+
+  // A long page has a way to get about in it: contents, or a list read a page at a time.
+  const outline = { outlines: live("[data-outline]").length, showMore: live("[data-show-more]").length };
+
+  // A grid of charts fills its box.
+  const chartGrids = live("[data-chart-grid]").map((grid) => {
+    const cells = [...grid.querySelectorAll("[data-chart-row] > *")].filter(visible);
+    if (cells.length === 0) return { cells: 0, rows: 0, ratio: 1, ...box(grid) };
+    const rects = cells.map((cell) => cell.getBoundingClientRect());
+    const area = rects.reduce((sum, r) => sum + r.width * r.height, 0);
+    const span = (Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left))) * (Math.max(...rects.map((r) => r.bottom)) - Math.min(...rects.map((r) => r.top)));
+    return { cells: cells.length, rows: grid.querySelectorAll("[data-chart-row]").length, ratio: span > 0 ? Math.round((area / span) * 1000) / 1000 : 1, ...box(grid) };
+  });
+
+  // An empty state is a recipe: a mark, a title, and a way forward (an action, or the reason there is none).
+  const empties = live("[data-empty]").map((el) => {
+    const heading = [...el.children].find((child) => child.tagName.toLowerCase() !== "svg" && (child.textContent ?? "").trim() !== "");
+    return {
+      title: cut(heading?.textContent), icon: [...el.children].some((child) => child.tagName.toLowerCase() === "svg"), hasTitle: Boolean(heading),
+      action: el.querySelector("button, a[href], [role='button']") !== null, reason: el.hasAttribute("data-reason"), ...box(el),
+    };
+  });
+
+  // What the report keeps of the page's make-up: its notes (with or without an action or a number) and its headline.
+  const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
+
+  return {
+    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
+    orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
+    activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
+  };
+}
+
+/** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
+export const CHART_GRID_FILL = 0.92;
+/** A toolbar starts above this many viewports' height from the top: a control group that begins further down is below the fold of the page it filters. */
+export const TOOLBAR_VIEWPORTS = 1.2;
+/** A band that moved this far (px) from where the scroller holds it has not held. */
+export const BAND_TOLERANCE_PX = 2;
+
+/**
+ * The page table's row for a view, and its template: what slots the template allows, and how many viewports a page may be before it
+ * needs contents.
+ * @param {string} name the report's page name
+ */
+export function templateOf(name) {
+  const view = PAGE_TEMPLATES.views.find((/** @type {any} */ entry) => entry.view === budgetKey(name)) ?? null;
+  return { view, template: view ? PAGE_TEMPLATES.templates[view.template] : null };
+}
+
+/**
+ * What the composition of one page view says about it (R19, audit D §4 S6): a control group after the content it controls, a second layer
+ * of switches, a band that does not hold, a module without its steps, a sentence standing alone, a tag that is pressed, a word that looks like
+ * a link, a primary action away from the header, a switch to nothing, a long page with no way about in it, a grid with holes, an empty
+ * state with no way forward. Every one is a finding of its own rule, so that a baseline can hold a page at what it has for a time, with an
+ * owner; none is a notice. A page whose composition could not be read says so (`not-observable`).
+ * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
+ * @param {any} c what `measureComposition` returned
+ * @returns {{ failures: string[], notices: Finding[] }}
+ */
+export function compositionFindings(name, viewportName, c) {
+  const current = `${name}@${viewportName}`;
+  /** @type {Finding[]} */ const found = [];
+  if (!c) return { failures: [], notices: [finding("not-observable", current, `${current}: not observable: the page's composition was not read`)] };
+  const { template } = templateOf(name);
+  const add = (/** @type {string} */ rule, /** @type {string} */ text, /** @type {number} */ value) => found.push(finding(rule, current, `${current}: [${rule}] ${text}`, value));
+  const quote = (/** @type {string[]} */ list, limit = 3) => `${list.slice(0, limit).map((text) => `“${text}”`).join("、")}${list.length > limit ? ` and ${list.length - limit} more` : ""}`;
+  const pageLevel = (/** @type {Array<{ inSection: boolean }>} */ list) => list.filter((entry) => !entry.inSection);
+
+  for (const group of c.controlsAfterContent) {
+    add("control-after-content", `“${group.control}” (at ${group.controlTop} px) stands after the ${group.content} it controls (at ${group.contentTop} px)`);
+  }
+  for (const toolbar of c.toolbars) {
+    if (toolbar.top >= TOOLBAR_VIEWPORTS * c.viewport.height) add("toolbar-position", `the toolbar “${toolbar.label}” starts at ${toolbar.top} px, below ${Math.round(TOOLBAR_VIEWPORTS * c.viewport.height)} px (${TOOLBAR_VIEWPORTS} × the window)`, toolbar.top);
+  }
+
+  // One layer of each kind of switch on a page: one tab list, one view switch written as radios, one toolbar (a block's own is its block's).
+  const tablists = pageLevel(c.tablists);
+  const viewGroups = pageLevel(c.viewGroups);
+  const toolbars = pageLevel(c.toolbars);
+  if (tablists.length > 1) add("toggle-layers", `${tablists.length} tab lists on the page (one): ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
+  if (viewGroups.length > 1) add("toggle-layers", `${viewGroups.length} view switches written as radio groups (one): ${quote(viewGroups.map((entry) => entry.label))}`, viewGroups.length);
+  if (toolbars.length > 1) add("toggle-layers", `${toolbars.length} toolbars on the page (one in the band): ${quote(toolbars.map((entry) => `${entry.label} at ${entry.top} px`))}`, toolbars.length);
+
+  // The band holds still when the page moves, and a module has its steps in it on every tab.
+  if (c.chrome) {
+    if (!c.chrome.sticky) add("chrome", `the band (${c.chrome.height} px high) is not sticky (position ${c.chrome.position})`);
+    else if (c.chrome.held && Math.abs(c.chrome.held.after - c.chrome.held.scrollerTop) > BAND_TOLERANCE_PX) {
+      add("chrome", `the band is at ${c.chrome.held.after} px after the page moved ${c.chrome.held.scrolled} px; the scroll area starts at ${c.chrome.held.scrollerTop} px, where a band that holds stands`, Math.abs(c.chrome.held.after - c.chrome.held.scrollerTop));
+    }
+  }
+  for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
+  if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
+  if (template) {
+    // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
+    const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
+    if (template.stepRail === "every-tab") {
+      if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
+      if (!c.stepRail && !dotted) add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+    }
+    if (template.stepRail === "none" && c.stepRail) add("template-slot", `a ${template.name} has a step rail (only a module page does)`);
+    if (template.tablist === "none" && tablists.length > 0) add("template-slot", `a ${template.name} has a tab list: ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
+    if (template.toolbar === "none" && toolbars.length > 0) add("template-slot", `a ${template.name} has a toolbar at ${toolbars[0].top} px`, toolbars.length);
+  }
+
+  // Sentences standing alone, tags and words dressed as controls, the primary action away from the header, switches to nothing.
+  if (c.orphans.length > 1) add("orphan-sentence", `${c.orphans.length} sentences stand alone, with no action in them and no number (one is allowed): ${quote(c.orphans.map((entry) => entry.text))}`, c.orphans.length);
+  for (const tag of c.tags) {
+    if (tag.insideControl) add("tag-as-control", `the tag “${tag.text}” is inside a ${tag.insideControl} (a tag is a label)`);
+    else if (tag.role) add("tag-as-control", `the tag “${tag.text}” has the role ${tag.role}`);
+    else if (tag.cursor === "pointer") add("tag-as-control", `the tag “${tag.text}” shows the pointer's cursor`);
+  }
+  for (const control of c.tagLike) add("tag-as-control", `the ${control.tag} “${control.text}” is drawn as a tag (the tag's height, corner and type size) and can be pressed`);
+  for (const word of c.words) add("word-as-link", `“${word.text}” is plain text in a ${word.tag} that looks pressable, and is the name of a tab or a step`);
+  for (const primary of c.primaries) {
+    if (!primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+  }
+  for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
+
+  // A long page has contents (a reading page) or its list read a page at a time (anything else).
+  if (template && c.viewport.height > 0) {
+    const viewports = c.height / c.viewport.height;
+    const reader = template.outline === "when-long";
+    if (viewports > template.longViewports && c.outline.outlines === 0 && (reader || c.outline.showMore === 0)) {
+      add("long-page", `${viewports.toFixed(1)} windows tall (${c.height} px; more than ${template.longViewports}) with no contents ([data-outline])${reader ? "" : " and no 显示更多"}`, Math.round(viewports * 10) / 10);
+    }
+  }
+  for (const grid of c.chartGrids) {
+    if (grid.ratio < CHART_GRID_FILL) add("chart-grid", `a grid of ${grid.cells} charts in ${grid.rows} row(s) fills ${Math.round(grid.ratio * 100)}% of its box (at least ${Math.round(CHART_GRID_FILL * 100)}%): a row is not full`);
+  }
+  for (const empty of c.empties) {
+    const missing = [...(empty.icon ? [] : ["a mark"]), ...(empty.hasTitle ? [] : ["a title"]), ...(empty.action || empty.reason ? [] : ["an action or the reason there is none"])];
+    if (missing.length) add("empty-state", `the empty state “${empty.title}” has no ${missing.join(" and no ")}`);
+  }
+  return { failures: [], notices: found };
+}
+
+/**
+ * What the pages of a module or a route family say together, once all have been read: a module's tabs show the same number of steps and the
+ * band stands at the same height on each; the pages that share a tab strip (a family of the page table) start their title on one left edge.
+ * @param {Record<string, any>} pages the report's pages, by `name@viewport`
+ * @returns {Finding[]}
+ */
+export function familyFindings(pages) {
+  /** @type {Finding[]} */ const found = [];
+  /** @type {Map<string, Array<{ view: string, name: string, c: any, row: any }>>} */ const modules = new Map();
+  /** @type {Map<string, Array<{ view: string, left: number }>>} */ const families = new Map();
+  for (const [view, page] of Object.entries(pages)) {
+    const c = page?.composition;
+    if (!c) continue;
+    const [name, viewport] = [view.slice(0, view.lastIndexOf("@")), view.slice(view.lastIndexOf("@") + 1)];
+    const { view: row } = templateOf(name);
+    if (!row) continue;
+    // The second study of the module walk is `vcr-trial@2`, the same tabs of another study: its own group.
+    const study = /@\d+$/.test(name) ? name.slice(name.lastIndexOf("@")) : "";
+    if (row.module) {
+      const key = `${row.module}${study}@${viewport}`;
+      modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
+    }
+    if (viewport === "desktop" && c.title) {
+      const key = `${row.family}${study}`;
+      families.set(key, [...(families.get(key) ?? []), { view, left: c.title.left }]);
+    }
+  }
+  for (const [key, tabs] of modules) {
+    if (tabs.length < 2) continue;
+    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
+    const counts = tabs.map((tab) => steps(tab.c));
+    if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
+    const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const known = tops.filter((top) => top !== null);
+    if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
+      found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
+    }
+    const heights = tabs.map((tab) => tab.c.chrome?.height ?? null).filter((height) => height !== null);
+    if (heights.length > 1 && Math.max(...heights) - Math.min(...heights) > BAND_TOLERANCE_PX) {
+      found.push(finding("module-chrome", key, `${key}: the band is not the same height on every tab: ${tabs.map((tab) => `${tab.name} ${tab.c.chrome?.height ?? "none"} px`).join(", ")}`, Math.max(...heights) - Math.min(...heights)));
+    }
+  }
+  for (const [key, list] of families) {
+    const edges = [...new Set(list.map((entry) => entry.left))];
+    if (edges.length < 2) continue;
+    /** @type {Map<number, number>} */ const tally = new Map();
+    for (const { left } of list) tally.set(left, (tally.get(left) ?? 0) + 1);
+    const common = [...tally].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+    for (const { view, left } of list.filter((entry) => entry.left !== common)) {
+      found.push(finding("left-edge", view, `${view}: the title starts at ${left} px; the other pages of ${key} start at ${common} px`, Math.abs(left - common)));
+    }
+  }
+  return found;
+}
+
 /** Where keyboard focus is: what it names and whether it is inside the sidebar. */
 export function focusProbe() {
   const el = document.activeElement;
@@ -1550,22 +1935,6 @@ export function afterClickFindings(name, kind, r) {
 }
 
 /**
- * The title column of every desktop page, against the one most pages share. A page whose title starts on another left edge has lost
- * the sidebar or its column (the 定时任务 page began at 0 px beside a sidebar that was not there).
- * @param {Record<string, { pageLefts?: number[] }>} pages the report's pages
- * @returns {string[]} notices
- */
-export function leftEdgeNotices(pages) {
-  const edges = Object.entries(pages).filter(([view, page]) => view.endsWith("@desktop") && Array.isArray(page.pageLefts) && page.pageLefts.length > 0)
-    .map(([view, page]) => [view, /** @type {number[]} */ (page.pageLefts)[0]]);
-  const tally = new Map();
-  for (const [, left] of edges) tally.set(left, (tally.get(left) ?? 0) + 1);
-  const [common] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
-  if (common === undefined) return [];
-  return edges.filter(([, left]) => left !== common).map(([view, left]) => `${view}: the title starts at ${left} px; most pages start at ${common} px`);
-}
-
-/**
  * The original column of a document's page is never narrower than this: below it a page of a PDF is read at a size nobody reads at, and
  * the original and the key points go back to being two tabs (R13 E-19, `useReaderBox`'s `ORIGINAL_MIN_WIDTH`). The drawer it replaces
  * was held to 576 px; the page holds the original wider than that.
@@ -1945,8 +2314,11 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
   const siblings = column ? [...column.children] : [];
   const at = header ? siblings.indexOf(header) : -1;
   const lead = at > 0 ? siblings.slice(0, at) : [];
-  const body = at >= 0 ? siblings[at + 1] ?? null : null;
-  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
+  // A page with a band (R19: steps, tabs and toolbar in one sticky row set under the header) has the band after its header and the body after
+  // the band: the body is `[data-page-body]`, and the band's rows are blocks of the page too (the band itself is wider than the column).
+  const band = document.querySelector("[data-page-chrome]");
+  const body = document.querySelector("[data-page-body]") ?? (at >= 0 ? siblings[at + 1] ?? null : null);
+  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])].filter((el) => el && visible(el));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
   for (const list of document.querySelectorAll("ul, ol")) {
@@ -2591,6 +2963,13 @@ async function main() {
           const shape = structureFindings(name, viewportName, structure);
           failures.push(...shape.failures);
           notices.push(...shape.notices);
+          // The composition (R19): what the framework's markers say about the order and the places of the page's parts. It moves the scroll
+          // area by a few hundred pixels and puts it back, so it is read before anything is clicked.
+          const composition = await page.evaluate(measureComposition, [{ hold: true }]);
+          report.pages[current].composition = composition;
+          const arranged = compositionFindings(name, viewportName, composition);
+          failures.push(...arranged.failures);
+          notices.push(...arranged.notices);
           if (viewportName === "phone") {
             // Focus order is read, never changed: two presses of Tab from the top of the page, and where each landed.
             const stops = [];
@@ -2654,7 +3033,7 @@ async function main() {
         await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
       }
     }
-    notices.push(...leftEdgeNotices(report.pages));
+    notices.push(...familyFindings(report.pages));
     const axeRead = axeNotices(axeScans);
     notices.push(...axeRead.findings);
     if (axeRead.summary) report.info.push(axeRead.summary);

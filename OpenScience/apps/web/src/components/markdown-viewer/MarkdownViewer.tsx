@@ -169,7 +169,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     img: ({ src, alt }) => <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />,
   }), [s, claims, claimStatuses, reading, renderLink]);
   return (
-    <div className={cn(s.root, className)}>
+    <div data-prose="" className={cn(s.root, className)}>
       <ReactMarkdown
         // remark-breaks: chat prose treats a single newline as a line break
         // (chat convention), not as the collapsible space of print markdown.

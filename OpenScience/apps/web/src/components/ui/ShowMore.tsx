@@ -27,7 +27,7 @@ export function useShowMore<T>(rows: readonly T[], { first, step, resetKey }: { 
 export function ShowMore({ remaining, unit, onMore, loading = false }: { remaining: number | null; unit: string; onMore: () => void; loading?: boolean }) {
   if (remaining !== null && remaining <= 0) return null;
   return (
-    <div className="mt-2 flex justify-center">
+    <div data-show-more="" className="mt-2 flex justify-center">
       <Button variant="text" size="sm" loading={loading} onClick={onMore}>{remaining === null ? "显示更多" : `显示更多 · 还有 ${remaining.toLocaleString("zh-CN")} ${unit}`}</Button>
     </div>
   );

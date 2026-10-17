@@ -21,7 +21,7 @@ import { brotliCompressSync } from "node:zlib";
 import {
   AFTER_CLICK_KIND, afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
   EXPECTED_REFUSALS, focusProbe, frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
-  leftEdgeNotices, matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
+  matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
@@ -654,6 +654,27 @@ function probe(kind, arg, search) {
     default: return null;
   }
 }
+// What measureComposition reads on a page that is right: a module page (a GEO project's tabs, a study's) has its band, its rail or its dotted tab
+// row, and a tab list; every other page has none of them. FAKE_COMPOSITION=orphans|steps|band|empty|layers: two sentences standing alone on the
+// knowledge base, a GEO tab with seven steps, a GEO band that does not hold, an empty state without a way forward on the inbox, two toolbars on the memory page.
+function compositionRead(pathname) {
+  const mode = process.env.FAKE_COMPOSITION || "";
+  const box = (top, height, left, width) => ({ top, bottom: top + height, left: left === undefined ? 296 : left, right: (left === undefined ? 296 : left) + (width === undefined ? 1152 : width), width: width === undefined ? 1152 : width, height });
+  const geo = /^\/app\/geo\/geo_1(\/(visibility|accuracy|questions|sources|actions|plan|evidence))?$/.test(pathname);
+  const vcr = /^\/app\/virtual-research\/std_/.test(pathname);
+  const read = { viewport: { width: 1512, height: 945 }, height: 945, title: { text: "页面", ...box(26, 32) }, chrome: null, stepRail: null, tablists: [], viewGroups: [], toolbars: [],
+    controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
+    notes: [], headline: 0, activity: 0, stepStates: [] };
+  if (geo || vcr) {
+    read.chrome = { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: mode === "band" && pathname.endsWith("/plan") ? { scrolled: 400, before: 60, after: -340, scrollerTop: 0 } : null };
+    read.tablists = [{ label: "视图", tabs: 8, dots: vcr ? 7 : 0, inChrome: true, inToolbar: false, inSection: false, ...box(100, 40) }];
+    if (geo) read.stepRail = { ...box(60, 40), folded: false, count: mode === "steps" && pathname.endsWith("/visibility") ? 7 : 8, inChrome: true, steps: [] };
+  }
+  if (mode === "orphans" && pathname === "/app/files") read.orphans = [1, 2].map((n) => ({ text: "第" + n + "句话单独站在页面上没有动作", tag: "p", ...box(300 + n * 40, 24) }));
+  if (mode === "empty" && pathname === "/app/inbox") read.empties = [{ title: "暂无消息", icon: false, hasTitle: true, action: false, reason: false, ...box(300, 200) }];
+  if (mode === "layers" && pathname === "/app/memory") read.toolbars = [1, 2].map((n) => ({ label: "工具条" + n, inChrome: n === 1, inSection: false, ...box(60 + n * 60, 28), controls: {} }));
+  return read;
+}
 let skillProbes = 0;
 let cleanupProbes = 0;
 let knowledgeStates = 0;
@@ -727,6 +748,7 @@ function context() {
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
+        if (typeof fn === "function" && fn.name === "measureComposition") return compositionRead(target().pathname);
         // FAKE_THROW=<function name>: that probe throws in the page, as 18.1's memory-map step did (a helper outside the function's own text).
         if (process.env.FAKE_THROW && typeof fn === "function" && fn.name === process.env.FAKE_THROW) throw new ReferenceError(fn.name + "Helper is not defined");
         // axe-core's source is put into the page as a string; the scan is a function. FAKE_AXE=clean|fail: nothing to report, a scan that throws.
@@ -901,7 +923,7 @@ module.exports = { chromium: { launch: async () => ({ newContext: async () => co
 /** What the walk takes for axe-core's build: a banner and `axe.run`. The fake page never runs it. */
 const FAKE_AXE_SOURCE = "/*! axe v4.12.1\n * a stand-in for the test\n */\nwindow.axe = { version: \"4.12.1\" };\nwindow.axe.run = function () {};\n";
 
-async function walk(env = {}, { axe = false } = {}) {
+async function walk(env = {}, { axe = false, baseline = null } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "ui-walk-"));
   await mkdir(path.join(dir, "playwright-core"));
   if (axe) await writeFile(path.join(dir, "axe.min.js"), FAKE_AXE_SOURCE);
@@ -909,7 +931,7 @@ async function walk(env = {}, { axe = false } = {}) {
   await writeFile(path.join(dir, "password"), "not-a-real-password\n");
   // The control-flow tests are about what the walk does, not about what its baseline accepts: this one accepts every sentence of a
   // finding, under a made-up owner. The baseline's own tests (`applyBaseline`, the `baseline` describe below) use real entries.
-  await writeFile(path.join(dir, "baseline.json"), JSON.stringify({ entries: [{ view: "*", contains: ":", owner: "test", until: "2999-12-31", why: "the walk's control flow is under test, not its baseline" }] }));
+  await writeFile(path.join(dir, "baseline.json"), JSON.stringify(baseline ?? { entries: [{ view: "*", contains: ":", owner: "test", until: "2999-12-31", why: "the walk's control flow is under test, not its baseline" }] }));
   const result = await new Promise((resolve) => {
     execFile(process.execPath, [path.join(repoRoot, "scripts/ops/ui-walk.mjs")], {
       env: {
@@ -930,7 +952,8 @@ async function walk(env = {}, { axe = false } = {}) {
     }, (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr }));
   });
   const log = (await readFile(path.join(dir, "log.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
-  const report = JSON.parse(await readFile(path.join(dir, "out", "report.json"), "utf8"));
+  // A walk that died before it wrote its report says why (its stderr), not that a file is missing.
+  const report = JSON.parse(await readFile(path.join(dir, "out", "report.json"), "utf8").catch((error) => { throw new Error(`the walk wrote no report (exit ${result.code}): ${result.stderr || result.stdout}`, { cause: error }); }));
   await rm(dir, { recursive: true, force: true });
   return { ...result, log, report };
 }
@@ -980,6 +1003,35 @@ test("a probe that throws in the page fails the walk and says what it did not re
   const fine = await walk();
   assert.equal(fine.report.steps["memory-map-drawer"].target, STEP_TARGETS["memory-map-drawer"]);
   for (const [name, read] of Object.entries(fine.report.steps)) assert.equal(typeof read.target, "string", `${name} names its target`);
+});
+
+test("the walk judges the composition of every page view it reads and hands what it finds to the baseline", async () => {
+  const fine = await walk();
+  assert.equal(fine.code, 0, fine.stdout + fine.stderr);
+  assert.ok(fine.report.pages["geo-plan@desktop"].composition.stepRail.count === 8, "the composition is in the report, page by page");
+  assert.deepEqual(fine.report.findings.filter((entry) => ["orphan-sentence", "step-rail", "chrome", "module-steps", "empty-state", "toggle-layers", "template-slot"].includes(entry.rule)), []);
+  // A page with two sentences standing alone, a tab with seven steps among eight, a band that does not hold, an empty state with no way
+  // forward and a second toolbar are each a finding of their rule, named by their page: strict, they fail the walk.
+  const strict = { OPEN_SCIENCE_WALK_BASELINE: "none" };
+  const orphans = await walk({ FAKE_COMPOSITION: "orphans", ...strict });
+  assert.ok(orphans.report.failures.some((line) => /^files@desktop: \[orphan-sentence\] 2 sentences stand alone.*\[orphan-sentence; no baseline entry accepts it\]$/.test(line)), orphans.report.failures.filter((line) => line.includes("orphan")).join("\n"));
+  const steps = await walk({ FAKE_COMPOSITION: "steps", ...strict });
+  assert.ok(steps.report.failures.some((line) => line.startsWith("geo@desktop: the steps are not the same on every tab: geo-overview 8, geo-visibility 7")), steps.report.failures.join("\n"));
+  const band = await walk({ FAKE_COMPOSITION: "band", ...strict });
+  assert.ok(band.report.failures.some((line) => /^geo-plan@desktop: \[chrome\] the band is at -340 px after the page moved 400 px/.test(line)));
+  const empty = await walk({ FAKE_COMPOSITION: "empty", ...strict });
+  assert.ok(empty.report.failures.some((line) => /^inbox@desktop: \[empty-state\] the empty state “暂无消息” has no a mark and no an action or the reason there is none/.test(line)));
+  const layers = await walk({ FAKE_COMPOSITION: "layers", ...strict });
+  assert.ok(layers.report.failures.some((line) => /^memory@desktop: \[toggle-layers\] 2 toolbars on the page/.test(line)));
+  // A baseline entry holds a page at what it has: the orphans of the knowledge base are accepted up to two, with an owner and a day, and nothing else is.
+  const entry = (max) => ({ view: "files@desktop", rule: "orphan-sentence", max, owner: "pagesa", until: "2999-12-31", why: "the knowledge base's two cards before there is a document" });
+  const held = await walk({ FAKE_COMPOSITION: "orphans" }, { baseline: { entries: [entry(2)] } });
+  const found = (read) => read.report.findings.find((item) => item.rule === "orphan-sentence");
+  assert.deepEqual(found(held).accepted, { owner: "pagesa", until: "2999-12-31" });
+  assert.equal(held.report.baseline.accepted, 1);
+  const worse = await walk({ FAKE_COMPOSITION: "orphans" }, { baseline: { entries: [entry(1)] } });
+  assert.equal(found(worse).accepted, null, "a page may not get worse than the baseline holds it at");
+  assert.ok(worse.report.baseline.lowerable.length === 0 && worse.report.baseline.unused.length === 1);
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {
@@ -1576,13 +1628,6 @@ test("the task page is read for its hooks, its pane, the frame over it and what 
   // The pane's wait is the pane being on the page.
   assert.equal(inPage(taskPage(), () => taskPaneReady()), true);
   assert.equal(inPage(taskPage({ pane: null }), () => taskPaneReady()), false);
-});
-
-test("the title column of a page is held against the one most pages share", () => {
-  const pages = { "files@desktop": { pageLefts: [296] }, "memory@desktop": { pageLefts: [296, 300] }, "inbox@desktop": { pageLefts: [296] }, "autopilot@desktop": { pageLefts: [24] }, "files@phone": { pageLefts: [16] } };
-  assert.deepEqual(leftEdgeNotices(pages), ["autopilot@desktop: the title starts at 24 px; most pages start at 296 px"]);
-  assert.deepEqual(leftEdgeNotices({}), []);
-  assert.deepEqual(leftEdgeNotices({ "files@desktop": { pageLefts: [] } }), []);
 });
 
 test("a PDF's original is wide on the document's page and fit to the width; a column that is too narrow or a viewer without the fragment fails", () => {
