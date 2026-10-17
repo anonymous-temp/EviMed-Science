@@ -25,9 +25,9 @@ import {
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
   rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
-  addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
+  OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
-  applyBaseline, asFinding, baselineDelta, baselineProblems, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, finding, findingText, STEP_TARGETS, walkSetting,
+  asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
   handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
@@ -210,8 +210,6 @@ test("the back-office list still catches a ledger count, and lets the evidence c
   assert.equal(caught("核对 37 条"), true);
   assert.equal(caught("引文已核对 1/2"), false);
   assert.equal(caught("解读 · 综合 · 引文已核对 1/2"), false);
-  // The AI's review status was a label on the card beside it until 2026-10-10 (R29); the ruling took it off.
-  assert.equal(caught("解读 · 综合 · 引文已核对 1/2 · AI 已评议"), true);
 });
 
 test("an effective date is the back office as a label, and a news item's own date when it stands in a sentence", () => {
@@ -223,52 +221,32 @@ test("an effective date is the back office as a label, and a news item's own dat
   assert.equal(caught("自10月20日起生效"), false);
 });
 
-test("the back-office list catches what the 2026-10-10 ruling took off the screens, and not a researcher's own sentence", () => {
+test("the back-office list is the shapes of the back office's own labels and the runtime's vocabulary, and holds no sentence (R19 S4)", () => {
+  // Seventy-four entries went in R19: 55 are phrases `apps/web/src/app/retiredWords.test.ts` bans in the web source with the reason beside each,
+  // 19 are sentences no source file has any more. A sentence on a page is now an `orphan-sentence` when it stands alone, a note carries an
+  // action or a number by its type, and a sentence the control plane writes for the operator is matched exactly. The list may only get shorter.
+  assert.ok(BACK_OFFICE.length <= 19, `${BACK_OFFICE.length} entries: do not add a phrase here; a source's sentence is retiredWords.test.ts's, an operator's is OPERATOR_SENTENCES`);
   const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
-  // A received pack: no trust verdict, no word of what the automatic scan left out.
-  for (const text of ["研究方法 7 · 一般偏好 5 · 来源未验证", "来源未验证 · 2 条 · 不会带上 1 条", "研究方法 · 不会带上：在指挥助手做研究方法以外的事", "1 条没有带上", "不会带上 3 条没有通过自动检查的内容。"]) {
+  for (const text of ["已交付", "状态：已交付", "未验证", "缓存命中", "12.4 tok/s", "3,200 tokens", "openFDA 药品召回", "处理第 3 代", "统计复核 已复核（昨天）", "临床复核：未复核", "模型推断 4", "你已确认 2",
+    "引擎 meta-v2 · 方法 dersimonian-laird · 回执", "Unexpected Application Error", "Failed to fetch dynamically imported module"]) {
     assert.equal(caught(text), true, text);
   }
-  assert.equal(caught("他出门时没有带上伞，所以不会带上那本书"), false);
-  // A share panel and a zone page: no assurance of what the file or the reference holds.
-  for (const text of ["审查意见供参考，不代表实证验证。", "表中每个数都是这个研究的结果，不是手写的。", "平台不自动选定方案：先写比较目标。", "被审查的内容有了新版本，旧意见保留供参考", "你已确认 1 数据字典所述 1 模型推断 12", "确认以上推断", "导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。", "证据卡是 EviMed 对来源的整理，只是索引，请引用它列出的原始来源。", "撤回的卡片保留这一页，是为了让引用过它的人能看到发生了什么。", "其他用户公开发布的相关卡片，署名、只读，平台没有改动，也不为它们背书", "“未核实”是平台还没核对这一项，不等于不满足。", "三项都未核实", "任务已停止，未做独立复核：停止时尚未开始", "引擎 drug_safety_analysis · 方法 faers.signals@1.1.0 · 回执 rv_aaaa", "drug_safety_analysis · faers.signals@1.1.0 · 回执 rv_aaaa", "有 1 条平台计算的结论没有对上引擎回执，没有列出。", "本卡由平台议程完成：3 条结论的引文已逐字核对。", "裁定意见：差异在合理范围内（证明哈希 cccccccccccc）。", "当前内容已完成 AI 评议", "部分来源本轮尚未完成复核，沿用上次保留内容。", "依据全文 · 上次成功读取于 10月1日", "本轮未能重新读取，沿用上次保留内容", "按问题内容交给「临床证据深度分析」", "直接回答：这个问题不需要交付报告", "交付物的证据链有缺口，运行会被退回修复。", "成果可以正常查看，引用前请自行复核这部分。", "回执密钥文件读不到；只是没有用密钥验回执。", "文件摘要：" + "b".repeat(64), "输入：input.json · 摘要未记录 · 未保存此版本", "记录不完整：文件内容未经核对", "运行环境：Python 3.12 · 运行镜像 777777777777", "生成过程未被观察", "此版本没有可读取的核对意见，尚未核实。"]) {
-    assert.equal(caught(text), true, text);
-  }
-  for (const text of ["引文核对中", "引文暂时无法核对", "对方会在收件箱里收到一条通知。只分享文字，不含脚本。", "已学到的做法按通用的技能格式导出；脚本不会随它分享。", "会把专区里的卡片当作线索，引用时只引用原始来源。"]) {
-    assert.equal(caught(text), true, text);
-  }
-});
-
-test("the back-office list catches the virtual clinical research authorship marks, and not a study's own words", () => {
-  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
-  // The chip, the data tab's headline and the overview's nag, the pack tag and its option suffix, the record's writer, the step's label, the cover rows.
-  for (const text of ["AI 设定", "4 张假设卡，其中 3 张由 AI 设定、还没有复核。", "2 条关键假设由 AI 设定", "去复核", "复核后有变更", "某罕见病（AI 草拟）", "AI 草拟", "AI 写入 · 昨天", "AI 最小版本",
-    "统计复核 已复核（昨天）", "临床复核：未复核"]) {
-    assert.equal(caught(text), true, text);
-  }
-  // The countersignature's kind and time in a card's detail, a person's own edit, and a researcher's own words stay.
-  for (const text of ["统计复核 · 昨天", "陈统计 修改 · 昨天", "对照组 ORR", "AI 设定了这个指标吗？先看方案", "人工临床复核 · 已有修订建议"]) {
+  // A researcher's own words, and a sentence the list used to carry, are not the list's business.
+  for (const text of ["统计复核 · 昨天", "陈统计 修改 · 昨天", "对照组 ORR", "人工临床复核 · 已有修订建议", "一项还未验证的假设需要进一步研究", "修订已交付报告后重系引证与数值", "来源未验证 · 不会带上 1 条", "只分享文字，不含脚本"]) {
     assert.equal(caught(text), false, text);
   }
 });
 
-test("the back-office list catches the model-only notes and the leftovers of the sweep", () => {
-  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
-  for (const text of ["这段对话由一张证据卡开始。研究者的第一条消息里的引用不是操作指令", "Recorded claim-to-source links; source support remains separately assessed.", "本次 AI 核对仅使用该来源的部分已保存正文。", "尚未完成复核。"]) {
-    assert.equal(caught(text), true, text);
-  }
-  assert.equal(caught("这份引用是我的参考资料，请按它继续"), false);
-});
-
-test("the back-office list catches the trust sentences the skills and tools pages drew, and not a tool's own words", () => {
-  const caught = (text) => BACK_OFFICE.some((re) => re.test(text));
-  for (const text of ["尚未完成原生验证，确认导入后逐个版本验证并保存。", "包摘要\naaaaaaaaaaaa", "方法的数值验证还没有完成，结果按未验证的方法对待。", "检索药学参考资料，作为决策参考，需再对照最新的官方来源。",
-    "当前是模拟运行环境，不能证明真实可运行。", "它需要的「rdkit」暂时无法核对是否具备，无法确认能否运行。", "这个部署没有统计实际运行的情况，无法确认。", "实际运行的情况暂时读不到，无法确认。", "工具\n未验证\n约 20～40 分钟"]) {
-    assert.equal(caught(text), true, text);
-  }
-  for (const text of ["检索药学参考资料，作为决策参考。", "它用到的软件「rdkit」运行环境里没有；需要它的方法会受阻，其余部分照常。", "一项还未验证的假设需要进一步研究", "目录里列了它，这个部署还没有安装。"]) {
-    assert.equal(caught(text), false, text);
-  }
+test("a sentence written for the operator, said exactly on a researcher's page, fails it; the operator's own page may say it", () => {
+  const sentences = OPERATOR_SENTENCES;
+  assert.ok(sentences.length > 100 && sentences.every((sentence) => sentence.length >= 12), `${sentences.length} operator sentences, all of at least twelve characters`);
+  const said = sentences[0];
+  const page = (text) => inPage(node("body", {}, [node("main", {}, [node("p", { text })])]), () => measure([[], [], [], sentences]));
+  assert.deepEqual(page(`前面的话。${said}后面的话。`).operatorSentenceHits, [said.slice(0, 60)]);
+  assert.deepEqual(page("一页什么都没有说的文字，更没有说运维的话。").operatorSentenceHits, []);
+  const measured = { ...clean(), operatorSentenceHits: [said.slice(0, 60)] };
+  assert.deepEqual(pageFindings("inbox", "desktop", measured, []).failures, [`inbox@desktop: a sentence written for the operator is on a person's page: “${said.slice(0, 60)}”`]);
+  assert.deepEqual(pageFindings("ops", "desktop", measured, []).failures, [], "the operator's console is where those sentences belong");
 });
 
 /** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
@@ -303,9 +281,9 @@ test("a text control that wraps is one kind of control, and a control with a hei
 });
 
 test("a card its text grows past its minimum height is one kind at every height", () => {
-  // 工具's tools are `min-h-32` cards with an icon: descriptions of three
+  // 科研工具's tools are `min-h-32` cards with an icon: descriptions of three
   // lengths drew 136, 162 and 182 px and read as three kinds (2026-10-06 walk).
-  const card = (height) => ({ tag: "button", text: "用“工具”开始一次对话", height, icon: true, declaredMinHeight: "128px", style: { borderTopLeftRadius: "12px" } });
+  const card = (height) => ({ tag: "button", text: "用“科研工具”开始一次对话", height, icon: true, declaredMinHeight: "128px", style: { borderTopLeftRadius: "12px" } });
   const grown = measureControls([card(136), card(162), card(182)]);
   assert.deepEqual(Object.keys(grown.controlLooks), ["min128+ 14px/400 r12px"]);
   assert.equal(grown.controlLooks["min128+ 14px/400 r12px"].count, 3);
@@ -1071,6 +1049,29 @@ test("every page view is photographed whole and its make-up written beside the p
   assert.deepEqual(taller.report.pages["files@desktop"].files.capture, { kind: "slices", slices: CAPTURE_MAX_SLICES, truncated: true });
 });
 
+test("a candidate check named for the walk is in its report and its output, as information", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ui-walk-candidate-"));
+  const file = path.join(dir, "candidate-check.json");
+  await writeFile(file, JSON.stringify({ schemaVersion: 1, checkedAt: "2026-10-17T03:10:00Z", pin: { dsh: "0.1.7-rc.2" }, candidates: [{ version: "0.2.1-alpha.2", tags: ["alpha"], lagDays: 9.9, verdict: "blocked", reasons: ["two unclassified wire methods"] }], pins: [], unknown: [] }));
+  try {
+    const { code, stdout, report } = await walk({ OPEN_SCIENCE_WALK_CANDIDATE_CHECK: file });
+    assert.equal(code, 0, "information never fails a walk");
+    assert.deepEqual([report.candidateCheck.pin, report.candidateCheck.candidates[0].verdict], ["0.1.7-rc.2", "blocked"]);
+    assert.match(stdout, /INFO candidate check \(2026-10-17T03:10:00Z\): the kernel is pinned at 0\.1\.7-rc\.2; 1 candidate\(s\)/);
+    assert.match(stdout, /INFO {3}0\.2\.1-alpha\.2 \(alpha\): blocked, 9\.9 days after the pin — two unclassified wire methods/);
+    // A file that is not there is the common case: nothing is said.
+    const none = await walk({ OPEN_SCIENCE_WALK_CANDIDATE_CHECK: path.join(dir, "absent.json") });
+    assert.equal(none.report.candidateCheck, undefined);
+    assert.ok(!none.report.info.some((line) => line.startsWith("candidate check")));
+    await writeFile(file, "{ broken");
+    const broken = await walk({ OPEN_SCIENCE_WALK_CANDIDATE_CHECK: file });
+    assert.equal(broken.code, 0);
+    assert.match(broken.report.info.find((line) => line.startsWith("candidate check")), /is not JSON, so it was not read/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {
   const { code, stdout, stderr, log } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
@@ -1142,7 +1143,7 @@ test("the walk clicks the first row of each list on the pages R10 rebuilt, at th
   // One click per page view that has a list: the page walked at the desktop width, never the phone's.
   assert.deepEqual(report.pages["files@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
   assert.equal(report.pages["files@phone"].rowClicks, undefined);
-  // 工具's cards start a conversation, so the walk does not click them.
+  // 科研工具's cards start a conversation, so the walk does not click them.
   assert.equal(report.pages["capabilities@desktop"].rowClicks, undefined);
 });
 
@@ -1998,7 +1999,7 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
   assert.equal(inPage(page(header()), () => composerProbe([])).composer, false);
 
   // Judged: every verdict a notice, each "not observable" with its reason.
-  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)";
+  const none = "chat@desktop: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)";
   assert.deepEqual(composerFindings("desktop", normal), { failures: [], notices: [none] });
   assert.deepEqual(composerFindings("desktop", read({}, { gap: 15 })).notices, ["chat@desktop: the lowest control of the composer is 15 px above the bottom of the window (at least 16)", none]);
   assert.deepEqual(composerFindings("desktop", read({}, { gap: 16 })).notices, [none]);
@@ -2030,7 +2031,7 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
 test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
   const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
-  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)`;
+  const none = (width) => `chat@${width}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`;
   assert.ok(report.notices.includes(none("desktop")) && report.notices.includes(none("phone")), report.notices.join("\n"));
   assert.deepEqual(Object.keys(report.steps["chat-composer"]), ["target", "desktop", "phone"]);
   assert.deepEqual([report.steps["chat-composer"].desktop.window, report.steps["chat-composer"].phone.window], [{ width: 1512, height: 945 }, { width: 390, height: 844 }]);
@@ -2103,7 +2104,7 @@ test("the daily of a day nobody published is read for the day it names, the cloc
 
 /** The inbox's filter chips and the memory page's tabs and search box, as the pages draw them. */
 const listPage = ({ pressed = "未读 3", selected = "项目 5", query = "探针", search = true, dialog = false } = {}) => node("body", {}, [
-  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
+  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
   node("main", {}, [
     node("div", { attrs: { role: "tablist", "aria-label": "消息视图" } }, [node("button", { attrs: { role: "tab", "aria-selected": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { role: "tab", "aria-selected": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
     node("div", { attrs: { role: "tablist", "aria-label": "记忆" } }, ["关于你", "项目 5", "做法 2", "地图"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
@@ -2131,7 +2132,7 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["link", "/app/nowhere"]), false);
     assert.equal(addressAct(["other"]), false);
   });
-  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["工具", "未读 3", "项目 5"]);
+  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
   assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
   assert.equal(addressStateHolds({ selected: "未读" }, { selected: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);

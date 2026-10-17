@@ -15,7 +15,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as walk from "../../../scripts/ops/ui-walk.mjs";
-import { BASELINE, BEGIN, embeddedBlock, END, PAGE_TEMPLATES, WALK } from "../../../scripts/ops/embed-walk-tables.mjs";
+import { ALL_ERROR_CODES, errorCodeAudience, errorCodeMessage } from "../../../packages/domain/src/errorCodes.mjs";
+import { BASELINE, BEGIN, embeddedBlock, END, operatorSentences, PAGE_TEMPLATES, WALK } from "../../../scripts/ops/embed-walk-tables.mjs";
 
 const {
   applyBaseline, asFinding, baselineDelta, baselineProblems, COVERAGE_RULES, finding, STEP_TARGETS, UNACCEPTABLE_RULES, viewOfSentence, walkSetting, WALK_PROFILES,
@@ -28,10 +29,11 @@ test("the tables the walk carries are the page table and the baseline, byte for 
   const start = text.indexOf(BEGIN);
   const end = text.indexOf(END);
   assert.ok(start > 0 && end > start, "the walk has its embedded-tables block between the markers");
-  const sources = embeddedBlock(await readJson(PAGE_TEMPLATES), await readJson(BASELINE));
+  const sources = embeddedBlock(await readJson(PAGE_TEMPLATES), await readJson(BASELINE), operatorSentences());
   assert.equal(text.slice(start, end + END.length), sources, "run node scripts/ops/embed-walk-tables.mjs");
   assert.deepEqual(walk.PAGE_TEMPLATES, await readJson(PAGE_TEMPLATES));
   assert.deepEqual(walk.WALK_BASELINE, await readJson(BASELINE));
+  assert.deepEqual(walk.OPERATOR_SENTENCES, operatorSentences());
 });
 
 test("the page table names six templates, each view one of them, and a budget row that exists", async () => {
@@ -102,7 +104,7 @@ test("a baseline is valid when each entry names its view, its finding, an owner,
   assert.equal(problem({ view: "files@desktop", rule: "type-pairs", owner: "", until: "2026-12-31", why: "x" }).length, 1, "no owner");
   assert.equal(problem({ view: "files@desktop", rule: "type-pairs", owner: "a", until: "someday", why: "x" }).length, 1, "no day");
   assert.equal(problem({ view: "files@desktop", rule: "type-pairs", owner: "a", until: "2026-12-31", why: "" }).length, 1, "no reason");
-  assert.equal(problem({ view: "files", rule: "type-pairs", owner: "a", until: "2026-12-31", why: "x" }).length, 1, "a view is name@desktop, name@phone, name@* or *");
+  assert.equal(problem({ view: "files desktop", rule: "type-pairs", owner: "a", until: "2026-12-31", why: "x" }).length, 1, "a view is one word: name@desktop, name@phone, name@*, *, or what a finding says");
   assert.equal(problem({ view: "*", owner: "a", until: "2026-12-31", why: "x" }).length, 1, "neither a rule nor a sentence");
   assert.equal(problem({ view: "*", rule: "axe", contains: "x", owner: "a", until: "2026-12-31", why: "x" }).length, 1, "both a rule and a sentence");
   assert.equal(problem({ view: "*", contains: "x", max: 3, owner: "a", until: "2026-12-31", why: "x" }).length, 1, "a number goes with a rule");
@@ -264,5 +266,47 @@ test("a page view is photographed whole when it is up to three windows tall, and
   assert.deepEqual(capturePlan(shape(9450)).tops, [0, 1418, 2836, 4254, 5672, 7090, 8505], "the last slice is the page's end");
   const many = capturePlan(shape(47250));
   assert.deepEqual([many.tops.length, many.truncated, many.tops.at(-1)], [CAPTURE_MAX_SLICES, true, 7 * 1418]);
+});
+
+/** What the nightly candidate check writes (schema 1, the shape its header documents), cut to what the walk reads. */
+const CANDIDATE_CHECK = {
+  schemaVersion: 1, checkedAt: "2026-10-17T03:10:00Z", pin: { dsh: "0.1.7-rc.2", publishedAt: "2026-09-18T00:00:00Z", cordis: "4.0.4" }, distTags: { latest: "0.1.7-rc.2", alpha: "0.2.1-alpha.2" },
+  candidates: [
+    { version: "0.2.1-alpha.2", tags: ["alpha"], lagDays: 9.9, ageDays: 3.1, verdict: "blocked", reasons: ["cordis 4.0.5-alpha.1 differs from the manifest", "2 unclassified wire methods", "the LoopX plugin's peer range excludes it", "6 dsh-client-* peers unsatisfied"] },
+    { version: "0.1.7-rc.2", tags: ["latest"], lagDays: 0, ageDays: 29, verdict: "same-as-pin", reasons: [] },
+  ],
+  pins: [{ id: "dsh-cite", kind: "npm", pinned: "0.3.5", latest: "0.4.2", behind: true, lagDays: 6.5 }, { id: "loopx-cli", pinned: "1.3.1", latest: "1.4.0", behind: true, lagDays: 5.4 }, { id: "openlist", pinned: "4.2.6", latest: "4.2.6", behind: false, lagDays: 0 }],
+  unknown: ["the GitHub rate limit stopped the OpenViking poll"],
+};
+
+test("the walk tells the candidate check in its report and its output when one is named, and never fails on it or on its absence (R19 S8)", async () => {
+  const { candidateCheckSummary, readCandidateCheck } = walk;
+  const told = candidateCheckSummary(CANDIDATE_CHECK);
+  assert.deepEqual(told.lines, [
+    "candidate check (2026-10-17T03:10:00Z): the kernel is pinned at 0.1.7-rc.2; 2 candidate(s)",
+    "  0.2.1-alpha.2 (alpha): blocked, 9.9 days after the pin — cordis 4.0.5-alpha.1 differs from the manifest; 2 unclassified wire methods; the LoopX plugin's peer range excludes it",
+    "  0.1.7-rc.2 (latest): same-as-pin, 0 days after the pin",
+    "  2 other pin(s) behind upstream: dsh-cite 0.3.5 → 0.4.2 (6.5 days), loopx-cli 1.3.1 → 1.4.0 (5.4 days)",
+    "  could not be learned: the GitHub rate limit stopped the OpenViking poll",
+  ]);
+  assert.deepEqual(told.summary.pinsBehind.map((pin) => pin.id), ["dsh-cite", "loopx-cli"]);
+  assert.equal(told.summary.candidates[0].reasons.length, 4, "the report keeps the reasons, the output the first three");
+  // Another schema, a file that is not JSON, and no file at all are each said (or not) without throwing.
+  assert.match(candidateCheckSummary({ schemaVersion: 2 }).lines[0], /not a candidate-check\.json of schema 1/);
+  assert.deepEqual(await readCandidateCheck(undefined), { summary: null, lines: [] });
+  assert.deepEqual(await readCandidateCheck("/nowhere/candidate-check.json"), { summary: null, lines: [] }, "the nightly job's file is not on every host");
+  assert.match((await readCandidateCheck("/x", async () => "not json")).lines[0], /^candidate check: \/x is not JSON/);
+  assert.equal((await readCandidateCheck("/x", async () => JSON.stringify(CANDIDATE_CHECK))).summary.pin, "0.1.7-rc.2");
+});
+
+test("the operator's sentences are the domain's, for the codes written for the operator and for no one else", () => {
+  // A `run` sentence is the subject of its run's own card and inbox line and a `person` sentence is written for the reader: neither is in
+  // the table, and the table says nothing a page of a researcher may say.
+  const table = new Set(walk.OPERATOR_SENTENCES);
+  const said = (audience) => [...ALL_ERROR_CODES].filter((code) => errorCodeAudience(code) === audience).map((code) => errorCodeMessage(code)).filter((sentence) => sentence?.length >= 12);
+  assert.deepEqual(said("person").filter((sentence) => table.has(sentence)), []);
+  assert.deepEqual(said("run").filter((sentence) => table.has(sentence)), []);
+  assert.deepEqual([...table].sort(), [...new Set(said("operator"))].sort());
+  assert.ok(table.size > 100, `${table.size} sentences: the domain's operator codes did not read`);
 });
 

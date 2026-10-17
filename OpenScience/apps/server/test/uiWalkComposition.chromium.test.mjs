@@ -75,7 +75,7 @@ test("a framework page that is right is read as one and has nothing to say", { s
   assert.deepEqual(facts.toolbars.map((entry) => [entry.label, entry.inChrome, entry.controls.pressed]), [["筛选与操作", true, 1]]);
   assert.deepEqual(facts.title.text, "测试页面");
   // The page is where the measure left it.
-  assert.equal(await page.evaluate(() => document.querySelector("main").scrollTop), 0);
+  assert.equal(await page.evaluate(() => globalThis.document.querySelector("main").scrollTop), 0);
 });
 
 test("control after content: a toolbar below the table it filters and a chip group below the chart it switches are named", { skip }, async () => {
@@ -246,7 +246,7 @@ test("the page's scroll area is found, measured and moved: the app scrolls insid
   assert.deepEqual([shape.viewportHeight, shape.clientHeight], [945, 945]);
   assert.ok(shape.scrollHeight > 1900, `the container holds ${shape.scrollHeight} px`);
   assert.deepEqual(await page.evaluate(scrollPage, ["to", 700]), { top: 700 });
-  assert.equal(await page.evaluate(() => document.querySelector("main").scrollTop), 700);
+  assert.equal(await page.evaluate(() => globalThis.document.querySelector("main").scrollTop), 700);
   assert.deepEqual(await page.evaluate(scrollPage, ["to", 0]), { top: 0 });
   // A small scroller inside the page (a table's) is not the page's.
   await page.setContent(framed({ body: `<div style="height:200px;overflow:auto"><div style="height:900px"></div></div>` + section(rows(2)) }));

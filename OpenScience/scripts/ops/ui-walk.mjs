@@ -49,15 +49,14 @@
  * study counts are folded and not cut off, a record that is not there says so and goes back to its list, 关注 is one sentence and one
  * button, the memory page opens on a tab that holds something, a PDF's original opens wide and fit to width, the new-skill drawer
  * names an empty field in place, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
- * account's data or is a measure of taste is a NOTICE: a page more than twelve viewports tall, more rows on a first screen than the
- * page's ceiling, a headline below 520 px on a phone, the title column of a page against the others'. Pages no walk has measured
- * yet report... Nothing here writes: the steps that click only open a
- * menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
+ * account's data or is a measure of taste (more rows on a first screen than the page's ceiling, a headline below 520 px on a phone) is a
+ * finding with a rule and a number, which fails unless the baseline accepts it (R19, below). Nothing here writes: the steps that click
+ * only open a menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
  * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
  * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
  *
- * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added is a
- * NOTICE unless it replaces a failure of the same thing. The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
+ * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added was a
+ * notice until a walk had measured it (since R19 a notice is a finding, below). The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
  * scheduled task is a page (`/app/autopilot/:taskId`, read after the first row is clicked: the layout's hooks, which pane is on, the
  * kernel frame's rectangle against the pane's, no text box or dialog of the page's own), not a drawer with a spend cap in ¥; a document is
  * a page whose original column is not narrower than 560 px, not a drawer; the 核对 column of the evidence matrix is ✓, ⚠ or blank. The first
@@ -73,11 +72,34 @@
  *
  * It also records, without failing on them, small click targets, decorative
  * SVGs without aria-hidden, console errors and other HTTP errors — the things
- * that need a person to judge — and, as a NOTICE, a page that sets its text in
- * more than four font-size × font-weight pairs (design spec chapter 5 rule 1,
- * acceptance row 4). A notice is reported, never failed on (principle 4: a
- * check ships as a notice until its real distribution is known); the per-page
- * counts are in the report so a budget can be set from them.
+ * that need a person to judge. A page that sets its text in more than four
+ * font-size × font-weight pairs (design spec chapter 5 rule 1, acceptance row
+ * 4) is a finding (`type-pairs`) with its count.
+ *
+ * R19 (audit D, the walk that missed the 2026-10-14 pages: C8, §4 S6-S9) made the walk see composition and stopped it passing in silence:
+ *   - FINDINGS HAVE AN EXIT. There is no class of notice. Whatever the walk saw that is not a plain failure is a finding with a rule
+ *     (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `not-observable`, `not-walked`, and the composition rules below) and fails
+ *     unless an entry of `ui-walk-baseline.json` accepts it: a view, the rule up to a number or a literal part of the sentence, an owner, a
+ *     day and a reason. After its day an entry accepts nothing. The report prints the delta (accepted by entry, not accepted, expired, no
+ *     longer needed, can be lowered). The baseline is embedded in this file (`embed-walk-tables.mjs`); `OPEN_SCIENCE_WALK_BASELINE`
+ *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the release walk on the
+ *     owner-view account, the default; many pages hold no data, so a coverage gap — `not-observable`, `not-walked` — may be accepted) or
+ *     `fixture` (the local walk on the data-rich fixture, which accepts none).
+ *     `scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for.
+ *   - A STEP THAT CANNOT RUN FAILS. A step that throws, times out before its target or finds its element absent is a failure naming
+ *     what it did not reach (`STEP_TARGETS`); 18.1's `ReferenceError: drawerMarks is not defined` was a notice for a release. No baseline
+ *     entry accepts it. A test lints every function handed to the browser alone, with `no-undef`: they stand on their own text.
+ *   - COMPOSITION. `measureComposition` reads the framework's markers (PageShell.tsx's table) and `compositionFindings` judges them: a
+ *     control group after the content it controls, a toolbar below the window, more than one tab list / toolbar / view switch, a band
+ *     that is not sticky or does not hold when the page moves, a module page without its steps, a template's slots used against its
+ *     rule, a sentence standing alone (one allowed), a tag that can be pressed, a word that looks like a link, a primary action away
+ *     from the header, a tab or chip counting 0, a long page with no contents, a grid of charts with holes, an empty state with no way
+ *     forward; `familyFindings` compares a module's tabs (steps, band) and a family's title edge. The page table
+ *     (`page-templates.json`) says which template each page is.
+ *   - WHOLE PAGES. Every page view is photographed from its top to its end (one picture up to three windows, slices of a window and a
+ *     half above that, at most eight) as `<view>.jpg` and its make-up is written as `<view>.json`; `report.json` links them.
+ *   - Information that is not a finding (a retried load, what a guarded click refused, the axe line, the candidate check) is `report.info`.
+ *     `OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>` adds the kernel candidate check to it (report only).
  *
  * What it changes on the deployment: a session (it logs in and logs out), and
  * — only when asked for the chat page — the account's default runtime. The
@@ -113,10 +135,12 @@
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
  *   [OPEN_SCIENCE_WALK_CHAT=1] \
  *   [OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0] \
+ *   [OPEN_SCIENCE_WALK_PROFILE=owner|fixture] [OPEN_SCIENCE_WALK_BASELINE=<file>|none] \
+ *   [OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>] \
  *   node scripts/ops/ui-walk.mjs
  *
- * Exit 0 when every assertion holds, 1 when one does not (the report names
- * which), 2 when the walk could not run at all.
+ * Exit 0 when every assertion holds and the baseline accepts every finding, 1 when one does not (the report names which), 2 when the walk
+ * could not run at all (a login that fails, a baseline or a setting that is not valid).
  */
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -130,11 +154,11 @@ import { brotliDecompressSync } from "node:zlib";
  * The embedded tables (written by `scripts/ops/embed-walk-tables.mjs` from `page-templates.json` and `ui-walk-baseline.json`; the walk is
  * the one file the release switch mounts, so what it reads at run time is in it). Placed first because everything below derives from it.
  */
-// BEGIN EMBEDDED WALK TABLES (generated by scripts/ops/embed-walk-tables.mjs from page-templates.json and ui-walk-baseline.json; do not edit by hand)
+// BEGIN EMBEDDED WALK TABLES (generated by scripts/ops/embed-walk-tables.mjs from page-templates.json, ui-walk-baseline.json and the domain's error codes; do not edit by hand)
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the reason in `budgetNote`. `provisional` is the way out of a budget nobody has measured on a live walk: it carries an owner and a release, and the walk fails a provisional entry whose release has passed (`UI_WALK_RELEASE_NOW` in the walk)."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs. `templates` says what each template may hold (`tablist`, `toolbar`, `stepRail`: `allowed`, `none`, `every-tab`) and how many windows tall a page of it may be before it needs contents (`longViewports`; a reading page needs contents from six, anything else contents or a list read a page at a time from twelve)."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
@@ -156,12 +180,12 @@ const WALK_TABLES = {
       {"view":"frontier-hot","route":"/app/frontier?view=hot","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
       {"view":"frontier-daily","route":"/app/frontier?view=daily","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"a published issue with a lead has both its 24px headline link and 16px row links","shapes":3,"rows":true},
       {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":true},
-      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","shapes":3,"rows":false},
+      {"view":"frontier-following","route":"/app/frontier?view=following","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
       {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's field","shapes":3,"rows":true},
       {"view":"frontier-daily-empty","route":"/app/frontier?view=daily&day=2020-01-01","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-record","template":"T1","budget":"frontier","rows":false},
-      {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-record","template":"T5","budget":"frontier","rows":false},
-      {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-record","template":"T1","budget":"frontier","rows":false},
+      {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-record","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
+      {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-record","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-record","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -221,9 +245,150 @@ const WALK_TABLES = {
   },
   "baseline": {
     "version": 1,
-    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, or `name@*`) and one finding: `rule` names a measured rule (`type-pairs`, `tall-page`, `rows-ceiling`, …) and `max` is the largest value accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both)."],
+    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
     "entries": []
-  }
+  },
+  "operatorSentences": [
+    "EviMed 主站账号登录没有启用，请检查登录配置。",
+    "OpenViking 数据卷已经超过约定时间没有新的已校验备份，请查看宿主机的备份定时器。",
+    "OpenViking 数据卷最近一次备份失败了，之前的备份仍在；请查看宿主机备份任务的日志。",
+    "OpenViking 数据卷的备份回执读不懂或不可信（格式、权限或内容不对），请查看宿主机的备份任务。",
+    "OpenViking 没有加载平台的记忆模板目录，原生记忆暂停；请检查模板目录的挂载和权限。",
+    "OpenViking 的编译请求没有经过身份转发程序，知识编译暂停；请检查它的配置和启动入口。",
+    "OpenViking 的编译身份转发程序没有应答，知识编译暂停；请查看该容器。",
+    "OpenViking 的记忆类型白名单和平台的不一致，原生记忆暂停；请重新生成它的配置文件。",
+    "OpenViking 还没有登记平台的账户（新数据卷首次启动后最多约五分钟），稍后会自动再查。",
+    "OpenViking 这一天的模型预算已经用完，新的记忆提取和知识编译会被拒绝；可以调高预算，或等额度恢复。",
+    "OpenViking 里的官方编译技能和本版本固定的内容不一致，知识编译暂停；请核对后重新安装。",
+    "OpenViking 里缺少官方编译技能，自动安装没有成功，知识编译暂停。",
+    "不允许用环境变量提供 Materials Project 的密钥，请改用密钥文件。",
+    "全部自动批准开着，生产环境必须关闭。",
+    "公开网址只能写到域名，不能带路径。",
+    "公开网址必须使用 https。",
+    "内置示例不可用，请联系管理员。",
+    "内置示例的内容无效，请联系管理员。",
+    "初始管理员密码太短，请加长。",
+    "初始管理员密码无效，请换一个。",
+    "初始管理员密码还是示例里的占位值，请换成真正的密码。",
+    "前沿动态使用的内部项目不存在。",
+    "前沿动态使用的运营账号读不到。",
+    "前沿动态模块没有就绪，请查看日志。",
+    "前沿动态没有配置运营账号。",
+    "前沿动态的后台循环没有启动。",
+    "前沿动态的数据库升级没有完成，请查看日志。",
+    "备份保留天数的配置无效。",
+    "备份健康检查的宽限时间配置无效。",
+    "备份存放在本机之外这件事还没有确认。",
+    "备份方式的配置值不被认可。",
+    "备份没有配置加密密钥，请配置后再启用。",
+    "备份状态文件是符号链接，不被允许。",
+    "备份状态文件的内容无效。",
+    "备份状态文件的路径无效。",
+    "备份状态文件读不到，请检查挂载和权限。",
+    "备份目录不存在，请先创建并挂载。",
+    "备份目录必须写成绝对路径。",
+    "备份目录放在了数据目录里，备份会和数据一起丢失，请改到数据目录之外。",
+    "备份目录是符号链接，不被允许，请指向真实目录。",
+    "备份目录的路径不是一个目录。",
+    "备份目录读不到或写不进，请检查挂载和权限。",
+    "备份还没有做过恢复演练，请完成一次并记录。",
+    "安全响应头被关闭了，生产环境必须开启。",
+    "官方编译技能还没有就绪，所以还没有检查编译身份转发程序。",
+    "定时备份在报告异常，请查看备份任务的日志。",
+    "定时备份已经很久没有成功运行，请查看备份任务。",
+    "宿主机命令行开着，生产环境必须关闭。",
+    "平台每周最多发布两张原创分析卡，这张顺延到下一周。",
+    "开发用的登录入口开着，生产环境必须关闭。",
+    "循证 GEO 有一个后台循环停住了，对应的步骤暂停推进；请联系管理员。",
+    "循证 GEO 有一个后台循环在反复出错，对应的步骤暂停推进；请联系管理员。",
+    "循证 GEO 有一个后台循环没有启动，对应的步骤不会自动推进；请联系管理员。",
+    "循证 GEO 没有配置媒体采买服务，下单这一步暂时用不了；其余步骤照常。",
+    "循证 GEO 没有配置社媒采集服务，读不到社媒帖子。",
+    "循证 GEO 的后台循环没有启动，监测和各步骤不会自动推进。",
+    "循证进化的依赖白名单配置有误，该模块暂未启用，其他研究不受影响。",
+    "循证进化的配置有误，该模块暂未启用，其他研究不受影响。",
+    "找不到前端静态文件，页面打不开。",
+    "找不到备份状态文件，备份可能从未运行过。",
+    "持久批准开着，生产环境必须关闭。",
+    "数据库的关系完整性还没有通过校验（有孤立记录或未校验的约束），请先修复。",
+    "数据目录是符号链接，不被允许，请指向真实目录。",
+    "数据目录的路径不是一个目录。",
+    "数据目录读不到或写不进，请检查挂载和权限。",
+    "检查编译身份转发程序时没有读到任务编号，知识编译暂停。",
+    "模型服务的地址配置无效。",
+    "模型网关的内部地址配置无效。",
+    "模型网关的地址配置无效。",
+    "模型网关的签名密钥无效或太短。",
+    "模型网关的运行时模式配置无效。",
+    "模型网关的限额配置无效。",
+    "正在运行的 OpenViking 不是本版本固定的那一版，请按发布清单更换镜像。",
+    "正在运行的版本和发布清单对不上，请重新部署。",
+    "没有任何可以登录的账号，请先创建一个。",
+    "没有找到配置的初始管理员账号，请检查初始账号的设置。",
+    "没有接入 OpenViking 数据卷的备份回执（备份叠加层没有挂载它的状态目录），无法确认原生记忆和知识页有没有备份。",
+    "没有配置 Materials Project 的密钥。",
+    "没有配置 OpenViking 调用模型网关的服务密钥，原生记忆和知识编译暂停；请重新运行 configure:production-state 并重建相关容器。",
+    "没有配置模型服务的密钥。",
+    "没有配置知识源插件，前沿动态没有内容来源。",
+    "没有配置运维指标的访问令牌。",
+    "状态变更不合法，已拒绝。",
+    "生产环境不允许用环境变量设置初始管理员密码，请改用密码文件。",
+    "生产环境必须配置可信代理。",
+    "生产环境的跨域来源必须使用 https。",
+    "生产环境的跨域白名单里不能有本机地址。",
+    "生产环境要求用共享数据库保存状态，现在用的是本机文件，请配置数据库。",
+    "登录方式的配置值不被认可，请检查部署的认证模式。",
+    "直连命令行开着，生产环境必须关闭。",
+    "知识源插件的版本和平台不匹配，前沿动态暂停读取。",
+    "知识源插件的访问令牌文件读不到。",
+    "知识源插件连不上，前沿动态暂时拿不到新内容；已有内容不受影响。",
+    "科研工具的数据要求需要补全。",
+    "要求启用收件箱，但收件箱没有接入。",
+    "要求启用文档解析，但没有配置解析服务的地址。",
+    "要求启用用量账本，但账本没有接入。",
+    "要求启用网盘接入，但没有配置网盘服务或访问令牌。",
+    "计量暂时不可用，本次用量稍后补记。",
+    "记不了 OpenViking 模型调用的账：平台账号或它的内部项目读不到；请查看数据库。",
+    "证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。",
+    "证据中心正在做另一项研究，这次排在它后面，不会丢。",
+    "证据中心的运行情况只有运营账号可以查看和手动运行。",
+    "评测因模型额度限制暂缓，现有进度已保留。",
+    "评测期间不提供原始文件下载，请改用已解析的来源。",
+    "评测的排除规则暂时无法读取，这次请求没有执行，请稍后重试。",
+    "资源限额之间互相矛盾（例如单个文件比整个项目还大），请核对。",
+    "跨域来源必须写成确切的域名，不能带路径或通配符。",
+    "跨域白名单里有不被允许的来源。",
+    "跨域白名单里有无法识别的来源。",
+    "运维指标的访问令牌太短，请加长。",
+    "运维指标的访问令牌无效。",
+    "运维指标的访问令牌还是示例里的占位值，请换掉。",
+    "运行时与控制面的契约版本不一致。",
+    "运行时协议与控制面不一致，请联系管理员升级。",
+    "运行时插座版本与镜像声明不一致。",
+    "运行时沙箱不可用，命令执行已整体关闭。",
+    "运行时的统一组合未装载，已拒绝启动。",
+    "运行时缺少必需组件，已拒绝启动。",
+    "还没有 OpenViking 数据卷的备份回执：宿主机的备份任务可能还没装好或从未运行，请查看备份定时器。",
+    "还没有读到 OpenViking 引擎的状态，稍后会自动再查。",
+    "这个来源在本次评测中被排除，请换用其他来源。",
+    "这个账号名或显示名留给平台出版方，请换一个。",
+    "这个部署没有开启证据中心的每日选题。",
+    "这个部署还没有配置备份。",
+    "这个项目调用平台工具过于频繁，请稍后重试。",
+    "这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。",
+    "这是平台出版方账号，不能删除或导出。",
+    "这条研究记录已变化，请刷新后重试。",
+    "这条裁决正在执行，稍后刷新再答复。",
+    "这条预测登记的内容不完整或格式不对：需要试验登记号、终点，以及估计值或成功概率。",
+    "这项操作仅运维账号可使用。",
+    "这项研究工作暂时无法完成，请稍后重试。",
+    "这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。",
+    "随版本发布的官方编译技能文件和固定的摘要对不上，没有安装；请核对发布内容。",
+    "预测登记模块没有启用，其他研究不受影响。",
+    "额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。",
+    "额度模块没有就绪（数据库或模块没有接入），请查看日志。",
+    "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
+  ]
 };
 // END EMBEDDED WALK TABLES
 
@@ -231,6 +396,10 @@ const WALK_TABLES = {
 export const PAGE_TEMPLATES = WALK_TABLES.pageTemplates;
 /** What the walk accepts for now, with an owner and a deadline for each entry. @type {any} */
 export const WALK_BASELINE = WALK_TABLES.baseline;
+/** The sentences of the error codes written for the operator (their audience in the domain): none of them is on a person's page. @type {string[]} */
+export const OPERATOR_SENTENCES = WALK_TABLES.operatorSentences;
+/** The pages that are the operator's own, where those sentences belong. */
+export const OPERATOR_PAGES = new Set(["ops"]);
 
 /**
  * The pages, by the name the report uses, that have an address of their own (`page-templates.json`, the views with a `route`).
@@ -248,48 +417,25 @@ const LEAKS = [
 ];
 
 /**
- * The back office a page no longer describes (2026-09-23 plan §4, checklist
- * item 8). A closed list of the product's own phrases, not a pattern over
- * open prose: each is something this code base used to print. 「已交付」 is the
- * status label standing on its own; inside a run of Chinese text it is a word of
- * the researcher's content (a lesson titled 「修订已交付报告后重系引证与数值」
- * failed the 2026-10-07 walk of the memory page). 「已核对 41/72」 is the
- * ledger's count; the evidence card's own tag, 「引文已核对 1/2」 (R13, E-12), is
- * a label a reader weighs the card by and is not that.
+ * The shapes of the back office's own labels and runtime vocabulary that no page of a researcher shows (2026-09-23 plan §4, checklist item 8):
+ * a status label on its own (「已交付」, 「未验证」), a count the back office keeps (「核对 41 条」, 「用过 3 次」, 「起生效」), the runtime's
+ * units and names (tokens, tok/s, the cache, a generation, a receipt's engine and method), the router's English error page. Closed
+ * vocabulary — each is something this code base once printed — and not a guess at prose. 「已交付」 is the status label standing on its
+ * own; inside a run of Chinese text it is a word of the researcher's content (a lesson titled 「修订已交付报告后重系引证与数值」 failed the
+ * 2026-10-07 walk of the memory page). 「已核对 41/72」 is the ledger's count; the evidence card's own tag, 「引文已核对 1/2」 (R13, E-12), is a
+ * label a reader weighs the card by and is not that.
+ *
+ * R19 (S4, audit D C8) took the sentences out. Seventy-four entries went: 55 are phrases that `apps/web/src/app/retiredWords.test.ts` bans in
+ * the web source with the reason beside each (the same list in a second place), and 19 are sentences that no source file of the web app or
+ * the domain contains any more (the trust, receipt and sharing sentences of the evidence card, the capsule, the result inspector and the
+ * inventory). What stands in their place is structural: a sentence that stands alone is an `orphan-sentence`, a note must carry an action or a
+ * number (the `Note` type), and a sentence the control plane writes for the operator is matched exactly (`OPERATOR_SENTENCES`, generated
+ * from the domain's error codes by audience, `pageFindings`). A list of phrases cannot catch the next sentence; do not add to this one.
  */
 export const BACK_OFFICE = [
   /(?<!\p{Script=Han})已交付(?!\p{Script=Han})/u, /核对\s*\d+\s*条/, /(?<!引文)已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /(?<![\p{Script=Han}\d])\d+月\d+日\s*起生效/u, /缓存命中/, /tok\/s/,
   /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
-  // The owner's ruling of 2026-10-10 (「全平台都不要呈现给用户看」): a received pack is shown as what comes in, with no trust verdict and no
-  // word of what the automatic scan left out. Specific shapes, because 「没有带上」 alone is a researcher's own sentence.
-  /来源未验证/, /不会带上\s*(?:\d+\s*条|：)/, /\d+\s*条没有带上/, /没有通过自动检查/,
-  // What a shared file or a subscribed zone holds is not assured to the researcher.
-  /只分享文字，不含脚本/, /脚本不会随它分享/, /引用时只引用原始来源/,
-  // The citation checker's own state under an answer: drawn only when it has a list to show.
-  /引文核对中/, /引文暂时无法核对/,
-  // The result inspector: no digest, no image, no list of what the platform did not record or observe about a version.
-  /文件摘要/, /摘要未记录/, /记录不完整：/, /运行镜像/, /未被观察的部分/, /生成过程未被观察/, /没有可读取的核对意见/, /(?:已|未)保存此版本/, /引用均为来源原文片段/, /不由模型生成/,
-  // A run's verdict sentences: no gate sending work back, no chore for the reader, no word of a signing key.
-  /退回修复/, /未经校验的文件不会被当作交付物/, /请自行复核/, /用密钥验回执/,
-  // Why a request was routed as it was is the ledger's, not a sentence for the researcher.
-  /按问题内容交给/, /这个问题不需要交付报告/, /路由判断没有给出结论/,
-  // An evidence card: whether an AI reviewed it, and what the upkeep rounds kept from the last reading.
-  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /没有对上引擎回执/, /平台保存的回执/, /本卡由平台议程完成/, /证明哈希/, /留在平台的内部研究记录/,
-  /审查意见供参考/, /不代表实证验证/, /旧意见保留供参考/, /表中每个数都是这个研究的结果/, /平台不自动选定方案/,
-  /模型推断\s*\d+/, /你已确认\s*\d+/, /数据字典所述/, /确认以上推断/,
-  /导读由模型根据原文写成/, /引用前请阅读原文/,
-  // The model-only notes and the English binding sentence must never be a line of a page; the old partial-text finding of an upkeep round and a
-  // generic 「review not done」 announcement are the card pipeline's.
-  /不是操作指令/, /source support remains separately assessed/, /仅使用该来源的部分已保存正文/, /尚未完成复核/,
-  /证据卡是 EviMed 对来源的整理/, /请引用它列出的原始来源/, /不要引用这张卡/, /撤回的卡片保留这一页/, /不为它们背书/, /是平台还没核对这一项/, /三项都未核实/, /(?:未做|未安排)独立复核/,
-  /AI 已评议/, /AI 待评议/, /当前内容(?:已完成 AI 评议|待重新评议)/, /沿用上次保留内容/, /上次成功读取于/, /本轮(?:未能重新读取|尚未核查)/, /部分来源(?:本轮尚未完成复核|待复核)/,
-  // 虚拟临床研究: who set a value, who drafted a pack or wrote a record, and whether a card was countersigned are not marks on the
-  // value, the card or the cover. 「AI 设定」 stands on its own as the chip did; inside a sentence it is the headline's or the nag's.
-  /(?<![\p{Script=Han}\w])AI 设定(?![\p{Script=Han}\w])/u, /由 AI 设定/, /去复核/, /复核后有变更/, /AI 草拟/, /AI 写入/, /AI 最小版本/,
-  /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/,
-  // The skills and tools pages: no digest row, no verification state of an import, no trust sentence about a package, a method or
-  // a tool's result — not even for assistive technology, which the walk reads too.
-  /尚未完成原生验证/, /包摘要/, /按未验证的方法对待/, /需再对照最新的官方来源/, /不能证明真实可运行/, /无法确认能否运行/, /没有统计实际运行的情况/, /实际运行的情况暂时读不到/, /^未验证$/m,
+  /引擎\s+\S+\s*·\s*方法\s+\S+\s*·\s*回执/, /\S+\s*·\s*\S+@\S+\s*·\s*回执/, /模型推断\s*\d+/, /你已确认\s*\d+/, /(?:临床|统计)复核[：:]?\s*(?:未复核|已复核（)/, /^未验证$/,
 ];
 
 /**
@@ -340,7 +486,7 @@ export const SECTION_SHAPES_BY_PAGE = Object.fromEntries(PAGE_TEMPLATES.views.fi
 
 /**
  * The pages whose lists are clicked: the first row of each list must show something where the reader is looking (DESIGN.md 「页面结构」
- * rule 6) — the `rows` of the page table. Not 工具 or the study's own tabs: a click on a card there writes, and their rows are results.
+ * rule 6) — the `rows` of the page table. Not 科研工具 or the study's own tabs: a click on a card there writes, and their rows are results.
  */
 export const ROW_CLICK_PAGES = new Set(PAGE_TEMPLATES.views.filter((/** @type {any} */ view) => view.rows).map((/** @type {any} */ view) => view.view));
 /** The lists of one page the walk clicks at most; a skills page has six groups, and the first row of each is enough to prove the pattern. */
@@ -597,7 +743,7 @@ export function baselineProblems(baseline) {
   baseline.entries.forEach((/** @type {any} */ entry, /** @type {number} */ index) => {
     const at = `entry ${index + 1}${typeof entry?.view === "string" ? ` (${entry.view})` : ""}`;
     if (!entry || typeof entry !== "object") { problems.push(`${at} is not an object`); return; }
-    if (typeof entry.view !== "string" || !(entry.view === "*" || /^[^@\s]+@(?:\*|desktop|phone|\d+)$/.test(entry.view))) problems.push(`${at}: \`view\` is \`*\`, \`<name>@*\`, \`<name>@desktop\` or \`<name>@phone\``);
+    if (typeof entry.view !== "string" || !/^\S+$/.test(entry.view)) problems.push(`${at}: \`view\` is \`*\`, \`<name>@*\`, \`<name>@desktop\`, \`<name>@phone\` or the name a finding gives`);
     if (typeof entry.owner !== "string" || !entry.owner.trim()) problems.push(`${at}: no \`owner\``);
     if (typeof entry.why !== "string" || !entry.why.trim()) problems.push(`${at}: no \`why\``);
     if (typeof entry.until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.until) || Number.isNaN(Date.parse(entry.until))) problems.push(`${at}: \`until\` is a date (YYYY-MM-DD)`);
@@ -707,6 +853,7 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
   if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
   if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
+  if (measured.operatorSentenceHits?.length && !OPERATOR_PAGES.has(key)) failures.push(`${current}: a sentence written for the operator is on a person's page: ${measured.operatorSentenceHits.map((sentence) => `“${sentence}”`).join(", ")}`);
   if (measured.retiredNameHits?.length) failures.push(`${current}: a retired module name on the page: ${measured.retiredNameHits.join(", ")}`);
   if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
   if (!measured.title || measured.title.trim() === "EviMed") failures.push(`${current}: the page has no title of its own`);
@@ -2287,7 +2434,7 @@ function required(name) {
  * (`page.evaluate`), so it reads nothing from this module; exported so a test
  * can run it over a page it describes.
  */
-export function measure([leakSources, backOfficeSources, retiredSources = []]) {
+export function measure([leakSources, backOfficeSources, retiredSources = [], operatorSentences = []]) {
   const leaks = leakSources.map(([source, flags]) => new RegExp(source, flags));
   const backOffice = backOfficeSources.map(([source, flags]) => new RegExp(source, flags));
   const retired = retiredSources.map(([source, flags]) => new RegExp(source, flags));
@@ -2358,7 +2505,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
       return around ? `text+${Math.round(around)}` : "text";
     }
     // A card whose CSS sets a minimum height and lets its text grow it past
-    // that is one kind at every height its text gives it: the tools of 工具
+    // that is one kind at every height its text gives it: the tools of 科研工具
     // (`min-h-32`) drew 136, 162 and 182 px for descriptions of three lengths
     // and failed the walk as three kinds (2026-10-06). At its minimum it is
     // measured like any other control.
@@ -2458,6 +2605,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = []]) {
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
     backOfficeHits: backOffice.map((re) => unquoted.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
+    operatorSentenceHits: operatorSentences.filter((sentence) => unquoted.includes(sentence)).map((sentence) => sentence.slice(0, 60)),
     retiredNameHits: retired.map((re) => everything.match(re)?.[0]?.slice(0, 60)).filter(Boolean),
     headerPrimaryActions,
     sectionShapes,
@@ -3033,7 +3181,7 @@ async function main() {
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
-            RETIRED_NAMES.map((re) => [re.source, re.flags])]);
+            RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
@@ -3183,6 +3331,9 @@ async function main() {
   report.baseline = { source: setting.baselineSource, profile: setting.profile, today: setting.today, accepted: decided.accepted.length, unaccepted: decided.unaccepted.length,
     unused: decided.unused.map(describeEntry), expired: decided.expired.map(describeEntry), lowerable: decided.lowerable.map(({ entry, measured }) => ({ ...describeEntry(entry), measured })) };
   report.runtimeStartsRefused = Object.values(runtimeStartsRefused).reduce((sum, count) => sum + count, 0);
+  const candidate = await readCandidateCheck(process.env.OPEN_SCIENCE_WALK_CANDIDATE_CHECK);
+  if (candidate.summary) report.candidateCheck = candidate.summary;
+  report.info.push(...candidate.lines);
   await writeFile(path.join(out, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   for (const failure of failures) console.log(`FAIL ${failure}`);
   for (const line of unaccepted) console.log(`FAIL (not accepted by the baseline) ${line}`);
@@ -3191,6 +3342,51 @@ async function main() {
   console.log(`${Object.keys(report.pages).length} page views walked, ${report.failures.length} failure(s) (${failures.length} outright, ${unaccepted.length} findings not accepted), `
     + `${decided.accepted.length} finding(s) accepted by the baseline, ${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return report.failures.length ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------- R19: the upstream candidate check (S8) */
+
+/**
+ * The kernel's candidate check (`scripts/ops/kernel-candidate-check.mjs`, schema 1), told for the report: how far behind upstream the pin is,
+ * what moving it would touch, and the other pins that have moved. Report only, as the check is: nothing here fails a walk. The nightly job
+ * uploads `candidate-check.json`; a deployment that keeps a copy beside the walk names it with `OPEN_SCIENCE_WALK_CANDIDATE_CHECK`.
+ * @param {any} check what the file holds
+ * @returns {{ summary: any, lines: string[] }}
+ */
+export function candidateCheckSummary(check) {
+  if (!check || check.schemaVersion !== 1 || !Array.isArray(check.candidates)) return { summary: null, lines: ["candidate check: the file is not a candidate-check.json of schema 1, so it was not read"] };
+  const candidates = check.candidates.map((/** @type {any} */ entry) => ({
+    version: String(entry.version), tags: entry.tags ?? [], lagDays: entry.lagDays ?? null, ageDays: entry.ageDays ?? null, verdict: entry.verdict ?? null, reasons: (entry.reasons ?? []).slice(0, 6),
+  }));
+  const behind = (check.pins ?? []).filter((/** @type {any} */ pin) => pin.behind).map((/** @type {any} */ pin) => ({ id: pin.id, pinned: pin.pinned, latest: pin.latest, lagDays: pin.lagDays ?? null }));
+  const summary = { checkedAt: check.checkedAt ?? null, pin: check.pin?.dsh ?? null, candidates, pinsBehind: behind, unknown: (check.unknown ?? []).slice(0, 10) };
+  const lines = [`candidate check (${summary.checkedAt ?? "undated"}): the kernel is pinned at ${summary.pin ?? "an unknown version"}; ${candidates.length === 0 ? "no newer candidate" : `${candidates.length} candidate(s)`}`];
+  for (const entry of candidates) lines.push(`  ${entry.version}${entry.tags.length ? ` (${entry.tags.join("/")})` : ""}: ${entry.verdict ?? "no verdict"}${entry.lagDays !== null ? `, ${entry.lagDays} days after the pin` : ""}${entry.reasons.length ? ` — ${entry.reasons.slice(0, 3).join("; ")}` : ""}`);
+  if (behind.length) lines.push(`  ${behind.length} other pin(s) behind upstream: ${behind.slice(0, 5).map((pin) => `${pin.id} ${pin.pinned} → ${pin.latest}${pin.lagDays !== null ? ` (${pin.lagDays} days)` : ""}`).join(", ")}${behind.length > 5 ? ", …" : ""}`);
+  if (summary.unknown.length) lines.push(`  could not be learned: ${summary.unknown.slice(0, 3).join("; ")}`);
+  return { summary, lines };
+}
+
+/**
+ * The candidate check named by `OPEN_SCIENCE_WALK_CANDIDATE_CHECK`, if there is one: nothing when the variable is not set or the file is
+ * not there (the check is the nightly job's, and a walk is run without it), a line saying so when the file is there and is not what it should be.
+ * @param {string | undefined} file @param {(file: string) => Promise<string>} [read]
+ * @returns {Promise<{ summary: any, lines: string[] }>}
+ */
+export async function readCandidateCheck(file, read = (name) => readFile(name, "utf8")) {
+  const named = String(file ?? "").trim();
+  if (!named) return { summary: null, lines: [] };
+  /** @type {string} */ let text;
+  try {
+    text = await read(named);
+  } catch (error) {
+    return /** @type {any} */ (error)?.code === "ENOENT" ? { summary: null, lines: [] } : { summary: null, lines: [`candidate check: ${named} could not be read (${String(/** @type {any} */ (error)?.code ?? error).slice(0, 40)})`] };
+  }
+  try {
+    return candidateCheckSummary(JSON.parse(text));
+  } catch {
+    return { summary: null, lines: [`candidate check: ${named} is not JSON, so it was not read`] };
+  }
 }
 
 /** A baseline entry as the report names it. @param {any} entry */
@@ -3757,7 +3953,7 @@ export function composerProbe([options] = [{}]) {
  * a conversation that runs a tool draws exactly one chip in the toolbar and none in the dock; a researcher sees neither the session
  * statistics nor the context ring; at 390 px the toolbar's row is one line and the page does not scroll sideways. Every verdict is a
  * NOTICE (new in R13). Each says "not observable" and why when what it looks at is not there: the walk's conversation runs no tool (a
- * tool is bound by the 工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
+ * tool is bound by the 科研工具 page, whose cards write), may be the blank conversation, and may belong to an operator.
  * @param {"desktop" | "phone"} viewportName @param {any} r what `composerProbe` returned
  * @returns {{ failures: string[], notices: string[] }}
  */
@@ -3772,7 +3968,7 @@ export function composerFindings(viewportName, r) {
   if (r.hero) notices.push(`${current}: not observable: the conversation is the blank one, whose composer is centred with no dock under it, so the room under it was not judged`);
   else if (r.gapLowest === null) notices.push(`${current}: not observable: the composer holds no control, so the room under it was not judged`);
   else if (r.gapLowest < COMPOSER_BOTTOM_PX) notices.push(`${current}: the lowest control of the composer is ${r.gapLowest} px above the bottom of the window (at least ${COMPOSER_BOTTOM_PX})`);
-  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 工具, whose cards write)`);
+  if (r.chips.total === 0) notices.push(`${current}: not observable: the conversation runs no tool, so there is no chip to count (a tool is bound from 科研工具, whose cards write)`);
   else {
     if (r.chips.bar !== 1) notices.push(`${current}: ${r.chips.bar} tool chip(s) are drawn in the toolbar (exactly one)`);
     if (r.chips.inTools !== r.chips.bar) notices.push(`${current}: ${r.chips.bar} chip(s) say they are in the toolbar and ${r.chips.inTools} are inside it`);
