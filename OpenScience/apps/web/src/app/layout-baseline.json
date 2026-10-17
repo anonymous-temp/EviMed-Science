@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 102,
+    "total": 99,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -10,11 +10,9 @@
       "app/routes/OpsPage.tsx": 1,
       "app/routes/RunFilePage.tsx": 1,
       "app/routes/SimulatedWalletPage.tsx": 1,
-      "components/autopilot/MaterialPicker.tsx": 1,
       "components/autopilot/TaskForm.tsx": 1,
       "components/capsule/CapsuleSharePanel.tsx": 3,
       "components/frontier/EvidenceChallenge.tsx": 1,
-      "components/frontier/EvidenceCommunityCards.tsx": 1,
       "components/frontier/EvidenceEditors.tsx": 1,
       "components/frontier/EvidenceVisibility.tsx": 1,
       "components/frontier/FrontierFeed.tsx": 1,
@@ -55,19 +53,11 @@
     }
   },
   "handwrittenLists": {
-    "total": 42,
+    "total": 31,
     "files": {
       "app/routes/CapsuleTransferPanel.tsx": 1,
-      "app/routes/EvidenceAuthorPage.tsx": 2,
-      "app/routes/EvidenceZonePage.tsx": 2,
-      "app/routes/EvidenceZonesPage.tsx": 1,
       "app/routes/GeoAnswerPage.tsx": 2,
       "components/capsule/CapsuleSharePanel.tsx": 2,
-      "components/frontier/EvidenceChangeLog.tsx": 1,
-      "components/frontier/EvidenceCommunityCards.tsx": 1,
-      "components/frontier/EvidenceDiscussion.tsx": 1,
-      "components/frontier/FollowedEvidenceZones.tsx": 2,
-      "components/frontier/TopicRequests.tsx": 1,
       "components/geo/MembersDialog.tsx": 1,
       "components/geo/tabs/JourneyTab.tsx": 1,
       "components/geo/tabs/QuestionsTab.tsx": 1,

@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { EVIDENCE_CALCULATION_LABEL_ZH } from "@evimed/domain";
+import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
 import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
@@ -140,15 +141,11 @@ export function SourceDetail({ source, citedBy, onOpenClaim }: {
       {citedBy.length > 0 && (
         <section aria-label="依据这个来源的结论">
           <h3 className="mb-1 text-ui font-semibold text-text">依据这个来源的结论 · {citedBy.length}</h3>
-          <ul className="divide-y divide-faint">
+          <List divided label="依据这个来源的结论">
             {citedBy.map((entry) => (
-              <li key={entry.key}>
-                <button type="button" onClick={() => onOpenClaim(entry.key)} className="w-full py-2 text-left text-ui text-text hover:text-link">
-                  <span className="line-clamp-2">{entry.text}</span>
-                </button>
-              </li>
+              <ListRow key={entry.key} title={<span className="line-clamp-2">{entry.text}</span>} onOpen={() => onOpenClaim(entry.key)} />
             ))}
-          </ul>
+          </List>
         </section>
       )}
     </div>

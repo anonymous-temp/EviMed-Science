@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag, type TagTone } from "@/components/ui/Tag";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { FrontierSkeleton } from "./FrontierSkeleton";
@@ -76,19 +77,22 @@ export function EvidenceChangeLog({ zoneId, cardId, pageSize = 20 }: { zoneId: s
   if (!entries.length) return <EmptyState title="还没有变更记录" description="更正、更新和撤回都会记在这里，只增不改。" />;
   return (
     <section aria-label="变更记录" className="max-w-measure-body">
-      <ol className="divide-y divide-border">
+      <List divided label="变更记录">
         {entries.map((entry) => (
-          <li key={entry.id} className="space-y-1 py-3">
-            <div className="flex flex-wrap items-center gap-2 text-caption text-muted">
-              <time dateTime={entry.occurredAt}>{day(entry.occurredAt)}</time>
-              <Tag tone={tone(entry.category)}>{entry.categoryLabel}</Tag>
-              <span>由{entry.triggerLabel}触发</span>
-              {!cardId && entry.cardTitle && <span className="truncate">{entry.cardTitle}</span>}
-            </div>
-            <p className="text-ui text-text">{entry.summary}</p>
-          </li>
+          <ListRow
+            key={entry.id}
+            title={<span className="font-normal">{entry.summary}</span>}
+            meta={(
+              <span className="flex flex-wrap items-center gap-2">
+                <time dateTime={entry.occurredAt}>{day(entry.occurredAt)}</time>
+                <Tag tone={tone(entry.category)}>{entry.categoryLabel}</Tag>
+                <span>由{entry.triggerLabel}触发</span>
+                {!cardId && entry.cardTitle && <span className="truncate">{entry.cardTitle}</span>}
+              </span>
+            )}
+          />
         ))}
-      </ol>
+      </List>
       {error && (
         <p role="alert" className="mt-3 text-ui text-error">
           {error}

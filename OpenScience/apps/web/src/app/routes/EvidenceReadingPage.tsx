@@ -7,6 +7,7 @@ import {
 import { CardEditor } from "@/components/frontier/EvidenceEditors";
 import { Textarea } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
+// eslint-disable-next-line no-restricted-imports -- the score is a field of the review form, not a filter of a list: a form has no toolbar.
 import { FilterSelect } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";

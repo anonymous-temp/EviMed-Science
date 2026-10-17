@@ -111,6 +111,9 @@ describe("the simulated wallet's two pages", () => {
   it.each(["membership", "refunds"])("has no %s page: an address from before is not found, and asks the deployment nothing", async (name) => {
     open(`/app/account/simulated/${name}`);
     expect(await screen.findByText("页面不存在")).toBeInTheDocument();
+    // Old mail linked to these: the way on is the 额度 they were about, not the front door (R19, audit D C4).
+    expect(screen.getByRole("link", { name: "回到额度" })).toHaveAttribute("href", "/app/account?tab=usage");
+    expect(screen.queryByRole("link", { name: "返回首页" })).not.toBeInTheDocument();
     expect(screen.queryByText(/只是演示/)).not.toBeInTheDocument();
     await settle();
     expect(mocks.allowance).not.toHaveBeenCalled();

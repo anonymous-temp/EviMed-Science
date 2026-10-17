@@ -20,6 +20,12 @@ describe("NotFound", () => {
     expect(container.textContent).toBe("页面不存在返回首页");
   });
 
+  it("sends an address that used to be something to what it was for, in place of the front door", () => {
+    render(<MemoryRouter><NotFound lead={{ to: "/app/account?tab=usage", label: "回到额度" }} /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "回到额度" })).toHaveAttribute("href", "/app/account?tab=usage");
+    expect(screen.queryByRole("link", { name: "返回首页" })).not.toBeInTheDocument();
+  });
+
   it("catches unknown paths inside the workbench and outside it", () => {
     const shell = routes.find((route) => route.path === "/app");
     // The pages sit under one pathless route, whose error element keeps the

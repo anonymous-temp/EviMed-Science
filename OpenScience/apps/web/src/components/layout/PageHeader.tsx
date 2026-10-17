@@ -45,13 +45,16 @@ export function PageHeader({
   /** The page's scope after the title: a `ScopeMenu` (whose things the page shows). */
   scope?: ReactNode;
   titleVariant?: "page" | "document";
-  /** The browser tab's name, when it should differ from the heading. */
-  documentTitle?: string;
+  /**
+   * The browser tab's name, when it should differ from the heading; `false` when the page names its tab elsewhere (a split view, whose
+   * list column and open record each draw a header, names its tab once, from the record that is open).
+   */
+  documentTitle?: string | false;
   className?: string;
 }) {
   return (
     <header data-page-header="" className={cn("flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2", className)}>
-      <PageTitle page={documentTitle ?? title} />
+      {documentTitle !== false && <PageTitle page={documentTitle ?? title} />}
       <div className="flex min-w-0 flex-1 basis-48 items-baseline gap-2">
         <h1 className={cn(titleVariant === "document" ? DOCUMENT_TITLE_CLASS : PAGE_TITLE_CLASS, "min-w-0 line-clamp-2")}>{title}</h1>
         {meta && <span className="shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}

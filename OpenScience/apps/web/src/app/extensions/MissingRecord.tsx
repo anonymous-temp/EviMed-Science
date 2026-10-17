@@ -1,4 +1,6 @@
+import { SearchX } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { StateScreen } from "@/components/ui/StateScreen";
 import { WebApiError } from "@/lib/apiClient";
 
 /** The record a drawer was asked to open does not exist: removed since a link to it was made, or never there. */
@@ -16,14 +18,18 @@ export function orMissing<T>(read: Promise<T>): Promise<T> {
 }
 
 /**
- * What a drawer shows for a record that is not there: one sentence and the way back to the list. Not an error line — there
+ * What a drawer shows for a record that is not there: the product's one screen for a page that cannot be the page — an icon, one
+ * sentence and the way back to the list (R19, audit D C5; it was a left-aligned sentence with a button). Not an error line — there
  * is nothing to retry, and 刷新 would repeat a read that cannot succeed.
  */
 export function MissingRecord({ noun, list, onBack }: { noun: "插件" | "技能"; list: string; onBack: () => void }) {
   return (
-    <div role="status" className="flex flex-col items-start gap-4">
-      <p className="text-ui text-text-2">{`找不到这个${noun}，它可能已被移除。`}</p>
-      <Button variant="secondary" onClick={onBack}>{list}</Button>
-    </div>
+    <StateScreen
+      icon={SearchX}
+      role="status"
+      title={`找不到这个${noun}，它可能已被移除。`}
+      action={<Button variant="secondary" onClick={onBack}>{list}</Button>}
+      className="h-auto min-h-64"
+    />
   );
 }
