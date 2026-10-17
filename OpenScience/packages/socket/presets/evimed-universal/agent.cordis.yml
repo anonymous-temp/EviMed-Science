@@ -42,7 +42,7 @@
 # the method that clause names is a skill the model loads when the question is
 # medical (`runtime/skills/evimed/open-domain-answer`), not this sentence.
 #
-# No working directory here (2026-10-17, 0.2.1-rc.2): the kernel took `{{cwd}}`
+# No working directory here (2026-10-17, DSH 0.2.1): the kernel took `{{cwd}}`
 # out of the prompt variables (registered: `provider`, `model`), and a section
 # naming it fails every request of the session before the model is asked. The
 # directory is now the working-directory service's, which states it in the
