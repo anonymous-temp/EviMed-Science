@@ -36,8 +36,8 @@ export function ProjectOutputsList({ items, failed, query, onRetry }: {
   const shown = items.filter((output) => outputMatches(output, query));
   if (shown.length === 0) {
     return query.trim()
-      ? <EmptyState icon={Search} title="没有找到相关产出" />
-      : <EmptyState icon={FileText} title="这个项目的对话还没有产出文件。" />;
+      ? <EmptyState icon={Search} title="没有找到相关产出" reason="换个关键词试试，或清空搜索框看全部。" />
+      : <EmptyState icon={FileText} title="这个项目的对话还没有产出文件。" reason="让助手写文档、做表格或画图，做出的文件会列在这里。" />;
   }
   return (
     <List label="对话产出">

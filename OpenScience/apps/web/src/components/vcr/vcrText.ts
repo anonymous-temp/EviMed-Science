@@ -280,10 +280,10 @@ export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freez
 });
 
 /**
- * What the matching tab says before anything has been judged, for a study that has only public material: there is nobody to match yet,
- * and what 让 AI 做 does instead is structure the criteria (the programme's step 7 at T0). Above T0 the step's own sentence stands.
+ * What the matching step gives a study that has only public material (T0), as the second half of its recipe (「用 … 得到 …」): there is
+ * nobody to match yet, and what the step does instead is structure the criteria. Above T0 the step's own `VCR_STEP_GIVES` stands.
  */
-export const VCR_MATCHING_EMPTY_T0 = "这项研究现在只有公开资料（T0），没有可以匹配的真实患者。让 AI 做会把入排条件整理成逐条可判定的标准；接入你的数据（T1 及以上）后才能逐个匹配、转诊和随访。";
+export const VCR_MATCHING_EMPTY_T0 = "逐条可判定的入排标准；接入你的数据（T1 及以上）后，再逐个匹配、转诊和随访";
 
 /**
  * 给患者找试验: what the direction says before it has anything to list. One sentence each, and the one button the page has (为该患者找试验)

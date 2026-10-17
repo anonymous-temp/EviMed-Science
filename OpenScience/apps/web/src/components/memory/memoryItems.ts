@@ -1,3 +1,4 @@
+import { FolderOpen, Radar, UsersRound } from "lucide-react";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
@@ -6,6 +7,7 @@ import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { projectLabels, type LabelledProject } from "@/lib/projectNames";
+import type { ScopeGroup } from "@/components/ui/ScopeMenu";
 import { methodTitle, type WebMethod } from "@/lib/methodsClient";
 import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
 
@@ -137,6 +139,35 @@ export function projectChoices(
     .sort((left, right) => order.indexOf(left.kind) - order.indexOf(right.kind));
   const orphans = facts.some((fact) => fact.group === "project" && (fact.projectId === null || !known.has(fact.projectId)));
   return orphans ? [...listed, { id: OTHER_PROJECT, name: "其他", kind: "own" }] : listed;
+}
+
+/** The heading and mark of each group of the project menu: the researcher's own projects need neither a heading nor a new mark. */
+const SCOPE_GROUPS = {
+  own: { heading: undefined, icon: FolderOpen },
+  vcr: { heading: "虚拟临床研究", icon: UsersRound },
+  geo: { heading: "循证 GEO", icon: Radar },
+} as const;
+
+/**
+ * The project choices as the header's scope menu groups them (`ScopeMenu`): the researcher's own projects first, then each module's
+ * own group under its name, as the sidebar and the knowledge base list them — so two studies with one name are never mistaken for the
+ * researcher's own projects. The choice that holds the facts naming no project the account still has is an ordinary entry, 「其他」.
+ */
+export function projectScopeGroups(choices: readonly ProjectChoice[]): ScopeGroup[] {
+  const groups: ScopeGroup[] = [];
+  let kind: ProjectKind | null = null;
+  for (const choice of choices) {
+    const { heading, icon } = SCOPE_GROUPS[choice.kind];
+    const entry = { id: choice.id ?? OTHER_PROJECT, label: choice.name, icon };
+    if (choice.kind === kind && groups.length > 0) {
+      const last = groups[groups.length - 1]!;
+      groups[groups.length - 1] = { ...last, choices: [...last.choices, entry] };
+    } else {
+      groups.push({ heading, choices: [entry] });
+      kind = choice.kind;
+    }
+  }
+  return groups;
 }
 
 /** The facts of the project a dropdown names; the ones that name none the account has under 「其他」. */

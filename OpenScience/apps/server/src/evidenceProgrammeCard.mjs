@@ -255,6 +255,10 @@ export function buildProgrammeCard(input) {
   const leadClaim = lead ? claims.find((made) => made.claimId === lead.claim.claimId) : null;
   const answer = leadClaim ? labelled(leadClaim)
     : `这张卡汇总了 ${claims.length} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。`;
+  // The card's summary is what every list shows in place of the card, so it names what is in THIS card. With no headline claim the
+  // answer is the neutral sentence above, which is the same words on every such card (nineteen identical rows in one zone, R19 audit
+  // D C3): the list line is the first conclusion the card holds, which is the one thing that differs from card to card.
+  const summary = leadClaim ? answer : labelled(claims[0]);
 
   const lines = claims.map((made, position) => {
     const numbers = (made.sourceIndexes ?? []).map((index) => `[${index}]`).join("");
@@ -278,7 +282,7 @@ export function buildProgrammeCard(input) {
   const card = {
     title,
     subtype: "academic",
-    summary: answer.slice(0, 600),
+    summary: summary.slice(0, 600),
     body,
     sources: sourcesOut,
     limitations: [

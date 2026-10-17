@@ -2,9 +2,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { card, zone } from "@/components/frontier/__fixtures__/evidenceCards";
+import { card, programmeCard, zone } from "@/components/frontier/__fixtures__/evidenceCards";
 import { WebApiError } from "@/lib/apiClient";
 import { EvidenceReadingPage } from "./EvidenceReadingPage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   fetchEvidenceZone: vi.fn(), fetchZoneEvidence: vi.fn(), fetchEvidenceCardLinks: vi.fn(), continueResearchFromCard: vi.fn(),
@@ -49,19 +50,26 @@ describe("reading an evidence card", () => {
     expect(document.title).toContain("试验药能预防卒中吗");
   });
 
-  it("opens with one row — the producer, the labels, the day — then the answer, the two ways to go on, and the claims with their marks", async () => {
+  it("opens with one line — the producer, the ✓ n/m — then the answer, the two ways to go on, and the claims with their marks", async () => {
     mount();
     const header = await screen.findByTestId("evidence-card-header");
-    expect(header).toHaveTextContent("出品方 李研究 · 用户 · 与所涉产品无利益关系");
-    expect(screen.getByText("引文已核对 1/2")).toBeInTheDocument();
+    expect(header).toHaveTextContent("李研究");
+    expect(screen.getByRole("button", { name: "引文已核对 1/2，查看证据要点" })).toHaveTextContent("✓1/2");
     // The producer line is the first thing in the article.
     expect(header.closest("article")?.querySelector("header")?.firstElementChild).toBe(header);
-    expect(screen.getByRole("radio", { name: "临床版" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "临床版" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("table", { name: "结局总结表" })).toBeInTheDocument();
     expect(screen.getByLabelText("引文已核对")).toBeInTheDocument();
     expect(screen.getByLabelText("未核对上")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("radio", { name: "公众版" }));
+    await userEvent.click(screen.getByRole("tab", { name: "公众版" }));
     expect(screen.getByText("每 1000 人里")).toBeInTheDocument();
+  });
+
+  it("is titled in the document's serif, with the action on the title's row", async () => {
+    mount();
+    const title = await screen.findByRole("heading", { level: 1, name: "试验药能预防卒中吗" });
+    expect(title).toHaveClass("text-doc-title");
+    expect(title.closest("[data-page-header]")).toContainElement(screen.getByRole("button", { name: "问这条证据" }));
   });
 
   it("keeps the two research actions together: 问这条证据 in the header, 用这张卡继续研究 directly under the answer, each with its hover line", async () => {
@@ -69,7 +77,7 @@ describe("reading an evidence card", () => {
     const ask = await screen.findByRole("button", { name: "问这条证据" });
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     expect(header).toContainElement(ask);
-    const answer = screen.getByText("核心回答").closest("section")!;
+    const answer = screen.getByRole("heading", { name: "核心回答" }).closest("section")!;
     const row = answer.nextElementSibling!;
     const next = within(row as HTMLElement).getByRole("button", { name: "用这张卡继续研究" });
     expect(next).toBeInTheDocument();
@@ -84,11 +92,11 @@ describe("reading an evidence card", () => {
       revisions: [{ revision: 2, recordedAt: "2026-10-04T00:00:00Z", title: "新版", sourceFingerprint: "b", reviewStatus: null }, { revision: 1, recordedAt: "2026-10-01T00:00:00Z", title: "旧版", sourceFingerprint: "a", reviewStatus: null }] });
     const { container } = mount();
     await screen.findByTestId("evidence-card-header");
-    const folds = Array.from(container.querySelectorAll("details"));
+    const folds = Array.from(container.querySelectorAll("details")).filter((fold) => !fold.closest("[data-outline]"));
     expect(folds.map((fold) => fold.querySelector("summary")?.textContent)).toEqual(["编写与核查", "评议与讨论（2）", "更新记录"]);
     expect(folds.every((fold) => !fold.open)).toBe(true);
     const [authoring, discussion, record] = folds;
-    expect(within(authoring).getByText("AI 编写 · EviMed 证据 AI")).toBeInTheDocument();
+    expect(within(authoring).getByText("编写").nextElementSibling).toHaveTextContent("AI · EviMed 证据 AI");
     for (const inside of [screen.getByText("有一个问题"), screen.getByText("引文对"), screen.getByLabelText("参与讨论"), screen.getByLabelText("评议意见")]) expect(discussion).toContainElement(inside);
     expect(record).toContainElement(screen.getByText("新版"));
     // Everything the card says comes before the first fold that is not about the card itself: after 来源与引用 come only the card's links and the folds.
@@ -174,5 +182,31 @@ describe("reading an evidence card", () => {
     mount("?edit=1");
     await screen.findByTestId("evidence-card-header");
     expect(screen.queryByLabelText("证据标题")).not.toBeInTheDocument();
+  });
+});
+
+// R19 (plan S10): the page is put together the way the framework says — a header, a body, no control under the content it controls —
+// and the long card is a reader, not a stack (audit D C2: 40,200 px). The 39-source, 58-conclusion card the owner opened.
+describe("the card page's composition", () => {
+  it("is a header and a reader: contents beside it, two lists of ten that open, no excerpt on the page, and no row of views to switch", async () => {
+    client.fetchZoneEvidence.mockResolvedValue(programmeCard());
+    const { container } = mount();
+    await screen.findByTestId("evidence-card-header");
+    const facts = expectComposed(container, { tablists: 0, stepRail: false, toolbar: false });
+    // The two lists have a toolbar each, inside their own sections, over their own rows (a section's toolbar is judged against it).
+    expect(facts.toolbars.map((toolbar) => toolbar.getAttribute("aria-label"))).toEqual(["筛选证据要点", "筛选来源"]);
+    await waitFor(() => expect(container.querySelector("[data-outline]")).not.toBeNull());
+    expect(container.querySelectorAll("blockquote")).toHaveLength(0);
+    expect(within(screen.getByRole("list", { name: "证据要点" })).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(screen.getByRole("list", { name: "来源与引用" })).getAllByRole("listitem")).toHaveLength(10);
+    // Nothing after the article but the card's links and folds.
+    expect(container.querySelector("article")?.lastElementChild).toHaveTextContent("来源与引用");
+  });
+
+  it("has exactly one row of views where the card has two readings, and it is above what it switches", async () => {
+    const { container } = mount();
+    await screen.findByTestId("evidence-card-header");
+    const facts = expectComposed(container, { tablists: 1 });
+    expect(facts.tablists[0].compareDocumentPosition(screen.getByRole("table", { name: "结局总结表" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
 import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
@@ -11,32 +11,27 @@ import { SELF_SECTIONS } from "@/lib/memoryGroups";
 import { listAllMethods } from "@/lib/methodsClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
-import { useGeoFeature } from "@/lib/geoClient";
 import { useMemoryMapFeature } from "@/lib/memoryMapFeature";
-import { useVcrFeature } from "@/lib/vcrClient";
-import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
-import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
-import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
-import { SearchInput } from "@/components/ui/SearchInput";
 import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
-import { GrowthPanel } from "@/components/memory/GrowthPanel";
 import { MemoryControls } from "@/components/memory/MemoryControls";
-import { memoryTabAddress, MemoryTabs, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryTabs";
+import { MEMORY_TIME_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryFrame";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
-import { ProjectScope } from "@/components/memory/ProjectScope";
-import { factItems, factRowSummary, factRowTitle, factsOfProject, OTHER_PROJECT, practiceItems, projectChoices, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
+import { factItems, factRowSummary, factRowTitle, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { RememberDialog } from "@/components/memory/RememberDialog";
 import { usePendingMemory } from "@/components/memory/usePendingMemory";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
+import { useProjectChoices } from "@/components/memory/useProjectChoices";
 import { useProjectOverview } from "@/components/memory/useProjectOverview";
+import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
 import { ShareDrawer } from "./CapsuleTransferPanel";
 import { knownErrorCodeMessage } from "@evimed/domain";
 
@@ -48,13 +43,17 @@ import { knownErrorCodeMessage } from "@evimed/domain";
 function tabFromAddress(params: URLSearchParams): MemoryTab | null {
   if (params.get("method")) return "methods";
   const named = params.get("tab");
-  return named === "methods" || named === "project" || named === "growth" || named === "self" ? named : null;
+  return named === "methods" || named === "project" || named === "self" ? named : null;
 }
 
 /** The reads a tab needs that did not answer, named by tab: a list that could not be read is never an empty one. */
 const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "handbooks")[]> = {
-  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods", "handbooks"], growth: [],
+  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods", "handbooks"],
 };
+
+/** What a conversation begun from an empty tab leaves in the composer, unsent: the blanks are the person's to fill. */
+const SELF_DRAFT = "请记住关于我的这些：\n\n我的专业和背景：\n我的写作和回答偏好：\n我常做的事：";
+const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目标：\n用到的资料：\n现在进行到：";
 
 /**
  * 「记忆胶囊」 (2026-10-07 plan §3.2, mockup m01): what EviMed keeps about the
@@ -72,8 +71,9 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  *  - 做法: what the platform learned — for every study, and for one research
  *    tool each — read, stopped, or taken back to the version before. Never
  *    typed in: methods are learned, not written (owner ruling 2026-09-20).
- *  - 成长: the line of how much the capsule has come to hold, and what was
- *    learned when.
+ *  - 地图: the memory map (`/app/memory/map`), a page of its own that wears this page's frame. 「成长」 was the fourth tab until
+ *    2026-10-17: the line of how much the capsule held said "grew to 75" over a line that fell to 42; what happened each week is
+ *    the map's 「时间」 view now, and `?tab=growth` arrives there.
  *
  * What the page no longer has, and why: the two stat blocks and 「查看做法」
  * counted the same methods three ways and moved nothing the reader could see;
@@ -82,8 +82,8 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  * with and without it under the learning budget); 「推断」 sat on every row of
  * a page where nearly every row is learned, and then once in every drawer: whose
  * words a memory is, is not said on the page at all (owner ruling of 2026-10-10).
- * 「地图」, the fifth tab, is the memory map (`/app/memory/map`), drawn on its own page with this tab bar so that it reads as part of
- * this page; it is offered where the deployment draws the map. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
+ * The tabs, the toolbar's search and the project scope of the header are `MemoryFrame`'s, which the map draws too, so the two pages are one
+ * column and one band. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
  * 已忘记的内容 · 本项目不使用记忆 · 重置记忆); the page asks nothing of the
  * server to be read — making the capsule on first use moved to opening 分享与导入.
  *
@@ -99,6 +99,17 @@ const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "
  * address does not make is the page's own (the first tab with something in it).
  */
 export function MemoryHubPage() {
+  const [params] = useSearchParams();
+  const feature = useMemoryMapFeature();
+  // 「成长」 is the map's time view now: an address that names the old tab goes there (where the deployment draws the map), else to the first list.
+  if (params.get("tab") === "growth") {
+    if (feature === "loading") return <RunsSkeleton filter={false} />;
+    return <Navigate to={feature === "on" ? MEMORY_TIME_ADDRESS : memoryTabAddress("self")} replace />;
+  }
+  return <MemoryHub mapOn={feature === "on"} />;
+}
+
+function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const projects = useProjectStore((state) => state.projects);
@@ -149,11 +160,6 @@ export function MemoryHubPage() {
     return () => { clearTimeout(timer); setSearching(false); };
   }, [query, searchAttempt]);
 
-  const geoOn = useGeoFeature() === "on";
-  const vcrOn = useVcrFeature() === "on";
-  const projectsKey = projects.map((project) => project.id).join("\u0000");
-  const geoIds = useGeoProjectIds(geoOn, projectsKey);
-  const vcrIds = useVcrProjectIds(vcrOn, projectsKey);
   const labels = useProjectLabels();
   const projectName = (id: string | null) => (id ? labels.get(id) ?? null : null);
   const knownProjects = useMemo(() => new Set(projects.map((project) => project.id)), [projects]);
@@ -165,7 +171,7 @@ export function MemoryHubPage() {
   const practices = useMemo(() => practiceItems(data?.methods ?? [], data?.handbooks ?? [], { query }), [data, query]);
 
   const self = facts.filter((fact) => fact.group === "self");
-  const choices = projectChoices(projects, { vcr: vcrIds, geo: geoIds }, facts);
+  const choices = useProjectChoices(facts);
   // The project shown: the researcher's choice, else the one the shell is in — and a choice the account no longer has is not one.
   const scope = choices.some((choice) => choice.id === projectChoice) ? projectChoice
     : choices.some((choice) => choice.id === currentProjectId) ? currentProjectId : choices[0]?.id ?? null;
@@ -242,20 +248,23 @@ export function MemoryHubPage() {
     self: loading ? undefined : self.length,
     project: loading ? undefined : projectFacts.length,
     methods: loading ? undefined : practices.methods.length + practices.handbooks.length,
-    growth: undefined,
   };
-  const mapOn = useMemoryMapFeature() === "on";
 
   const opened: FactItem | PracticeItem | null = openKey
     ? [...facts, ...everyFact, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
     : null;
-  const setProjectChoice = (id: string) => setParams((current) => withParam(current, "project", id), { replace: true });
+  const setProjectChoice = (id: string | null) => { if (id) setParams((current) => withParam(current, "project", id), { replace: true }); };
   const chooseTab = (next: MemoryPageTab) => {
     // 地图 is a page of its own that reads as this page's last tab.
     if (next === "map") { navigate(memoryTabAddress("map")); return; }
     landed.current = true;
     setParams((current) => withParam(current, "tab", next));
   };
+  // Where a conversation begun from an empty tab goes: the project the 项目 tab names, else the one the shell is in (what is said about the
+  // person belongs to the account, whichever project it is said in). The words are left in the composer, unsent.
+  const speakProject = tab === "project" && scope && scope !== OTHER_PROJECT ? scope : currentProjectId;
+  const speak = useKnowledgeConversation(speakProject ?? "");
+  const speakAbout = (draft: string) => (speakProject ? () => speak(draft, []) : undefined);
 
   const factRows = (rows: readonly FactItem[], label: string) => (
     <List label={label}>
@@ -266,28 +275,24 @@ export function MemoryHubPage() {
   );
   // Waiting words head the two lists of memories, but not a search: that is a list of hits.
   const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows items={pending} slow={pendingState.slow} /> : null;
-  const empty = (title: string, description: string) => (
-    <EmptyState icon={Brain} title={query.trim() ? "没有找到" : title} description={query.trim() ? undefined : description} />
+  // An empty list says what will be here and gives the one thing to do about it — or, where nothing can be done (a practice is learned,
+  // never typed), why there is no button. A search with no hit has the box's own 「清除搜索」 over it, and says only that.
+  const empty = (title: string, description: string, action?: { label: string; onPress: (() => void) | undefined }) => (
+    query.trim()
+      ? <EmptyState icon={Brain} title="没有找到" reason="换个关键词试试，或清空搜索框看全部。" />
+      : <EmptyState icon={Brain} title={title} description={action?.onPress ? description : undefined} reason={action?.onPress ? undefined : description}
+        action={action?.onPress ? <Button onClick={action.onPress}>{action.label}</Button> : undefined} />
   );
 
   const list = () => {
-    if (loading || (searching && !found && tab !== "methods" && tab !== "growth")) return <RunsSkeleton filter={false} />;
-    if (tab === "growth") {
-      return (
-        <GrowthPanel
-          practices={data.methods === null || data.handbooks === null ? null : everyPractice.methods.length + everyPractice.handbooks.length}
-          canOpen={(what, id) => (what === "method" ? everyPractice.methods : everyPractice.handbooks).some((item) => item.key === `${what}:${id}`)}
-          onOpen={(what, id) => setOpenKey(`${what}:${id}`)}
-        />
-      );
-    }
+    if (loading || (searching && !found && tab !== "methods")) return <RunsSkeleton filter={false} />;
     if (serviceDown && (tab === "self" || tab === "project")) {
       return <LoadError message={knownErrorCodeMessage("memory_engine_unavailable") ?? "记忆服务暂时不可用。"} onRetry={reload} />;
     }
     if (tabUnread) return null;
     if (tab === "self") {
       if (self.length === 0) {
-        return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。");
+        return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。", { label: "在对话里说说你自己", onPress: speakAbout(SELF_DRAFT) });
       }
       return (
         <div className="space-y-6">
@@ -310,17 +315,17 @@ export function MemoryHubPage() {
         || projectFacts.length > 0);
       return (
         <div className="space-y-4">
-          {choices.length > 0 && <ProjectScope choices={choices} value={scope} onChange={setProjectChoice} />}
           {overview && (
             <ProjectOverview
               overview={overview}
               hasMemories={projectFacts.length > 0}
+              onSpeak={speakAbout(PROJECT_DRAFT)}
               canOpen={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
               onOpen={(recordId) => setOpenKey(`record:${recordId}`)}
             />
           )}
           {waiting}
-          {projectFacts.length === 0 ? (waiting ? null : empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。"))
+          {projectFacts.length === 0 ? (waiting ? null : empty("这个项目还没有记忆", "你在对话里说过的目标、资料和已定的事会出现在这里。", { label: "在对话里说说这个项目", onPress: scope === null || scope === OTHER_PROJECT ? undefined : speakAbout(PROJECT_DRAFT) }))
             // Under the card, the ranking and the works, the list needs its own name; alone, the tab names it.
             : above ? <GroupSection title="记忆">{factRows(projectFacts, "项目的记忆")}</GroupSection>
               : factRows(projectFacts, "项目的记忆")}
@@ -351,8 +356,12 @@ export function MemoryHubPage() {
   };
 
   return (
-    <PageShell
-      title="记忆胶囊"
+    <MemoryFrame
+      tab={tab}
+      counts={counts}
+      map={mapOn}
+      onTab={chooseTab}
+      scope={tab === "project" && choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: scope, onChange: setProjectChoice } : undefined}
       actions={(
         <MemoryControls
           onReset={reload}
@@ -362,20 +371,13 @@ export function MemoryHubPage() {
           onRemember={native ? () => setDrawer("remember") : undefined}
         />
       )}
+      toolbar={{ label: "搜索记忆", search: { label: "搜索记忆", value: query, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition } }}
     >
       <span ref={scrollAnchor} hidden />
-      {/* One row: the tabs, and the search box at its end; on a phone the box takes its own line. */}
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border">
-        <MemoryTabs value={tab} counts={counts} map={mapOn} onChange={chooseTab} className="min-w-0 flex-1 border-b-0" />
-        {tab !== "growth"
-          ? <SearchInput label="搜索记忆" value={query} maxLength={80} onChange={(event) => search.setDraft(event.target.value)} onClear={search.clear} {...search.composition} className="mb-1.5 w-full sm:w-60" />
-          // 成长 has nothing to search, and the row keeps its height so the rule under the tabs does not jump between tabs.
-          : <div aria-hidden="true" className="mb-1.5 h-control" />}
-      </div>
-      {unread.length > 0 && <LoadError className="mt-4" message="没有读到全部记忆。" onRetry={reload} />}
-      {searchFailed && <LoadError className="mt-4" message="搜索没有完成。" onRetry={() => setSearchAttempt((value) => value + 1)} />}
-      {missing && <p role="status" className="mt-4 text-ui text-text-2">{missing}</p>}
-      <div className="mt-4">{list()}</div>
+      {unread.length > 0 && <LoadError className="mb-4" message="没有读到全部记忆。" onRetry={reload} />}
+      {searchFailed && <LoadError className="mb-4" message="搜索没有完成。" onRetry={() => setSearchAttempt((value) => value + 1)} />}
+      {missing && <p role="status" className="mb-4 text-ui text-text-2">{missing}</p>}
+      <div>{list()}</div>
 
       {opened?.kind === "record" || opened?.kind === "entry" ? (
         <FactDrawer
@@ -411,6 +413,6 @@ export function MemoryHubPage() {
           onChanged={reload}
         />
       )}
-    </PageShell>
+    </MemoryFrame>
   );
 }

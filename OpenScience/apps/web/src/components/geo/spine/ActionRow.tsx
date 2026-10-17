@@ -119,7 +119,6 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
             type="button"
             onClick={onOpen}
             data-geo-action-open=""
-            title={what.detail ?? undefined}
             className={cn(
               "min-w-0 flex-1 truncate text-left text-ui after:absolute after:inset-0 after:content-[''] max-sm:basis-full max-sm:line-clamp-2 max-sm:whitespace-normal",
               skipped ? "text-text-3" : "text-text",
@@ -130,11 +129,11 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
           </button>
         </div>
         <div className="grid min-w-0 gap-x-6 gap-y-0.5 text-compact text-text-2 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.2fr)]">
-          <p data-geo-action-article="" title={[written.kind, written.engines].filter(Boolean).join(" · ") || undefined} className="min-w-0 truncate">
+          <p data-geo-action-article="" className="min-w-0 truncate">
             <span className="mr-1.5 text-caption text-text-3">稿件</span>
             {[written.kind, written.engines].filter(Boolean).join(" · ") || "还没有稿件"}
           </p>
-          <p data-geo-action-sources="" title={action.sources.map(sourceName).join("、") || undefined} className="flex min-w-0 items-baseline gap-1.5">
+          <p data-geo-action-sources="" className="flex min-w-0 items-baseline gap-1.5">
             <span className="shrink-0 text-caption text-text-3">信源</span>
             {lead ? (
               <>
@@ -145,7 +144,7 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
               </>
             ) : <span className="text-text-3">没有推荐</span>}
           </p>
-          <p data-geo-action-expected="" title={[expected.now, expected.sample, expected.goal].filter(Boolean).join(" · ")} className="min-w-0 truncate">
+          <p data-geo-action-expected="" className="min-w-0 truncate">
             <span className="mr-1.5 text-caption text-text-3">预期</span>
             <span className="tabular-nums">{expected.now}</span>
             {expected.sample && <span className="text-text-3">{`（${expected.sample}）`}</span>}

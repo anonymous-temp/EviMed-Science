@@ -7,6 +7,7 @@ import { productErrorMessage } from "@/lib/productClient";
 import { formatClock, formatDay } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Note } from "@/components/ui/Note";
 import { LoadError } from "@/components/cards/LoadError";
 
 /**
@@ -155,9 +156,7 @@ function LastCheck({ asset }: { asset: DatasetMeaningAsset }) {
         </ul>
       )}
       {check.notChecked.length > 0 && (
-        <p className="max-w-measure text-text-3">
-          {`${check.notChecked.length} 项检查没有运行：${[...new Set(check.notChecked.map((item) => notCheckedLabel(item.reason)))].join("；")}。没有运行不等于没有问题。`}
-        </p>
+        <Note className="max-w-measure text-text-3" result={[{ n: check.notChecked.length }, ` 项检查没有运行：${[...new Set(check.notChecked.map((item) => notCheckedLabel(item.reason)))].join("；")}。`]} />
       )}
     </div>
   );

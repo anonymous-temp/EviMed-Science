@@ -105,7 +105,8 @@ describe("KnowledgePageView", () => {
   it("tells the person when their own paragraphs were put back after a compile dropped them", async () => {
     mocks.page.mockResolvedValue({ ...mine, restored: { at: "2026-10-13T04:29:00Z", count: 2, round: 3 } });
     renderView(mine);
-    expect(await screen.findByText(/丢掉了你写的 2 处补充，已经放回原处/)).toBeInTheDocument();
+    // The count is its own figure inside the sentence (a `Note`), so the sentence is read off the note and not off one text node.
+    await waitFor(() => expect(document.querySelector("[data-note]")?.textContent).toMatch(/丢掉了你写的 2 处补充，已经放回原处/));
   });
 
   it("reports the page it read, with the documents it cites, for a conversation to take along", async () => {

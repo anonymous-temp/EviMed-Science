@@ -1,9 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
 import { EvidenceReading, evidenceDay } from "./EvidenceReading";
 import { EvidenceReviews } from "./EvidenceDiscussion";
-import { evidenceSourceId } from "./EvidenceContent";
 /** The article and what readers made of it, which the reading page keeps in two places. */
 const Full = ({ evidence }: { evidence: EvidenceCard }) => (
   <>
@@ -72,8 +72,8 @@ const card: EvidenceCard = {
   },
 };
 describe("question-based evidence content", () => {
-  it("shows the answer, applicable population, original counts and traceable sources", () => {
-    const { container } = render(<EvidenceReading evidence={card} />);
+  it("shows the answer, applicable population, original counts and traceable sources", async () => {
+    render(<EvidenceReading evidence={card} />);
     // The question is the page's title, not a heading of the article.
     expect(
       screen.queryByRole("heading", { name: "What does this trial show?" }),
@@ -93,10 +93,14 @@ describe("question-based evidence content", () => {
     expect(
       screen.getByText("Counts during observation, not fixed-horizon risks"),
     ).toBeInTheDocument();
-    for (const link of screen.getAllByRole("link", { name: "查看来源 1" }))
-      expect(
-        container.querySelector(link.getAttribute("href")!),
-      ).toHaveTextContent("Primary trial");
+    // Every [n] on the page opens its source: the title in the drawer's heading, the excerpt in its body.
+    for (const link of screen.getAllByRole("link", { name: "查看来源 1" })) {
+      await userEvent.click(link);
+      const drawer = screen.getByRole("dialog", { name: "来源 1" });
+      expect(drawer).toHaveTextContent("Primary trial");
+      expect(within(drawer).getByText("Original trial result")).toBeInTheDocument();
+      await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
+    }
     expect(screen.getByText(/依据摘要/)).toBeInTheDocument();
   });
   it("labels annualized rates as person-years and never fixed-period person risk", () => {
@@ -141,7 +145,7 @@ describe("question-based evidence content", () => {
     };
     const gone = [/当前内容待重新评议/, /当前内容已完成 AI 评议/, /AI 待评议/, /AI 已评议/];
     const view = render(<Full evidence={{ ...card, editorial }} />);
-    expect(screen.getByText("AI 编写 · EviMed writer")).toBeInTheDocument();
+    expect(screen.getByText("编写").nextElementSibling).toHaveTextContent("AI · EviMed writer");
     expect(screen.getByText("尚无当前内容的用户评议")).toBeInTheDocument();
     for (const pattern of gone) expect(screen.queryByText(pattern)).not.toBeInTheDocument();
     view.rerender(
@@ -160,7 +164,7 @@ describe("question-based evidence content", () => {
     for (const pattern of gone) expect(screen.queryByText(pattern)).not.toBeInTheDocument();
     expect(screen.queryByText("AI reviewer")).not.toBeInTheDocument();
   });
-  it("says nothing of a source refresh that did not happen, keeps the card's own reading date, and keeps the AI's findings", () => {
+  it("says nothing of a source refresh that did not happen, keeps the card's own reading date, and keeps the AI's findings", async () => {
     const checkedAt = "2026-10-01T00:00:00Z";
     const attemptedAt = "2026-10-02T06:00:00Z";
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
@@ -180,16 +184,15 @@ describe("question-based evidence content", () => {
       editorial,
       sources: [...card.sources, { title: "Second source", url: "https://example.org/second", excerpt: "New reading", checkedAt: attemptedAt }],
     }} />);
-    const retained = view.container.querySelector(`#${evidenceSourceId(card.id, 1)}`)!;
-    // The maintenance pipeline's bookkeeping (what it read when, what it kept from last time) is not on the page.
+    // The maintenance pipeline's bookkeeping (what it read when, what it kept from last time) is not on the page, nor in a source's drawer.
     for (const pattern of [/上次成功读取于/, /尝试于/, /本轮未能重新读取/, /沿用上次保留内容/, /部分来源本轮尚未完成复核/, /当前内容已完成 AI 评议/])
       expect(view.container.textContent).not.toMatch(pattern);
-    expect(view.container.querySelector(`#${evidenceSourceId(card.id, 2)}`)).not.toHaveTextContent("读取于");
-    expect(screen.getByText(/全部来源上次核查于/)).toHaveTextContent(evidenceDay(checkedAt));
+    await userEvent.click(within(screen.getByRole("list", { name: "来源与引用" })).getByRole("button", { name: "Second source" }));
+    expect(screen.getByRole("dialog", { name: "来源 2" })).not.toHaveTextContent("读取于");
+    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.getByText("来源核查").nextElementSibling).toHaveTextContent(evidenceDay(checkedAt));
     expect(screen.getByText("AI review remains about the scientific content")).toBeInTheDocument();
     expect(screen.queryByText(/web_read_unreadable/)).not.toBeInTheDocument();
-    for (const link of screen.getAllByRole("link", { name: "查看来源 1" }))
-      expect(view.container.querySelector(link.getAttribute("href")!)).toBe(retained);
     view.rerender(<Full evidence={{ ...card, editorial: { ...editorial, sourceChecks: [{ sourceIndex: 1, status: "checked", attemptedAt }] } }} />);
     expect(screen.queryByText(/未能重新读取|当前内容已完成 AI 评议/)).not.toBeInTheDocument();
   });
@@ -255,11 +258,15 @@ describe("question-based evidence content", () => {
   });
 });
 
-it('publication notices warn readers and cannot display a current AI review endorsement',()=>{
+it('publication notices warn readers and cannot display a current AI review endorsement',async()=>{
   const editorial: NonNullable<EvidenceCard['editorial']>={author:{kind:'ai',name:'AI writer'},reviewer:{kind:'ai',name:'Old AI reviewer'},status:'ai-reviewed',reviewRevision:card.revision};
   render(<Full evidence={{...card,editorial,sources:card.sources.map(source=>({...source,publicationStatus:{kind:'retracted',notices:['Synthetic journal retraction notice']}}))}}/>);
   expect(screen.getByRole('alert')).toHaveTextContent('原有结论需要重新核查');
-  expect(screen.getByText('Synthetic journal retraction notice')).toBeInTheDocument();
+  // The notice is read where the source is: its row says the retraction, its drawer says the notice.
+  const row = within(screen.getByRole('list',{name:'来源与引用'})).getByRole('button',{name:'Primary trial'}).closest('li')!;
+  expect(row).toHaveTextContent('存在撤稿记录');
+  await userEvent.click(within(row).getByRole('button',{name:'Primary trial'}));
+  expect(within(screen.getByRole('dialog',{name:'来源 1'})).getByText('Synthetic journal retraction notice')).toBeInTheDocument();
   expect(screen.queryByText('AI 已评议')).not.toBeInTheDocument();
   expect(screen.queryByText('当前内容已完成 AI 评议')).not.toBeInTheDocument();
   expect(screen.queryByText(/当前内容待重新评议|AI 待评议/)).not.toBeInTheDocument();
@@ -273,7 +280,7 @@ it("shows an account revision history alongside the original AI author without c
     reviewer:null,status:"review-pending",reviewRevision:null,
     lastEditor:{userId:"alice",name:"Alice",editedAt},
   }}}/>);
-  expect(screen.getByText(/AI 编写 · Original evidence AI/)).toBeInTheDocument();
-  expect(screen.getByText(`用户修订记录 · Alice · ${evidenceDay(editedAt)}`)).toBeInTheDocument();
+  expect(screen.getByText("编写").nextElementSibling).toHaveTextContent("AI · Original evidence AI");
+  expect(screen.getByText("用户修订").nextElementSibling).toHaveTextContent(`Alice · ${evidenceDay(editedAt)}`);
   expect(screen.queryByText(/人工评议|医生|已完成 AI 评议|AI 待评议/)).not.toBeInTheDocument();
 });

@@ -1,3 +1,4 @@
+import type { NotePart } from "@/components/ui/Note";
 import { kindTitle } from "@/lib/memoryGroups";
 import type { MapEdge, MapNode, MapReason, MemoryMap } from "@/lib/memoryMapClient";
 import type { MapSelection } from "./useMapSelection";
@@ -100,6 +101,31 @@ export function headline(doc: Pick<MemoryMap, "summary" | "nodes">): HeadlinePar
   if (needsLook === 0) return [{ text: `${base}。` }];
   if (sources > 0 && sources >= needsLook / 2) return [{ text: `${base}，其中 ` }, { text: `${needsLook} 件`, action: "look" }, { text: "依据的资料变了或需要核对。" }];
   return [{ text: `${base}，其中 ` }, { text: `${needsLook} 件`, action: "look" }, { text: "需要看一眼。" }];
+}
+
+/**
+ * The sentence over the relation picture, in its numbers: how many memories in force, tied to how many documents and projects. It is
+ * counted over the marks drawn, so a narrowed or replayed picture says what it holds and not what the account does.
+ */
+export function relationTitle(nodes: readonly Pick<MapNode, "type" | "state">[]): string {
+  const memories = nodes.filter((node) => node.type === "memory" && node.state !== "replaced").length;
+  const documents = nodes.filter((node) => node.type === "document" || node.type === "page").length;
+  const projects = nodes.filter((node) => node.type === "project").length;
+  const tied = [documents > 0 ? `${documents} 份资料` : "", projects > 0 ? `${projects} 个项目` : ""].filter(Boolean).join("和 ");
+  if (memories === 0) return "记忆、资料和项目的关系";
+  return tied ? `${memories} 件现行的记忆，连着 ${tied}` : `${memories} 件现行的记忆`;
+}
+
+/**
+ * The sentence as the page's `Headline` slot takes it: the number that needs a look is a link that narrows the map to those marks
+ * (`onLook`), and its unit stays outside the link.
+ */
+export function headlineParts(parts: readonly HeadlinePart[], onLook: () => void): NotePart[] {
+  return parts.flatMap((part): NotePart[] => {
+    if (part.action !== "look") return [part.text];
+    const n = Number.parseInt(part.text, 10);
+    return Number.isFinite(n) ? [{ n, onOpen: onLook, label: `${part.text}，只看这些` }, part.text.slice(String(n).length)] : [part.text];
+  });
 }
 
 export function headlineText(parts: readonly HeadlinePart[]): string {

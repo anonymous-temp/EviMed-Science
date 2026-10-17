@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams } from "react-router";
-import { Cloud, Download, FileUp, Folder, Globe, Plus, Search, StickyNote, Upload } from "lucide-react";
+import { Cloud, Download, FileUp, Folder, Globe, Plus, RefreshCw, Search, StickyNote, Upload } from "lucide-react";
 import { SOURCE_KINDS } from "@evimed/domain";
 import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { downloadKnowledgeVault, getSourceComposition, listProjectOutputs, vaultErrorMessage, type LibraryComposition as Composition, type ProjectOutput } from "@/lib/knowledgeBaseClient";
@@ -18,10 +18,12 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
-import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
+import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { SearchInput } from "@/components/ui/SearchInput";
+import { ShowMore } from "@/components/ui/ShowMore";
+import { StepState } from "@/components/ui/StepState";
+import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -29,14 +31,16 @@ import { PageShell } from "@/components/layout/PageShell";
 import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialogs";
 import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
-import { KnowledgePanel } from "@/components/sources/KnowledgePanel";
-import { KnowledgeScopeMenu } from "@/components/sources/KnowledgeScopeMenu";
-import { KnowledgeStatusLine } from "@/components/sources/KnowledgeStatusLine";
+import { KnowledgeGraphView } from "@/components/sources/KnowledgeGraphView";
+import { useKnowledgeScope } from "@/components/sources/useKnowledgeScope";
+import { KnowledgeStatusDot } from "@/components/sources/KnowledgeStatusDot";
+import { KnowledgeTree, KnowledgeTreeMissing } from "@/components/sources/KnowledgeTree";
 import { LibraryComposition } from "@/components/sources/LibraryComposition";
 import { ProjectOutputsList } from "@/components/sources/ProjectOutputsList";
 import { SourceRow } from "@/components/sources/SourceRow";
-import { isReading, isUsable } from "@/components/sources/sourceView";
-import { roundKey, useKnowledgeStatus } from "@/components/sources/useKnowledge";
+import { groupRows, statusLine } from "@/components/sources/knowledgeView";
+import { isKnowledgePage, isReading, isUsable } from "@/components/sources/sourceView";
+import { roundKey, useKnowledgeStatus, useKnowledgeTree } from "@/components/sources/useKnowledge";
 
 /** The folder an upload lands in, under the project's base folder. */
 const KNOWLEDGE_ROOT = "knowledge-base";
@@ -55,18 +59,16 @@ function useDebounced<T>(value: T, delay: number): T {
   return settled;
 }
 
-/** Whether the window is a phone's width: the chips then keep three inline and the rest under 「更多」, since a row of seven is cut off. */
-function useNarrow(): boolean {
-  const query = "(max-width: 639px)";
-  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches);
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return undefined;
-    const media = window.matchMedia(query);
-    const update = () => setNarrow(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return narrow;
+/** How many pages one load follows to find enough documents once the compiled files are left out of the list (50 documents a page). */
+const MAX_FOLLOWED_PAGES = 10;
+
+/** The three views of the knowledge base: what was put in, what the platform made of it, and the picture of that. */
+type KnowledgeTab = "sources" | "pages" | "graph";
+
+/** The tab an address is at: `view=graph` is 图谱, the 知识页 type is 知识页, anything else is the documents. */
+function tabOf(state: KnowledgeListState): KnowledgeTab {
+  if (state.view === "graph") return "graph";
+  return state.kind === "wiki" ? "pages" : "sources";
 }
 
 /**
@@ -74,15 +76,20 @@ function useNarrow(): boolean {
  * rules, a web page, a note — which a conversation reads and cites. One list, in a scope: a project's, or the
  * documents made available to every project.
  *
- * The header is the title, the scope (choosing it changes this page's list and nothing else: it does not move the
- * tab to that project), a search and one primary action, 「添加」, which holds the four ways in. Under it, one row of
- * chips by what a document is, counted by the server over the whole scope and the search — not over the page — and
- * one list. A row says what the document is called, one line of what it says and where it came from; it is a link
- * to the document's own page (`/app/files/:sourceId`), where its original and what it says are side by side. The
- * scope, the type and the search are in the address, so a reload, the back button and a link all land on the list as
- * it was, and coming back from a document puts the list back where it was left. A page is fifty documents; the rest
- * load as the list is scrolled, and the search runs where the documents are, so the fifty-first is as findable as the
- * first.
+ * The page is one frame (R19, plan §5.5, audit D C1c): the title with its scope (`ScopeMenu`) and, only while something needs
+ * attention, one status dot; the primary action, 「添加」, which holds the four ways in; three tabs — 资料 · 知识页 · 图谱 — and
+ * under them **one** toolbar row, which is the only row of controls before the content. Four rows used to stand there (the type
+ * chips, a status line, the 页面 / 图谱 tabs, the graph's own chips). The row holds what the tab is filtered by — the type of a
+ * document, the kind of graph — then the search and a count; with documents selected it is replaced by 「已选 N 份 · 在对话中使用 ·
+ * 取消」, and the bar that used to stand at the bottom of the page is gone.
+ *
+ * 资料 is what the researcher put in — the documents a conversation reads: a row says what the document is called, one line of what
+ * it says and where it came from, and is a link to the document's own page (`/app/files/:sourceId`), where its original and what it
+ * says are side by side. The files the platform compiled out of them are not documents and are the 知识页 tab's, as a tree by type,
+ * and the 图谱 tab's, as a picture of the pages and of the entities. The scope, the tab, the type and the search are in the address,
+ * so a reload, the back button and a link all land on the page as it was, and coming back from a document puts the list back where
+ * it was left. A page is fifty documents; the rest load as the list is scrolled, and the search runs where the documents are, so
+ * the fifty-first is as findable as the first.
  *
  * A row says a state only while the document cannot be used yet (「正在读取」, a few seconds) or when it could not be
  * read (「没能读取 · 重试」). Reading state is not a filter: nobody comes to the knowledge base to look for documents
@@ -113,13 +120,18 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const listState = useMemo(() => readListState(params), [params]);
   const scope = useMemo(() => scopeOf(listState, currentProjectId), [listState, currentProjectId]);
   const kind = listState.kind;
+  // The compiled files are a project's; the shared documents are one list, whatever the address says of a tab.
+  const tab = scope.kind === "shared" ? "sources" : tabOf(listState);
   const update = useCallback((patch: Partial<KnowledgeListState>) => {
     setParams((current) => {
       const next = { ...readListState(current), ...patch };
       return listParams(next);
     }, { replace: true });
   }, [setParams]);
-  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), kind: null, view: null });
+  // A project's types and files are its own: the documents' type is let go when the scope changes, the pages' tab is kept (the
+  // pages of the other project are what the researcher came to see), and a focus on a mark of the old project's graph is dropped.
+  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), ...(tab === "sources" || next.kind === "shared" ? { kind: null, view: null } : {}), focus: null, depth: null });
+  const scopeMenu = useKnowledgeScope(scope, setScope);
   // What is typed is the box's own until the researcher stops; the address follows, and an address changed from outside
   // (the back button between two lists) moves the box.
   const [query, setQuery] = useState(listState.q);
@@ -136,7 +148,6 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     setQuery(listState.q);
   }, [listState.q]);
   const search = listState.q;
-  const narrow = useNarrow();
   const [items, setItems] = useState<SourceRecord[] | null>(null);
   const [selected, setSelected] = useState<Map<string, SourceRecord>>(() => new Map());
   const [counts, setCounts] = useState<SourceCounts | null>(null);
@@ -222,6 +233,11 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const addProjectId = scopeProjectId ?? currentProjectId;
   const projectNames = useMemo(() => projectLabels(projects), [projects]);
 
+  // The compiled files are the 知识页 tab's: the documents' list leaves them out where there is a tab for them. They are the newest
+  // files a compile writes, so a page of the list can be all of them, and the load follows pages until it holds documents.
+  const hideCompiled = tab === "sources" && !shared;
+  const documentsOf = useCallback((rows: SourceRecord[]) => (hideCompiled ? rows.filter((row) => !isKnowledgePage(row)) : rows), [hideCompiled]);
+
   const pageRoot = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
   const loaded = useRef(0);
@@ -243,14 +259,17 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       setError(null);
       setPassages((previous) => (background ? { ...previous, ...(page.passages ?? {}) } : page.passages ?? {}));
       if (!background) {
-        // The pages the reader had open are read again until the document they opened is among them (bounded).
-        let loadedItems = page.items;
+        // The pages the reader had open are read again until the document they opened is among them, and a page that was mostly the
+        // platform's own files is followed until it holds the documents it should (both bounded).
+        let loadedItems = documentsOf(page.items);
         let cursor = page.nextCursor;
-        for (let more = 0; position && loadedItems.length < position.count && cursor && more < 10; more += 1) {
+        const wanted = position ? position.count : PAGE_SIZE;
+        const dropped = page.items.length - loadedItems.length;
+        for (let more = 0; cursor && (position !== null || dropped > 0) && loadedItems.length < wanted && more < MAX_FOLLOWED_PAGES; more += 1) {
           const next = await listSources(scope, { ...(kind ? { kind } : {}), q: search, cursor, limit: PAGE_SIZE });
           if (generation.current !== current) return;
           const known = new Set(loadedItems.map((item) => item.id));
-          loadedItems = [...loadedItems, ...next.items.filter((item) => !known.has(item.id))];
+          loadedItems = [...loadedItems, ...documentsOf(next.items).filter((item) => !known.has(item.id))];
           cursor = next.nextCursor;
           if (next.passages) setPassages((previous) => ({ ...previous, ...next.passages }));
         }
@@ -261,12 +280,13 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       }
       // A refresh of the head of the list: what it holds replaces those rows, and what was loaded beyond it stays.
       setItems((previous) => {
-        if (!previous || !page.nextCursor) { setNextCursor(page.nextCursor); return page.items; }
+        const fresh = documentsOf(page.items);
+        if (!previous || !page.nextCursor) { setNextCursor(page.nextCursor); return fresh; }
         const oldest = page.items.at(-1)?.createdAt ?? "";
-        const fresh = new Set(page.items.map((item) => item.id));
-        const tail = previous.filter((item) => !fresh.has(item.id) && item.createdAt < oldest);
+        const known = new Set(fresh.map((item) => item.id));
+        const tail = previous.filter((item) => !known.has(item.id) && item.createdAt < oldest);
         if (tail.length === 0) setNextCursor(page.nextCursor);
-        return [...page.items, ...tail];
+        return [...fresh, ...tail];
       });
     } catch (loadError) {
       if (generation.current === current) {
@@ -274,7 +294,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         setError(`无法加载资料：${productErrorMessage(loadError)}`);
       }
     }
-  }, [scope, kind, search]);
+  }, [scope, kind, search, documentsOf]);
   useEffect(() => { void load(); return () => { generation.current += 1; }; }, [load]);
   // A round that ends brings pages: the chips' counts and the list are read again, once, when what it left changes.
   const lastRound = useRef(knowledgeRound);
@@ -299,21 +319,28 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     const current = generation.current;
     setLoadingMore(true);
     try {
-      const page = await listSources(scope, { ...(kind ? { kind } : {}), q: search, cursor: nextCursor, limit: PAGE_SIZE });
-      if (generation.current !== current) return;
+      // The next page may be the platform's own files from end to end: pages are followed until a document comes (bounded).
+      let cursor: string | null = nextCursor;
+      let added: SourceRecord[] = [];
+      for (let followed = 0; cursor && added.length === 0 && followed < MAX_FOLLOWED_PAGES; followed += 1) {
+        const page = await listSources(scope, { ...(kind ? { kind } : {}), q: search, cursor, limit: PAGE_SIZE });
+        if (generation.current !== current) return;
+        added = documentsOf(page.items);
+        if (page.passages) setPassages((previous) => ({ ...previous, ...page.passages }));
+        cursor = page.nextCursor;
+      }
       setItems((previous) => {
         const known = new Set((previous ?? []).map((item) => item.id));
-        return [...(previous ?? []), ...page.items.filter((item) => !known.has(item.id))];
+        return [...(previous ?? []), ...added.filter((item) => !known.has(item.id))];
       });
-      if (page.passages) setPassages((previous) => ({ ...previous, ...page.passages }));
-      setNextCursor(page.nextCursor);
+      setNextCursor(cursor);
     } catch (loadError) {
       toast.error(`无法加载更多：${productErrorMessage(loadError)}`);
     } finally { setLoadingMore(false); }
-  }, [nextCursor, loadingMore, scope, kind, search]);
-  // The list loads the next page as its end comes into view; the 「加载更多」 row is the same thing for a browser
+  }, [nextCursor, loadingMore, scope, kind, search, documentsOf]);
+  // The list loads the next page as its end comes into view; the 「显示更多」 button is the same thing for a browser
   // that cannot tell, and for a keyboard.
-  const sentinel = useRef<HTMLLIElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const node = sentinel.current;
     if (!node || !nextCursor || typeof IntersectionObserver === "undefined") return undefined;
@@ -443,29 +470,42 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     } catch (failure) { toast.error(webErrorMessage(failure)); }
   };
 
+  // The compiled files: the tree is read for the project once the tabs are there, so 知识页 can say how many pages it holds before it
+  // is opened, and the tab's body and the count are one read.
+  const pagesTabs = !shared && (pagesOffered || (counts?.wiki ?? 0) > 0 || tab !== "sources");
+  const { tree, failed: treeFailed, retry: retryTree } = useKnowledgeTree(scopeProjectId, pagesTabs, knowledgeRound);
+  const pageCount = tree ? groupRows(tree.pages).reduce((sum, group) => sum + group.rows.length, 0) : 0;
+  const line = pagesOffered ? statusLine(knowledge) : null;
+
+  /** What a document count is in the 资料 tab: the platform's own files are not among them. */
+  const documentTotal = (tally: SourceCounts | null): number | null => (tally ? tally.all - (hideCompiled || pagesTabs ? tally.wiki ?? 0 : 0) : null);
   const kindOptions: FilterOption<SourceKind | "all">[] = useMemo(() => {
     if (!counts) return [];
     return [
-      { value: "all" as const, label: "全部", count: counts.all },
-      ...SOURCE_KINDS.filter((entry) => counts[entry.id as SourceKind] > 0 || entry.id === kind)
+      { value: "all" as const, label: "全部", count: documentTotal(counts) ?? counts.all },
+      ...SOURCE_KINDS.filter((entry) => entry.id !== "wiki" && (counts[entry.id as SourceKind] > 0 || entry.id === kind))
         .map((entry) => ({ value: entry.id as SourceKind, label: entry.label, count: counts[entry.id as SourceKind] })),
     ];
-  }, [counts, kind]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [counts, kind, pagesTabs, hideCompiled]);
   const kindsPresent = kindOptions.length - 1;
   // 「对话产出」 stands in the row of types, last, where the project's conversations have delivered something (or it is the view).
   const outputsChip = (outputs !== null && outputs.length > 0) || outputsView;
   const chipOptions: FilterOption<SourceKind | "all" | "outputs">[] = useMemo(
     () => [...kindOptions, ...(outputsChip ? [{ value: "outputs" as const, label: "对话产出", ...(outputs ? { count: outputs.length } : {}) }] : [])],
     [kindOptions, outputsChip, outputs]);
-  const chooseChip = (value: SourceKind | "all" | "outputs") => {
+  const chooseChip = (value: string) => {
     if (value === "outputs") update({ view: "outputs", kind: null });
-    else update({ kind: value === "all" ? null : value, view: null });
+    else update({ kind: value === "all" ? null : value as SourceKind, view: null });
   };
+  const goTab = (next: KnowledgeTab) => update({
+    kind: next === "sources" ? null : "wiki", view: next === "graph" ? "graph" : null, graph: null, focus: null, depth: null,
+  });
   const duplicateOpen = duplicatesFor ? groups.filter((group) => !group.decision && group.sourceIds.includes(duplicatesFor)) : [];
   const filtered = kind !== null || search !== "";
   // With nothing in the project's library the empty state offers 「添加」, so the header does not: one solid button on the page. It stays
   // wherever the empty state offers none — a search without a hit, the shared library — and while the list is read or failed.
-  const firstRun = items !== null && items.length === 0 && !error && !filtered && !shared && !outputsView;
+  const firstRun = tab === "sources" && items !== null && items.length === 0 && !error && !filtered && !shared && !outputsView;
 
   const rowActions = (source: SourceRecord) => ({
     busy,
@@ -476,40 +516,47 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     onDelete: () => setDeleting(source),
   });
 
-  const addMenu = (
+  const addMenu = (label = "添加") => (
     <Menu label="添加" items={[
       { label: "上传文件", icon: FileUp, onSelect: () => void uploadFiles() },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
       ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
     ]}>
-      <Button disabled={!hasWebApi || uploading} loading={uploading}>{!uploading && <Plus size={16} aria-hidden="true" />}添加</Button>
+      <Button disabled={!hasWebApi || uploading} loading={uploading}>{!uploading && <Plus size={16} aria-hidden="true" />}{label}</Button>
     </Menu>
   );
 
-  // The 知识页 filter browses the project's compiled files (a tree, or the graph); everywhere else, and wherever the tree cannot be
-  // read, the page is the list of documents.
-  const knowledgeBrowse = kind === "wiki" && !shared && !outputsView;
-  const documentList = outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null
-    : filtered ? <EmptyState icon={Search} title="没有找到相关资料" />
-      : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在资料的“⋯”菜单里选“设为所有项目可用”。" />
-        : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu} />
+  const selectedHere = tab === "sources" && !outputsView && selected.size > 0;
+  // How many documents the list holds in all, for what it is showing: the type's, or every document's (the search is the server's).
+  const total = outputsView ? outputs?.length ?? null : kind ? counts?.[kind] ?? null : documentTotal(counts);
+  const remaining = total === null || items === null ? 0 : Math.max(0, total - items.length);
+  const more = nextCursor && (
+    <div ref={sentinel}>
+      {loadingMore ? <div className="mt-2 flex justify-center"><Button variant="text" size="sm" loading>正在加载</Button></div>
+        : remaining > 0 ? <ShowMore remaining={remaining} unit="份" onMore={() => void loadMore()} />
+          : <div className="mt-2 flex justify-center"><Button variant="text" size="sm" onClick={() => void loadMore()}>显示更多</Button></div>}
+    </div>
+  );
+  const documentList = outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null : nextCursor ? more
+    : filtered ? <EmptyState icon={Search} title="没有找到相关资料" reason="换个关键词试试，或清空搜索框看全部。" />
+      : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在项目的资料里，用资料的“⋯”菜单选“设为所有项目可用”。"
+        action={<Button variant="secondary" onClick={() => update({ scope: null, kind: null })}>回到项目的资料</Button>} />
+        : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu()} />
   ) : (
-    <List label="资料">
-      {items.map((source) => (
-        <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
-          projectName={shared ? projectNames.get(source.projectId) ?? null : null}
-          to={readerLink(source)} onOpen={keepPlace}
-          selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
-          passages={passages[source.id]} query={search}
-          passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
-      ))}
-      {nextCursor && (
-        <li ref={sentinel} className="flex justify-center py-3">
-          <Button variant="text" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
-        </li>
-      )}
-    </List>
+    <div>
+      <List label="资料">
+        {items.map((source) => (
+          <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
+            projectName={shared ? projectNames.get(source.projectId) ?? null : null}
+            to={readerLink(source)} onOpen={keepPlace}
+            selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
+            passages={passages[source.id]} query={search}
+            passageTo={(passage) => readerPath(source.id, listState, passage.page ? { tab: "original", page: passage.page } : { tab: null, page: null })} />
+        ))}
+      </List>
+      {more}
+    </div>
   );
 
   // 「导出到 Obsidian」: the documents of the project the page lists, as a vault. Beside the one primary button, in a menu of its own.
@@ -520,6 +567,59 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     catch (failure) { toast.error(`没能导出：${vaultErrorMessage(failure)}`); }
     finally { setExporting(false); }
   };
+
+  // What the 知识页 and 图谱 tabs say when there is nothing to show: what the pages are made of, what they will be, and the one thing to do.
+  // The documents are the 资料 tab's, so 「你的 N 份资料」 opens them; a round that is running is not an empty page (the strip over the tabs
+  // says so), and a project that has enough documents is asked to compile, not to add more.
+  const readable = knowledge?.readable ?? documentTotal(counts) ?? 0;
+  const missing = knowledge ? Math.max(1, knowledge.minSources - knowledge.readable) : null;
+  // Until the compile's own status is read the recipe would first say the documents' count and then the compile's (they can differ: a
+  // document still being read is not one yet), so it waits for it where the deployment compiles at all.
+  const recipe = pagesOffered && !shared && knowledge === null ? <FilesSkeleton /> : (
+    <StepState
+      phase="empty" step={line?.canCompile ? "整理知识页" : "添加资料"} noun="知识页"
+      uses={[{ label: `你的 ${readable} 份资料${knowledge?.state === "below_threshold" && missing ? `（还差 ${missing} 份）` : ""}`, onOpen: () => goTab("sources") }]}
+      gives="按类整理好的页面，和页面之间的关系图"
+      onStart={hasWebApi ? (line?.canCompile ? () => void compileNow() : () => void uploadFiles()) : undefined}
+      starting={line?.canCompile ? compileAsking : uploading}
+      reason="还不能添加资料。"
+    />
+  );
+  const compiling = line?.busy === true;
+
+  // ------------------------------------------------------------------ the one toolbar row
+  const typeFilter: ToolbarFilter[] = kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip)
+    ? [{ kind: "chips", label: "资料类型", options: chipOptions, value: outputsView ? "outputs" : kind ?? "all", neutral: "all", maxVisible: chipOptions.length, onChange: chooseChip }]
+    : [];
+  const graphFilter: ToolbarFilter[] = [{
+    kind: "chips", label: "图谱的类型", neutral: "wiki", options: [{ value: "wiki", label: "页面之间" }, { value: "kg", label: "实体和关系" }],
+    value: listState.graph === "kg" ? "kg" : "wiki", pinned: true, onChange: (next) => update({ graph: next === "kg" ? "kg" : null, focus: null, depth: null }),
+  }];
+  const clearSearch = () => setQuery("");
+  const searchBox = { label: "搜索资料和内容", value: query, onChange: setQuery, onClear: clearSearch };
+  const toolbar: ToolbarProps | undefined = selectedHere ? {
+    label: "所选资料",
+    summary: `已选 ${selected.size} 份`,
+    actions: (
+      <>
+        <Button size="sm" onClick={() => void openSelected()}>在对话中使用</Button>
+        <Button size="sm" variant="text" onClick={() => setSelected(new Map())}>取消</Button>
+      </>
+    ),
+  } : firstRun ? undefined : {
+    label: tab === "sources" ? "资料的筛选" : tab === "pages" ? "知识页的搜索" : "图谱的筛选",
+    filters: tab === "sources" ? typeFilter : tab === "graph" ? graphFilter : [],
+    onClear: tab === "sources" && filtered ? () => { setQuery(""); update({ kind: null, view: null, q: "" }); } : undefined,
+    search: searchBox,
+    summary: tab === "sources" ? (total === null ? undefined : `${total} 份`) : tab === "pages" ? (pageCount > 0 ? `${pageCount} 页` : undefined) : undefined,
+  };
+
+  const pagesBody = !scopeProjectId ? null : treeFailed && !tree ? (
+    <>
+      <KnowledgeTreeMissing onRetry={retryTree} />
+      {documentList}
+    </>
+  ) : !tree || (compiling && tree.pages.length === 0) ? <FilesSkeleton /> : <KnowledgeTree rows={tree.pages} query={listState.q} listState={listState} empty={recipe} />;
 
   return (
     <div {...dropProps} ref={pageRoot} className="relative h-full">
@@ -533,34 +633,39 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       )}
       <PageShell
         title="知识库"
-        meta={<KnowledgeScopeMenu scope={scope} onChange={setScope} />}
+        scope={scopeMenu}
+        meta={pagesOffered && !shared ? <KnowledgeStatusDot status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} /> : undefined}
         actions={<>
-          <SearchInput label="搜索资料和内容" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery("")} className="w-60" />
-          {!firstRun && addMenu}
+          {!firstRun && addMenu()}
           {!shared && !firstRun && (
             <Menu label="更多" items={[
               { label: "在记忆地图中查看", onSelect: () => navigate("/app/memory/map") },
+              ...(pagesOffered && line?.canCompile ? [{ label: compileAsking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: compileAsking, onSelect: () => void compileNow() }] : []),
               { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
             ]} />
           )}
         </>}
+        activity={compiling && !shared && knowledge ? {
+          label: "整理知识页", phase: [knowledge.pages > 0 ? `已有 ${knowledge.pages} 页` : "", knowledge.typedPages.kg > 0 ? `${knowledge.typedPages.kg} 个实体` : ""].filter(Boolean).join("，") || undefined,
+          startedAt: knowledge.stage?.startedAt ?? null, ...(knowledge.state === "queued" ? { waiting: "资料有更新，稍后会自动开始" } : {}),
+        } : undefined}
+        tabs={pagesTabs ? {
+          label: "知识库", value: tab, onChange: goTab, panelId: "knowledge-panel",
+          items: [
+            { value: "sources" as const, label: "资料", count: documentTotal(counts) || undefined },
+            { value: "pages" as const, label: "知识页", count: pageCount || undefined },
+            { value: "graph" as const, label: "图谱" },
+          ],
+        } : undefined}
+        toolbar={toolbar}
       >
-        {composition && !outputsView && <LibraryComposition composition={composition} />}
-        {kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip) && (
-          <FilterChips label="资料类型" className="mb-4" options={chipOptions} maxVisible={narrow ? 3 : chipOptions.length} value={outputsView ? "outputs" : kind ?? "all"} onChange={chooseChip} />
-        )}
-        {pagesOffered && !shared && !outputsView && <KnowledgeStatusLine status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} />}
-        {outputsView && <ProjectOutputsList items={outputs} failed={outputsFailed} query={search} onRetry={() => setOutputsAttempt((value) => value + 1)} />}
-        {!outputsView && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-        {knowledgeBrowse && scopeProjectId
-          ? <KnowledgePanel projectId={scopeProjectId} listState={listState} version={knowledgeRound} onChange={update} fallback={documentList} />
-          : documentList}
-        {!outputsView && selected.size > 0 && (
-          <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 border-t border-border bg-surface pt-3 pb-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} role="region" aria-label="所选资料">
-            <span className="text-caption text-text-2">已选 {selected.size} 份资料</span>
-            <Button onClick={() => void openSelected()}>在对话中使用</Button>
-            <Button variant="text" onClick={() => setSelected(new Map())}>取消选择</Button>
-          </div>
+        {tab === "sources" && composition && !outputsView && <LibraryComposition composition={composition} />}
+        {tab === "sources" && outputsView && <ProjectOutputsList items={outputs} failed={outputsFailed} query={search} onRetry={() => setOutputsAttempt((value) => value + 1)} />}
+        {tab === "sources" && !outputsView && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
+        {tab === "sources" && documentList}
+        {tab === "pages" && pagesBody}
+        {tab === "graph" && scopeProjectId && (
+          <KnowledgeGraphView projectId={scopeProjectId} kind={listState.graph === "kg" ? "kg" : "wiki"} listState={listState} version={knowledgeRound} onChange={update} empty={recipe} />
         )}
       </PageShell>
       {connecting && driveOffered && (

@@ -6,7 +6,7 @@ import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, typ
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Card } from "@/components/ui/Card";
-import { FilterChips } from "@/components/ui/FilterChips";
+import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { FrontierSkeleton } from "./FrontierSkeleton";
@@ -63,29 +63,25 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
 export type HotState = { board: FrontierHotBoard | null; error: string | null } | null;
 
 /**
- * 当前 · 本周 · 本月: the 热榜's time range, at the end of the page's view row
- * with when the ranking was taken beside it (small, grey).
+ * 当前 · 本周 · 本月: the 热榜's time range, in the page's toolbar with when the ranking was taken beside it (small, grey).
  *
- * The chips appear once the server stamps its rankings (`board.takenAt`): a
- * server without them answers every window with the current list, and a chip
- * that changed nothing would say something false. They stay while another
- * window's ranking is read.
+ * The chips appear once the server stamps its rankings (`board.takenAt`): a server without them answers every window with the
+ * current list, and a chip that changed nothing would say something false. They stay while another window's ranking is read.
  */
-export function HotWindowChips({ window, board, onWindow }: {
+export function hotWindowFilter({ window, board, onWindow }: {
   window: FrontierHotWindow;
   /** The ranking on screen, for the time it was taken. */
   board: FrontierHotBoard | null;
   onWindow: (window: FrontierHotWindow) => void;
-}) {
-  return (
-    <FilterChips
-      label="时间范围"
-      options={WINDOW_OPTIONS}
-      value={window}
-      onChange={onWindow}
-      trailing={board?.takenAt ? <span className="text-caption text-text-3">{hotBoardStamp(board.window, board.takenAt)}</span> : undefined}
-    />
-  );
+}): ToolbarFilter {
+  return {
+    kind: "chips",
+    label: "时间范围",
+    options: WINDOW_OPTIONS,
+    value: window,
+    onChange: (next) => onWindow(next as FrontierHotWindow),
+    note: board?.takenAt ? hotBoardStamp(board.window, board.takenAt) : undefined,
+  };
 }
 
 /**

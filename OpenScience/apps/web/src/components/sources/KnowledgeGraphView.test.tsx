@@ -27,7 +27,7 @@ function view(state: Partial<KnowledgeListState> = {}, onChange = vi.fn(), kind:
   render(
     <MemoryRouter initialEntries={["/app/files?kind=wiki&view=graph&graph=kg"]}>
       <Routes>
-        <Route path="/app/files" element={<KnowledgeGraphView projectId="p1" kind={kind} listState={{ ...base, ...state }} version="1" onChange={onChange} />} />
+        <Route path="/app/files" element={<KnowledgeGraphView projectId="p1" kind={kind} listState={{ ...base, ...state }} version="1" onChange={onChange} empty={<p>还没有整理出页面的配方</p>} />} />
         <Route path="*" element={<Where />} />
       </Routes>
     </MemoryRouter>,
@@ -146,14 +146,26 @@ describe("KnowledgeGraphView", () => {
     await waitFor(() => expect(screen.getAllByRole("button", { name: /^展开 \d+ 个/ })).toHaveLength(1));
   });
 
-  it("says in a sentence that the graph is thin, and that it is empty, and offers a retry when it cannot be read", async () => {
+  it("draws the picture as a card whose heading counts what is in it, with the legend and the quiet line in the card", async () => {
+    view();
+    const heading = await screen.findByRole("heading", { level: 2, name: /^\d+ 个实体，\d+ 条关系$/u });
+    const card = heading.closest("section")!;
+    expect(within(card).getByRole("img", { name: /实体和关系的关系图/u })).toBeInTheDocument();
+    expect(within(card).getByRole("group", { name: "图例" })).toBeInTheDocument();
+    // The list under the picture is outside the card: it is the same marks as text.
+    expect(card).not.toContainElement(screen.getByRole("list", { name: "实体" }));
+  });
+
+  it("is the list alone when the graph is too thin to draw, hands an empty graph to the page's recipe, and offers a retry when it cannot be read", async () => {
     mocks.graph.mockResolvedValue({ kind: "kg", nodes: kgNodes.slice(0, 2), links: [], relations: [], unresolved: 0, problems: [] });
     view();
-    expect(await screen.findByText("内容还少，画成图说不出什么，下面是列表。")).toBeInTheDocument();
+    expect(await screen.findByRole("list", { name: "实体" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /关系图/u })).toBeNull();
+    expect(screen.queryByText(/内容还少/u)).toBeNull();
     cleanup();
     mocks.graph.mockResolvedValue({ kind: "kg", nodes: [], links: [], relations: [], unresolved: 0, problems: [] });
     view();
-    expect(await screen.findByText("还没有整理出实体和关系。")).toBeInTheDocument();
+    expect(await screen.findByText("还没有整理出页面的配方")).toBeInTheDocument();
     cleanup();
     mocks.graph.mockRejectedValueOnce(new Error("down")).mockResolvedValue(kgMedical);
     view();

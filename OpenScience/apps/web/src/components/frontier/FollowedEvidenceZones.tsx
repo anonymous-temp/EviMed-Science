@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { List, ListRow } from "@/components/ui/ListRow";
 import type { EvidenceCard, EvidenceZone } from "@/lib/evidenceZoneClient";
 
 /**
@@ -18,34 +19,30 @@ export function FollowedEvidenceZones({ zones, cards }: { zones: readonly Eviden
           查看全部关注专区
         </Link>
       </div>
-      <ul className="mt-3 divide-y divide-border">
+      <List divided label="关注的专区" className="mt-3">
         {shownZones.map((zone) => (
-          <li key={zone.id} className="py-3">
-            <Link to={`/app/frontier/zones/${encodeURIComponent(zone.id)}`} className="text-ui text-text hover:text-accent">
-              {zone.title}
-            </Link>
-            {zone.evidenceCount !== null && <span className="ml-3 text-caption text-text-3">{zone.evidenceCount} 条证据</span>}
-          </li>
+          <ListRow
+            key={zone.id}
+            to={`/app/frontier/zones/${encodeURIComponent(zone.id)}`}
+            title={zone.title}
+            trailing={zone.evidenceCount !== null ? <span className="tabular-nums">{zone.evidenceCount} 条证据</span> : undefined}
+          />
         ))}
-      </ul>
+      </List>
       {shownCards.length > 0 && (
         <div>
           <h3 className="mt-4 text-ui font-medium text-text">最近证据更新</h3>
-          <ul className="mt-3 divide-y divide-border">
+          <List divided label="最近证据更新" className="mt-3">
             {shownCards.map((card) => (
-              <li key={card.id} className="py-3">
-                <Link
-                  to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}
-                  className="text-ui text-text hover:text-accent"
-                >
-                  {card.content?.question || card.title}
-                </Link>
-                {(card.content?.answer || card.summary) && (
-                  <p className="mt-1 line-clamp-2 max-w-measure text-caption text-text-2">{card.content?.answer || card.summary}</p>
-                )}
-              </li>
+              <ListRow
+                key={card.id}
+                to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}
+                title={card.content?.question || card.title}
+                // The card's own list line — never the neutral answer every card without a headline shares.
+                meta={(card.summary || card.content?.answer) ? <span className="line-clamp-2 block max-w-measure text-text-2">{card.summary || card.content?.answer}</span> : undefined}
+              />
             ))}
-          </ul>
+          </List>
         </div>
       )}
     </section>

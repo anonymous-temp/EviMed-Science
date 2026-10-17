@@ -93,7 +93,7 @@ export function ForgottenDrawer({ records, entries, projectName, onClose, onChan
     <Drawer title="已忘记的内容" onClose={onClose}>
       {failed && <LoadError className="mb-4" message="暂时读不到已停用的做法和经验。" onRetry={reload} />}
       {data === null && !failed ? <RunsSkeleton filter={false} />
-        : rows.length === 0 ? (failed ? null : <EmptyState icon={Archive} title="没有已忘记的内容" />)
+        : rows.length === 0 ? (failed ? null : <EmptyState icon={Archive} title="没有已忘记的内容" reason="你忘记的记忆会列在这里，随时可以恢复。" />)
           : (
             <List label="已忘记的内容">
               {rows.map((row) => (

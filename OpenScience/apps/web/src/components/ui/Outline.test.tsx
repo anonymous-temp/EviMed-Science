@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Outline, useOutline } from "./Outline";
 
-function Reader({ layout, sections = 4, refresh = [] }: { layout: "column" | "folded"; sections?: number; refresh?: unknown[] }) {
+function Reader({ layout, sections = 4, refresh = [], skip }: { layout: "column" | "folded"; sections?: number; refresh?: unknown[]; skip?: string }) {
   const body = useRef<HTMLDivElement>(null);
-  const { entries, active, select } = useOutline(body, { idPrefix: "t", refresh });
+  const { entries, active, select } = useOutline(body, { idPrefix: "t", refresh, skip });
   return (
     <div>
       <Outline layout={layout} entries={entries} active={active} onSelect={select} />
@@ -18,6 +18,7 @@ function Reader({ layout, sections = 4, refresh = [] }: { layout: "column" | "fo
             <p>正文。</p>
           </section>
         ))}
+        {skip && <div data-skip=""><h2>正文自带的标题</h2></div>}
       </div>
     </div>
   );
@@ -34,6 +35,12 @@ describe("Outline", () => {
     expect(document.querySelector("h2")?.id).toMatch(/^t-sec-/);
     await userEvent.click(buttons[3]);
     expect(buttons[3]).toHaveAttribute("aria-current", "location");
+  });
+
+  it("leaves out the headings inside a part the page says are not its sections", async () => {
+    render(<Reader layout="column" skip="[data-skip]" />);
+    const nav = await screen.findByRole("navigation", { name: "目录" });
+    expect([...nav.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["第 1 节", "第 2 节", "子节", "第 3 节", "第 4 节"]);
   });
 
   it("is a column beside the page, sticky below the band the page publishes, with the way back to the top", () => {

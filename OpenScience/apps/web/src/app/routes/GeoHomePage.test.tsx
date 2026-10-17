@@ -6,6 +6,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { GEO_SUMMARIES } from "@/components/geo/__fixtures__/geoProjects";
 import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
 import { GeoHomePage } from "./GeoHomePage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({
   useGeoFeature: vi.fn(),
@@ -121,6 +122,41 @@ describe("循证 GEO home", () => {
     expect(client.listGeoProjects).toHaveBeenCalledTimes(1);
   });
 
+  // R19 (audit D C4): 继续 stood among the data columns and read 「继续 | 未测 | 未测」. It is under the name, after the status it changes.
+  it("puts 继续 after 已暂停 under the project's name — not among the values on the right — and leaves the data columns whole", async () => {
+    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" }]);
+    renderHome();
+    const row = within(await screen.findByRole("list", { name: "循证 GEO 项目" })).getByRole("listitem");
+    const resume = within(row).getByRole("button", { name: /继续/ });
+    const subline = row.querySelector("[data-geo-subline]")!;
+    expect(subline).toContainElement(resume);
+    expect(subline).toHaveTextContent(/已暂停\s*继续$/);
+    // The values on the right are the index and the mention rate, and no button.
+    const values = row.querySelector(".w-16")!.parentElement!;
+    expect(within(values).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("orders two or more projects by their latest activity, or the ones that need the reader first, and draws no order for one", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[0], id: "geo_a", name: "安静的项目", updatedAt: "2026-10-12T00:00:00Z", alert: { wrongOurs: 0, severe: 0, safety: 0 } },
+      { ...GEO_SUMMARIES[1], id: "geo_b", name: "有严重讲错的项目", updatedAt: "2026-10-01T00:00:00Z", alert: { wrongOurs: 3, severe: 2, safety: 0, severity: "S3" } },
+      { ...GEO_SUMMARIES[0], id: "geo_c", name: "停了的项目", status: "paused", updatedAt: "2026-10-13T00:00:00Z", alert: { wrongOurs: 0, severe: 0, safety: 0 } },
+    ]);
+    const { unmount } = renderHome();
+    const names = () => within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("link").map((link) => link.textContent);
+    await screen.findByRole("list", { name: "循证 GEO 项目" });
+    expect(names()).toEqual(["停了的项目", "安静的项目", "有严重讲错的项目"]);
+    const toolbar = screen.getByRole("group", { name: "项目排序" });
+    expect(toolbar).toHaveTextContent("3 个项目");
+    await userEvent.click(within(toolbar).getByRole("button", { name: "需要处理的在前" }));
+    expect(names()).toEqual(["有严重讲错的项目", "安静的项目", "停了的项目"]);
+    unmount();
+    client.listGeoProjects.mockResolvedValue([GEO_SUMMARIES[0]]);
+    renderHome();
+    await screen.findByRole("list", { name: "循证 GEO 项目" });
+    expect(screen.queryByRole("group", { name: "项目排序" })).not.toBeInTheDocument();
+  });
+
   it("keeps 继续 when the project cannot be set going, and says so", async () => {
     client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" }]);
     client.patchGeoProject.mockRejectedValue(new WebApiError("no", { status: 403, code: "geo_forbidden" }));
@@ -191,5 +227,19 @@ describe("循证 GEO home", () => {
     client.listGeoProjects.mockRejectedValue(new WebApiError("off", { status: 404, code: "geo_not_enabled" }));
     renderHome();
     expect(await screen.findByText(GEO_OFF_SENTENCE)).toBeInTheDocument();
+  });
+});
+
+describe("the GEO home's composition", () => {
+  it("has its header with one primary action, the order over the list, and no button among the data columns", async () => {
+    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], status: "paused" }, GEO_SUMMARIES[1]]);
+    const { container } = renderHome();
+    await screen.findByRole("list", { name: "循证 GEO 项目" });
+    expectComposed(container, { tablists: 0, stepRail: false, toolbar: true });
+    // 继续 is under the name (the row's meta line); the values on the right are text.
+    for (const row of within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("listitem")) {
+      const values = row.querySelector(".w-16")?.parentElement;
+      expect(values && within(values as HTMLElement).queryByRole("button")).toBeNull();
+    }
   });
 });

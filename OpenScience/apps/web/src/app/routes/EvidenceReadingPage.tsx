@@ -5,14 +5,17 @@ import {
   useEvidenceRequestId,
 } from "@/components/frontier/useEvidenceScope";
 import { CardEditor } from "@/components/frontier/EvidenceEditors";
-import { Textarea, inputClasses } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
+// eslint-disable-next-line no-restricted-imports -- the score is a field of the review form, not a filter of a list: a form has no toolbar.
+import { FilterSelect } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
+import { EvidenceInspector } from "@/components/frontier/EvidenceInspector";
 import {
   EvidenceDiscussionList,
   EvidenceReviews,
@@ -180,7 +183,8 @@ function EvidenceReadingContent({
   return (
     <PageShell
       title={question ?? "证据卡"}
-      width="read"
+      titleVariant="document"
+      width="page"
       back={<FrontierBack trail={[{ label: zone?.title || "专区", to: zonePath }]} />}
       actions={
         (askable || evidence?.canEdit) && (
@@ -247,13 +251,13 @@ function EvidenceReadingContent({
         <FrontierSkeleton />
       ) : (
         evidence && (
-          <>
+          // The page's one drawer: a conclusion's quotation or a source's excerpt, from either list or from any `[n]` — the discussion's too.
+          <EvidenceInspector evidence={evidence} challenges={challengeable ? (challenges ?? []) : undefined}>
             <EvidenceReading
               evidence={evidence}
-              challenges={challengeable ? (challenges ?? []) : undefined}
               afterAnswer={<EvidenceContinueAction evidence={evidence} />}
             />
-            <div className="mt-6 max-w-measure-body space-y-4">
+            <div className="mt-6 max-w-read space-y-4">
               {sourceItemLive && (
                 <Link
                   className="inline-block text-caption text-accent"
@@ -311,26 +315,12 @@ function EvidenceReadingContent({
                           });
                       }}
                     >
-                      <label className="block text-ui text-text">
-                        学术评议评分
-                        <select
-                          className={inputClasses({ className: "mt-2" })}
-                          required
-                          value={score}
-                          onChange={(event) =>
-                            setScore(
-                              event.target.value ? Number(event.target.value) : "",
-                            )
-                          }
-                        >
-                          <option value="">请选择评分</option>
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <option key={value} value={value}>
-                              {value} / 5
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <FilterSelect
+                        label="学术评议评分"
+                        options={[1, 2, 3, 4, 5].map((value) => ({ value: String(value), label: `${value} / 5` }))}
+                        value={score === "" ? null : String(score)}
+                        onChange={(value) => setScore(value ? Number(value) : "")}
+                      />
                       <Textarea
                         label="评议意见"
                         maxLength={4000}
@@ -412,7 +402,7 @@ function EvidenceReadingContent({
                 </Disclosure>
               )}
             </div>
-          </>
+          </EvidenceInspector>
         )
       )}
     </PageShell>

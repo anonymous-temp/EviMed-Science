@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FrontierDaily } from "@/lib/frontierClient";
-import { DailyIssue, type DailyState } from "./DailyView";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { DailyIssue, dailyControls, type DailyState } from "./DailyView";
 import { frontierItem } from "./__fixtures__/frontierItems";
 
 const items = (prefix: string, count: number) => Array.from({ length: count }, (_, index) => frontierItem({ id: `${prefix}${index}`, title: `${prefix} 第 ${index + 1} 条` }));
@@ -21,45 +22,67 @@ const scrollIntoView = vi.fn();
 beforeEach(() => { scrollIntoView.mockReset(); Element.prototype.scrollIntoView = scrollIntoView; });
 afterEach(() => { delete (Element.prototype as Partial<Element>).scrollIntoView; });
 
+/** The page's way of using an issue: its controls in the toolbar above it. */
+const showWithToolbar = (daily: FrontierDaily, props: { weekly?: boolean; onDay?: (day: string) => void } = {}) => {
+  const current = state(daily);
+  const controls = dailyControls(current, { weekly: props.weekly, onDay: props.onDay ?? (() => {}) });
+  return render(<MemoryRouter><Toolbar label="简报的控制" filters={controls.filters} actions={controls.actions} /><DailyIssue state={current} onDay={() => {}} {...props} /></MemoryRouter>);
+};
+
 describe("the issue's header", () => {
-  it("stays at the top while the issue scrolls, with the date, 分类, 往期 and 复制 in it", () => {
+  it("is the date and how long the issue takes to read, and holds no control: they are the page toolbar's (R19, audit D C1c)", () => {
     show(issue());
     const header = screen.getByRole("banner");
-    expect(header).toHaveClass("sticky", "top-0", "z-sticky", "bg-bg");
+    expect(header).not.toHaveClass("sticky");
     expect(within(header).getByRole("heading", { name: "10月7日 周三" })).toBeInTheDocument();
-    for (const name of ["复制", "分类", "往期"]) expect(within(header).getByRole("button", { name })).toBeInTheDocument();
+    expect(header).toHaveTextContent("12 条 · 约 7 分钟");
+    expect(within(header).queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "复制" })).not.toBeInTheDocument();
+  });
+
+  it("puts 分类, 往期 and 复制 in the toolbar, where the issue's controls stay while it scrolls", () => {
+    showWithToolbar(issue());
+    const toolbar = screen.getByRole("group", { name: "简报的控制" });
+    for (const name of ["分类", "往期", "复制"]) expect(within(toolbar).getByRole("button", { name })).toBeInTheDocument();
+    expect(toolbar.compareDocumentPosition(screen.getByRole("article")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("lists the lanes with their counts in 分类, safety first, and takes the reader to the one chosen without changing the address", async () => {
-    show(issue());
+    showWithToolbar(issue());
     await userEvent.click(screen.getByRole("button", { name: "分类" }));
     const menu = await screen.findByRole("menu", { name: "分类" });
-    expect(within(menu).getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual(["安全警示 1", "临床证据 8", "指南共识 2", "研发产业 1"]);
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "指南共识 2" }));
+    expect(within(menu).getAllByRole("menuitemradio").map((entry) => entry.textContent)).toEqual(["安全警示 1", "临床证据 8", "指南共识 2", "研发产业 1"]);
+    await userEvent.click(within(menu).getByRole("menuitemradio", { name: "指南共识 2" }));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById("daily-guideline"));
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
   });
 
   it("offers 分类 only from three lanes on", () => {
-    show(issue({ safety: [], sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
+    showWithToolbar(issue({ safety: [], sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
     expect(screen.queryByRole("button", { name: "分类" })).not.toBeInTheDocument();
   });
 
   it("keeps the safety alerts and drug-safety lane separately named and addressable", async () => {
-    show(issue({ sections: [lane("safety", "药物安全", 2), lane("guideline", "指南共识", 1)] }));
+    showWithToolbar(issue({ sections: [lane("safety", "药物安全", 2), lane("guideline", "指南共识", 1)] }));
     expect(screen.getByRole("region", { name: "安全警示 1" })).not.toBe(screen.getByRole("region", { name: "药物安全 2" }));
     for (const [name, id] of [["安全警示 1", "daily-safety-alerts"], ["药物安全 2", "daily-safety"]]) {
       await userEvent.click(screen.getByRole("button", { name: "分类" }));
-      await userEvent.click(screen.getByRole("menuitem", { name }));
+      await userEvent.click(screen.getByRole("menuitemradio", { name }));
       expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById(id));
       expect(document.querySelectorAll(`#${id}`)).toHaveLength(1);
     }
   });
 
   it("counts the safety alerts as a lane, so two lanes and an alert are three", () => {
-    show(issue({ sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
+    showWithToolbar(issue({ sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
     expect(screen.getByRole("button", { name: "分类" })).toBeInTheDocument();
+  });
+
+  it("has no controls for a day without an issue, whose past issues are the empty state's own button", () => {
+    const controls = dailyControls({ index: [{ day: "2026-10-06", title: null, itemCount: 3, generatedAt: null }], issue: null, loading: false, error: null, retry: () => {} }, { onDay: () => {} });
+    expect(controls.filters).toEqual([]);
+    expect(controls.actions).toBeNull();
   });
 });
 
@@ -131,9 +154,9 @@ describe("a day without an issue", () => {
     render(<MemoryRouter><DailyIssue state={state} onDay={() => {}} {...props} /></MemoryRouter>);
 
   it.each([
-    ["pending", "10月1日 周四日报尚未发布"],
-    ["failed", "10月1日 周四日报生成失败"],
-    ["empty", "10月1日 周四没有符合条件的内容"],
+    ["pending", "10月1日 周四的日报尚未发布。"],
+    ["failed", "10月1日 周四的日报生成失败。"],
+    ["empty", "10月1日 周四没有符合条件的内容，没有出刊。"],
   ] as const)("keeps the real publication date for a %s outcome and offers past issues", (outcome, title) => {
     showEmpty(empty({
       publication: { day: "2026-10-01", state: outcome },
@@ -147,7 +170,6 @@ describe("a day without an issue", () => {
     showEmpty(empty({ schedule: { time: "08:15", timeZone: "Asia/Shanghai" } }));
     expect(screen.getByText("今日日报 08:15（北京时间）发布")).toBeInTheDocument();
     expect(screen.queryByText(/07:30/)).not.toBeInTheDocument();
-    expect(screen.getByText("当天没有符合条件的内容时不出刊。")).toBeInTheDocument();
   });
 
   it("names another time zone by its own name", () => {
@@ -169,8 +191,9 @@ describe("a day without an issue", () => {
       day: "2026-10-01", schedule: { time: "07:30", timeZone: "Asia/Shanghai" },
       index: [{ day: "2026-10-07", title: null, itemCount: 12, generatedAt: null }, { day: "2026-10-06", title: null, itemCount: 9, generatedAt: null }],
     }), { onDay });
-    expect(screen.getByText("10月1日 周四没有日报")).toBeInTheDocument();
-    expect(screen.getByText("日报每天 07:30（北京时间）发布；当天没有符合条件的内容时不出刊。")).toBeInTheDocument();
+    // One sentence: the fact once, and no 「周四日报」 run together (R19, audit D C3).
+    expect(screen.getByText("10月1日 周四没有日报：当天没有符合条件的内容时不出刊。")).toBeInTheDocument();
+    expect(screen.queryByText(/07:30/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "往期" }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "10月6日 周二" }));
     expect(onDay).toHaveBeenCalledWith("2026-10-06");

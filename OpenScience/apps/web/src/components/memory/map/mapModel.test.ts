@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
-import { MIN_EDGES, MIN_NODES, existingAt, headline, headlineText, isThin, markKindWord, markRows, narrowMap, replayStops } from "./mapModel";
+import { MIN_EDGES, MIN_NODES, existingAt, headline, headlineParts, headlineText, isThin, markKindWord, markRows, narrowMap, relationTitle, replayStops } from "./mapModel";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, state: "current", at: "2026-09-01T00:00:00.000Z", open: { kind: "record", id }, ...over });
 const edge = (from: string, to: string, type: MapEdge["type"] = "belongs-to"): MapEdge => ({ from, to, type });
@@ -82,6 +82,28 @@ describe("the sentence the picture proves", () => {
   it("has no button when there is nothing to look at, and a plain sentence when there is nothing at all", () => {
     expect(headline({ summary: summary(7, 0), nodes: [] })).toEqual([{ text: "EviMed 记住了你的 7 件事。" }]);
     expect(headline({ summary: summary(0, 0), nodes: [] })).toEqual([{ text: "还没有记住什么。" }]);
+  });
+});
+
+describe("the sentence in the page's headline slot", () => {
+  it("makes the number a link that narrows to what needs a look, with its unit outside the link", () => {
+    const parts = headline({ summary: { memories: 48, documents: 1, methods: 0, projects: 1, needsLook: 4, since: null }, nodes: [0, 1, 2, 3].map((index) => memory(`s${index}`, { state: "check", reason: "source-retracted" })) });
+    let looked = 0;
+    const slot = headlineParts(parts, () => { looked += 1; });
+    expect(slot).toEqual(["EviMed 记住了你的 48 件事，其中 ", { n: 4, onOpen: expect.any(Function), label: "4 件，只看这些" }, " 件", "依据的资料变了或需要核对。"]);
+    (slot[1] as { onOpen: () => void }).onOpen();
+    expect(looked).toBe(1);
+  });
+  it("is the plain sentence when nothing needs a look", () => {
+    expect(headlineParts(headline({ summary: { memories: 7, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null }, nodes: [] }), () => undefined)).toEqual(["EviMed 记住了你的 7 件事。"]);
+  });
+});
+
+describe("what the relation picture holds, in a sentence", () => {
+  it("counts the memories in force and what they are tied to, and leaves out what is not there", () => {
+    expect(relationTitle(nodes)).toBe("3 件现行的记忆，连着 1 份资料和 1 个项目");
+    expect(relationTitle(nodes.filter((node) => node.type === "memory"))).toBe("3 件现行的记忆");
+    expect(relationTitle(nodes.filter((node) => node.type !== "memory"))).toBe("记忆、资料和项目的关系");
   });
 });
 

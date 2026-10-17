@@ -70,6 +70,9 @@ function bandLevelOf(series: object): number | null {
   return typeof level === "number" && Number.isFinite(level) ? level : null;
 }
 
+/** The sources a chart draws dashed, and the word for what the dash means. */
+const DASHED_SOURCES: ReadonlyArray<readonly [VcrValueSource, string]> = [["reconstructed", "文献重建"], ["aggregate", "汇总数据"]];
+
 /**
  * A chart's legend, from its series: each one in its own colour and mark, an
  * assumption tagged 「假设」, then — once per name — the bands the chart
@@ -86,6 +89,9 @@ export function VcrSeriesLegend({ series }: {
     if (name) bands.set(name, bands.get(name) === true || Boolean(line.ours));
   }
   const unobserved = series.some((line) => (line.unobserved ?? []).length > 0);
+  // A dashed line says what it is drawn from, once: the dash is the encoding for a curve nobody measured, and a legend that names
+  // the series without naming the dash leaves the reader to guess (plan §9.6; audit B §2.4 #18).
+  const dashed = DASHED_SOURCES.filter(([source]) => series.some((line) => line.source === source));
   return (
     <>
       {series.map((line, index) => (
@@ -104,6 +110,17 @@ export function VcrSeriesLegend({ series }: {
             style={{ background: ours ? "var(--chart-own)" : "var(--chart-rival-2)", opacity: 0.28 }}
           />
           {name}
+        </span>
+      ))}
+      {dashed.map(([source, word]) => (
+        <span key={source} data-vcr-legend-source={source} className="inline-flex items-center gap-1.5 text-caption text-text-2">
+          <span
+            aria-hidden="true"
+            data-forced-colors="preserve"
+            className="inline-block h-0.5 w-4 text-text-3"
+            style={{ backgroundImage: "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)" }}
+          />
+          {`虚线 = ${word}`}
         </span>
       ))}
       {unobserved && (
@@ -143,6 +160,10 @@ export function VcrPlot({
   overlay?: ReactNode;
   className?: string;
 }) {
+  // The axis title sits at the right end of the tick row; when the last tick is near that end the two would print on top of each
+  // other (a phone's plot is about 300px: a five-character title needs the last quarter), so the title takes the line under it.
+  const lastTick = x.ticks.length > 0 ? posX(x.ticks[x.ticks.length - 1], x) : 0;
+  const titleBelow = Boolean(xLabel) && Boolean(xLabels?.length) && lastTick > 100 - 5 * (xLabel?.length ?? 0);
   return (
     <div className={cn("w-full", className)}>
       {yLabel && <p className="mb-1 text-caption text-text-3">{yLabel}</p>}
@@ -190,9 +211,10 @@ export function VcrPlot({
               {label}
             </span>
           ))}
-          {xLabel && <span className="absolute right-0 whitespace-nowrap text-meta text-text-3">{xLabel}</span>}
+          {xLabel && !titleBelow && <span className="absolute right-0 whitespace-nowrap text-meta text-text-3">{xLabel}</span>}
         </div>
       )}
+      {xLabel && titleBelow && <p className="ml-10 text-right text-meta text-text-3">{xLabel}</p>}
     </div>
   );
 }
@@ -348,9 +370,13 @@ export function VcrSurvivalChart({
         formatY={(value) => `${Math.round(value * 100)}%`}
         height={height}
         overlay={rmst?.tau != null ? (
+          // The name of the cut-off stands beside its line, on the side with the room, and not across it.
           <span
             data-vcr-tau=""
-            className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-meta text-accent-strong"
+            className={cn(
+              "absolute top-0 whitespace-nowrap text-meta text-accent-strong",
+              posX(rmst.tau, x) > 60 ? "-translate-x-full pr-1" : "pl-1",
+            )}
             style={{ left: `${posX(rmst.tau, x)}%` }}
           >
             {rmst.label ?? `τ = ${rmst.tau}`}
@@ -409,19 +435,20 @@ export function VcrSurvivalChart({
         })}
       </VcrPlot>
       {curves.some((curve) => curve.atRisk?.length) && (
-        <table className="mt-3 w-full border-collapse text-caption tabular-nums">
-          <caption className="mb-1 text-left text-caption text-text-3">风险人数</caption>
-          <tbody>
-            {curves.filter((curve) => curve.atRisk?.length).map((curve) => (
-              <tr key={`risk-${curve.key}`} data-vcr-at-risk={curve.key}>
-                <th scope="row" className="whitespace-nowrap py-0.5 pr-3 text-left font-normal text-text-3">{curve.label}</th>
+        <div role="group" aria-label="风险人数" className="mt-3">
+          <p className="text-caption text-text-3">风险人数</p>
+          {curves.filter((curve) => curve.atRisk?.length).map((curve) => (
+            <div key={`risk-${curve.key}`} data-vcr-at-risk={curve.key} className="mt-1">
+              <span className="block truncate text-caption text-text-3">{curve.label}</span>
+              {/* Each count hangs under the time it was counted at, on the curve's own axis. */}
+              <span className="relative ml-10 block h-5">
                 {(curve.atRisk ?? []).map((entry) => (
-                  <td key={entry.x} className="py-0.5 text-center text-text-2">{entry.n}</td>
+                  <span key={entry.x} className="absolute -translate-x-1/2 text-caption tabular-nums text-text-2" style={{ left: `${posX(entry.x, x)}%` }}>{entry.n}</span>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

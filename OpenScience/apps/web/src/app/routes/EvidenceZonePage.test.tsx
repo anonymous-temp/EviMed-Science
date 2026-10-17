@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { card, zone } from "@/components/frontier/__fixtures__/evidenceCards";
 import { EvidenceZonePage } from "./EvidenceZonePage";
+import { expectComposed } from "@/test/expectComposed";
 
 const client = vi.hoisted(() => ({ fetchEvidenceZoneDetail: vi.fn(), listZoneEvidence: vi.fn(), followEvidenceZone: vi.fn(), publishEvidenceZone: vi.fn(), prepareEvidenceResearch: vi.fn() }));
 const upkeep = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn(), fetchEvidenceChanges: vi.fn() }));
@@ -114,9 +115,13 @@ describe("a zone's page", () => {
     expect(await screen.findByText("3 条证据")).toBeInTheDocument();
     expect(screen.queryByText(/匹配|已发布/)).toBeNull();
     client.listZoneEvidence.mockResolvedValue({ items: [card], total: 1, nextCursor: null });
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索当前专区证据" }), "卒中");
-    await userEvent.click(screen.getByRole("button", { name: "搜索" }));
+    // The same live search as the zone list: typing is searching, there is no 「搜索」 button, and the count comes after the box.
+    expect(screen.queryByRole("button", { name: "搜索" })).toBeNull();
+    const box = screen.getByRole("searchbox", { name: "搜索当前专区证据" });
+    await userEvent.type(box, "卒中");
     expect(await screen.findByText("1 条匹配证据")).toBeInTheDocument();
+    expect(client.listZoneEvidence).toHaveBeenLastCalledWith("ez_1", "卒中", null, undefined);
+    expect(box.compareDocumentPosition(screen.getByText("1 条匹配证据")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     reader.unmount();
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...readable, canEdit: true }, feedback: [] });
     client.listZoneEvidence.mockResolvedValue({ items: [card], total: 4, nextCursor: null });
@@ -124,14 +129,16 @@ describe("a zone's page", () => {
     expect(await screen.findByText("3 条已发布，含草稿共 4 条")).toBeInTheDocument();
   });
 
-  it("shows each card as its question, a two-line answer and one line of 性质 · 引文已核对 — not who wrote it, whether an AI reviewed it, nor when it was checked", async () => {
+  it("shows each card as its question, a two-line summary and one line of 性质 · 引文已核对 — not who wrote it, whether an AI reviewed it, nor when it was checked", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: readable, feedback: [] });
-    client.listZoneEvidence.mockResolvedValue({ items: [{ ...card, content: { question: "试验药能预防卒中吗？", answer: "能，但出血增多。" }, editorial: { author: { kind: "ai", name: "EviMed 证据 AI", model: "deepseek-v4-flash" }, reviewer: { kind: "ai", name: "核对 AI" }, status: "ai-reviewed", reviewRevision: card.revision, sourceCheckedAt: "2026-10-04T12:00:00Z" } }], total: 1, nextCursor: null });
+    client.listZoneEvidence.mockResolvedValue({ items: [{ ...card, summary: "能，但出血增多。", content: { question: "试验药能预防卒中吗？", answer: "这张卡汇总了 1 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。" }, editorial: { author: { kind: "ai", name: "EviMed 证据 AI", model: "deepseek-v4-flash" }, reviewer: { kind: "ai", name: "核对 AI" }, status: "ai-reviewed", reviewRevision: card.revision, sourceCheckedAt: "2026-10-04T12:00:00Z" } }], total: 1, nextCursor: null });
     mount();
     const link = await screen.findByRole("link", { name: "试验药能预防卒中吗？" });
     expect(link).toHaveAttribute("href", "/app/frontier/zones/ez_1/evidence/ec_0123456789abcdef");
     const row = link.closest("li")!;
     expect(within(row).getByText("能，但出血增多。")).toHaveClass("line-clamp-2");
+    // The row says the card's own line — never the neutral answer every card without a headline shares (R19, audit D C3).
+    expect(row).not.toHaveTextContent("这张卡汇总了");
     expect(row).toHaveTextContent("解读 · 综合 · 引文已核对 1/2");
     expect(row).not.toHaveTextContent(/AI 编写|EviMed 证据 AI|来源核查|评议者|学术证据|deepseek|AI 已评议|AI 待评议/);
   });
@@ -205,46 +212,55 @@ describe("a zone's page and the features the server says it has", () => {
   it("links the public page of a published zone opened to the internet, when the server reports public pages", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
+    const opened = vi.spyOn(window, "open").mockReturnValue(null);
     mount();
-    const link = await screen.findByRole("link", { name: "公开页" });
-    expect(link).toHaveAttribute("href", "/evidence/z/ez_1");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // It is an entry of the header's menu, and opens in a new window without handing it this one.
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "公开页" }));
+    expect(opened).toHaveBeenCalledWith("/evidence/z/ez_1", "_blank", "noopener,noreferrer");
+    opened.mockRestore();
   });
 
   it("links the public page under the base the server says the pages are served at", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, publicBasePath: "/evimed-evidence", upkeep: false });
+    const opened = vi.spyOn(window, "open").mockReturnValue(null);
     mount();
-    expect(await screen.findByRole("link", { name: "公开页" })).toHaveAttribute("href", "/evimed-evidence/z/ez_1");
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "公开页" }));
+    expect(opened).toHaveBeenCalledWith("/evimed-evidence/z/ez_1", "_blank", "noopener,noreferrer");
+    opened.mockRestore();
   });
 
-  it("shows no 公开页 link for a zone that is platform-only, a draft, or on a deployment without public pages", async () => {
+  it("shows no 公开页 for a zone that is platform-only, a draft, or on a deployment without public pages", async () => {
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...open, visibility: "platform" }, feedback: [] });
     const platformOnly = mount();
     await screen.findByRole("heading", { name: "卒中研究" });
-    expect(screen.queryByRole("link", { name: "公开页" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更多操作" })).toBeNull();
     platformOnly.unmount();
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...open, state: "draft" }, feedback: [] });
     const draft = mount();
     await screen.findByRole("heading", { name: "卒中研究" });
-    expect(screen.queryByRole("link", { name: "公开页" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更多操作" })).toBeNull();
     draft.unmount();
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: false, upkeep: false });
     mount();
     await screen.findByRole("heading", { name: "卒中研究" });
-    expect(screen.queryByRole("link", { name: "公开页" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更多操作" })).toBeNull();
   });
 
-  it("places the change log behind the upkeep flag, and reads it only when the reader opens it", async () => {
+  it("places the change log behind the upkeep flag, in the header's menu, and reads it only when the reader opens it", async () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
+    client.listZoneEvidence.mockResolvedValue({ items: [card], total: 1, nextCursor: null });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: false, upkeep: true });
     mount();
-    const summary = await screen.findByText("变更记录");
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     expect(upkeep.fetchEvidenceChanges).not.toHaveBeenCalled();
-    await userEvent.click(summary);
-    expect(await screen.findByText("还没有变更记录")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "变更记录" }));
+    const drawer = await screen.findByRole("dialog", { name: "变更记录" });
+    expect(await within(drawer).findByText("还没有变更记录")).toBeInTheDocument();
     expect(upkeep.fetchEvidenceChanges).toHaveBeenCalledWith("ez_1", expect.objectContaining({ limit: 20 }));
   });
 
@@ -252,7 +268,42 @@ describe("a zone's page and the features the server says it has", () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     mount();
-    await screen.findByRole("link", { name: "公开页" });
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "变更记录" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "公开页" })).toBeInTheDocument();
+  });
+
+  it("keeps a zone's background and experts, and a suggestion to its owner, in the menu's drawers — not as folds on the page", async () => {
+    client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...open, canFeedback: true, background: "卒中的背景。", experts: [{ name: "王医生", institution: "某医院" }] }, feedback: [] });
+    client.listZoneEvidence.mockResolvedValue({ items: [card], total: 1, nextCursor: null });
+    const { container } = mount();
+    await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    expect(container.querySelector("details")).toBeNull();
+    await userEvent.click(screen.getByRole("menuitem", { name: "领域背景与专家" }));
+    const background = await screen.findByRole("dialog", { name: "领域背景与专家" });
+    expect(within(background).getByText("卒中的背景。")).toBeInTheDocument();
+    expect(within(background).getByText("王医生 · 某医院")).toBeInTheDocument();
+    await userEvent.click(within(background).getByRole("button", { name: "关闭" }));
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "给专区提建议" }));
+    expect(await screen.findByRole("dialog", { name: "给专区提建议" })).toContainElement(screen.getByLabelText("专区建议"));
+  });
+});
+
+describe("the zone page's composition", () => {
+  it("has its header, then the toolbar with the search and the count after it, then the list — and nothing of the zone's menu on the page", async () => {
+    client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...readable, canEdit: true }, feedback: [] });
+    client.listZoneEvidence.mockResolvedValue({ items: [card], total: 3, nextCursor: null });
+    const { container } = mount();
+    await screen.findByRole("searchbox", { name: "搜索当前专区证据" });
+    const facts = expectComposed(container, { tablists: 0, stepRail: false, toolbar: true });
+    expect(facts.toolbars).toHaveLength(1);
+    expect(facts.chrome).toContainElement(facts.toolbars[0]);
+    // The owner's way to add to the list is the toolbar's, not a button above it.
+    expect(within(facts.toolbars[0]).getByRole("button", { name: "添加证据" })).toBeInTheDocument();
+    // What was a fold on the page — 领域背景与专家, 变更记录, 给专区提建议 — is the menu's, and is not on it.
+    expect(screen.queryByText("领域背景与专家")).toBeNull();
     expect(screen.queryByText("变更记录")).toBeNull();
+    expect(screen.queryByText("给专区提建议")).toBeNull();
   });
 });

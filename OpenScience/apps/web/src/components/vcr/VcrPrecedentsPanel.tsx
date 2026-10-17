@@ -1,14 +1,16 @@
 import { registryCoverageSummary, VcrRegistryCoverage } from "./VcrRegistryCoverage";
-import { Fragment, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { getVcrPrecedents, type VcrPrecedent } from "@/lib/vcrClient";
 import { safeLink } from "@/lib/frontierClient";
-import { cn } from "@/lib/cn";
-import { buttonClasses } from "@/components/ui/Button";
-import { drawnColumns, type DataColumn } from "@/components/ui/DataTable";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { SearchInput } from "@/components/ui/SearchInput";
-import { useVcrLoad, VcrFacts, VcrTabError, VcrToolbar } from "./vcrTabKit";
+import { Drawer } from "@/components/ui/Drawer";
+import { FactList, type Fact } from "@/components/ui/FactList";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { EmptyState } from "@/components/cards/EmptyState";
+import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { numberText } from "./vcrText";
 
@@ -34,40 +36,42 @@ export function VcrPrecedentsPanel() {
   const [query, setQuery] = useState("");
   const [asked, setAsked] = useState("");
   const { state, reload } = useVcrLoad(`vcr:precedents:${asked}`, () => getVcrPrecedents(asked ? { q: asked } : {}));
-  if (state.kind === "error" && state.off) return <p className="py-12 text-center text-ui text-text-3">{VCR_OFF_SENTENCE}</p>;
+  if (state.kind === "error" && state.off) return <EmptyState title={VCR_OFF_SENTENCE} />;
   if (state.kind === "ready" && !state.data.available) {
     return (
-      <p data-vcr-precedents-unavailable="" className="py-12 text-center text-ui text-text-3">
-        {state.data.message ?? "试验先例库在本部署尚未接入。"}
-      </p>
+      <div data-vcr-precedents-unavailable="">
+        <EmptyState title={state.data.message ?? "试验先例库在本部署尚未接入。"} />
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <VcrToolbar summary={state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined}>
-        <SearchInput
-          label="搜索先例"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            if (!event.target.value.trim()) setAsked("");
-          }}
-          onClear={() => { setQuery(""); setAsked(""); }}
-          onKeyDown={(event) => { if (event.key === "Enter") setAsked(query.trim()); }}
-        />
-      </VcrToolbar>
+      <Toolbar
+        label="试验先例的检索"
+        search={{
+          label: "搜索先例",
+          value: query,
+          onChange: (next) => {
+            setQuery(next);
+            if (!next.trim()) setAsked("");
+          },
+          onClear: () => { setQuery(""); setAsked(""); },
+          inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
+        }}
+        summary={state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined}
+      />
 
       {state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
           : state.data.precedents.length === 0
-            ? <p className="py-6 text-ui text-text-3">{asked ? "没有找到先例。换一个检索词试试。" : "先例库里还没有先例。"}</p>
-            : (
-              <VcrPrecedentTable
-                rows={state.data.precedents}
-                footnote={state.data.sources ?? "计划值取自登记记录的预计字段，只用于对照；历史基准只用实际值。"}
+            ? (
+              <EmptyState
+                title={asked ? "没有找到先例" : "先例库里还没有先例"}
+                action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
               />
-            )}
+            )
+            : <VcrPrecedentTable rows={state.data.precedents} />}
 
       {/* What the registries could and could not be read for is the answer to 「为什么没有这一条」, one click under the precedents rather than above them. */}
       {state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
@@ -95,25 +99,18 @@ function hasDetail(row: VcrPrecedent): boolean {
 /**
  * The precedent table both the library and a study's 数据与证据 tab read.
  *
- * One line per trial, planned and actual in columns of their own; a row opens
- * to the rest of what the registry says (plan §6.4) — the title, countries,
- * interventions, endpoints and the eligibility **as written**, beside the
- * normalised population it was reduced to, so a reader can check the
- * reduction. The source opens only through a checked `http(s)` link.
+ * One line per trial, planned and actual in columns of their own (the names say what a sponsor hoped for and what happened, so no
+ * sentence has to — plan §6.4); a row opens to the rest of what the registry says in a drawer: the title, countries,
+ * interventions, endpoints and the eligibility **as written**, beside the normalised population it was reduced to, so a reader can
+ * check the reduction. The registry number in the first cell is the keyboard's way in. The source opens only through a checked
+ * `http(s)` link.
  */
-export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
+export function VcrPrecedentTable({ rows, withUse = false }: {
   rows: readonly VcrPrecedent[];
-  footnote?: ReactNode;
   /** The 「用于」 column: which parameter of this study the trial fed. */
   withUse?: boolean;
 }) {
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const toggle = (id: string) => setOpen((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  });
+  const [opened, setOpened] = useState<VcrPrecedent | null>(null);
   const columns: Array<DataColumn<VcrPrecedent>> = [
     {
       key: "registry",
@@ -121,7 +118,7 @@ export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
       rowHeader: true,
       cell: (row) => {
         // The registry number is the row's one control — plain text in the accent colour, one line — and what the registry says about
-        // the trial is a line of the table under it. A chevron and a second line inside the button made it a kind of control of its own.
+        // the trial is a line of the table under it.
         const caption = [row.registry, row.population].filter(Boolean).join(" · ");
         return (
           <span className="block min-w-0">
@@ -129,9 +126,8 @@ export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
               ? (
                 <button
                   type="button"
-                  aria-expanded={open.has(row.id)}
-                  aria-controls={`vcr-precedent-${row.id}`}
-                  onClick={() => toggle(row.id)}
+                  aria-label={`打开 ${row.registryId} 的登记记录`}
+                  onClick={() => setOpened(row)}
                   className="text-left tabular-nums text-link hover:underline"
                 >
                   {row.registryId}
@@ -152,82 +148,43 @@ export function VcrPrecedentTable({ rows, footnote, withUse = false }: {
     { key: "rate", header: "每中心每月", align: "right", isEmpty: (row) => row.perSitePerMonth == null, cell: (row) => numberText(row.perSitePerMonth, 2) },
     ...(withUse ? [{ key: "usedFor", header: "用于", isEmpty: (row: VcrPrecedent) => !row.usedFor, cell: (row: VcrPrecedent) => row.usedFor ?? "—" }] : []),
   ];
-  const drawn = drawnColumns(columns, rows);
 
   return (
-    <div>
-      {/* The table scrolls sideways on a narrow screen: the scroller is a named region a keyboard can reach and scroll. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be reachable by keyboard (axe: scrollable-region-focusable). */}
-      <div role="region" aria-label="试验先例" tabIndex={0} className="overflow-x-auto">
-        <table className="w-full min-w-[48rem] border-collapse">
-          <caption className="sr-only">试验先例</caption>
-          <thead>
-            <tr className="border-b border-border">
-              {drawn.map((column) => (
-                <th
-                  key={column.key}
-                  scope="col"
-                  className={cn("sticky top-0 z-sticky bg-bg px-2 pb-2 pt-1 text-compact font-normal text-text-3", column.align === "right" ? "text-right" : "text-left")}
-                >
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <Fragment key={row.id}>
-                <tr data-vcr-precedent={row.registryId} className="border-b border-faint">
-                  {drawn.map((column) => {
-                    const shared = cn("px-2 py-2.5 align-top text-ui text-text", column.align === "right" ? "text-right tabular-nums" : "text-left");
-                    return column.rowHeader
-                      ? <th key={column.key} scope="row" className={cn(shared, "font-normal")}>{column.cell(row)}</th>
-                      : <td key={column.key} className={shared}>{column.cell(row)}</td>;
-                  })}
-                </tr>
-                {open.has(row.id) && (
-                  <tr id={`vcr-precedent-${row.id}`} data-vcr-precedent-detail={row.registryId} className="border-b border-faint bg-surface-1">
-                    <td colSpan={drawn.length} className="px-4 py-3">
-                      <PrecedentDetail row={row} />
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {footnote != null && <p className="mt-2 text-caption text-text-3">{footnote}</p>}
-    </div>
+    <>
+      <DataTable
+        label="试验先例"
+        minWidth="min-w-[48rem]"
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        rowAttrs={(row) => ({ "data-vcr-precedent": row.registryId })}
+        onRowOpen={(row) => { if (hasDetail(row)) setOpened(row); }}
+      />
+      {opened && (
+        <Drawer title={opened.registryId} onClose={() => setOpened(null)} widthClassName="max-w-lg">
+          <PrecedentDetail row={opened} />
+        </Drawer>
+      )}
+    </>
   );
 }
 
 /** A precedent opened: everything the registry says, the eligibility as written beside the normalised population. */
 function PrecedentDetail({ row }: { row: VcrPrecedent }) {
   const link = safeLink(row.source);
-  const facts = [
+  const facts: Fact[] = [
     ...(row.title ? [{ label: "标题", value: row.title }] : []),
     ...(row.countries?.length ? [{ label: "国家/地区", value: row.countries.join("、") }] : []),
     ...(row.interventions?.length ? [{ label: "干预", value: row.interventions.join("、") }] : []),
     ...(row.endpoints?.length ? [{ label: "终点", value: row.endpoints.join("、") }] : []),
     ...(row.enrollmentKind ? [{ label: "入组人数", value: ENROLMENT_KIND[row.enrollmentKind] ?? row.enrollmentKind }] : []),
     ...(row.hasResults != null ? [{ label: "结果", value: row.hasResults ? "已公布结果" : "未公布结果" }] : []),
+    ...(row.population ? [{ label: "人群（标准化）", value: row.population }] : []),
+    ...(row.eligibilityText ? [{ label: "入排条件原文", value: <span data-vcr-eligibility-text="">{row.eligibilityText}</span> }] : []),
   ];
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <VcrFacts rows={facts} />
-      {(row.population || row.eligibilityText) && (
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-caption text-text-3">人群（标准化）</dt>
-            <dd className="mt-1 text-ui text-text">{row.population ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-caption text-text-3">入排条件原文</dt>
-            <dd data-vcr-eligibility-text="" className="mt-1 text-ui text-text-2">{row.eligibilityText ?? "—"}</dd>
-          </div>
-        </dl>
-      )}
+    <div data-vcr-precedent-detail={row.registryId} className="flex flex-col gap-4">
+      <FactList rows={facts} />
       {link && (
         <a href={link} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm", className: "w-fit text-link" })}>
           打开登记记录

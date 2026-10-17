@@ -41,13 +41,18 @@ function useChanged(values: readonly unknown[]): number {
 
 export function useOutline(
   container: RefObject<HTMLElement | null>,
-  { enabled = true, idPrefix, refresh = [] }: {
+  { enabled = true, idPrefix, refresh = [], skip }: {
     /** Off while the container does not hold the headings (a report's other view). The last contents are kept. */
     enabled?: boolean;
     /** Ids given to headings that have none; unique per reader so two on one page never share. */
     idPrefix: string;
     /** What re-renders the headings: when any of these changes the page is read again. */
     refresh?: readonly unknown[];
+    /**
+     * A selector for the parts of the page whose headings are not its sections: a card's Markdown body brings its own `##`, folded
+     * under a closed disclosure, and listing it among the card's sections would send the reader to a heading they cannot see.
+     */
+    skip?: string;
   },
 ): { entries: OutlineEntry[]; active: string | null; select: (id: string) => void } {
   const [entries, setEntries] = useState<OutlineEntry[]>([]);
@@ -60,12 +65,13 @@ export function useOutline(
     if (!root || !enabled) return;
     const found: OutlineEntry[] = [];
     root.querySelectorAll<HTMLHeadingElement>("h2, h3").forEach((heading, index) => {
+      if (skip && heading.closest(skip)) return;
       if (!heading.id) heading.id = `${idPrefix}-sec-${index + 1}`;
       const text = heading.textContent?.trim() ?? "";
       if (text) found.push({ id: heading.id, text, level: heading.tagName === "H2" ? 2 : 3 });
     });
     setEntries(found);
-  }, [container, enabled, idPrefix, round]);
+  }, [container, enabled, idPrefix, round, skip]);
 
   // Which section is being read, for the contents' current mark.
   useEffect(() => {

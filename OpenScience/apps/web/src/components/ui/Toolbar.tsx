@@ -61,6 +61,11 @@ export interface ToolbarChips {
   maxVisible?: number;
   /** A grey word after the chips (the time a ranking was taken). */
   note?: string;
+  /**
+   * Stays on the row on a phone, where every other filter folds into the one 「筛选」 chip: the page's own views (the memory map's five,
+   * the knowledge graph's two), which a person has to reach without opening a menu. A few short chips; a long row does not fit a phone.
+   */
+  pinned?: boolean;
 }
 
 export interface ToolbarToggle {
@@ -144,18 +149,24 @@ function foldedEntries(filters: readonly ToolbarFilter[]): MenuEntry[] {
   return entries;
 }
 
-export function Toolbar({ label = "筛选与操作", views, filters = [], onClear, search, summary, actions, className }: ToolbarProps) {
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className }: ToolbarProps) {
   const narrow = useNarrow();
-  const active = filters.filter(isActive).length;
+  // On a phone the filters fold into one chip — all but the pinned views, which stay as the chips they are.
+  const kept = narrow ? declared.filter((filter) => filter.kind === "chips" && filter.pinned) : [];
+  const filters = narrow ? declared.filter((filter) => !kept.includes(filter)) : declared;
+  const folded = filters.filter(isActive).length;
+  // What 「清除筛选」 lets go of is every filter that is on, the pinned ones too.
+  const active = folded + kept.filter(isActive).length;
   const searching = Boolean(search?.value);
   // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so the
   // text stands on the page's left edge. Without views the whole row does (below).
   const controls = (
     <>
+      {kept.map((filter, index) => <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} />)}
       {narrow && filters.length > 0 ? (
         <Menu label="筛选" align="start" items={foldedEntries(filters)}>
-          <FilterChip menu className={views ? "-ml-3" : undefined} pressed={active > 0} aria-label={active > 0 ? `筛选，已选 ${active} 项` : "筛选"}>
-            {active > 0 ? `筛选 · ${active}` : "筛选"}
+          <FilterChip menu className={views ? "-ml-3" : undefined} pressed={folded > 0} aria-label={folded > 0 ? `筛选，已选 ${folded} 项` : "筛选"}>
+            {folded > 0 ? `筛选 · ${folded}` : "筛选"}
           </FilterChip>
         </Menu>
       ) : filters.map((filter, index) => <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} />)}

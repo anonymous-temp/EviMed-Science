@@ -1,7 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { render as renderBare, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ExportPanel, ImportPanel, ShareDrawer } from "./CapsuleTransferPanel";
+
+// The panels sit in a page, and an empty export points to a conversation: they are drawn where a router is.
+const render = (ui: ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
 import * as api from "@/lib/productClient";
 vi.mock("@/lib/productClient");
 // Sharing between accounts has its own switch (`features.capsuleShare` of `/api/me`); on unless a test says otherwise.
@@ -80,6 +85,8 @@ it("says there is nothing to share yet instead of offering an export that fails"
   vi.mocked(api.previewCapsuleExport).mockResolvedValue({scopes:["workstyle"],empty:true,tooMany:false,card:null,entries:[]});
   render(<ExportPanel capsule={capsule}/>);
   expect(await screen.findByText("还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。")).toBeInTheDocument();
+  // The sentence has the one thing to do about it.
+  expect(screen.getByRole("button",{name:"说说你的工作方式"})).toBeInTheDocument();
   await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");
   expect(screen.getByRole("button",{name:"加密导出"})).toBeDisabled();
   expect(api.previewCapsuleExport).toHaveBeenCalledWith(capsule.id,{scopes:["workstyle"]});
@@ -209,8 +216,8 @@ it("previews an uploaded encrypted capsule, with what its check leaves out, befo
   // The extension is for the file picker, and nowhere a reader can see it.
   expect(picker).toHaveAttribute("accept",".evimedcap");
   expect(container.textContent).not.toMatch(/\.evimedcap|口令|解密/);
-  // What a file is, before one is chosen: whose it is, how big, and that looking changes nothing.
-  expect(screen.getByText("别人分享给你的记忆胶囊，不超过 2 MiB。预览不会改变你的记忆。")).toBeInTheDocument();
+  // Nothing is explained before a file is chosen: the size limit is said to the file that breaks it, and looking changes nothing.
+  expect(container.textContent).not.toMatch(/预览不会改变你的记忆/);
   const file=new File(['{"encrypted":true}'],"methods.evimedcap",{type:"application/json"});Object.defineProperty(file,"text",{value:async()=>'{"encrypted":true}'});
   await userEvent.upload(picker,file);
   await userEvent.type(screen.getByLabelText("文件密码"),"test-only-passphrase");

@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
+import { fakeRoom, renderTab } from "../__fixtures__/tabFrame";
 import { OverviewTab } from "./OverviewTab";
 import { PopulationTab } from "./PopulationTab";
 import { PatientsTab } from "./PatientsTab";
@@ -50,10 +50,12 @@ function emptyTitles(root: ParentNode): string[] {
 
 const KNOWLEDGE_EMPTY = { pack: null, definitions: [], comparisons: [], savable: [] };
 
-beforeEach(() => { installVcrServer(network.productRequest); });
+let restoreRoom: () => void;
+beforeEach(() => { restoreRoom = fakeRoom(); installVcrServer(network.productRequest); });
+afterEach(() => restoreRoom());
 
 async function drawTab(node: React.ReactElement) {
-  const view = render(<MemoryRouter>{node}</MemoryRouter>);
+  const view = renderTab(node);
   // The tab has read its page and drawn it (every variant draws at least its headline or a card).
   await waitFor(() => expect(view.container.querySelector("[data-vcr-loading]")).toBeNull());
   // The reads that follow the page's own (the library, the packs) settle.
@@ -132,7 +134,7 @@ describe("no title over an empty box", () => {
   it("holds on the data tab when no pack is bound and the catalogue has none to choose: no 「病种定义包」", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/packs": { packs: [] } });
     const view = await drawTab(<DataTab studyId={STUDY_ID} study={study((raw) => { raw.knowledge = KNOWLEDGE_EMPTY; })} />);
-    await screen.findByText("对照组中位 PFS", { selector: "h2" });
+    await screen.findByRole("heading", { name: "对照组中位 PFS", level: 2 });
     expect(view.queryByRole("heading", { name: "病种定义包" })).toBeNull();
     expect(emptyTitles(view.container)).toEqual([]);
   });
@@ -150,19 +152,18 @@ describe("no title over an empty box", () => {
     expect(emptyTitles(view.container)).toEqual([]);
   });
 
-  it("holds on a generated population with no profile: the sentence is a line, not a card, and the two cards that remain are there", async () => {
+  it("holds on a generated population the server could not describe: the sentence and the records, with no card that is a title over nothing", async () => {
     const raw = fixture("ev201/population.json");
-    Object.assign(raw, { version: "人群 v1", kind: "情景人群", method: "按设定的分布和相关性抽样", allowedUses: [{ key: "design", label: "设计" }],
-      constraints: [], profile: [], profileKind: null, profileMissing: true, generated: [], criteria: [], attrition: [], outcome: null, unknownReasons: [], blockers: [],
-      quality: null, headline: null, definition: null, download: null, knowledge: KNOWLEDGE_EMPTY,
-      profileNote: "这个人群生成时还没有画像：点“重新生成”，按同样的设定再生成一次，就能看到每个变量的分布。" });
+    Object.assign(raw, { version: "人群 v1", kind: "情景人群", records: { result: "res_pop", rows: 1000 },
+      constraints: [], profile: [], profileKind: null, generated: [], criteria: [], attrition: [], outcome: null, unknownReasons: [], blockers: [],
+      quality: null, headline: null, definition: null, download: null, knowledge: KNOWLEDGE_EMPTY, stale: null,
+      counts: { realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: 1000, note: null, notes: {}, scope: null } });
     installVcrServer(network.productRequest, { [tab("population")]: raw, "GET /vcr/definitions": { definitions: [] } });
     const view = await drawTab(<PopulationTab studyId={STUDY_ID} study={study()} />);
-    const note = view.container.querySelector("[data-vcr-profile-missing]") as HTMLElement;
-    expect(note).not.toBeNull();
-    expect(note.closest("[class~='rounded-card']")).toBeNull();
-    expect(view.getByText("怎么生成的")).toBeInTheDocument();
-    expect(view.getByText("能用来做什么")).toBeInTheDocument();
+    expect(view.container.querySelector("[data-headline]")).toHaveTextContent("人群 v1 · 情景人群 · 1,000 条生成记录");
+    expect(view.queryByText("怎么生成的")).toBeNull();
+    expect(view.queryByText("能用来做什么")).toBeNull();
+    expect(view.container.querySelector("[data-vcr-profile-missing]")).toBeNull();
     expect(emptyTitles(view.container)).toEqual([]);
   });
 
@@ -180,7 +181,7 @@ describe("no title over an empty box", () => {
     trialView.unmount();
 
     const patients = fixture("ev201/patients.json");
-    Object.assign(patients, { model: null, trajectories: null, example: null, panels: [], sensitivity: null, headline: null, twin: null, sets: [], counts: null, partial: null, stale: null });
+    Object.assign(patients, { model: null, trajectories: null, example: null, panels: [], sensitivity: null, headline: null, twin: null, sets: [], counts: null, partial: null, stale: null, records: null, calibration: null, profile: [], profileKind: null });
     installVcrServer(network.productRequest, { [tab("patients")]: patients });
     const patientView = await drawTab(<PatientsTab studyId={STUDY_ID} study={study((raw) => { raw.steps.patients = { status: "none", requested: false }; })} />);
     expect(patientView.queryByText("还没有选定模型")).toBeNull();
@@ -196,8 +197,8 @@ describe("no title over an empty box", () => {
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
     expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();
-    expect(view.queryByRole("radiogroup", { name: "匹配与招募的视图" })).toBeNull();
-    expect(view.queryByLabelText("查看方案")).toBeNull();
+    expect(view.container.querySelector("[data-page-chrome]")).toBeNull();
+    expect(view.queryByRole("button", { name: "查看方案" })).toBeNull();
     expect(view.getAllByRole("button")).toHaveLength(1);
     expect(emptyTitles(view.container)).toEqual([]);
   });
