@@ -135,7 +135,7 @@ export function WebReadinessCard() {
               {/* What needs a person first; what is fine is folded, so a clean deployment is a short card. */}
               {[...failed, ...noted, ...disabled].map((row) => <Row key={row.key} row={row} />)}
               {passed.length > 0 && (
-                <li className="bg-surface px-3 py-2">
+                <li className="border-t border-border bg-surface px-3 py-2 first:border-t-0">
                   <Disclosure summary={`已通过 ${passed.length} 项`}>
                     <OpsRows label="已通过的检查">
                       {passed.map((row) => <Row key={row.key} row={row} />)}

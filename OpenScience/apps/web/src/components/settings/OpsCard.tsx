@@ -14,7 +14,8 @@ import { IconButton } from "@/components/ui/IconButton";
  * component now:
  *
  *  - the title is 14 / 600 like a `Panel`'s, and the one refresh is an icon button;
- *  - a row is a list item with a rule *under* it (the header's rule is the same kind), so the card has two strokes, the box and the rule;
+ *  - a row is a list item whose rule is its *top* (the body's rule under the header is the same kind, and so is a `Panel`'s and a list's),
+ *    so the card has two strokes, the box and the rule;
  *  - **a good state has no colour**: a check that passed, a task that finished, an event that went through is the page's ordinary text.
  *    Only what needs a person is coloured — amber for a thing to look at, red for one that failed (`OPS_TONE`);
  *  - an identifier an operator searches the logs for is not page text: it is a copy button (`CopyId`) whose tooltip holds it, beside a
@@ -31,7 +32,7 @@ export function OpsCard({ title, description, refresh, trailing, children }: {
 }) {
   return (
     <section aria-label={title} className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
+      <header className="flex items-center gap-3 px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-ui font-semibold text-text">{title}</h2>
           {description && <p className="mt-0.5 text-caption text-text-3">{description}</p>}
@@ -48,7 +49,9 @@ export function OpsCard({ title, description, refresh, trailing, children }: {
           />
         )}
       </header>
-      {children}
+      {/* The rule under the header is the body's own top rule: every rule on the page is the top of the thing below it (`divide-y`'s kind, a
+          Panel's, a list's), so the page has one kind of rule and not a top and a bottom. */}
+      <div className="border-t border-border">{children}</div>
     </section>
   );
 }
@@ -63,9 +66,9 @@ export function OpsRows({ label, children }: { label: string; children: ReactNod
   return <ul aria-label={label} className="overflow-hidden rounded-input border border-border">{children}</ul>;
 }
 
-/** One row. The rule is under it, the last row has none: the same stroke as the header's. */
+/** One row. The rule is its top, the first row has none: the stroke of `divide-y`, a panel and every list. */
 export function OpsRow({ children, className }: { children: ReactNode; className?: string }) {
-  return <li className={cn("flex min-h-10 items-center gap-2.5 border-b border-border bg-surface px-3 py-2 text-ui last:border-b-0", className)}>{children}</li>;
+  return <li className={cn("flex min-h-10 items-center gap-2.5 border-t border-border bg-surface px-3 py-2 text-ui first:border-t-0", className)}>{children}</li>;
 }
 
 /** What a list says when it has nothing: one line in the box where the rows would be. */

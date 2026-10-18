@@ -497,8 +497,7 @@ control on pages that had eight to ten. By class: a toolbar in the band is one r
 when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
 every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a small button is 13 / 400 like the chip
 beside it, a severity grade 12 / 400 like a tag (the current navigation item stays 14 / 500 on purpose: it is the one kind of control the page's
-secondary buttons already are, and a weight of its own would split them); a table's controls are 28 high; a card's and a panel's rule is *under* the row (one stroke, not a
-top and a bottom); a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+secondary buttons already are, and a weight of its own would split them); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
 a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
 screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
 more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).

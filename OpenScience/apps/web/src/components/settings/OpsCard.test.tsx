@@ -24,15 +24,19 @@ describe("the operator console's card", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("draws its rows as a list with the rule under each — the same stroke as the header's — and none under the last", () => {
+  it("draws its rows as a list whose rule is the top of each row but the first — the stroke of the rule under the header, of a Panel and of every list", () => {
     render(<OpsCard title="任务"><OpsBody><OpsRows label="后台任务"><OpsRow>甲</OpsRow><OpsRow>乙</OpsRow></OpsRows></OpsBody></OpsCard>);
     const rows = within(screen.getByRole("list", { name: "后台任务" })).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(row.className).toContain("border-b");
-      expect(row.className).not.toMatch(/(^|\s)border-t(\s|$)/);
+      expect(row.className).toMatch(/(^|\s)border-t(\s|$)/);
+      expect(row.className).not.toMatch(/(^|\s)border-b(\s|$)/);
     }
-    expect(rows[1].className).toContain("last:border-b-0");
+    expect(rows[0].className).toContain("first:border-t-0");
+    // The header has no rule of its own: the body has its top rule.
+    const section = screen.getByRole("region", { name: "任务" });
+    expect(section.querySelector("header")?.className).not.toMatch(/border-b/);
+    expect(section.querySelector(":scope > div")?.className).toContain("border-t");
   });
 
   it("gives a good state no colour: only a thing to look at is amber and only a failure red", () => {
