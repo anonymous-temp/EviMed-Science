@@ -36,6 +36,7 @@ function frame(overrides: Partial<StudyFrameApi> = {}): StudyFrameApi {
     openChat: vi.fn(),
     openPanel: vi.fn(),
     setToolbar: vi.fn(),
+    setPrimary: vi.fn(),
     ...overrides,
   };
 }

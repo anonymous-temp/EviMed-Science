@@ -37,6 +37,8 @@ const gets = (name: string) => network.productRequest.mock.calls.filter(([path, 
 const nothingIn = (name: string) => ({ [tab(name)]: fixture(`empty/${name}.json`) });
 const draw = (study: VcrStudy = ev201()) => renderTab(<TrialTab studyId={STUDY_ID} study={study} />);
 const band = (container: HTMLElement) => container.querySelector("[data-page-chrome]") as HTMLElement;
+/** The page's header, where a tab's primary action is drawn. */
+const header = (container: HTMLElement) => container.querySelector("[data-page-header]") as HTMLElement;
 const found = (root: ParentNode, selector: string) => waitFor(() => {
   const node = root.querySelector(selector);
   if (!node) throw new Error(`nothing at ${selector}`);
@@ -292,14 +294,16 @@ describe("试验 · what the band offers", () => {
     expect(chips.getByRole("button", { name: /^方案\s*4/ })).toBeInTheDocument();
   });
 
-  it("offers 选定方案 as the one primary action while nothing has been chosen, and 改选方案 once something is", async () => {
+  it("offers 选定方案 as the header's primary action while nothing has been chosen, and 改选方案 in the band once something is", async () => {
     const raw = fixture("ev201/trial.json");
     raw.decision = null;
     for (const design of raw.designs) design.chosen = false;
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
     const { container } = draw();
     await trialDrawn();
-    expect(within(band(container)).getByRole("button", { name: "选定方案" })).toBeInTheDocument();
+    // In the header's action slot like every page's primary — not in the band, 144 px down, which is where the walk found it on the owner's study.
+    expect(within(header(container)).getByRole("button", { name: "选定方案" })).toBeInTheDocument();
+    expect(within(band(container)).queryByRole("button", { name: "选定方案" })).toBeNull();
     expect(screen.queryByRole("button", { name: "改选方案" })).toBeNull();
     expect(container.querySelector("[data-headline]")).not.toHaveTextContent("已选定方案");
   });
@@ -357,7 +361,7 @@ describe("试验 · the decision", () => {
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
     const { container } = draw();
     await trialDrawn();
-    await userEvent.click(within(band(container)).getByRole("button", { name: "选定方案" }));
+    await userEvent.click(within(header(container)).getByRole("button", { name: "选定方案" }));
     const drawer = await screen.findByRole("dialog", { name: "选定方案" });
     const save = within(drawer).getByRole("button", { name: "写入决策记录" });
     expect(save).toBeDisabled();
@@ -558,7 +562,7 @@ describe("试验 · designs nothing has computed", () => {
     expect(c).toHaveTextContent("还没算");
     // A design that ran with no value in one column is 「—」, not 「还没算」.
     expect(container.querySelector("tr[data-vcr-design='A']")).not.toHaveTextContent("还没算");
-    await userEvent.click(within(band(container)).getByRole("button", { name: /选定方案|改选方案/ }));
+    await userEvent.click(within(container).getByRole("button", { name: /选定方案|改选方案/ }));
     const drawer = await screen.findByRole("dialog");
     expect(within(drawer).getByRole("radio", { name: "C" })).toBeDisabled();
     expect(within(drawer).getByRole("radio", { name: "A" })).toBeEnabled();

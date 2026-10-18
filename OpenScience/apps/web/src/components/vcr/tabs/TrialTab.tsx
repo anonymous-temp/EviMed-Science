@@ -29,7 +29,7 @@ import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
-import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
+import { useStudyFrame, useVcrPrimary, useVcrToolbar } from "../studyFrameContext";
 import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, mcseText, numberText, valueText } from "../vcrText";
 
@@ -124,7 +124,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const actions: VcrToolbarAction[] = [];
   if (shown === "designs" && !nothing) {
     if (canWrite) {
-      if (!noneRan) actions.push({ key: "choose", label: decided ? "改选方案" : "选定方案", primary: !decided, onSelect: () => setChoosing(true) });
+      if (!noneRan && decided) actions.push({ key: "choose", label: "改选方案", onSelect: () => setChoosing(true) });
       if (frame) {
         actions.push({ key: "add", label: "加一个方案", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
         actions.push({ key: "change", label: "改假设", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
@@ -144,6 +144,9 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
       ...(actions.length > 0 ? { actions: <VcrToolbarActions actions={actions} /> } : {}),
     }
     : null);
+
+  // 「选定方案」 is the page's next thing for the reader until a design is chosen: the header's primary, not a button in the band.
+  useVcrPrimary(shown === "designs" && !nothing && canWrite && !noneRan && !decided ? { label: "选定方案", onSelect: () => setChoosing(true) } : null);
 
   if (nothing) {
     return failed

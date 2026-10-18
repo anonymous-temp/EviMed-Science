@@ -14,7 +14,7 @@ import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { DOT_WORDS, type TabItem } from "@/components/ui/Tabs";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey } from "./studyFrameContext";
+import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey, type StudyPrimary } from "./studyFrameContext";
 import { useVcrRun } from "./useVcrRun";
 import { budgetWaitOf } from "./VcrBudgetDialog";
 import { leadJob, isMoving, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
@@ -47,7 +47,8 @@ export const STUDY_PANEL_ID = "vcr-tab-panel";
  *    so there is no second rail: each tab wears the state of its step as a dot — with the state in words as its tooltip and for a
  *    screen reader — and the server's one finding with its one number (`stepSummaries`). It is in the sticky band, so switching
  *    tabs never loses where the study is, and its height is the same on every tab.
- *  - **The primary action is the server's `next`** and is in the header on every tab, not only on the overview. While work is going
+ *  - **The primary action is the server's `next`** and is in the header on every tab, not only on the overview. A tab's own primary
+ *    (选定方案 on 试验, `useVcrPrimary`) is drawn there too and takes the solid look; the next step is then the quiet button beside it. While work is going
  *    on it is not drawn: the strip under the header says what is happening, with 取消 — a second button for the next step beside it
  *    could only queue another. While computations wait for the lead's word on the budget, 确认预算 is the primary instead — it is
  *    the one thing that lets the study go on — and the next step, if it has one, is the quiet button beside it.
@@ -139,6 +140,7 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
 export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
   const { run, busy } = useVcrRun(study, { refresh: reload });
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
+  const [tabPrimary, setTabPrimary] = useState<StudyPrimary | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const mayRun = study.abilities.includes("run");
   const moving = isMoving(study.activity);
@@ -161,15 +163,20 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
     openChat: onChat,
     openPanel: onPanel,
     setToolbar,
+    setPrimary: setTabPrimary,
   }), [studyId, study, reload, onChat, onPanel]);
 
   // The primary action: the next step, in the header of every tab. While work goes on the strip under the header is what is said
   // and there is nothing to press for another step — it could only queue behind this one.
   const waitingBudget = study.abilities.includes("manage_study") && budgetWaitOf(study).count > 0;
   const budgetButton = waitingBudget ? <Button onClick={() => onPanel("budget")}>确认预算</Button> : null;
+  // The open tab's own primary (选定方案 on 试验) takes the header's primary look unless the budget waits, which lets the study go on and
+  // outranks it; either way the next step is the quiet one beside it, and the header never holds two solid buttons.
+  const tabButton = tabPrimary ? <Button variant={waitingBudget ? "secondary" : "primary"} onClick={tabPrimary.onSelect}>{tabPrimary.label}</Button> : null;
+  const primaryTaken = waitingBudget || tabPrimary !== null;
   const nextButton = next && mayRun && !moving ? (() => {
     const button = (
-      <Button variant={waitingBudget ? "secondary" : "primary"} loading={busy} onClick={() => run(() => runVcrStep(studyId, next.step), "这一步无法开始，请稍后重试。")}>
+      <Button variant={primaryTaken ? "secondary" : "primary"} loading={busy} onClick={() => run(() => runVcrStep(studyId, next.step), "这一步无法开始，请稍后重试。")}>
         {`${next.reason === "retry" ? "接着做" : next.reason === "refresh" ? "重新做" : "下一步"}：${next.label}`}
       </Button>
     );
@@ -195,6 +202,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
         actions={(
           <>
             {budgetButton}
+            {tabButton}
             {nextButton}
             <Button variant="secondary" aria-pressed={view === "chat"} onClick={() => { if (view !== "chat") onChat(); }}>
               <MessageSquare size={16} aria-hidden="true" />

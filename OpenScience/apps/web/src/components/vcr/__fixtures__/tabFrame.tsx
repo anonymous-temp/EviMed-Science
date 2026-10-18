@@ -2,8 +2,9 @@ import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { vi } from "vitest";
+import { Button } from "@/components/ui/Button";
 import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
-import { StudyFrameContext, ToolbarSlotContext, type StudyFrameApi } from "../studyFrameContext";
+import { StudyFrameContext, ToolbarSlotContext, type StudyFrameApi, type StudyPrimary } from "../studyFrameContext";
 
 /**
  * What the study frame gives a tab, for a test that renders one tab on its own (R19).
@@ -11,7 +12,8 @@ import { StudyFrameContext, ToolbarSlotContext, type StudyFrameApi } from "../st
  * A tab hands its controls to the frame's sticky band (`useVcrToolbar`), and the band draws them above the body. Rendered without a
  * frame a tab draws none, which is what it must do and is no way to test its controls. This stands in for the frame: the same
  * context, the same real `Toolbar` above the body in document order, and the doors a tab uses (`refresh`, `openChat`, `openPanel`)
- * as spies the test can read. The page's own conversation, panels and polling are the frame's and are held by its tests.
+ * as spies the test can read. The tab's primary action (`useVcrPrimary`) is drawn as the solid button of a header (`data-page-header`)
+ * above the band, where the frame puts it. The page's own conversation, panels and polling are the frame's and are held by its tests.
  */
 export interface TabFrameSpies {
   refresh: ReturnType<typeof vi.fn>;
@@ -31,6 +33,7 @@ export function TabFrame({ studyId, spies, version = "v1", children }: {
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
+  const [primary, setPrimary] = useState<StudyPrimary | null>(null);
   const doors = useMemo(() => spies ?? makeFrameSpies(), [spies]);
   const api = useMemo<StudyFrameApi>(() => ({
     studyId,
@@ -40,9 +43,11 @@ export function TabFrame({ studyId, spies, version = "v1", children }: {
     openChat: doors.openChat,
     openPanel: doors.openPanel,
     setToolbar,
+    setPrimary,
   }), [studyId, version, doors]);
   return (
     <StudyFrameContext.Provider value={api}>
+      <header data-page-header="">{primary ? <Button onClick={primary.onSelect}>{primary.label}</Button> : null}</header>
       {toolbar ? <div data-page-chrome=""><Toolbar {...toolbar} /></div> : null}
       <div data-page-body="">{children}</div>
     </StudyFrameContext.Provider>

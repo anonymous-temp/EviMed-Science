@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect } from "react";
+import { createContext, useContext, useLayoutEffect, useRef } from "react";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import type { VcrActivity } from "@/lib/vcrClient";
 
@@ -33,6 +33,14 @@ export interface StudyFrameApi {
   openPanel(panel: StudyPanelKey): void;
   /** `useVcrToolbar`'s door; a tab does not call it. */
   setToolbar(toolbar: ToolbarProps | null | undefined): void;
+  /** `useVcrPrimary`'s door; a tab does not call it. */
+  setPrimary(primary: StudyPrimary | null): void;
+}
+
+/** The one thing a tab asks of the reader next, as the header's primary button (DESIGN.md: the primary action is in the header). */
+export interface StudyPrimary {
+  label: string;
+  onSelect: () => void;
 }
 
 export const StudyFrameContext = createContext<StudyFrameApi | null>(null);
@@ -69,3 +77,20 @@ export function useVcrToolbar(toolbar: ToolbarProps | null): void {
   useLayoutEffect(() => () => { set?.(undefined); }, [set]);
 }
 
+
+/**
+ * The tab's one primary action — 「选定方案」 on 试验 — drawn **in the header's action slot**, where every page's primary is, and not
+ * in the toolbar (the walk's `primary-action`: a solid button 144 px down, under the header's row, on the owner's study). The frame
+ * draws it as the header's primary and the study's next step beside it as a secondary one, as it does while the budget waits. A tab
+ * that has none passes `null`; the button goes when the tab does.
+ */
+export function useVcrPrimary(primary: StudyPrimary | null): void {
+  const set = useContext(StudyFrameContext)?.setPrimary;
+  const label = primary?.label ?? null;
+  const select = useRef(primary?.onSelect);
+  select.current = primary?.onSelect;
+  useLayoutEffect(() => {
+    set?.(label === null ? null : { label, onSelect: () => select.current?.() });
+  }, [set, label]);
+  useLayoutEffect(() => () => { set?.(null); }, [set]);
+}

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { StudyFrame, activityStripOf, type StudyView } from "./StudyFrame";
-import { useStudyFrame, useVcrToolbar } from "./studyFrameContext";
+import { useStudyFrame, useVcrPrimary, useVcrToolbar } from "./studyFrameContext";
 import { fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
 
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
@@ -199,6 +199,36 @@ describe("the header's primary action is the study's next step, on every tab", (
     await waitFor(() => expect(toasts.error).toHaveBeenCalledTimes(1));
     expect(String(toasts.error.mock.calls[0][0])).toContain("正在做研究里的一个步骤");
     expect(String(toasts.error.mock.calls[0][0])).not.toContain("定时任务");
+  });
+});
+
+describe("a tab's own primary action is the header's", () => {
+  const solid = (button: HTMLElement) => button.className.includes("bg-accent");
+  // The fixture study has computations waiting for the lead's word on the budget, which is the header's primary while it lasts: this one has no lead.
+  const noLead = () => study((raw) => { raw.abilities = raw.abilities.filter((ability: string) => ability !== "manage_study"); });
+  /** A tab that asks the frame for a primary of its own, as 试验 does until a design is chosen. */
+  function Choosing({ ask = true }: { ask?: boolean }) {
+    const [chosen, setChosen] = useState(false);
+    useVcrPrimary(ask ? { label: "选定方案", onSelect: () => setChosen(true) } : null);
+    return <p data-testid="chosen">{chosen ? "已选" : "未选"}</p>;
+  }
+
+  it("is drawn in the header as the solid button, with the study's next step quiet beside it — never two solid buttons", async () => {
+    draw({ study: noLead(), children: <Choosing /> });
+    const header = document.querySelector("[data-page-header]") as HTMLElement;
+    const chosen = within(header).getByRole("button", { name: "选定方案" });
+    expect(solid(chosen)).toBe(true);
+    expect(solid(within(header).getByRole("button", { name: "接着做：生成虚拟患者" }))).toBe(false);
+    expect([...header.querySelectorAll("button")].filter(solid)).toHaveLength(1);
+    await userEvent.click(chosen);
+    expect(screen.getByTestId("chosen")).toHaveTextContent("已选");
+  });
+
+  it("goes when the tab asks for none, and the next step is the solid one again", () => {
+    draw({ study: noLead(), children: <Choosing ask={false} /> });
+    const header = document.querySelector("[data-page-header]") as HTMLElement;
+    expect(within(header).queryByRole("button", { name: "选定方案" })).toBeNull();
+    expect(solid(within(header).getByRole("button", { name: "接着做：生成虚拟患者" }))).toBe(true);
   });
 });
 
