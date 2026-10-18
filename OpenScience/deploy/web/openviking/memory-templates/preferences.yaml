@@ -61,7 +61,7 @@ fields:
     type: string
     description: |
       Markdown bullets, one per distinct reusable preference, stating the specific choice,
-      what it applies to in the user's words (whose exercises, which documents, which
+      what it applies to in the user's words (for whom, which documents, which
       language: "给门诊患者写的科普材料一律用初中生读得懂的话", not "材料用通俗的话"), and any
       condition, exception or reason the user gave. No dates, events or plans.
       Example:
