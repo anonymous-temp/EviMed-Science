@@ -1851,7 +1851,7 @@ export class MemoryIntelligence {
                 // 2026-10-18 (K05): 「练习题分基础、提高、拓展三档」 was kept and 「初中数学、七年级」 was not, so the preference no longer said
                 // whose exercises it was about. The native templates say the same (memory-templates-src/preferences.yaml, profile.yaml).
                 "A preference keeps what it applies to: when the same message says who or what it is for (the class they teach, the kind of document, the language of the code), write that into the preference so it still reads right on its own — 「给门诊患者写的科普材料一律用初中生读得懂的话」, not 「材料用通俗的话」.",
-                "A person can hold several roles at once. When a stored profile memory already names a role and this conversation states another without saying the earlier one ended (「我现在不做…了」, 「已经转去…」), keep both: reuse the key with a value naming both roles, or give the new role a key of its own. A newly stated role never silently replaces a stored one.",
+                "A person can hold several roles at once. When a stored profile memory already names a role and this conversation states another without saying the earlier one ended (「我现在不做…了」, 「已经转去…」), keep both: reuse the key with a value that states both roles as they now stand (「心内科医生，也在读流行病学硕士」), never as a history of what was recorded before, or give the new role a key of its own. A newly stated role never silently replaces a stored one.",
                 // "In the source's own language": a value written in Chinese
                 // pulls a quote from an English tool result towards Chinese too,
                 // and a translated quote is not verbatim, so the candidate would
