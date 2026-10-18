@@ -2064,6 +2064,8 @@ test("the extraction is asked for the spans of the episode to leave out", async 
   // N06: an allergy said inside a question was kept beside the allergy the person had asked to be remembered.
   assert.match(system, /neither is another fact of that kind said inside a later question because one was kept before/);
   assert.match(system, /The exception covers only the fact that message asks to keep/, "the never-kept rules both engines read say it too");
+  // full group A on ad4a0ea51: 「这个课题可能要放慢」 was kept as the project's stage with its reason, the supervisor's health.
+  assert.match(system, /a fact worth keeping that comes with a detail the rules keep out — someone's health, a name, a private reason — is kept without it/);
 });
 
 test("a candidate that carries what the same reading said is never kept is not kept, and the rest of the reading stands", async () => {
