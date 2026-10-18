@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 import type { LucideIcon } from "lucide-react";
 import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
@@ -24,6 +24,12 @@ import { useNarrow } from "@/lib/useMediaQuery";
  *    cannot reach for `FilterChips` and put its own row somewhere else; and below 640 px it folds them into one 「筛选」 chip
  *    that opens a menu, so a phone is never given four rows of chips;
  *  - at the far end `search`, `summary` (the count of what is listed) and `actions` (buttons for this list: 下载, 管理关注).
+ *
+ * In the sticky band (`inBand`, which `PageShell` sets) the row is one row, always: a module's band is the same height on every tab
+ * (DESIGN.md rule 9), and a tab whose real data gave its filters, its search and its count more width than the row has made its band a
+ * line taller (the walk's `module-chrome`, 循证 GEO's 问题与回答, 2026-10-18). When the controls do not fit one line the filters fold into
+ * the one 「筛选」 chip, as on a phone, and unfold when the row has grown past the width where they did not fit; the page's own views
+ * (`pinned`) and the search, count and actions stay where they are.
  *
  * `onClear` makes a 「清除筛选」 chip appear while any filter or the search is on, and lets go of all of them.
  * `data-toolbar` is what the walk and `pageComposition.test.tsx` read: the first toolbar must come before the body in the
@@ -102,6 +108,8 @@ export interface ToolbarProps {
   /** Buttons for this list. */
   actions?: ReactNode;
   className?: string;
+  /** The toolbar stands in the sticky band, so its row never wraps: what does not fit folds (`PageShell` sets it). */
+  inBand?: boolean;
 }
 
 function isActive(filter: ToolbarFilter): boolean {
@@ -149,11 +157,46 @@ function foldedEntries(filters: readonly ToolbarFilter[]): MenuEntry[] {
   return entries;
 }
 
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className }: ToolbarProps) {
+/** A row of one line is 28 px of controls; a wrapped one is at least two of them and a gap. */
+const ONE_LINE_MAX = 44;
+
+/**
+ * Whether the row's controls take more than one line, and so must fold — in the band only. Measured from the layout, so a test without
+ * one (jsdom) never folds. Unfolding is tried again when the row has grown past the width at which it last wrapped.
+ */
+function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): boolean {
+  const [crowded, setCrowded] = useState(false);
+  // The width of the row when the unfolded controls last wrapped: unfolding is only tried above it.
+  const failedAt = useRef(0);
+  useLayoutEffect(() => {
+    const element = row.current;
+    if (!enabled || !element) { if (crowded) setCrowded(false); return undefined; }
+    const check = () => {
+      const width = element.clientWidth;
+      if (!crowded) {
+        if (element.offsetHeight > ONE_LINE_MAX) { failedAt.current = width; setCrowded(true); }
+      } else if (width > failedAt.current + 8) {
+        setCrowded(false);
+      }
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [row, enabled, crowded]);
+  return enabled && crowded;
+}
+
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className, inBand = false }: ToolbarProps) {
   const narrow = useNarrow();
-  // On a phone the filters fold into one chip — all but the pinned views, which stay as the chips they are.
-  const kept = narrow ? declared.filter((filter) => filter.kind === "chips" && filter.pinned) : [];
-  const filters = narrow ? declared.filter((filter) => !kept.includes(filter)) : declared;
+  const row = useRef<HTMLDivElement>(null);
+  // A row with views is the tab row, which lays its own trailing controls out (`Tabs`); only a toolbar of its own can be crowded.
+  const crowded = useCrowded(row, inBand && !views && !narrow);
+  const fold = narrow || crowded;
+  // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned views, which stay as the chips they are.
+  const kept = fold ? declared.filter((filter) => filter.kind === "chips" && filter.pinned) : [];
+  const filters = fold ? declared.filter((filter) => !kept.includes(filter)) : declared;
   const folded = filters.filter(isActive).length;
   // What 「清除筛选」 lets go of is every filter that is on, the pinned ones too.
   const active = folded + kept.filter(isActive).length;
@@ -163,7 +206,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const controls = (
     <>
       {kept.map((filter, index) => <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} />)}
-      {narrow && filters.length > 0 ? (
+      {fold && filters.length > 0 ? (
         <Menu label="筛选" align="start" items={foldedEntries(filters)}>
           <FilterChip menu className={views ? "-ml-3" : undefined} pressed={folded > 0} aria-label={folded > 0 ? `筛选，已选 ${folded} 项` : "筛选"}>
             {folded > 0 ? `筛选 · ${folded}` : "筛选"}
@@ -206,7 +249,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         )} />
       ) : (
         // A chip's text is 12 px in from its ground: the row steps out by that much so the text stands on the page's left edge.
-        <div className="-ml-3 flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
+        <div ref={row} className="-ml-3 flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
           {controls}
           {end}
         </div>

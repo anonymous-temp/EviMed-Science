@@ -265,7 +265,7 @@ export function PageShell<V extends string = string>({
             {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
             {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
             {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
-            {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} /></div>}
+            {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} inBand /></div>}
           </div>
         )}
         {headline && <Headline {...headline} className={cn("mt-4", headline.className)} />}

@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import { shellSources } from "../../test/sourceStrings";
 import { FilterChip } from "./FilterChips";
 import { Headline } from "./Headline";
+import { Button } from "./Button";
 import { List, ListHeader, ListRow } from "./ListRow";
 import { Note } from "./Note";
 import { SearchInput } from "./SearchInput";
+import { SeverityBadge } from "./SeverityBadge";
 import { StepRail, type StepRailStep } from "./StepRail";
 import { Tabs } from "./Tabs";
 
@@ -108,6 +110,27 @@ describe("a figure that opens what it counts", () => {
     const note = classesOf(document.querySelector("[data-note]") as Element);
     expect(note).toContain("bg-warn-soft");
     expect(note).not.toContain("text-warn-strong");
+  });
+});
+
+describe("the small type pairs", () => {
+  // A page may hold four size × weight pairs. The owner's data put a 13 / 500 text button beside a 13 / 400 chip, and a 12 / 600 grade
+  // beside the 12 / 400 tag, on 循证 GEO's home, 记忆, 信源 and 额度 — one pair more each than the fixture's pages had.
+  it("sets a small button in the weight of the chip beside it, and the larger ones as they were", () => {
+    render(<><Button size="sm" variant="text">继续</Button><Button>新建项目</Button><FilterChip>最近活动</FilterChip></>);
+    expect(classesOf(screen.getByRole("button", { name: "继续" }))).toContain("font-normal");
+    expect(classesOf(screen.getByRole("button", { name: "继续" }))).not.toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-semibold");
+  });
+
+  it("sets a severity grade in the weight of a tag: the ground says how bad, not the stroke", () => {
+    render(<SeverityBadge level="S3" />);
+    const grade = classesOf(document.querySelector("[data-severity]") as Element);
+    expect(grade).toContain("text-meta");
+    expect(grade).toContain("font-normal");
+    expect(grade).not.toContain("font-semibold");
   });
 });
 

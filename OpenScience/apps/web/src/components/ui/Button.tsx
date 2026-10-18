@@ -42,7 +42,10 @@ const variantClasses: Record<Exclude<ButtonVariant, "ghost">, string> = {
 
 // Padding 10 / 14 / 18 and icon gap 4 / 6 / 8, from the size table (§16.3).
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-sm gap-1 px-2.5 text-compact", // 28 — inside a row, a table, a toolbar
+  // 28 — inside a row, a table, a toolbar. 13 / 400 like the chip beside it: a small control at 500 was a second 13 px pair on every
+  // page that held a chip and a text button (the walk's `type-pairs`: 循证 GEO, 记忆, 信源, 额度 on the owner's data), and the fonts a
+  // Chinese reader's Windows carries draw 500 as 400 anyway.
+  sm: "h-sm gap-1 px-2.5 text-compact font-normal",
   md: "h-control gap-1.5 px-3.5 text-ui", // 36 — a page's controls, a form, a dialog
   lg: "h-form-primary gap-2 px-[18px] text-ui", // 44 — a form's primary action, the login
 };

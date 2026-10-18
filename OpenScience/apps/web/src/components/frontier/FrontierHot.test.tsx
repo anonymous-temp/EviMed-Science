@@ -73,3 +73,16 @@ describe("热榜 with nothing on it", () => {
     expect(within(empty).getByText("热榜还在准备")).toBeInTheDocument();
   });
 });
+
+describe("热榜's 「新」 and 「升温」", () => {
+  it("stand beside the title's link, not in it: a tag is a label and never part of a control", () => {
+    render(<MemoryRouter><HotBoard state={{ board: { window: "current", takenAt: ago(0.2), since: ago(72.2), events: [event(1, { badge: "new" }), event(2, { badge: "warming" as FrontierHotEvent["badge"] })] }, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
+    for (const row of screen.getAllByRole("listitem")) {
+      const tag = row.querySelector("[data-tag]");
+      expect(tag).not.toBeNull();
+      expect(tag!.closest("a, button")).toBeNull();
+      // The link still names the title alone.
+      expect(within(row).getByRole("link")).not.toContainElement(tag as HTMLElement);
+    }
+  });
+});

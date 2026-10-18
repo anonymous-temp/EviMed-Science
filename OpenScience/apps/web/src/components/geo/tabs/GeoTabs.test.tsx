@@ -1000,7 +1000,7 @@ describe("药品价值分析只在依据里", () => {
     {
       tab: "questions",
       render: () => { client.getGeoQuestions.mockResolvedValue(questionsFilled); return <QuestionsTab {...props()} />; },
-      ready: () => screen.findByText("3 个问题群 · 2 问 · 2 条真实问法"),
+      ready: () => screen.findByText("3 个问题群 · 2 问"),
     },
     {
       tab: "sources",

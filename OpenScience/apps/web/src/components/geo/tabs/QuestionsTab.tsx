@@ -169,11 +169,7 @@ function QuestionPage({
   const found = groups.filter((group) => matches.get(group.id) && shownPools.includes(group.pool));
   const counts = useMemo(() => {
     const questions = groups.flatMap((group) => list(group.questions));
-    return {
-      groups: groups.length,
-      measured: questions.filter((question) => question.isMeasured).length,
-      real: questions.filter((question) => question.kind === "real").length,
-    };
+    return { groups: groups.length, measured: questions.filter((question) => question.isMeasured).length };
   }, [groups]);
   const matchedQuestions = found.reduce((sum, group) => sum + (matches.get(group.id)?.count ?? 0), 0);
 
@@ -193,7 +189,7 @@ function QuestionPage({
       }] : []),
     ],
     search: { label: "搜索问题", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
-    summary: needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个问题群 · ${counts.measured} 问 · ${counts.real.toLocaleString("zh-CN")} 条真实问法`,
+    summary: needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个问题群 · ${counts.measured} 问`,
   });
 
   const remove = (id: string) => {

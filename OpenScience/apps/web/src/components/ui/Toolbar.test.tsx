@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Star } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,7 @@ function narrow() {
   }) as unknown as MediaQueryList);
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const LANES = [{ value: "evidence", label: "临床证据" }, { value: "safety", label: "药物安全" }];
 const WINDOWS = [{ value: "now", label: "当前" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }];
@@ -143,5 +143,65 @@ describe("Toolbar", () => {
     expect(container.querySelector("[data-toolbar]")).not.toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.getByRole("button", { name: "只看需要看一眼的" })).toBeInTheDocument();
+  });
+
+  describe("in the sticky band, where the row is one line whatever the data", () => {
+    /** A layout for jsdom: the row is 64 px tall (two lines) while it holds the filters in a row narrower than 1,000 px, 28 otherwise. */
+    function layout(widths: { current: number }) {
+      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("flex-wrap") && this.querySelector("[aria-label='时间范围']") && widths.current < 1_000 ? 64 : 28;
+      });
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("flex-wrap") ? widths.current : 0;
+      });
+      const observers: Array<() => void> = [];
+      vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observers.push(callback); } observe() {} disconnect() {} });
+      return observers;
+    }
+    const filters: ToolbarFilter[] = [
+      { kind: "chips", label: "视图", pinned: true, options: [{ value: "a", label: "按问句池" }, { value: "b", label: "按旅程" }], value: "a", onChange: () => {} },
+      { kind: "chips", label: "时间范围", options: WINDOWS, value: "now", onChange: () => {} },
+    ];
+
+    it("folds the filters into 「筛选」 when they would wrap, and keeps the page's own views, the search and the count on the row", () => {
+      layout({ current: 900 });
+      render(<Toolbar inBand filters={filters} search={{ label: "搜索问题", value: "", onChange: () => {} }} summary="25 个问题群" />);
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+      expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "按旅程" })).toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "搜索问题" })).toBeInTheDocument();
+      expect(screen.getByText("25 个问题群")).toBeInTheDocument();
+    });
+
+    it("unfolds when the row has grown past the width where they did not fit, and not before", () => {
+      const widths = { current: 900 };
+      const observers = layout(widths);
+      render(<Toolbar inBand filters={filters} />);
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+      // Still the same width: nothing to try.
+      act(() => observers.forEach((notify) => notify()));
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+      widths.current = 1100;
+      act(() => observers.forEach((notify) => notify()));
+      expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "筛选" })).toBeNull();
+      // And a row that shrinks again folds them again.
+      widths.current = 800;
+      act(() => observers.forEach((notify) => notify()));
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+    });
+
+    it("leaves a toolbar outside the band alone, wrapping or not", () => {
+      layout({ current: 900 });
+      render(<Toolbar filters={filters} />);
+      expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "筛选" })).toBeNull();
+    });
+
+    it("draws everything when the row fits", () => {
+      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(28);
+      render(<Toolbar inBand filters={filters} />);
+      expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
+    });
   });
 });
