@@ -192,7 +192,7 @@ describe("准确与安全: the list is by claim", () => {
     expect(screen.queryByRole("button", { name: "问 AI" })).toBeNull();
   });
 
-  it("shows twenty at a time, says how many more, and says how many the page cannot list", async () => {
+  it("shows the five gravest first, ten more at a time, says how many more, and says how many the page cannot list", async () => {
     const rows = Array.from({ length: 30 }, (_, index) => row(`err_${index}`, {
       fingerprint: `fp_m${index}`,
       statement: `第 ${index + 1} 句不对的话`,
@@ -209,9 +209,13 @@ describe("准确与安全: the list is by claim", () => {
     expect(within(status).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
     expect(claimKeys()).toHaveLength(3);
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
-    expect(claimKeys()).toHaveLength(20);
+    // Five on the first screen: the two pictures above carry rows of their own, and a data page's first screen holds twenty.
+    expect(claimKeys()).toHaveLength(5);
     expect(screen.getByText("这里列出了 30 条讲错，还有 74 条没有列出。")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 10 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 25 条说法" }));
+    expect(claimKeys()).toHaveLength(15);
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 15 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 5 条说法" }));
     expect(claimKeys()).toHaveLength(30);
     expect(screen.queryByRole("button", { name: /显示更多/ })).toBeNull();
     // the gravest first, the closed one last

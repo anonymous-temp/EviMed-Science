@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import { shellSources } from "../../test/sourceStrings";
 import { FilterChip } from "./FilterChips";
 import { Headline } from "./Headline";
+import { Button } from "./Button";
 import { List, ListHeader, ListRow } from "./ListRow";
 import { Note } from "./Note";
 import { SearchInput } from "./SearchInput";
+import { SeverityBadge } from "./SeverityBadge";
 import { StepRail, type StepRailStep } from "./StepRail";
 import { Tabs } from "./Tabs";
 
@@ -40,14 +42,16 @@ describe("the module band", () => {
     const tab = classesOf(screen.getByRole("tab", { name: "总览" }));
     const steps = STEPS.map((step) => classesOf(screen.getByRole("link", { name: new RegExp(`^${step.label}`) })));
     for (const step of steps) {
-      // The type of the tab row: 14 px, 500, square (no `rounded`), a 2 px rule at the foot.
+      // The type of the tab row: 14 px, 500, square (`rounded-none`: every link and button has the control corner unless it says
+      // otherwise, and a 2 px rule at the foot of a rounded box curves up at its ends), a 2 px rule at the foot.
       expect(step).toContain("text-ui");
       expect(step).toContain("font-medium");
       expect(step).toContain("border-b-2");
-      expect([...step].filter((name) => /^rounded/.test(name))).toEqual([]);
+      expect([...step].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     }
     expect(tab).toContain("text-ui");
     expect(tab).toContain("font-medium");
+    expect([...tab].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     const open = steps[1];
     expect(open).toContain("border-accent");
     expect(steps[0]).not.toContain("border-accent");
@@ -108,6 +112,36 @@ describe("a figure that opens what it counts", () => {
     const note = classesOf(document.querySelector("[data-note]") as Element);
     expect(note).toContain("bg-warn-soft");
     expect(note).not.toContain("text-warn-strong");
+  });
+});
+
+describe("the corner of a link and a button", () => {
+  it("is the control corner unless the element sets one of its own — in the stylesheet, as the bare element", () => {
+    const css = readFileSync(resolve(__dirname, "../../index.css"), "utf8");
+    // The bare element (specificity 0,0,1): a `rounded-*` utility is more specific, so only an element with none gets the corner.
+    expect(css).toMatch(/\n(?:a,\s*button|button,\s*a)\s*\{\s*border-radius:\s*var\(--radius-control\);\s*\}/);
+    expect(css).toContain("--radius-control: 8px;");
+  });
+});
+
+describe("the small type pairs", () => {
+  // A page may hold four size × weight pairs. The owner's data put a 13 / 500 text button beside a 13 / 400 chip, and a 12 / 600 grade
+  // beside the 12 / 400 tag, on 循证 GEO's home, 记忆, 信源 and 额度 — one pair more each than the fixture's pages had.
+  it("sets a small button in the weight of the chip beside it, and the larger ones as they were", () => {
+    render(<><Button size="sm" variant="text">继续</Button><Button>新建项目</Button><FilterChip>最近活动</FilterChip></>);
+    expect(classesOf(screen.getByRole("button", { name: "继续" }))).toContain("font-normal");
+    expect(classesOf(screen.getByRole("button", { name: "继续" }))).not.toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-semibold");
+  });
+
+  it("sets a severity grade in the weight of a tag: the ground says how bad, not the stroke", () => {
+    render(<SeverityBadge level="S3" />);
+    const grade = classesOf(document.querySelector("[data-severity]") as Element);
+    expect(grade).toContain("text-meta");
+    expect(grade).toContain("font-normal");
+    expect(grade).not.toContain("font-semibold");
   });
 });
 

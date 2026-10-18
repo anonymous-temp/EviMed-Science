@@ -36,16 +36,16 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
   // Beside a dataset's meaning the panel says what the data can use and is silent when it can use nothing yet.
   if (dataset && tools !== null && tools.length === 0 && !error) return null;
   return <section aria-label={dataset ? "这份数据可用的工具" : "循证进化"} className="mt-6 space-y-3">
-    <h2 className="text-body font-semibold text-text">{dataset ? "这份数据可用的工具" : "循证进化"}</h2>
+    <h2 className="text-ui font-semibold text-text">{dataset ? "这份数据可用的工具" : "循证进化"}</h2>
     {error && <LoadError message={error} onRetry={() => void load()} />}
-    {tools === null ? <FilesSkeleton /> : tools.length === 0 ? !error && <EmptyState title={dataset ? "暂无已匹配的工具" : "暂无新工具"} /> : <ul className="space-y-3">{tools.map(tool => <li key={tool.id} className="rounded-card bg-surface-1 p-4">
-      <h3 className="text-ui font-medium text-text">{tool.name ?? tool.description ?? '科研工具'}</h3>
+    {tools === null ? <FilesSkeleton /> : tools.length === 0 ? !error && <EmptyState title={dataset ? "暂无已匹配的工具" : "暂无新工具"} reason={dataset ? "表格的数据要求有工具对得上时，会列在这里。" : "循证进化补出新的科研工具后，会列在这里。"} /> : <ul className="space-y-3">{tools.map(tool => <li key={tool.id} className="rounded-card bg-surface-1 p-4">
+      <h3 className="text-ui font-semibold text-text">{tool.name ?? tool.description ?? '科研工具'}</h3>
       {tool.description && <p className="mt-1 text-ui text-text-2">{tool.description}</p>}
       <div className="mt-2 flex flex-wrap gap-2"><Tag>{tool.validationLevel === 'V4' && Number.isInteger(tool.usage?.runs) && (tool.usage?.runs ?? -1) >= 0 ? `已用于 ${tool.usage?.runs} 次研究` : VALIDATION[tool.validationLevel] ?? tool.validationLevel}</Tag><Tag>{DATA[tool.dataLevel] ?? tool.dataLevel}</Tag>{tool.maintenanceState === 'deprecating' && <Tag>待修复</Tag>}{access.operator && tool.status && <Tag>{{ staged: "待上线", active: "已上线", alias: "历史别名", retired: "已退役" }[tool.status]}</Tag>}</div>
       {tool.papers && tool.papers.length > 0 && <Disclosure summary="依据文献"><ul className="mt-2 space-y-2">{tool.papers.map(paper => <li key={paper.id}><a href={paper.url} target="_blank" rel="noreferrer" className="text-ui text-accent">{paper.title}</a></li>)}</ul></Disclosure>}
       {tool.dataRequirements && <Disclosure summary="数据要求"><Button variant="text" size="sm" onClick={() => downloadEvolutionRequirements(tool)}>下载数据要求</Button><Button variant="text" size="sm" onClick={() => downloadEvolutionTemplate(tool)}>下载表格模板</Button></Disclosure>}
       {access.operator && tool.artifactDigest && <Disclosure summary="版本"><p className="break-all font-mono text-caption text-text-3">{tool.artifactDigest}</p></Disclosure>}
     </li>)}</ul>}
-    {!projectId && access.operator && <Disclosure summary="研发计划"><ul className="space-y-2">{plans.map(row => <li key={row.id} className="flex flex-wrap items-center gap-2 text-ui text-text-2"><span>{row.payload.title ?? row.payload.goal}</span>{DOSSIER_STATUS[row.payload.status] && <Tag>{DOSSIER_STATUS[row.payload.status]}</Tag>}</li>)}</ul>{plans.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure>}
+    {!projectId && access.operator && <Disclosure summary="研发计划"><ul className="space-y-2">{plans.map(row => <li key={row.id} className="flex flex-wrap items-center gap-2 text-ui text-text-2"><span>{row.payload.title ?? row.payload.goal}</span>{DOSSIER_STATUS[row.payload.status] && <Tag>{DOSSIER_STATUS[row.payload.status]}</Tag>}</li>)}</ul>{plans.length === 0 && <EmptyState title="暂无研发计划" reason="循证进化立项后，计划会列在这里。" />}</Disclosure>}
   </section>;
 }

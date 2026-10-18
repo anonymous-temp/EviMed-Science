@@ -1,14 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
 import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
-import { fetchMemoryProfile, searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
-import { listAllHandbooks } from "@/lib/handbooksClient";
-import { fetchMyCapsule } from "@/lib/memoryClient";
-import { isMemoryServiceUnavailable } from "@/lib/memoryErrors";
+import { searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
 import { SELF_SECTIONS } from "@/lib/memoryGroups";
-import { listAllMethods } from "@/lib/methodsClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { useMemoryMapFeature } from "@/lib/memoryMapFeature";
@@ -17,7 +13,6 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
-import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { MemoryControls } from "@/components/memory/MemoryControls";
@@ -27,6 +22,7 @@ import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { factItems, factRowSummary, factRowTitle, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { RememberDialog } from "@/components/memory/RememberDialog";
+import { useMemoryReads, type MemoryRead } from "@/components/memory/useMemoryReads";
 import { usePendingMemory } from "@/components/memory/usePendingMemory";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectChoices } from "@/components/memory/useProjectChoices";
@@ -47,7 +43,7 @@ function tabFromAddress(params: URLSearchParams): MemoryTab | null {
 }
 
 /** The reads a tab needs that did not answer, named by tab: a list that could not be read is never an empty one. */
-const SOURCES_OF: Record<MemoryTab, readonly ("profile" | "mine" | "methods" | "handbooks")[]> = {
+const SOURCES_OF: Record<MemoryTab, readonly MemoryRead[]> = {
   self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods", "handbooks"],
 };
 
@@ -133,18 +129,14 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const [missing, setMissing] = useState<string | null>(null);
   // The tab is chosen for the researcher once: an address that names one, a notice that names a memory or a method, or a tab they
   // clicked is theirs; otherwise the page opens on the first tab that has something in it, when the data is in.
-  const landed = useRef(tabFromAddress(params) !== null || params.has("record") || params.has("method"));
+  const [landed, setLanded] = useState(() => tabFromAddress(params) !== null || params.has("record") || params.has("method"));
 
   // 「刚记住了 … 撤销」 for what changed by itself since the last visit.
   useMemoryWritePrompt();
 
-  const { data, reload } = useCapsuleData(async () => {
-    const settled = await Promise.allSettled([fetchMemoryProfile(), fetchMyCapsule(), listAllMethods("approved"), listAllHandbooks("active")]);
-    const read = <T,>(result: PromiseSettledResult<T>) => (result.status === "fulfilled" ? result.value : null);
-    // The memory service itself being down is not "could not read": the page says so in place of the lists it feeds, and nothing else breaks.
-    const serviceDown = settled[0].status === "rejected" && isMemoryServiceUnavailable(settled[0].reason);
-    return { profile: read(settled[0]), mine: read(settled[1]), methods: read(settled[2]), handbooks: read(settled[3]), serviceDown };
-  });
+  // Four reads, each drawn as it arrives: a tab fills when the reads it is made of are in, not when the slowest of the four has answered.
+  const { data, reload } = useMemoryReads();
+  const readIn = useCallback((names: readonly MemoryRead[]) => names.every((name) => data[name] !== undefined), [data]);
 
   // Server-side, and debounced: the box used to be a `toLowerCase().includes` over the rows already loaded, so it could only find what was on screen.
   useEffect(() => {
@@ -164,11 +156,11 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const projectName = (id: string | null) => (id ? labels.get(id) ?? null : null);
   const knownProjects = useMemo(() => new Set(projects.map((project) => project.id)), [projects]);
 
-  const records = useMemo(() => data?.profile?.records ?? [], [data]);
-  const entries = useMemo(() => data?.mine?.entries ?? [], [data]);
+  const records = useMemo(() => data.profile?.records ?? [], [data.profile]);
+  const entries = useMemo(() => data.mine?.entries ?? [], [data.mine]);
   const facts = useMemo(() => factItems(found ?? records, entries, { query }), [found, records, entries, query]);
-  const everyPractice = useMemo(() => practiceItems(data?.methods ?? [], data?.handbooks ?? []), [data]);
-  const practices = useMemo(() => practiceItems(data?.methods ?? [], data?.handbooks ?? [], { query }), [data, query]);
+  const everyPractice = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? []), [data.methods, data.handbooks]);
+  const practices = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? [], { query }), [data.methods, data.handbooks, query]);
 
   const self = facts.filter((fact) => fact.group === "self");
   const choices = useProjectChoices(facts);
@@ -184,10 +176,12 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   // An inbox notice names a memory (`?record=`) or a method (`?method=`): its drawer opens, and the address is cleared so a reload does not open it again.
   const handled = useRef(false);
   useEffect(() => {
-    if (!data || handled.current) return;
+    if (handled.current) return;
     const recordId = params.get("record");
     const methodId = params.get("method");
     if (!recordId && !methodId) { handled.current = true; return; }
+    // The reads the address names, not all four: a link to a memory opens when the memories are in, whatever the methods are doing.
+    if (!readIn(recordId ? SOURCES_OF.self : SOURCES_OF.methods)) return;
     handled.current = true;
     const next = new URLSearchParams(params);
     if (recordId) {
@@ -207,23 +201,21 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     next.delete("record");
     next.delete("method");
     setParams(next, { replace: true });
-  }, [data, params, setParams, facts, records, entries, everyPractice]);
+  }, [data.methods, readIn, params, setParams, facts, records, entries, everyPractice]);
 
-  const loading = data === null;
-  const scrollAnchor = usePageScroll(!loading);
-  const serviceDown = data?.serviceDown === true;
-  const unread = (Object.entries(data ?? {}) as [string, unknown][]).filter(([name, value]) => value === null && !(serviceDown && name === "profile")).map(([name]) => name);
+  const serviceDown = data.serviceDown;
+  const unread = (["profile", "mine", "methods", "handbooks"] as const).filter((name) => data[name] === null && !(serviceDown && name === "profile"));
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
   // What 「记住这一条」 asked and is not written yet (about twelve seconds), and whether that is taking longer than it should.
-  const pending = useMemo(() => data?.profile?.pending ?? [], [data]);
+  const pending = useMemo(() => data.profile?.pending ?? [], [data.profile]);
   const pendingState = usePendingMemory(pending, reload);
-  const native = data?.profile?.engine === "native";
+  const native = data.profile?.engine === "native";
 
   // 关于你 is the first tab and, for most accounts early on, the empty one while 项目 and 做法 hold what was learned: landing on an
-  // empty list reads as 「什么都没记住」. A tab whose read failed is not known to be empty, so the choice stops there.
+  // empty list reads as 「什么都没记住」. A tab whose read failed is not known to be empty, so the choice stops there. The choice is made as
+  // the reads come in, in the tabs' order: the first tab whose reads are in and that holds something, and no later one is waited for.
   useEffect(() => {
-    if (!data || landed.current) return;
-    landed.current = true;
+    if (landed) return;
     const everyFact = factItems(records, entries);
     const holds: [MemoryTab, number][] = [
       ["self", everyFact.filter((fact) => fact.group === "self").length],
@@ -231,7 +223,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
       ["methods", everyPractice.methods.length + everyPractice.handbooks.length],
     ];
     for (const [candidate, rows] of holds) {
-      if (SOURCES_OF[candidate].some((name) => (data as unknown as Record<string, unknown>)[name] === null)) return;
+      if (!readIn(SOURCES_OF[candidate])) return;
+      if (SOURCES_OF[candidate].some((name) => data[name] === null)) { setLanded(true); return; }
       if (rows === 0) continue;
       if (candidate === "project") {
         // The dropdown names one project at a time: open the first that has facts when the shell's own has none.
@@ -239,16 +232,21 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
         if (withFacts && factsOfProject(everyFact, scope, knownProjects).length === 0) setPickedProject(withFacts.id);
       }
       if (candidate !== "self") setPickedTab(candidate);
+      setLanded(true);
       return;
     }
-  }, [data, records, entries, everyPractice, choices, scope, knownProjects]);
+    setLanded(true);
+  }, [landed, data, readIn, records, entries, everyPractice, choices, scope, knownProjects]);
 
   // A tab with nothing in it carries no number: 「做法 0」 is a statistic about an empty list, which its empty state already says.
+  // The tab's own reads decide when its number is drawn, and until the page has chosen where to land no list is: it would be the wrong one.
+  const loading = (name: MemoryTab) => !readIn(SOURCES_OF[name]);
   const counts: Record<MemoryTab, number | undefined> = {
-    self: loading ? undefined : self.length,
-    project: loading ? undefined : projectFacts.length,
-    methods: loading ? undefined : practices.methods.length + practices.handbooks.length,
+    self: loading("self") ? undefined : self.length,
+    project: loading("project") ? undefined : projectFacts.length,
+    methods: loading("methods") ? undefined : practices.methods.length + practices.handbooks.length,
   };
+  const scrollAnchor = usePageScroll(readIn(SOURCES_OF[tab]) && landed);
 
   const opened: FactItem | PracticeItem | null = openKey
     ? [...facts, ...everyFact, ...everyPractice.methods, ...everyPractice.handbooks].find((item) => item.key === openKey) ?? null
@@ -257,7 +255,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const chooseTab = (next: MemoryPageTab) => {
     // 地图 is a page of its own that reads as this page's last tab.
     if (next === "map") { navigate(memoryTabAddress("map")); return; }
-    landed.current = true;
+    setLanded(true);
     setParams((current) => withParam(current, "tab", next));
   };
   // Where a conversation begun from an empty tab goes: the project the 项目 tab names, else the one the shell is in (what is said about the
@@ -285,7 +283,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   );
 
   const list = () => {
-    if (loading || (searching && !found && tab !== "methods")) return <RunsSkeleton filter={false} />;
+    if (loading(tab) || !landed || (searching && !found && tab !== "methods")) return <RunsSkeleton filter={false} />;
     if (serviceDown && (tab === "self" || tab === "project")) {
       return <LoadError message={knownErrorCodeMessage("memory_engine_unavailable") ?? "记忆服务暂时不可用。"} onRetry={reload} />;
     }
@@ -384,7 +382,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
           key={opened.key}
           item={opened}
           projectName={opened.group === "project" ? projectName(opened.projectId) : null}
-          conversations={{ ...data?.profile?.conversations, ...searchConversations }}
+          conversations={{ ...data.profile?.conversations, ...searchConversations }}
           siblings={records}
           onClose={close}
           onChanged={reload}
@@ -407,7 +405,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
       {drawer === "forgotten" && (
         <ForgottenDrawer
           records={records}
-          entries={data?.mine?.forgotten ?? []}
+          entries={data.mine?.forgotten ?? []}
           projectName={projectName}
           onClose={() => setDrawer(null)}
           onChanged={reload}

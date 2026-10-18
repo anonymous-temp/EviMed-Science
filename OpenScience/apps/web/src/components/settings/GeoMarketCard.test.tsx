@@ -78,6 +78,7 @@ describe("GEO market operations", () => {
 });
 
 it("requires a reason and a deliberate confirmation before recording a loss", async () => {
+  api.fetchGeoMarket.mockResolvedValue({ ...overview, counts: { unknownOrders: 1, problemOrders: 1, requestedTopups: 1 } });
   api.listGeoMarketOrders.mockResolvedValue({ items: [{ ...order, state: "problem", canResolve: false, canMarkLost: true, vendorOrderNid: "000123" }], total: 1, nextCursor: null });
   api.markGeoMarketOrderLost.mockResolvedValue({ id: "o1", state: "lost" });
   render(<GeoMarketCard />);
@@ -102,6 +103,7 @@ it("does not clear a reconciliation stop when its page is merely viewed", async 
 });
 
 it("resets the cursor when the operator switches lists", async () => {
+  api.fetchGeoMarket.mockResolvedValue({ ...overview, counts: { unknownOrders: 1, problemOrders: 3, requestedTopups: 1 } });
   api.listGeoMarketOrders.mockResolvedValue({ items: [order], total: 2, nextCursor: "page-two" });
   render(<GeoMarketCard />);
   fireEvent.click(await screen.findByRole("button", { name: "下一页" }));
@@ -130,4 +132,27 @@ it("closes the previous order editor on pagination so offscreen orders cannot be
   expect(await screen.findByText("第二项研究")).toBeInTheDocument();
   expect(screen.queryByLabelText("平台订单号")).not.toBeInTheDocument();
   expect(api.resolveGeoMarketOrder).not.toHaveBeenCalled();
+});
+
+describe("the lists that hold nothing are not tabs (DESIGN.md rule 5: a switch to an empty place is hidden)", () => {
+  it("draws no tab for a list that counts 0, and no tab row at all when 月度结算 is the only place left", async () => {
+    api.fetchGeoMarket.mockResolvedValue({ ...overview, counts: { unknownOrders: 0, problemOrders: 0, requestedTopups: 0 } });
+    render(<GeoMarketCard />);
+    await screen.findByText("投放账户余额");
+    expect(screen.queryByRole("tab", { name: /待确认订单|问题订单|充值记录/ })).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    // Nothing was chosen, and nothing holds anything: the settlement is what opens.
+    await waitFor(() => expect(api.fetchGeoMonthlySettlement).toHaveBeenCalled());
+    expect(api.listGeoMarketOrders).not.toHaveBeenCalled();
+  });
+
+  it("keeps the lists that hold something, and opens on the first of them", async () => {
+    api.fetchGeoMarket.mockResolvedValue({ ...overview, counts: { unknownOrders: 0, problemOrders: 2, requestedTopups: 0 } });
+    render(<GeoMarketCard />);
+    expect(await screen.findByRole("tab", { name: /问题订单/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "月度结算" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /待确认订单/ })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /充值记录/ })).toBeNull();
+    await waitFor(() => expect(api.listGeoMarketOrders).toHaveBeenLastCalledWith({ view: "problems", cursor: null, limit: 50 }));
+  });
 });

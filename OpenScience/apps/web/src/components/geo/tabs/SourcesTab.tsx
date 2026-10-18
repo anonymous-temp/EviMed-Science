@@ -37,8 +37,12 @@ import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 import { GeoSourceDrawer } from "./GeoSourceDrawer";
 import { ShowMore, useShowMore } from "./showMore";
 
-/** Sources listed before 「显示更多」, and how many each press adds. */
-const SOURCES_SHOWN = 30;
+/**
+ * Sources listed before 「显示更多」, and how many each press adds. The first screen of a data page holds at most 40 rows (the walk's
+ * `rows-ceiling`) and the two pictures above the list carry a dozen of their own: thirty sources made 41 on the owner's project, which has
+ * 1,734 of them. The toolbar's count says how many there are.
+ */
+const SOURCES_SHOWN = 20;
 
 type Only = "wrong" | "mentions" | "own" | "placeable" | "verified";
 
@@ -291,7 +295,8 @@ function SourceList({
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
             </Note>
           ) : (
-            <div>
+            // The list is a block of its own, so its sort header stands over the list it sorts and not after the two pictures above it.
+            <section aria-label="信源列表">
               <ListHeader label="按数字排序" columns={COLUMNS} sort={sort} onSort={sortBy} />
               <List divided label="信源">
                 {visible.map(({ source, counts }) => (
@@ -317,7 +322,7 @@ function SourceList({
                 ))}
               </List>
               <ShowMore remaining={remaining} unit="个" onMore={more} />
-            </div>
+            </section>
           )}
           {impostors.length > 0 && (
             <Disclosure summary="冒名站">

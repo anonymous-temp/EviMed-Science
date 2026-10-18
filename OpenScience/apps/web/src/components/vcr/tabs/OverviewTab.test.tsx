@@ -36,6 +36,7 @@ function frame(overrides: Partial<StudyFrameApi> = {}): StudyFrameApi {
     openChat: vi.fn(),
     openPanel: vi.fn(),
     setToolbar: vi.fn(),
+    setPrimary: vi.fn(),
     ...overrides,
   };
 }
@@ -217,6 +218,16 @@ describe("总览", () => {
       expect(fold.open).toBe(false);
       expect(within(fold).getByRole("link", { name: /CDE 沟通交流资料包/, hidden: true })).toHaveAttribute("href", `${address("")}?package=exp_1`);
       expect(container.querySelectorAll("details")).toHaveLength(1);
+    });
+
+    it("lists the drafts as the list when nothing is finished — a heading and a fold is a shape of the page's own (the walk's 4th section shape)", () => {
+      const { container } = draw(study((raw) => { raw.overview.deliverables = raw.overview.deliverables.map((item: any) => ({ ...item, draft: true, meta: null })); }));
+      const section = screen.getByRole("heading", { name: "交付物" }).closest("section") as HTMLElement;
+      expect(section.querySelector("details")).toBeNull();
+      expect(container.querySelectorAll("details")).toHaveLength(0);
+      const list = within(section).getByRole("list", { name: "交付物" });
+      expect(within(list).getAllByRole("listitem").length).toBeGreaterThan(0);
+      expect(within(list).getAllByText("草稿").length).toBeGreaterThan(0);
     });
 
     it("is not drawn when the study has produced nothing", () => {

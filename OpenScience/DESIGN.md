@@ -491,6 +491,19 @@ headline, has the weight of its sentence; a selected chip and the toolbar's sear
 one height; a source mark is 12 / 400; the frontier's header action is `secondary` like the other modules'. A page that
 needs a kind of its own says what it is in its `budgetNote`. `lookKinds.test.tsx` holds the classes.
 
+**The same, on the owner's data (2026-10-18, r19-walkfix).** The release walk of production found what the fixture could not: a
+band a line taller on one tab, a tag in a link, a sort header after two pictures, 41 rows on a first screen, nine to eleven kinds of
+control on pages that had eight to ten. By class: a toolbar in the band is one row whatever the data — its filters fold into 「筛选」
+when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
+every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a small button is 13 / 400 like the chip
+beside it, a severity grade 12 / 400 like a tag (the current navigation item stays 14 / 500 on purpose: it is the one kind of control the page's
+secondary buttons already are, and a weight of its own would split them); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
+screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
+more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).
+The operator's console is one card (`OpsCard`): a good state has no colour (amber for a thing to look at, red for a failure), an
+identifier is a copy button and never page text, and a list that holds nothing is not a tab.
+
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
 and the walk fail on them — and a search reads them as the new names until 2027-01-07.

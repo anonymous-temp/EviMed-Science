@@ -64,7 +64,19 @@ export async function furnishAccount(app, user, ids, { log }) {
       validFrom: new Date(now - daysAgo * DAY).toISOString(),
     }, null, { by: "user", reason: "walk fixture" });
   }
-  log(`account: ${MEMORIES.length} memory records`);
+  // An account in use for months holds a hundred and more: the page's lists, its search and its first screen are measured on more than
+  // twenty-three (the owner's memory page took more than 30 s to answer) — but not so many that the 记忆地图 folds its marks into clusters: the walk presses the first mark and expects a record's drawer.
+  for (let index = 0; index < 60; index += 1) {
+    const project = index % 3 === 0;
+    await app.researchMemory.upsertRecord(user.id, {
+      scope: project ? "project" : "user", ...(project ? { scopeId: "default" } : {}), kind: project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior",
+      key: `${project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior"}.walk_${index}`,
+      value: project ? `第 ${index} 项研究事实：纳入第 ${index} 个中心的随访数据，主要结局为糖化血红蛋白较基线的变化。` : index % 3 === 1 ? `偏好 ${index}：引用文献时给出 PMID，比较药物时用表格。` : `习惯 ${index}：每次整理文献都先核对原文数字。`,
+      origin: index % 4 === 0 ? "inferred" : "explicit", status: "active", confidence: 0.8, importance: 0.3 + (index % 7) / 10,
+      validFrom: new Date(now - (40 + index) * DAY / 3).toISOString(),
+    }, null, { by: "user", reason: "walk fixture" }).catch((/** @type {any} */ error) => { if (index === 0) log(`account: more memory — ${String(error?.message ?? error).slice(0, 160)}`); });
+  }
+  log(`account: ${MEMORIES.length + 60} memory records`);
 
   // ---- what the platform learned from the work (做法)
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
@@ -156,5 +168,39 @@ export async function furnishAccount(app, user, ids, { log }) {
     await app.notificationService.create(user.id, { noticeType: "notify", severity: title.includes("等你") ? "attention" : "info", title, body, projectId: projectOf(title),
       source: { type: "vcr", id: `${studyOf(title)}/${tab}` }, groupKey: `${groupKey}:${n}` }, { now: at(5 + n * 8) });
   }
-  log(`account: ${geoNotices.length + vcrNotices.length} inbox notices`);
+  // The owner's inbox came from four places, not two: the scheduled tasks' briefings (the ones that wait for a check wear 「待核对」), what
+  // the memory learned, the platform's own notes, and clinical-safety findings pinned over the list. Each is a kind of row the toolbar's
+  // chips, the row's actions and its tags are measured on.
+  const briefs = ["每日文献简报", "每周工作汇总", "心衰证据追踪"];
+  for (let index = 0; index < 12; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "review", severity: "info", title: `定时任务简报：${briefs[index % briefs.length]}`,
+      body: `${index % 4} 条重点发现，${3 + index} 条待验证线索。`, actions: [{ id: "open", label: "查看简报" }],
+      source: { type: "digest", id: `digest-walk-${index}` } }, { now: at(7 + index * 11) });
+  }
+  for (const [title, body] of [["记住了一条偏好", "引用文献时给出 PMID。"], ["更新了一条记忆", "老年患者的糖化血红蛋白目标要看合并症。"]]) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "info", title, body, source: { type: "memory", id: `memory-walk-${n}` }, groupKey: `memory:${n}` }, { now: at(30 + n) });
+  }
+  for (let index = 0; index < 8; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "info", title: ["额度已更新", "新的前沿动态日报", "定时任务已暂停", "导出已完成"][index % 4],
+      body: "平台的一条通知。", groupKey: `system:${n}` }, { now: at(20 + index * 13) });
+  }
+  for (let index = 0; index < 4; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "safety", title: "稿件里有一处用药安全提示", body: "“起始剂量为 5 mg”与说明书的 2 mg 不符，发布前需要处理。",
+      projectId: ids.projects.geo, source: { type: "geo", id: `${geo}/actions` }, groupKey: `geo:safety:${index}` }, { now: at(2 + index) });
+  }
+  // The ones from days ago have been read, as on an account in use: a read row's title is a weight of its own beside an unread row's.
+  const everything = await app.notificationService.list(user.id, { limit: 100 });
+  let read = 0;
+  for (const item of everything.items) {
+    if (item.severity === "safety" || item.readAt || item.noticeType !== "notify" && item.noticeType !== "review") continue;
+    if (Date.now() - new Date(item.createdAt).getTime() > 3 * 86_400_000 / 3 && read < 40) {
+      await app.notificationService.markRead(user.id, item.id, item.revision).catch(() => null);
+      read += 1;
+    }
+  }
+  log(`account: ${geoNotices.length + vcrNotices.length + 12 + 2 + 8 + 4} inbox notices (${read} read)`);
 }

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { knownErrorCodeMessage } from "@evimed/domain";
 import { webErrorMessage, listWebErrorEvents, type WebErrorEvent } from "@/lib/apiClient";
-import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
-import { iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { CopyId, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows } from "./OpsCard";
 
 export function WebErrorsCard() {
   const [events, setEvents] = useState<WebErrorEvent[]>([]);
@@ -27,56 +27,35 @@ export function WebErrorsCard() {
   }, [refresh]);
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">错误账本</h2>
-          <p className="mt-0.5 text-caption text-muted">该项目最近失败的 API 请求</p>
-        </div>
-        <Tooltip content="刷新错误列表" kind="label">
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            onClick={() => void refresh()}
-            disabled={loading}
-            aria-label="刷新错误列表"
-          >
-            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </header>
-      <div className="px-5 py-4">
-        <div className="overflow-hidden rounded-input border border-border">
+    <OpsCard title="错误账本" description="该项目最近失败的 API 请求" refresh={{ label: "刷新错误列表", loading, onRefresh: () => void refresh() }}>
+      <OpsBody>
+        <OpsRows label="失败的请求">
           {events.length === 0 ? (
-            <p className="bg-surface px-3 py-2.5 text-ui text-muted">暂无近期 API 错误。</p>
+            <OpsNothing>暂无近期 API 错误。</OpsNothing>
           ) : (
-            events.map((event, index) => (
-              <div
-                key={`${event.requestId ?? "request"}-${event.createdAt}-${index}`}
-                className={cn(
-                  "flex min-h-10 items-center gap-2.5 bg-surface px-3 py-2 text-ui",
-                  index > 0 && "border-t border-border",
-                )}
-              >
-                <AlertTriangle size={16} className="shrink-0 text-error" aria-hidden="true" />
-                <span className="w-10 shrink-0 font-mono text-caption text-error">{event.status}</span>
-                <Tooltip content={event.route} kind="label" whenTruncated>
-                  <span className="min-w-0 flex-1 truncate font-mono text-caption text-text">
-                    {event.route}
+            events.map((event, index) => {
+              // The code and the request id are for whoever searches the logs: one copy button holds both, and the row says what went wrong.
+              const identifier = [event.code, event.requestId].filter(Boolean).join(" ");
+              return (
+                <OpsRow key={`${event.requestId ?? "request"}-${event.createdAt}-${index}`}>
+                  <AlertTriangle size={16} className="shrink-0 text-error" aria-hidden="true" />
+                  <span className="w-10 shrink-0 font-mono text-caption text-error">{event.status}</span>
+                  <Tooltip content={event.route} kind="label" whenTruncated>
+                    <span className="min-w-0 flex-1 truncate font-mono text-caption text-text">
+                      {event.route}
+                    </span>
+                  </Tooltip>
+                  <span className="hidden max-w-[16rem] truncate text-caption text-text-3 sm:block">
+                    {(event.code && knownErrorCodeMessage(event.code)) || "其他错误"}
                   </span>
-                </Tooltip>
-                <span className="hidden max-w-[9rem] truncate font-mono text-caption text-muted sm:block">
-                  {event.code}
-                </span>
-                <span className="hidden max-w-[10rem] truncate font-mono text-caption text-muted md:block">
-                  {event.requestId ?? "无请求 id"}
-                </span>
-                <span className="shrink-0 font-mono text-caption text-muted">{formatClock(event.createdAt)}</span>
-              </div>
-            ))
+                  {identifier && <CopyId value={identifier} label="复制错误标识" />}
+                  <span className="shrink-0 font-mono text-caption text-text-3">{formatClock(event.createdAt)}</span>
+                </OpsRow>
+              );
+            })
           )}
-        </div>
-      </div>
-    </section>
+        </OpsRows>
+      </OpsBody>
+    </OpsCard>
   );
 }
-

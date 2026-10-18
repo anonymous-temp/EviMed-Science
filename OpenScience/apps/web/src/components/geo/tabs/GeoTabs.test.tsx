@@ -591,19 +591,23 @@ describe("信源", () => {
     expect(screen.getByText("3 个信源")).toBeInTheDocument();
   });
 
-  it("shows 30 of a thousand sources, then 30 more at a time, and starts over when the query changes", async () => {
+  it("shows 20 of a thousand sources, then 20 more at a time, and starts over when the query changes", async () => {
     client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: many(1000) });
     renderTab(<SourcesTab {...props()} />);
     const list = await screen.findByRole("list", { name: "信源" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(30);
+    // The first screen of a data page holds forty rows, and the two pictures above the list carry a dozen of their own.
+    expect(within(list).getAllByRole("listitem")).toHaveLength(20);
     expect(screen.getByText("1,000 个信源")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 970 个" }));
-    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(60);
+    // The list is a block of its own: its sort header stands over it and not after the pictures (the walk's control-after-content).
+    expect(list.closest("section[aria-label='信源列表']")).not.toBeNull();
+    expect(screen.getByRole("group", { name: "按数字排序" }).closest("section[aria-label='信源列表']")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 980 个" }));
+    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(40);
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索信源" }), "site9");
-    // site9, site90–99, site900–999: 111 matches, back to the first 30.
+    // site9, site90–99, site900–999: 111 matches, back to the first 20.
     expect(screen.getByText("匹配 111 个信源")).toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(30);
-    expect(screen.getByRole("button", { name: "显示更多 · 还有 81 个" })).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "信源" })).getAllByRole("listitem")).toHaveLength(20);
+    expect(screen.getByRole("button", { name: "显示更多 · 还有 91 个" })).toBeInTheDocument();
   });
 
   it("says which engines' citations had no link instead of leaving them out silently (G8)", async () => {
@@ -1000,7 +1004,7 @@ describe("药品价值分析只在依据里", () => {
     {
       tab: "questions",
       render: () => { client.getGeoQuestions.mockResolvedValue(questionsFilled); return <QuestionsTab {...props()} />; },
-      ready: () => screen.findByText("3 个问题群 · 2 问 · 2 条真实问法"),
+      ready: () => screen.findByText("3 个问题群 · 2 问"),
     },
     {
       tab: "sources",

@@ -216,7 +216,7 @@ describe("问题与回答: the band's toolbar", () => {
   it("finds a question by a word of it, keeps the groups it is in and says how many questions matched", async () => {
     renderTab();
     await findRow(G_BRAND);
-    expect(screen.getByText("4 个问题群 · 6 问 · 2 条真实问法")).toBeInTheDocument();
+    expect(screen.getByText("4 个问题群 · 6 问")).toBeInTheDocument();
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索问题" }), "哪家公司");
     expect(screen.getByText("匹配 1 个问题")).toBeInTheDocument();
     expect(rowOf(G_BRAND)).toHaveTextContent("匹配：信尔美是哪家公司生产的？");

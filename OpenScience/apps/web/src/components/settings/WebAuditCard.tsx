@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardList, RefreshCw } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { webErrorMessage, listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { LEDGER_STATUS_LABEL, auditActionLabel, labelFor } from "@/lib/statusLabel";
+import { LEDGER_STATUS_LABEL, auditActionLabel, auditTarget, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
-import { iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { CopyId, OPS_TONE, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows, type OpsTone } from "./OpsCard";
 
 export function WebAuditCard() {
   const [events, setEvents] = useState<WebAuditRecord[]>([]);
@@ -28,70 +28,47 @@ export function WebAuditCard() {
   }, [refresh]);
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">操作审计</h2>
-          <p className="mt-0.5 text-caption text-muted">该工作区最近的项目操作</p>
-        </div>
-        <Tooltip content="刷新审计事件" kind="label">
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            onClick={() => void refresh()}
-            disabled={loading}
-            aria-label="刷新审计事件"
-          >
-            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </header>
-      <div className="px-5 py-4">
-        <div className="overflow-hidden rounded-input border border-border">
+    <OpsCard title="操作审计" description="该工作区最近的项目操作" refresh={{ label: "刷新审计事件", loading, onRefresh: () => void refresh() }}>
+      <OpsBody>
+        <OpsRows label="项目操作">
           {events.length === 0 ? (
-            <p className="bg-surface px-3 py-2.5 text-ui text-muted">暂无近期审计事件。</p>
+            <OpsNothing>暂无近期审计事件。</OpsNothing>
           ) : (
-            events.map((event, index) => (
-              <div
-                key={`${event.action ?? event.command ?? "event"}-${event.createdAt}-${index}`}
-                className={cn(
-                  "flex min-h-10 items-center gap-2.5 bg-surface px-3 py-2 text-ui",
-                  index > 0 && "border-t border-border",
-                )}
-              >
-                <ClipboardList size={16} className={cn("shrink-0", statusTone(event.status))} aria-hidden="true" />
-                {/* The ledger's own name for the action stays in the tooltip, for whoever has to search the log. */}
-                <Tooltip content={event.action ?? "操作"}>
-                  <span className="w-28 shrink-0 truncate text-caption text-text">
-                    {auditActionLabel(event.action)}
+            events.map((event, index) => {
+              const target = auditTarget(event.target, event.command);
+              return (
+                <OpsRow key={`${event.action ?? event.command ?? "event"}-${event.createdAt}-${index}`}>
+                  <ClipboardList size={16} className={cn("shrink-0", OPS_TONE[statusTone(event.status)] || "text-text-3")} aria-hidden="true" />
+                  {/* The ledger's own name for the action stays in the tooltip, for whoever has to search the log. */}
+                  <Tooltip content={event.action ?? "操作"}>
+                    <span className="w-28 shrink-0 truncate text-caption text-text max-sm:w-20">
+                      {auditActionLabel(event.action)}
+                    </span>
+                  </Tooltip>
+                  <Tooltip content={event.status}>
+                    <span className={cn("w-20 shrink-0 text-caption max-sm:w-14", OPS_TONE[statusTone(event.status)])}>
+                      {labelFor(LEDGER_STATUS_LABEL, event.status)}
+                    </span>
+                  </Tooltip>
+                  {/* On a phone the name of the target gives way to the row's own words and its copy button: it had a column of one letter. */}
+                  <span className="min-w-0 flex-1 truncate text-caption text-text-3 max-sm:hidden">{target.text}</span>
+                  <span className="max-sm:flex-1 sm:hidden" aria-hidden="true" />
+                  {target.id && <CopyId value={target.id} label={`复制“${target.text}”的标识`} />}
+                  <span className="hidden w-16 shrink-0 text-right text-caption text-text-3 sm:block">
+                    {event.bytes ? humanSize(event.bytes) : ""}
                   </span>
-                </Tooltip>
-                <Tooltip content={event.status}>
-                  <span className={cn("w-20 shrink-0 text-caption", statusTone(event.status))}>
-                    {labelFor(LEDGER_STATUS_LABEL, event.status)}
-                  </span>
-                </Tooltip>
-                <Tooltip content={event.target ?? event.command ?? "项目"} kind="label" whenTruncated>
-                  <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
-                    {event.target ?? event.command ?? "项目"}
-                  </span>
-                </Tooltip>
-                <span className="hidden w-16 shrink-0 text-right font-mono text-caption text-muted sm:block">
-                  {event.bytes ? humanSize(event.bytes) : ""}
-                </span>
-                <span className="shrink-0 font-mono text-caption text-muted">{formatClock(event.createdAt)}</span>
-              </div>
-            ))
+                  <span className="shrink-0 font-mono text-caption text-text-3">{formatClock(event.createdAt)}</span>
+                </OpsRow>
+              );
+            })
           )}
-        </div>
-      </div>
-    </section>
+        </OpsRows>
+      </OpsBody>
+    </OpsCard>
   );
 }
 
-function statusTone(status: WebAuditRecord["status"]) {
-  if (status === "failed") return "text-error";
-  if (status === "completed") return "text-accent";
-  return "text-muted";
+/** A failure is red; what went through is the page's own text. */
+function statusTone(status: WebAuditRecord["status"]): OpsTone {
+  return status === "failed" ? "failed" : "ok";
 }
-
-

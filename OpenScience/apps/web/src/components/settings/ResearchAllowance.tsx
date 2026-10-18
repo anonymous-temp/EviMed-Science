@@ -66,7 +66,7 @@ export function ResearchAllowance({ allowance }: { allowance: WebResearchAllowan
           <PanelRow label="充值" description="不会过期" control={<AllowanceAmount value={allowance.balances.purchased} simulated={simulated} mark={false} />} />
           <PanelRow label="赠送" description={allowance.nextExpiry ? `其中 ${allowanceText(allowance.nextExpiry.amount)}将于 ${expiryWords(allowance.nextExpiry.at)}到期` : undefined} control={<AllowanceAmount value={allowance.balances.gifted} simulated={simulated} mark={false} />} />
         </>}
-        {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} description={allowance.balances ? "正在进行的研究暂时占用，结束后按实际用量结算" : undefined} control={<AllowanceAmount value={allowance.held} simulated={simulated} mark={false} />} />}
+        {allowance.held !== null && (allowance.balances || Number(allowance.held) > 0) && <PanelRow label={allowance.balances ? "冻结" : "占用额度"} control={<AllowanceAmount value={allowance.held} simulated={simulated} mark={false} />} />}
       </>}
       {month && <PanelRow label="本月消费" control={<AllowanceAmount value={month.paid} simulated={simulated} mark={false} rounding="nearest" />} />}
       {month && month.pending > 0 && <PanelRow label="本月待结算" control={<AllowanceAmount value={month.pending} simulated={simulated} mark={false} rounding="nearest" />} />}
@@ -157,7 +157,7 @@ function StatementRow({ item, simulated, marked }: { item: WebResearchStatement;
     to={!credit && item.runId ? `/app/runs?run=${encodeURIComponent(item.runId)}` : undefined}
     meta={<>{notes || undefined}{detailable && open && <StatementDetail id={item.id} />}</>}
     expanded={detailable ? open : undefined}
-    actions={detailable ? <Button variant="text" size="sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "收起明细" : "查看明细"}</Button> : undefined}
+    actions={detailable ? <Button variant="text" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "收起明细" : "查看明细"}</Button> : undefined}
     trailing={<>
       {simulated && marked && <SimulatedMark />}
       <div className="min-w-20 text-right text-ui"><span className="block text-text-2">{label}</span>{amount && <span className="tabular-nums">{sign}{amount}</span>}</div>
@@ -193,6 +193,6 @@ function PlatformCost() {
   useEffect(() => { load(); }, [load]);
   return <Panel title="平台运行成本">
     {error ? <PanelRow label={<span role="alert">{error}</span>} control={<Button variant="text" onClick={load}>重试</Button>} />
-      : <PanelRow label="供应商成本估算" description="含后台运行开销，仅供运营参考。" control={<span className="tabular-nums">{usage ? money(usage.cost) : '正在读取'}</span>} />}
+      : <PanelRow label="供应商成本估算" control={<span className="tabular-nums">{usage ? money(usage.cost) : '正在读取'}</span>} />}
   </Panel>;
 }

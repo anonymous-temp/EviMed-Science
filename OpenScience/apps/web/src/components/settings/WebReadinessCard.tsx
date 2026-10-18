@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, CircleDashed, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, XCircle } from "lucide-react";
 import { knownErrorCodeMessage } from "@evimed/domain";
 import { webErrorMessage, fetchWebReadiness, type WebReadiness, type WebReadinessCheck } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { humanSize } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { OPS_TONE, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows } from "./OpsCard";
 
 const CHECK_LABELS: Record<string, string> = {
   dataDir: "数据卷",
@@ -118,71 +118,60 @@ export function WebReadinessCard() {
   const attention = failed.length + noted.length;
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">部署配置检查</h2>
-          <p className="mt-0.5 text-caption text-muted">只检查配置和依赖服务，不代表当前研究能用</p>
-        </div>
-        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-medium", readiness && attention === 0 ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn")}>
-          {readiness ? (attention === 0 ? "配置通过" : "需要关注") : "正在读取"}
-        </span>
-        <Tooltip content="刷新配置检查" kind="label">
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            onClick={() => void refresh()}
-            disabled={loading}
-            aria-label="刷新配置检查"
-          >
-            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </header>
-      <div className="px-5 py-4">
-        <div className="overflow-hidden rounded-input border border-border">
+    <OpsCard
+      title="部署配置检查"
+      description="只检查配置和依赖服务，不代表当前研究能用"
+      // The verdict is the page's quiet text, not a tag: a `Tag` is a text-2 grey, one more colour of text on a console that has the
+      // body's, the quiet grey, amber for a thing to look at and red for a failure (the walk's budget for a page is five).
+      trailing={<span className="shrink-0 text-caption text-text-3">{readiness ? (attention === 0 ? "配置通过" : "需要关注") : "正在读取"}</span>}
+      refresh={{ label: "刷新配置检查", loading, onRefresh: () => void refresh() }}
+    >
+      <OpsBody>
+        <OpsRows label="配置检查">
           {rows.length === 0 ? (
-            <p className="bg-surface px-3 py-2.5 text-ui text-muted">配置检查尚未加载。</p>
+            <OpsNothing>配置检查尚未加载。</OpsNothing>
           ) : (
             <>
               {/* What needs a person first; what is fine is folded, so a clean deployment is a short card. */}
-              {[...failed, ...noted].map((row, index) => <Row key={row.key} row={row} first={index === 0} />)}
-              {disabled.map((row, index) => <Row key={row.key} row={row} first={failed.length + noted.length + index === 0} />)}
+              {[...failed, ...noted, ...disabled].map((row) => <Row key={row.key} row={row} />)}
               {passed.length > 0 && (
-                <div className={cn("bg-surface px-3 py-2", rows.length > passed.length && "border-t border-border")}>
+                <li className="border-t border-border bg-surface px-3 py-2 first:border-t-0">
                   <Disclosure summary={`已通过 ${passed.length} 项`}>
-                    <div className="overflow-hidden rounded-input border border-border">
-                      {passed.map((row, index) => <Row key={row.key} row={row} first={index === 0} />)}
-                    </div>
+                    <OpsRows label="已通过的检查">
+                      {passed.map((row) => <Row key={row.key} row={row} />)}
+                    </OpsRows>
                   </Disclosure>
-                </div>
+                </li>
               )}
             </>
           )}
-        </div>
-      </div>
-    </section>
+        </OpsRows>
+      </OpsBody>
+    </OpsCard>
   );
 }
 
 const STATE_WORD: Record<RowKind, string> = { failed: "失败", warning: "需要留意", disabled: "未启用", passed: "通过" };
 
 /** One check: its mark, its name, its state in words, and the sentence — with the server's code in a tooltip for whoever must grep the logs. */
-function Row({ row, first }: { row: ReadinessRow; first: boolean }) {
+function Row({ row }: { row: ReadinessRow }) {
   const { kind } = row;
   const icon: ReactNode = kind === "failed" ? <XCircle size={16} className="shrink-0 text-error" aria-hidden="true" />
     : kind === "warning" ? <AlertTriangle size={16} className="shrink-0 text-warn" aria-hidden="true" />
-      : kind === "disabled" ? <CircleDashed size={16} className="shrink-0 text-muted" aria-hidden="true" />
-        : <CheckCircle2 size={16} className="shrink-0 text-ok" aria-hidden="true" />;
-  const detail = <span className="min-w-0 flex-1 text-caption text-muted">{row.detail}</span>;
+      : kind === "disabled" ? <CircleDashed size={16} className="shrink-0 text-text-3" aria-hidden="true" />
+        : <CheckCircle2 size={16} className="shrink-0 text-text-3" aria-hidden="true" />;
+  // On a phone the sentence goes under the name and the state, with the icon's width taken off its left (it was squeezed into a column of
+  // two characters at 390 px).
+  const detail = <span className="min-w-0 flex-1 text-caption text-text-3 max-sm:basis-full max-sm:pl-[26px]">{row.detail}</span>;
   return (
-    <div className={cn("flex min-h-11 items-center gap-2.5 bg-surface px-3 py-2 text-ui", !first && "border-t border-border")}>
+    <OpsRow className="min-h-11 max-sm:flex-wrap">
       {icon}
-      <span className="w-32 shrink-0 font-medium text-text">{row.label}</span>
-      <span className={cn("w-20 shrink-0 text-caption", kind === "failed" ? "text-error" : kind === "warning" ? "text-warn" : kind === "passed" ? "text-ok" : "text-muted")}>
+      <span className="w-32 shrink-0 text-text max-sm:w-auto max-sm:flex-1">{row.label}</span>
+      <span className={cn("w-20 shrink-0 text-caption max-sm:w-auto", kind === "failed" ? OPS_TONE.failed : kind === "warning" ? OPS_TONE.warn : OPS_TONE.quiet)}>
         {STATE_WORD[kind]}
       </span>
       {row.code ? <Tooltip content={row.code}>{detail}</Tooltip> : detail}
-    </div>
+    </OpsRow>
   );
 }
 

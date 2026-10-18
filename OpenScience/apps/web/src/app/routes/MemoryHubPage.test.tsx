@@ -300,6 +300,40 @@ describe("记忆胶囊", () => {
     expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
   });
 
+  describe("each read is drawn as it arrives (the walk's memory page that took 30 s on the owner's data)", () => {
+    it("lists the memories while the methods are still being read, and gives 做法 its number when they arrive", async () => {
+      let release: (methods: unknown[]) => void = () => {};
+      listAllMethods.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+      open();
+      // The memories are in: their tab is open and listed, and the slowest read has not been waited for.
+      expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+      // 做法 is still being read: it has no number, which is not a zero.
+      expect(screen.getByRole("tab", { name: "做法" })).toBeInTheDocument();
+      expect(screen.queryByText("没有读到全部记忆。")).toBeNull();
+      await act(async () => { release([method]); });
+      expect(await screen.findByRole("tab", { name: /做法\s*[1-9]/ })).toBeInTheDocument();
+    });
+
+    it("keeps the list under the tab that is waiting for its own reads, and never lands on a tab before it can tell which holds something", async () => {
+      let release: (profile: unknown) => void = () => {};
+      fetchMemoryProfile.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+      open();
+      // Everything but the profile is in, and the profile decides whether 关于你 holds anything: nothing is drawn under the tabs yet.
+      expect(await screen.findByRole("tab", { name: /做法/ })).toBeInTheDocument();
+      expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
+      expect(screen.queryByRole("button", { name: /药学背景/ })).toBeNull();
+      await act(async () => { release({ records: [record()], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} }); });
+      expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
+    });
+
+    it("opens a memory named in the address when the memories are in, whatever the methods are doing", async () => {
+      listAllMethods.mockImplementation(() => new Promise(() => {}));
+      open("?record=rec_1");
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    });
+  });
+
   it("opens on the project that has facts when the shell's own has none", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_6", kind: "project_fact", scope: "project", scopeId: "prj_2", key: "project.fact.product", value: "信尔美为处方药，需冷链。", summary: "信尔美为处方药，需冷链。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
@@ -681,6 +715,8 @@ describe("记忆胶囊", () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockImplementation(async (status?: string) => { if (status === "retired") throw new Error("down"); return []; });
+    // Nothing anywhere, so the page opens on the first tab and says it is empty (a handbook would have taken it to 做法).
+    listAllHandbooks.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
     await user.click(screen.getByRole("button", { name: "记忆设置" }));

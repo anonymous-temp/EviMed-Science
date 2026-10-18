@@ -51,8 +51,8 @@ describe("WebResourcesCard", () => {
     render(<WebResourcesCard />);
     const tile = (await screen.findByText("失联")).closest("div.rounded-input") as HTMLElement;
     expect(within(tile).getByText("有 3 个任务在等它")).toBeInTheDocument();
-    // It is the one tile in the warn tone.
-    expect(tile).toHaveClass("border-warn");
+    // It is the one tile in the warn tone: said by the colour of its word, not by a border of its own (the page has one border).
+    expect(within(tile).getByText("失联")).toHaveClass("text-warn");
     expect(screen.queryByText(/已停止/)).not.toBeInTheDocument();
   });
 
@@ -61,7 +61,7 @@ describe("WebResourcesCard", () => {
     render(<WebResourcesCard />);
     const tile = (await screen.findByText("已停止")).closest("div.rounded-input") as HTMLElement;
     expect(within(tile).getByText("意外退出，下次打开任务会自动启动")).toBeInTheDocument();
-    expect(tile).not.toHaveClass("border-warn");
+    expect(within(tile).getByText("已停止")).not.toHaveClass("text-warn");
     expect(screen.queryByText("失联")).not.toBeInTheDocument();
   });
 

@@ -14,6 +14,14 @@ vi.mock("@/lib/toast", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+
+/** The page as a reader has it: tooltips (hidden until the pointer or the keyboard asks) taken out. */
+function visibleText() {
+  const copy = document.body.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[role="tooltip"]').forEach((node) => node.remove());
+  return (copy.textContent ?? "").replace(/\s+/g, " ");
+}
+
 describe("WebAuditCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,7 +64,10 @@ describe("WebAuditCard", () => {
     for (const raw of ["file.upload", "command.write_workspace_file", "completed", "failed"]) {
       for (const place of screen.getAllByText(raw)) expect(place.getAttribute("role")).toBe("tooltip");
     }
-    expect(screen.getByText("inputs/data.csv")).toBeInTheDocument();
+    // A path is its file name; the whole path is the copy button's.
+    expect(screen.getByText("data.csv")).toBeInTheDocument();
+    expect(visibleText()).not.toContain("inputs/data.csv");
+    expect(screen.getByRole("button", { name: "复制“data.csv”的标识" })).toBeInTheDocument();
     expect(screen.getByText("2 KB")).toBeInTheDocument();
     expect(screen.queryByText("internal path detail")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.listWebAuditLog).toHaveBeenCalledWith(20));
@@ -71,6 +82,20 @@ describe("WebAuditCard", () => {
     expect(await screen.findByText("其他操作")).toBeInTheDocument();
     expect(screen.getByText("已开始")).toBeInTheDocument();
     expect(screen.getByText("未登记的状态")).toBeInTheDocument();
+  });
+
+  it("names a document and a command in words, with the identifier behind a copy button and not in the row", async () => {
+    mocks.listWebAuditLog.mockResolvedValue([
+      { createdAt: "2026-01-01T12:00:00.000Z", userId: "alice", projectId: "paper1", action: "source.register", command: null, status: "completed", target: "src_20a9d3af2947385e47bee76791993e26", bytes: null, error: null },
+      { createdAt: "2026-01-01T12:01:00.000Z", userId: "alice", projectId: "paper1", action: "command.preview_url", command: "preview_url", status: "completed", target: "preview_url", bytes: null, error: null },
+      { createdAt: "2026-01-01T12:02:00.000Z", userId: "alice", projectId: "paper1", action: "file.upload", command: null, status: "completed", target: "base:knowledge-base/kg/entities/防风.md", bytes: 935, error: null },
+    ]);
+    render(<WebAuditCard />);
+    expect(await screen.findByText("资料")).toBeInTheDocument();
+    expect(screen.getByText("预览文件")).toBeInTheDocument();
+    expect(screen.getByText("防风.md")).toBeInTheDocument();
+    // The walk reads snake-case tokens and source ids in the visible text of the page: there are none.
+    expect(visibleText()).not.toMatch(/src_[0-9a-f]{8}|preview_url|base:/);
   });
 
   it("shows an empty state", async () => {

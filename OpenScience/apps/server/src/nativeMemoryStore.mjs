@@ -117,7 +117,28 @@ function engineFailure(error) {
   return error;
 }
 
+/**
+ * What reading an account's memory costs the engine: one listing, then one read per file. The memory page asks for it three ways at
+ * once (the list, a project's overview, what changed) and a conversation's tools ask again, so the same files were read three or four
+ * times over, eight at a time, by one visit — on an account of a hundred files that is the page's first screen taking longer than a
+ * browser's patience (the release walk of 2026-10-18: memory did not answer in 30 s on the owner's data).
+ *
+ *  - callers that arrive while a read of the same account is under way share it (nothing is kept once it ends: a read that begins after
+ *    another has ended is its own, so nothing here is ever older than the call that asked);
+ *  - a file whose `modTime` and size are what they were when it was last read is not read again; every write the store makes forgets the
+ *    account's bodies, so the page that has just edited a memory reads it back as it is.
+ */
+const BODIES_PER_ACCOUNT = 400;
+const BODY_ACCOUNTS = 100;
+
 export class NativeMemoryStore {
+  /** @type {Map<string, { epoch: number, promise: Promise<any[]> }>} */
+  #reading = new Map();
+  /** @type {Map<string, Map<string, { modTime: string, size: number, body: string }>>} */
+  #bodies = new Map();
+  /** @type {Map<string, number>} what each account's writes have counted: a read begun before a write is not shared after it */
+  #epochs = new Map();
+
   /**
    * @param {{ sessions: import("./openVikingSessions.mjs").OpenVikingSessions, overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
    *   now?: () => Date }} dependencies
@@ -143,18 +164,43 @@ export class NativeMemoryStore {
 
   // ----------------------------------------------------------------- reading
 
+  /** The account's own writes: its cached bodies and any read begun before now are not to be trusted after this. @param {string} userId */
+  #touch(userId) {
+    this.#epochs.set(userId, (this.#epochs.get(userId) ?? 0) + 1);
+    this.#reading.delete(userId);
+    this.#bodies.delete(userId);
+  }
+
   /**
    * Every memory file of the account, with its body, type, project and what the overlay knows of it.
    * @param {string} userId
    */
   async files(userId) {
     this.#assertConfigured();
+    const epoch = this.#epochs.get(userId) ?? 0;
+    const running = this.#reading.get(userId);
+    if (running && running.epoch === epoch) return running.promise;
+    const promise = this.#readFiles(userId, epoch);
+    const entry = { epoch, promise };
+    this.#reading.set(userId, entry);
+    const forget = () => { if (this.#reading.get(userId) === entry) this.#reading.delete(userId); };
+    promise.then(forget, forget);
+    return promise;
+  }
+
+  /** @param {string} userId @param {number} epoch */
+  async #readFiles(userId, epoch) {
     const root = this.sessions.memoryRoot(userId);
     const nodes = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 8 }));
     const known = await this.overlay.files(userId);
     const listed = nodes.filter((node) => !node.isDir).map((node) => ({ node, file: nativeMemoryFile(node.uri, root) })).filter((entry) => entry.file);
-    return mapLimit(listed, 8, async ({ node, file }) => {
-      const body = (await this.#engine(() => this.sessions.read(userId, node.uri))) ?? "";
+    const kept = this.#bodies.get(userId) ?? new Map();
+    const files = await mapLimit(listed, 8, async ({ node, file }) => {
+      const cached = node.modTime ? kept.get(node.uri) : undefined;
+      const body = cached && cached.modTime === node.modTime && cached.size === node.size
+        ? cached.body
+        : (await this.#engine(() => this.sessions.read(userId, node.uri))) ?? "";
+      if (node.modTime && !(cached && cached.body === body)) kept.set(node.uri, { modTime: node.modTime, size: node.size, body });
       const held = known.get(node.uri) ?? null;
       const tag = node.tags.find((item) => item.startsWith("project="))?.slice("project=".length) ?? null;
       return {
@@ -162,6 +208,16 @@ export class NativeMemoryStore {
         projectId: tag ?? held?.projectId ?? null, sensitive: held?.sensitive === true, labels: held?.labels ?? [], modTime: node.modTime,
       };
     });
+    // Only what is still true: a write since this read began has made these bodies old, and the listing is the engine's, not the cache's.
+    if ((this.#epochs.get(userId) ?? 0) === epoch) {
+      const present = new Set(listed.map(({ node }) => node.uri));
+      for (const uri of kept.keys()) if (!present.has(uri)) kept.delete(uri);
+      while (kept.size > BODIES_PER_ACCOUNT) kept.delete(/** @type {string} */ (kept.keys().next().value));
+      this.#bodies.delete(userId);
+      this.#bodies.set(userId, kept);
+      while (this.#bodies.size > BODY_ACCOUNTS) this.#bodies.delete(/** @type {string} */ (this.#bodies.keys().next().value));
+    }
+    return files;
   }
 
   /**
@@ -487,6 +543,7 @@ export class NativeMemoryStore {
    * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string }} how
    */
   async #write(userId, file, next, { actor, reason, change = "updated" }) {
+    this.#touch(userId);
     await this.#engine(() => this.sessions.replace(userId, file.uri, next));
     const before = statements(file.body);
     const after = statements(next);
@@ -498,6 +555,7 @@ export class NativeMemoryStore {
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId });
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
+    this.#touch(userId);
   }
 
   /**
@@ -548,12 +606,14 @@ export class NativeMemoryStore {
 
   /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string }} [options] */
   async forgetFile(userId, file, { keepText = false, actor = "user", reason = "" } = {}) {
+    this.#touch(userId);
     const removed = await this.#engine(() => this.sessions.remove(userId, file.uri));
     await this.overlay.reject(userId, file.type, file.uri, statements(file.body));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
       reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
     await this.overlay.removeFile(userId, file.uri);
+    this.#touch(userId);
     return { removed, uri: file.uri };
   }
 
@@ -578,6 +638,7 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} id @param {{ expectedVersion?: number }} options
    */
   async undo(userId, id, { expectedVersion = 0 } = {}) {
+    this.#touch(userId);
     if (!NATIVE_RECORD_ID.test(String(id))) throw new HttpError(404, "memory_not_found", "Memory not found.");
     const fileId = String(id).slice(0, 27);
     const files = await this.files(userId);
@@ -637,6 +698,7 @@ export class NativeMemoryStore {
    */
   async remember(userId, { text, projectId = null }) {
     this.#assertConfigured();
+    this.#touch(userId);
     const words = String(text ?? "").trim();
     if (!words || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
     if (identifierShapesIn(words).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
@@ -674,6 +736,7 @@ export class NativeMemoryStore {
    */
   async reset(userId) {
     this.#assertConfigured();
+    this.#touch(userId);
     const root = this.sessions.memoryRoot(userId);
     let files = 0;
     await this.#engine(async () => {
@@ -706,6 +769,7 @@ export class NativeMemoryStore {
    */
   async deleteProject(userId, projectId) {
     this.#assertConfigured();
+    this.#touch(userId);
     const root = this.sessions.memoryRoot(userId);
     const tagged = await this.#engine(() => this.sessions.tree(userId, root, { levelLimit: 8, tags: [`project=${projectId}`] }));
     const fromOverlay = await this.overlay.projectFiles(userId, projectId);
@@ -725,6 +789,7 @@ export class NativeMemoryStore {
    */
   async eraseAccount(userId) {
     this.#assertConfigured();
+    this.#touch(userId);
     const erased = await this.#engine(() => this.sessions.eraseUser(userId));
     await this.overlay.purgeUser(userId).catch(() => null);
     await this.overlay.forgetAccount(userId).catch(() => null);

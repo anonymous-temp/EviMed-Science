@@ -71,6 +71,18 @@ const ITEMS = [
   ["example-ai-medicine", 3, "ai", "review-opinion", ["pharmacy"], false, false, null, "药物相互作用提示系统的临床评估", "评估显示提示依从性是效果的关键。"],
   ["example-journal-medicine", 8, "evidence", "rct", ["gastroenterology"], false, false, null, "质子泵抑制剂减量试验：症状复发率相近", "减量组与维持组的症状复发率相近。"],
   ["example-journal-cardiology", 12, "evidence", "rct", ["cardiology"], false, false, null, "他汀联合依折麦布的早期强化降脂试验", "早期强化降脂使低密度脂蛋白胆固醇更快达标。"],
+  // Five more stories of two reports each, so the hot list has its ten (the owner's list is full) — two of them first reported within twelve
+  // hours, which the list marks 「新」.
+  ["example-journal-medicine", 5, "evidence", "rct", ["gastroenterology"], false, false, "NCT90000009", "围手术期加速康复方案缩短结直肠手术住院时间", "多中心试验显示住院时间中位缩短 1.5 天，并发症发生率相近。"],
+  ["example-health-news", 4, "evidence", "rct", ["gastroenterology"], false, false, "NCT90000009", "结直肠手术的加速康复：试验要点", "报道援引试验，住院时间缩短 1.5 天。"],
+  ["example-journal-oncology", 9, "evidence", "rct", ["oncology"], false, false, "NCT90000010", "辅助免疫治疗用于高危黑色素瘤：三年无复发生存提高", "三年无复发生存率 68% 对 54%。"],
+  ["example-pharma-news", 8, "pipeline", "press-release", ["oncology"], false, false, "NCT90000010", "辅助免疫治疗的黑色素瘤试验：企业解读", "企业解读强调三年无复发生存获益。"],
+  ["example-journal-cardiology", 15, "evidence", "rct", ["cardiology"], false, false, "NCT90000011", "经导管瓣膜置换在中危患者中的五年结局", "五年死亡或致残性卒中的复合结局与外科手术相近。"],
+  ["example-health-news", 14, "evidence", "rct", ["cardiology"], false, false, "NCT90000011", "瓣膜置换五年随访：微创与开胸差别不大", "五年结局相近，微创恢复更快。"],
+  ["example-journal-medicine", 21, "evidence", "rct", ["nephrology"], false, false, "NCT90000012", "钠-葡萄糖协同转运蛋白 2 抑制剂延缓非糖尿病肾病进展", "肾功能下降速度减缓 0.9 毫升每分钟每年。"],
+  ["example-health-news", 20, "evidence", "rct", ["nephrology"], false, false, "NCT90000012", "非糖尿病肾病也能用降糖药吗：新试验", "试验纳入非糖尿病的慢性肾脏病患者。"],
+  ["example-journal-oncology", 36, "evidence", "rct", ["oncology"], false, false, "NCT90000013", "乳腺癌新辅助治疗：病理完全缓解率比较", "病理完全缓解率 45% 对 32%。"],
+  ["example-health-news", 35, "evidence", "rct", ["oncology"], false, false, "NCT90000013", "乳腺癌新辅助新方案的病理缓解数据", "报道援引试验，病理完全缓解率提高 13 个百分点。"],
 ];
 
 /**
@@ -128,6 +140,7 @@ export async function furnishFrontier(app, user, { log }) {
     log(`frontier: daily ${JSON.stringify(await composer.daily.runDue().catch((/** @type {any} */ error) => ({ failed: String(error?.code ?? error?.message ?? error) })))} ${JSON.stringify(composer.daily.status?.() ?? null).slice(0, 400)}`);
     composer.events.editor = editors.events;
     composer.daily.editor = editors.daily;
+    await furnishHotHistory(database, log);
     log(`frontier: composer ${JSON.stringify(Object.fromEntries(Object.entries(composer.status().loops).map(([name, state]) => [name, [state.runs, state.lastError]])))}`);
     const events = (await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.events")).rows[0]?.n ?? 0;
     const hot = (await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.hot_snapshots")).rows[0]?.n ?? 0;
@@ -136,6 +149,39 @@ export async function furnishFrontier(app, user, { log }) {
   } else log("frontier: no composer — the events, the hot list and the daily were not made");
 
   return furnishZones(app, user, { log });
+}
+
+/**
+ * What the hot list looked like in the day before it: seven earlier lists, four hours apart (the trend's points) and the one six hours
+ * back that 「升温」 is read against. Without them the page has no sparkline and no 「升温」, and the owner's list has both — a fixture whose hot
+ * list had a heat and no history drew none of the shapes the walk measures in a row of it (a tag beside the title, a trend at the end).
+ * The rankings are the latest list's, a little lower for the events that are rising and without two of the others, so the module's own
+ * reading (`frontierHotReading`) finds what it finds on a live list.
+ * @param {any} database @param {(line: string) => void} log
+ */
+async function furnishHotHistory(database, log) {
+  const latest = (await database.query("SELECT taken_at, ranking, heats FROM evimed_frontier.hot_snapshots ORDER BY taken_at DESC LIMIT 1")).rows?.[0];
+  const entries = Array.isArray(latest?.ranking) ? latest.ranking : [];
+  if (entries.length < 6) { log(`frontier: the hot list holds ${entries.length} events: no history was written`); return; }
+  const at = new Date(latest.taken_at).getTime();
+  const heats = /** @type {Record<string, number>} */ (latest.heats ?? {});
+  const rising = new Set(entries.slice(3, 7).map((entry) => entry.eventId));
+  let written = 0;
+  for (const hoursBack of [24, 20, 16, 12, 8, 6, 4]) {
+    // Eight hours back and nearer the list was as it is now with three events missing (ranks 5 to 7) and two swapped: the events that moved up are 「升温」.
+    const ranking = hoursBack > 8
+      ? entries.map((entry) => ({ ...entry }))
+      : [...entries.slice(0, 2), entries[3], entries[2], ...entries.slice(7)].filter(Boolean).map((entry) => ({ ...entry }));
+    const earlier = Object.fromEntries(Object.entries(heats).map(([id, value]) => {
+      const ramp = 0.55 + 0.45 * (1 - hoursBack / 24);
+      return [id, Math.round(value * (rising.has(id) ? ramp * 0.55 : ramp) * 10_000) / 10_000];
+    }));
+    const result = await database.query(
+      "INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking, heats) VALUES ($1, $2::jsonb, $3::jsonb) ON CONFLICT (taken_at) DO NOTHING",
+      [new Date(at - hoursBack * 3_600_000).toISOString(), JSON.stringify(ranking.map((entry, index) => ({ ...entry, rank: index + 1, delta: 0 }))), JSON.stringify(earlier)]);
+    written += result.rowCount ?? 0;
+  }
+  log(`frontier: ${written} earlier hot lists written (the trend's points and the one 「升温」 is read against)`);
 }
 
 /**

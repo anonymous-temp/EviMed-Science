@@ -205,7 +205,7 @@ export function AppShell() {
               type="button"
               aria-label="关闭侧边栏"
               onClick={closeSidebar}
-              className="fixed inset-0 z-drawer bg-scrim lg:hidden"
+              className="fixed inset-0 z-drawer rounded-none bg-scrim lg:hidden"
             />
           )}
           <Sidebar />

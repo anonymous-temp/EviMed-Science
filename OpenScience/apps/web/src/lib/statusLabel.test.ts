@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { LEDGER_STATUS_LABEL, labelFor } from "./statusLabel";
+import { LEDGER_STATUS_LABEL, auditTarget, commandLabel, labelFor, securityActionLabel } from "./statusLabel";
 
 /** Every `audit(…, "action", "status")`, `securityAudit(…)` and download `settle("status")` the server writes with a literal status. */
 function writtenStatuses(): Set<string> {
@@ -32,5 +32,23 @@ describe("the ledger status words", () => {
     expect(labelFor(LEDGER_STATUS_LABEL, "a_status_nobody_wrote")).toBe("未登记的状态");
     expect(labelFor(LEDGER_STATUS_LABEL, "")).toBe("未登记的状态");
     expect(labelFor(LEDGER_STATUS_LABEL, "constructor")).toBe("未登记的状态");
+  });
+});
+
+describe("an audit row's target in words", () => {
+  it("names a document, a path and a command by what a person reads, and keeps the identifier apart", () => {
+    expect(auditTarget("src_20a9d3af2947385e47bee76791993e26", null)).toEqual({ text: "资料", id: "src_20a9d3af2947385e47bee76791993e26" });
+    expect(auditTarget("base:knowledge-base/kg/entities/防风.md", null)).toEqual({ text: "防风.md", id: "knowledge-base/kg/entities/防风.md" });
+    expect(auditTarget("inputs/data.csv", null)).toEqual({ text: "data.csv", id: "inputs/data.csv" });
+    expect(auditTarget("preview_url", "preview_url")).toEqual({ text: "预览文件", id: "preview_url" });
+    expect(auditTarget(null, "write_workspace_file")).toEqual({ text: "写入文件", id: "write_workspace_file" });
+    expect(auditTarget(null, null)).toEqual({ text: "项目", id: null });
+  });
+
+  it("never prints a command or a code it has no word for: 其他命令, 其他操作", () => {
+    expect(commandLabel("a_command_nobody_wrote")).toBe("其他命令");
+    expect(commandLabel(null)).toBe("其他命令");
+    expect(securityActionLabel("auth.something.new")).toBe("其他操作");
+    expect(securityActionLabel("auth.login")).toBe("登录");
   });
 });

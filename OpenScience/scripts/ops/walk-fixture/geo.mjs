@@ -4,7 +4,7 @@
  *
  *  - the product, its claims, twelve question groups of four questions (three of them controls), the journey — written by the module's own
  *    writers (`geoRuntimeWrite`, what a run's `geo_write` calls), the question set locked;
- *  - the measured side — five rounds of answers (a baseline and four weekly), 144 answers each, with their judged facts: whether the
+ *  - the measured side — five rounds of answers (a baseline and four weekly), one per question and engine, with their judged facts: whether the
  *    product was named, first, recommended, which sites were cited, which statements were wrong. The probe host and the judge model are
  *    absent here, so the answers are written into the tables the measurement writes (`GeoMeasureStore`), and **the numbers are the
  *    platform's own** — `tickMetrics` computes every rate, the index and the sources' citation counts from them;
@@ -20,7 +20,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const server = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "server", "src");
 const load = (/** @type {string} */ file) => import(pathToFileURL(path.join(server, file)).href);
 
-const ENGINES = ["doubao", "qianwen", "deepseek"];
+// Five engines, as the owner's product is measured on: the engine bars, the heat table and the sources' per-engine counts are
+// drawn for five, and a fixture with three never drew the width of the real ones (r19-walkfix).
+const ENGINES = ["doubao", "qianwen", "deepseek", "kimi", "yuanbao"];
 const BRAND = "康舒宁";
 const COMPETITORS = ["诺康泰", "瑞信平"];
 const OWNED = "kangshuning.example.com";
@@ -39,17 +41,38 @@ const GROUPS = [
   { pool: "P4", name: "品牌身份：谁生产", typical: "康舒宁是哪家公司的？", stage: "选药", questions: ["康舒宁是哪家公司的", "康舒宁是进口药还是国产药", "康舒宁什么时候上市的", "康舒宁的通用名是什么"] },
   { pool: "P4", name: "品牌身份：真假辨别", typical: "怎么辨别康舒宁的真假？", stage: "购药", control: true, questions: ["怎么辨别康舒宁的真假", "康舒宁包装上有什么防伪标识", "网上买的康舒宁可靠吗", "康舒宁的批号在哪里查"] },
   { pool: "P4", name: "品牌身份：购买渠道", typical: "康舒宁在哪里买？", stage: "购药", questions: ["康舒宁在哪里买", "康舒宁需要处方吗", "康舒宁医院能开吗", "康舒宁可以网上买吗"] },
+  // The owner's project had 25 groups in four pools; the page's rows, its heat table and its pool sections are measured at that count.
+  { pool: "P1", name: "已用药：保存与携带", typical: "康舒宁怎么保存？", stage: "用药中", questions: ["康舒宁怎么保存", "康舒宁冷藏多久", "康舒宁坐飞机怎么带", "康舒宁开封后能放多久"] },
+  { pool: "P1", name: "已用药：联合用药", typical: "康舒宁和二甲双胍能一起用吗？", stage: "用药中", questions: ["康舒宁和二甲双胍能一起用吗", "康舒宁和胰岛素能一起用吗", "康舒宁和他汀能一起用吗", "康舒宁和降压药有冲突吗"] },
+  { pool: "P1", name: "已用药：复诊与检查", typical: "用康舒宁要查什么？", stage: "用药中", questions: ["用康舒宁要查什么", "康舒宁多久复诊一次", "康舒宁要定期查胰腺吗", "康舒宁用了多久看效果"] },
+  { pool: "P2", name: "品类对比：作用机制", typical: "周制剂降糖针的原理是什么？", stage: "选药", questions: ["周制剂降糖针的原理是什么", "康舒宁和诺康泰机制有什么不同", "GLP-1 类药物是怎么降糖的", "康舒宁为什么一周打一次"] },
+  { pool: "P2", name: "品类对比：特殊人群", typical: "老年人用哪种降糖针？", stage: "选药", control: true, questions: ["老年人用哪种降糖针", "肾功能不好能用康舒宁吗", "康舒宁适合瘦人吗", "康舒宁能用于孕妇吗"] },
+  { pool: "P3", name: "症状求助：疲乏与饥饿", typical: "总觉得饿是怎么回事？", stage: "确诊后", questions: ["总觉得饿是怎么回事", "糖尿病总觉得累怎么办", "吃了药还是口渴", "夜里总起夜是不是血糖高"] },
+  { pool: "P3", name: "症状求助：并发症", typical: "糖尿病会有哪些并发症？", stage: "确诊后", questions: ["糖尿病会有哪些并发症", "手脚麻木是不是糖尿病引起的", "糖尿病眼底要多久查一次", "糖尿病肾病早期有什么表现"] },
+  { pool: "P3", name: "症状求助：饮食运动", typical: "糖尿病吃什么主食好？", stage: "确诊后", questions: ["糖尿病吃什么主食好", "打了降糖针还要控制饮食吗", "糖尿病每天走多少步", "晚饭后散步能降糖吗"] },
+  { pool: "P4", name: "品牌身份：厂家服务", typical: "康舒宁有患者援助项目吗？", stage: "购药", questions: ["康舒宁有患者援助项目吗", "康舒宁客服电话是多少", "康舒宁有专业护士指导吗", "康舒宁说明书怎么下载"] },
+  { pool: "P4", name: "品牌身份：上市与批准", typical: "康舒宁是哪年批准的？", stage: "选药", questions: ["康舒宁是哪年批准的", "康舒宁有哪些适应证", "康舒宁的临床试验结果怎么样", "康舒宁在国外上市了吗"] },
+  { pool: "P2", name: "品类对比：使用便利", typical: "周制剂和每日针哪个方便？", stage: "选药", questions: ["周制剂和每日针哪个方便", "康舒宁的笔怎么用", "康舒宁针头疼不疼", "康舒宁一盒能用多久"] },
+  { pool: "P4", name: "品牌身份：真实世界", typical: "康舒宁的真实患者评价怎么样？", stage: "购药", questions: ["康舒宁的真实患者评价怎么样", "康舒宁有人用了没效果吗", "康舒宁副作用多久会消失", "康舒宁停药后血糖会反弹吗"] },
 ];
 
 /** Third-party sites the engines cite, with what kind of site each is. Every name is invented. */
 const SITES = {
-  news: ["health-daily.example.com", "med-times.example.cn", "life-news.example.com"],
-  vertical: ["doctor-answers.example.com", "pharma-know.example.com", "diabetes-hub.example.org", "drug-guide.example.org", "health-library.example.com"],
-  social: ["ask-and-answer.example.com", "note-share.example.com", "short-video.example.com", "health-circle.example.cn"],
-  wiki: ["med-encyclopedia.example.com", "knowledge-base.example.org"],
-  regulator: ["drug-registry.example.org"],
+  news: ["health-daily.example.com", "med-times.example.cn", "life-news.example.com", "city-evening.example.cn", "wellness-weekly.example.com", "medical-news.example.org", "daily-health.example.cn", "pharma-today.example.com", "science-times.example.org", "family-doctor.example.cn", "news-digest.example.com"],
+  vertical: ["doctor-answers.example.com", "pharma-know.example.com", "diabetes-hub.example.org", "drug-guide.example.org", "health-library.example.com", "clinic-notes.example.cn", "medicine-box.example.com", "patient-voice.example.org", "endo-forum.example.cn", "drug-compare.example.com", "diabetes-school.example.cn", "pharmacy-guide.example.org", "chronic-care.example.com"],
+  social: ["ask-and-answer.example.com", "note-share.example.com", "short-video.example.com", "health-circle.example.cn", "daily-notes.example.cn", "community-qa.example.com", "mp-health.example.cn", "video-clinic.example.com", "weibo-health.example.cn", "forum-diabetes.example.cn", "tieba-health.example.com"],
+  wiki: ["med-encyclopedia.example.com", "knowledge-base.example.org", "open-wiki.example.org", "pharma-wiki.example.cn", "baike-med.example.cn"],
+  regulator: ["drug-registry.example.org", "nhc-notice.example.gov", "nmpa-label.example.gov", "reimbursement-list.example.gov"],
+  selfmedia: ["author-column.example.cn", "doctor-blog.example.com", "pharmacist-notes.example.cn", "toutiao-health.example.cn", "wechat-column.example.cn", "personal-health.example.com", "diabetes-diary.example.org", "weight-journal.example.cn"],
+  commerce: ["drug-shop.example.com", "pharmacy-mall.example.cn", "online-clinic.example.com"],
 };
-const CITED_BY = { doubao: [...SITES.social, ...SITES.news, ...SITES.vertical.slice(0, 2)], qianwen: [...SITES.vertical, ...SITES.wiki, ...SITES.news.slice(0, 1)], deepseek: [...SITES.regulator, ...SITES.wiki, ...SITES.vertical.slice(0, 3)] };
+const CITED_BY = {
+  doubao: [...SITES.social, ...SITES.news, ...SITES.vertical.slice(0, 4), ...SITES.selfmedia.slice(0, 3)],
+  qianwen: [...SITES.vertical, ...SITES.wiki, ...SITES.news.slice(0, 3), ...SITES.commerce],
+  deepseek: [...SITES.regulator, ...SITES.wiki, ...SITES.vertical.slice(0, 5)],
+  kimi: [...SITES.selfmedia, ...SITES.news.slice(3, 8), ...SITES.vertical.slice(4, 9), ...SITES.regulator.slice(0, 2)],
+  yuanbao: [...SITES.selfmedia.slice(2), ...SITES.social.slice(0, 6), ...SITES.news.slice(5), ...SITES.commerce.slice(0, 2)],
+};
 
 /** A deterministic number in [0, 1) for a label: the same fixture every time. @param {string} label */
 function unit(label) {
@@ -62,6 +85,16 @@ const WRONGS = [
   [`${BRAND}可以用于一型糖尿病患者`, "indication", "label_conflict", "S4", "用于成人2型糖尿病患者的血糖控制"],
   [`${BRAND}没有明显的胃肠道不良反应`, "adverse", "dropped_condition", "S2", "常见不良反应为胃肠道反应（恶心、腹泻、呕吐）"],
   [`${BRAND}起始剂量为5 mg`, "dosing", "number", "S3", "起始剂量为2 mg，每4周可增加一次"],
+  [`${BRAND}每两周注射一次`, "dosing", "number", "S3", "本品每周一次皮下注射给药"],
+  [`${BRAND}适合所有糖尿病患者使用`, "indication", "dropped_condition", "S3", "用于成人2型糖尿病患者的血糖控制"],
+  [`${BRAND}几乎没有恶心的副作用`, "adverse", "dropped_condition", "S2", "常见不良反应为胃肠道反应（恶心、腹泻、呕吐）"],
+  [`${BRAND}可以用于儿童的血糖控制`, "indication", "label_conflict", "S4", "用于成人2型糖尿病患者的血糖控制"],
+  [`${BRAND}每4周增加一次剂量，每次加倍`, "dosing", "number", "S3", "起始剂量为2 mg，每4周可增加一次"],
+  [`${BRAND}的胃肠道反应只在第一周出现`, "adverse", "number", "S2", "多在剂量增加时出现"],
+  [`${BRAND}不需要冷藏保存`, "dosing", "label_conflict", "S1", "本品每周一次皮下注射给药"],
+  [`${BRAND}与二甲双胍不能同时使用`, "indication", "label_conflict", "S2", "用于成人2型糖尿病患者的血糖控制"],
+  [`${BRAND}注射后要立刻吃饭`, "adverse", "dropped_condition", "S1", "常见不良反应为胃肠道反应（恶心、腹泻、呕吐）"],
+  [`${BRAND}的起始剂量因人而异，没有固定值`, "dosing", "number", "S3", "起始剂量为2 mg，每4周可增加一次"],
 ];
 
 /**
@@ -92,10 +125,16 @@ export async function furnishGeo(app, user, { log }) {
     { claimKey: "indication", statement: "用于成人2型糖尿病的血糖控制", quote: "用于成人2型糖尿病患者的血糖控制。", sourceRef: "说明书 2026 版", sourceKind: "label", inLabel: true },
     { claimKey: "adverse", statement: "常见不良反应为胃肠道反应", quote: "常见不良反应为胃肠道反应（恶心、腹泻、呕吐），多在剂量增加时出现。", sourceRef: "说明书 2026 版", sourceKind: "label", inLabel: true },
   ] });
-  const questions = await write("questions", { data: { groups: GROUPS.map((group) => ({
+  const groupsOf = (/** @type {typeof GROUPS} */ groups) => ({ data: { groups: groups.map((group) => ({
     pool: group.pool, name: group.name, typicalQuestion: group.typical, journeyStage: group.stage, isControl: Boolean(group.control),
     questions: group.questions.map((text) => ({ text: `${text}？`, kind: "real", platform: "xhs", isMeasured: true })),
   })) } });
+  // The first set (the twelve groups the run began with) is locked and is replaced by the full one: a project that has been measured for
+  // a month has more than one version, and the band's 「问句版本」 menu is drawn only then (the walk's module-chrome found the band a line
+  // taller on the owner's project, where that menu is one more control on the 问题与回答 row).
+  await write("questions", groupsOf(GROUPS.slice(0, 12)));
+  await write("lock_questions", { data: {} });
+  const questions = await write("questions", groupsOf(GROUPS));
   await write("lock_questions", { data: {} });
   await write("journey", { data: {
     subtypes: [{ name: "新确诊", size: "300000" }, { name: "口服药控制不佳", size: "900000" }],
@@ -108,7 +147,7 @@ export async function furnishGeo(app, user, { log }) {
   const measure = new GeoMeasureStore(geoStore.database ?? app.store.database);
   await measure.ready();
   const groupIds = questions.ids;
-  const map = await geoStore.questionMap(project.id, 1);
+  const map = await geoStore.questionMap(project.id, 2);
   const claimIds = Object.fromEntries((claims.claims ?? []).map((/** @type {any} */ claim) => [claim.claimKey ?? claim.key, claim.id]));
   if (!claimIds.dosing) throw new Error(`the claims were written without their keys: ${JSON.stringify(claims.claims)}`);
   const today = new Date();
@@ -119,8 +158,8 @@ export async function furnishGeo(app, user, { log }) {
     const askedAt = new Date(today.getTime() - daysAgo * 86_400_000 - 3_600_000);
     const roundId = `gr_walk_${roundIndex}`;
     await measure.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, status, planned, done, failed, sample_date, created_at, started_at, finished_at)
-      VALUES ($1, $2, $3, $4, 1, $5::text[], 'done', 144, 144, 0, $6::date, $7, $7, $7)`,
-    [roundId, user.id, project.id, roundIndex === 0 ? "baseline" : "weekly", ENGINES, askedAt.toISOString().slice(0, 10), askedAt.toISOString()]);
+      VALUES ($1, $2, $3, $4, 2, $5::text[], 'done', $8, $8, 0, $6::date, $7, $7, $7)`,
+    [roundId, user.id, project.id, roundIndex === 0 ? "baseline" : "weekly", ENGINES, askedAt.toISOString().slice(0, 10), askedAt.toISOString(), GROUPS.length * 4 * ENGINES.length]);
     for (const group of map) {
       const spec = GROUPS.find((entry) => entry.name === group.name) ?? GROUPS[0];
       for (const question of group.questions) {
@@ -140,6 +179,17 @@ export async function furnishGeo(app, user, { log }) {
   const deps = { store: measure, now: () => new Date(), config: {} };
   for (let guard = 0; guard < 10; guard += 1) if ((await tickMetrics(deps)).rounds === 0) break;
   log(`geo: ${dayOffsets.length} rounds measured, ${wrongOnes.length} answers carry a wrong sentence`);
+  // The sites the answers cited are in the table now, each counted by the platform. What kind a site is the platform learns elsewhere
+  // (the owner's project had 1,734 sites, 1,722 of them unclassified): here the media, wikis, regulators, self-media and shops are named
+  // and the verticals and the communities are left as they come, so the page draws the one big bar and the small ones.
+  const kindOf = { news: "news", wiki: "encyclopedia", regulator: "government", selfmedia: "wemedia", commerce: "ecommerce" };
+  for (const [group, kind] of Object.entries(kindOf)) {
+    await measure.query("UPDATE evimed_geo.sources SET kind = $3 WHERE geo_project_id = $1 AND domain = ANY($2::text[]) AND kind IS NULL",
+      [project.id, SITES[/** @type {keyof typeof SITES} */ (group)], kind]);
+  }
+  // Two sites that pass themselves off as the brand's, which the page folds under 「冒名站」.
+  await measure.query("UPDATE evimed_geo.sources SET impostor = true WHERE geo_project_id = $1 AND domain = ANY($2::text[])",
+    [project.id, [SITES.social[3], SITES.vertical[5]]]);
 
   // ---- the errors the wrong sentences make (the platform's own record of one, with the confirmation it would have asked for done)
   /** @type {Map<string, string>} */
@@ -224,6 +274,14 @@ export async function furnishGeo(app, user, { log }) {
     { url: "https://zhuanlan.example.com/p/20261001", platform: "zhihu", title: "每周一次的降糖针怎么选", publishedAt: new Date(today.getTime() - 9 * 86_400_000).toISOString().slice(0, 10), groupId: groupIds[3] },
   ] }).catch((error) => log(`geo: owned links — ${String(error.message).slice(0, 300)}`));
   log(`geo: strategy, ${actions.length} actions, ${written?.ids?.length ?? 0} articles, owned links written`);
+
+  // Two more projects of the account, started and left (paused), as the owner's list has them: the list's row then carries 「已暂停」 and a
+  // text button 「继续」 beside the first project's grade and its trend, which is the row the home page's type pairs are measured on.
+  for (const [slug, name] of [["geo-second", "示例复方制剂 · 9月29日"], ["geo-third", "示例复方制剂 · 9月28日"]]) {
+    const extra = await app.store.createProject(user, slug, name);
+    const created = await geoStore.createProject({ userId: user.id, projectId: extra.id, engines: ENGINES.slice(0, 3), coverageDays: 90, product: { brandName: name } });
+    await geoStore.updateProject(user.id, created.id, { status: "paused" }).catch((/** @type {any} */ error) => log(`geo: ${name} was not paused (${String(error?.message ?? error).slice(0, 160)})`));
+  }
   return { projectId: project.id, controlProjectId: controlProject.id };
 }
 
@@ -236,7 +294,7 @@ export async function furnishGeo(app, user, { log }) {
 function answerOf({ roundIndex, group, question, engine, claimIds }) {
   const seed = `${roundIndex}:${question.id}:${engine}`;
   const base = { P1: 0.7, P2: 0.3, P3: 0.12, P4: 0.5 }[/** @type {"P1"} */ (group.pool)] ?? 0.3;
-  const engineFactor = { doubao: 1, qianwen: 0.8, deepseek: 0.9 }[/** @type {"doubao"} */ (engine)] ?? 1;
+  const engineFactor = { doubao: 1, qianwen: 0.8, deepseek: 0.9, kimi: 0.7, yuanbao: 0.85 }[/** @type {"doubao"} */ (engine)] ?? 1;
   const lift = group.control ? 0 : roundIndex * 0.045;
   const named = unit(`mention:${seed}`) < Math.min(0.95, (base + lift) * engineFactor);
   const first = named && unit(`first:${seed}`) < 0.35;
@@ -248,11 +306,12 @@ function answerOf({ roundIndex, group, question, engine, claimIds }) {
   const citations = [];
   for (let index = 0; index < count; index += 1) {
     const domain = cited[Math.floor(unit(`site:${seed}:${index}`) * cited.length)];
-    citations.push({ title: `${group.name}的参考资料 ${index + 1}`, url: `https://${domain}/a/${Math.floor(unit(`page:${seed}:${index}`) * 900) + 100}` });
+    // A cited link carries its site (`domain`), as the probe host writes it: the platform counts the answers that cite a site by it.
+    citations.push({ title: `${group.name}的参考资料 ${index + 1}`, url: `https://${domain}/a/${Math.floor(unit(`page:${seed}:${index}`) * 900) + 100}`, domain });
   }
   const citesOurs = named && unit(`ours:${seed}`) < 0.3;
-  if (citesOurs) citations.push({ title: "说明书更新公告", url: `https://${OWNED}/news/label-update` });
-  const wrong = named && roundIndex >= 1 && unit(`wrong:${seed}`) < (group.pool === "P1" || group.pool === "P2" ? 0.09 : 0.02);
+  if (citesOurs) citations.push({ title: "说明书更新公告", url: `https://${OWNED}/news/label-update`, domain: OWNED });
+  const wrong = named && roundIndex >= 1 && unit(`wrong:${seed}`) < (group.pool === "P1" || group.pool === "P2" ? 0.13 : 0.04);
   const pick = Math.floor(unit(`which:${seed}`) * WRONGS.length);
   const [sentence, key, errorType, severity, evidence] = WRONGS[pick];
   const rivals = COMPETITORS.filter((_, index) => unit(`rival:${seed}:${index}`) < 0.55);

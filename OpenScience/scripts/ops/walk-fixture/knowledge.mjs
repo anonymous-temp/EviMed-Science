@@ -108,10 +108,16 @@ export async function furnishKnowledge(app, user, password, { engine, setCompile
       : { root: "base", path: `knowledge-base/${name}`, data: text, encoding: "utf8" };
     const sent = await api("/api/files/upload", { method: "POST", body: JSON.stringify(body) });
     if (sent.status !== 200) throw new Error(`upload of ${name} answered ${sent.status}: ${JSON.stringify(sent.body).slice(0, 200)}`);
-    const source = await app.sourceService.get(user.id, sent.body.data.source.id);
-    // Text only: an understanding of each document is a model's, and none is here.
-    if (source.payload.depth !== "index_only") {
-      await app.sourceService.override(user.id, source.id, { expectedRevision: source.revision, docType: source.payload.docType, depth: "index_only", reason: "Walk fixture: text only." });
+    // Text only: an understanding of each document is a model's, and none is here. The ingestion worker is already reading the document
+    // (its own poll), so the record can move between this read and the write: the write is tried again against what the worker left.
+    let source = await app.sourceService.get(user.id, sent.body.data.source.id);
+    for (let attempt = 0; attempt < 5 && source.payload.depth !== "index_only"; attempt += 1) {
+      try {
+        await app.sourceService.override(user.id, source.id, { expectedRevision: source.revision, docType: source.payload.docType, depth: "index_only", reason: "Walk fixture: text only." });
+      } catch (error) {
+        if (!/record changed/i.test(String(/** @type {any} */ (error)?.message ?? error)) || attempt === 4) throw error;
+      }
+      source = await app.sourceService.get(user.id, source.id);
     }
     ids[name] = source.id;
   }
@@ -165,6 +171,19 @@ function wikiPages(src) {
   const trial = src("周制剂降糖药52周试验.pdf");
   const page = (/** @type {string} */ type, /** @type {string} */ title, /** @type {string} */ description, /** @type {string} */ body) => `---\ntype: ${type}\ntitle: ${title}\ndescription: ${description}\n---\n\n# ${title}\n\n${body}\n`;
   return {
+    // A long page: ten sections, each with its own quotation — the shape of a compiled overview, which the reader gives a contents.
+    "concept/研究总览.md": page("concept", "研究总览", "项目方案、统计计划与证据的总览", [
+      ["研究问题", `成人 2 型糖尿病患者使用每周一次与每日一次降糖针的疗效与体重差别 [方案](${plan} "成人 2 型糖尿病患者使用每周一次与每日一次降糖针的疗效与体重差别")。`],
+      ["入选与排除", `纳入年龄不小于 18 岁、糖化血红蛋白在 7.5% 到 10.5% 之间的患者 [方案](${plan} "糖化血红蛋白在 7.5% 到 10.5% 之间")。`],
+      ["主要结局", `主要结局为 52 周糖化血红蛋白较基线的变化 [方案](${plan} "主要结局为 52 周糖化血红蛋白较基线的变化")。`],
+      ["数据来源", `数据来自三家医院的门诊随访记录 [方案](${plan} "数据来自三家医院的门诊随访记录")。`],
+      ["统计方法", `主分析使用混合效应模型 [统计分析计划](${sap} "主分析使用混合效应模型")。`],
+      ["样本量", `每组需要 133 人 [统计分析计划](${sap} "每组需要 133 人，按 15% 的脱落率调整")。`],
+      ["文献检索", `检出 41 篇，纳入 12 篇 [检索记录](${search} "检出：41 篇；纳入：12 篇")。`],
+      ["已有试验", `试验组糖化血红蛋白下降 1.8 个百分点 [试验](${trial} "52 周时试验组糖化血红蛋白下降 1.8 个百分点，对照组下降 0.9 个百分点")。`],
+      ["安全性", `胃肠道反应多出现在加量期 [处理要点](${safety} "胃肠道反应多出现在加量期，常见的是恶心、腹泻和呕吐")。`],
+      ["下一步", `方案先在注册平台登记 [纪要](${minutes} "方案先在注册平台登记，拿到注册号再开始数据整理")。`],
+    ].map(([heading, text]) => `## ${heading}\n\n${text}\n\n${text.replace(/ \[.*$/u, "")}。这一节的内容在下面几个页面里有更完整的说明，需要时可以从相关页面进入。\n`).join("\n")),
     "index.md": page("index", "知识页目录", "本项目的知识页", "- [周制剂降糖药](concept/周制剂降糖药.md)\n- [糖化血红蛋白目标](concept/糖化血红蛋白目标.md)\n- [胃肠道不良反应](concept/胃肠道不良反应.md)\n- [统计分析计划](concept/统计分析计划.md)\n- [样本量估算](concept/样本量估算.md)\n- [研究方案](entity/研究方案.md)\n- [随访数据](entity/随访数据.md)\n- [文献检索](entity/文献检索.md)"),
     "concept/周制剂降糖药.md": page("concept", "周制剂降糖药", "每周注射一次的降糖药", `## 定义\n\n每周注射一次的降糖药，52 周时糖化血红蛋白下降幅度约为对照的两倍 [试验](${trial} "52 周时试验组糖化血红蛋白下降 1.8 个百分点，对照组下降 0.9 个百分点")。\n\n## 体重\n\n试验组体重下降 6.2 公斤 [试验](${trial} "试验组体重下降 6.2 公斤，对照组下降 1.1 公斤")。\n\n## 指南\n\n每周一次的制剂可以提高依从性 [指南](${guideline} "每周一次的制剂可以提高依从性")。\n\n## 相关\n\n- [胃肠道不良反应](胃肠道不良反应.md)\n- [糖化血红蛋白目标](糖化血红蛋白目标.md)\n\n## 来源\n\n- [试验](${trial})\n- [指南](${guideline})`),
     "concept/糖化血红蛋白目标.md": page("concept", "糖化血红蛋白目标", "不同人群的目标值", `多数成年患者的目标小于 7% [指南](${guideline} "多数成年患者的糖化血红蛋白目标为小于 7%")；老年患者应放宽 [指南](${guideline} "老年患者与合并症多的患者应放宽目标")。\n\n本研究的入选范围是 7.5% 到 10.5% [方案](${plan} "糖化血红蛋白在 7.5% 到 10.5% 之间")。\n\n参见 [周制剂降糖药](周制剂降糖药.md)。`),
@@ -228,6 +247,14 @@ function graphFiles(src) {
     relation("followup-data", "collected_at", "采集于", "hospital-c", [data]),
     relation("literature-search", "informs", "支持", "protocol", [search]),
     relation("mixed-model", "analyses", "分析", "followup-data", [sap]),
+    // The owner's graph file was 31 KB of these: a data file nobody reads top to bottom, whose page is six windows tall. The compile writes
+    // one line for each pair of entities the documents put side by side.
+    ...Array.from({ length: 230 }, (_unused, index) => {
+      const ids = ["weekly-agent", "daily-agent", "hba1c", "weight", "nausea", "pancreatitis", "followup-data", "protocol", "sap", "mixed-model", "sample-size", "trial-52w", "literature-search", "guideline", "hospital-a", "hospital-b", "hospital-c"];
+      const names = [["mentions", "提到"], ["assesses", "测评"], ["reports_issue", "记录问题"], ["uses_case", "使用病例"], ["relates_to", "相关"]];
+      const [name, label] = names[index % names.length];
+      return relation(ids[index % ids.length], name, label, ids[(index * 7 + 3) % ids.length], [[plan, sap, minutes, search, data, safety][index % 6]]);
+    }),
   ].join("\n")}\n`;
   return files;
 }
