@@ -17,7 +17,7 @@
     {
       "view": "frontier-hot@desktop",
       "rule": "type-pairs",
-      "max": 6,
+      "max": 5,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -39,17 +39,9 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "frontier-following@desktop",
-      "rule": "type-pairs",
-      "max": 8,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "frontier-zones@desktop",
       "rule": "type-pairs",
-      "max": 6,
+      "max": 5,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -63,17 +55,9 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "geo@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "virtual-research@desktop",
       "rule": "type-pairs",
-      "max": 7,
+      "max": 6,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -95,17 +79,9 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "files@desktop",
-      "rule": "type-pairs",
-      "max": 6,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "knowledge-graph@desktop",
       "rule": "type-pairs",
-      "max": 7,
+      "max": 6,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -113,7 +89,7 @@
     {
       "view": "memory-project@desktop",
       "rule": "type-pairs",
-      "max": 6,
+      "max": 5,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -121,7 +97,7 @@
     {
       "view": "memory-map@desktop",
       "rule": "type-pairs",
-      "max": 8,
+      "max": 7,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -144,14 +120,6 @@
     },
     {
       "view": "account-appearance@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "account-usage@desktop",
       "rule": "type-pairs",
       "max": 5,
       "owner": "controller",
@@ -233,7 +201,7 @@
     {
       "view": "geo-accuracy@desktop",
       "rule": "type-pairs",
-      "max": 12,
+      "max": 10,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -242,14 +210,6 @@
       "view": "geo-questions@desktop",
       "rule": "type-pairs",
       "max": 7,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "geo-sources@desktop",
-      "rule": "type-pairs",
-      "max": 6,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -281,7 +241,7 @@
     {
       "view": "geo-answer@desktop",
       "rule": "type-pairs",
-      "max": 11,
+      "max": 10,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -289,7 +249,7 @@
     {
       "view": "vcr-overview@desktop",
       "rule": "type-pairs",
-      "max": 10,
+      "max": 9,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -297,7 +257,7 @@
     {
       "view": "vcr-population@desktop",
       "rule": "type-pairs",
-      "max": 10,
+      "max": 5,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -305,31 +265,7 @@
     {
       "view": "vcr-patients@desktop",
       "rule": "type-pairs",
-      "max": 9,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "vcr-comparator@desktop",
-      "rule": "type-pairs",
-      "max": 10,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "vcr-trial@desktop",
-      "rule": "type-pairs",
-      "max": 12,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "vcr-matching@desktop",
-      "rule": "type-pairs",
-      "max": 9,
+      "max": 7,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -337,7 +273,7 @@
     {
       "view": "vcr-data@desktop",
       "rule": "type-pairs",
-      "max": 12,
+      "max": 10,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -351,39 +287,15 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "vcr-population@2@desktop",
-      "rule": "type-pairs",
-      "max": 10,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "vcr-patients@2@desktop",
-      "rule": "type-pairs",
-      "max": 9,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "vcr-comparator@2@desktop",
       "rule": "type-pairs",
-      "max": 10,
+      "max": 7,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
       "view": "vcr-trial@2@desktop",
-      "rule": "type-pairs",
-      "max": 12,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
-      "view": "vcr-matching@2@desktop",
       "rule": "type-pairs",
       "max": 9,
       "owner": "controller",
@@ -393,7 +305,7 @@
     {
       "view": "vcr-data@2@desktop",
       "rule": "type-pairs",
-      "max": 12,
+      "max": 10,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -409,7 +321,7 @@
     {
       "view": "frontier-evidence@desktop",
       "rule": "type-pairs",
-      "max": 8,
+      "max": 7,
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
@@ -429,6 +341,22 @@
       "owner": "controller",
       "until": "2026-12-01",
       "why": "type-scale pairs of R19 pages, to be reduced"
+    },
+    {
+      "view": "ops@desktop",
+      "rule": "type-pairs",
+      "max": 5,
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"
+    },
+    {
+      "view": "memory@desktop",
+      "rule": "type-pairs",
+      "max": 5,
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"
     }
   ]
 }
