@@ -474,6 +474,31 @@ export function omitSpans(text, spans) {
 }
 
 /**
+ * The candidates that carry nothing the same reading named under `omit`.
+ *
+ * One model call reads a conversation twice: what to keep (`candidates`) and what the episode must leave out because the
+ * never-kept rules forbid it (`omit`). A candidate that holds, verbatim, a span the same call said is never kept contradicts
+ * that call's own verdict, and the verdict wins: the candidate is not kept, and the rest of the reading stands. Seen on
+ * 2026-10-18 (local replay of production's N06): 「磺胺类药物过敏」 said inside a question was listed under omit and, in the same
+ * answer, added to the allergy memory the person had asked to keep. Which words are never kept is the model's judgement
+ * (principle 1); that a candidate carries one of the spans it named, and that the span is in the conversation, is checked here.
+ * @param {readonly any[]} candidates validated candidates @param {unknown} omit @param {readonly { role?: string, text?: string }[]} sources
+ * @param {string[]} rejections @returns {any[]}
+ */
+export function candidatesClearOfOmissions(candidates, omit, sources, rejections) {
+  const texts = sources.filter((source) => source.role === "user" || source.role === "assistant").map((source) => String(source.text ?? ""));
+  const omitted = verifiedOmissions(omit, texts);
+  if (!omitted.length) return [...candidates];
+  return candidates.filter((candidate) => {
+    const carried = `${candidate.value ?? ""}\n${candidate.summary ?? ""}\n${candidate.evidence?.quote ?? ""}`;
+    if (!omitted.some((span) => carried.includes(span))) return true;
+    // The span itself stays out of the reason: it is what the rules keep out.
+    rejections.push(`"${candidate.key}" carries what the same reading said is never kept`);
+    return false;
+  });
+}
+
+/**
  * The stored record a researcher asked, in the conversation, to forget — or
  * why the request names none.
  *
@@ -1228,6 +1253,7 @@ export class MemoryIntelligence {
     let extractionError = null;
     try {
       ({ candidates, proposed, rejections, forget: forgetRequests, omit } = await this.#extractWithModel(sources, project, run, existing));
+      candidates = candidatesClearOfOmissions(candidates, omit, sources, rejections);
     } catch (error) {
       // A failed extraction is not a failed run: the run summary is written,
       // and the error travels to the run's own notice rather than being
@@ -1761,7 +1787,7 @@ export class MemoryIntelligence {
               role: "system",
               content: [
                 "Extract durable memory candidates from the supplied conversation sources.",
-                "Return JSON only: {\"candidates\":[...]}. Maximum 12 candidates.",
+                "Return JSON only: {\"candidates\":[...],\"omit\":[...]}. Maximum 12 candidates.",
                 // No confidence: a number the model types is not a measurement,
                 // and the page used to print it as one. What a record is worth
                 // follows from its origin; how established it is is counted.
@@ -1868,12 +1894,12 @@ export class MemoryIntelligence {
                 // The episode the platform keeps of a conversation (its last question and answer, ninety days) is the one stored text
                 // the never-kept rules did not reach: a password typed in passing, a patient's name, one's own blood pressure were
                 // in it (2026-10-14 probe). The model names the spans; code checks each is verbatim and blanks it (`verifiedOmissions`).
-                "Also return {\"omit\":[\"...\"]} (leave the key out when nothing qualifies): the platform stores the last question and answer of a conversation as its episode for ninety days, and blanks out of it what the never-kept rules forbid. List the exact spans of the user's or the assistant's messages, copied character for character and each as short as it can be (a password, a name, a number, an address, the clause that states a diagnosis or a reading), that fall under those rules: a secret or account number; the name of any person other than the user (a patient, a colleague, a family member, whatever else is said of them) and every identifying detail of theirs; any reading, complaint, diagnosis or medication of a patient or of anyone but the user; the user's own health or private life, unless they asked for it to be remembered. Go through the question and the answer clause by clause and list every such span, one entry per name or detail. A surname with 某 or an initial (李某, 王某某) is still a name. List such a reading or number on its own as well as inside its clause (「11.2」 as well as 「空腹血糖有点高，11.2」): the answer may repeat it in other words, and only an exact span is blanked. Never a whole question, and never ordinary words: a threshold, a reference range, a guideline's figure or a term the answer explains belongs to no one and stays.",
+                "Always return omit beside candidates, an empty list when nothing qualifies: the platform stores the last question and answer of a conversation as its episode for ninety days, and blanks out of it what the never-kept rules forbid. List the exact spans of the user's or the assistant's messages, copied character for character and each as short as it can be (a password, a name, a number, an address, the clause that states a diagnosis or a reading), that fall under those rules: a secret or account number; the name of any person other than the user (a patient, a colleague, a family member, whatever else is said of them) and every identifying detail of theirs; any reading, complaint, diagnosis or medication of a patient or of anyone but the user; the user's own health or private life, unless they asked for it to be remembered. Go through the question and the answer clause by clause and list every such span, one entry per name or detail. A surname with 某 or an initial (李某, 王某某) is still a name. List such a reading or number on its own as well as inside its clause (「11.2」 as well as 「空腹血糖有点高，11.2」): the answer may repeat it in other words, and only an exact span is blanked. Never a whole question, and never ordinary words: a threshold, a reference range, a guideline's figure or a term the answer explains belongs to no one and stays.",
                 // 2026-10-18 (production's legacy run on V4.1-Flash, replayed locally): shown only keys, the model reused a key whose name
                 // seemed to fit for a different fact, and the newer fact replaced the older — an exercise-sheet format and a requirements-
                 // document structure both became `preference.practice_format`, a code style and an R library choice `preference.code_style`
                 // — and a correction could not find the key that held the corrected fact. The summary is what tells one fact from another.
-                "existingMemories lists what is already stored: the scope, kind and key of each memory and the one sentence it says (summary). A key holds one fact. Reuse its exact scope, kind and key only when this conversation is about that same fact — the person restates it, adds to it or changes it — and then give its complete current value: what the stored summary says and the person did not change, with what they changed. A different fact gets a key of its own even when it is of the same kind or an existing key's name seems to fit it: another preference about another thing (the format of a weekly report and the structure of a grant proposal are two), another role, another piece of work. A stored memory changes only when one of the person's own messages in this conversation says so; never rewrite one from what the assistant did, wrote or recommended, or from the code and files of the work.",
+                "existingMemories lists what is already stored: the scope, kind and key of each memory and the one sentence it says (summary). A key holds one fact. Reuse its exact scope, kind and key only when this conversation is about that same fact — the person restates it, adds to it or changes it — and then give its complete current value: what the stored summary says and the person did not change, with what they changed. A different fact gets a key of its own even when it is of the same kind or an existing key's name seems to fit it: another preference about another thing (the format of a weekly report and the structure of a grant proposal are two), another role, another piece of work. A stored memory changes only when one of the person's own messages in this conversation says so; never rewrite one from what the assistant did, wrote or recommended, or from the code and files of the work. Adding to a stored memory is keeping: what the never-kept rules keep out is never added to one, not even to a memory of the same kind the person once asked to keep.",
                 // The judgement is the model's; that the named key exists, is
                 // in force and is in the same scope is checked in code
                 // (supersededRecord), and an unchecked claim is dropped.

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
@@ -2050,7 +2050,8 @@ test("the extraction is asked for the spans of the episode to leave out", async 
     },
   });
   await intelligence.recordRun(project(), run("run_omit"), [message("m1", "帮我写个连接脚本")]);
-  assert.match(system, /Also return \{"omit":\["\.\.\."\]\}/);
+  assert.match(system, /Return JSON only: \{"candidates":\[\.\.\.\],"omit":\[\.\.\.\]\}/);
+  assert.match(system, /Always return omit beside candidates, an empty list when nothing qualifies/);
   assert.match(system, /copied character for character and each as short as it can be/);
   assert.match(system, /Never a whole question, and never ordinary words/);
   // 2026-10-18, production's legacy run: 「张某」 stayed in N04's episode, and N05's reading stayed in the answer because only the
@@ -2061,4 +2062,55 @@ test("the extraction is asked for the spans of the episode to leave out", async 
   // N06: an allergy said inside a question was kept beside the allergy the person had asked to be remembered.
   assert.match(system, /neither is another fact of that kind said inside a later question because one was kept before/);
   assert.match(system, /The exception covers only the fact that message asks to keep/, "the never-kept rules both engines read say it too");
+});
+
+test("a candidate that carries what the same reading said is never kept is not kept, and the rest of the reading stands", async () => {
+  // 2026-10-18, local replay of production's N06: an allergy said inside a question was listed under omit and, in the same answer,
+  // added to the allergy memory the person had asked to keep.
+  const sources = [{ role: "user", text: "我对磺胺类药物过敏，社区获得性肺炎一般怎么选抗生素？" }, { role: "assistant", text: "可以考虑……" }];
+  const candidates = [
+    { key: "profile.allergy", value: "对青霉素和磺胺类药物过敏", summary: "用户对青霉素和磺胺类药物过敏", evidence: { quote: "我对磺胺类药物过敏" } },
+    { key: "preference.answer_length", value: "回答简短", summary: "回答简短", evidence: { quote: "怎么选抗生素" } },
+  ];
+  const rejections = [];
+  const kept = candidatesClearOfOmissions(candidates, ["磺胺类药物过敏", "不在原文里"], sources, rejections);
+  assert.deepEqual(kept.map((candidate) => candidate.key), ["preference.answer_length"]);
+  assert.deepEqual(rejections, ['"profile.allergy" carries what the same reading said is never kept'], "and the span itself is not repeated in the reason");
+  assert.deepEqual(candidatesClearOfOmissions(candidates, ["不在原文里"], sources, []).length, 2, "a span that is not in the conversation names nothing");
+  assert.deepEqual(candidatesClearOfOmissions(candidates, "磺胺类药物过敏", sources, []).length, 2, "nor does an omit that is not a list");
+
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const { sources } = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: [
+          { scope: "user", kind: "profile", key: "profile.allergy", value: "对青霉素和磺胺类药物过敏", summary: "对青霉素和磺胺类药物过敏", origin: "explicit", importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "我对磺胺类药物过敏" },
+        ],
+        omit: ["磺胺类药物过敏"],
+      }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_n06"), [message("m1", "我对磺胺类药物过敏，社区获得性肺炎一般怎么选抗生素？")]);
+  assert.equal(result.extracted, 0);
+  assert.ok([...store.records.values()].every((record) => record.kind === "run_summary"), "no memory of the person's health was written");
+  assert.ok(result.rejectionReasons.some((reason) => reason.includes("never kept")));
+});
+
+test("an explicit request to remember a fact about oneself is kept when the reading omits nothing of it", async () => {
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const { sources } = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: [
+          { scope: "user", kind: "profile", key: "profile.allergy", value: "对青霉素过敏", summary: "对青霉素过敏", origin: "explicit", importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "记住我对青霉素过敏" },
+        ],
+        omit: [],
+      }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_k13"), [message("m1", "记住我对青霉素过敏。")]);
+  assert.equal(result.extracted, 1);
+  assert.equal([...store.records.values()].find((record) => record.kind === "profile").value, "对青霉素过敏");
 });
