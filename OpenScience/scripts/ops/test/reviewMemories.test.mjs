@@ -51,3 +51,21 @@ test("without --project the reading is charged to the account's default project,
   assert.equal(await chargedProject(store([]), "u1"), "default");
   await assert.rejects(() => chargedProject({ userById: async () => null }, "nobody"), /no such user/);
 });
+
+// R19 post-release: review-memories.mjs built `new AgentRunStore(null, {})`, which throws "requires a configured model", so the
+// report never ran in production. Every ops script that builds the store hands it the deployment's model, as the server does.
+test("every ops script that builds an AgentRunStore hands it the deployment's model", async () => {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const directory = new URL("../", import.meta.url);
+  const offenders = [];
+  let seen = 0;
+  for (const name of (await readdir(directory)).filter((file) => file.endsWith(".mjs"))) {
+    const source = await readFile(new URL(name, directory), "utf8");
+    for (const match of source.matchAll(/new AgentRunStore\((.*)$/gm)) {
+      seen += 1;
+      if (!/\bmodel\s*:/.test(match[1])) offenders.push(`${name}: ${match[0]}`);
+    }
+  }
+  assert.ok(seen >= 2, "the walk found the scripts that build the store");
+  assert.deepEqual(offenders, []);
+});

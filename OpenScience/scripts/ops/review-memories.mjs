@@ -107,7 +107,7 @@ async function main() {
   try {
     if (!database) throw new Error("no control-plane database is configured");
     const { researchMemory } = memoryStoreForOps(config, database);
-    const runs = new AgentRunStore(null, {});
+    const runs = new AgentRunStore(null, { model: config.deepseekModel });
     const review = new MemoryReview(config, researchMemory, {
       usageLedger: new UsageLedger(database),
       evidenceProvenance: () => createEvidenceProvenance({
