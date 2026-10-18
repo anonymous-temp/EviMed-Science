@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, episodeOmissions, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
@@ -2115,4 +2115,19 @@ test("an explicit request to remember a fact about oneself is kept when the read
   const result = await intelligence.recordRun(project(), run("run_k13"), [message("m1", "记住我对青霉素过敏。")]);
   assert.equal(result.extracted, 1);
   assert.equal([...store.records.values()].find((record) => record.kind === "profile").value, "对青霉素过敏");
+});
+
+test("a figure inside a span the model named is left out of the episode wherever it occurs (production's N05)", async () => {
+  const asked = "我最近血压有点高，140/90，平时饮食应该注意什么？简短回答。";
+  const replied = "140/90 mmHg 属于 1 级高血压的临界值；多次测量 ≥140/90 再就医。";
+  assert.deepEqual(episodeOmissions(["血压有点高，140/90"], [asked, replied]), ["血压有点高，140/90", "140/90"]);
+  assert.deepEqual(episodeOmissions(["男，56 岁"], ["患者男，56 岁"]), ["男，56 岁"], "two digits are not a figure of their own");
+  assert.deepEqual(episodeOmissions(["空腹 8.5–10.2 mmol/L"], ["空腹 8.5–10.2 mmol/L，复查 8.5–10.2"]), ["空腹 8.5–10.2 mmol/L", "8.5–10.2"]);
+  assert.deepEqual(episodeOmissions("140/90", [asked]), [], "not a list, nothing named");
+
+  const { intelligence, summary } = episodeRun({ candidates: [], omit: ["血压有点高，140/90"] });
+  await intelligence.recordRun(project(), run("run_n05"), [message("m1", asked), { info: { id: "m2", role: "assistant" }, parts: [{ type: "text", text: replied }] }]);
+  const stored = JSON.parse(summary().value);
+  assert.equal(stored.question, "我最近[已省略]，平时饮食应该注意什么？简短回答。");
+  assert.ok(!stored.answer.includes("140/90"), stored.answer);
 });

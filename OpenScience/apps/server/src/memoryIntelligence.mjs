@@ -438,6 +438,25 @@ export function verifiedOmissions(spans, texts) {
   return found.sort((left, right) => right.length - left.length);
 }
 
+/** A figure in a span the model named: a number with a separator in it (「140/90」, 「11.2」, 「8.5–10.2」) or of three digits or more. */
+const SPAN_FIGURE = /\d+(?:[./:：～~–-]\d+)+|\d{3,}/gu;
+
+/**
+ * What the episode leaves out: the verified spans, and every figure inside one of them wherever else it occurs.
+ *
+ * The answer repeats a reading in its own words — 「140/90 mmHg 属于 1 级高血压」 after 「我最近血压有点高，140/90」 — so the
+ * clause the model named, blanked where it stands, left the reading in the answer (production's N05, 2026-10-18, and three of
+ * seven local runs). Which clause is never kept is the model's judgement; that a figure inside it is the same figure elsewhere
+ * in the same question and answer is a property of the text (principle 1: numbers go to code).
+ * @param {unknown} spans @param {readonly string[]} texts @returns {string[]} longest first
+ */
+export function episodeOmissions(spans, texts) {
+  const verified = verifiedOmissions(spans, texts);
+  const figures = [...new Set(verified.flatMap((span) => span.match(SPAN_FIGURE) ?? []))]
+    .filter((figure) => !verified.includes(figure) && texts.some((source) => source.includes(figure)));
+  return [...verified, ...figures].sort((left, right) => right.length - left.length);
+}
+
 /**
  * A text with the verified spans blanked out, wherever they occur, shortest first (names and numbers before clauses) and up to
  * seven tenths of its length: a verdict that would leave the question unreadable misread it, and what cannot be blanked is still
@@ -1662,7 +1681,7 @@ export class MemoryIntelligence {
     const lastAssistant = [...sources].reverse().find((source) => source.role === "assistant") ?? null;
     const asked = lastUser?.text.slice(0, 4_000) ?? "";
     const replied = lastAssistant?.text.slice(0, 8_000) ?? "";
-    const omitted = verifiedOmissions(omit, [asked, replied]);
+    const omitted = episodeOmissions(omit, [asked, replied]);
     // What a conversation is remembered by keeps no identifier: a pasted case's ID number or phone is the conversation's, not
     // the episode's (2026-10-12 review) — and nothing else the never-kept rules forbid: a password typed in passing, a patient's
     // or a colleague's name, one's own blood pressure (2026-10-14 probe). The model names the spans, code checks they are there.
@@ -1810,8 +1829,8 @@ export class MemoryIntelligence {
                 // The scope a kind must carry is enforced on the way in. Saying
                 // so here is the difference between a candidate being stored and
                 // being silently dropped for a mismatch the model could not see.
-                "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on, preference is how they want work done, behavior is how they habitually work.",
-                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". The project whose id is \"default\" is the catch-all every account starts in and has no single subject: record no project_fact, decision or follow_up there. A follow_up, in any project, is what the person themselves says is still open or still to do: a question, an option or a next step the assistant raised is not one, even when it came in a plan the person asked for, until the person takes it up in a message of their own, and the task they are asking for right now is not one either. correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
+                "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on (every role they have told you of, not only the latest), preference is how they want work done, behavior is how they habitually work.",
+                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". The project whose id is \"default\" is the catch-all every account starts in and has no single subject: record no project_fact, decision or follow_up there. A follow_up, in any project, is what the person themselves says is still open or still to do: a question, an option or a next step the assistant raised is not one, even when it came in a plan the person asked for, until the person takes it up in a message of their own, and the task they are asking for right now is not one either (「帮我把数据清洗步骤列出来」 asks for work now; the open points of the answer are the assistant's). correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
                 // 2026-10-14: the assistant's words are never a memory of the person. Production held 31 project facts and follow-ups
                 // quoting offers, a report's safety boilerplate and the run's own state; the native engine's templates already refuse
                 // exactly that, and this is the same rule. Code checks that the quoted message is the person's (`validateCandidate`).
@@ -1851,7 +1870,6 @@ export class MemoryIntelligence {
                 // 2026-10-18 (K05): 「练习题分基础、提高、拓展三档」 was kept and 「初中数学、七年级」 was not, so the preference no longer said
                 // whose exercises it was about. The native templates say the same (memory-templates-src/preferences.yaml, profile.yaml).
                 "A preference keeps what it applies to: when the same message says who or what it is for (the class they teach, the kind of document, the language of the code), write that into the preference so it still reads right on its own — 「给门诊患者写的科普材料一律用初中生读得懂的话」, not 「材料用通俗的话」.",
-                "A person can hold several roles at once. When a stored profile memory already names a role and this conversation states another without saying the earlier one ended (「我现在不做…了」, 「已经转去…」), keep both: reuse the key with a value that states both roles as they now stand (「心内科医生，也在读流行病学硕士」), never as a history of what was recorded before, or give the new role a key of its own. A newly stated role never silently replaces a stored one.",
                 // "In the source's own language": a value written in Chinese
                 // pulls a quote from an English tool result towards Chinese too,
                 // and a translated quote is not verbatim, so the candidate would
@@ -1899,7 +1917,7 @@ export class MemoryIntelligence {
                 // seemed to fit for a different fact, and the newer fact replaced the older — an exercise-sheet format and a requirements-
                 // document structure both became `preference.practice_format`, a code style and an R library choice `preference.code_style`
                 // — and a correction could not find the key that held the corrected fact. The summary is what tells one fact from another.
-                "existingMemories lists what is already stored: the scope, kind and key of each memory and the one sentence it says (summary). A key holds one fact. Reuse its exact scope, kind and key only when this conversation is about that same fact — the person restates it, adds to it or changes it — and then give its complete current value: what the stored summary says and the person did not change, with what they changed. A different fact gets a key of its own even when it is of the same kind or an existing key's name seems to fit it: another preference about another thing (the format of a weekly report and the structure of a grant proposal are two), another role, another piece of work. A stored memory changes only when one of the person's own messages in this conversation says so; never rewrite one from what the assistant did, wrote or recommended, or from the code and files of the work. Adding to a stored memory is keeping: what the never-kept rules keep out is never added to one, not even to a memory of the same kind the person once asked to keep.",
+                "existingMemories lists what is already stored: the scope, kind and key of each memory and the one sentence it says (summary). A key holds one fact. Reuse its exact scope, kind and key only when this conversation is about that same fact — the person restates it, adds to it or changes it — and then give its complete current value: what the stored summary says and the person did not take back, with what they added or changed. A role is added, not swapped: 「我是…」 beside a stored role names one more role of theirs, and the value keeps both as they now stand (「心内科医生，也在读流行病学硕士」), never as a history of what was recorded, unless they say the earlier one ended (「我现在不做…了」, 「已经转去…」). A different fact gets a key of its own even when it is of the same kind or an existing key's name seems to fit it: another preference about another thing (the format of a weekly report and the structure of a grant proposal are two), another role, another piece of work. A stored memory changes only when one of the person's own messages in this conversation says so; never rewrite one from what the assistant did, wrote or recommended, or from the code and files of the work. Adding to a stored memory is keeping: what the never-kept rules keep out is never added to one, not even to a memory of the same kind the person once asked to keep.",
                 // The judgement is the model's; that the named key exists, is
                 // in force and is in the same scope is checked in code
                 // (supersededRecord), and an unchecked claim is dropped.
