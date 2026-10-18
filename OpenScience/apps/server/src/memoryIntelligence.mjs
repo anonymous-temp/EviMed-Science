@@ -407,13 +407,49 @@ function windowedSources(entries) {
 function parseModelJson(content) {
   const raw = boundedText(content, 100_000).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   if (!raw) return { candidates: [], forget: [], omit: [] };
-  const parsed = JSON.parse(raw);
+  const parsed = parseLeadingObject(raw);
   if (!parsed || typeof parsed !== "object") return { candidates: [], forget: [], omit: [] };
   return {
     candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
     forget: Array.isArray(parsed.forget) ? parsed.forget : [],
     omit: Array.isArray(parsed.omit) ? parsed.omit : [],
   };
+}
+
+/**
+ * The reply as JSON, or — when text follows a complete object — that leading object.
+ *
+ * One reply in 306 (2026-10-18, local runs) closed the object after its candidates and then wrote `,"omit":[]}`; the parse
+ * threw and the run lost every candidate it had read (K12's study, in full group A). The leading object is complete JSON and is
+ * read; what follows it is dropped, and an omit lost that way leaves the episode to the identifier shapes (`maskIdentifiers`).
+ * Anything else that does not parse still throws, as before.
+ * @param {string} raw
+ */
+export function parseLeadingObject(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    if (!raw.startsWith("{")) throw error;
+    let depth = 0;
+    let quoted = false;
+    for (let index = 0; index < raw.length; index += 1) {
+      const character = raw[index];
+      if (quoted) {
+        if (character === "\\") index += 1;
+        else if (character === "\"") quoted = false;
+      } else if (character === "\"") quoted = true;
+      else if (character === "{" || character === "[") depth += 1;
+      else if (character === "}" || character === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          // A complete object that is the whole reply failed for another reason; only trailing text is forgiven.
+          if (index + 1 < raw.length) return JSON.parse(raw.slice(0, index + 1));
+          throw error;
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 /** What replaces a span the never-kept rules forbid in a stored episode, as it replaces an identifier-shaped one (`maskIdentifiers`). */

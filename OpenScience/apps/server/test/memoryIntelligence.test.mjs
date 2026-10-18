@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, episodeOmissions, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, episodeOmissions, extractionEmptyCause, omitSpans, parseLeadingObject, verifiedOmissions } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
@@ -2132,4 +2132,12 @@ test("a figure inside a span the model named is left out of the episode wherever
   const stored = JSON.parse(summary().value);
   assert.equal(stored.question, "我最近[已省略]，平时饮食应该注意什么？简短回答。");
   assert.ok(!stored.answer.includes("140/90"), stored.answer);
+});
+
+test("a reply that closes its object early keeps the candidates it read (full group A, 2026-10-18)", () => {
+  const reply = '{"candidates":[{"key":"project.population","value":"房颤患者 {约 3200 例}","evidenceQuote":"\\"引号\\""}]},"omit":[]}';
+  assert.deepEqual(parseLeadingObject(reply).candidates.map((candidate) => candidate.key), ["project.population"]);
+  assert.deepEqual(parseLeadingObject('{"candidates":[]}'), { candidates: [] });
+  assert.throws(() => parseLeadingObject('{"candidates":['), SyntaxError, "a reply cut off mid-object still fails");
+  assert.throws(() => parseLeadingObject("not json"), SyntaxError);
 });
