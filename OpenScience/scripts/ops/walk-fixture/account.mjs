@@ -64,7 +64,19 @@ export async function furnishAccount(app, user, ids, { log }) {
       validFrom: new Date(now - daysAgo * DAY).toISOString(),
     }, null, { by: "user", reason: "walk fixture" });
   }
-  log(`account: ${MEMORIES.length} memory records`);
+  // An account in use for months holds a hundred and more: the page's lists, its search and its first screen are measured on that, not on
+  // twenty-three (the owner's memory page took more than 30 s to answer).
+  for (let index = 0; index < 120; index += 1) {
+    const project = index % 3 === 0;
+    await app.researchMemory.upsertRecord(user.id, {
+      scope: project ? "project" : "user", ...(project ? { scopeId: "default" } : {}), kind: project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior",
+      key: `${project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior"}.walk_${index}`,
+      value: project ? `第 ${index} 项研究事实：纳入第 ${index} 个中心的随访数据，主要结局为糖化血红蛋白较基线的变化。` : index % 3 === 1 ? `偏好 ${index}：引用文献时给出 PMID，比较药物时用表格。` : `习惯 ${index}：每次整理文献都先核对原文数字。`,
+      origin: index % 4 === 0 ? "inferred" : "explicit", status: "active", confidence: 0.8, importance: 0.3 + (index % 7) / 10,
+      validFrom: new Date(now - (40 + index) * DAY / 3).toISOString(),
+    }, null, { by: "user", reason: "walk fixture" }).catch((/** @type {any} */ error) => { if (index === 0) log(`account: more memory — ${String(error?.message ?? error).slice(0, 160)}`); });
+  }
+  log(`account: ${MEMORIES.length + 120} memory records`);
 
   // ---- what the platform learned from the work (做法)
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
@@ -181,7 +193,7 @@ export async function furnishAccount(app, user, ids, { log }) {
       projectId: ids.projects.geo, source: { type: "geo", id: `${geo}/actions` }, groupKey: `geo:safety:${index}` }, { now: at(2 + index) });
   }
   // The ones from days ago have been read, as on an account in use: a read row's title is a weight of its own beside an unread row's.
-  const everything = await app.notificationService.list(user.id, { limit: 200 });
+  const everything = await app.notificationService.list(user.id, { limit: 100 });
   let read = 0;
   for (const item of everything.items) {
     if (item.severity === "safety" || item.readAt || item.noticeType !== "notify" && item.noticeType !== "review") continue;

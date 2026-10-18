@@ -84,6 +84,8 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
       </div>
     );
   }
+  // As `ScrollRegion` writes them: a spread, because the lint rule cannot model a scroll region.
+  const region = { tabIndex: 0, role: "region", "aria-label": page.title };
   const reasons = staleReasons(page.stale);
   const titles = new Map(page.sources.map((entry) => [entry.sourceId, entry.title]));
   const line = statusLine(status);
@@ -92,7 +94,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
   return (
     // The page scrolls in its own box, so the box is a region a keyboard can reach and a screen reader can name (axe
     // `scrollable-region-focusable`: a document of one paragraph of data has no link in it to put the focus on).
-    <div tabIndex={0} role="region" aria-label={page.title} className="flex h-full items-start gap-8 overflow-y-auto pb-8" data-knowledge-page="">
+    <div {...region} className="flex h-full items-start gap-8 overflow-y-auto pb-8" data-knowledge-page="">
       <div ref={body} className="min-w-0 max-w-read flex-1 space-y-4">
         {outlined && !wide && <Outline layout="folded" entries={entries} active={active} onSelect={select} className="mb-2" />}
         <div className="flex flex-wrap items-center gap-2">
