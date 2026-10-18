@@ -130,3 +130,44 @@ test("a short exchange is learned from while the runtime lives: ledger row, proj
   assert.equal((await overlay.commit(userId, second.archiveUri)).state, "replayed");
   assert.equal(nativeMemoryCounters().workerCommits.replayed, 1);
 });
+
+test("an account deleted while its turn's commit waited commits nothing, writes nothing and reports nothing", options, async () => {
+  // Production R19, 2026-10-18: the memory-policy runner deleted its throwaway accounts a few seconds after their last turn, and
+  // each debounced commit that fired afterwards asked for the account's engine, whose first read writes the settings row — the
+  // users key refused it and the log said `memory_payload_invalid` for an account that simply was not there any more.
+  resetNativeMemoryMetrics();
+  const userId = `tc_${randomUUID().slice(0, 8)}`;
+  users.push(userId);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Turn commit test','development')", [userId]);
+  const project = { id: "p_gone", userId };
+  const researchMemory = new ResearchMemoryStore(config, { database });
+  const conversations = { running: async () => [], runsOf: async () => [] };
+  const admission = createMemoryAdmission({ config, researchMemory, conversations });
+  const reports = [];
+  let reads = 0;
+  let commits = 0;
+  /** @type {Set<{ fn: () => void }>} */
+  const timers = new Set();
+  const committer = new NativeTurnCommit({
+    config, researchMemory, admission, conversations,
+    sessions: { configured: true, readSession: async () => { reads += 1; return { result: { pending_tokens: 120, message_count: 2 } }; } },
+    commit: async () => { commits += 1; return { commit: "accepted" }; },
+    setTimer: (fn) => { const timer = { fn }; timers.add(timer); return timer; }, clearTimer: (timer) => { timers.delete(timer); }, wait: async () => {},
+    report: (line) => reports.push(line),
+  });
+  await committer.noteRunFinished(project, { id: "run-gone", sessionId: CONVERSATION, status: "succeeded" });
+  assert.ok(committer.isArmed(userId, CONVERSATION), "an attended turn of a native account is armed");
+
+  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]);
+  for (const timer of [...timers]) { timers.delete(timer); timer.fn(); }
+  await committer.idle();
+
+  assert.deepEqual(reports, [], "nothing to report: the account is gone");
+  assert.equal(commits, 0);
+  assert.equal(reads, 0, "the engine is not asked about a conversation of an account that is gone");
+  assert.equal(nativeMemoryCounters().turnCommits.not_learning, 1);
+  assert.equal(await researchMemory.memoryEngine(userId), "legacy", "an account that is gone is on no engine");
+  const rows = await database.query("SELECT 1 FROM evimed_memory.settings WHERE user_id=$1", [userId]);
+  assert.equal(rows.rowCount, 0, "and nothing is written for it");
+  await assert.rejects(researchMemory.setMemoryEngine(userId, "native"), { code: "memory_engine_invalid" });
+});
