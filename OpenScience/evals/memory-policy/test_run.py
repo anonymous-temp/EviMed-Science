@@ -79,6 +79,22 @@ class Scoring(unittest.TestCase):
         self.assertTrue(run.score_case(allergy, view([record("对青霉素过敏", kind="profile")]))["passed"])
         self.assertFalse(run.score_case(allergy, view([record("对青霉素过敏", scope="project", scope_id="prj_a", kind="project_fact")]))["passed"])
 
+    def test_a_latin_term_is_a_whole_word_and_a_key_is_not_read(self):
+        # Production's legacy run, 2026-10-18: K02 and K03 passed on "Go" inside the key `project.goal` and inside "Django".
+        case = CASES["K02-programmer-profile"]
+        self.assertFalse(run.score_case(case, view([record("学校选课系统用 Django", key="profile.goal")]))["passed"])
+        self.assertTrue(run.score_case(case, view([record("主要写 Go 和 PostgreSQL", kind="profile")]))["passed"])
+        self.assertTrue(run.score_case(case, view([record("Writes Go and SQL", kind="profile")]))["passed"])
+        self.assertTrue(run.score_case(CASES["K01-programmer-code-style"], view([record("变量名用snake_case")]))["passed"], "beside Chinese is a word boundary")
+        self.assertFalse(run.score_case(CASES["K04-programmer-decision"], view([record("Kafkaesque", scope="project", scope_id="prj_a")]))["passed"])
+
+    def test_a_persons_statement_is_looked_for_in_the_persons_memory(self):
+        # 后端 on some project's card (S01's gateway) is not K02's profile.
+        case = CASES["K02-programmer-profile"]
+        self.assertFalse(run.score_case(case, view([], cards={"A": [{"text": "后端架构、网关"}]}))["passed"])
+        self.assertFalse(run.score_case(case, view([record("后端架构", scope="project", scope_id="prj_a", kind="project_fact")]))["passed"])
+        self.assertFalse(run.score_case(CASES["K08-teacher-project"], view([record("学校的选课系统用 Django")]))["passed"], "and a project's fact is in its project")
+
     def test_only_what_is_in_force_counts(self):
         case = CASES["N01-secret-in-passing"]
         self.assertTrue(run.score_case(case, view([record("数据库密码 Xk9#mPq2Lz", status="archived")]))["passed"], "a forgotten memory is not kept")

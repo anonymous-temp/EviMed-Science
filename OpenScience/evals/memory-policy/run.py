@@ -45,12 +45,35 @@ def norm(text):
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(text or ""))).lower()
 
 
+def spaced(text):
+    """NFKC and lower case with the white space kept (collapsed): the form a whole-word match reads."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(text or ""))).strip().lower()
+
+
+# A term written in Latin letters and digits only ("Go", "SaaS", "Kafka") is a word, and is found only as a word: "Go" is not in
+# "Django", "MongoDB" or "goal". Production's legacy run of 2026-10-18 passed K02 and K03 on exactly that.
+ASCII_WORD = re.compile(r"[0-9a-z_]+")
+
+
 def is_active(record):
     return str(record.get("status") or "active") == "active"
 
 
 def record_text(record):
-    return "\n".join(str(record.get(field) or "") for field in ("key", "summary", "value"))
+    """What a person reads of a record: its summary and its value. The key is a machine identifier and is not read."""
+    return "\n".join(str(record.get(field) or "") for field in ("summary", "value"))
+
+
+def entry(text):
+    return {"text": norm(text), "words": spaced(text)}
+
+
+def mentions(item, term):
+    """Whether one text of the view mentions a term: a Latin word as a whole word, anything else as a substring."""
+    flat = norm(term)
+    if ASCII_WORD.fullmatch(flat):
+        return re.search(r"(?<![0-9a-z_])" + re.escape(spaced(term)) + r"(?![0-9a-z_])", item["words"]) is not None
+    return flat in item["text"]
 
 
 def build_view(snapshot, projects):
@@ -62,24 +85,24 @@ def build_view(snapshot, projects):
     durable, episodes = [], []
     for record in snapshot.get("records") or []:
         if str(record.get("kind")) == "run_summary":
-            episodes.append(norm(record_text(record)))
+            episodes.append(entry(record_text(record)))
             continue
         if not is_active(record):
             continue
         scope_id = str(record.get("scopeId") or "")
-        durable.append({"scope": str(record.get("scope") or ""), "project": ids.get(scope_id), "text": norm(record_text(record))})
-    cards = {label: [norm(slot.get("text")) for slot in slots or []] for label, slots in (snapshot.get("cards") or {}).items()}
+        durable.append({"scope": str(record.get("scope") or ""), "project": ids.get(scope_id), **entry(record_text(record))})
+    cards = {label: [entry(slot.get("text")) for slot in slots or []] for label, slots in (snapshot.get("cards") or {}).items()}
     return {"durable": durable, "cards": cards, "episodes": episodes}
 
 
 def text_in(view, where, case_project="A"):
-    """The text a check looks in: `any`, `user`, `project` (the case's own) or `project:<label>`."""
+    """The texts a check looks in: `any`, `user`, `project` (the case's own) or `project:<label>`."""
     if where in ("any", None, ""):
-        return [item["text"] for item in view["durable"]] + [text for cards in view["cards"].values() for text in cards]
+        return list(view["durable"]) + [item for cards in view["cards"].values() for item in cards]
     if where == "user":
-        return [item["text"] for item in view["durable"] if item["scope"] == "user"]
+        return [item for item in view["durable"] if item["scope"] == "user"]
     label = case_project if where == "project" else where.split(":", 1)[1]
-    return [item["text"] for item in view["durable"] if item["scope"] == "project" and item["project"] == label] + list(view["cards"].get(label, []))
+    return [item for item in view["durable"] if item["scope"] == "project" and item["project"] == label] + list(view["cards"].get(label, []))
 
 
 def score_case(case, view):
@@ -88,27 +111,26 @@ def score_case(case, view):
     failures = []
     project = case.get("project", "A")
     for group in checks.get("keep") or []:
-        wanted = [norm(item) for item in group["any"]]
-        if not any(any(item in text for item in wanted) for text in text_in(view, group.get("in", "any"), project)):
+        if not any(any(mentions(item, term) for term in group["any"]) for item in text_in(view, group.get("in", "any"), project)):
             failures.append(f"nothing kept mentions any of {group['any']} (in {group.get('in', 'any')})")
     everywhere = text_in(view, "any")
     for term in checks.get("never") or []:
-        if any(norm(term) in text for text in everywhere):
+        if any(mentions(item, term) for item in everywhere):
             failures.append(f"a kept memory carries {term!r}")
     for term in checks.get("neverEpisode") or []:
-        if any(norm(term) in text for text in everywhere + view["episodes"]):
+        if any(mentions(item, term) for item in everywhere + view["episodes"]):
             failures.append(f"a kept memory or a conversation's stored episode carries {term!r}")
     for pattern in checks.get("neverPattern") or []:
-        if any(re.search(pattern, text) for text in everywhere):
+        if any(re.search(pattern, item["text"]) for item in everywhere):
             failures.append(f"a kept memory matches {pattern!r}")
     for rule in checks.get("neverUnless") or []:
-        for text in everywhere:
-            if norm(rule["term"]) in text and not any(norm(item) in text for item in rule["unless"]):
+        for item in everywhere:
+            if mentions(item, rule["term"]) and not any(mentions(item, other) for other in rule["unless"]):
                 failures.append(f"a kept memory still carries {rule['term']!r} without {rule['unless']}")
                 break
     for where, terms in (checks.get("neverIn") or {}).items():
         for term in terms:
-            if any(norm(term) in text for text in text_in(view, where, project)):
+            if any(mentions(item, term) for item in text_in(view, where, project)):
                 failures.append(f"{where} carries {term!r}")
     return {"passed": not failures, "failures": failures}
 
@@ -117,8 +139,7 @@ def keeps_met(case, view):
     """Whether every keep of the case is already in the memory (the settle loop waits for these)."""
     project = case.get("project", "A")
     for group in (case.get("checks") or {}).get("keep") or []:
-        wanted = [norm(item) for item in group["any"]]
-        if not any(any(item in text for item in wanted) for text in text_in(view, group.get("in", "any"), project)):
+        if not any(any(mentions(item, term) for term in group["any"]) for item in text_in(view, group.get("in", "any"), project)):
             return False
     return True
 
@@ -323,7 +344,7 @@ class Session:
         deadline = time.time() + self.args.checkpoint_wait
         while time.time() < deadline:
             view = view_fn(self.snapshot())
-            if all(any(norm(item) in text for item in group for text in text_in(view, "any")) for group in groups):
+            if all(any(mentions(item, term) for term in group for item in text_in(view, "any")) for group in groups):
                 return True
             time.sleep(self.args.poll)
         return False
