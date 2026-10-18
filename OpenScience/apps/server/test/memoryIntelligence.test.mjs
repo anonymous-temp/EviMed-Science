@@ -184,43 +184,50 @@ test("a tool result grounds no memory, however exact the quote; the person's own
   assert.deepEqual([...client.records.values()].filter((record) => record.kind !== "run_summary").map((record) => record.key), ["project.fact.scope.single_drug"]);
 });
 
-test("extraction is shown the keys already in use, and never the summaries it wrote before", async () => {
-  // Without this the model mints a fresh key each time — one run produced
-  // user.specialty, profile.specialty, profile.work.area and
-  // user.profile.work_domain for the same fact — and the profile fills with
-  // synonyms that each stay at a single observation.
+test("extraction is shown each stored memory's key and what it says, and nothing of a sensitive one", async () => {
+  // Without the keys the model mints a fresh key each time — one run produced user.specialty, profile.specialty,
+  // profile.work.area and user.profile.work_domain for the same fact. With the keys alone (2026-09-19 to 2026-10-18) it reused a
+  // key whose name seemed to fit for a different fact, and the newer replaced the older: on production's memory-policy run an
+  // exercise-sheet format and a requirements-document structure both became `preference.practice_format`, and a correction
+  // could not find the key that held the corrected database. The summary is what tells one fact from another.
   const client = new MemoryStoreDouble();
   await client.upsertRecord("user_1", {
     scope: "user", scopeId: null, kind: "profile", key: "user.profile.job_title",
-    value: "临床药师", summary: "临床药师", origin: "explicit", status: "active",
+    value: "临床药师", summary: "用户是临床药师", origin: "explicit", status: "active",
     confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+  await client.upsertRecord("user_1", {
+    scope: "user", scopeId: null, kind: "preference", key: "preference.long_note",
+    value: "长".repeat(400), summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+  await client.upsertRecord("user_1", {
+    scope: "user", scopeId: null, kind: "profile", key: "profile.flagged",
+    value: "一条被标为敏感的记忆", summary: "一条被标为敏感的记忆", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: true,
   }, null, {});
 
   let seenExisting = null;
+  let system = "";
   const intelligence = new MemoryIntelligence(config, client, {
     fetchImpl: async (_input, init) => {
-      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
-      seenExisting = payload.existingMemories;
+      const body = JSON.parse(String(init.body));
+      system = body.messages[0].content;
+      seenExisting = JSON.parse(body.messages[1].content).existingMemories;
       return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
     },
   });
   await intelligence.recordRun(project(), run("run_reuse"), [message("m1", "我是临床药师。")]);
 
   assert.ok(Array.isArray(seenExisting), "existing memories must reach the extraction prompt");
-  assert.ok(
-    seenExisting.some((record) => record.key === "user.profile.job_title" && record.kind === "profile"),
-    "the stored profile key must be offered for reuse",
-  );
-  assert.ok(
-    seenExisting.every((record) => record.kind !== "run_summary"),
-    "run summaries are episodic and must not be offered as profile keys",
-  );
-  // A stored summary that had picked up a label ("Reinforced: …") was handed
-  // back to the model as an example of a summary, and the label reproduced
-  // itself (2026-09-19). The keys are what reuse needs.
-  for (const record of seenExisting) {
-    assert.deepEqual(Object.keys(record).sort(), ["key", "kind", "scope"], "only the identity of a stored memory is offered");
-  }
+  const byKey = new Map(seenExisting.map((record) => [record.key, record]));
+  assert.deepEqual(byKey.get("user.profile.job_title"), { scope: "user", kind: "profile", key: "user.profile.job_title", summary: "用户是临床药师" });
+  assert.equal(byKey.get("preference.long_note").summary.length, 200, "a record with no summary is shown by its value, bounded");
+  assert.deepEqual(Object.keys(byKey.get("profile.flagged")).sort(), ["key", "kind", "scope"], "a sensitive memory's text reaches no prompt");
+  assert.ok(seenExisting.every((record) => record.kind !== "run_summary"), "run summaries are episodic and must not be offered as profile keys");
+  assert.match(system, /A key holds one fact\. Reuse its exact scope, kind and key only when this conversation is about that same fact/);
+  assert.match(system, /never rewrite one from what the assistant did, wrote or recommended/);
+  assert.match(system, /A correction never leaves the old fact in force beside the new one|a correction never leaves the old fact in force beside the new one/);
 });
 
 test("a condition on the task in hand is not told to the model as a preference", async () => {
@@ -1985,6 +1992,17 @@ test("the spans the model names are blanked from the stored episode only where t
   assert.equal(omitSpans("甲乙甲乙甲乙 丙", ["甲乙"]), "甲乙甲乙甲乙 丙", "three occurrences of two characters in eight are more than seven tenths");
 });
 
+test("a clause and the number inside it are both blanked, wherever each occurs (2026-10-18, production's N05)", () => {
+  // The model named the clause and the reading; blanked one after the other, the reading went first and the clause, no longer
+  // verbatim, stayed. The answer repeats only the reading, and it goes there too.
+  const asked = "我最近血压有点高，140/90，平时饮食应该注意什么？简短回答。";
+  const replied = "140/90 mmHg 属于 1 级高血压范围，建议限盐。";
+  const spans = verifiedOmissions(["血压有点高，140/90", "140/90"], [asked, replied]);
+  assert.equal(omitSpans(asked, spans), "我最近[已省略]，平时饮食应该注意什么？简短回答。");
+  assert.equal(omitSpans(replied, spans), "[已省略] mmHg 属于 1 级高血压范围，建议限盐。");
+  assert.equal(omitSpans("患者张某，男，56 岁，帮我写一份门诊病程记录模板", ["张某", "，男，56 岁"]), "患者[已省略]，帮我写一份门诊病程记录模板", "adjacent spans are one blank");
+});
+
 /** An extraction that returns what it is told to, and the messages of a one-question conversation. */
 function episodeRun(reply, { fail = false } = {}) {
   const store = new MemoryStoreDouble();
@@ -2035,4 +2053,11 @@ test("the extraction is asked for the spans of the episode to leave out", async 
   assert.match(system, /Also return \{"omit":\["\.\.\."\]\}/);
   assert.match(system, /copied character for character and each as short as it can be/);
   assert.match(system, /Never a whole question, and never ordinary words/);
+  // 2026-10-18, production's legacy run: 「张某」 stayed in N04's episode, and N05's reading stayed in the answer because only the
+  // clause around it was named.
+  assert.match(system, /A surname with 某 or an initial \(张某, 李某某\) is still a name/);
+  assert.match(system, /List a reading or a number on its own as well as inside its clause/);
+  // N06: an allergy said inside a question was kept beside the allergy the person had asked to be remembered.
+  assert.match(system, /neither is another fact of that kind said inside a later question because one was kept before/);
+  assert.match(system, /The exception covers only the fact that message asks to keep/, "the never-kept rules both engines read say it too");
 });
