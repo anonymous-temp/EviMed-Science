@@ -111,8 +111,8 @@ export const COMMAND_LABEL: Readonly<Record<string, string>> = Object.freeze({
   claim_verification: "核对结论",
   record_provenance: "记录来源",
   list_provenance: "查看来源",
-  record_run: "记录运行",
-  list_runs: "查看运行记录",
+  record_run: "登记一次运行",
+  list_runs: "查看运行列表",
   read_run_log: "读取运行日志",
 });
 

@@ -345,7 +345,7 @@ bordered pill or bordered `<button>` outside it:
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
 | `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
-| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` at 500 when current |
+| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` when current — told by its ground, at the weight of the rest |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
@@ -490,6 +490,20 @@ row's look; a row's title and every link and text button have the 8 px corner; a
 headline, has the weight of its sentence; a selected chip and the toolbar's search pill are one filled pill; a sort button has
 one height; a source mark is 12 / 400; the frontier's header action is `secondary` like the other modules'. A page that
 needs a kind of its own says what it is in its `budgetNote`. `lookKinds.test.tsx` holds the classes.
+
+**The same, on the owner's data (2026-10-18, r19-walkfix).** The release walk of production found what the fixture could not: a
+band a line taller on one tab, a tag in a link, a sort header after two pictures, 41 rows on a first screen, nine to eleven kinds of
+control on pages that had eight to ten. By class: a toolbar in the band is one row whatever the data — its filters fold into 「筛选」
+when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
+every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a small button is 13 / 400 like the chip
+beside it, a severity grade 12 / 400 like a tag, the current navigation item and an empty state's title carry no weight of their own (14 / 600 for
+the title, the ground for the item); a table's controls are 28 high; a card's and a panel's rule is *under* the row (one stroke, not a
+top and a bottom); a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
+screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
+more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).
+The operator's console is one card (`OpsCard`): a good state has no colour (amber for a thing to look at, red for a failure), an
+identifier is a copy button and never page text, and a list that holds nothing is not a tab.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`

@@ -41,13 +41,15 @@ afterEach(() => {
 // 「项目插件」 left here on 2026-10-07 (it is on 插件与技能 now) and 「循证进化」 arrived. The console stays bound to the project the
 // account is actually in: its cards remount when that project is corrected, and only then.
 describe("运维: the deployment's console and the evolution engine", () => {
-  it("holds the console and 循证进化, with one line on what its controls do, and no project plugins", async () => {
+  it("holds the console and 循证进化, with no grey line on what its controls do (the stop and restart dialogs say it), and no project plugins", async () => {
     api.fetchWebMe.mockResolvedValue({ project: { id: "alpha" } });
     render(<OpsPage />);
     expect(screen.getByText("部署配置检查")).toBeInTheDocument();
     expect(screen.getByText("循证 GEO 投放")).toBeInTheDocument();
     expect(screen.getByText("循证进化面板")).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent("停止或重启会中断进行中的研究");
+    // The sentence that stood above the cards had no action and no number: what stopping does is said in the confirmation of 停止 and 重启.
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText(/这里的操作作用于整个部署/)).not.toBeInTheDocument();
     expect(screen.queryByText(/项目插件/)).not.toBeInTheDocument();
     await waitFor(() => expect(api.fetchWebMe).toHaveBeenCalled());
     expect(mounts.tasks).toBe(1);

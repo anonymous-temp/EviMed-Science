@@ -274,6 +274,14 @@ export async function furnishGeo(app, user, { log }) {
     { url: "https://zhuanlan.example.com/p/20261001", platform: "zhihu", title: "每周一次的降糖针怎么选", publishedAt: new Date(today.getTime() - 9 * 86_400_000).toISOString().slice(0, 10), groupId: groupIds[3] },
   ] }).catch((error) => log(`geo: owned links — ${String(error.message).slice(0, 300)}`));
   log(`geo: strategy, ${actions.length} actions, ${written?.ids?.length ?? 0} articles, owned links written`);
+
+  // Two more projects of the account, started and left (paused), as the owner's list has them: the list's row then carries 「已暂停」 and a
+  // text button 「继续」 beside the first project's grade and its trend, which is the row the home page's type pairs are measured on.
+  for (const [slug, name] of [["geo-second", "示例复方制剂 · 9月29日"], ["geo-third", "示例复方制剂 · 9月28日"]]) {
+    const extra = await app.store.createProject(user, slug, name);
+    const created = await geoStore.createProject({ userId: user.id, projectId: extra.id, engines: ENGINES.slice(0, 3), coverageDays: 90, product: { brandName: name } });
+    await geoStore.updateProject(user.id, created.id, { status: "paused" }).catch((/** @type {any} */ error) => log(`geo: ${name} was not paused (${String(error?.message ?? error).slice(0, 160)})`));
+  }
   return { projectId: project.id, controlProjectId: controlProject.id };
 }
 

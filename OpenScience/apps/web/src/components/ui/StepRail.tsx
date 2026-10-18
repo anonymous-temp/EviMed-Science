@@ -89,7 +89,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
           // rule and its colour, never by a weight or a corner of its own — a rail and a tab row that differ in how they are drawn are two
           // kinds of control on every module page, for the one job of saying where the person is.
           const look = cn(
-            "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 text-ui font-medium outline-none transition-colors duration-fast",
+            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-none border-b-2 px-2 text-ui font-medium outline-none transition-colors duration-fast",
             active ? "border-accent text-text" : cn("border-transparent", step.state === "todo" ? "text-text-3" : "text-text-2"),
           );
           const tip = `${RAIL_STATE_WORDS[step.state]}${step.summary ? `：${step.summary}` : ""}`;

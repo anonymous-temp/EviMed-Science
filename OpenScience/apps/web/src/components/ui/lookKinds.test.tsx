@@ -42,14 +42,16 @@ describe("the module band", () => {
     const tab = classesOf(screen.getByRole("tab", { name: "总览" }));
     const steps = STEPS.map((step) => classesOf(screen.getByRole("link", { name: new RegExp(`^${step.label}`) })));
     for (const step of steps) {
-      // The type of the tab row: 14 px, 500, square (no `rounded`), a 2 px rule at the foot.
+      // The type of the tab row: 14 px, 500, square (`rounded-none`: every link and button has the control corner unless it says
+      // otherwise, and a 2 px rule at the foot of a rounded box curves up at its ends), a 2 px rule at the foot.
       expect(step).toContain("text-ui");
       expect(step).toContain("font-medium");
       expect(step).toContain("border-b-2");
-      expect([...step].filter((name) => /^rounded/.test(name))).toEqual([]);
+      expect([...step].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     }
     expect(tab).toContain("text-ui");
     expect(tab).toContain("font-medium");
+    expect([...tab].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     const open = steps[1];
     expect(open).toContain("border-accent");
     expect(steps[0]).not.toContain("border-accent");
