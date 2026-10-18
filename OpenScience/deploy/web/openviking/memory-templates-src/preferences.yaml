@@ -50,8 +50,10 @@ fields:
   - name: content
     type: string
     description: |
-      Markdown bullets, one per distinct reusable preference, stating the specific choice
-      and any condition, exception or reason the user gave. No dates, events or plans.
+      Markdown bullets, one per distinct reusable preference, stating the specific choice,
+      what it applies to in the user's words (whose exercises, which documents, which
+      language: "给七年级数学出的练习题分基础、提高、拓展三档", not "练习题分三档"), and any
+      condition, exception or reason the user gave. No dates, events or plans.
       Example:
       - Meta 分析一律用随机效应模型。
       - 报告先给结论，再给依据。
