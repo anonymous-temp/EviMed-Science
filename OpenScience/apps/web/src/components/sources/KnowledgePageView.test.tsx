@@ -37,6 +37,31 @@ describe("KnowledgePageView", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it("scrolls in a region a keyboard can reach and a screen reader can name — the page's own title", async () => {
+    renderView(mine);
+    await screen.findByRole("heading", { name: "事实时间线" });
+    const region = screen.getByRole("region", { name: mine.title });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region.className).toContain("overflow-y-auto");
+    expect(region).toHaveAttribute("data-knowledge-page");
+  });
+
+  it("gives a page of four sections or more its contents, and a short one none", async () => {
+    const long = { ...mine, body: ["第一节", "第二节", "第三节", "第四节", "第五节"].map((name) => `## ${name}\n\n${name}的内容。\n`).join("\n"), links: [], userBlocks: [], quotations: null, stale: [] } as unknown as KnowledgePage;
+    mocks.page.mockResolvedValue(long);
+    const view = renderView(long);
+    await screen.findByRole("heading", { name: "第三节" });
+    await waitFor(() => expect(document.querySelector("[data-outline]")).not.toBeNull());
+    const contents = within(document.querySelector("[data-outline]") as HTMLElement);
+    expect(contents.getAllByRole("button").map((button) => button.textContent)).toEqual(expect.arrayContaining(["第一节", "第五节"]));
+    view.unmount();
+    const short = { ...mine, body: "## 只有一节\n\n内容。\n", links: [], userBlocks: [], quotations: null, stale: [] } as unknown as KnowledgePage;
+    mocks.page.mockResolvedValue(short);
+    renderView(short);
+    await screen.findByRole("heading", { name: "只有一节" });
+    expect(document.querySelector("[data-outline]")).toBeNull();
+  });
+
   it("draws the page as a document — headings, a table, the person's own paragraph as theirs — and shows no engine address", async () => {
     renderView(mine);
     expect(await screen.findByRole("heading", { name: "事实时间线" })).toBeInTheDocument();

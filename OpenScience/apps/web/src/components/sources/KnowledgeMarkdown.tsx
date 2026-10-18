@@ -2,6 +2,7 @@ import { Component, useCallback, useMemo, useState, type ReactNode } from "react
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
+import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { listParams, readListState, readerPath } from "@/lib/knowledgeNav";
@@ -76,6 +77,25 @@ function PageLinkTo({ link, children }: { link: Extract<KnowledgePageLink, { kin
   return <Link to={readerPath(link.sourceId, readListState(params))} className={LINK}>{children}</Link>;
 }
 
+/** Lines of a data file shown before 「显示更多」, and how many each press adds. */
+const RAW_LINES_SHOWN = 40;
+const RAW_LINES_STEP = 120;
+
+/**
+ * A data file as it is written, in a window of its lines. The owner's relation file was 31 KB — four hundred lines, six windows of
+ * page with no heading to give the page a contents; the first lines are the file's, and the count of the rest is the button's.
+ */
+function RawLines({ text }: { text: string }) {
+  const lines = useMemo(() => text.split("\n").filter((line) => line.trim() !== ""), [text]);
+  const { visible, remaining, more } = useShowMore(lines, { first: RAW_LINES_SHOWN, step: RAW_LINES_STEP, resetKey: String(text.length) });
+  return (
+    <>
+      <pre data-knowledge-raw="" className="whitespace-pre-wrap break-words rounded-card bg-surface-2 p-4 font-mono text-ui text-text">{visible.join("\n")}</pre>
+      <ShowMore remaining={remaining} unit="行" onMore={more} />
+    </>
+  );
+}
+
 /**
  * A knowledge page, drawn: its Markdown as the document reader draws any report — headings, lists, tables, emphasis —
  * with each link the control plane found replaced by what it leads to. A link to a page goes to that page in the app; a
@@ -101,10 +121,8 @@ export function KnowledgeMarkdown({ page }: { page: KnowledgePage }) {
       : <>{children}</>;
   }, [page.links]);
 
-  // The graph's relation file is data, not a page: it is shown as it is written.
-  if (page.type === "relations") {
-    return <pre data-knowledge-raw="" className="whitespace-pre-wrap break-words rounded-card bg-surface-2 p-4 font-mono text-ui text-text">{rawMarkdown(page)}</pre>;
-  }
+  // The graph's relation file is data, not a page: it is shown as it is written, a screenful of lines at a time.
+  if (page.type === "relations") return <RawLines text={rawMarkdown(page)} />;
   return (
     <RawFallback raw={rawMarkdown(page)}>
       <div data-knowledge-body="">

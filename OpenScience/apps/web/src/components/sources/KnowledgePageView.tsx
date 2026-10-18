@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Pencil } from "lucide-react";
 import { knowledgePageTypeLabel } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
+import { Outline, useOutline } from "@/components/ui/Outline";
 import { Tag } from "@/components/ui/Tag";
 import { Textarea } from "@/components/ui/Input";
 import { LoadError } from "@/components/cards/LoadError";
@@ -15,8 +16,12 @@ import {
   type KnowledgePage, type KnowledgeStatus, type SourceRecord,
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
+import { useWide } from "@/lib/useMediaQuery";
 import { KnowledgeMarkdown } from "./KnowledgeMarkdown";
 import { STALE_LABEL, maskEngineAddresses, staleReasons, statusLine } from "./knowledgeView";
+
+/** A page of this many sections or more has a contents beside it. */
+const OUTLINE_FROM = 4;
 
 /**
  * 「知识页」, opened: the page as the compile wrote it, drawn as a document (`KnowledgeMarkdown`), with what a reader needs
@@ -36,6 +41,13 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
   const [asking, setAsking] = useState(false);
   const report = useRef(onPage);
   report.current = onPage;
+  // A page of four sections or more has its contents (the reader's T5 rule): read off the headings the page rendered, in a column beside
+  // it from `lg` and folded above it below.
+  const wide = useWide();
+  const body = useRef<HTMLDivElement>(null);
+  const outlineId = `kp${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
+  const { entries, active, select } = useOutline(body, { enabled: page !== null && !editing, idPrefix: outlineId, refresh: [page] });
+  const outlined = entries.length >= OUTLINE_FROM;
   useEffect(() => {
     let active = true;
     setError(null);
@@ -78,46 +90,52 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
   const canCompile = Boolean(line?.canCompile) && !asking;
   const counts = page.quotations;
   return (
-    <div className="h-full max-w-read space-y-4 overflow-y-auto pb-8" data-knowledge-page="">
-      <div className="flex flex-wrap items-center gap-2">
-        <Tag>{knowledgePageTypeLabel(page.type)}</Tag>
-        {page.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}
-        {page.editable && (
-          <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setEditing(true)}>
-            <Pencil size={16} aria-hidden="true" />编辑
-          </Button>
-        )}
-      </div>
-      {page.description && <p className="text-ui text-text-2">{page.description}</p>}
-      {reasons.length > 0 && (
-        <div role="status" data-knowledge-stale="" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card bg-warn-soft px-3 py-2 text-ui text-warn-strong">
-          {reasons.map((reason) => {
-            const named = page.stale.filter((entry) => (entry.reason in STALE_LABEL ? entry.reason : "changed") === reason);
-            return (
-              <span key={reason} className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium">{STALE_LABEL[reason]}</span>
-                {named.map((entry) => (
-                  <Link key={entry.sourceId} to={`/app/files/${encodeURIComponent(entry.sourceId)}`} className="text-link underline underline-offset-2">
-                    {titles.get(entry.sourceId) ?? "这份资料"}
-                  </Link>
-                ))}
-              </span>
-            );
-          })}
-          {canCompile && <Button variant="text" size="sm" className="ml-auto" onClick={() => void compile()}>重新整理</Button>}
+    // The page scrolls in its own box, so the box is a region a keyboard can reach and a screen reader can name (axe
+    // `scrollable-region-focusable`: a document of one paragraph of data has no link in it to put the focus on).
+    <div tabIndex={0} role="region" aria-label={page.title} className="flex h-full items-start gap-8 overflow-y-auto pb-8" data-knowledge-page="">
+      <div ref={body} className="min-w-0 max-w-read flex-1 space-y-4">
+        {outlined && !wide && <Outline layout="folded" entries={entries} active={active} onSelect={select} className="mb-2" />}
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag>{knowledgePageTypeLabel(page.type)}</Tag>
+          {page.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}
+          {page.editable && (
+            <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setEditing(true)}>
+              <Pencil size={16} aria-hidden="true" />编辑
+            </Button>
+          )}
         </div>
-      )}
-      {page.restored && page.restored.count > 0 && (
-        <Note className="text-caption" result={["上一次重新整理时丢掉了你写的 ", { n: page.restored.count }, " 处补充，已经放回原处。"]} />
-      )}
-      {counts && counts.present + counts.absent > 0 && (
-        <p className="text-caption text-text-3">
-          {counts.present > 0 ? `${counts.present} 处引文已在原文里找到` : ""}
-          {counts.present > 0 && counts.absent > 0 ? " · " : ""}
-          {counts.absent > 0 ? `${counts.absent} 处没能核对` : ""}
-        </p>
-      )}
-      <KnowledgeMarkdown page={page} />
+        {page.description && <p className="text-ui text-text-2">{page.description}</p>}
+        {reasons.length > 0 && (
+          <div role="status" data-knowledge-stale="" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card bg-warn-soft px-3 py-2 text-ui text-warn-strong">
+            {reasons.map((reason) => {
+              const named = page.stale.filter((entry) => (entry.reason in STALE_LABEL ? entry.reason : "changed") === reason);
+              return (
+                <span key={reason} className="flex flex-wrap items-center gap-x-2">
+                  <span className="font-medium">{STALE_LABEL[reason]}</span>
+                  {named.map((entry) => (
+                    <Link key={entry.sourceId} to={`/app/files/${encodeURIComponent(entry.sourceId)}`} className="text-link underline underline-offset-2">
+                      {titles.get(entry.sourceId) ?? "这份资料"}
+                    </Link>
+                  ))}
+                </span>
+              );
+            })}
+            {canCompile && <Button variant="text" size="sm" className="ml-auto" onClick={() => void compile()}>重新整理</Button>}
+          </div>
+        )}
+        {page.restored && page.restored.count > 0 && (
+          <Note className="text-caption" result={["上一次重新整理时丢掉了你写的 ", { n: page.restored.count }, " 处补充，已经放回原处。"]} />
+        )}
+        {counts && counts.present + counts.absent > 0 && (
+          <p className="text-caption text-text-3">
+            {counts.present > 0 ? `${counts.present} 处引文已在原文里找到` : ""}
+            {counts.present > 0 && counts.absent > 0 ? " · " : ""}
+            {counts.absent > 0 ? `${counts.absent} 处没能核对` : ""}
+          </p>
+        )}
+        <KnowledgeMarkdown page={page} />
+      </div>
+      {outlined && wide && <Outline layout="column" entries={entries} active={active} onSelect={select} />}
     </div>
   );
 }
