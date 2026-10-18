@@ -227,6 +227,8 @@ test("extraction is shown each stored memory's key and what it says, and nothing
   assert.ok(seenExisting.every((record) => record.kind !== "run_summary"), "run summaries are episodic and must not be offered as profile keys");
   assert.match(system, /A key holds one fact\. Reuse its exact scope, kind and key only when this conversation is about that same fact/);
   assert.match(system, /never rewrite one from what the assistant did, wrote or recommended/);
+  // 2026-10-18 local runs: the analysis plan's open questions, raised by the assistant, were filed as the researcher's follow-ups.
+  assert.match(system, /A follow_up, in any project, is what the person themselves says is still open or still to do/);
   assert.match(system, /A correction never leaves the old fact in force beside the new one|a correction never leaves the old fact in force beside the new one/);
 });
 

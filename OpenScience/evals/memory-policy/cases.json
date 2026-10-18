@@ -308,6 +308,13 @@
       ],
       "in": "project"
      }
+    ],
+    "never": [
+     "TTR",
+     "INR",
+     "as-treated",
+     "on-treatment",
+     "ITT"
     ]
    },
    "project": "A"
