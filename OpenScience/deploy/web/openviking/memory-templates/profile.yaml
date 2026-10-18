@@ -51,7 +51,7 @@ description: |
   3. For a changed state (role, employer, field of work, education), replace the old bullet
      with the latest confirmed value; never keep state history here. A role or line of work
      stated beside an existing one, without saying the earlier one changed or ended, is a
-     second bullet, not a replacement: a person can teach and also run a school's system.
+     second bullet, not a replacement: a person can be a nurse and also study for a master's degree.
   4. Remove any bullet that the never-kept rules exclude, unless the user asked for it to
      be remembered.
 

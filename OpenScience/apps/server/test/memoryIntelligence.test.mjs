@@ -1993,8 +1993,8 @@ test("the spans the model names are blanked from the stored episode only where t
 });
 
 test("a clause and the number inside it are both blanked, wherever each occurs (2026-10-18, production's N05)", () => {
-  // The model named the clause and the reading; blanked one after the other, the reading went first and the clause, no longer
-  // verbatim, stayed. The answer repeats only the reading, and it goes there too.
+  // Production named only the clause, and the answer, which repeats only the reading, kept it; the instruction now asks for the
+  // reading on its own as well. Blanked one after the other, the reading would go first and the clause, no longer verbatim, stay.
   const asked = "我最近血压有点高，140/90，平时饮食应该注意什么？简短回答。";
   const replied = "140/90 mmHg 属于 1 级高血压范围，建议限盐。";
   const spans = verifiedOmissions(["血压有点高，140/90", "140/90"], [asked, replied]);
@@ -2055,8 +2055,9 @@ test("the extraction is asked for the spans of the episode to leave out", async 
   assert.match(system, /Never a whole question, and never ordinary words/);
   // 2026-10-18, production's legacy run: 「张某」 stayed in N04's episode, and N05's reading stayed in the answer because only the
   // clause around it was named.
-  assert.match(system, /A surname with 某 or an initial \(张某, 李某某\) is still a name/);
-  assert.match(system, /List a reading or a number on its own as well as inside its clause/);
+  assert.match(system, /A surname with 某 or an initial \(李某, 王某某\) is still a name/);
+  assert.match(system, /List such a reading or number on its own as well as inside its clause/);
+  assert.match(system, /a threshold, a reference range, a guideline.s figure or a term the answer explains belongs to no one and stays/);
   // N06: an allergy said inside a question was kept beside the allergy the person had asked to be remembered.
   assert.match(system, /neither is another fact of that kind said inside a later question because one was kept before/);
   assert.match(system, /The exception covers only the fact that message asks to keep/, "the never-kept rules both engines read say it too");
