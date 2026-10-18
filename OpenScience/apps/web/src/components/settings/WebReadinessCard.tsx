@@ -6,7 +6,6 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { humanSize } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { OPS_TONE, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows } from "./OpsCard";
 
@@ -122,7 +121,9 @@ export function WebReadinessCard() {
     <OpsCard
       title="部署配置检查"
       description="只检查配置和依赖服务，不代表当前研究能用"
-      trailing={<Tag>{readiness ? (attention === 0 ? "配置通过" : "需要关注") : "正在读取"}</Tag>}
+      // The verdict is the page's quiet text, not a tag: a `Tag` is a text-2 grey, one more colour of text on a console that has the
+      // body's, the quiet grey, amber for a thing to look at and red for a failure (the walk's budget for a page is five).
+      trailing={<span className="shrink-0 text-caption text-text-3">{readiness ? (attention === 0 ? "配置通过" : "需要关注") : "正在读取"}</span>}
       refresh={{ label: "刷新配置检查", loading, onRefresh: () => void refresh() }}
     >
       <OpsBody>
