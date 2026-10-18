@@ -76,9 +76,10 @@ it("sits in the one page column with a one-line header and no subtitle", async (
   expect(container.querySelector(".max-w-page")).toContainElement(heading);
   expect(container.querySelector(".max-w-read")).toBeNull();
   expect(screen.queryByText(/研究完成、需要你决定/)).not.toBeInTheDocument();
-  // 「全部已读」 is a text button in the header, not a bordered one.
+  // 「全部已读」 acts on the list under the toolbar, so it is the toolbar's — a small text button, not the header's and not a bordered one.
   const banner = screen.getByRole("banner");
-  const readAll = within(banner).getByRole("button", { name: "全部已读" });
+  expect(within(banner).queryByRole("button", { name: "全部已读" })).toBeNull();
+  const readAll = within(container.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "全部已读" });
   expect(readAll.className).not.toMatch(/(^|\s)border(\s|$)/);
 });
 

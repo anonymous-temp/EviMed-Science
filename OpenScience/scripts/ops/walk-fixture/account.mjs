@@ -156,5 +156,39 @@ export async function furnishAccount(app, user, ids, { log }) {
     await app.notificationService.create(user.id, { noticeType: "notify", severity: title.includes("等你") ? "attention" : "info", title, body, projectId: projectOf(title),
       source: { type: "vcr", id: `${studyOf(title)}/${tab}` }, groupKey: `${groupKey}:${n}` }, { now: at(5 + n * 8) });
   }
-  log(`account: ${geoNotices.length + vcrNotices.length} inbox notices`);
+  // The owner's inbox came from four places, not two: the scheduled tasks' briefings (the ones that wait for a check wear 「待核对」), what
+  // the memory learned, the platform's own notes, and clinical-safety findings pinned over the list. Each is a kind of row the toolbar's
+  // chips, the row's actions and its tags are measured on.
+  const briefs = ["每日文献简报", "每周工作汇总", "心衰证据追踪"];
+  for (let index = 0; index < 12; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "review", severity: "info", title: `定时任务简报：${briefs[index % briefs.length]}`,
+      body: `${index % 4} 条重点发现，${3 + index} 条待验证线索。`, actions: [{ id: "open", label: "查看简报" }],
+      source: { type: "digest", id: `digest-walk-${index}` } }, { now: at(7 + index * 11) });
+  }
+  for (const [title, body] of [["记住了一条偏好", "引用文献时给出 PMID。"], ["更新了一条记忆", "老年患者的糖化血红蛋白目标要看合并症。"]]) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "info", title, body, source: { type: "memory", id: `memory-walk-${n}` }, groupKey: `memory:${n}` }, { now: at(30 + n) });
+  }
+  for (let index = 0; index < 8; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "info", title: ["额度已更新", "新的前沿动态日报", "定时任务已暂停", "导出已完成"][index % 4],
+      body: "平台的一条通知。", groupKey: `system:${n}` }, { now: at(20 + index * 13) });
+  }
+  for (let index = 0; index < 4; index += 1) {
+    n += 1;
+    await app.notificationService.create(user.id, { noticeType: "notify", severity: "safety", title: "稿件里有一处用药安全提示", body: "“起始剂量为 5 mg”与说明书的 2 mg 不符，发布前需要处理。",
+      projectId: ids.projects.geo, source: { type: "geo", id: `${geo}/actions` }, groupKey: `geo:safety:${index}` }, { now: at(2 + index) });
+  }
+  // The ones from days ago have been read, as on an account in use: a read row's title is a weight of its own beside an unread row's.
+  const everything = await app.notificationService.list(user.id, { limit: 200 });
+  let read = 0;
+  for (const item of everything.items) {
+    if (item.severity === "safety" || item.readAt || item.noticeType !== "notify" && item.noticeType !== "review") continue;
+    if (Date.now() - new Date(item.createdAt).getTime() > 3 * 86_400_000 / 3 && read < 40) {
+      await app.notificationService.markRead(user.id, item.id, item.revision).catch(() => null);
+      read += 1;
+    }
+  }
+  log(`account: ${geoNotices.length + vcrNotices.length + 12 + 2 + 8 + 4} inbox notices (${read} read)`);
 }

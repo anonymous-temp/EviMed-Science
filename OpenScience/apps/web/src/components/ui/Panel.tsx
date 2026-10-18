@@ -33,7 +33,9 @@ export function Panel({
           {action}
         </div>
       )}
-      <div className="divide-y divide-border rounded-card border border-border bg-surface">{children}</div>
+      {/* The rule between rows is the one under each row but the last (`border-b`), the stroke a card's header and a list's rows use too: a
+          rule above every row but the first is a second kind of border on the page (the walk counts them by side). */}
+      <div className="rounded-card border border-border bg-surface [&>*:last-child]:border-b-0 [&>*]:border-b [&>*]:border-border">{children}</div>
     </section>
   );
 }

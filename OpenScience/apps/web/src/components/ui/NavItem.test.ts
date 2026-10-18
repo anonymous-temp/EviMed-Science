@@ -5,15 +5,16 @@ const classes = (value: string) => value.split(/\s+/);
 
 describe("navItemClasses", () => {
   // Spec §20.6: 36 high, 8 px padding and corner, 14 px text 8 px after its
-  // icon; surface-2 under the pointer, the current one on accent-soft at 500.
-  it("is the spec's navigation item, and the current one sits on accent-soft at 500", () => {
+  // icon; surface-2 under the pointer, the current one on accent-soft (at the weight of the rest, r19-walkfix).
+  it("is the spec's navigation item, and the current one sits on accent-soft and is told by its ground, not by a weight", () => {
     const rest = classes(navItemClasses());
     expect(rest).toEqual(expect.arrayContaining(["h-control", "px-2", "rounded", "gap-2", "text-ui", "hover:bg-surface-2"]));
     expect(rest).not.toContain("bg-accent-soft");
     expect(rest).not.toContain("font-medium");
 
     const current = classes(navItemClasses({ current: true }));
-    expect(current).toEqual(expect.arrayContaining(["h-control", "bg-accent-soft", "font-medium", "text-text"]));
+    expect(current).toEqual(expect.arrayContaining(["h-control", "bg-accent-soft", "text-text"]));
+    expect(current).not.toContain("font-medium");
     expect(current).not.toContain("hover:bg-surface-2");
   });
 

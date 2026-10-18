@@ -146,8 +146,9 @@ export function WebResourcesCard() {
   );
 }
 
-// The small secondary button (spec §17.1): there are no outline buttons.
-const runtimeButtonCls = buttonClasses({ variant: "secondary", size: "sm" });
+// A secondary button at the size of a page's controls (spec §17.1: there are no outline buttons). 36 high, 14 px: these three are the card's
+// own controls and not a row's, and a 13 px button was one more size-and-weight pair on a page that has 14 px buttons already.
+const runtimeButtonCls = buttonClasses({ variant: "secondary", size: "md" });
 
 function Metric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: "warn" }) {
   return (

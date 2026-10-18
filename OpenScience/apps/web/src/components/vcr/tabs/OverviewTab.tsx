@@ -158,7 +158,9 @@ function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; 
 /* ------------------------------------------------------------------------- the deliverables */
 
 function Deliverables({ items, studyId }: { items: VcrStudy["overview"]["deliverables"]; studyId: string }) {
-  // Listed when finished; a draft (nothing was written, or it is not final) is folded under one line.
+  // Listed when finished; a draft (nothing was written, or it is not final) is folded under one line — unless nothing is finished, when the
+  // drafts are the list: a section that is a heading and a fold is a shape of its own, and the owner's study had one (the walk's
+  // `section>div+details` was the page's fourth kind of section against a budget of three).
   const finished = items.filter((item) => !item.draft);
   const drafts = items.filter((item) => item.draft);
   if (items.length === 0) return null;
@@ -170,16 +172,16 @@ function Deliverables({ items, studyId }: { items: VcrStudy["overview"]["deliver
           title={item.title}
           // The package opens in the reader on this page (`?package=`), which is one address rather than a route of its own.
           to={`${vcrTabPath(studyId, "overview")}?package=${encodeURIComponent(item.id)}`}
-          meta={item.meta ?? undefined}
+          meta={item.meta ?? (item.draft ? "草稿" : undefined)}
         />
       ))}
     </List>
   );
   return (
-    <Section title="交付物" count={finished.length > 0 ? finished.length : undefined}>
-      {finished.length > 0 && rows(finished)}
-      {drafts.length > 0 && (
-        <Disclosure summary={`草稿 ${drafts.length}`} className={finished.length > 0 ? "mt-3" : undefined}>
+    <Section title="交付物" count={finished.length > 0 ? finished.length : drafts.length}>
+      {finished.length > 0 ? rows(finished) : rows(drafts)}
+      {finished.length > 0 && drafts.length > 0 && (
+        <Disclosure summary={`草稿 ${drafts.length}`} className="mt-3">
           {rows(drafts)}
         </Disclosure>
       )}

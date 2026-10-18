@@ -220,6 +220,16 @@ describe("总览", () => {
       expect(container.querySelectorAll("details")).toHaveLength(1);
     });
 
+    it("lists the drafts as the list when nothing is finished — a heading and a fold is a shape of the page's own (the walk's 4th section shape)", () => {
+      const { container } = draw(study((raw) => { raw.overview.deliverables = raw.overview.deliverables.map((item: any) => ({ ...item, draft: true, meta: null })); }));
+      const section = screen.getByRole("heading", { name: "交付物" }).closest("section") as HTMLElement;
+      expect(section.querySelector("details")).toBeNull();
+      expect(container.querySelectorAll("details")).toHaveLength(0);
+      const list = within(section).getByRole("list", { name: "交付物" });
+      expect(within(list).getAllByRole("listitem").length).toBeGreaterThan(0);
+      expect(within(list).getAllByText("草稿").length).toBeGreaterThan(0);
+    });
+
     it("is not drawn when the study has produced nothing", () => {
       draw(study((raw) => { raw.overview.deliverables = []; }));
       expect(screen.queryByRole("heading", { name: "交付物" })).toBeNull();

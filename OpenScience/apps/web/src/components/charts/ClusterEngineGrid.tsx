@@ -116,7 +116,7 @@ export function ClusterEngineGrid({
                   const stance = engineStance(tally);
                   if (!tally || stance === "unmeasured") {
                     return (
-                      <td key={engine} data-cluster-cell={engine} data-stance="unmeasured" className="h-8 rounded text-center text-compact text-text-3" style={{ background: HATCH }}>
+                      <td key={engine} data-cluster-cell={engine} data-stance="unmeasured" className="h-sm rounded text-center text-compact text-text-3" style={{ background: HATCH }}>
                         <span aria-hidden="true">—</span>
                         <span className="sr-only">{`${row.name}，${engineName(engine)}：${STANCE_WORDS.unmeasured}`}</span>
                       </td>
@@ -127,15 +127,15 @@ export function ClusterEngineGrid({
                   const spoken = `${row.name}，${engineName(engine)}：${tally.answered} 个回答里 ${tally.mentioned} 个提到了${wrong ? `，${tally.wrong} 个讲错` : ""}`;
                   return (
                     <td key={engine} data-cluster-cell={engine} data-stance={stance} data-wrong={wrong ? "" : undefined} data-forced-colors="preserve"
-                      className={cn("h-8 rounded p-0 text-center text-compact tabular-nums", STANCE_CLASSES[stance])}>
+                      className={cn("h-sm rounded p-0 text-center text-compact tabular-nums", STANCE_CLASSES[stance])}>
                       {onOpen ? (
                         <button type="button" onClick={() => onOpen(row.key, engine)} aria-label={spoken}
-                          className="flex h-8 w-full items-center justify-center gap-1 rounded px-2 hover:underline hover:underline-offset-4">
+                          className="flex h-sm w-full items-center justify-center gap-1 rounded px-2 hover:underline hover:underline-offset-4">
                           {text}
                           {wrong && <X size={16} aria-hidden="true" className={stance === "all" ? "text-accent-fg" : "text-danger"} />}
                         </button>
                       ) : (
-                        <span className="flex h-8 items-center justify-center gap-1 px-2" aria-label={spoken}>
+                        <span className="flex h-sm items-center justify-center gap-1 px-2" aria-label={spoken}>
                           {text}
                           {wrong && <X size={16} aria-hidden="true" className="text-danger" />}
                         </span>

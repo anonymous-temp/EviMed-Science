@@ -606,6 +606,14 @@ svg.lucide {
   outline: var(--focus-ring-width) solid var(--focus);
   outline-offset: var(--focus-ring-offset);
 }
+/* Every link and button has the control corner (8 px) unless it sets one of its own. A text link written without `rounded` — fifty-two
+   of them in the shell — was a square control beside the rounded ones: the UI walk counts a control's corner as part of its look, so
+   each page that held one drew a kind of control more than its neighbours, and the focus ring of a square link was square. The
+   selector is the bare element on purpose: any utility class (`rounded-full`, `rounded-none`) is more specific and wins. */
+a,
+button {
+  border-radius: var(--radius-control);
+}
 /* Text fields signal focus with their border (and the `Input` primitive's
    1 px inner line), so their outline is transparent — invisible here, and
    painted in the system highlight colour when forced colours take over. */

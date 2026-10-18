@@ -104,7 +104,7 @@ describe("设置", () => {
       // The address is the same under either name: links and the server's copy depend on it.
       expect(within(nav()).getByRole("link", { name: usage })).toHaveAttribute("href", "/app/account?tab=usage");
       // The sidebar's navigation item (spec §20.6), not a 32 px look of its own.
-      expect(within(nav()).getByRole("link", { name: "账户" })).toHaveClass("h-control", "bg-accent-soft", "font-medium");
+      expect(within(nav()).getByRole("link", { name: "账户" })).toHaveClass("h-control", "bg-accent-soft");
       expect(within(nav()).getByRole("link", { name: usage })).toHaveClass("h-control", "hover:bg-surface-2");
     });
 

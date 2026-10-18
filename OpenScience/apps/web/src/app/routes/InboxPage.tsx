@@ -341,11 +341,6 @@ export function InboxPage() {
   return (
     <PageShell
       title="收件箱"
-      actions={(
-        <Button variant="text" loading={markingAll} disabled={!hasUnread} onClick={() => void readAll()}>
-          {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
-        </Button>
-      )}
       // The page's one row of controls, over the list they narrow (R19, audit D C1): 全部 / 未读 are its views, as the tabs of every list
       // page; and, when the notices come from more than one place, which place — chips for the sources that have any.
       toolbar={{
@@ -354,6 +349,13 @@ export function InboxPage() {
           label: "消息视图", value: filter, onChange: (next) => chooseFilter(next as Filter), panelId: "inbox-list",
           items: [{ value: "all", label: "全部" }, { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) }],
         },
+        // 「全部已读」 is an action on the list below, so it is the toolbar's — a 36 px text button in the header was a kind of control of its
+        // own (the owner's inbox drew nine against a budget of eight), and the header is the title, the scope and at most one primary.
+        actions: (
+          <Button variant="text" size="sm" loading={markingAll} disabled={!hasUnread} onClick={() => void readAll()}>
+            {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
+          </Button>
+        ),
         filters: sources.length > 1 ? [{
           kind: "chips" as const, label: "消息来源", value: source, neutral: "", onChange: chooseSource,
           options: [{ value: "", label: "全部来源" }, ...sources.map((entry) => ({ value: entry.type, label: INBOX_SOURCE_WORDS[entry.type], count: entry.count }))],

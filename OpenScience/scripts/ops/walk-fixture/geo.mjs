@@ -179,6 +179,17 @@ export async function furnishGeo(app, user, { log }) {
   const deps = { store: measure, now: () => new Date(), config: {} };
   for (let guard = 0; guard < 10; guard += 1) if ((await tickMetrics(deps)).rounds === 0) break;
   log(`geo: ${dayOffsets.length} rounds measured, ${wrongOnes.length} answers carry a wrong sentence`);
+  // The sites the answers cited are in the table now, each counted by the platform. What kind a site is the platform learns elsewhere
+  // (the owner's project had 1,734 sites, 1,722 of them unclassified): here the media, wikis, regulators, self-media and shops are named
+  // and the verticals and the communities are left as they come, so the page draws the one big bar and the small ones.
+  const kindOf = { news: "news", wiki: "encyclopedia", regulator: "government", selfmedia: "wemedia", commerce: "ecommerce" };
+  for (const [group, kind] of Object.entries(kindOf)) {
+    await measure.query("UPDATE evimed_geo.sources SET kind = $3 WHERE geo_project_id = $1 AND domain = ANY($2::text[]) AND kind IS NULL",
+      [project.id, SITES[/** @type {keyof typeof SITES} */ (group)], kind]);
+  }
+  // Two sites that pass themselves off as the brand's, which the page folds under 「冒名站」.
+  await measure.query("UPDATE evimed_geo.sources SET impostor = true WHERE geo_project_id = $1 AND domain = ANY($2::text[])",
+    [project.id, [SITES.social[3], SITES.vertical[5]]]);
 
   // ---- the errors the wrong sentences make (the platform's own record of one, with the confirmation it would have asked for done)
   /** @type {Map<string, string>} */
@@ -287,10 +298,11 @@ function answerOf({ roundIndex, group, question, engine, claimIds }) {
   const citations = [];
   for (let index = 0; index < count; index += 1) {
     const domain = cited[Math.floor(unit(`site:${seed}:${index}`) * cited.length)];
-    citations.push({ title: `${group.name}的参考资料 ${index + 1}`, url: `https://${domain}/a/${Math.floor(unit(`page:${seed}:${index}`) * 900) + 100}` });
+    // A cited link carries its site (`domain`), as the probe host writes it: the platform counts the answers that cite a site by it.
+    citations.push({ title: `${group.name}的参考资料 ${index + 1}`, url: `https://${domain}/a/${Math.floor(unit(`page:${seed}:${index}`) * 900) + 100}`, domain });
   }
   const citesOurs = named && unit(`ours:${seed}`) < 0.3;
-  if (citesOurs) citations.push({ title: "说明书更新公告", url: `https://${OWNED}/news/label-update` });
+  if (citesOurs) citations.push({ title: "说明书更新公告", url: `https://${OWNED}/news/label-update`, domain: OWNED });
   const wrong = named && roundIndex >= 1 && unit(`wrong:${seed}`) < (group.pool === "P1" || group.pool === "P2" ? 0.13 : 0.04);
   const pick = Math.floor(unit(`which:${seed}`) * WRONGS.length);
   const [sentence, key, errorType, severity, evidence] = WRONGS[pick];

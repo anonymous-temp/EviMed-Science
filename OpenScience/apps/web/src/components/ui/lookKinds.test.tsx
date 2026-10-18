@@ -113,6 +113,15 @@ describe("a figure that opens what it counts", () => {
   });
 });
 
+describe("the corner of a link and a button", () => {
+  it("is the control corner unless the element sets one of its own — in the stylesheet, as the bare element", () => {
+    const css = readFileSync(resolve(__dirname, "../../index.css"), "utf8");
+    // The bare element (specificity 0,0,1): a `rounded-*` utility is more specific, so only an element with none gets the corner.
+    expect(css).toMatch(/\n(?:a,\s*button|button,\s*a)\s*\{\s*border-radius:\s*var\(--radius-control\);\s*\}/);
+    expect(css).toContain("--radius-control: 8px;");
+  });
+});
+
 describe("the small type pairs", () => {
   // A page may hold four size × weight pairs. The owner's data put a 13 / 500 text button beside a 13 / 400 chip, and a 12 / 600 grade
   // beside the 12 / 400 tag, on 循证 GEO's home, 记忆, 信源 and 额度 — one pair more each than the fixture's pages had.

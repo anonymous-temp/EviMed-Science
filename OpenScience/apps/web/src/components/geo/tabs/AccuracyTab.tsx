@@ -64,7 +64,14 @@ import { ShowMore, useShowMore } from "./showMore";
  */
 
 /** How many claims the list shows before 「显示更多」. */
-const PAGE = 20;
+/**
+ * The wrong statements shown before 「显示更多」, and how many each press adds. The two pictures above the list carry fifteen rows of their
+ * own (five engines, the reasons, the keys of two bars): twenty statements made 29 rows on the first screen of the owner's project, and a
+ * data page's first screen holds twenty (the walk's `rows-ceiling`). The five most serious come first, as the list is sorted; the
+ * heading says how many there are.
+ */
+const FIRST_SHOWN = 5;
+const PAGE = 10;
 const SAFETY_METRICS: ReadonlyArray<{ ids: readonly string[]; polarity: "up" | "down" }> = [
   { ids: ["M-11"], polarity: "up" },
   { ids: ["M-12"], polarity: "up" },
@@ -232,7 +239,7 @@ function Accuracy({
     () => (view === "engines" ? sections.flatMap((section) => section.claims.map((claim) => ({ engine: section.engine, claim }))) : claims.map((claim) => ({ engine: null as string | null, claim }))),
     [view, sections, claims],
   );
-  const { visible, remaining, more } = useShowMore(flat, { first: PAGE, step: PAGE, resetKey: `${view}|${show}|${engine}|${type}|${trace}|${cluster}|${query.trim()}` });
+  const { visible, remaining, more } = useShowMore(flat, { first: FIRST_SHOWN, step: PAGE, resetKey: `${view}|${show}|${engine}|${type}|${trace}|${cluster}|${query.trim()}` });
 
   const clearAll = () => {
     change({ [GEO_ENGINE_PARAM]: null, [TYPE_PARAM]: null, [TRACE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null });
