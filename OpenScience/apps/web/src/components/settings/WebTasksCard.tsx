@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { X } from "lucide-react";
 import { webErrorMessage, cancelWebTask, listWebTasks, type WebTask, type WebTaskStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
-import { labelFor } from "@/lib/statusLabel";
-import { iconButtonClasses } from "@/components/ui/IconButton";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { commandLabel, labelFor } from "@/lib/statusLabel";
+import { IconButton } from "@/components/ui/IconButton";
+import { CopyId, OPS_TONE, OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows, type OpsTone } from "./OpsCard";
 
 /** The task states in words: `timed out` and `succeeded` reached the page as
  *  English enum values (review B, WebTasksCard P1). */
@@ -20,14 +20,15 @@ const TASK_STATUS_LABEL: Record<WebTaskStatus, string> = {
   timed_out: "已超时",
 };
 
-const TONE: Record<WebTaskStatus, string> = {
-  queued: "text-muted",
-  running: "text-warn",
-  canceling: "text-warn",
-  succeeded: "text-ok",
-  failed: "text-error",
-  canceled: "text-muted",
-  timed_out: "text-error",
+/** A task that is under way or stopped is amber or red; one that finished is the page's own text, one that was cancelled is quiet. */
+const TONE: Record<WebTaskStatus, OpsTone> = {
+  queued: "quiet",
+  running: "warn",
+  canceling: "warn",
+  succeeded: "ok",
+  failed: "failed",
+  canceled: "quiet",
+  timed_out: "failed",
 };
 
 const TERMINAL = new Set<WebTaskStatus>(["succeeded", "failed", "canceled", "timed_out"]);
@@ -65,66 +66,37 @@ export function WebTasksCard() {
   };
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">后台任务</h2>
-          <p className="mt-0.5 text-caption text-muted">当前项目的任务队列</p>
-        </div>
-        <Tooltip content="刷新任务" kind="label">
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            onClick={() => void refresh()}
-            disabled={loading}
-            aria-label="刷新任务"
-          >
-            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </header>
-      <div className="px-5 py-4">
-        <div className="overflow-hidden rounded-input border border-border">
+    <OpsCard title="后台任务" description="当前项目的任务队列" refresh={{ label: "刷新任务", loading, onRefresh: () => void refresh() }}>
+      <OpsBody>
+        <OpsRows label="后台任务">
           {tasks.length === 0 ? (
-            <p className="bg-surface px-3 py-2.5 text-ui text-muted">该项目暂无任务。</p>
+            <OpsNothing>该项目暂无任务。</OpsNothing>
           ) : (
-            tasks.map((task, index) => (
-              <div
-                key={task.id}
-                className={cn(
-                  "flex h-10 items-center gap-2.5 bg-surface px-3 text-ui",
-                  index > 0 && "border-t border-border",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate font-medium text-text">
-                  {task.command}
-                </span>
-                <span className="hidden max-w-[9rem] truncate font-mono text-caption text-muted sm:block">
-                  {task.id}
-                </span>
-                <span className={cn("text-caption font-medium", TONE[task.status])}>
+            tasks.map((task) => (
+              <OpsRow key={task.id}>
+                <span className="min-w-0 flex-1 truncate text-text">{commandLabel(task.command)}</span>
+                <CopyId value={task.id} label={`复制“${commandLabel(task.command)}”的任务标识`} />
+                <span className={cn("text-caption", OPS_TONE[TONE[task.status]])}>
                   {labelFor(TASK_STATUS_LABEL, task.status)}
                 </span>
-                <span className="hidden font-mono text-caption text-muted sm:inline">
+                <span className="hidden font-mono text-caption text-text-3 sm:inline">
                   {formatClock(task.startedAt ?? task.queuedAt ?? task.createdAt)}
                 </span>
                 {!TERMINAL.has(task.status) && (
-                  <Tooltip content={`取消 ${task.command}`} kind="label">
-                    <button
-                      className={iconButtonClasses({ size: "sm", destructive: true })}
-                      onClick={() => void cancel(task.id)}
-                      disabled={canceling === task.id}
-                      aria-label={`取消 ${task.command}`}
-                    >
-                      <X size={16} aria-hidden="true" />
-                    </button>
-                  </Tooltip>
+                  <IconButton
+                    icon={X}
+                    label={`取消 ${commandLabel(task.command)}`}
+                    size="sm"
+                    destructive
+                    onClick={() => void cancel(task.id)}
+                    disabled={canceling === task.id}
+                  />
                 )}
-              </div>
+              </OpsRow>
             ))
           )}
-        </div>
-      </div>
-    </section>
+        </OpsRows>
+      </OpsBody>
+    </OpsCard>
   );
 }
-

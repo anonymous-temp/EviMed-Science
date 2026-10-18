@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
 import {
   fetchGeoMarket, listGeoMarketOrders, listGeoMarketTopups, fetchGeoMonthlySettlement, confirmGeoMarketTopup,
@@ -8,6 +9,7 @@ import {
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { IconButton } from "@/components/ui/IconButton";
 import { Tabs } from "@/components/ui/Tabs";
 import { DataTable } from "@/components/ui/DataTable";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -20,11 +22,35 @@ const flowLabels: Record<string, string> = { settle: "结算支出", refund: "�
 const reasonLabels: Record<string, string> = { text_changed: "正文内容不符", domain_mismatch: "发布域名不符", unreachable: "页面无法访问", above_reserve: "金额超过预留" };
 const topupLabels = { requested: "待核对", confirmed: "已到账", cancelled: "已取消" };
 
+/**
+ * The tabs a deployment has something in: a switch to an empty place is hidden (DESIGN.md rule 5; the walk's `zero-count`). 月度结算 has
+ * no count and is always there; the three lists of orders and top-ups are there while they hold something, and the tab that is open is
+ * kept so it does not vanish under a hand that just emptied it.
+ */
+export function marketTabs(counts: GeoMarketOverview["counts"] | undefined, open: View): Array<{ value: View; label: string; count?: number }> {
+  const all: Array<{ value: View; label: string; count?: number }> = [
+    { value: "unknown", label: "待确认订单", count: counts?.unknownOrders },
+    { value: "problems", label: "问题订单", count: counts?.problemOrders },
+    { value: "topups", label: "充值记录", count: counts?.requestedTopups },
+    { value: "settlement", label: "月度结算" },
+  ];
+  return all.filter((tab) => tab.count !== 0 || tab.value === open);
+}
+
+/** Where an operator who has chosen nothing lands: the first list that holds something. Counts that are not known yet read as the first. */
+function firstFilled(counts: GeoMarketOverview["counts"] | undefined): View {
+  if (!counts) return "unknown";
+  if (counts.unknownOrders !== 0) return "unknown";
+  if (counts.problemOrders !== 0) return "problems";
+  if (counts.requestedTopups !== 0) return "topups";
+  return "settlement";
+}
+
 export function GeoMarketCard() {
   const [overview, setOverview] = useState<GeoMarketOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [off, setOff] = useState(false);
-  const [view, setView] = useState<View>("unknown");
+  const [chosen, setView] = useState<View | null>(null);
   const [month, setMonth] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -40,6 +66,9 @@ export function GeoMarketCard() {
   const [editing, setEditing] = useState<{ order: GeoMarketOrder; kind: "resolve" | "lost" } | null>(null);
   const [field, setField] = useState("");
   const [confirmation, setConfirmation] = useState<{ title: string; body: string; run: () => Promise<void> } | null>(null);
+  // The place shown: the one the operator chose, else the first that holds something (and 月度结算 when none does).
+  const view: View = chosen ?? firstFilled(overview?.counts);
+  const tabs = marketTabs(overview?.counts, view);
   const overviewGeneration = useRef(0);
   const alive = useRef(true);
   const overviewLoad = useCallback(async () => {
@@ -120,17 +149,13 @@ export function GeoMarketCard() {
   if (!overview.operationsAvailable) return <Panel title="循证 GEO 投放" className="mt-6"><EmptyState title="投放管理暂不可用"
     action={<Button variant="secondary" onClick={() => void overviewLoad()}>重试</Button>} /></Panel>;
 
-  return <Panel title="循证 GEO 投放" className="mt-6" action={<Button size="sm" variant="text" onClick={() => { pageTo(null); void overviewLoad(); setRefresh((n) => n + 1); }}>刷新</Button>}>
+  return <Panel title="循证 GEO 投放" className="mt-6" action={<IconButton icon={RefreshCw} label="刷新投放状态" size="sm" onClick={() => { pageTo(null); void overviewLoad(); setRefresh((n) => n + 1); }} />}>
     <PanelRow label={overview.configured ? "投放账户余额" : "未配置投放连接"} control={overview.configured && overview.balance == null ? "暂时无法读取余额" : money(overview.balance?.money)} />
     {overview.stopNewOrders?.stopped && <PanelRow label="新订单已暂停" control={<Button variant="secondary" size="sm" disabled={Boolean(pending)}
       onClick={() => setConfirmation({ title: "恢复新订单", body: "确认已核对账目差异后恢复投放。", run: () => mutate("stop", () => clearGeoMarketStop("Operator reviewed reconciliation in GEO operations."), (result) => result.cleared ? "已解除对账暂停" : "本次未解除暂停，请重新核对。") })}>恢复新订单</Button>} />}
     {overview.reconciliation && <PanelRow label={`最近对账 · ${overview.reconciliation.day}`} control={overview.reconciliation.status === "mismatch" ? `差额 ${money(overview.reconciliation.diff)}` : "已核对"} />}
     <div className="p-4">
-      <Tabs label="循证 GEO 投放管理" value={view} onChange={changeView} items={[
-        { value: "unknown", label: "待确认订单", count: overview.counts?.unknownOrders },
-        { value: "problems", label: "问题订单", count: overview.counts?.problemOrders },
-        { value: "topups", label: "充值记录", count: overview.counts?.requestedTopups }, { value: "settlement", label: "月度结算" },
-      ]} />
+      {tabs.length > 1 && <Tabs label="循证 GEO 投放管理" value={view} onChange={changeView} items={tabs} />}
       {notice && <p role="status" className="mt-3 text-caption text-text-2">{notice}</p>}
       {actionError && <p role="alert" className="mt-3 text-caption text-error">{actionError}</p>}
       {view === "settlement" && <div className="mt-4 flex items-end gap-4"><Input label="结算月份" type="month" value={month} onChange={(event) => { setMonth(event.target.value); setCursor(null); }} />

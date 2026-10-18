@@ -16,6 +16,14 @@ vi.mock("@/lib/toast", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+
+/** The page as a reader has it: tooltips (hidden until the pointer or the keyboard asks) taken out. */
+function visibleText() {
+  const copy = document.body.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[role="tooltip"]').forEach((node) => node.remove());
+  return (copy.textContent ?? "").replace(/\s+/g, " ");
+}
+
 describe("WebTasksCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,8 +59,11 @@ describe("WebTasksCard", () => {
 
     render(<WebTasksCard />);
 
-    expect(await screen.findByText("write_workspace_file")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("取消 write_workspace_file"));
+    // The command is said in words; its name and the task's id are not page text — the id is a copy button's.
+    expect(await screen.findByText("写入文件")).toBeInTheDocument();
+    expect(visibleText()).not.toMatch(/write_workspace_file|task_1/);
+    expect(screen.getByRole("button", { name: "复制“写入文件”的任务标识" })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("取消 写入文件"));
 
     await waitFor(() => expect(mocks.cancelWebTask).toHaveBeenCalledWith("task_1"));
     // The state in words, not the English enum value.

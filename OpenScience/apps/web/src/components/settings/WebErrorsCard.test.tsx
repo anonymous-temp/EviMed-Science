@@ -14,6 +14,14 @@ vi.mock("@/lib/toast", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+
+/** The page as a reader has it: tooltips (hidden until the pointer or the keyboard asks) taken out. */
+function visibleText() {
+  const copy = document.body.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[role="tooltip"]').forEach((node) => node.remove());
+  return (copy.textContent ?? "").replace(/\s+/g, " ");
+}
+
 describe("WebErrorsCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,8 +45,10 @@ describe("WebErrorsCard", () => {
     expect(await screen.findByText("错误账本")).toBeInTheDocument();
     expect(screen.getByText("404")).toBeInTheDocument();
     expect(screen.getByText("/api/files/preview/:path")).toBeInTheDocument();
-    expect(screen.getByText("file_not_found")).toBeInTheDocument();
-    expect(screen.getByText("req_123")).toBeInTheDocument();
+    // What went wrong is said in words; the code and the request id are one copy button's, not page text.
+    expect(screen.getByText("其他错误")).toBeInTheDocument();
+    expect(visibleText()).not.toMatch(/file_not_found|req_123/);
+    expect(screen.getByRole("button", { name: "复制错误标识" })).toBeInTheDocument();
     expect(screen.queryByText(/auth_token|private\/report/i)).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.listWebErrorEvents).toHaveBeenCalledWith(20));
   });

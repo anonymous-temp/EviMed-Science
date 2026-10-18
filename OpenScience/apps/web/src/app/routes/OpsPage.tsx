@@ -45,7 +45,6 @@ export function OpsPage() {
 
   return (
     <div>
-      <p role="note" className="text-caption text-text-3">这里的操作作用于整个部署：停止或重启会中断进行中的研究。</p>
       {/* What is running now first; whether the configuration holds second — the order an operator asks in. */}
       <WebResourcesCard key={`resources-${projectId}`} />
       <WebReadinessCard />

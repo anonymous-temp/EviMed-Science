@@ -14,6 +14,14 @@ vi.mock("@/lib/toast", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+
+/** The page as a reader has it: tooltips (hidden until the pointer or the keyboard asks) taken out. */
+function visibleText() {
+  const copy = document.body.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[role="tooltip"]').forEach((node) => node.remove());
+  return (copy.textContent ?? "").replace(/\s+/g, " ");
+}
+
 describe("WebSecurityCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,10 +50,12 @@ describe("WebSecurityCard", () => {
     render(<WebSecurityCard />);
 
     expect(await screen.findByText("安全事件")).toBeInTheDocument();
-    expect(screen.getByText("auth.login")).toBeInTheDocument();
+    expect(screen.getByText("登录")).toBeInTheDocument();
     expect(screen.getByText("失败")).toBeInTheDocument();
-    expect(screen.getByText("invalid_credentials")).toBeInTheDocument();
-    expect(screen.getByText("auth.logout")).toBeInTheDocument();
+    // The code is a copy button's, with the account it came from; the row says what happened.
+    expect(visibleText()).not.toContain("invalid_credentials");
+    expect(screen.getAllByRole("button", { name: "复制事件标识" })).toHaveLength(2);
+    expect(screen.getByText("退出登录")).toBeInTheDocument();
     expect(screen.queryByText("bob")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.listWebSecurityEvents).toHaveBeenCalledWith(20));
   });

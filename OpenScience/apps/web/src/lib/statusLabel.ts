@@ -88,3 +88,66 @@ export function auditActionLabel(action: string | null | undefined): string {
   if (action && action.startsWith("command.")) return "运行命令";
   return labelFor(AUDIT_ACTION_LABEL, action, "其他操作");
 }
+
+/**
+ * What the workspace commands are called, for the operator's ledgers (`commands.mjs`). A command's snake-case name is the code's, not
+ * page text: the ledger says what it does, and a command it has no word for reads 「其他命令」.
+ */
+export const COMMAND_LABEL: Readonly<Record<string, string>> = Object.freeze({
+  start_runtime: "启动运行时",
+  stop_runtime: "停止运行时",
+  restart_runtime: "重启运行时",
+  runtime_status: "查看运行状态",
+  upload_file: "上传文件",
+  add_files_to_workspace: "添加文件",
+  add_text_to_workspace: "添加文字",
+  save_to_knowledge_base: "存入知识库",
+  read_artifact: "读取文件",
+  resolve_artifact: "定位文件",
+  preview_url: "预览文件",
+  list_dir: "列出文件",
+  write_workspace_file: "写入文件",
+  save_text_file: "保存文本",
+  claim_verification: "核对结论",
+  record_provenance: "记录来源",
+  list_provenance: "查看来源",
+  record_run: "记录运行",
+  list_runs: "查看运行记录",
+  read_run_log: "读取运行日志",
+});
+
+/** A command in words. */
+export function commandLabel(command: string | null | undefined): string {
+  return labelFor(COMMAND_LABEL, command, "其他命令");
+}
+
+/**
+ * What an audit row's target is in words, and the identifier behind it when it is one. A document's `src_…` is the platform's own id and
+ * not something a person reads: the row says 「资料」 and the id is a copy button's. A path is shown as its file name (the whole path is
+ * the tooltip and the copy), and a command is named by what it does.
+ */
+export function auditTarget(target: string | null | undefined, command: string | null | undefined): { text: string; id: string | null } {
+  const value = (target ?? "").trim();
+  if (!value) return { text: command ? commandLabel(command) : "项目", id: command ?? null };
+  if (/^src_[A-Za-z0-9]+$/.test(value)) return { text: "资料", id: value };
+  const path = value.replace(/^base:/, "");
+  if (path.includes("/")) return { text: path.slice(path.lastIndexOf("/") + 1) || path, id: path };
+  return /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(path) ? { text: commandLabel(path), id: path } : { text: path, id: null };
+}
+
+/** What the security log's actions are called (`auth.*` in the server); an action it has no word for reads 「其他操作」. */
+export const SECURITY_ACTION_LABEL: Readonly<Record<string, string>> = Object.freeze({
+  "auth.login": "登录",
+  "auth.logout": "退出登录",
+  "auth.register": "注册",
+  "auth.password": "修改密码",
+  "auth.oidc.start": "单点登录开始",
+  "auth.oidc.callback": "单点登录完成",
+  "auth.evimed.session": "会话",
+  "auth.evimed.logout": "退出登录",
+});
+
+/** A security-log action in words. */
+export function securityActionLabel(action: string | null | undefined): string {
+  return labelFor(SECURITY_ACTION_LABEL, action, "其他操作");
+}

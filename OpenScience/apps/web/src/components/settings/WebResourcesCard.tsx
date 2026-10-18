@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Play, RefreshCw, RotateCw, Square } from "lucide-react";
+import { Play, RotateCw, Square } from "lucide-react";
 import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock, formatRelativeTime, humanSize } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { iconButtonClasses } from "@/components/ui/IconButton";
 import { buttonClasses } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { OpsCard } from "./OpsCard";
 
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
@@ -81,32 +81,18 @@ export function WebResourcesCard() {
   const controlsDisabled = loading || runtimeAction != null || metrics == null;
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body text-text">运行状况</h2>
-          <p className="mt-0.5 text-caption text-muted">
-            {metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
-          </p>
-        </div>
-        <Tooltip content="刷新资源状态" kind="label">
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            onClick={() => void refresh()}
-            disabled={loading || runtimeAction != null}
-            aria-label="刷新资源状态"
-          >
-            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </header>
+    <OpsCard
+      title="运行状况"
+      description={metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
+      refresh={{ label: "刷新资源状态", loading, disabled: runtimeAction != null, onRefresh: () => void refresh() }}
+    >
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="存储" value={max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
         <Metric label="任务" value={`${runningTasks} 个进行中`} detail={`共 ${metrics?.tasks.total ?? 0} 条`} />
         <Metric label="运行时" {...runtimeMetric(metrics, runningTasks)} />
         <Metric label="服务端内存" value={humanSize(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-border px-5 py-3">
+      <div className="flex flex-wrap gap-2 px-5 pb-4">
         <Tooltip content="启动研究运行时" kind="label">
           <button
             className={runtimeButtonCls}
@@ -156,7 +142,7 @@ export function WebResourcesCard() {
           }}
         />
       )}
-    </section>
+    </OpsCard>
   );
 }
 
@@ -165,10 +151,10 @@ const runtimeButtonCls = buttonClasses({ variant: "secondary", size: "sm" });
 
 function Metric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: "warn" }) {
   return (
-    <div className={cn("rounded-input border bg-bg px-3 py-2.5", tone === "warn" ? "border-warn" : "border-border")}>
-      <div className="text-caption text-muted">{label}</div>
-      <div className={cn("mt-1 truncate text-ui font-medium", tone === "warn" ? "text-warn-strong" : "text-text")}>{value}</div>
-      <div className="mt-0.5 truncate text-caption text-muted">{detail}</div>
+    <div className="rounded-input border border-border bg-bg px-3 py-2.5">
+      <div className="text-caption text-text-3">{label}</div>
+      <div className={cn("mt-1 truncate text-ui font-semibold", tone === "warn" ? "text-warn" : "text-text")}>{value}</div>
+      <div className="mt-0.5 truncate text-caption text-text-3">{detail}</div>
     </div>
   );
 }
