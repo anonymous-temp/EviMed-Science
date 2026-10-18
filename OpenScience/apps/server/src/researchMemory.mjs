@@ -1887,12 +1887,17 @@ export class ResearchMemoryStore {
     const held = await this.#query("SELECT engine, engine_changed_at FROM evimed_memory.settings WHERE user_id=$1", [owner]);
     let row = held.rows[0];
     if (!row?.engine) {
+      // Written only for an account that exists. A turn's commit that fired after its account was deleted asked here, and the
+      // insert hit the users key: `memory_payload_invalid` in the log for every such account (production R19, 2026-10-18). An
+      // account that is gone has no memory and is on no engine; it is answered `legacy`, which every caller reads as "nothing
+      // of the native path to do", and nothing is written.
       const decided = await this.#query(`INSERT INTO evimed_memory.settings AS s (user_id, engine, engine_changed_at)
-        VALUES ($1, $2, clock_timestamp())
+        SELECT u.id, $2, clock_timestamp() FROM evimed_control.users u WHERE u.id = $1
         ON CONFLICT (user_id) DO UPDATE SET engine = COALESCE(s.engine, EXCLUDED.engine),
           engine_changed_at = COALESCE(s.engine_changed_at, EXCLUDED.engine_changed_at)
         RETURNING engine, engine_changed_at`, [owner, this.nativeEngineEnabled ? "native" : "legacy"]);
       row = decided.rows[0];
+      if (!row) return { engine: "legacy", changedAt: null };
     }
     return { engine: row.engine === "native" ? "native" : "legacy", changedAt: row.engine_changed_at ? new Date(row.engine_changed_at).toISOString() : null };
   }
@@ -1910,6 +1915,8 @@ export class ResearchMemoryStore {
     if (before.engine === engine) return { engine, changedAt: before.changedAt ?? new Date().toISOString(), changed: false };
     const result = await this.#query(`UPDATE evimed_memory.settings SET engine=$2, engine_changed_at=clock_timestamp(),
         updated_at=date_trunc('second', clock_timestamp()) WHERE user_id=$1 RETURNING engine_changed_at`, [owner, engine]);
+    // No row to move: the account does not exist (`storedMemoryEngine` writes none for it).
+    if (!result.rows[0]) throw new HttpError(400, "memory_engine_invalid", "That account does not exist.");
     return { engine, changedAt: new Date(result.rows[0].engine_changed_at).toISOString(), changed: true };
   }
 

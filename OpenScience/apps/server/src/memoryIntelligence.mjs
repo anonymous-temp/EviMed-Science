@@ -407,13 +407,49 @@ function windowedSources(entries) {
 function parseModelJson(content) {
   const raw = boundedText(content, 100_000).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   if (!raw) return { candidates: [], forget: [], omit: [] };
-  const parsed = JSON.parse(raw);
+  const parsed = parseLeadingObject(raw);
   if (!parsed || typeof parsed !== "object") return { candidates: [], forget: [], omit: [] };
   return {
     candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
     forget: Array.isArray(parsed.forget) ? parsed.forget : [],
     omit: Array.isArray(parsed.omit) ? parsed.omit : [],
   };
+}
+
+/**
+ * The reply as JSON, or — when text follows a complete object — that leading object.
+ *
+ * One reply in 306 (2026-10-18, local runs) closed the object after its candidates and then wrote `,"omit":[]}`; the parse
+ * threw and the run lost every candidate it had read (K12's study, in full group A). The leading object is complete JSON and is
+ * read; what follows it is dropped, and an omit lost that way leaves the episode to the identifier shapes (`maskIdentifiers`).
+ * Anything else that does not parse still throws, as before.
+ * @param {string} raw
+ */
+export function parseLeadingObject(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    if (!raw.startsWith("{")) throw error;
+    let depth = 0;
+    let quoted = false;
+    for (let index = 0; index < raw.length; index += 1) {
+      const character = raw[index];
+      if (quoted) {
+        if (character === "\\") index += 1;
+        else if (character === "\"") quoted = false;
+      } else if (character === "\"") quoted = true;
+      else if (character === "{" || character === "[") depth += 1;
+      else if (character === "}" || character === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          // A complete object that is the whole reply failed for another reason; only trailing text is forgiven.
+          if (index + 1 < raw.length) return JSON.parse(raw.slice(0, index + 1));
+          throw error;
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 /** What replaces a span the never-kept rules forbid in a stored episode, as it replaces an identifier-shaped one (`maskIdentifiers`). */
@@ -438,22 +474,83 @@ export function verifiedOmissions(spans, texts) {
   return found.sort((left, right) => right.length - left.length);
 }
 
+/** A figure in a span the model named: a number with a separator in it (「140/90」, 「11.2」, 「8.5–10.2」) or of three digits or more. */
+const SPAN_FIGURE = /\d+(?:[./:：～~–-]\d+)+|\d{3,}/gu;
+
+/**
+ * What the episode leaves out: the verified spans, and every figure inside one of them wherever else it occurs.
+ *
+ * The answer repeats a reading in its own words — 「140/90 mmHg 属于 1 级高血压」 after 「我最近血压有点高，140/90」 — so the
+ * clause the model named, blanked where it stands, left the reading in the answer (production's N05, 2026-10-18, and three of
+ * seven local runs). Which clause is never kept is the model's judgement; that a figure inside it is the same figure elsewhere
+ * in the same question and answer is a property of the text (principle 1: numbers go to code).
+ * @param {unknown} spans @param {readonly string[]} texts @returns {string[]} longest first
+ */
+export function episodeOmissions(spans, texts) {
+  const verified = verifiedOmissions(spans, texts);
+  const figures = [...new Set(verified.flatMap((span) => span.match(SPAN_FIGURE) ?? []))]
+    .filter((figure) => !verified.includes(figure) && texts.some((source) => source.includes(figure)));
+  return [...verified, ...figures].sort((left, right) => right.length - left.length);
+}
+
 /**
  * A text with the verified spans blanked out, wherever they occur, shortest first (names and numbers before clauses) and up to
  * seven tenths of its length: a verdict that would leave the question unreadable misread it, and what cannot be blanked is still
  * blanked where it has the shape of an identifier or a secret (`maskIdentifiers`).
+ *
+ * Every span is found in the text as it was given and the places they cover are blanked together, each run of covered
+ * characters as one 「[已省略]」. Blanking one span at a time could not take a clause and a number inside it: once 「140/90」 was
+ * blanked, 「血压有点高，140/90」 was no longer in the text and stayed. Both are asked for since 2026-10-18 — production's N05
+ * named only the clause, and the answer, which repeats the reading in other words, kept 「140/90」.
  * @param {string} text @param {readonly string[]} spans @returns {string}
  */
 export function omitSpans(text, spans) {
-  let result = text;
-  let budget = Math.floor(text.length * 0.7);
+  const budget = Math.floor(text.length * 0.7);
+  const covered = new Uint8Array(text.length);
+  let used = 0;
   for (const span of [...spans].sort((left, right) => left.length - right.length)) {
-    const occurrences = result.split(span).length - 1;
-    if (!occurrences || span.length * occurrences > budget) continue;
-    budget -= span.length * occurrences;
-    result = result.split(span).join(OMITTED);
+    if (!span) continue;
+    const starts = [];
+    for (let at = text.indexOf(span); at >= 0; at = text.indexOf(span, at + span.length)) starts.push(at);
+    let added = 0;
+    for (const start of starts) for (let index = start; index < start + span.length; index += 1) added += covered[index] ? 0 : 1;
+    if (!starts.length || used + added > budget) continue;
+    for (const start of starts) covered.fill(1, start, start + span.length);
+    used += added;
+  }
+  if (!used) return text;
+  let result = "";
+  for (let index = 0; index < text.length;) {
+    if (!covered[index]) { result += text[index]; index += 1; continue; }
+    result += OMITTED;
+    while (index < text.length && covered[index]) index += 1;
   }
   return result;
+}
+
+/**
+ * The candidates that carry nothing the same reading named under `omit`.
+ *
+ * One model call reads a conversation twice: what to keep (`candidates`) and what the episode must leave out because the
+ * never-kept rules forbid it (`omit`). A candidate that holds, verbatim, a span the same call said is never kept contradicts
+ * that call's own verdict, and the verdict wins: the candidate is not kept, and the rest of the reading stands. Seen on
+ * 2026-10-18 (local replay of production's N06): 「磺胺类药物过敏」 said inside a question was listed under omit and, in the same
+ * answer, added to the allergy memory the person had asked to keep. Which words are never kept is the model's judgement
+ * (principle 1); that a candidate carries one of the spans it named, and that the span is in the conversation, is checked here.
+ * @param {readonly any[]} candidates validated candidates @param {unknown} omit @param {readonly { role?: string, text?: string }[]} sources
+ * @param {string[]} rejections @returns {any[]}
+ */
+export function candidatesClearOfOmissions(candidates, omit, sources, rejections) {
+  const texts = sources.filter((source) => source.role === "user" || source.role === "assistant").map((source) => String(source.text ?? ""));
+  const omitted = verifiedOmissions(omit, texts);
+  if (!omitted.length) return [...candidates];
+  return candidates.filter((candidate) => {
+    const carried = `${candidate.value ?? ""}\n${candidate.summary ?? ""}\n${candidate.evidence?.quote ?? ""}`;
+    if (!omitted.some((span) => carried.includes(span))) return true;
+    // The span itself stays out of the reason: it is what the rules keep out.
+    rejections.push(`"${candidate.key}" carries what the same reading said is never kept`);
+    return false;
+  });
 }
 
 /**
@@ -1211,6 +1308,7 @@ export class MemoryIntelligence {
     let extractionError = null;
     try {
       ({ candidates, proposed, rejections, forget: forgetRequests, omit } = await this.#extractWithModel(sources, project, run, existing));
+      candidates = candidatesClearOfOmissions(candidates, omit, sources, rejections);
     } catch (error) {
       // A failed extraction is not a failed run: the run summary is written,
       // and the error travels to the run's own notice rather than being
@@ -1619,7 +1717,7 @@ export class MemoryIntelligence {
     const lastAssistant = [...sources].reverse().find((source) => source.role === "assistant") ?? null;
     const asked = lastUser?.text.slice(0, 4_000) ?? "";
     const replied = lastAssistant?.text.slice(0, 8_000) ?? "";
-    const omitted = verifiedOmissions(omit, [asked, replied]);
+    const omitted = episodeOmissions(omit, [asked, replied]);
     // What a conversation is remembered by keeps no identifier: a pasted case's ID number or phone is the conversation's, not
     // the episode's (2026-10-12 review) — and nothing else the never-kept rules forbid: a password typed in passing, a patient's
     // or a colleague's name, one's own blood pressure (2026-10-14 probe). The model names the spans, code checks they are there.
@@ -1744,7 +1842,7 @@ export class MemoryIntelligence {
               role: "system",
               content: [
                 "Extract durable memory candidates from the supplied conversation sources.",
-                "Return JSON only: {\"candidates\":[...]}. Maximum 12 candidates.",
+                "Return JSON only: {\"candidates\":[...],\"omit\":[...]}. Maximum 12 candidates.",
                 // No confidence: a number the model types is not a measurement,
                 // and the page used to print it as one. What a record is worth
                 // follows from its origin; how established it is is counted.
@@ -1767,8 +1865,8 @@ export class MemoryIntelligence {
                 // The scope a kind must carry is enforced on the way in. Saying
                 // so here is the difference between a candidate being stored and
                 // being silently dropped for a mismatch the model could not see.
-                "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on, preference is how they want work done, behavior is how they habitually work.",
-                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". The project whose id is \"default\" is the catch-all every account starts in and has no single subject: record no project_fact, decision or follow_up there, and never file a direction the assistant proposed as the researcher's own to-do. correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
+                "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on (every role they have told you of, not only the latest), preference is how they want work done, behavior is how they habitually work.",
+                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". The project whose id is \"default\" is the catch-all every account starts in and has no single subject: record no project_fact, decision or follow_up there. A follow_up, in any project, is what the person themselves says is still open or still to do: a question, an option or a next step the assistant raised is not one, even when it came in a plan the person asked for, until the person takes it up in a message of their own, and the task they are asking for right now is not one either (「帮我把数据清洗步骤列出来」 asks for work now; the open points of the answer are the assistant's). correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
                 // 2026-10-14: the assistant's words are never a memory of the person. Production held 31 project facts and follow-ups
                 // quoting offers, a report's safety boilerplate and the run's own state; the native engine's templates already refuse
                 // exactly that, and this is the same rule. Code checks that the quoted message is the person's (`validateCandidate`).
@@ -1805,6 +1903,9 @@ export class MemoryIntelligence {
                 // page never has to ask anyone to write a method: a standing
                 // instruction said in conversation is how a method is taught.
                 "When the user does state how they always want work done — 「以后 Meta 分析先报 GRADE 再报效应量」, 「报告一律用中文」 — that is a preference and must be recorded as one, origin explicit, scope user. It is the only way they ever tell the platform how to work; there is no form anywhere that asks them to write one down.",
+                // 2026-10-18 (K05): 「练习题分基础、提高、拓展三档」 was kept and 「初中数学、七年级」 was not, so the preference no longer said
+                // whose exercises it was about. The native templates say the same (memory-templates-src/preferences.yaml, profile.yaml).
+                "A preference keeps what it applies to: when the same message says who or what it is for (the class they teach, the kind of document, the language of the code), write that into the preference so it still reads right on its own — 「给门诊患者写的科普材料一律用初中生读得懂的话」, not 「材料用通俗的话」.",
                 // "In the source's own language": a value written in Chinese
                 // pulls a quote from an English tool result towards Chinese too,
                 // and a translated quote is not verbatim, so the candidate would
@@ -1830,12 +1931,12 @@ export class MemoryIntelligence {
                 // The project card (2026-10-12; general since 2026-10-13): the page reads a project off these keys, so the same work is
                 // the same keys whatever the conversation says. The clinical elements are an extension for a described study, not the
                 // shape of every project; code checks only the field's shape and an extension's name and length.
-                `When the researcher describes a piece of work of their own that goes on over time, in any field (a study, a thesis, a launch plan, a software refactor, a market analysis), record what they said about it under these keys, each as a project_fact at scope project and only the ones they stated: ${PROJECT_CARD_PROMPT_SLOTS}. Only when they describe a clinical or epidemiological study of patients or participants, also record the elements of it they stated under ${PROJECT_CARD_PROMPT_CLINICAL_SLOTS}; an element they did not state is not written, and no slot is ever filled from the topic of a question. For any other work, the people or things it is about (an audience, a customer segment, a system, a body of sources) are its subject, never a population or an intervention. Another kind of work may add a slot of its own as ${PROJECT_CARD_EXTENSION_PREFIX}<one lowercase word> with a short value (a data analysis: variables, method; writing: audience, venue; software: interface, version). A research direction is a profile, and what they ask you to look up or answer is a question; neither gets these keys. A decision stays a decision, and anything else about the project keeps a key of its own.`,
+                `When the researcher describes a piece of work of their own that goes on over time, in any field (a study, a thesis, a launch plan, a software refactor, a market analysis), record what they said about it under these keys, each as a project_fact at scope project and only the ones they stated: ${PROJECT_CARD_PROMPT_SLOTS}. Only when they describe a clinical or epidemiological study of patients or participants, also record the elements of it they stated under ${PROJECT_CARD_PROMPT_CLINICAL_SLOTS}; an element they did not state is not written, and no slot is ever filled from the topic of a question. For any other work, the people or things it is about (an audience, a customer segment, a system, a body of sources) are its subject, never a population or an intervention. Another kind of work may add a slot of its own as ${PROJECT_CARD_EXTENSION_PREFIX}<one lowercase word> with a short value (a data analysis: variables, method; writing: audience, venue; software: interface, version). A research direction is a profile, and what they ask you to look up or answer is a question; neither gets these keys. A decision stays a decision, and anything else about the project keeps a key of its own. The card holds the one piece of work this project is about: when existingMemories already show the card describing one piece of work and the conversation describes a different one (a clinic's booking app beside a research cohort), leave the card as it is and record the other work's facts under keys of their own, project.<one lowercase word naming that work>.<what> (project.booking_app.framework), unless the person says this project is now about the other work.`,
                 // The never-kept rules are one text, the native engine's templates' own (`MEMORY_NEVER_KEPT_TEXT`, rendered into
                 // every type by `memory-templates-src/build.mjs`), so the two extractors cannot disagree about what is not kept.
                 `The rules for what is never kept are the ones the user's memory engine applies to every type of memory:\n${MEMORY_NEVER_KEPT_TEXT}\n`,
-                "In this extraction: a conversation with nothing of that kind to keep returns {\"candidates\":[]}. A project may remember the shape of a cohort (who is eligible, which years, how many, what source, which kinds of variables) and never a member of it. The evidenceQuote is shown to the researcher beside the memory, so it never carries what the rules keep out: choose another span of the same message that leaves a phone number, handle, ID or address behind, or write no memory. When a candidate would fall under those rules but still seems worth proposing, set sensitive true on it: the platform does not keep sensitive candidates. The one exception in the rules, a message in which the researcher asks to remember a fact about themselves (「记住我对青霉素过敏」), is proposed as a profile memory at user scope in their own words, with sensitive false and their request as the evidenceQuote; the same fact said in passing or inside a question is not that request.",
-                "When the researcher tells you something you said or did was wrong, always record a correction (kind correction), written as the rule to follow next time (「引用研究结果时写明终点定义」) rather than as the content of a study.",
+                "In this extraction: a conversation with nothing of that kind to keep returns {\"candidates\":[]}. A project may remember the shape of a cohort (who is eligible, which years, how many, what source, which kinds of variables) and never a member of it. The evidenceQuote is shown to the researcher beside the memory, so it never carries what the rules keep out: choose another span of the same message that leaves a phone number, handle, ID or address behind, or write no memory. The same holds for value and summary: a fact worth keeping that comes with a detail the rules keep out — someone's health, a name, a private reason — is kept without it (「课题进度可能放慢」, never 「因家人生病放慢」), and value and summary say only what the person's own message says, nothing the assistant added. When a candidate would fall under those rules but still seems worth proposing, set sensitive true on it: the platform does not keep sensitive candidates. The one exception in the rules, a message in which the researcher asks to remember a fact about themselves (「记住我对青霉素过敏」), is proposed as a profile memory at user scope in their own words, with sensitive false and their request as the evidenceQuote; the same fact said in passing or inside a question is not that request, and neither is another fact of that kind said inside a later question because one was kept before (a remembered allergy does not make 「我血糖偏高，早餐吃什么好？」 a request, nor another allergy mentioned in a question): it is written nowhere, neither as a memory of its own nor into the kept one.",
+                "When the researcher tells you something you said or did was wrong, always record a correction (kind correction), written as the rule to follow next time (「引用研究结果时写明终点定义」) rather than as the content of a study. When they change a standing preference or a fact of their own (「更正一下：以后改用…」, 「主库改成…了」), that is the preference or the fact itself, written under its own kind and key; kind correction is only for something the assistant got wrong.",
                 "Describe a dataset by what it is (cohort, years, size, source, kinds of variables), never by its rows, and not by its file or column names.",
                 // English whatever the conversation: `memoryKeyPattern` admits
                 // lowercase ASCII only, and a key that followed the language
@@ -1847,12 +1948,16 @@ export class MemoryIntelligence {
                 // The episode the platform keeps of a conversation (its last question and answer, ninety days) is the one stored text
                 // the never-kept rules did not reach: a password typed in passing, a patient's name, one's own blood pressure were
                 // in it (2026-10-14 probe). The model names the spans; code checks each is verbatim and blanks it (`verifiedOmissions`).
-                "Also return {\"omit\":[\"...\"]} (leave the key out when nothing qualifies): the platform stores the last question and answer of a conversation as its episode for ninety days, and blanks out of it what the never-kept rules forbid. List the exact spans of the user's or the assistant's messages, copied character for character and each as short as it can be (a password, a name, a number, an address, the clause that states a diagnosis or a reading), that fall under those rules: a secret or account number; the name of any person other than the user (a patient, a colleague, a family member, whatever else is said of them) and every identifying detail of theirs; any reading, complaint, diagnosis or medication of a patient or of anyone but the user; the user's own health or private life, unless they asked for it to be remembered. Go through the question and the answer clause by clause and list every such span, one entry per name or detail. Never a whole question, and never ordinary words.",
-                "existingMemories lists the keys already stored. When this conversation restates or refines one of them, reuse its exact scope, kind and key so it counts as another observation of that memory; only mint a new key for a fact none of them covers.",
+                "Always return omit beside candidates, an empty list when nothing qualifies: the platform stores the last question and answer of a conversation as its episode for ninety days, and blanks out of it what the never-kept rules forbid. List the exact spans of the user's or the assistant's messages, copied character for character and each as short as it can be (a password, a name, a number, an address, the clause that states a diagnosis or a reading), that fall under those rules: a secret or account number; the name of any person other than the user (a patient, a colleague, a family member, whatever else is said of them) and every identifying detail of theirs; any reading, complaint, diagnosis or medication of a patient or of anyone but the user; the user's own health or private life, unless they asked for it to be remembered. Go through the question and the answer clause by clause and list every such span, one entry per name or detail. A surname with 某 or an initial (李某, 王某某) is still a name. List such a reading or number on its own as well as inside its clause (「11.2」 as well as 「空腹血糖有点高，11.2」): the answer may repeat it in other words, and only an exact span is blanked. Never a whole question, and never ordinary words: a threshold, a reference range, a guideline's figure or a term the answer explains belongs to no one and stays.",
+                // 2026-10-18 (production's legacy run on V4.1-Flash, replayed locally): shown only keys, the model reused a key whose name
+                // seemed to fit for a different fact, and the newer fact replaced the older — an exercise-sheet format and a requirements-
+                // document structure both became `preference.practice_format`, a code style and an R library choice `preference.code_style`
+                // — and a correction could not find the key that held the corrected fact. The summary is what tells one fact from another.
+                "existingMemories lists what is already stored: the scope, kind and key of each memory and the one sentence it says (summary). A key holds one fact. Reuse its exact scope, kind and key only when this conversation is about that same fact — the person restates it, adds to it or changes it — and then give its complete current value: what the stored summary says and the person did not take back, with what they added or changed. A role is added, not swapped: 「我是…」 beside a stored role names one more role of theirs, and the value keeps both as they now stand (「心内科医生，也在读流行病学硕士」), never as a history of what was recorded, unless they say the earlier one ended (「我现在不做…了」, 「已经转去…」). A different fact gets a key of its own even when it is of the same kind or an existing key's name seems to fit it: another preference about another thing (the format of a weekly report and the structure of a grant proposal are two), another role, another piece of work. A stored memory changes only when one of the person's own messages in this conversation says so; never rewrite one from what the assistant did, wrote or recommended, or from the code and files of the work. Adding to a stored memory is keeping: what the never-kept rules keep out is never added to one, not even to a memory of the same kind the person once asked to keep.",
                 // The judgement is the model's; that the named key exists, is
                 // in force and is in the same scope is checked in code
                 // (supersededRecord), and an unchecked claim is dropped.
-                "When this conversation changes a stored fact — a dose, a drug, a population, a threshold, a decision — reuse its key with the new value; the store keeps the old value as history. If the new fact replaces one stored under a different key, give that key as supersedes (it must be in existingMemories, in the same scope), so the old one stops being used instead of standing beside the new one.",
+                "When this conversation changes a stored fact — a dose, a drug, a population, a threshold, a decision — reuse its key with the new value; the store keeps the old value as history. If the new fact replaces one stored under a different key, give that key as supersedes (it must be in existingMemories, in the same scope), so the old one stops being used instead of standing beside the new one. When the person corrects something (「更正」, 「改成」, 「不是 X，是 Y」), find by its summary every stored memory that still says the old thing and change each one, by its own key or through supersedes: a correction never leaves the old fact in force beside the new one. One sentence that changes two facts (the database, and the launch date) is two memories, each under the key that holds it.",
                 // Time, disagreement and provenance of a fact (2026-10-04). Each is
                 // the model's reading; code checks the closed half (an ISO date
                 // whose year the source contains, a key that is in force, an
@@ -1884,11 +1989,11 @@ export class MemoryIntelligence {
                 projectId: project.id,
                 sessionId: run.sessionId,
                 // Keys already in use, so a recurring fact lands on the memory
-                // that holds it instead of a synonym beside it. The keys only:
-                // the stored summaries used to ride along, and a summary that
-                // had picked up a label ("Reinforced: …") was handed back to the
-                // model as an example of what a summary looks like, so the
-                // label reproduced itself run after run (2026-09-19).
+                // that holds it instead of a synonym beside it. From 2026-09-19
+                // to 2026-10-18 the keys only: a summary that had picked up a
+                // label ("Reinforced: …") was handed back to the model as an
+                // example of what a summary looks like, and the label
+                // reproduced itself run after run.
                 existingMemories: existing
                   .filter((record) => record.kind !== "run_summary")
                   .slice(0, 60)
@@ -1896,6 +2001,11 @@ export class MemoryIntelligence {
                     scope: record.scope,
                     kind: record.kind,
                     key: record.key,
+                    // What each memory says, so a statement lands on the memory that holds that fact and no other (2026-10-18,
+                    // see the instruction above). One sentence, bounded, and none for a record flagged sensitive, which no path
+                    // carries into a prompt. The 2026-09-19 label ("Reinforced: …") that once made summaries a bad example has
+                    // been ruled out by an instruction of its own (above) since that day.
+                    ...(record.sensitive ? {} : { summary: boundedText(record.summary || record.value, 200) }),
                   })),
                 sources,
               }),

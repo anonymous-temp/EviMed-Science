@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "Keep / never-keep / correct / forget / scope cases for the memory policy. Every check is a substring or a pattern over the memory the platform shows afterwards; none is a model's judgement. Statements are invented.",
+ "about": "Keep / never-keep / correct / forget / scope cases for the memory policy. Every check is a substring (a term in Latin letters and digits only: a whole word) or a pattern over the memory the platform shows afterwards, read from each memory's summary and value and never its key; a person's own statement is looked for in the person's memory (in: user), a project's in that project's. None is a model's judgement. Statements are invented.",
  "cases": [
   {
    "id": "K01-programmer-code-style",
@@ -18,7 +18,7 @@
       "any": [
        "snake_case"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -42,7 +42,7 @@
        "Go",
        "支付"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -66,7 +66,7 @@
        "迁移",
        "灰度"
       ],
-      "in": "any"
+      "in": "project"
      }
     ]
    },
@@ -89,7 +89,7 @@
       "any": [
        "Kafka"
       ],
-      "in": "any"
+      "in": "project"
      }
     ]
    }
@@ -111,7 +111,7 @@
        "三档",
        "基础"
       ],
-      "in": "any"
+      "in": "user"
      },
      {
       "any": [
@@ -119,7 +119,7 @@
        "七年级",
        "初中"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -143,14 +143,14 @@
        "目标",
        "风险"
       ],
-      "in": "any"
+      "in": "user"
      },
      {
       "any": [
        "产品经理",
        "SaaS"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -177,7 +177,7 @@
       "any": [
        "Excel"
       ],
-      "in": "any"
+      "in": "project"
      }
     ]
    },
@@ -199,7 +199,7 @@
       "any": [
        "Django"
       ],
-      "in": "any"
+      "in": "project"
      }
     ]
    },
@@ -221,7 +221,7 @@
       "any": [
        "tidyverse"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -245,7 +245,7 @@
        "中文",
        "简洁"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -268,14 +268,14 @@
        "随机效应",
        "GRADE"
       ],
-      "in": "any"
+      "in": "user"
      },
      {
       "any": [
        "药师",
        "真实世界"
       ],
-      "in": "any"
+      "in": "user"
      }
     ]
    },
@@ -298,7 +298,7 @@
        "房颤",
        "利伐沙班"
       ],
-      "in": "any"
+      "in": "project"
      },
      {
       "any": [
@@ -306,8 +306,15 @@
        "队列",
        "大出血"
       ],
-      "in": "any"
+      "in": "project"
      }
+    ],
+    "never": [
+     "TTR",
+     "INR",
+     "as-treated",
+     "on-treatment",
+     "ITT"
     ]
    },
    "project": "A"
@@ -694,7 +701,7 @@
       "any": [
        "中文"
       ],
-      "in": "any"
+      "in": "user"
      }
     ],
     "neverUnless": [
@@ -734,7 +741,7 @@
       "any": [
        "PostgreSQL"
       ],
-      "in": "any"
+      "in": "project"
      }
     ],
     "neverUnless": [

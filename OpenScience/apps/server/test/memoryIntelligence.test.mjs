@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
-import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources, extractionEmptyCause, omitSpans, verifiedOmissions } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, candidatesClearOfOmissions, conversationMemorySources, episodeOmissions, extractionEmptyCause, omitSpans, parseLeadingObject, verifiedOmissions } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 
 class MemoryStoreDouble {
@@ -184,43 +184,52 @@ test("a tool result grounds no memory, however exact the quote; the person's own
   assert.deepEqual([...client.records.values()].filter((record) => record.kind !== "run_summary").map((record) => record.key), ["project.fact.scope.single_drug"]);
 });
 
-test("extraction is shown the keys already in use, and never the summaries it wrote before", async () => {
-  // Without this the model mints a fresh key each time — one run produced
-  // user.specialty, profile.specialty, profile.work.area and
-  // user.profile.work_domain for the same fact — and the profile fills with
-  // synonyms that each stay at a single observation.
+test("extraction is shown each stored memory's key and what it says, and nothing of a sensitive one", async () => {
+  // Without the keys the model mints a fresh key each time — one run produced user.specialty, profile.specialty,
+  // profile.work.area and user.profile.work_domain for the same fact. With the keys alone (2026-09-19 to 2026-10-18) it reused a
+  // key whose name seemed to fit for a different fact, and the newer replaced the older: on production's memory-policy run an
+  // exercise-sheet format and a requirements-document structure both became `preference.practice_format`, and a correction
+  // could not find the key that held the corrected database. The summary is what tells one fact from another.
   const client = new MemoryStoreDouble();
   await client.upsertRecord("user_1", {
     scope: "user", scopeId: null, kind: "profile", key: "user.profile.job_title",
-    value: "临床药师", summary: "临床药师", origin: "explicit", status: "active",
+    value: "临床药师", summary: "用户是临床药师", origin: "explicit", status: "active",
     confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+  await client.upsertRecord("user_1", {
+    scope: "user", scopeId: null, kind: "preference", key: "preference.long_note",
+    value: "长".repeat(400), summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+  await client.upsertRecord("user_1", {
+    scope: "user", scopeId: null, kind: "profile", key: "profile.flagged",
+    value: "一条被标为敏感的记忆", summary: "一条被标为敏感的记忆", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: true,
   }, null, {});
 
   let seenExisting = null;
+  let system = "";
   const intelligence = new MemoryIntelligence(config, client, {
     fetchImpl: async (_input, init) => {
-      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
-      seenExisting = payload.existingMemories;
+      const body = JSON.parse(String(init.body));
+      system = body.messages[0].content;
+      seenExisting = JSON.parse(body.messages[1].content).existingMemories;
       return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
     },
   });
   await intelligence.recordRun(project(), run("run_reuse"), [message("m1", "我是临床药师。")]);
 
   assert.ok(Array.isArray(seenExisting), "existing memories must reach the extraction prompt");
-  assert.ok(
-    seenExisting.some((record) => record.key === "user.profile.job_title" && record.kind === "profile"),
-    "the stored profile key must be offered for reuse",
-  );
-  assert.ok(
-    seenExisting.every((record) => record.kind !== "run_summary"),
-    "run summaries are episodic and must not be offered as profile keys",
-  );
-  // A stored summary that had picked up a label ("Reinforced: …") was handed
-  // back to the model as an example of a summary, and the label reproduced
-  // itself (2026-09-19). The keys are what reuse needs.
-  for (const record of seenExisting) {
-    assert.deepEqual(Object.keys(record).sort(), ["key", "kind", "scope"], "only the identity of a stored memory is offered");
-  }
+  const byKey = new Map(seenExisting.map((record) => [record.key, record]));
+  assert.deepEqual(byKey.get("user.profile.job_title"), { scope: "user", kind: "profile", key: "user.profile.job_title", summary: "用户是临床药师" });
+  assert.equal(byKey.get("preference.long_note").summary.length, 200, "a record with no summary is shown by its value, bounded");
+  assert.deepEqual(Object.keys(byKey.get("profile.flagged")).sort(), ["key", "kind", "scope"], "a sensitive memory's text reaches no prompt");
+  assert.ok(seenExisting.every((record) => record.kind !== "run_summary"), "run summaries are episodic and must not be offered as profile keys");
+  assert.match(system, /A key holds one fact\. Reuse its exact scope, kind and key only when this conversation is about that same fact/);
+  assert.match(system, /never rewrite one from what the assistant did, wrote or recommended/);
+  // 2026-10-18 local runs: the analysis plan's open questions, raised by the assistant, were filed as the researcher's follow-ups.
+  assert.match(system, /A follow_up, in any project, is what the person themselves says is still open or still to do/);
+  assert.match(system, /A correction never leaves the old fact in force beside the new one|a correction never leaves the old fact in force beside the new one/);
 });
 
 test("a condition on the task in hand is not told to the model as a preference", async () => {
@@ -1985,6 +1994,17 @@ test("the spans the model names are blanked from the stored episode only where t
   assert.equal(omitSpans("甲乙甲乙甲乙 丙", ["甲乙"]), "甲乙甲乙甲乙 丙", "three occurrences of two characters in eight are more than seven tenths");
 });
 
+test("a clause and the number inside it are both blanked, wherever each occurs (2026-10-18, production's N05)", () => {
+  // Production named only the clause, and the answer, which repeats only the reading, kept it; the instruction now asks for the
+  // reading on its own as well. Blanked one after the other, the reading would go first and the clause, no longer verbatim, stay.
+  const asked = "我最近血压有点高，140/90，平时饮食应该注意什么？简短回答。";
+  const replied = "140/90 mmHg 属于 1 级高血压范围，建议限盐。";
+  const spans = verifiedOmissions(["血压有点高，140/90", "140/90"], [asked, replied]);
+  assert.equal(omitSpans(asked, spans), "我最近[已省略]，平时饮食应该注意什么？简短回答。");
+  assert.equal(omitSpans(replied, spans), "[已省略] mmHg 属于 1 级高血压范围，建议限盐。");
+  assert.equal(omitSpans("患者张某，男，56 岁，帮我写一份门诊病程记录模板", ["张某", "，男，56 岁"]), "患者[已省略]，帮我写一份门诊病程记录模板", "adjacent spans are one blank");
+});
+
 /** An extraction that returns what it is told to, and the messages of a one-question conversation. */
 function episodeRun(reply, { fail = false } = {}) {
   const store = new MemoryStoreDouble();
@@ -2032,7 +2052,92 @@ test("the extraction is asked for the spans of the episode to leave out", async 
     },
   });
   await intelligence.recordRun(project(), run("run_omit"), [message("m1", "帮我写个连接脚本")]);
-  assert.match(system, /Also return \{"omit":\["\.\.\."\]\}/);
+  assert.match(system, /Return JSON only: \{"candidates":\[\.\.\.\],"omit":\[\.\.\.\]\}/);
+  assert.match(system, /Always return omit beside candidates, an empty list when nothing qualifies/);
   assert.match(system, /copied character for character and each as short as it can be/);
   assert.match(system, /Never a whole question, and never ordinary words/);
+  // 2026-10-18, production's legacy run: 「张某」 stayed in N04's episode, and N05's reading stayed in the answer because only the
+  // clause around it was named.
+  assert.match(system, /A surname with 某 or an initial \(李某, 王某某\) is still a name/);
+  assert.match(system, /List such a reading or number on its own as well as inside its clause/);
+  assert.match(system, /a threshold, a reference range, a guideline.s figure or a term the answer explains belongs to no one and stays/);
+  // N06: an allergy said inside a question was kept beside the allergy the person had asked to be remembered.
+  assert.match(system, /neither is another fact of that kind said inside a later question because one was kept before/);
+  assert.match(system, /The exception covers only the fact that message asks to keep/, "the never-kept rules both engines read say it too");
+  // full group A on ad4a0ea51: 「这个课题可能要放慢」 was kept as the project's stage with its reason, the supervisor's health.
+  assert.match(system, /a fact worth keeping that comes with a detail the rules keep out — someone's health, a name, a private reason — is kept without it/);
+});
+
+test("a candidate that carries what the same reading said is never kept is not kept, and the rest of the reading stands", async () => {
+  // 2026-10-18, local replay of production's N06: an allergy said inside a question was listed under omit and, in the same answer,
+  // added to the allergy memory the person had asked to keep.
+  const sources = [{ role: "user", text: "我对磺胺类药物过敏，社区获得性肺炎一般怎么选抗生素？" }, { role: "assistant", text: "可以考虑……" }];
+  const candidates = [
+    { key: "profile.allergy", value: "对青霉素和磺胺类药物过敏", summary: "用户对青霉素和磺胺类药物过敏", evidence: { quote: "我对磺胺类药物过敏" } },
+    { key: "preference.answer_length", value: "回答简短", summary: "回答简短", evidence: { quote: "怎么选抗生素" } },
+  ];
+  const rejections = [];
+  const kept = candidatesClearOfOmissions(candidates, ["磺胺类药物过敏", "不在原文里"], sources, rejections);
+  assert.deepEqual(kept.map((candidate) => candidate.key), ["preference.answer_length"]);
+  assert.deepEqual(rejections, ['"profile.allergy" carries what the same reading said is never kept'], "and the span itself is not repeated in the reason");
+  assert.deepEqual(candidatesClearOfOmissions(candidates, ["不在原文里"], sources, []).length, 2, "a span that is not in the conversation names nothing");
+  assert.deepEqual(candidatesClearOfOmissions(candidates, "磺胺类药物过敏", sources, []).length, 2, "nor does an omit that is not a list");
+
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const { sources } = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: [
+          { scope: "user", kind: "profile", key: "profile.allergy", value: "对青霉素和磺胺类药物过敏", summary: "对青霉素和磺胺类药物过敏", origin: "explicit", importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "我对磺胺类药物过敏" },
+        ],
+        omit: ["磺胺类药物过敏"],
+      }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_n06"), [message("m1", "我对磺胺类药物过敏，社区获得性肺炎一般怎么选抗生素？")]);
+  assert.equal(result.extracted, 0);
+  assert.ok([...store.records.values()].every((record) => record.kind === "run_summary"), "no memory of the person's health was written");
+  assert.ok(result.rejectionReasons.some((reason) => reason.includes("never kept")));
+});
+
+test("an explicit request to remember a fact about oneself is kept when the reading omits nothing of it", async () => {
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const { sources } = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: [
+          { scope: "user", kind: "profile", key: "profile.allergy", value: "对青霉素过敏", summary: "对青霉素过敏", origin: "explicit", importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "记住我对青霉素过敏" },
+        ],
+        omit: [],
+      }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_k13"), [message("m1", "记住我对青霉素过敏。")]);
+  assert.equal(result.extracted, 1);
+  assert.equal([...store.records.values()].find((record) => record.kind === "profile").value, "对青霉素过敏");
+});
+
+test("a figure inside a span the model named is left out of the episode wherever it occurs (production's N05)", async () => {
+  const asked = "我最近血压有点高，140/90，平时饮食应该注意什么？简短回答。";
+  const replied = "140/90 mmHg 属于 1 级高血压的临界值；多次测量 ≥140/90 再就医。";
+  assert.deepEqual(episodeOmissions(["血压有点高，140/90"], [asked, replied]), ["血压有点高，140/90", "140/90"]);
+  assert.deepEqual(episodeOmissions(["男，56 岁"], ["患者男，56 岁"]), ["男，56 岁"], "two digits are not a figure of their own");
+  assert.deepEqual(episodeOmissions(["空腹 8.5–10.2 mmol/L"], ["空腹 8.5–10.2 mmol/L，复查 8.5–10.2"]), ["空腹 8.5–10.2 mmol/L", "8.5–10.2"]);
+  assert.deepEqual(episodeOmissions("140/90", [asked]), [], "not a list, nothing named");
+
+  const { intelligence, summary } = episodeRun({ candidates: [], omit: ["血压有点高，140/90"] });
+  await intelligence.recordRun(project(), run("run_n05"), [message("m1", asked), { info: { id: "m2", role: "assistant" }, parts: [{ type: "text", text: replied }] }]);
+  const stored = JSON.parse(summary().value);
+  assert.equal(stored.question, "我最近[已省略]，平时饮食应该注意什么？简短回答。");
+  assert.ok(!stored.answer.includes("140/90"), stored.answer);
+});
+
+test("a reply that closes its object early keeps the candidates it read (full group A, 2026-10-18)", () => {
+  const reply = '{"candidates":[{"key":"project.population","value":"房颤患者 {约 3200 例}","evidenceQuote":"\\"引号\\""}]},"omit":[]}';
+  assert.deepEqual(parseLeadingObject(reply).candidates.map((candidate) => candidate.key), ["project.population"]);
+  assert.deepEqual(parseLeadingObject('{"candidates":[]}'), { candidates: [] });
+  assert.throws(() => parseLeadingObject('{"candidates":['), SyntaxError, "a reply cut off mid-object still fails");
+  assert.throws(() => parseLeadingObject("not json"), SyntaxError);
 });

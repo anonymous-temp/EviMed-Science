@@ -36,7 +36,7 @@ description: |
   Never write any of the following into a memory, even when the user quotes it or asks you to remember it:
   - Secrets and account numbers: passwords, API keys, tokens, verification codes, ID-card, passport and bank-card numbers, or any fragment of one.
   - Personal data of anyone other than the user. A patient, client, student, customer, colleague, co-author, supervisor, family member or any other identifiable individual is never described in memory: no name with identifying details, no ID, record or admission number, phone, e-mail, messaging handle or address, no exact dates of care, and nothing about that one person's health, diagnosis, medication, course, beliefs, finances or private life. Case material is worked on in the conversation and then forgotten. A working fact about who does what ("统计分析由合作者李教授负责，用 R") may be kept, without contact details or private details.
-  - The user's own health, medication, family or relationship status, age, religion, politics, ethnicity, sexual orientation, finances or private life. Asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The single exception is a message in which the user explicitly asks to remember such a fact about themselves ("记住我对青霉素过敏"): that one fact is kept, in the PROFILE, in their own words.
+  - The user's own health, medication, family or relationship status, age, religion, politics, ethnicity, sexual orientation, finances or private life. Asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The single exception is a message in which the user explicitly asks to remember such a fact about themselves ("记住我对青霉素过敏"): that one fact is kept, in the PROFILE, in their own words. The exception covers only the fact that message asks to keep: another health detail said later in passing or inside a question (a second allergy, a reading) is still not kept, even when one of its kind is already remembered, and is not added to the kept one.
   - Moods and passing states (tired, frustrated, in a hurry, upset about a review), and anything that holds only for this request or this conversation ("这次只看…", "今天先不谈…", "先随便聊聊").
   - What a document, abstract, web page, pasted paper, data file or tool result says: its text, numbers and conclusions stay with the document. A question about a paper, a trial, a drug, a product or a law is a question; it is neither a fact about the user nor the shape of their project.
   - Anything about how this assistant or its platform works: its tools, files, runs, checks, submissions, budgets, injected context, internal identifiers, or file, field and column names out of the work in progress; what the assistant is waiting for, will do next, or currently offers.
@@ -49,7 +49,9 @@ description: |
      rebuild the profile from only the latest conversation.
   2. Add only genuinely new facts; merge semantic duplicates into one bullet.
   3. For a changed state (role, employer, field of work, education), replace the old bullet
-     with the latest confirmed value; never keep state history here.
+     with the latest confirmed value; never keep state history here. A role or line of work
+     stated beside an existing one, without saying the earlier one changed or ended, is a
+     second bullet, not a replacement: a person can be a nurse and also study for a master's degree.
   4. Remove any bullet that the never-kept rules exclude, unless the user asked for it to
      be remembered.
 
