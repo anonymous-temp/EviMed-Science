@@ -41,16 +41,18 @@ export function WebAuditCard() {
                   <ClipboardList size={16} className={cn("shrink-0", OPS_TONE[statusTone(event.status)] || "text-text-3")} aria-hidden="true" />
                   {/* The ledger's own name for the action stays in the tooltip, for whoever has to search the log. */}
                   <Tooltip content={event.action ?? "操作"}>
-                    <span className="w-28 shrink-0 truncate text-caption text-text">
+                    <span className="w-28 shrink-0 truncate text-caption text-text max-sm:w-20">
                       {auditActionLabel(event.action)}
                     </span>
                   </Tooltip>
                   <Tooltip content={event.status}>
-                    <span className={cn("w-20 shrink-0 text-caption", OPS_TONE[statusTone(event.status)])}>
+                    <span className={cn("w-20 shrink-0 text-caption max-sm:w-14", OPS_TONE[statusTone(event.status)])}>
                       {labelFor(LEDGER_STATUS_LABEL, event.status)}
                     </span>
                   </Tooltip>
-                  <span className="min-w-0 flex-1 truncate text-caption text-text-3">{target.text}</span>
+                  {/* On a phone the name of the target gives way to the row's own words and its copy button: it had a column of one letter. */}
+                  <span className="min-w-0 flex-1 truncate text-caption text-text-3 max-sm:hidden">{target.text}</span>
+                  <span className="max-sm:flex-1 sm:hidden" aria-hidden="true" />
                   {target.id && <CopyId value={target.id} label={`复制“${target.text}”的标识`} />}
                   <span className="hidden w-16 shrink-0 text-right text-caption text-text-3 sm:block">
                     {event.bytes ? humanSize(event.bytes) : ""}

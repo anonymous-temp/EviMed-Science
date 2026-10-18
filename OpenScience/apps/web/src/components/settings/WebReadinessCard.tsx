@@ -160,12 +160,14 @@ function Row({ row }: { row: ReadinessRow }) {
     : kind === "warning" ? <AlertTriangle size={16} className="shrink-0 text-warn" aria-hidden="true" />
       : kind === "disabled" ? <CircleDashed size={16} className="shrink-0 text-text-3" aria-hidden="true" />
         : <CheckCircle2 size={16} className="shrink-0 text-text-3" aria-hidden="true" />;
-  const detail = <span className="min-w-0 flex-1 text-caption text-text-3">{row.detail}</span>;
+  // On a phone the sentence goes under the name and the state, with the icon's width taken off its left (it was squeezed into a column of
+  // two characters at 390 px).
+  const detail = <span className="min-w-0 flex-1 text-caption text-text-3 max-sm:basis-full max-sm:pl-[26px]">{row.detail}</span>;
   return (
-    <OpsRow className="min-h-11">
+    <OpsRow className="min-h-11 max-sm:flex-wrap">
       {icon}
-      <span className="w-32 shrink-0 text-text">{row.label}</span>
-      <span className={cn("w-20 shrink-0 text-caption", kind === "failed" ? OPS_TONE.failed : kind === "warning" ? OPS_TONE.warn : OPS_TONE.quiet)}>
+      <span className="w-32 shrink-0 text-text max-sm:w-auto max-sm:flex-1">{row.label}</span>
+      <span className={cn("w-20 shrink-0 text-caption max-sm:w-auto", kind === "failed" ? OPS_TONE.failed : kind === "warning" ? OPS_TONE.warn : OPS_TONE.quiet)}>
         {STATE_WORD[kind]}
       </span>
       {row.code ? <Tooltip content={row.code}>{detail}</Tooltip> : detail}
