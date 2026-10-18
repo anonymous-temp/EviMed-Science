@@ -157,7 +157,7 @@ function StatementRow({ item, simulated, marked }: { item: WebResearchStatement;
     to={!credit && item.runId ? `/app/runs?run=${encodeURIComponent(item.runId)}` : undefined}
     meta={<>{notes || undefined}{detailable && open && <StatementDetail id={item.id} />}</>}
     expanded={detailable ? open : undefined}
-    actions={detailable ? <Button variant="text" size="sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "收起明细" : "查看明细"}</Button> : undefined}
+    actions={detailable ? <Button variant="text" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "收起明细" : "查看明细"}</Button> : undefined}
     trailing={<>
       {simulated && marked && <SimulatedMark />}
       <div className="min-w-20 text-right text-ui"><span className="block text-text-2">{label}</span>{amount && <span className="tabular-nums">{sign}{amount}</span>}</div>

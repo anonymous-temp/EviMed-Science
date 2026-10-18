@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { KnowledgePage } from "@/lib/sourceClient";
 import pageMine from "./knowledgeFixtures/page-analysis-mine.json";
-import { KnowledgeMarkdown } from "./KnowledgeMarkdown";
+import { KnowledgeMarkdown, isRelationsFile } from "./KnowledgeMarkdown";
 
 vi.mock("@/components/markdown-viewer/MarkdownViewer", () => ({ MarkdownViewer: () => { throw new Error("cannot draw"); } }));
 
@@ -27,9 +27,18 @@ describe("KnowledgeMarkdown when the page cannot be drawn", () => {
     expect(document.querySelector("[data-knowledge-raw]")?.textContent).toContain('"relation":"uses"');
   });
 
+  it("knows the relation file by its file name as well as by its kind — the server's record says `relations.jsonl`", () => {
+    for (const named of [{ type: "relations" }, { type: "relations.jsonl" }, { type: "something", path: "relations.jsonl" }, { type: "something", path: "kg/relations.jsonl" }]) {
+      expect(isRelationsFile({ path: "x.md", ...named } as KnowledgePage)).toBe(true);
+    }
+    for (const other of [{ type: "concept", path: "concept/a.md" }, { type: "entity", path: "entities/relations-of-a.md" }, { type: "analysis", path: "analysis/relations.jsonl.md" }]) {
+      expect(isRelationsFile(other as KnowledgePage)).toBe(false);
+    }
+  });
+
   it("shows a long relation file a window of lines at a time and says how many are left — the page is not six screens of data", async () => {
     const lines = Array.from({ length: 400 }, (_unused, index) => JSON.stringify({ from: `a${index}`, relation: "uses", label: "使用", to: `b${index}`, evidence: [""] }));
-    const relations = { ...(pageMine as unknown as KnowledgePage), type: "relations", markdown: `${lines.join("\n")}\n`, editable: false } as KnowledgePage;
+    const relations = { ...(pageMine as unknown as KnowledgePage), type: "relations.jsonl", path: "relations.jsonl", markdown: `${lines.join("\n")}\n`, editable: false } as KnowledgePage;
     render(<MemoryRouter><KnowledgeMarkdown page={relations} /></MemoryRouter>);
     const raw = () => document.querySelector("[data-knowledge-raw]") as HTMLElement;
     expect(raw().textContent?.split("\n")).toHaveLength(40);

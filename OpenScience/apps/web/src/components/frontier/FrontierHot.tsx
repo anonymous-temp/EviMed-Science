@@ -112,7 +112,7 @@ export function HotBoard({ state, onRetry }: {
 
 /**
  * One row of 热榜. The title line is one 36 px link (the control height; 40
- * is a tab's) — the rank beside it, a badge beside it (outside the link) — and the whole title
+ * is a tab's) — the rank beside it, a badge after it (outside the link) — and the whole title
  * is its tooltip where it is cut. The
  * heat and its trend are shown only where the server sends a heat: a week's
  * or a month's ranking is by institutions, and says so in its line instead.
@@ -126,14 +126,15 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
     <li className="flex gap-3 border-b border-border py-4">
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
-        {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). */}
+        {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). After it, not
+            before: a badge in front moved the title of the rows that have one off the left edge of the titles of those that do not. */}
         <div className="flex min-h-control min-w-0 items-center gap-1.5">
-          {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
           <Tooltip content={event.title} kind="label" whenTruncated>
             <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
               <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
             </Link>
           </Tooltip>
+          {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
         </div>
         <p className="text-caption text-text-3">{hotRowMeta(event)}</p>
       </div>

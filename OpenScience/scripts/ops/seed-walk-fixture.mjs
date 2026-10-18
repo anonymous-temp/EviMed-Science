@@ -27,6 +27,8 @@
  *   OPEN_SCIENCE_WALK_PROFILE=fixture OPEN_SCIENCE_PLAYWRIGHT_CORE=apps/server/node_modules/playwright-core \
  *   OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/google-chrome OPEN_SCIENCE_WALK_OUT=/tmp/walk-out node scripts/ops/ui-walk.mjs
  *
+ * `--simulated-wallet` bills research from the simulated wallet (as the owner's deployment does), so the settings page is 额度 rather than 用量.
+ *
  * The release gate runs both walks: production's owner-view walk (as it always has) and this one, locally, on the integrated tree.
  *
  * Seeding is idempotent: the account is made once (a second start finds it and seeds nothing), and `--reseed` drops nothing — to start
@@ -58,7 +60,7 @@ export function parseArguments(argv) {
     const word = argv[index];
     if (!word.startsWith("--")) throw new Error(`unexpected argument ${word}`);
     const name = word.slice(2);
-    if (name === "reseed") { given[name] = true; continue; }
+    if (name === "reseed" || name === "simulated-wallet") { given[name] = true; continue; }
     const value = argv[index + 1];
     if (value === undefined || value.startsWith("--")) throw new Error(`--${name} needs a value`);
     given[name] = value;
@@ -73,6 +75,7 @@ export function parseArguments(argv) {
     passwordFile: String(given["password-file"] ?? ""),
     pidFile: String(given["pid-file"] ?? ""),
     reseed: given.reseed === true,
+    simulatedWallet: given["simulated-wallet"] === true,
   };
 }
 
@@ -93,7 +96,7 @@ const log = (line) => process.stderr.write(`${new Date().toISOString()} walk-fix
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (!options.databaseUrl || !options.dataDir || !options.passwordFile) {
-    process.stderr.write("usage: seed-walk-fixture.mjs --database-url <url> --data-dir <dir> --password-file <file> [--static-dir <dir>] [--port <n>] [--user <name>] [--pid-file <file>]\n");
+    process.stderr.write("usage: seed-walk-fixture.mjs --database-url <url> --data-dir <dir> --password-file <file> [--static-dir <dir>] [--port <n>] [--user <name>] [--pid-file <file>] [--simulated-wallet]\n");
     process.exit(2);
   }
   assertThrowawayDatabase(options.databaseUrl);
@@ -129,6 +132,9 @@ async function main() {
     // The kernel's window, as production has it (the shell places its frame over a conversation's pane: 定时任务's task page). The origin
     // answers nothing — port 9, nothing listens — so a frame is minted and placed and never loads: no walk starts a runtime anyway.
     runtimeUiProxyEnabled: true, runtimeUiPublicOrigin: "http://127.0.0.1:9",
+    // With `--simulated-wallet` the deployment bills research from the control plane's simulated wallet (no money moves), as production does: the
+    // settings page is then 额度 (the allowance, its lots, the statements) and not 用量.
+    ...(options.simulatedWallet ? { evimedCreditsEnabled: true, evimedCreditsSimulated: true, evimedCreditsPerCny: 1, evimedCreditsSimulatedStartCredits: 60, researchBillingEnabled: true } : {}),
     // The key the account's own data-source credentials are sealed under (random, kept nowhere): without it 设置 → 数据源 answers 503.
     modelGatewaySigningSecret: randomBytes(36).toString("base64url"),
   });

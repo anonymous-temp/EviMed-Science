@@ -3,8 +3,7 @@ import { cn } from "@/lib/cn";
 /**
  * A navigation item (spec §20.6): 36 high (`h-control`), 8 px padding and
  * corner, a 16 px icon in `text-3` 8 px before 14 px text; `surface-2` under
- * the pointer, and the current one on `accent-soft` in the body colour — told by its ground, at the weight of the rest (a current item at 500 was a
- * second 14 px pair on every page that holds a rail of places: 设置, the knowledge base).
+ * the pointer, and the current one on `accent-soft` in the body colour at 500.
  * The caller sets `aria-current` (or `aria-pressed` on a toggle) — the look
  * follows the state, it does not stand in for it.
  *
@@ -16,7 +15,7 @@ import { cn } from "@/lib/cn";
 export function navItemClasses({ current = false, className }: { current?: boolean; className?: string } = {}): string {
   return cn(
     "flex h-control w-full min-w-0 items-center gap-2 rounded px-2 text-left text-ui outline-none transition-colors duration-fast",
-    current ? "bg-accent-soft text-text" : "text-text hover:bg-surface-2",
+    current ? "bg-accent-soft font-medium text-text" : "text-text hover:bg-surface-2",
     className,
   );
 }

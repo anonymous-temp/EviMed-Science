@@ -108,10 +108,16 @@ export async function furnishKnowledge(app, user, password, { engine, setCompile
       : { root: "base", path: `knowledge-base/${name}`, data: text, encoding: "utf8" };
     const sent = await api("/api/files/upload", { method: "POST", body: JSON.stringify(body) });
     if (sent.status !== 200) throw new Error(`upload of ${name} answered ${sent.status}: ${JSON.stringify(sent.body).slice(0, 200)}`);
-    const source = await app.sourceService.get(user.id, sent.body.data.source.id);
-    // Text only: an understanding of each document is a model's, and none is here.
-    if (source.payload.depth !== "index_only") {
-      await app.sourceService.override(user.id, source.id, { expectedRevision: source.revision, docType: source.payload.docType, depth: "index_only", reason: "Walk fixture: text only." });
+    // Text only: an understanding of each document is a model's, and none is here. The ingestion worker is already reading the document
+    // (its own poll), so the record can move between this read and the write: the write is tried again against what the worker left.
+    let source = await app.sourceService.get(user.id, sent.body.data.source.id);
+    for (let attempt = 0; attempt < 5 && source.payload.depth !== "index_only"; attempt += 1) {
+      try {
+        await app.sourceService.override(user.id, source.id, { expectedRevision: source.revision, docType: source.payload.docType, depth: "index_only", reason: "Walk fixture: text only." });
+      } catch (error) {
+        if (!/record changed/i.test(String(/** @type {any} */ (error)?.message ?? error)) || attempt === 4) throw error;
+      }
+      source = await app.sourceService.get(user.id, source.id);
     }
     ids[name] = source.id;
   }

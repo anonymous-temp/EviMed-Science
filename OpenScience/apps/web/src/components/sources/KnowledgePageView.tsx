@@ -17,7 +17,7 @@ import {
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { useWide } from "@/lib/useMediaQuery";
-import { KnowledgeMarkdown } from "./KnowledgeMarkdown";
+import { KnowledgeMarkdown, isRelationsFile } from "./KnowledgeMarkdown";
 import { STALE_LABEL, maskEngineAddresses, staleReasons, statusLine } from "./knowledgeView";
 
 /** A page of this many sections or more has a contents beside it. */
@@ -98,7 +98,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
       <div ref={body} className="min-w-0 max-w-read flex-1 space-y-4">
         {outlined && !wide && <Outline layout="folded" entries={entries} active={active} onSelect={select} className="mb-2" />}
         <div className="flex flex-wrap items-center gap-2">
-          <Tag>{knowledgePageTypeLabel(page.type)}</Tag>
+          <Tag>{isRelationsFile(page) ? "图谱关系" : knowledgePageTypeLabel(page.type)}</Tag>
           {page.tags.slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}
           {page.editable && (
             <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setEditing(true)}>

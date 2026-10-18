@@ -421,11 +421,11 @@ describe("Sidebar navigation", () => {
     renderSidebar("/app/capabilities");
     const current = screen.getByRole("link", { name: "科研工具" });
     expect(current).toHaveAttribute("aria-current", "page");
-    expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft");
+    expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft", "font-medium");
     const other = screen.getByRole("link", { name: "知识库" });
     expect(other).not.toHaveAttribute("aria-current");
     expect(other).toHaveClass("h-control", "hover:bg-surface-2");
-    expect(other).not.toHaveClass("bg-accent-soft");
+    expect(other).not.toHaveClass("bg-accent-soft", "font-medium");
 
     const bell = await screen.findByRole("button", { name: "收件箱" });
     const collapse = screen.getByRole("button", { name: "收起侧边栏" });

@@ -77,6 +77,15 @@ function PageLinkTo({ link, children }: { link: Extract<KnowledgePageLink, { kin
   return <Link to={readerPath(link.sourceId, readListState(params))} className={LINK}>{children}</Link>;
 }
 
+/**
+ * Whether the page is the graph's relation file. The server's record names it by its file (`type: "relations.jsonl"`) and the tree's
+ * row by the kind (`relations`): this read only the second, so the file — the one page that is four hundred lines of JSON — was drawn
+ * as Markdown, paragraph after paragraph, on the owner's account.
+ */
+export function isRelationsFile(page: Pick<KnowledgePage, "type" | "path">): boolean {
+  return page.type === "relations" || page.type === "relations.jsonl" || /(^|\/)relations\.jsonl$/.test(String(page.path ?? ""));
+}
+
 /** Lines of a data file shown before 「显示更多」, and how many each press adds. */
 const RAW_LINES_SHOWN = 40;
 const RAW_LINES_STEP = 120;
@@ -122,7 +131,7 @@ export function KnowledgeMarkdown({ page }: { page: KnowledgePage }) {
   }, [page.links]);
 
   // The graph's relation file is data, not a page: it is shown as it is written, a screenful of lines at a time.
-  if (page.type === "relations") return <RawLines text={rawMarkdown(page)} />;
+  if (isRelationsFile(page)) return <RawLines text={rawMarkdown(page)} />;
   return (
     <RawFallback raw={rawMarkdown(page)}>
       <div data-knowledge-body="">

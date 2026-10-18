@@ -81,8 +81,9 @@ describe("热榜's 「新」 and 「升温」", () => {
       const tag = row.querySelector("[data-tag]");
       expect(tag).not.toBeNull();
       expect(tag!.closest("a, button")).toBeNull();
-      // The link still names the title alone.
+      // The link still names the title alone, and the badge comes after it: every title starts on one left edge.
       expect(within(row).getByRole("link")).not.toContainElement(tag as HTMLElement);
+      expect(within(row).getByRole("link").compareDocumentPosition(tag as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
   });
 });

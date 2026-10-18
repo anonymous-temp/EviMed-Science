@@ -64,9 +64,9 @@ export async function furnishAccount(app, user, ids, { log }) {
       validFrom: new Date(now - daysAgo * DAY).toISOString(),
     }, null, { by: "user", reason: "walk fixture" });
   }
-  // An account in use for months holds a hundred and more: the page's lists, its search and its first screen are measured on that, not on
-  // twenty-three (the owner's memory page took more than 30 s to answer).
-  for (let index = 0; index < 120; index += 1) {
+  // An account in use for months holds a hundred and more: the page's lists, its search and its first screen are measured on more than
+  // twenty-three (the owner's memory page took more than 30 s to answer) — but not so many that the 记忆地图 folds its marks into clusters: the walk presses the first mark and expects a record's drawer.
+  for (let index = 0; index < 60; index += 1) {
     const project = index % 3 === 0;
     await app.researchMemory.upsertRecord(user.id, {
       scope: project ? "project" : "user", ...(project ? { scopeId: "default" } : {}), kind: project ? "project_fact" : index % 3 === 1 ? "preference" : "behavior",
@@ -76,7 +76,7 @@ export async function furnishAccount(app, user, ids, { log }) {
       validFrom: new Date(now - (40 + index) * DAY / 3).toISOString(),
     }, null, { by: "user", reason: "walk fixture" }).catch((/** @type {any} */ error) => { if (index === 0) log(`account: more memory — ${String(error?.message ?? error).slice(0, 160)}`); });
   }
-  log(`account: ${MEMORIES.length + 120} memory records`);
+  log(`account: ${MEMORIES.length + 60} memory records`);
 
   // ---- what the platform learned from the work (做法)
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
