@@ -2,8 +2,7 @@ import { FRONTIER_LEAVING, readFrontierPosition, type FrontierReadingPosition } 
 import { WeeklyView, useFrontierWeekly } from "@/components/frontier/WeeklyView";
 import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
-import { ChevronRight } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
   reportFrontierExposure,
@@ -47,7 +46,6 @@ import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/front
 import { SourcesLink } from "@/components/frontier/SourcesList";
 import { FollowingView, followControls, useFollowing } from "@/components/frontier/FollowingView";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
-import { buttonClasses } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import type { CardTag } from "@/components/frontier/frontierText";
 
@@ -70,8 +68,8 @@ function readDay(value: string | null): string | null {
 
 /**
  * 「前沿动态」 (plan 2026-09-23 §6): one page with feed, digest, recommendation and follow views —
- * 精选, 全部, 热榜, 与我相关, 关注 and 简报 (the daily and the weekly) — with a link to the evidence
- * zones (another group of pages) beside the title. The views are one row of tabs and the controls of
+ * 精选, 全部, 证据专区, 热榜, 与我相关, 关注 and 简报 (the daily and the weekly). The evidence
+ * directory keeps its own address. The views are one row of tabs and the controls of
  * the open view, with the server-side search, sit at that row's right (`frontierToolbar`; plan
  * 2026-10-07 §4) in the shell's sticky band, so they stay at the top of a six-thousand-pixel feed
  * (R19, audit D C1d). 精选 opens with the safety strip and 当前热点
@@ -113,6 +111,7 @@ export function FrontierPage() {
 
 function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const location = useLocation();
   const restore = useRef(readFrontierPosition((location.state as { frontierReading?: unknown } | null)?.frontierReading));
   const pages = useRef(1);
@@ -497,6 +496,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const searchOrigin = useRef<PageView | null>(null);
 
   const setView = (next: PageView) => {
+    if (next === "zones") { window.dispatchEvent(new Event(FRONTIER_LEAVING)); navigate("/app/frontier/zones"); return; }
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day and the time range belong to the view they were chosen in.
@@ -681,9 +681,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       case "hot":
         return <HotBoard state={hot[hotWindow] ?? null} onRetry={() => setHotAttempt((value) => value + 1)} />;
       case "weekly":
-        return <WeeklyView state={weekly} onWeek={openWeek} />;
+        return <WeeklyView expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={weekly} onWeek={openWeek} />;
       case "daily":
-        return <DailyIssue state={daily} onDay={openDay} />;
+        return <DailyIssue expansion={{ ids: expanded, onExpand: (id) => setExpanded((current) => [...new Set([...current, id])]) }} state={daily} onDay={openDay} />;
       case "foryou":
         return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
       case "following":
@@ -712,7 +712,6 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
-      actions={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "secondary" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>}
       toolbar={toolbar}
     >
       {ready && params.get("item") && (

@@ -96,14 +96,14 @@ describe("the issue's header", () => {
 });
 
 describe("a row", () => {
-  it("has its title as the one way to the original, and 「详情」 beside the institution — no second 「原文」", () => {
+  it("opens the addressed reader through its title, and 「详情」 beside the institution — no second 「原文」", () => {
     show(issue({ safety: [], sections: [lane("evidence", "临床证据", 1)] }));
     const row = within(screen.getByRole("list", { name: "临床证据" })).getByRole("listitem");
-    expect(within(row).getByRole("link", { name: "evidence 第 1 条" })).toHaveAttribute("target", "_blank");
-    expect(within(row).getAllByRole("link")).toHaveLength(1);
+    expect(within(row).getByRole("link", { name: "evidence 第 1 条" })).toHaveAttribute("href", "/app/frontier/items/evidence0");
+    expect(within(row).getAllByRole("link")).toHaveLength(2);
     expect(within(row).queryByText(/原文/)).not.toBeInTheDocument();
     expect(within(row).queryByText("阅读详情")).not.toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "详情" })).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "详情" })).toHaveAttribute("href", "/app/frontier/items/evidence0");
   });
 
   it("has no 「详情」 where the drawer would add nothing", () => {
@@ -141,13 +141,12 @@ describe("the lead story", () => {
     item: frontierItem({ id: "lead", title: "FDA 发布新方法学专题", url: "https://example.org/fda-nams" }), text: "FDA 发布直接最终规则。", event: null, ...over,
   });
 
-  it("makes its title the link to the original, in a new tab, and has no separate 「原文」 control", () => {
+  it("makes its title the link to the addressed reader, and has no separate 「原文」 control", () => {
     show(issue({ lead: lead() }));
     const title = screen.getByRole("heading", { level: 3, name: "FDA 发布新方法学专题" });
     const link = within(title).getByRole("link", { name: "FDA 发布新方法学专题" });
-    expect(link).toHaveAttribute("href", "https://example.org/fda-nams");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(link).toHaveAttribute("href", "/app/frontier/items/lead");
+    expect(link).not.toHaveAttribute("target");
     // One kind of 「原文」 entry on the page: the lead does not add its own, and says whose it is in plain grey text.
     expect(screen.queryByText(/原文/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /原文/ })).not.toBeInTheDocument();
@@ -217,4 +216,10 @@ describe("a day without an issue", () => {
     showEmpty(empty(), { weekly: true });
     expect(screen.getByText("暂无周报")).toBeInTheDocument();
   });
+});
+
+it("restores a weekly lane's expanded rows from the feed reading position", () => {
+  render(<MemoryRouter><DailyIssue weekly laneLimit={2} state={state(issue({ safety: [], sections: [lane("evidence", "临床证据", 8)] }))} onDay={() => {}} expansion={{ ids: ["digest:week:2026-10-07:evidence"], onExpand: () => {} }} /></MemoryRouter>);
+  expect(within(screen.getByRole("list", { name: "临床证据" })).getAllByRole("listitem")).toHaveLength(8);
+  expect(screen.queryByRole("button", { name: "展开其余 6 条" })).not.toBeInTheDocument();
 });

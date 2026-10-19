@@ -1,3 +1,4 @@
+import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
@@ -294,10 +295,12 @@ function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; 
  */
 function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole } }) {
   const primary = item.role === "primary";
+  const origin = useFrontierOrigin();
+  const location = useLocation();
   return (
     <li className="relative py-2 pl-5">
       <span aria-hidden="true" className={cn("absolute -left-[5px] top-3.5 h-2.5 w-2.5 rounded-full", primary ? "bg-accent" : "bg-bg ring-1 ring-inset ring-border-control")} />
-      <p className="text-ui text-text">{primary && <span className="sr-only">一手来源：</span>}<a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
+      <p className="text-ui text-text">{primary && <span className="sr-only">一手来源：</span>}<Link to={`/app/frontier/items/${encodeURIComponent(item.id)}`} state={{ ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: "事件报道" } }} onClick={rememberFrontierPosition} className="hover:text-accent hover:underline">{item.title}</Link></p>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">
         <span>{item.source.name}</span>
         {item.sourceTypeLabel && <><span aria-hidden="true">·</span><span>{item.sourceTypeLabel}</span></>}

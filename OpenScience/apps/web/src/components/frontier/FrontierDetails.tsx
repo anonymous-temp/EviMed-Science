@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { fetchFrontierAbstractZh, fetchFrontierItem, frontierErrorMessage, type FrontierItem } from "@/lib/frontierClient";
+import { fetchFrontierAbstractZh, fetchFrontierItem, frontierErrorMessage, type FrontierItem, type FrontierItemDetail } from "@/lib/frontierClient";
 import { dayKey } from "@/lib/inboxGroups";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
@@ -18,6 +18,10 @@ import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, dateClock, evidenceTag, shortD
  * nothing.
  */
 export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierItem; onClose: () => void; onOpened?: (item: FrontierItem) => void }) {
+  return <Drawer title={item.title} onClose={onClose}><FrontierArticleContent item={item} onOpened={onOpened} /></Drawer>;
+}
+
+export function FrontierArticleContent({ item, onOpened }: { item: FrontierItem | FrontierItemDetail; onOpened?: (item: FrontierItem) => void }) {
   const facts = cardFacts(item);
   const pdf = freeFullText(item);
   const published = publishedLabel(item);
@@ -30,9 +34,8 @@ export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierIte
     ...facts.map((fact) => [fact.label, fact.text, undefined] as [string, string, undefined]),
   ];
   return (
-    <Drawer title={item.title} onClose={onClose}>
       <div className="space-y-6">
-        {item.summary && <p className="max-w-measure text-ui text-text">{item.summary}</p>}
+        {item.summary && <section className="space-y-2"><h2 className="text-ui font-semibold text-text">AI 导读</h2><p className="max-w-measure whitespace-pre-line text-body leading-7 text-text">{item.summary}</p></section>}
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-ui">
           {rows.map(([label, value, lang]) => (
             <div key={label} className="contents">
@@ -51,10 +54,13 @@ export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierIte
             </a>
           )}
         </div>
-        {abstractOffered(item) && <AbstractSection itemId={item.id} />}
+        {"abstractZh" in item && item.abstractZh ? <StoredAbstract text={item.abstractZh} chinese /> : abstractOffered(item) ? <AbstractSection itemId={item.id} /> : "abstract" in item && item.abstract ? <StoredAbstract text={item.abstract} /> : null}
       </div>
-    </Drawer>
   );
+}
+
+function StoredAbstract({ text, chinese = false }: { text: string; chinese?: boolean }) {
+  return <section className="space-y-2"><h2 className="text-ui font-semibold text-text">{chinese ? "中文摘要" : "原文摘要"}</h2><p className="max-w-measure whitespace-pre-line text-body leading-7 text-text-2">{text}</p></section>;
 }
 
 /** The free full text, when it is not the page the title already opens. */

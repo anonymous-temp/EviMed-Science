@@ -9,12 +9,13 @@ import { feedFilters, type FrontierFilterValue } from "./FrontierFilters";
 import { hotWindowFilter } from "./FrontierHot";
 
 /** What the page is showing. `weekly` is the 简报 tab's second period, `daily` its first. */
-export type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | "weekly";
+export type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | "weekly" | "zones";
 
-/** The six views, in the order a reader looks for them. 简报 is the daily and the weekly. */
+/** The peer views, in the order a reader looks for them. 简报 is the daily and the weekly. */
 const VIEWS: readonly TabItem<PageView>[] = [
   { value: "selected", label: "精选" },
   { value: "all", label: "全部" },
+  { value: "zones", label: "证据专区" },
   { value: "hot", label: "热榜" },
   { value: "foryou", label: "与我相关" },
   { value: "following", label: "关注" },
@@ -22,7 +23,7 @@ const VIEWS: readonly TabItem<PageView>[] = [
 ];
 
 /**
- * The page's one row of controls, as the `Toolbar` of the page shell takes it (plan 2026-10-07 §4; R19, audit D C1d): the six views
+ * The page's one row of controls, as the `Toolbar` of the page shell takes it (plan 2026-10-07 §4; R19, audit D C1d): the peer views
  * as underlined tabs on the left and, at the right, the controls of the view that is open —
  *
  *  - 精选 / 全部: the feed's filters;

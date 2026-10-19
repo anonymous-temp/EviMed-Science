@@ -1,6 +1,6 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { CalendarDays, ChevronDown, Copy } from "lucide-react";
 import {
   fetchFrontierDaily,
@@ -19,9 +19,8 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
-import { FrontierDetails, frontierDetailsOffered } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
-import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
+import { INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
 
 /** 往期 lists this many issues: two weeks, a menu that fits a laptop screen. */
 const ARCHIVE_SHOWN = 14;
@@ -154,7 +153,9 @@ export function dailyControls(state: DailyState, { weekly = false, onDay }: { we
  * never a long scroll away. `laneLimit` shows that many rows of each lane and
  * 「展开其余 N 条」 for the rest: the weekly's way to be read in a few minutes.
  */
-export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number }) {
+export interface DigestExpansion { ids: string[]; onExpand: (id: string) => void }
+
+export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number; expansion?: DigestExpansion }) {
   const origin = useFrontierOrigin();
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
@@ -199,8 +200,8 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
 
       {issue.lead && (
         <section aria-label="头条" className="mt-5">
-          {/* The title is the way to the original, as on the feed's card and on every row below (§12.3): one kind of 「原文」 entry on the page. */}
-          <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
+          {/* Feed and digest headlines share the same addressed reader. */}
+          <h3 className="max-w-measure-body text-title font-semibold text-text"><ArticleLink item={issue.lead.item}>{issue.lead.item.title}</ArticleLink></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
           {(leadText || issue.lead.event) && (
             // The issue's own text (`data-prose`), as a row's summary is: content of the issue, not a sentence of the page's.
@@ -216,8 +217,8 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
         </section>
       )}
 
-      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
-      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
+      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
+      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
 
@@ -274,8 +275,9 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
  * One lane of the issue, or its safety alerts: a heading and its count, then numbered rows — all of
  * them, or the first `limit` and 「展开其余 N 条」, which opens the rest where it stands.
  */
-function DailySection({ id, title, items, safety = false, limit }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number }) {
-  const [all, setAll] = useState(false);
+function DailySection({ id, title, items, safety = false, limit, expansion, expansionId }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number; expansion?: DigestExpansion; expansionId: string }) {
+  const [localAll, setAll] = useState(false);
+  const all = expansion ? expansion.ids.includes(expansionId) : localAll;
   const shown = limit !== undefined && !all ? items.slice(0, limit) : items;
   const rest = items.length - shown.length;
   return (
@@ -287,32 +289,31 @@ function DailySection({ id, title, items, safety = false, limit }: { id: string;
       <ol aria-label={title} className="mt-1">
         {shown.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
       </ol>
-      {rest > 0 && <Button variant="text" size="sm" className="-ml-2 mt-1" onClick={() => setAll(true)}>展开其余 {rest} 条</Button>}
+      {rest > 0 && <Button variant="text" size="sm" className="-ml-2 mt-1" onClick={() => expansion ? expansion.onExpand(expansionId) : setAll(true)}>展开其余 {rest} 条</Button>}
     </section>
   );
 }
 
-/**
- * A row: 「01」, the title — the way to the original, as on the feed's card — the summary in at
- * most three lines (a safety notice has its title and no more), and a grey line naming the
- * institution — FDA, 英国 MHRA, never the interface it was read through — with 「详情」 where the
- * drawer holds more than the row does.
- */
+/** A digest row keeps its source and opens the shared article reader. */
 function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
-  const [details, setDetails] = useState(false);
   return (
     <li className="flex gap-2 border-b border-border py-3">
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
-        <p data-row-title className="text-body font-semibold leading-6 text-text"><a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
+        <p data-row-title className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
         {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
           {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
-          {frontierDetailsOffered(item) && <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
+          <ArticleLink item={item} className={cn(INLINE_ACTION, "px-1 text-accent")}>详情</ArticleLink>
         </div>
       </div>
-      {details && <FrontierDetails item={item} onClose={() => setDetails(false)} />}
     </li>
   );
+}
+
+function ArticleLink({ item, children, className = "hover:text-accent hover:underline" }: { item: FrontierItem; children: ReactNode; className?: string }) {
+  const origin = useFrontierOrigin();
+  const location = useLocation();
+  return <Link to={`/app/frontier/items/${encodeURIComponent(item.id)}`} state={{ ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: "简报" } }} onClick={rememberFrontierPosition} className={className}>{children}</Link>;
 }

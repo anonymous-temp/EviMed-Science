@@ -19,6 +19,7 @@ import { RouteError } from "./routes/RouteError";
  * `AppShell` renders the fallback for these (`Suspense`), so a chunk still in
  * flight shows the shell with its navigation rather than a blank page.
  */
+const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").then((m) => ({ default: m.FrontierArticlePage })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
@@ -86,6 +87,7 @@ export const routes: RouteObject[] = [
         // 「前沿动态」: the feed, and one event of it. Both answer for themselves
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
+        { path: "frontier/items/:itemId", element: <FrontierArticlePage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
         // 「虚拟临床研究」: the module's home, and one study's seven tabs (总览
         // when none is named). A study package is read at `?package=<id>` on

@@ -1,5 +1,5 @@
 import { ChevronLeft } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { cn } from "@/lib/cn";
 import { INLINE_ACTION } from "./frontierText";
 
@@ -31,7 +31,7 @@ export function evidenceFromState(state: unknown): EvidenceFrom | null {
  * zone pages used to open with the feed's own navigation row — 动态 · 证据专区
  * · 简报 · 关注 — so that a reader on a zone saw the feed's four views and a
  * title that said 前沿动态 over a page that was not the feed. They are a
- * separate group of pages reached from a header link now, and say so here.
+ * separate group of addressed pages, reached from the feed's evidence-zone tab.
  *
  * `trail` names the pages in between, for a page more than one step down: a
  * zone is 「‹ 前沿动态 / 证据专区」, so the way up to the directory stays where
@@ -39,10 +39,11 @@ export function evidenceFromState(state: unknown): EvidenceFrom | null {
  * reader came from somewhere else — the author's page, opened from a card, goes
  * back to that card (`evidenceFromState`).
  */
-export function FrontierBack({ trail = [], to = "/app/frontier", label = "前沿动态" }: { trail?: readonly { label: string; to: string }[]; to?: string; label?: string }) {
+export function FrontierBack({ historyBack = false, trail = [], to = "/app/frontier", label = "前沿动态" }: { historyBack?: boolean; trail?: readonly { label: string; to: string }[]; to?: string; label?: string }) {
+  const navigate = useNavigate();
   return (
     <nav aria-label="返回" className="flex min-w-0 flex-wrap items-center gap-x-1">
-      <Link to={to} className={cn(INLINE_ACTION, "-ml-1.5 min-w-0 shrink gap-1 px-1.5 text-text-3 hover:text-text")}>
+      <Link to={to} onClick={historyBack ? (event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(-1); } : undefined} className={cn(INLINE_ACTION, "-ml-1.5 min-w-0 shrink gap-1 px-1.5 text-text-3 hover:text-text")}>
         <ChevronLeft size={16} className="shrink-0" aria-hidden="true" />
         <span className="min-w-0 max-w-measure truncate">{label}</span>
       </Link>
