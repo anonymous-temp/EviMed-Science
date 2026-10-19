@@ -1,0 +1,177 @@
+name: Isolated exact-source ToolUniverse release
+on:
+  push:
+    branches: [codex/tooluniverse-release-d612-20261020]
+permissions:
+  contents: read
+concurrency:
+  group: tooluniverse-d612-isolated-release
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      APPLICATION_SOURCE: d61205db20627880cf7f44b07907896435abab9c
+      IMAGE: evimed-tooluniverse:ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d61205db20627880cf7f44b07907896435abab9c
+          persist-credentials: false
+      - name: Assert exact application checkout and run sidecar unit tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$APPLICATION_SOURCE"
+          python3 -m unittest discover -s OpenScience/deploy/tooluniverse/tests -v
+      - name: Resolve exact official Python amd64 base
+        run: |
+          set -euo pipefail
+          python - <<'PYBASE'
+          import hashlib, json, os, subprocess, urllib.request
+          token_url = 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/python:pull'
+          with urllib.request.urlopen(token_url, timeout=30) as response:
+              token = json.load(response)['token']
+          def registry(path):
+              request = urllib.request.Request('https://registry-1.docker.io/v2/library/python/' + path,
+                  headers={'Authorization': 'Bearer ' + token, 'Accept': ', '.join([
+                      'application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json',
+                      'application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'])})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  content = response.read(2 * 1024 * 1024 + 1)
+                  assert len(content) <= 2 * 1024 * 1024
+                  digest = 'sha256:' + hashlib.sha256(content).hexdigest()
+                  assert response.headers.get('Docker-Content-Digest', digest) == digest
+                  return json.loads(content), digest
+          index, index_digest = registry('manifests/3.12-slim-bookworm')
+          platforms = [row for row in index['manifests'] if row.get('platform', {}).get('os') == 'linux'
+              and row.get('platform', {}).get('architecture') == 'amd64' and not row.get('platform', {}).get('variant')]
+          assert len(platforms) == 1
+          selected = platforms[0]['digest']
+          manifest, manifest_digest = registry('manifests/' + selected)
+          assert manifest_digest == selected and 'config' in manifest and 'manifests' not in manifest
+          config, config_digest = registry('blobs/' + manifest['config']['digest'])
+          assert config_digest == manifest['config']['digest']
+          assert config['os'] == 'linux' and config['architecture'] == 'amd64'
+          base = 'python@' + manifest_digest
+          subprocess.run(['docker', 'pull', '--platform', 'linux/amd64', base], check=True)
+          image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', base]))[0]
+          assert image['Id'] == config_digest and image['RootFS']['Layers'] == config['rootfs']['diff_ids']
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('PYTHON_BASE_IMAGE=' + base + '\n')
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'tooluniverse-base.json'), 'w') as output:
+              json.dump({'reference': base, 'indexDigest': index_digest, 'platformManifestDigest': manifest_digest,
+                  'configDigest': config_digest, 'platform': 'linux/amd64', 'rootfs': config['rootfs']}, output)
+          PYBASE
+      - name: Build only exact ToolUniverse image
+        run: |
+          set -euo pipefail
+          test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          timeout --kill-after=15s 1200 docker build --platform linux/amd64 \
+            --build-arg "PYTHON_BASE_IMAGE=$PYTHON_BASE_IMAGE" \
+            --label "org.opencontainers.image.revision=$APPLICATION_SOURCE" \
+            --label "org.opencontainers.image.version=tooluniverse-$APPLICATION_SOURCE" \
+            --label "org.opencontainers.image.source=https://github.com/anonymous-temp/EviMed-Science" \
+            -f OpenScience/deploy/tooluniverse/Dockerfile -t "$IMAGE" OpenScience
+      - name: Qualify native image and authenticated local MCP catalogue
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, secrets, subprocess, time, urllib.error
+          def run(args): return subprocess.check_output(args,timeout=30)
+          image=os.environ['IMAGE']; source=os.environ['APPLICATION_SOURCE']
+          info=json.loads(run(['docker','image','inspect',image]))[0]
+          assert info['Os']=='linux' and info['Architecture']=='amd64'
+          assert info['Config']['User']=='tooluniverse'
+          assert info['Config']['Labels']['org.opencontainers.image.revision']==source
+          assert len(info['RootFS']['Layers'])>0
+          root=pathlib.Path(os.environ['RUNNER_TEMP']); token=root/'tooluniverse-ci-token'
+          token.write_text(secrets.token_urlsafe(48)); token.chmod(0o444)
+          name='tooluniverse-isolated-ci'
+          container=None
+          try:
+              container=run(['docker','run','-d','--name',name,'--network','none','--read-only',
+                  '--cap-drop','ALL','--security-opt','no-new-privileges',
+                  '--tmpfs','/home/tooluniverse:uid=10001,gid=10001,mode=0700',
+                  '--tmpfs','/tmp:mode=1777',
+                  '--mount',f'type=bind,source={token},target=/run/secrets/tooluniverse-api-token,readonly',image]).decode().strip()
+              actual=json.loads(run(['docker','inspect',container]))[0]
+              assert actual['Image']==info['Id'] and actual['HostConfig']['NetworkMode']=='none'
+              assert actual['HostConfig']['ReadonlyRootfs'] is True
+              health=None
+              for _ in range(60):
+                  result=subprocess.run(['docker','exec',container,'python','/opt/evimed-tooluniverse/sidecar.py','check','--full'],capture_output=True,timeout=15)
+                  if result.returncode==0:
+                      health=json.loads(result.stdout); break
+                  time.sleep(2)
+              assert health=={'ready':True,'tools':4,'catalogue':184}, 'actual_mcp_catalogue_failed'
+              run(['docker','exec',container,'python','-c',"import importlib.metadata; assert importlib.metadata.version('tooluniverse')=='1.4.1'"])
+              source_files={}
+              for file in ['Dockerfile','sidecar.py','profile.yaml','constraints.txt']:
+                  expected=hashlib.sha256((pathlib.Path('OpenScience/deploy/tooluniverse')/file).read_bytes()).hexdigest()
+                  source_files[file]=expected
+                  if file!='Dockerfile':
+                      actual=run(['docker','exec',container,'python','-c',"import hashlib,pathlib; print(hashlib.sha256(pathlib.Path('/opt/evimed-tooluniverse/"+file+"').read_bytes()).hexdigest())"]).decode().strip()
+                      assert actual==expected, 'installed_source_file_mismatch'
+              negative="import urllib.request,urllib.error; r=urllib.request.Request('http://127.0.0.1:8080/mcp',data=b'{}',headers={'Content-Type':'application/json'});\ntry: urllib.request.urlopen(r,timeout=3); raise RuntimeError('unauthenticated_access')\nexcept urllib.error.HTTPError as e: assert e.code==401"
+              run(['docker','exec',container,'python','-c',negative])
+              report={'schemaVersion':1,'kind':'tooluniverse-image-qualification','qualified':True,
+                  'applicationSourceRevision':source,'sourceRevision':source,'workflowSourceRevision':os.environ['GITHUB_SHA'],
+                  'workflowRun':os.environ['GITHUB_RUN_ID'],'workflowAttempt':os.environ['GITHUB_RUN_ATTEMPT'],
+                  'image':image,'configDigest':info['Id'],'platform':'linux/amd64','rootfs':info['RootFS'],
+                  'base':json.loads((root/'tooluniverse-base.json').read_text()),'sourceFilesSha256':source_files,'tooluniverseVersion':'1.4.1',
+                  'health':health,'healthContext':'built_image_offline_local_mcp','unauthenticatedStatus':401,
+                  'networkMode':'none','readOnlyRootfs':True,'providerCredentials':False}
+              (root/'tooluniverse-qualification.json').write_text(json.dumps(report)+'\n')
+          finally:
+              if container: subprocess.run(['docker','rm','-f',container],check=True,timeout=30,stdout=subprocess.DEVNULL)
+              token.unlink(missing_ok=True)
+          PY
+      - name: Export bounded single-image archive and source-bound inventory
+        run: |
+          set -euo pipefail
+          export out="$RUNNER_TEMP/tooluniverse-release"
+          mkdir -m 700 "$out"
+          printf '%s\n' "$IMAGE" > "$out/images.txt"
+          cp "$RUNNER_TEMP/tooluniverse-qualification.json" "$out/qualification.json"
+          test "$(df -B1 --output=avail / | tail -1)" -ge 12884901888
+          started=$SECONDS
+          setsid bash -euo pipefail -c 'docker save "$IMAGE" | gzip -1 > "$out/images.tar.gz"' &
+          export_pid=$!
+          trap 'kill -- -"$export_pid" 2>/dev/null || true; wait "$export_pid" 2>/dev/null || true' EXIT
+          while kill -0 "$export_pid" 2>/dev/null; do
+            test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240
+            test "$(stat -c %s "$out/images.tar.gz" 2>/dev/null || echo 0)" -le 2147483648
+            test "$((SECONDS - started))" -le 600
+            sleep 5
+          done
+          wait "$export_pid"
+          trap - EXIT
+          test "$(stat -c %s "$out/images.tar.gz")" -le 2147483648
+          (cd "$out" && sha256sum images.tar.gz > images.tar.gz.sha256)
+          python3 - <<'PY'
+          import importlib.util,json,os,pathlib
+          spec=importlib.util.spec_from_file_location('inventory','OpenScience/scripts/ops/image-archive-inventory.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          environment=dict(os.environ,GITHUB_SHA=os.environ['APPLICATION_SOURCE'],OPEN_SCIENCE_RELEASE_ID='tooluniverse-'+os.environ['APPLICATION_SOURCE'])
+          assert module.write_report(os.environ['out'],environment)==1
+          root=pathlib.Path(os.environ['out']); manifest=json.loads((root/'manifest.json').read_text())
+          qualified=json.loads((root/'qualification.json').read_text()); image=manifest['images'][0]
+          assert image['references']==[os.environ['IMAGE']]
+          assert image['configDigest']==qualified['configDigest']
+          assert image['rootfs']['diff_ids']==qualified['rootfs']['Layers']
+          assert image['platform']=='linux/amd64' and manifest['sourceRevision']==os.environ['APPLICATION_SOURCE']
+          assert image['labels']['org.opencontainers.image.revision']==os.environ['APPLICATION_SOURCE']
+          assert qualified['workflowSourceRevision']==os.environ['GITHUB_SHA']
+          print(json.dumps({'archiveBytes':(root/'images.tar.gz').stat().st_size,'applicationSourceRevision':manifest['sourceRevision'],
+              'workflowSourceRevision':qualified['workflowSourceRevision'],'qualified':True}))
+          PY
+      - name: Publish exact single-image package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tooluniverse-release-d61205db20627880cf7f44b07907896435abab9c
+          path: ${{ runner.temp }}/tooluniverse-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
