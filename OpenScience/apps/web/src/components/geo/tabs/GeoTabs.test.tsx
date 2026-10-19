@@ -33,6 +33,8 @@ import { VisibilityTab } from "./VisibilityTab";
 const client = vi.hoisted(() => ({
   getGeoValue: vi.fn<(geoId: string) => Promise<unknown>>(async () => ({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } })),
   getGeoEvidence: vi.fn(),
+  listGeoProjects: vi.fn(),
+  getGeoProject: vi.fn(),
   getGeoJourney: vi.fn(),
   getGeoQuestions: vi.fn(),
   getGeoClusters: vi.fn(),
@@ -60,9 +62,15 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 const store = vi.hoisted(() => ({
   select: vi.fn(async (_projectId: string, land?: () => void) => { land?.(); }),
   load: vi.fn(async () => undefined),
+  subscribe: vi.fn(() => () => undefined),
 }));
 vi.mock("@/lib/projects", () => ({
-  useProjectStore: { getState: () => ({ projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }) },
+  useProjectStore: { getState: () => ({ currentId: "prj_geo_1", switching: null, projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }), subscribe: store.subscribe },
+}));
+
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
+  getWebProjectId: () => "prj_geo_1",
 }));
 
 const download = vi.hoisted(() => ({ downloadArtifact: vi.fn(async () => undefined) }));
@@ -95,12 +103,27 @@ function renderTab(tab: ReactElement) {
   );
 }
 
+function expectUnsentProjectDraft(text: string) {
+  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1");
+  const state = JSON.parse(screen.getByTestId("state").textContent ?? "null");
+  expect(state.runtimeUiIntent).toMatchObject({
+    kind: "create", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text),
+  });
+  expect(state.runtimeUiIntent).not.toHaveProperty("send");
+  expect(client.listGeoProjects).toHaveBeenCalled();
+  expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
+  expect(client.runGeoStep).not.toHaveBeenCalled();
+}
+
 const props = (project: GeoProject = geoProject()) => ({ geoId: "geo_1", project });
 
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   store.select.mockClear();
+  store.subscribe.mockClear();
+  client.listGeoProjects.mockResolvedValue([geoProject()]);
+  client.getGeoProject.mockResolvedValue(geoProject());
   download.downloadArtifact.mockClear();
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
   // 问题与回答 reads the groups' counts beside the question set: here, groups nobody has counted yet.
@@ -413,13 +436,14 @@ describe("信源", () => {
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     await userEvent.click(within(dialog).getByRole("button", { name: "在对话中处理" }));
     await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
     const draft = state?.runtimeUiIntent?.draft ?? "";
     expect(draft).toContain("baike.baidu.com");
     expect(draft).toContain("第 1 句讲错的话");
     expect(draft).toContain("1 个讲错了信尔美");
+    expectUnsentProjectDraft("baike.baidu.com");
     expect(client.runGeoStep).not.toHaveBeenCalled();
   });
 
@@ -800,6 +824,7 @@ describe("总览", () => {
     await userEvent.click(within(list).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(store.select).toHaveBeenCalled());
     expect(await screen.findByTestId("state")).toHaveTextContent("每天注射一次");
+    expectUnsentProjectDraft("每天注射一次");
   });
 
   it("draws no 「需要你」 where nothing is asked, and no list of the wrong statements: those are 准确与安全's", async () => {
@@ -1062,6 +1087,7 @@ describe("药品价值分析只在依据里", () => {
     await userEvent.click(start[0]);
     await waitFor(() => expect(store.select).toHaveBeenCalled());
     expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析");
+    expectUnsentProjectDraft("请结合现有资料开始药品价值分析");
     // Opened with the brief in the composer; nothing was sent.
     expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
   });
@@ -1087,6 +1113,8 @@ describe("a hand-off to the conversation that fails", () => {
     const button = (await screen.findAllByRole("button", { name: "写纠错稿" }))[0];
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
+    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
@@ -1104,6 +1132,8 @@ describe("a hand-off to the conversation that fails", () => {
     const button = within(dialog).getByRole("button", { name: "在对话中处理" });
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
+    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");

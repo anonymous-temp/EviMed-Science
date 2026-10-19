@@ -8,9 +8,20 @@ import { AskAi } from "./AskAi";
 const store = vi.hoisted(() => ({
   select: vi.fn(async (_projectId: string, land?: () => void) => { land?.(); }),
   load: vi.fn(async () => undefined),
+  subscribe: vi.fn(() => () => undefined),
 }));
 vi.mock("@/lib/projects", () => ({
-  useProjectStore: { getState: () => ({ projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }) },
+  useProjectStore: { getState: () => ({ currentId: "prj_geo_1", switching: null, projects: [{ id: "prj_geo_1" }], select: store.select, load: store.load }), subscribe: store.subscribe },
+}));
+
+const client = vi.hoisted(() => ({ list: vi.fn(), project: vi.fn() }));
+vi.mock("@/lib/geoClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoClient")>()),
+  listGeoProjects: client.list, getGeoProject: client.project,
+}));
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
+  getWebProjectId: () => "prj_geo_1",
 }));
 
 function Probe() {
@@ -30,6 +41,11 @@ function renderAsk() {
 }
 
 beforeEach(() => {
+  client.list.mockReset();
+  client.project.mockReset();
+  client.list.mockResolvedValue([{ id: "geo_1", projectId: "prj_geo_1" }]);
+  client.project.mockResolvedValue({ id: "geo_1", projectId: "prj_geo_1", sessionId: "ses_geo_1" });
+  store.subscribe.mockClear();
   store.select.mockReset();
   store.select.mockImplementation(async (_projectId: string, land?: () => void) => { land?.(); });
   useToastStore.setState({ toasts: [] });
@@ -39,9 +55,12 @@ describe("问 AI", () => {
   it("opens the project's conversation with the draft, unsent", async () => {
     renderAsk();
     await userEvent.click(screen.getByRole("button", { name: "开始药品价值分析" }));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string; sessionId?: string } } | null;
-    expect(state?.runtimeUiIntent).toMatchObject({ draft: "请开始药品价值分析。", sessionId: "ses_geo_1" });
+    expect(state?.runtimeUiIntent).toMatchObject({ kind: "create", projectId: "prj_geo_1", draft: "请开始药品价值分析。", sessionId: "ses_geo_1" });
+    expect(state?.runtimeUiIntent).not.toHaveProperty("send");
+    expect(client.project).toHaveBeenCalledWith("geo_1");
+    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
     expect(useToastStore.getState().toasts).toEqual([]);
   });
 
@@ -51,6 +70,8 @@ describe("问 AI", () => {
     const button = screen.getByRole("button", { name: "开始药品价值分析" });
     await userEvent.click(button);
     await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
+    expect(client.project).toHaveBeenCalledWith("geo_1");
+    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/plan");
