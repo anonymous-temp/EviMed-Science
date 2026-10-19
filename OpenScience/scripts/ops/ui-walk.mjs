@@ -198,7 +198,7 @@ const WALK_TABLES = {
       {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
       {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
-      {"view":"memory","route":"/app/memory","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
@@ -3904,8 +3904,8 @@ async function walkAddressState(page, base) {
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // A memory row that opens in a drawer: in the address while open, closed by Back. A row that goes to a page (a work's document) is not one.
-  await openRoute(page, base, "/app/memory");
+  // The landing address opens the map; the self tab holds the memory rows whose drawers this probe exercises.
+  await openRoute(page, base, "/app/memory?tab=self");
   const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {

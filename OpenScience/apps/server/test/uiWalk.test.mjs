@@ -2536,6 +2536,7 @@ test("记忆地图 is a data page: three kinds of section, and its first mark an
   assert.equal(SECTION_SHAPES_BY_PAGE["memory-map"], 3);
   assert.ok(ROW_CLICK_PAGES.has("memory-map"), "a mark that opens nothing fails the page");
   assert.ok(ROUTES.some(([name, route]) => name === "memory-map" && route === "/app/memory/map"));
+  assert.ok(ROUTES.some(([name, route]) => name === "memory" && route === "/app/memory?tab=self"), "the row-list probe names the list tab rather than the map landing");
   assert.deepEqual(PAGE_PROBES["memory-map"], [["memoryMap", ["desktop", "phone"]]]);
   // The sentence, the canvas and the list are three shapes; a fourth is one too many.
   const sentence = ["section>p+div", "canvas>", "ul>li"];
