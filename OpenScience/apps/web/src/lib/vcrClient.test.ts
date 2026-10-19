@@ -39,7 +39,8 @@ describe("the readers over the server's own pages", () => {
     expect(population.quality?.tag).toBe("合成 · 探索性");
 
     const patients = await getVcrPatients(STUDY_ID);
-    expect(patients.model?.twinLabel).toBe("基线条件化预测");
+    expect(patients.model?.twin).toBe("scenario_simulation");
+    expect(patients.model?.twinLabel).toBe("情景仿真");
     expect(patients.partial?.sentence).toMatch(/1,200/);
     expect(patients.sensitivity?.base?.value).toBe(0.41);
 
