@@ -213,7 +213,7 @@ was protecting, and it survives unchanged.
 | `badge` | 12 / 1 | a count inside a pill |
 | `meta` | 12 / 1.5 | the densest metadata: dates, journals, counts, legends |
 | `caption` | 12 / 20px | captions and secondary one-liners (a line in a row) |
-| `compact` | 13 / 20px | a cell of a dense data grid (the heat table, the cluster grid) — a control is `ui`, a table head `caption` |
+| `compact` | 13 / 20px | held in reserve for a dense grid whose 12 px cells would be too small; nothing sets it since R19.2 — a control is `ui`, a table head and a heat cell `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
 | `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |

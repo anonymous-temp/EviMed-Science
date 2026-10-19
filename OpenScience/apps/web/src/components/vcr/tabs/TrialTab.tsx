@@ -384,7 +384,7 @@ function NotComputedDesigns({ designs, studyId, study, failed }: { designs: read
           <ListRow
             key={design.id}
             title={design.name}
-            leading={<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta font-semibold text-text-2">{design.code}</span>}
+            leading={<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag bg-surface-2 text-meta text-text-2">{design.code}</span>}
             trailing={<Tag>{NOT_RUN}</Tag>}
             titleProps={{ "data-vcr-design": design.code }}
           />
@@ -409,7 +409,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       cell: (design) => (
         <span className="flex flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta font-semibold",
+            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
               design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
             >
               {design.code}

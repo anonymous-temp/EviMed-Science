@@ -123,14 +123,14 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
         >
           <Input label="成员账号 ID" value={userId} onChange={(event) => setUserId(event.target.value)} autoComplete="off" />
           <div>
-            <label htmlFor={roleId} className="mb-2 block text-ui font-semibold text-text">角色</label>
+            <label htmlFor={roleId} className="mb-2 block text-ui text-text">角色</label>
             <select id={roleId} value={role} onChange={(event) => setRole(event.target.value as VcrMemberRole)} className={inputClasses()}>
               {VCR_MEMBER_ROLES.map((each) => <option key={each} value={each}>{memberRoleLabel(each as VcrMemberRole)}</option>)}
             </select>
           </div>
           {needsSite && (
             <div>
-              <label htmlFor={siteFieldId} className="mb-2 block text-ui font-semibold text-text">所属中心</label>
+              <label htmlFor={siteFieldId} className="mb-2 block text-ui text-text">所属中心</label>
               <select id={siteFieldId} value={siteId} onChange={(event) => setSiteId(event.target.value)} className={inputClasses()}>
                 <option value="">选择中心</option>
                 {(sites ?? []).map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}

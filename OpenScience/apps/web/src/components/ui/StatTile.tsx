@@ -107,13 +107,13 @@ export function StatTile({
           "mt-1.5 flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums",
           // A word does not get a number's size: 「样本不足」 set in 32 px
           // shouts louder than every measurement beside it.
-          placeholder ? "text-heading text-text-2" : lead ? "text-metric-lg" : "text-metric",
+          placeholder ? "text-section text-text-2" : lead ? "text-metric-lg" : "text-metric",
           dense && !lead && !placeholder && "max-sm:mt-1 max-sm:text-heading",
           !placeholder && (tone === "safety" ? "text-danger-strong" : "text-text"),
         )}
       >
         {opens ? <OpenNumber label={label} value={value} to={to} onOpen={onOpen} /> : value}
-        {unit != null && <span className="text-ui text-text-3">{unit}</span>}
+        {unit != null && <span className="text-ui font-normal text-text-3">{unit}</span>}
         {rank != null && <Rank>{rank}</Rank>}
       </p>
       {(delta != null || note != null) && (
@@ -141,7 +141,7 @@ function OpenNumber({ label, value, to, onOpen }: { label: string; value: ReactN
 /** 「第 3 / 6」 beside a number: where it stands among comparable products. */
 export function Rank({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-tag shrink-0 items-center rounded-tag bg-accent-soft px-1.5 text-meta font-semibold tabular-nums text-accent">
+    <span className="inline-flex h-tag shrink-0 items-center rounded-tag bg-accent-soft px-1.5 text-meta font-normal tabular-nums text-accent">
       {children}
     </span>
   );

@@ -173,7 +173,7 @@ export function EvidenceMaintenance({
                     onChange={(event) => patch({ query: event.target.value })}
                   />
                   <fieldset className="space-y-3">
-                    <legend className="mb-2 text-ui font-semibold text-text">
+                    <legend className="mb-2 text-ui text-text">
                       来源范围
                     </legend>
                     <div className="flex flex-wrap gap-x-4 gap-y-3">

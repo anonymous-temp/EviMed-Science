@@ -76,7 +76,7 @@ function RegisterSource({ studyId, options, onChanged }: { studyId: string; opti
         <Input label="名称" value={name} onChange={(event) => setName(event.target.value)} placeholder="例如 合作方基线导出" maxLength={80} />
         <Input label="数据方" value={party} onChange={(event) => setParty(event.target.value)} placeholder="谁的数据" maxLength={80} />
         <fieldset className="sm:col-span-2">
-          <legend className="mb-2 text-ui font-semibold text-text">允许的用途</legend>
+          <legend className="mb-2 text-ui text-text">允许的用途</legend>
           <div className="flex flex-wrap gap-4">
             {USES.map((use) => (
               <label key={use.value} className="flex items-center gap-2 text-ui text-text-2">
@@ -90,7 +90,7 @@ function RegisterSource({ studyId, options, onChanged }: { studyId: string; opti
           </div>
         </fieldset>
         <div>
-          <label htmlFor="vcr-source-value-source" className="mb-2 block text-ui font-semibold text-text">值的来源</label>
+          <label htmlFor="vcr-source-value-source" className="mb-2 block text-ui text-text">值的来源</label>
           <select id="vcr-source-value-source" value={valueSource} onChange={(event) => setValueSource(event.target.value)} className={inputClasses()}>
             {options.valueSources.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>

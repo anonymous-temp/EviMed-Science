@@ -175,9 +175,8 @@ export function DataTable<T>({
                   {drawn.map((column, index) => {
                     const body = column.cell(row);
                     const shared = cn(
-                      "border-b border-border px-2 py-2.5 align-middle text-ui",
+                      "border-b border-border px-2 py-2.5 align-middle text-ui text-text",
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
-                      ours ? "font-semibold text-text" : "text-text",
                     );
                     return column.rowHeader
                       ? (
@@ -187,7 +186,6 @@ export function DataTable<T>({
                           className={cn(
                             shared,
                             "font-normal",
-                            ours && "font-semibold",
                             // Frozen: opaque, in the row's own ground.
                             frozenAt(column, index) && cn("sticky left-0 z-page", ours ? "bg-accent-soft" : groundClass),
                           )}

@@ -195,7 +195,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
                       selected={selected?.id === assumption.id}
                       titleProps={{ "data-vcr-assumption": assumption.id }}
                       trailing={(
-                        <span className="text-ui font-semibold tabular-nums text-text">
+                        <span className="text-ui tabular-nums text-text">
                           {valueText(assumption.value)}
                           {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
                         </span>
@@ -350,7 +350,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
 
       <div>
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} /></span>
+          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} large /></span>
           {assumption.value.interval && (
             <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
           )}

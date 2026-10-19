@@ -79,7 +79,7 @@ describe("a toolbar row", () => {
     render(<><FilterChip pressed>全部</FilterChip><SearchInput label="搜索行动" size="sm" /></>);
     const chip = classesOf(screen.getByRole("button", { name: "全部" }));
     const search = classesOf(screen.getByRole("searchbox", { name: "搜索行动" }));
-    for (const shared of ["h-sm", "rounded-full", "bg-surface-2", "text-compact"]) {
+    for (const shared of ["h-sm", "rounded-full", "bg-surface-2", "text-ui"]) {
       expect(chip).toContain(shared);
       expect(search).toContain(shared);
     }

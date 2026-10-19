@@ -235,7 +235,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
           }}
         >
           <div>
-            <label htmlFor={`${source.id}-grantee-kind`} className="mb-2 block text-ui font-semibold text-text">授权给</label>
+            <label htmlFor={`${source.id}-grantee-kind`} className="mb-2 block text-ui text-text">授权给</label>
             <select id={`${source.id}-grantee-kind`} value={kind} onChange={(event) => setKind(event.target.value as "account" | "role" | "study")} className={inputClasses()}>
               <option value="role">某个角色</option>
               <option value="account">某个成员账号</option>
@@ -244,7 +244,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
           </div>
           {kind === "role" && (
             <div>
-              <label htmlFor={`${source.id}-grantee-role`} className="mb-2 block text-ui font-semibold text-text">角色</label>
+              <label htmlFor={`${source.id}-grantee-role`} className="mb-2 block text-ui text-text">角色</label>
               <select id={`${source.id}-grantee-role`} value={role} onChange={(event) => setRole(event.target.value)} className={inputClasses()}>
                 {options.memberRoles.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>

@@ -302,7 +302,7 @@ export function VcrForestPlot({
               key={row.id}
               data-vcr-forest-row={row.id}
               // The row a quotation is read from has a ground of its own and its mark in the accent; a selected ground would say it can be pressed.
-              className={cn("border-b border-faint", row.highlighted && "bg-surface-2", row.pooled && "font-semibold")}
+              className={cn("border-b border-faint", row.highlighted && "bg-surface-2")}
             >
               <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">
                 {row.label}
@@ -489,7 +489,7 @@ export function VcrTradeoffScatter({
                   opacity: design.dominated ? 1 : design.chosen ? 0.9 : 0.42,
                 }}
               />
-              <span aria-hidden="true" className={cn("absolute inset-0 flex items-center justify-center text-meta font-semibold", design.chosen ? "text-accent-fg" : "text-text")}>
+              <span aria-hidden="true" className={cn("absolute inset-0 flex items-center justify-center text-meta", design.chosen ? "text-accent-fg" : "text-text")}>
                 {design.code}
               </span>
             </span>

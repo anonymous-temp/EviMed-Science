@@ -70,7 +70,7 @@ export function EvidenceContent({ evidence }: { evidence: EvidenceCard }) {
         <section className="space-y-2">
           {content.population && (
             <p className="text-ui leading-relaxed text-text-2">
-              <span className="font-semibold text-text">适用人群 · </span>
+              <span className="text-text">适用人群 · </span>
               {content.population}
             </p>
           )}
@@ -95,7 +95,7 @@ export function EvidenceContent({ evidence }: { evidence: EvidenceCard }) {
             key={index}
             className="space-y-3 rounded-card border border-border p-4"
           >
-            <figcaption className="text-ui font-semibold text-text">
+            <figcaption className="text-ui text-text">
               {comparison.title}
               <EvidenceReferences
                 evidence={evidence}

@@ -124,7 +124,7 @@ export function HeatGrid({
                 <th
                   scope="row"
                   data-heat-emphasis={emphasis?.row === row.key ? "" : undefined}
-                  className={cn("sticky left-0 z-page w-24 text-left text-compact text-text sm:w-28", emphasis?.row === row.key ? "font-semibold" : "font-normal", groundClass)}
+                  className={cn("sticky left-0 z-page w-24 text-left text-caption text-text sm:w-28", emphasis?.row === row.key ? "font-semibold" : "font-normal", groundClass)}
                 >
                   {row.header}
                 </th>
@@ -140,7 +140,7 @@ export function HeatGrid({
                       data-heat-step={step ?? undefined}
                       data-forced-colors={step === null ? undefined : "preserve"}
                       className={cn(
-                        "h-8 rounded text-center text-compact tabular-nums",
+                        "h-8 rounded text-center text-caption tabular-nums",
                         step === null ? "bg-surface-1 text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,
                         emphasis?.column === columns[index]?.key && "ring-1 ring-inset ring-border-control",
                       )}

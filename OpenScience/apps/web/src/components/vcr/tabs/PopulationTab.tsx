@@ -289,9 +289,9 @@ function CohortBody({ data }: { data: PopulationData }) {
             <div className="mt-4 border-t border-border pt-3">
               <VcrFunnelBar eligible={data.outcome.eligible} insufficient={data.outcome.insufficient} ineligible={data.outcome.ineligible} />
               <p data-vcr-outcome="" className="mt-2 flex flex-wrap gap-x-6 text-ui tabular-nums text-text">
-                <span><span className="font-semibold">{numberText(data.outcome.eligible, 0)}</span> 符合</span>
-                <span><span className="font-semibold text-warn-strong">{numberText(data.outcome.insufficient, 0)}</span> 可能符合</span>
-                <span className="text-text-3"><span className="font-semibold">{numberText(data.outcome.ineligible, 0)}</span> 不符合</span>
+                <span>{numberText(data.outcome.eligible, 0)} 符合</span>
+                <span><span className="text-warn-strong">{numberText(data.outcome.insufficient, 0)}</span> 可能符合</span>
+                <span className="text-text-3">{numberText(data.outcome.ineligible, 0)} 不符合</span>
               </p>
             </div>
           )}

@@ -51,7 +51,7 @@ export function VcrJudgmentDrawer({ studyId, assessmentId, criterion, onClose, o
         <p className="text-ui text-text">{criterion.text}</p>
         <p className="text-caption text-text-3">{`平台判为：${criterionStateLabel(criterion.state)}`}</p>
         <div>
-          <label htmlFor={stateId} className="mb-2 block text-ui font-semibold text-text">你的判定</label>
+          <label htmlFor={stateId} className="mb-2 block text-ui text-text">你的判定</label>
           <select id={stateId} value={state} onChange={(event) => setState(event.target.value as VcrCriterionState)} className={inputClasses()}>
             {VCR_CRITERION_STATES.map((each) => <option key={each} value={each}>{criterionStateLabel(each as VcrCriterionState)}</option>)}
           </select>

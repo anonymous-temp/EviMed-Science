@@ -33,7 +33,7 @@ export function EmptyState({
   return (
     <div data-empty="" data-reason={reason ? "" : undefined} className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
       <Icon size={20} className="text-muted" aria-hidden />
-      <Title className="mt-3 text-ui font-semibold text-text">{title}</Title>
+      <Title className="mt-3 text-ui text-text">{title}</Title>
       {(description || reason) && (
         <div className="mt-2 max-w-sm text-caption text-muted">
           {description}

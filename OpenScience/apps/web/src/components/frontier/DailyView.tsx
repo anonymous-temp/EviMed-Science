@@ -223,7 +223,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
 
       {issue.aiMinute && (
         <section aria-labelledby="daily-ai-minute" className="mt-8">
-          <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
+          <h3 id="daily-ai-minute" className="text-body font-semibold text-text">AI 一分钟</h3>
           <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
       )}
@@ -245,7 +245,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
 function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
   return (
     <section aria-labelledby="daily-followed-zones" className="mt-8">
-      <h3 id="daily-followed-zones" className="text-ui font-semibold text-text">你关注的专区</h3>
+      <h3 id="daily-followed-zones" className="text-body font-semibold text-text">你关注的专区</h3>
       {zones.map((zone) => (
         <div key={zone.zoneId} className="mt-2">
           <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "-ml-1 px-1 text-text-3 hover:text-accent")}>
@@ -281,7 +281,7 @@ function DailySection({ id, title, items, safety = false, limit }: { id: string;
   return (
     <section aria-labelledby={`daily-${id}`} className="mt-8">
       <h3 id={`daily-${id}`} className="flex scroll-mt-24 items-baseline gap-2">
-        <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
+        <span className={cn("text-body font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
         <span className="text-caption tabular-nums text-text-3">{items.length}</span>
       </h3>
       <ol aria-label={title} className="mt-1">

@@ -205,7 +205,7 @@ export function PatientTrials({ studyId, study, page, roster, asked, picked, fac
                   {eligible
                     ? <CircleCheck size={16} aria-hidden="true" className="shrink-0" />
                     : <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />}
-                  <span className="font-semibold">{selected.verdict.text}</span>
+                  <span>{selected.verdict.text}</span>
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}
