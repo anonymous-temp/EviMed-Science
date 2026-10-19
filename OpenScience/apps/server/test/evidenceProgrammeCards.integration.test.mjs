@@ -276,6 +276,26 @@ test("an episode whose card was refused before the fix is reopened by the ops sc
   } finally { fx.zones.saveEditorial = save; await fx.close(); }
 });
 
+test("an older episode settled after a later one of its topic does not put its evidence back over the later card", options, async () => {
+  const fx = await setup("cardsuperseded");
+  try {
+    const older = await episodeOf(fx, { day: "2026-10-12", zone: "nsclc", taskType: "literature-sentinel", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [] });
+    const newer = await episodeOf(fx, { day: "2026-10-13", zone: "nsclc", taskType: "literature-sentinel", sources: [SOURCE_A, SOURCE_B],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A), claim("CLM-002", SOURCE_B, QUOTE_B)], agendaClaims: [] });
+    // The later run settles first (the sweep reads the newest decision first; a reopened older episode comes after it).
+    assert.equal((await fx.programme.settleEpisode(newer.episodeId)).state, "published");
+    const settled = await fx.programme.settleEpisode(older.episodeId);
+    assert.equal(settled.state, "superseded");
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.deepEqual([card.revision, card.lineage.episodeId, card.claims.length], [1, newer.episodeId, 2], "the later card is untouched");
+    const recorded = await outcomeOf(fx, "2026-10-12", older.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.cardId, recorded.supersededBy], ["superseded", card.id, newer.episodeId]);
+    assert.equal((await fx.programme.settleEpisode(older.episodeId)).state, "superseded", "final");
+    assert.equal(fx.programme.status().counters.cards.superseded, 1);
+  } finally { await fx.close(); }
+});
+
 test("a card built for an episode no decision chose is refused by name, and an episode with no matrix writes none", options, async () => {
   const fx = await setup("cardnodecision");
   try {

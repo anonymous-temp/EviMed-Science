@@ -51,7 +51,7 @@ import {
 export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified", "headline_unresolved", "calculation_not_verified", "card_limit"]);
 
 /** Why no card is written for an episode, closed for the same reason. `pending` and `deferred` are not refusals: the episode is looked at again. */
-export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused"]);
+export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused", "superseded"]);
 
 /** The confidence labels a synthesized claim keeps, in the reader's words. */
 const CONFIDENCE_ZH = Object.freeze({ high: "高", moderate: "中", low: "低" });

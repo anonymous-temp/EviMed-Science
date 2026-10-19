@@ -13,7 +13,8 @@
  * 2026-10-19: four episodes of 64 to 78 claims over the 60 a card carries), the recorded outcome is what keeps the fixed builder
  * from ever seeing them. This removes that one outcome from its decision, and nothing else: the episode, its result, its
  * agenda and every other outcome stay as they are. The control plane's sweep (`EvidenceProgrammeWorker`) then settles the
- * episode like any open one — a card, a revision of the agenda's card, or a new outcome recorded with its reason.
+ * episode like any open one — a card, a revision of the agenda's card, or a new outcome recorded with its reason; an episode whose
+ * topic card has since been revised by a later episode is recorded `superseded` and leaves that card as it is.
  *
  * The sweep reads the last `PROGRAMME_SETTLE_DAYS` decisions; an episode in an older decision is reported `outside_sweep_window`
  * and left alone even with `--apply`, because reopening it would change nothing.

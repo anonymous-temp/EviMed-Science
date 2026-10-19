@@ -68,7 +68,7 @@ const DECISION_MAX_TOKENS = 800;
 const DECISION_TIMEOUT_MS = 30_000;
 const MAX_REASON_CHARS = 300;
 /** An outcome that does not change on a later look is final; the others are looked at again by the sweep. */
-const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt", "card_refused"]);
+const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt", "card_refused", "superseded"]);
 /** Looks at an episode whose matrix is not there yet before the absence is final: a capture that has not landed is not a run with no matrix. */
 const MATRIX_ATTEMPTS = 3;
 /** @param {{ outcome?: string, attempts?: number } | null | undefined} recorded @returns {boolean} */
@@ -205,8 +205,8 @@ export function evidenceProgrammeMetricFamilies(/** @type {ReturnType<typeof cre
     counter("signal_failures_total", "Signal sources of the topic selector that could not be read, by class; the selector is told that signal is not recorded and decides without it.", by(counters.signalFailures, "class")),
     counter("demand_entities_total", "Entities that reached the reader-count floor and were shown to the selector as a count.", [{ value: counters.demandEntities }]),
     counter("actions_total", "Zone actions of the day's decision, by what became of them: scheduled, failed, or deferred (by reason).", by(counters.actions, "outcome")),
-    counter("cards_total", "Settled programme episodes, by outcome: a card published or revised, none for want of a qualifying claim, waiting for an independent check, deferred by the weekly original-analysis cap, and the refusals.", by(counters.cards, "outcome")),
-    counter("claims_excluded_total", "Matrix claims left out of a card, by why: not verified by the run, refuted or weakened by the independent check, or the card's own re-check.", by(counters.claimsExcluded, "reason")),
+    counter("cards_total", "Settled programme episodes, by outcome: a card published or revised, none for want of a qualifying claim, waiting for an independent check, deferred by the weekly original-analysis cap, superseded by a later episode's card of the same topic, and the refusals.", by(counters.cards, "outcome")),
+    counter("claims_excluded_total", "Matrix claims left out of a card, by why: not verified by the run, refuted or weakened by the independent check, the card's own re-check, or more than one card carries.", by(counters.claimsExcluded, "reason")),
     counter("claims_published_total", "Claims published in programme cards.", [{ value: counters.claimsPublished }]),
     counter("original_analyses_total", "Original-analysis cards, by what became of them: published as a signal still to be replicated, published as a finding, or deferred by the weekly cap.", by(counters.original, "outcome")),
     counter("admissions_total", "Episode admissions asked of the programme (its budget and its slot), by answer.", by(counters.admissions, "outcome")),
@@ -883,8 +883,16 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       captured = await readSources(read.version, evaluation.included.flatMap((/** @type {any} */ entry) => claimPaths(entry.claim)));
     }
     const provenance = programmeCardProvenance(agenda.id, episode.payload.taskType);
-    const existing = (await database.query("SELECT id, revision FROM evimed_frontier.evidence_cards WHERE zone_id = $1 AND user_id = $2 AND provenance = $3 ORDER BY created_at, id LIMIT 1",
+    const existing = (await database.query("SELECT id, revision, lineage FROM evimed_frontier.evidence_cards WHERE zone_id = $1 AND user_id = $2 AND provenance = $3 ORDER BY created_at, id LIMIT 1",
       [zone.id, publisher, provenance])).rows[0] ?? null;
+    // The topic's card stands on the newest episode that reached it. An older episode settled late — its independent check came in
+    // after a later run's card, or an operator reopened it (`scripts/ops/evidence-programme-resettle.mjs`) — does not put its older
+    // evidence back over the newer: its outcome is that a later episode's card holds the topic.
+    const later = existing ? await laterEpisodeOf(existing, episode) : null;
+    if (later) {
+      await recordOutcome(decisionId, episodeId, { outcome: "superseded", cardId: existing.id, revision: existing.revision, supersededBy: later });
+      return countOutcome("superseded", { cardId: existing.id, revision: existing.revision });
+    }
     const weekStart = new Date(now().getTime() - 7 * 86_400_000).toISOString();
     const originalThisWeek = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
       WHERE c.user_id = $1 AND c.originality = 'original_analysis' AND c.created_at > $2::timestamptz AND (z.kind = 'official' OR z.user_id = $1)`, [publisher, weekStart])).rows[0].n;
@@ -935,6 +943,19 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     const outcome = existing ? "revised" : "published";
     await recordOutcome(decisionId, episodeId, { outcome, cardId, revision, claims: built.includedCount, excluded: summarise(built.excluded), headlineClaimId: built.headlineClaimId, originality: built.originality });
     return countOutcome(outcome, { cardId, revision });
+  }
+
+  /**
+   * The episode a card's current revision stands on, when it began after this one; null when it is this episode, an earlier one, or
+   * one that cannot be read (the card is then revised as before).
+   * @param {{ lineage?: any }} card @param {{ id: string, createdAt?: string | null }} episode @returns {Promise<string | null>}
+   */
+  async function laterEpisodeOf(card, episode) {
+    const standing = typeof card.lineage?.episodeId === "string" ? card.lineage.episodeId : null;
+    if (!standing || standing === episode.id) return null;
+    const other = await autopilot.getEpisode(publisher, standing).catch(() => null);
+    const [mine, theirs] = [Date.parse(String(episode.createdAt ?? "")), Date.parse(String(other?.createdAt ?? ""))];
+    return Number.isFinite(mine) && Number.isFinite(theirs) && theirs > mine ? standing : null;
   }
 
   /** @param {{ claimId: string, reason: string }[]} excluded @returns {Record<string, number>} */
