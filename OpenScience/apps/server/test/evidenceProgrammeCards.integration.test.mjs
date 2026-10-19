@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { claimVerification } from "@evimed/domain/clinical-evidence";
 import { EVIDENCE_PROJECT_ID, PLATFORM_PUBLISHER_USER_ID, modelAnswer, programmeFixture, sha256 } from "./helpers/evidenceProgrammeFixture.mjs";
+import { resettleRefusedCards } from "../../../scripts/ops/evidence-programme-resettle.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "local PostgreSQL required" };
@@ -50,7 +51,7 @@ async function foldEpisode(fx, { action, matrixClaims, sources, agendaClaims, ma
     const versionId = `rv_${sha256(`matrix-${counter}`)}`;
     const inputs = sources.map((source, index) => {
       const sourceVersion = `rv_${sha256(`${source.path}-${counter}`)}`;
-      fx.rawByVersion.set(sourceVersion, { bytes: Buffer.from(source.text), digest: sha256(source.text), capturedAt: "2026-10-05T00:30:00.000Z" });
+      fx.rawByVersion.set(sourceVersion, { bytes: Buffer.from(source.text), digest: sha256(source.text), capturedAt: source.capturedAt ?? "2026-10-05T00:30:00.000Z" });
       return { kind: "source", id: source.path, path: source.path, digest: sha256(source.text), versionId: sourceVersion, availability: "captured", index };
     });
     // As the delivery capture records it: the matrix version carries the source links, and the gate's verdict sits on the report
@@ -215,6 +216,63 @@ test("a card the zone refuses as invalid is recorded once with the zone's reason
     assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "card_refused");
     assert.equal(calls, 2, "the refused card was not built and saved again");
     assert.equal(fx.programme.status().counters.cards.card_refused, 1);
+  } finally { fx.zones.saveEditorial = save; await fx.close(); }
+});
+
+test("an episode of more verified claims than a card carries publishes sixty through the real zone, the day's new ones first (production 2026-10-09 to 10-17)", options, async () => {
+  const fx = await setup("cardlimit");
+  try {
+    // The 10-13 shape: the claims of the day before carried forward, then the ones read that morning; no agenda claims, as on production.
+    const sourceOf = (/** @type {number} */ n, /** @type {string} */ day) => ({ path: `.evimed-sources/pubmed/PMID${3100000 + n}/abstract.md`, title: `Trial ${n}`,
+      url: `https://pubmed.ncbi.nlm.nih.gov/${3100000 + n}/`, access: "abstract", capturedAt: `${day}T00:41:40.623Z`,
+      text: `Abstract ${n}. In trial ${n} the primary composite kidney outcome occurred less often with the study drug than with placebo.` });
+    const quoteOf = (/** @type {number} */ n) => `In trial ${n} the primary composite kidney outcome occurred less often`;
+    const earlier = Array.from({ length: 20 }, (_, n) => sourceOf(n, "2026-10-12"));
+    const fresh = Array.from({ length: 4 }, (_, n) => sourceOf(20 + n, "2026-10-13"));
+    const carried = Array.from({ length: 65 }, (_, n) => claim(`CLM-${527 + n}`, earlier[n % 20], quoteOf(n % 20)));
+    const added = Array.from({ length: 13 }, (_, n) => claim(`CLM-${592 + n}`, fresh[n % 4], quoteOf(20 + (n % 4))));
+    const run = await episodeOf(fx, { day: "2026-10-13", zone: "nsclc", taskType: "literature-sentinel", sources: [...earlier, ...fresh], matrixClaims: [...carried, ...added], agendaClaims: [] });
+    const settled = await fx.programme.onRunFinished(project, { id: run.runId });
+    assert.equal(settled.state, "published", JSON.stringify(settled));
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.equal(card.claims.length, 60);
+    const ids = card.claims.map((/** @type {any} */ entry) => entry.claimId);
+    for (const entry of added) assert.ok(ids.includes(entry.claimId), `${entry.claimId}, read on the run's day, is on the card`);
+    const recorded = await outcomeOf(fx, "2026-10-13", run.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.claims, recorded.excluded], ["published", 60, { card_limit: 18 }]);
+    assert.equal(fx.programme.status().counters.claimsExcluded.card_limit, 18);
+    const read = await fx.zones.detail(fx.publisherUser, card.zone_id, card.id);
+    assert.equal(read.evidence.claimVerification.verified, 60, "a reader sees every carried claim ✓");
+    // The zone's own refusal of a longer list now says which bound it crossed.
+    const many = [...card.claims, ...card.claims.slice(0, 1).map((/** @type {any} */ entry) => ({ ...entry, claimId: "CLM-999" }))];
+    await assert.rejects(fx.zones.saveEditorial(fx.publisherUser, { claims: many, expectedRevision: card.revision }, card.zone_id, card.id, false, "programme"),
+      (error) => /** @type {any} */ (error).code === "evidence_invalid" && /claims has 61 entries, more than the 60 a card carries/.test(/** @type {any} */ (error).message));
+  } finally { await fx.close(); }
+});
+
+test("an episode whose card was refused before the fix is reopened by the ops script and settled by the next sweep; a second run changes nothing", options, async () => {
+  const fx = await setup("cardresettle");
+  const save = fx.zones.saveEditorial.bind(fx.zones);
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-09", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A, SOURCE_B],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A), claim("CLM-002", SOURCE_B, QUOTE_B)], agendaClaims: [] });
+    // What production recorded for four episodes: the zone's refusal, final.
+    fx.zones.saveEditorial = async () => { throw Object.assign(new Error("Invalid evidence content: claims."), { status: 400, code: "evidence_invalid" }); };
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "card_refused");
+    fx.zones.saveEditorial = save;
+    const report = await resettleRefusedCards({ documents: fx.documents });
+    assert.deepEqual(report.episodes.map((entry) => [entry.episodeId, entry.day, entry.action, entry.reason]),
+      [[run.episodeId, "2026-10-09", "would_reopen", "Invalid evidence content: claims."]], "a report changes nothing");
+    assert.equal((await outcomeOf(fx, "2026-10-09", run.episodeId)).outcome, "card_refused");
+    const applied = await resettleRefusedCards({ documents: fx.documents, episodeIds: [run.episodeId, "episode-unknown"], apply: true });
+    assert.deepEqual(applied.episodes.map((entry) => entry.action), ["reopened", "not_found"]);
+    assert.equal(await outcomeOf(fx, "2026-10-09", run.episodeId), undefined, "only that outcome is gone");
+    assert.equal((await fx.programme.sweep()).settled, 1, "the next sweep settles it like any open episode");
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.deepEqual(card.claims.map((/** @type {any} */ entry) => entry.claimId), ["CLM-001", "CLM-002"]);
+    assert.equal((await outcomeOf(fx, "2026-10-09", run.episodeId)).outcome, "published");
+    const again = await resettleRefusedCards({ documents: fx.documents, episodeIds: [run.episodeId], apply: true });
+    assert.deepEqual(again.episodes.map((entry) => [entry.action, entry.outcome]), [["not_refused", "published"]], "idempotent");
   } finally { fx.zones.saveEditorial = save; await fx.close(); }
 });
 

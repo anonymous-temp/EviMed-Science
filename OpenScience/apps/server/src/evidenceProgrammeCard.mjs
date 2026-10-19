@@ -224,10 +224,11 @@ function programmeCardBody(claims) {
  *
  * The sizes are measured on the claims as numbered in this round; once the left-out claims are gone the numbers and source
  * indexes only get smaller, so what fits here fits in the card assembled next.
- * @param {{ claim: any, agendaClaim: any | null, headline: boolean }[]} entries standing claims, in the matrix's order
+ * @template {{ claim: any, agendaClaim: any | null, headline: boolean }} T
+ * @param {T[]} entries standing claims, in the matrix's order
  * @param {any[]} made their card claims, in the same order
  * @param {Map<string, { capturedAt?: string | null }>} captured artifact path → when the platform's copy of it was captured
- * @returns {typeof entries}
+ * @returns {T[]}
  */
 function withinCardBounds(entries, made, captured) {
   const tier = (/** @type {any} */ entry) => TIER_RANK[/** @type {keyof typeof TIER_RANK} */ (entry.agendaClaim?.tier)] ?? 3;
