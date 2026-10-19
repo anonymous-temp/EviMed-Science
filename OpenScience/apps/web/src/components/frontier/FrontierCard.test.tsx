@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
+import { FrontierDetails } from "./FrontierDetails";
 import { FrontierCard } from "./FrontierCard";
 import { frontierItem } from "./__fixtures__/frontierItems";
 
@@ -152,13 +153,12 @@ describe("its actions", () => {
     expect(within(card).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("opens the original from its title, in a new tab, and records the reading", async () => {
+  it("opens its addressed reader from the title and records the reading", async () => {
     const item = frontierItem();
     const handlers = renderCard(item);
     const original = within(screen.getByRole("heading", { level: 3 })).getByRole("link", { name: item.title });
-    expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
-    expect(original).toHaveAttribute("target", "_blank");
-    expect(original).toHaveAttribute("rel", "noopener noreferrer");
+    expect(original).toHaveAttribute("href", `/app/frontier/items/${encodeURIComponent(item.id)}`);
+    expect(original).not.toHaveAttribute("target");
     await userEvent.click(original);
     expect(handlers.onOpened).toHaveBeenCalledWith(item);
   });
@@ -252,7 +252,7 @@ describe("the card's footer", () => {
   it("says 「详情」 only where the drawer holds something the card does not, and never 「阅读详情」", () => {
     renderCard(plain());
     const card = screen.getByRole("article");
-    expect(within(card).queryByRole("button", { name: "详情" })).not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "详情" })).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: "阅读详情" })).not.toBeInTheDocument();
     // What it still shows: the star, 「深入研究」 and 「⋯」 (and the details in 「⋯ › 详情」, below).
     expect(within(card).getByRole("button", { name: "收藏" })).toBeInTheDocument();
@@ -268,27 +268,24 @@ describe("the card's footer", () => {
   ])("offers 「详情」 for %s", async (_name, overrides) => {
     renderCard(plain(overrides));
     await userEvent.click(within(screen.getByRole("article")).getByRole("button", { name: "详情" }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/items/");
   });
 
   it("keeps the details reachable from 「⋯」 for the item that shows no button", async () => {
     renderCard(plain());
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "详情" }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/items/");
   });
 });
 
-describe("「⋯ › 详情」", () => {
-  async function openDetails() {
-    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "详情" }));
-    return screen.findByRole("dialog", { name: "口服 PCSK9 抑制剂降低主要心血管事件" });
-  }
+describe("the shared article texts", () => {
+  function renderDetails(item = frontierItem()) { render(<FrontierDetails item={item} onClose={() => {}} />); }
+  async function openDetails() { return screen.findByRole("dialog", { name: "口服 PCSK9 抑制剂降低主要心血管事件" }); }
 
   it("holds what the card left out: the original title, the facts and the free full text", async () => {
     client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "这是中文摘要。", abstract: "Abstract.", note: null });
-    renderCard(frontierItem({ sourceType: "media", facts: { journal: "NEJM", impact_factor: 78.456 },
+    renderDetails(frontierItem({ sourceType: "media", facts: { journal: "NEJM", impact_factor: 78.456 },
       openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }));
     const details = await openDetails();
     for (const text of ["Oral PCSK9 Inhibition and Cardiovascular Outcomes", "期刊", "影响因子", "78.5"]) expect(details).toHaveTextContent(text);
@@ -300,8 +297,7 @@ describe("「⋯ › 详情」", () => {
   it("reads the abstract only when the details are opened, and names the original one as such", async () => {
     client.fetchFrontierAbstractZh.mockResolvedValue(null);
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItem(), abstract: "Background: an original abstract.", abstractZh: null });
-    renderCard();
-    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
+    renderDetails();
     const details = await openDetails();
     expect(await within(details).findByText("Background: an original abstract.")).toBeInTheDocument();
     expect(within(details).getByRole("heading", { name: "原文摘要" })).toBeInTheDocument();
@@ -310,14 +306,14 @@ describe("「⋯ › 详情」", () => {
   it("offers a retry when the abstract could not be read", async () => {
     client.fetchFrontierAbstractZh.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null }))
       .mockResolvedValueOnce({ abstractZh: "重试之后的中文摘要。", abstract: null, note: null });
-    renderCard();
+    renderDetails();
     const details = await openDetails();
     await userEvent.click(await within(details).findByRole("button", { name: "重试" }));
     await waitFor(() => expect(within(details).getByText("重试之后的中文摘要。")).toBeInTheDocument());
   });
 
   it("does not look for an abstract an item does not have", async () => {
-    renderCard(frontierItem({ flags: [{ key: "no-abstract", label: "无摘要" }] }));
+    renderDetails(frontierItem({ flags: [{ key: "no-abstract", label: "无摘要" }] }));
     const details = await openDetails();
     expect(within(details).queryByRole("heading", { name: "中文摘要" })).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();

@@ -1,0 +1,230 @@
+name: knowledge-plugin
+
+on:
+  pull_request:
+  push:
+    branches: ["main", "master", "codex/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: knowledge_image_smoke
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["127.0.0.1:5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      KNOWLEDGE_PLUGIN_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432
+      IMAGE: evimed-knowledge-plugin:ci-${{ github.sha }}
+      FULL_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned test dependencies
+        working-directory: 项目代码/knowledge-plugin
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run plugin tests against disposable PostgreSQL
+        working-directory: 项目代码/knowledge-plugin
+        run: |
+          set -euo pipefail
+          python -c 'import os,psycopg; psycopg.connect(os.environ["KNOWLEDGE_PLUGIN_TEST_DATABASE_URL"] + "/postgres").close()'
+          python -m pytest tests -q --junitxml="$RUNNER_TEMP/plugin-tests.xml"
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          root = ET.parse(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-tests.xml')).getroot()
+          skipped = root.findall('.//testcase/skipped')
+          assert root.findall('.//testcase'), 'No plugin tests ran'
+          assert not any('no PostgreSQL' in item.get('message', '') for item in skipped), 'Database tests must run'
+          PY
+      - name: Resolve exact official Python amd64 base
+        run: |
+          set -euo pipefail
+          python - <<'PYBASE'
+          import hashlib, json, os, subprocess, urllib.request
+          token_url = 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/python:pull'
+          with urllib.request.urlopen(token_url, timeout=30) as response:
+              token = json.load(response)['token']
+          def registry(path):
+              request = urllib.request.Request('https://registry-1.docker.io/v2/library/python/' + path,
+                  headers={'Authorization': 'Bearer ' + token, 'Accept': ', '.join([
+                      'application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json',
+                      'application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'])})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  content = response.read(2 * 1024 * 1024 + 1)
+                  assert len(content) <= 2 * 1024 * 1024
+                  digest = 'sha256:' + hashlib.sha256(content).hexdigest()
+                  assert response.headers.get('Docker-Content-Digest', digest) == digest
+                  return json.loads(content), digest
+          index, index_digest = registry('manifests/3.12-slim-bookworm')
+          platforms = [row for row in index['manifests'] if row.get('platform', {}).get('os') == 'linux'
+              and row.get('platform', {}).get('architecture') == 'amd64' and not row.get('platform', {}).get('variant')]
+          assert len(platforms) == 1
+          selected = platforms[0]['digest']
+          manifest, manifest_digest = registry('manifests/' + selected)
+          assert manifest_digest == selected and 'config' in manifest and 'manifests' not in manifest
+          config, config_digest = registry('blobs/' + manifest['config']['digest'])
+          assert config_digest == manifest['config']['digest']
+          assert config['os'] == 'linux' and config['architecture'] == 'amd64'
+          base = 'python@' + manifest_digest
+          subprocess.run(['docker', 'pull', '--platform', 'linux/amd64', base], check=True)
+          image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', base]))[0]
+          assert image['Id'] == config_digest and image['RootFS']['Layers'] == config['rootfs']['diff_ids']
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('PYTHON_BASE_IMAGE=' + base + '\n')
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-base.json'), 'w') as output:
+              json.dump({'reference': base, 'indexDigest': index_digest, 'platformManifestDigest': manifest_digest,
+                  'configDigest': config_digest, 'platform': 'linux/amd64', 'rootfs': config['rootfs']}, output)
+          PYBASE
+      - name: Build exact plugin image on isolated runner
+        run: |
+          set -euo pipefail
+          test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          args=()
+          if [ "$FULL_RELEASE" = true ]; then args+=(--no-cache); fi
+          setsid timeout 900 docker build "${args[@]}" --platform linux/amd64 \
+            --build-arg "PYTHON_BASE_IMAGE=$PYTHON_BASE_IMAGE" --build-arg "PLUGIN_BUILD=$GITHUB_SHA" \
+            --tag "$IMAGE" 项目代码/knowledge-plugin &
+          build_pid=$!
+          trap 'kill -- -"$build_pid" 2>/dev/null || true' EXIT
+          while kill -0 "$build_pid" 2>/dev/null; do
+            test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240 || exit 1
+            sleep 5
+          done
+          wait "$build_pid"
+          trap - EXIT
+      - name: Qualify built imports registry and database-backed HTTP
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m "$IMAGE" python -m knowledge_plugin check-registry
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            "$IMAGE" python -c 'import knowledge_plugin.api, knowledge_plugin.db, knowledge_plugin.medical_discovery, knowledge_plugin.dynamic_registry, psycopg, playwright.async_api'
+          install -d -m 0755 "$RUNNER_TEMP/plugin-smoke"
+          printf '%s\n' 'disposable-ci-plugin-token-0123456789' > "$RUNNER_TEMP/plugin-smoke/token"
+          sudo chown 10002:10002 "$RUNNER_TEMP/plugin-smoke/token"
+          sudo chmod 0600 "$RUNNER_TEMP/plugin-smoke/token"
+          docker run -d --name knowledge-plugin-ci --network host --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 128 --memory 512m --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+            --mount "type=bind,src=$RUNNER_TEMP/plugin-smoke/token,dst=/run/secrets/token,readonly" \
+            -e KNOWLEDGE_PLUGIN_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/knowledge_image_smoke \
+            -e KNOWLEDGE_PLUGIN_TOKEN_FILE=/run/secrets/token -e KNOWLEDGE_PLUGIN_CRAWL=0 \
+            -e KNOWLEDGE_PLUGIN_PORT=18080 "$IMAGE"
+          python - <<'PY'
+          import json, os, time, urllib.request
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:18080/v1/health', timeout=3) as response:
+                      health = json.load(response)
+                  assert health['status'] in ('ok', 'degraded')
+                  assert health.get('sources'), 'Registry must be populated in the actual database'
+                  break
+              except Exception:
+                  if attempt == 59: raise
+                  time.sleep(2)
+          request = urllib.request.Request('http://127.0.0.1:18080/v1/manifest',
+              headers={'Authorization': 'Bearer disposable-ci-plugin-token-0123456789'})
+          with urllib.request.urlopen(request, timeout=5) as response:
+              manifest = json.load(response)
+          assert manifest['plugin']['build'] == os.environ['GITHUB_SHA']
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-health.json'), 'w') as output:
+              json.dump(health, output)
+          PY
+          python - <<'PY'
+          import json, os, subprocess
+          image = json.loads(subprocess.check_output(['docker','image','inspect',os.environ['IMAGE']]))[0]
+          container = json.loads(subprocess.check_output(['docker','inspect','knowledge-plugin-ci']))[0]
+          assert image['Os'] == 'linux' and image['Architecture'] == 'amd64'
+          assert image['Config']['User'] == '10002:10002'
+          assert image['Config']['Labels']['org.opencontainers.image.revision'] == os.environ['GITHUB_SHA']
+          assert container['Image'] == image['Id']
+          assert container['HostConfig']['ReadonlyRootfs'] and container['HostConfig']['CapDrop'] == ['ALL']
+          report = {'schemaVersion': 1, 'scope': 'knowledge-plugin-image-qualification',
+              'sourceRevision': os.environ['GITHUB_SHA'], 'workflowRun': os.environ['GITHUB_RUN_ID'],
+              'workflowAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'reference': os.environ['IMAGE'],
+              'configDigest': image['Id'], 'platform': 'linux/amd64', 'rootfs': image['RootFS'],
+              'pythonBase': json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-base.json'))),
+              'health': json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-health.json'))),
+              'boundaries': {'nonRoot': True, 'readOnly': True, 'crawlerDisabled': True, 'disposablePostgres': True}}
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'plugin-qualification.json'), 'w') as output:
+              json.dump(report, output, indent=2)
+          PY
+      - name: Export bounded plugin-only release artifact
+        if: env.FULL_RELEASE == 'true'
+        run: |
+          set -euo pipefail
+          export out="$RUNNER_TEMP/evimed-knowledge-plugin-release"
+          install -d -m 0700 "$out"
+          printf '%s\n' "$IMAGE" > "$out/images.txt"
+          cp "$RUNNER_TEMP/plugin-qualification.json" "$out/qualification.json"
+          test "$(df -B1 --output=avail / | tail -1)" -ge 12884901888
+          export started=$SECONDS
+          setsid bash -euo pipefail -c 'docker save "$IMAGE" | gzip -1 > "$out/images.tar.gz"' &
+          export_pid=$!
+          trap 'kill -- -"$export_pid" 2>/dev/null || true' EXIT
+          while kill -0 "$export_pid" 2>/dev/null; do
+            test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240 || exit 1
+            test "$(stat -c %s "$out/images.tar.gz" 2>/dev/null || echo 0)" -le 1073741824 || exit 1
+            test "$((SECONDS - started))" -le 600 || exit 1
+            sleep 5
+          done
+          wait "$export_pid"
+          trap - EXIT
+          test "$(stat -c %s "$out/images.tar.gz")" -le 1073741824
+          (cd "$out" && sha256sum images.tar.gz > images.tar.gz.sha256)
+          OPEN_SCIENCE_RELEASE_ID="knowledge-plugin-$GITHUB_SHA" python - <<'PYINVENTORY'
+          import importlib.util, os
+          spec = importlib.util.spec_from_file_location('inventory', 'OpenScience/scripts/ops/image-archive-inventory.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          assert module.write_report(os.environ['out'], os.environ) == 1
+          PYINVENTORY
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path(os.environ['out'])
+          manifest = json.loads((out / 'manifest.json').read_text())
+          qualified = json.loads((out / 'qualification.json').read_text())
+          assert manifest['sourceRevision'] == os.environ['GITHUB_SHA']
+          assert len(manifest['images']) == 1
+          actual = manifest['images'][0]
+          assert actual['configDigest'] == qualified['configDigest']
+          assert actual['rootfs']['diff_ids'] == qualified['rootfs']['Layers']
+          assert actual['platform'] == 'linux/amd64'
+          assert actual['labels']['org.opencontainers.image.revision'] == os.environ['GITHUB_SHA']
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: knowledge-plugin-qualification-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/plugin-tests.xml
+            ${{ runner.temp }}/plugin-qualification.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: env.FULL_RELEASE == 'true'
+        with:
+          name: evimed-knowledge-plugin-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-knowledge-plugin-release/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Remove disposable plugin container and token
+        if: always()
+        run: |
+          docker rm -f knowledge-plugin-ci 2>/dev/null || true
+          sudo rm -f "$RUNNER_TEMP/plugin-smoke/token"

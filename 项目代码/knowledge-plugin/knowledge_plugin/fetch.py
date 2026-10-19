@@ -360,6 +360,8 @@ class ProtectedFetcher:
         self._relay_ssl_context = relay_ssl_context
         self._relay_client: httpx.AsyncClient | None = None
         self._relay_key: tuple | None = None
+        self._relay_inflight: dict[httpx.AsyncClient, int] = {}
+        self._retired_relays: set[httpx.AsyncClient] = set()
         if browser is None and settings.browser_cdp_url:
             browser = BrowserFetcher(settings.browser_cdp_url, timeout_s=settings.browser_timeout_s,
                                      user_agent_suffix=user_agent(settings.contact_email()))
@@ -383,6 +385,11 @@ class ProtectedFetcher:
         if self._relay_client is not None:
             await self._relay_client.aclose()
             self._relay_client = None
+        for client in tuple(self._retired_relays):
+            await client.aclose()
+        self._retired_relays.clear()
+        if self._closing:
+            await asyncio.gather(*tuple(self._closing))
         if self._browser is not None:
             await self._browser.aclose()
 
@@ -453,9 +460,7 @@ class ProtectedFetcher:
         if self._relay_client is not None and self._relay_key == key:
             return self._relay_client
         if self._relay_client is not None:
-            task = asyncio.get_running_loop().create_task(self._relay_client.aclose())
-            self._closing.add(task)
-            task.add_done_callback(self._closing.discard)
+            self._retire_relay(self._relay_client)
         context = self._relay_ssl_context
         proxy_spec = (httpx.Proxy(proxy.url, auth=(proxy.username, proxy.password), ssl_context=context) if context
                       else httpx.Proxy(proxy.url, auth=(proxy.username, proxy.password)))
@@ -466,6 +471,18 @@ class ProtectedFetcher:
         )
         self._relay_key = key
         return self._relay_client
+
+    def _retire_relay(self, client: httpx.AsyncClient) -> None:
+        """Future reads replace a failed pool; existing peer responses finish first."""
+        if self._relay_client is client:
+            self._relay_client = None
+            self._relay_key = None
+        self._retired_relays.add(client)
+        if self._relay_inflight.get(client, 0) == 0:
+            self._retired_relays.discard(client)
+            task = asyncio.get_running_loop().create_task(client.aclose())
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)
 
     # ---------------------------------------------------------------- public API
 
@@ -484,6 +501,8 @@ class ProtectedFetcher:
         if allowed_hosts and not host_allowed(first.hostname or "", allowed_hosts):
             raise FetchError("blocked", "host_not_allowed")
         if egress == "browser":
+            if spec.same_origin_redirects:
+                raise FetchError("blocked", "strict_origin_browser_unavailable")
             return await self._fetch_browser(spec, first, allowed_hosts, robots_file, wait_for)
         url, body = spec.url, spec.body
         headers = {k: v for k, v in (spec.headers or {}).items() if k.lower() not in HEADERS_NEVER_FROM_ADAPTERS}
@@ -491,6 +510,11 @@ class ProtectedFetcher:
         for hop in range(self._settings.max_redirects + 1):
             parts = _check_url(url)
             host = (parts.hostname or "").lower()
+            if spec.same_origin_redirects and (
+                    parts.scheme != first.scheme or host != (first.hostname or "").lower()
+                    or (parts.port or 443) != (first.port or 443)
+                    or parts.username is not None or parts.password is not None):
+                raise FetchError("blocked", "redirect_origin_not_allowed")
             if not spec.api:
                 allowed, delay, unreachable = await self._robots_by_egress[egress].check(url)
                 self._budget.observe_crawl_delay(host, delay)
@@ -624,6 +648,7 @@ class ProtectedFetcher:
             **credentials,
         }
         client = self._relay_client_for(proxy)
+        self._relay_inflight[client] = self._relay_inflight.get(client, 0) + 1
         # every new tunnel pays two extra TLS handshakes, 1-2 s (edgeProxy.mjs, measured 2026-09-22)
         deadline = self._budget.timeout_s(host, self._settings.request_timeout_s) + proxy.connect_timeout_s
         try:
@@ -636,9 +661,14 @@ class ProtectedFetcher:
                     await response.aclose()
             client.cookies.clear()
             return response.status_code, {k.lower(): v for k, v in response.headers.items()}, content, url
+        except asyncio.CancelledError:
+            self._retire_relay(client)
+            raise
         except (TimeoutError, httpx.TimeoutException):
+            self._retire_relay(client)
             raise FetchError("timeout", "timeout") from None
         except httpx.ProxyError as error:
+            self._retire_relay(client)
             status = _proxy_error_status(error)
             if status == 403:
                 # the node's policy refuses this destination: the source is unreachable this way
@@ -647,11 +677,21 @@ class ProtectedFetcher:
                 raise FetchError("http-error", "relay_upstream_unreachable", status=status) from None
             raise FetchError("blocked", "edge_proxy_refused", status=status) from None
         except httpx.ConnectError:
+            self._retire_relay(client)
             if await self._proxy_reachable(proxy):
                 raise FetchError("http-error", "relay_upstream_unreachable") from None
             raise FetchError("blocked", "edge_proxy_unreachable") from None
         except httpx.HTTPError as error:
+            self._retire_relay(client)
             raise FetchError("http-error", "transport_" + type(error).__name__.lower()) from None
+        finally:
+            active = self._relay_inflight[client] - 1
+            if active:
+                self._relay_inflight[client] = active
+            else:
+                self._relay_inflight.pop(client)
+                if client in self._retired_relays:
+                    self._retire_relay(client)
 
     async def _proxy_reachable(self, proxy: EdgeProxy) -> bool:
         """Tell a dead node from a dead upstream behind it: can we complete TLS to the node itself?"""

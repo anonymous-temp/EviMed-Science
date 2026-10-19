@@ -54,6 +54,7 @@ export interface VcrPatchBody {
 
 export interface VcrJobBody {
   kind: string;
+  modelId?: string;
   scenario?: Record<string, unknown>;
   inputs?: unknown[];
   seed?: number;
@@ -155,6 +156,8 @@ export interface VcrModelBody {
   endpointType?: "continuous" | "binary" | "time_to_event";
   /** The trials the model was fitted on, one label each. */
   sources?: string[];
+  card?: Record<string, unknown>;
+  applicability?: Record<string, unknown>;
 }
 
 /** A person's re-judgment of one criterion; the platform's own answer is kept beside it. */
@@ -193,7 +196,7 @@ export function trialSearchBody(subjectKey: string) {
 export function jobBody(input: VcrJobBody) {
   return said({
     kind: input.kind, scenario: input.scenario, inputs: input.inputs, seed: input.seed, replicates: input.replicates,
-    cpuSecondsLimit: input.cpuSecondsLimit,
+    cpuSecondsLimit: input.cpuSecondsLimit, modelId: input.modelId,
   });
 }
 
@@ -290,6 +293,7 @@ export function modelBody(input: VcrModelBody) {
   return said({
     studyId: input.studyId, name: input.name.trim(), version: input.version?.trim() || undefined, risk: input.risk, endpointType: input.endpointType,
     sources: sources.length > 0 ? sources : undefined,
+    card: input.card, applicability: input.applicability,
   });
 }
 

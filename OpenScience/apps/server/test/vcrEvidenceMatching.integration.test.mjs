@@ -933,3 +933,47 @@ test("an answer names a subject the study has: an invented key is refused and ne
   assert.equal(await vcr.matchStore.holdsSubject(otherStudy.id, "P-001"), false);
   assert.equal(await vcr.matchStore.holdsSubject(study.id, "P-001"), true, "a subject with a recorded fact is held");
 });
+
+test("browser reference adapter reads and preserves the same registry bytes and verified values for an existing study", options, async () => {
+  const target = await vcr.store.createStudy({ userId: USER, projectId: "prj-browser-reference", name: "Reference workflow", question: "q", dataTier: "T0" });
+  const input = { registry: "clinicaltrials.gov", registryId: "NCT02296125", studyId: target.id };
+  const read = await vcr.service.readReferenceTrial({ id: USER }, input);
+  assert.equal(read.available, true);
+  assert.ok(read.record.text.includes("enrollmentInfo.count: 674"));
+  assert.equal(read.record.enrollment.actual, 674);
+  assert.equal(read.record.enrollment.planned, null);
+  await assert.rejects(vcr.service.applyReferenceTrial({ id: OTHER_USER }, input), { code: "vcr_study_not_found" });
+  const applied = await vcr.service.applyReferenceTrial({ id: USER }, input);
+  assert.equal(applied.status, "ok");
+  assert.ok(applied.counts.verified > 0);
+  const preserved = await vcr.evidenceStore.getPrecedent(USER, applied.precedent.id, { withText: true });
+  assert.equal(preserved.record_text.split("\n").slice(1).join("\n"), read.record.text.split("\n").slice(1).join("\n"), "source fields agree across reads; each preservation retains its own retrieval timestamp");
+  const items = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: target.id, parameter: "enrollment_actual" });
+  assert.ok(items.some(row => Number(row.value) === 674));
+  const model = await vcr.service.adoptModel({ id: USER }, { name: "Source-bound model", version: "1.0.0", card: {
+    sourceRegistryId: "NCT02296125", sourceRecordHash: "forged", sourceEvidenceIds: ["forged"], sourceParameters: [{ parameter: "enrollment_actual", value: 999 }],
+  } });
+  const stored = (await vcr.store.models(USER)).find(row => row.id === model.id);
+  assert.equal(stored.card.sourceImport.status, "ok");
+  assert.notEqual(stored.card.sourceRecordHash, "forged");
+  assert.ok(stored.card.sourceParameters.some(row => row.parameter === "enrollment_actual" && Number(row.value) === 674));
+  assert.ok(!stored.card.sourceParameters.some(row => Number(row.value) === 999));
+  const exact = await vcr.evidenceStore.itemsById({ userId: USER, studyId: null, ids: stored.card.sourceEvidenceIds });
+  assert.equal(exact.length, stored.card.sourceParameters.length);
+  assert.equal((await vcr.evidenceStore.itemsById({ userId: OTHER_USER, studyId: null, ids: stored.card.sourceEvidenceIds })).length, 0);
+
+});
+
+test("a legacy calendar-only exit is compared as recorded, without a timezone rewrite finding", options, async () => {
+  const subjectKey = "P-legacy-exit";
+  await vcr.matchStore.query(`INSERT INTO evimed_vcr.followup_episodes
+    (id, study_id, user_id, subject_key, kind, window_end, restricted, exit_reason)
+    VALUES ('fup_legacy_calendar', $1, $2, $3, 'study_specific', $4::timestamptz, '{}'::jsonb, 'Original reason')`,
+  [study.id, USER, subjectKey, "2026-08-01"]);
+  const saved = await write("followup", [{ subjectKey, kind: "study_specific", exitDate: "2026-08-01", exitReason: "Original reason" }]);
+  assert.equal(saved.ids.length, 1);
+  assert.ok(!saved.issues.some(row => row.code === "vcr_exit_date_rewritten" || row.code === "vcr_exit_reason_rewritten"));
+  const original = await vcr.matchStore.firstTrialExit({ studyId: study.id, subjectKey });
+  assert.equal(original.id, "fup_legacy_calendar");
+  assert.equal(original.exitDate, null, "the migration never invents missing verbatim input on old rows");
+});

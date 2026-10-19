@@ -184,15 +184,13 @@ describe("记忆地图", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("draws no graph when there is too little: the sentence, three numbers and the list", async () => {
+  it("draws isolated memories even when there are no relationship edges", async () => {
     fetchMemoryMap.mockResolvedValue(busyMap({
       nodes: [memory("a"), memory("b")], edges: [], summary: { memories: 2, documents: 0, methods: 0, projects: 0, needsLook: 0, since: "2026-09-10" },
     }));
     open();
     expect(await screen.findByText(/EviMed 记住了你的 2 件事/u)).toBeInTheDocument();
-    expect(screen.getByLabelText("三个数字")).toHaveTextContent("记忆2");
-    expect(screen.getByText("再多聊几次，这里会长出你的地图。")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /关系图/u })).toBeNull();
+    expect(screen.getByRole("img", { name: /关系图/u })).toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "标记" })).getAllByRole("listitem")).toHaveLength(2);
   });
 
@@ -216,6 +214,16 @@ describe("记忆地图", () => {
     expect(screen.getByRole("list", { name: "标记" })).toBeInTheDocument();
   });
 
+  it("does not report zero memories or empty-account guidance when the memory source could not be read", async () => {
+    fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [], edges: [], events: [], missing: ["native-memory"],
+      summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null } }));
+    open();
+    expect(await screen.findByRole("alert")).toHaveTextContent("有一部分没有读到");
+    expect(screen.queryByLabelText("三个数字")).toBeNull();
+    expect(screen.queryByText(/还没有记住什么/u)).toBeNull();
+    expect(screen.queryByText("再多聊几次，这里会长出你的地图。")).toBeNull();
+  });
+
   it("says so when the map cannot be read at all, with a way to try again", async () => {
     fetchMemoryMap.mockRejectedValueOnce(new Error("down")).mockResolvedValue(busyMap());
     const user = userEvent.setup();
@@ -227,7 +235,7 @@ describe("记忆地图", () => {
   });
 
   it("says there is nothing yet when nothing is remembered", async () => {
-    fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [], edges: [], summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null } }));
+    fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [], edges: [], events: [], summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null } }));
     open();
     expect(await screen.findByText("还没有记住什么")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "标记" })).toBeNull();
@@ -249,7 +257,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["关于你", "项目", "做法", "地图"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["地图", "关于你", "项目", "做法"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
     await user.click(within(tabs).getByRole("tab", { name: "做法" }));
     expect(where()).toBe("/app/memory?tab=methods");

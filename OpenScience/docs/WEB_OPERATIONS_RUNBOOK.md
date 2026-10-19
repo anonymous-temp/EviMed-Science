@@ -206,6 +206,16 @@ opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
 
+The knowledge-source plugin is a separate thirteenth image: the Web workflow's
+full twelve-image archive does not include `docker-compose.knowledge.yml`.
+The independent `knowledge-plugin` workflow tests it against disposable
+PostgreSQL, qualifies the built amd64 image with crawling disabled, and exports
+`evimed-knowledge-plugin-release-<sha>` on the same tagged release pushes. Bind
+its checksum, native config digest, ordered layers, source revision and workflow
+receipt before changing `EVIMED_KNOWLEDGE_PLUGIN_IMAGE`; a Web archive alone
+cannot deliver a plugin source change. Its qualification uses only disposable
+credentials and does not certify production crawl or browser/relay access.
+
 For a drained switch, acquire a durable maintenance lease under the deployment
 lock, verify that its activity is known and idle, and pass the same request ID
 to `host-release-switch.sh <sha> --no-prune --maintenance-request-id=<id>`.

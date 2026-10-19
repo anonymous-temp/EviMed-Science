@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 210,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/metabolic-network-modeling/results.json",
+      "sha256": "a56c8ce3140e9766ceea58f65be101b0fbbd16dcb3e25e40dee629be38e084a8"
+    },
+    {
+      "bytes": 767,
+      "path": "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-curated/skill-execution-v1-artifacts/metabolic-network-modeling/metabolic-network-modeling-report.md",
+      "sha256": "15cc50a70e9a11588d9e4d99cbd28fbbebade256472e51629825c3af451ccd3e"
+    }
+  ],
+  "finishedAt": "2026-10-19T12:53:35.261072Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "metabolic-network-modeling",
+  "startedAt": "2026-10-19T12:53:35.259565Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for metabolic-network-modeling and wrote 2 verified artifacts.",
+  "warnings": [
+    "FBA conclusions depend on reaction directionality, bounds, objective choice, and model curation."
+  ]
+}

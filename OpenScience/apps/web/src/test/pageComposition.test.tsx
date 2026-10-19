@@ -231,17 +231,16 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     );
   }
 
-  it.each(GEO_TABS)("$label: the rail is in the sticky band, the tab row is the page's one row of views, and nothing stands under what it controls", async ({ key, label }) => {
+  it.each(GEO_TABS)("$label: compact workflow and result selectors replace repeated navigation bars", async ({ key, label }) => {
     const { container } = renderGeo(key === "overview" ? "/app/geo/geo_masi" : `/app/geo/geo_masi/${key}`);
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
-    await waitFor(() => expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true"));
-    const facts = expectComposed(container, { stepRail: true, tablists: 1 });
-    expect(facts.stepRails).toHaveLength(1);
-    expect([...facts.stepRails[0].querySelectorAll("[data-rail-step]")]).toHaveLength(8);
+    await waitFor(() => expect(screen.getByRole("button", { name: `查看：${label}` })).toBeInTheDocument());
+    const facts = expectComposed(container, { stepRail: false, tablists: 0 });
+    expect(facts.stepRails).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /^进度，已完成/ })).toBeInTheDocument();
     expect(facts.chrome).toHaveClass("sticky", "top-0");
-    // The band's rows: the rail, the tabs and the toolbar's row (drawn, or reserved and empty).
-    expect(facts.chrome!.children).toHaveLength(3);
+    expect(facts.chrome!.children).toHaveLength(1);
   });
 
   // The rail's click and a 「需要你」 row end in `#geo-<block>`; a tab that is rebuilt without the id leaves the link landing at the top
@@ -303,7 +302,7 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(container.querySelector("[data-geo-actions]")).not.toBeNull(), { timeout: 4000 });
-    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
     const chart = container.querySelector("[data-geo-effect]") as HTMLElement;
     const list = container.querySelector("[data-geo-actions]") as HTMLElement;
     const toolbar = facts.toolbars[0];
@@ -369,7 +368,7 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
   it.each(Object.keys(ORDER))("%s: the band, then its toolbar, then its landmarks in order, with no control under what it controls", async (key) => {
     const { container } = renderAt(`/app/geo/geo_masi/${key}`);
     for (const selector of ORDER[key]) await waitFor(() => expect(container.querySelector(selector), `${key}: ${selector}`).not.toBeNull(), { timeout: 4000 });
-    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
     const body = facts.body as HTMLElement;
     expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
     let earlier: Element = facts.toolbars[0];
@@ -396,13 +395,13 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
     const { container } = renderAt("/app/geo/geo_masi/answers/snap_deepseek");
     const heading = await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     await waitFor(() => expect(container.querySelector("[data-geo-answer]")).not.toBeNull());
-    const facts = expectComposed(container, { stepRail: true, tablists: 1, toolbar: true });
+    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
     const action = container.querySelector("[data-geo-answer-primary]") as HTMLElement;
     const text = container.querySelector("[data-geo-answer]") as HTMLElement;
     for (const [before, after] of [[facts.chrome!, heading], [heading, action], [action, text]] as const) expect(precedes(before, after)).toBe(true);
     expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
     // the one question's tab stays selected under the answer
-    expect(screen.getByRole("tab", { name: "问题与回答" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "查看：问题与回答" })).toBeInTheDocument();
   });
 });

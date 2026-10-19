@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
-import { MIN_EDGES, MIN_NODES, existingAt, headline, headlineParts, headlineText, isThin, markKindWord, markRows, narrowMap, relationTitle, replayStops } from "./mapModel";
+import { existingAt, headline, headlineParts, headlineText, isThin, markKindWord, markRows, narrowMap, relationTitle, replayStops } from "./mapModel";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, state: "current", at: "2026-09-01T00:00:00.000Z", open: { kind: "record", id }, ...over });
 const edge = (from: string, to: string, type: MapEdge["type"] = "belongs-to"): MapEdge => ({ from, to, type });
@@ -107,13 +107,11 @@ describe("what the relation picture holds, in a sentence", () => {
   });
 });
 
-describe("when there is too little to draw", () => {
-  it("is fewer than 8 marks or fewer than 5 lines", () => {
-    const some = (count: number) => Array.from({ length: count }, (_, index) => memory(`n${index}`));
-    const lines = (count: number) => Array.from({ length: count }, (_, index) => edge(`memory:n${index}`, "you:account"));
-    expect(isThin({ nodes: some(MIN_NODES - 1), edges: lines(MIN_EDGES) })).toBe(true);
-    expect(isThin({ nodes: some(MIN_NODES), edges: lines(MIN_EDGES - 1) })).toBe(true);
-    expect(isThin({ nodes: some(MIN_NODES), edges: lines(MIN_EDGES) })).toBe(false);
+describe("sparse memory graphs", () => {
+  it("keeps real isolated marks visible and omits only an empty graph", () => {
+    expect(isThin({ nodes: [], edges: [] })).toBe(true);
+    expect(isThin({ nodes: [memory("one")], edges: [] })).toBe(false);
+    expect(isThin({ nodes: [memory("one"), memory("two")], edges: [] })).toBe(false);
   });
 });
 

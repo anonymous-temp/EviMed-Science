@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-19T12:52:13.587059+00:00",
+  "finishedAt": "2026-10-19T12:52:14.576217+00:00",
+  "environment": {
+    "pythonExecutable": "/private/tmp/evimed-knowledge-rectification-venv/bin/python3.12",
+    "pythonVersion": "3.12.12",
+    "dependencyContract": "selected audit runtime plus package-declared dependencies"
+  },
+  "installedPackagesExamined": 4,
+  "executionCertified": 4,
+  "failed": 0,
+  "packages": [
+    {
+      "sourceReceipts": [
+        {
+          "path": "runtime/skills/office/docx/SKILL.md",
+          "bytes": 3781,
+          "sha256": "3c301c452ad343ab6acff479dd27fb4e59312c86e5118958a8cccb41b07ea0d5"
+        },
+        {
+          "path": "runtime/skills/office/docx/scripts/create_docx.py",
+          "bytes": 907,
+          "sha256": "41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6"
+        },
+        {
+          "path": "runtime/skills/office/docx/scripts/docx_tool.py",
+          "bytes": 15917,
+          "sha256": "edf0b689f22eb3219fe0c9e9cd00b442cccc97290823a336ca1a41034e44fbda"
+        },
+        {
+          "path": "runtime/skills/office/shared/render_document.py",
+          "bytes": 11835,
+          "sha256": "8d22054b8098b7b3c2ddca0c36ce5ac8b4061d7767c5031595fed8da1aecb1dc"
+        }
+      ],
+      "package": "office/docx",
+      "operation": "task",
+      "command": [
+        "/private/tmp/evimed-knowledge-rectification-venv/bin/python3.12",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/runtime/skills/office/docx/scripts/create_docx.py",
+        "--input",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/docx/source.txt",
+        "--output",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/docx/report.docx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "3c301c452ad343ab6acff479dd27fb4e59312c86e5118958a8cccb41b07ea0d5",
+      "entrypoint": "runtime/skills/office/docx/scripts/create_docx.py",
+      "entrypointSha256": "41c84714d99790a78a2842500e6240ab2a72028a2cc078026e94602e22692eb6",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/docx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/docx/report.docx",
+          "bytes": 10393,
+          "sha256": "953e49f7d7540bfb6d9cf1b7c356efa326ffa7ec7e0800fc0a7b7287449bfd92"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "sourceReceipts": [
+        {
+          "path": "runtime/skills/office/pdf/SKILL.md",
+          "bytes": 2195,
+          "sha256": "d77077ae36cae77b05c714e1546d5df07504b5e10c69103cc8355bc3411bbc88"
+        },
+        {
+          "path": "runtime/skills/office/pdf/scripts/create_pdf.py",
+          "bytes": 901,
+          "sha256": "fd6a219afbbdd0e012c12ae4ef7b29f0db04c14c7a19eaaef72894381ba72499"
+        },
+        {
+          "path": "runtime/skills/office/pdf/scripts/pdf_tool.py",
+          "bytes": 7744,
+          "sha256": "9cb0a3e7c64980aa21e1366519beb3cd67a5df45abc6e72da31cca20ab17e596"
+        },
+        {
+          "path": "runtime/skills/office/shared/render_document.py",
+          "bytes": 11835,
+          "sha256": "8d22054b8098b7b3c2ddca0c36ce5ac8b4061d7767c5031595fed8da1aecb1dc"
+        }
+      ],
+      "package": "office/pdf",
+      "operation": "task",
+      "command": [
+        "/private/tmp/evimed-knowledge-rectification-venv/bin/python3.12",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/runtime/skills/office/pdf/scripts/create_pdf.py",
+        "--input",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pdf/source.txt",
+        "--output",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pdf/report.pdf"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "pdfHeader": true,
+        "pdfTrailer": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "d77077ae36cae77b05c714e1546d5df07504b5e10c69103cc8355bc3411bbc88",
+      "entrypoint": "runtime/skills/office/pdf/scripts/create_pdf.py",
+      "entrypointSha256": "fd6a219afbbdd0e012c12ae4ef7b29f0db04c14c7a19eaaef72894381ba72499",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pdf/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pdf/report.pdf",
+          "bytes": 7939,
+          "sha256": "0930266edb2b543b550ff4dfde19865ff953ef98ee0bad5b9a11621abab0049c"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "sourceReceipts": [
+        {
+          "path": "runtime/skills/office/pptx/SKILL.md",
+          "bytes": 4448,
+          "sha256": "604c95766be7987482c82d148236bee780b9a96a0bd942d35428fa569f124773"
+        },
+        {
+          "path": "runtime/skills/office/pptx/scripts/create_pptx.py",
+          "bytes": 9510,
+          "sha256": "2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683"
+        },
+        {
+          "path": "runtime/skills/office/pptx/scripts/pptx_tool.py",
+          "bytes": 15927,
+          "sha256": "6eb2b4f71ce5d13d18067cff611b09c10c2f97152c1ca8a9b36d715e036b21b3"
+        },
+        {
+          "path": "runtime/skills/office/shared/render_document.py",
+          "bytes": 11835,
+          "sha256": "8d22054b8098b7b3c2ddca0c36ce5ac8b4061d7767c5031595fed8da1aecb1dc"
+        }
+      ],
+      "package": "office/pptx",
+      "operation": "task",
+      "command": [
+        "/private/tmp/evimed-knowledge-rectification-venv/bin/python3.12",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/runtime/skills/office/pptx/scripts/create_pptx.py",
+        "--title",
+        "EviMed evidence",
+        "--body-file",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pptx/source.txt",
+        "--output",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pptx/report.pptx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "604c95766be7987482c82d148236bee780b9a96a0bd942d35428fa569f124773",
+      "entrypoint": "runtime/skills/office/pptx/scripts/create_pptx.py",
+      "entrypointSha256": "2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pptx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/pptx/report.pptx",
+          "bytes": 4446,
+          "sha256": "791ee84dd4947c2c221211475ceea951bd61a098870e7786ed3752c43e748a38"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "sourceReceipts": [
+        {
+          "path": "runtime/skills/office/xlsx/SKILL.md",
+          "bytes": 3403,
+          "sha256": "c441998722c651ad9e767f42f66bf373c1371c2186cd13691292af9aa05cd6ca"
+        },
+        {
+          "path": "runtime/skills/office/xlsx/scripts/create_xlsx.py",
+          "bytes": 4513,
+          "sha256": "6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c"
+        },
+        {
+          "path": "runtime/skills/office/xlsx/scripts/xlsx_tool.py",
+          "bytes": 5966,
+          "sha256": "7825dff50fe5893f60dbb0b8c6fcd1a07c19983921a3d53774d8c31c9fd7adb6"
+        },
+        {
+          "path": "runtime/skills/office/shared/render_document.py",
+          "bytes": 11835,
+          "sha256": "8d22054b8098b7b3c2ddca0c36ce5ac8b4061d7767c5031595fed8da1aecb1dc"
+        }
+      ],
+      "package": "office/xlsx",
+      "operation": "task",
+      "command": [
+        "/private/tmp/evimed-knowledge-rectification-venv/bin/python3.12",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/runtime/skills/office/xlsx/scripts/create_xlsx.py",
+        "--input",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/xlsx/results.csv",
+        "--output",
+        "/Users/wangzeyuan/.codex/worktrees/platform-followups/EviMedScience/OpenScience/evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/xlsx/report.xlsx",
+        "--sheet",
+        "Evidence"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "c441998722c651ad9e767f42f66bf373c1371c2186cd13691292af9aa05cd6ca",
+      "entrypoint": "runtime/skills/office/xlsx/scripts/create_xlsx.py",
+      "entrypointSha256": "6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/xlsx/results.csv",
+          "bytes": 32,
+          "sha256": "40e70e4e6587c62cc2efad296c778a2aa302ffd0d3fd2e7b60aad79b0072fb7f"
+        },
+        {
+          "path": "evals/capability-audit/results/local-source-20261019-office/platform-skill-execution-v1-artifacts/20261019T125213Z-f3222ad4/xlsx/report.xlsx",
+          "bytes": 1592,
+          "sha256": "9f4e515e91af02027b707dd893ce47a0465ae39deada959e2fba66f6ea2f54a6"
+        }
+      ],
+      "artifactErrors": []
+    }
+  ],
+  "claimBoundary": "This certifies one bounded deterministic task per listed first-party package. Remote-compute and modal-run exercise local provenance recording only, not remote execution. It does not certify every input shape, external remote availability, or feature-complete Office fidelity."
+}

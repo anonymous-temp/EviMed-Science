@@ -180,7 +180,7 @@ export const VCR_MODEL_TIER_LABELS_ZH = Object.freeze({ scenario: '情景模型'
 
 /** Model risk = the model's share of the decision × the cost of being wrong (ICH M15 / ASME V&V 40). */
 export const VCR_MODEL_RISKS = frozen(['none', 'low', 'medium', 'high'])
-export const VCR_MODEL_RISK_LABELS_ZH = Object.freeze({ none: '无（参考仿真）', low: '低', medium: '中', high: '高' })
+export const VCR_MODEL_RISK_LABELS_ZH = Object.freeze({ unassessed: '未评估', none: '无（参考仿真）', low: '低', medium: '中', high: '高' })
 
 /** The highest intended use a model of each tier can carry (§8.2 table). */
 export const VCR_MODEL_TIER_USE_CEILING = Object.freeze({
@@ -324,7 +324,7 @@ export function intendedUseCeilingFor(input) {
  * @param {string} risk @param {readonly string[]} evidence
  */
 export function missingModelEvidence(risk, evidence) {
-  const required = VCR_MODEL_RISK_EVIDENCE[/** @type {keyof typeof VCR_MODEL_RISK_EVIDENCE} */ (risk)] ?? []
+  const required = VCR_MODEL_RISK_EVIDENCE[/** @type {keyof typeof VCR_MODEL_RISK_EVIDENCE} */ (risk)] ?? VCR_MODEL_RISK_EVIDENCE.high
   const held = new Set(evidence ?? [])
   return frozen(required.filter((item) => !held.has(item)))
 }
@@ -332,15 +332,17 @@ export function missingModelEvidence(risk, evidence) {
 /** A model may be called 「数字孪生」 only with all four (NASEM 2023; plan §5.2). */
 export const VCR_TWIN_EVIDENCE = frozen(['individual_conditioned', 'updates_with_new_data', 'calibrated_uncertainty', 'validation_record'])
 /**
- * `digital_twin` when all four hold, `baseline_conditioned_prediction` otherwise.
+ * `digital_twin` when all four hold; prediction requires individual conditioning.
+ * Unconditioned reference distributions remain scenario simulations.
  * The label is derived, never granted by hand (§5.2).
  * @param {readonly string[]} evidence
  */
 export function twinLabel(evidence) {
   const held = new Set(evidence ?? [])
-  return VCR_TWIN_EVIDENCE.every((item) => held.has(item)) ? 'digital_twin' : 'baseline_conditioned_prediction'
+  return VCR_TWIN_EVIDENCE.every((item) => held.has(item)) ? 'digital_twin'
+    : held.has('individual_conditioned') ? 'baseline_conditioned_prediction' : 'scenario_simulation'
 }
-export const VCR_TWIN_LABELS_ZH = Object.freeze({ digital_twin: '数字孪生', baseline_conditioned_prediction: '基线条件化预测' })
+export const VCR_TWIN_LABELS_ZH = Object.freeze({ digital_twin: '数字孪生', baseline_conditioned_prediction: '基线条件化预测', scenario_simulation: '情景仿真' })
 
 // ---------------------------------------------------------------------------
 // The study: tiers, steps, workspaces (§3.2, §4, §9.4)

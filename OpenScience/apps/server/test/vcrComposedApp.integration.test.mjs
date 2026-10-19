@@ -421,15 +421,19 @@ test("C2-12 the ledger the browser reads carries the keys its reader takes, all 
   assert.deepEqual(site.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-own-1", "S-own-2"], "a site reads its own referrals only");
   assert.equal((await call("lead", "GET", `${S}/referrals?state=contactable`)).body.data.referrals.length, 0);
 
-  // The library page's adoption: the account's own model, written by the server as literature-tier from the trials named.
+  // The library preserves cited trials separately from an assessed population; registration alone grants no applicability.
   const adopted = await call("owner", "POST", "/api/vcr/models", { name: `page-model-${suffix}`, version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"] });
   assert.equal(adopted.status, 201, adopted.text);
   const model = (await rows(`SELECT tier, risk, applicability FROM evimed_vcr.models WHERE name = $1`, [`page-model-${suffix}`]))[0];
   assert.equal(model.tier, "literature");
   assert.equal(model.risk, "medium");
-  assert.match(String(model.applicability.population), /NCT02296125/);
+  assert.deepEqual(model.applicability.sources, ["NCT02296125", "CTR20990001"]);
+  assert.equal(model.applicability.population, undefined, "unassessed population is not inferred from source identifiers");
   const library = await call("owner", "GET", "/api/vcr/models");
-  assert.ok(library.body.data.models.some((/** @type {any} */ row) => row.name === `page-model-${suffix}`));
+  const libraryModel = library.body.data.models.find((/** @type {any} */ row) => row.name === `page-model-${suffix}`);
+  assert.ok(libraryModel);
+  assert.deepEqual(libraryModel.sourceRefs, ["NCT02296125", "CTR20990001"], "the canonical browser view preserves both cited trials");
+  assert.equal(libraryModel.scope, null);
 });
 
 test("PA-11 the first human stop, through HTTP: a coordinator confirms one patient by name; a viewer and a site cannot; the second click writes nothing more", options, async () => {

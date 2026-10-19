@@ -1,8 +1,10 @@
+import { Link, useLocation } from "react-router";
+import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { FrontierItem } from "@/lib/frontierClient";
-import { EXTERNAL, INLINE_ACTION, ago } from "./frontierText";
+import { INLINE_ACTION, ago } from "./frontierText";
 
 /** How far back the strip looks (plan 2026-09-23 §6.2: 近 48 小时). */
 export const SAFETY_STRIP_HOURS = 48;
@@ -21,13 +23,15 @@ export function recentAlerts(items: readonly FrontierItem[], now = Date.now()): 
 /** One alert's line: the title, then who issued it and when, in grey. */
 function AlertLink({ item, onOpened }: { item: FrontierItem; onOpened: (item: FrontierItem) => void }) {
   const when = ago(item.timelineAt);
+  const origin = useFrontierOrigin();
+  const location = useLocation();
   return (
-    <a href={item.url} {...EXTERNAL} onClick={() => onOpened(item)} className="flex h-control min-w-0 flex-1 items-center rounded text-ui text-text hover:underline">
+    <Link to={`/app/frontier/items/${encodeURIComponent(item.id)}`} state={{ ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: "前沿动态" } }} onClick={() => { rememberFrontierPosition(); onOpened(item); }} className="flex h-control min-w-0 flex-1 items-center rounded text-ui text-text hover:underline">
       <span className="truncate">
         {item.title}
         <span className="text-text-3"> · {item.source.name}{when && ` · ${when}`}</span>
       </span>
-    </a>
+    </Link>
   );
 }
 

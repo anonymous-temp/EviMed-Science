@@ -1471,7 +1471,7 @@ export function presentDataTab(bundle, query = {}) {
   return {
     headline: cards.length ? `${cards.length} 张假设卡。` : null,
     status: [
-      ...(precedents.length ? [{ label: "试验先例", value: `${precedents.length} 项` }] : []),
+      ...(precedents.length ? [{ label: "参考试验", value: `${precedents.length} 项` }] : []),
       ...(cards.length ? [{ label: "假设卡", value: `${cards.length} 张` }] : []),
       { label: "患者级数据", value: study.dataTier === "T0" ? "未接入" : (snapshots.length ? `${snapshots.length} 个快照` : "未接入") },
     ],
@@ -1480,7 +1480,7 @@ export function presentDataTab(bundle, query = {}) {
     reviews: list(bundle.reviews).map((/** @type {any} */ review) => presentVcrReview(review, reviewContextOf(bundle))),
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,
     precedents,
-    precedentSources: precedents.length ? `${precedents.length} 项试验先例` : null,
+    precedentSources: precedents.length ? `${precedents.length} 项参考试验` : null,
     precedentNote: null,
     // Trial events the feed reported for this study's subject: pointers marked as candidates, never precedents (flywheel F24).
     ...(bundle.candidates?.length ? { precedentCandidates: bundle.candidates } : {}),

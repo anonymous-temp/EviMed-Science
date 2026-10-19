@@ -97,6 +97,11 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
 export function MemoryHubPage() {
   const [params] = useSearchParams();
   const feature = useMemoryMapFeature();
+  // A plain entry opens the actual visual overview; explicit list, search and record links keep their destination.
+  if (params.size === 0) {
+    if (feature === "loading") return <RunsSkeleton filter={false} />;
+    if (feature === "on") return <Navigate to={memoryTabAddress("map")} replace />;
+  }
   // 「成长」 is the map's time view now: an address that names the old tab goes there (where the deployment draws the map), else to the first list.
   if (params.get("tab") === "growth") {
     if (feature === "loading") return <RunsSkeleton filter={false} />;

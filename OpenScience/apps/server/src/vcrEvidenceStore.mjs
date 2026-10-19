@@ -331,6 +331,16 @@ export class VcrEvidenceStore extends VcrStoreBase {
       [userId, studyId, wanted]);
   }
 
+  /** Exact extraction versions, including explicitly unknown values, owned by one source intake.
+   * @param {{ userId: string, studyId: string | null, ids: readonly string[] }} query
+   */
+  async itemsById({ userId, studyId, ids }) {
+    const wanted = [...new Set((ids ?? []).map(String))];
+    if (!wanted.length) return [];
+    return this.rows(`SELECT * FROM ${VCR_SCHEMA}.evidence_items WHERE user_id = $1
+      AND study_id IS NOT DISTINCT FROM $2 AND id = ANY($3::text[])`, [userId, studyId, wanted]);
+  }
+
   /** Per-parameter counts for the 「数据与证据」 page: how much is verified, how much refused. @param {{ userId: string, studyId: string }} query */
   async evidenceCoverage({ userId, studyId }) {
     return this.rows(

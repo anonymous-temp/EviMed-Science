@@ -40,6 +40,8 @@ const VALIDATION_WORD = { passed: "通过", partial: "部分", none: "无" } as 
  */
 export function VcrModelRecord({ model, className }: { model: VcrModelCard; className?: string }) {
   const twin = twinLabelOf(model);
+  const sourceBindings = (Array.isArray(model.revisionCard?.parameterBindings) ? model.revisionCard.parameterBindings : []).filter(row => row && typeof row === "object" && typeof row.field === "string" && typeof row.sourceId === "string" && typeof row.quote === "string" && typeof row.textSha256 === "string" && Number.isFinite(row.mappedValue)) as Array<{ field: string; value: number; mappedValue: number; unit: string; quote: string; quoteStart: number; quoteEnd: number; sourceId: string; textSha256: string }>;
+  const parameterLabels: Record<string, string> = { "truth.effect": "结局差值", "truth.sd": "标准差", "truth.controlRate": "对照发生率", "truth.treatmentRate": "干预发生率", "truth.hazardRatio": "风险比", "truth.controlMedian": "对照中位时间" };
   const rows: Fact[] = [
     ...(model.scope ? [{ label: "适用人群", value: model.scope }] : []),
     ...(model.region ? [{ label: "适用地区", value: model.region }] : []),
@@ -81,6 +83,14 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
       </p>
 
       {rows.length > 0 && <FactList rows={rows} />}
+      {sourceBindings.length > 0 && <Section title="文献参数" level="sub">
+        <DataTable label="文献参数与来源" rows={sourceBindings} rowKey={row => row.field} columns={[
+          { key: "field", header: "参数", cell: row => parameterLabels[row.field] ?? row.field },
+          { key: "value", header: "来源取值", cell: row => `${row.value} ${row.unit || "单位未声明"}` },
+          { key: "mapped", header: "计算取值", cell: row => row.mappedValue },
+          { key: "source", header: "依据", cell: row => <Link className="inline-flex min-h-8 items-center py-1 text-link hover:underline" to={`/app/files/${encodeURIComponent(row.sourceId)}?${new URLSearchParams({ start: String(row.quoteStart), end: String(row.quoteEnd), sha: row.textSha256 })}`}>{row.quote}</Link> },
+        ]} />
+      </Section>}
 
       {model.shapeMissing && model.shapeMissing.length > 0 && (
         <Section title="接口还缺的内容" level="sub" count={model.shapeMissing.length}>
@@ -134,7 +144,7 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
         <Section title="用到它的研究" level="sub" count={numberText(model.usedBy.length, 0)}>
           <ul className="flex flex-wrap gap-x-4 gap-y-1">
             {model.usedBy.map((user) => (
-              <li key={user.id}><Link to={vcrTabPath(user.id, "overview")} className="text-ui text-link hover:underline">{user.label}</Link></li>
+              <li key={user.id}><Link to={vcrTabPath(user.id, "overview")} className="inline-flex min-h-8 items-center py-1 text-ui text-link hover:underline">{user.label}</Link></li>
             ))}
           </ul>
         </Section>

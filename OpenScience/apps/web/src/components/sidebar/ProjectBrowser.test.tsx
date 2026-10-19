@@ -794,7 +794,7 @@ describe("ProjectBrowser — creating and renaming", () => {
 function renderModules(props: { geo?: boolean; vcr?: boolean }, initialPath = "/app/chat") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <ProjectBrowser {...props} />
+      <ProjectBrowser {...props} /><LocationProbe />
     </MemoryRouter>,
   );
 }
@@ -806,45 +806,60 @@ describe("ProjectBrowser — GEO projects", () => {
     mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "p-heart", name: "心衰" }]);
   });
 
-  it("gathers GEO projects in one group at the end, closed, with their count — and not among the researcher's own", async () => {
+  it("lists GEO projects at the same level as ordinary projects with a module icon", async () => {
     renderModules({ geo: true });
-    const group = await screen.findByRole("button", { name: /循证 GEO/ });
-    expect(group).toHaveAttribute("aria-expanded", "false");
-    expect(group).toHaveTextContent("1");
-    expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument();
-    // The researcher's own stay where they were, folder icon and all.
-    expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-folder")).not.toBeNull();
-    const names = screen.getAllByRole("button").map((button) => button.textContent ?? "");
-    expect(names.findIndex((name) => /循证 GEO/.test(name))).toBeGreaterThan(names.findIndex((name) => /Paper 1/.test(name)));
+    await waitFor(() => expect(screen.getByRole("button", { name: "心衰" }).querySelector("svg.lucide-radar")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: /循证 GEO/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paper 1" }).closest("li")?.parentElement).toBe(screen.getByRole("button", { name: "心衰" }).closest("li")?.parentElement);
   });
 
-  it("opens into the project rows an ordinary project has, with the radar where the folder would be", async () => {
+  it("uses the canonical GEO name while preserving a newer project rename", async () => {
+    mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "p-heart", name: "信尔美" }]);
     renderModules({ geo: true });
-    await userEvent.click(await screen.findByRole("button", { name: /循证 GEO/ }));
+    await screen.findByRole("button", { name: "信尔美" });
+    // A stale module read must not undo the name the person just chose.
+    mocks.listGeoProjects.mockReturnValue(new Promise(() => {}));
+    await userEvent.click(screen.getByRole("button", { name: "重命名项目“信尔美”" }));
+    const input = screen.getByRole("textbox", { name: "新的项目名" });
+    expect(input).toHaveValue("信尔美");
+    await userEvent.clear(input);
+    await userEvent.type(input, "产品研究{Enter}");
+    expect(await screen.findByRole("button", { name: "产品研究" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "信尔美" })).not.toBeInTheDocument();
+  });
+
+  it("links a GEO conversation directly to its project's workflow", async () => {
+    mocks.runs["p-heart"] = [run({ id: "geo-answer", question: "产品证据" })];
+    renderModules({ geo: true });
+    await waitFor(() => expect(screen.getByRole("button", { name: "心衰" }).querySelector("svg.lucide-radar")).not.toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "心衰" }));
+    const row = await screen.findByRole("button", { name: /产品证据/ });
+    await userEvent.click(row);
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses-geo-answer"));
+  });
+
+  it("opens conversations directly under the GEO project", async () => {
+    renderModules({ geo: true });
     const heart = await screen.findByRole("button", { name: "心衰" });
-    expect(heart.querySelector("svg.lucide-radar")).not.toBeNull();
-    expect(screen.getByRole("list", { name: "循证 GEO" })).toContainElement(heart);
-    await userEvent.click(screen.getByRole("button", { name: /循证 GEO/ }));
-    expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument();
+    await userEvent.click(heart);
+    expect(heart).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("list", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("remembers that the group was opened, across a reload", async () => {
+  it("remembers each GEO project's expansion across reloads", async () => {
     const first = renderModules({ geo: true });
-    await userEvent.click(await screen.findByRole("button", { name: /循证 GEO/ }));
-    expect(JSON.parse(window.localStorage.getItem("ai4s.sidebar.moduleGroups") ?? "{}")).toEqual({ geo: true });
+    await userEvent.click(await screen.findByRole("button", { name: "心衰" }));
+    expect(JSON.parse(window.localStorage.getItem("ai4s.sidebar.projectGroups") ?? "{}")["p-heart"]).toBe(true);
     first.unmount();
     renderModules({ geo: true });
-    // Until the GEO list answers, its project reads as an ordinary one; once it has, the group is where the reader left it.
-    await waitFor(() => expect(screen.getByRole("button", { name: /循证 GEO/ })).toHaveAttribute("aria-expanded", "true"));
-    expect(screen.getByRole("button", { name: "心衰" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "心衰" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("is open from the start when it holds the project the reader is in, until they close it", async () => {
+  it("opens the current GEO project's conversations directly", async () => {
     setWebProjectId("p-heart");
     useProjectStore.setState({ currentId: "p-heart" });
     renderModules({ geo: true });
-    await waitFor(() => expect(screen.getByRole("button", { name: /循证 GEO/ })).toHaveAttribute("aria-expanded", "true"));
-    expect(screen.getByRole("button", { name: /^心衰\s*（当前项目）$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^心衰\s*（当前项目）$/ })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("draws no group when there is no GEO project, and reads no GEO list when the module is not offered", async () => {
@@ -869,7 +884,7 @@ describe("ProjectBrowser — the module the tab's project belongs to", () => {
     mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
     mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "paper1", name: "Paper 1" }]);
     render(<MemoryRouter initialEntries={["/app/chat"]}><ProjectBrowser geo vcr onCurrentModule={seen} /></MemoryRouter>);
-    await screen.findByRole("button", { name: /循证 GEO/ });
+    await waitFor(() => expect(mocks.listGeoProjects).toHaveBeenCalled());
     await waitFor(() => expect(seen).toHaveBeenLastCalledWith(null));
     // The draft nobody has spoken in is not in the list, and its conversation still belongs to the module.
     await act(async () => { await useProjectStore.getState().select("p-heart"); });
@@ -895,13 +910,10 @@ describe("ProjectBrowser — 虚拟临床研究 studies", () => {
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201", status: "active" }] });
   });
 
-  it("gathers studies in one group at the end, with the people icon on its rows", async () => {
+  it("lists studies beside ordinary projects with the people icon", async () => {
     renderModules({ vcr: true });
-    const group = await screen.findByRole("button", { name: /虚拟临床研究/ });
-    expect(group).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument();
-    await userEvent.click(group);
-    expect((await screen.findByRole("button", { name: "心衰" })).querySelector("svg.lucide-users-round")).not.toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "心衰" }).querySelector("svg.lucide-users-round")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: /虚拟临床研究/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-users-round")).toBeNull();
   });
 
@@ -915,19 +927,16 @@ describe("ProjectBrowser — 虚拟临床研究 studies", () => {
     first.unmount();
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201" }] });
     renderModules({ vcr: true });
-    expect(await screen.findByRole("button", { name: /虚拟临床研究/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^心衰/ })).toBeInTheDocument();
   });
 
-  it("keeps the two groups apart, each with its own count and its own remembered state", async () => {
+  it("keeps each module project's expansion independent without module wrappers", async () => {
     mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "paper1", name: "Paper 1" }]);
     renderModules({ geo: true, vcr: true });
-    const geoGroup = await screen.findByRole("button", { name: /循证 GEO/ });
-    const vcrGroup = await screen.findByRole("button", { name: /虚拟临床研究/ });
-    expect(geoGroup).toHaveTextContent("1");
-    expect(vcrGroup).toHaveTextContent("1");
-    await userEvent.click(vcrGroup);
-    expect(JSON.parse(window.localStorage.getItem("ai4s.sidebar.moduleGroups") ?? "{}")).toEqual({ vcr: true });
-    expect(screen.getByRole("button", { name: /循证 GEO/ })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(await screen.findByRole("button", { name: "心衰" }));
+    expect(screen.getByRole("button", { name: "心衰" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Paper 1" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /循证 GEO|虚拟临床研究/ })).not.toBeInTheDocument();
   });
 
   // 「新建研究」 makes the study and its project before anything is said in it: until the first definition names it, it is a draft and
@@ -1029,7 +1038,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     try {
       window.localStorage.setItem("ai4s.sidebar.moduleGroups", JSON.stringify({ vcr: false }));
       renderModules({ vcr: true }, "/app/virtual-research/std_1");
-      await waitFor(() => expect(screen.getByRole("button", { name: /虚拟临床研究/ })).toHaveAttribute("aria-expanded", "true"));
+      await waitFor(() => expect(screen.getByRole("button", { name: /^心衰/ })).toHaveAttribute("aria-expanded", "true"));
       await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest" }));
       const calls = scroll.mock.calls.length;
       // Another tab of the same study is not another visit: the reader's own scrolling of the sidebar is left alone.
@@ -1045,7 +1054,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     renderModules({ vcr: true }, "/app/virtual-research/std_1/chat");
     await screen.findByRole("button", { name: "Paper 1" });
     // The draft the reader is in is shown while they are in it, as a study of the group.
-    expect(await screen.findByRole("button", { name: /虚拟临床研究/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^心衰/ })).toBeInTheDocument();
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201 二线 NSCLC", status: "active" }], draftProjectIds: [] });
     mocks.projects = PROJECTS.map((project) => (project.id === "p-heart" ? { ...project, name: "EV-201 二线 NSCLC" } : project));
     const { announceVcrStudiesChanged } = await import("@/components/vcr/useVcrProjectIds");

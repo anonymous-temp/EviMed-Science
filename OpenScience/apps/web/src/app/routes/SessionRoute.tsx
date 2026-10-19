@@ -1,3 +1,10 @@
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { useGeoAssociation } from "@/components/geo/useGeoProjectIds";
+import { getGeoProject } from "@/lib/geoClient";
+import { geoChatPath } from "@/lib/geoLocation";
+import { chatSessionId } from "@/lib/runLocation";
+import { useProjectStore } from "@/lib/projects";
 import { PageTitle } from "@/components/layout/PageTitle";
 
 /**
@@ -24,5 +31,21 @@ import { PageTitle } from "@/components/layout/PageTitle";
  * re-cut around it. This file is that re-cut; the spec records the reversal.
  */
 export function SessionRoute() {
+  const projectId = useProjectStore((state) => state.currentId);
+  const association = useGeoAssociation(projectId);
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!association) return undefined;
+    let live = true;
+    // The listing is a hint only. The current authorized project response proves identity.
+    void getGeoProject(association.id).then((project) => {
+      if (!live || project.projectId !== projectId || useProjectStore.getState().currentId !== projectId) return;
+      const intent = (location.state as { runtimeUiIntent?: { projectId?: string; sessionId?: string } } | null)?.runtimeUiIntent;
+      const sessionId = chatSessionId(location.pathname) ?? (intent?.projectId === projectId ? intent.sessionId : null) ?? project.sessionId;
+      navigate(`${geoChatPath(project.id, sessionId)}${location.search}${location.hash}`, { replace: true, state: location.state });
+    }).catch(() => { /* A stale module listing cannot redirect an ordinary conversation. */ });
+    return () => { live = false; };
+  }, [association, projectId, location.pathname, location.search, location.hash, location.state, navigate]);
   return <PageTitle page="对话" />;
 }

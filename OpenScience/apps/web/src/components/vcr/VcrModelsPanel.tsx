@@ -14,32 +14,21 @@ import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrModelAdoptDialog } from "./VcrModelAdoptDialog";
 import { endpointLabel, VcrModelRecord } from "./VcrModelRecord";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
+import { VcrMethodRunner, methodTask } from "./VcrMethodRunner";
 import { intendedUseLabel, modelRiskLabel, modelTierLabel } from "./vcrText";
+
+type VcrModelsMethod = import("@/lib/vcrClient").VcrModels["methods"][number];
 
 type Filter = "all" | VcrModelTier;
 
-/**
- * 模型与方法: the library both studies draw on, and what each model's output is allowed to be used for (R19, plan §5.3; audit B §4.8).
- *
- * The models are a list beside the record of the one in view (`VcrModelRecord`, the same body a study's 「模型 ›」 drawer shows). The
- * tier is not a badge: it is a **ceiling** (plan §8.2). A literature model can support a design and cannot support a submission, and
- * a result that used one is labelled down to that ceiling wherever it appears. The 「数字孪生」 line is derived the same way — a
- * model earns the word only with all four pieces of evidence behind it (`twinLabel`), and the record says which one is missing
- * rather than leaving the term to marketing.
- *
- * Hidden knowledge:
- *  - **A filter with nobody in it is not drawn.** The tiers are the chips, each with its count, and a tier no model is in is not a
- *    chip: zero is not a filter.
- *  - **The statistical method packages are a reference table, folded.** Thirty-five rows of numerics are for the statistician who
- *    checks which algorithm a number came from; they sit under one line at the end and carry no sentence about what a passed
- *    reference case does or does not say.
- *  - **The engine's own catalogue is an operator's matter.** When the compute engine and the method catalogue disagree the platform
- *    says so in its logs and operator views, not to the person choosing a model.
- */
+/** Models retain their evidence records; task-grouped methods configure the existing study computation jobs. */
 export function VcrModelsPanel() {
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [adopting, setAdopting] = useState(false);
+  const [revisingModel, setRevisingModel] = useState<VcrModelCard | null>(null);
+  const [runningMethod, setRunningMethod] = useState<VcrModelsMethod | null>(null);
+  const [sourceModel, setSourceModel] = useState<VcrModelCard | null>(null);
   const { state, reload } = useVcrLoad("vcr:models", () => getVcrModels());
   const data = state.kind === "ready" ? state.data : null;
   const tiers = (["scenario", "literature", "data", "validated"] as const)
@@ -110,6 +99,10 @@ export function VcrModelsPanel() {
                 <div className="pl-6 max-lg:pl-0">
                   <Section title={model.name}>
                     <VcrModelRecord model={model} />
+                    {model.registrationState && <p className="text-caption text-text-2">{model.registrationState === "parameterized_reference" ? "已有来源参数参考配置；个体预测能力及临床验证尚未建立。" : "文献来源已登记，模型说明或参数仍待补充。"}</p>}
+                    {model.specificationMissing?.length ? <ul className="text-caption text-text-2">{model.specificationMissing.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
+                    {model.executionSpec && <Button variant="secondary" onClick={() => { const method = data.methods.find(row => row.method === model.executionSpec?.method); if (method) { setSourceModel(model); setRunningMethod(method); } }}>配置来源参数参考仿真</Button>}
+                    {model.tier === "literature" && <Button variant="secondary" onClick={() => { setRevisingModel(model); setAdopting(true); }}>补充来源并登记新版本</Button>}
                   </Section>
                 </div>
               ) : null;
@@ -118,54 +111,21 @@ export function VcrModelsPanel() {
         )}
 
       {data.methods.length > 0 && (
-        <Disclosure summary={`方法包 · ${data.methods.length}`}>
-          <DataTable
-            label="方法包"
-            minWidth="min-w-[36rem]"
-            columns={[
-              { key: "name", header: "方法", rowHeader: true, cell: (row) => row.name },
-              { key: "version", header: "版本", isEmpty: (row) => !row.version, cell: (row) => row.version ?? "—" },
-              { key: "endpoints", header: "支持的终点", isEmpty: (row) => !row.endpoints, cell: (row) => row.endpoints ?? "—" },
-              {
-                key: "numeric",
-                header: "数值验证",
-                isEmpty: (row) => !row.numeric,
-                cell: (row) => row.numeric
-                  ? (
-                    <span className="flex flex-col gap-1">
-                      <span className="inline-flex items-center gap-1 text-ok"><CircleCheck size={16} aria-hidden="true" />{row.numeric}</span>
-                      {row.validation?.ciUrl && <a className="text-link hover:underline" href={row.validation.ciUrl} target="_blank" rel="noreferrer">查看验证来源</a>}
-                    </span>
-                  )
-                  : <span className="text-text-3">—</span>,
-              },
-              {
-                key: "assumptions",
-                header: "适用假设",
-                isEmpty: (row) => !row.assumptions?.length,
-                cell: (row) => row.assumptions?.length
-                  ? (
-                    <Disclosure summary="查看假设及来源">
-                      <List label={`${row.name} 的适用假设`}>
-                        {row.assumptions.map((item, index) => (
-                          <li key={index} className="py-1">
-                            <p>{item.text}</p>
-                            <p className="text-text-3">{item.source}</p>
-                          </li>
-                        ))}
-                      </List>
-                    </Disclosure>
-                  )
-                  : <span className="text-text-3">—</span>,
-              },
-              { key: "usedIn", header: "用在", isEmpty: (row) => !row.usedIn, cell: (row) => row.usedIn ?? "—" },
-            ]}
-            rows={data.methods}
-            rowKey={(row) => row.id}
-            rowAttrs={(row) => ({ "data-vcr-method": row.id })}
-          />
-        </Disclosure>
+        <Section title="方法">
+          {Array.from(new Set(data.methods.map((method) => methodTask(method.method ?? method.id)))).map((task) => (
+            <Section key={task} title={task}>
+              <List label={task}>
+                {data.methods.filter((method) => methodTask(method.method ?? method.id) === task).map((method) => (
+                  <ListRow key={method.id} title={method.name} onOpen={() => { setSourceModel(null); setRunningMethod(method); }}
+                    titleProps={{ "data-vcr-method": method.id }}
+                    meta={<span className="text-caption text-text-3">{method.endpoints ?? "终点要求未说明"} · {method.usedIn ?? "选择研究后配置"}</span>} />
+                ))}
+              </List>
+            </Section>
+          ))}
+        </Section>
       )}
+      {runningMethod && <VcrMethodRunner key={`${runningMethod.id}:${sourceModel?.id ?? ""}`} method={runningMethod} sourceModel={sourceModel?.executionSpec ? { id: sourceModel.id, version: sourceModel.version, studyId: sourceModel.studyId, scenario: sourceModel.executionSpec.scenario } : undefined} onClose={() => { setRunningMethod(null); setSourceModel(null); }} />}
 
       {data.ladder && data.ladder.length > 0 && (
         <Disclosure summary="可信度要求（按用途）">
@@ -183,7 +143,7 @@ export function VcrModelsPanel() {
         </Disclosure>
       )}
 
-      {adopting && <VcrModelAdoptDialog onClose={() => setAdopting(false)} onSaved={reload} />}
+      {adopting && <VcrModelAdoptDialog initialModel={revisingModel} onClose={() => { setAdopting(false); setRevisingModel(null); }} onSaved={reload} />}
     </div>
   );
 }

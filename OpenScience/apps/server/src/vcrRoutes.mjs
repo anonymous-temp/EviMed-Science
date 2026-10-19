@@ -268,7 +268,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -601,6 +601,25 @@ export function createVcrRoutes(dependencies) {
     if (parts[0] === "precedents") {
       if (parts.length === 1 && method === "GET") {
         return reply(await service.precedents(user, Object.fromEntries([...url.searchParams].slice(0, 20))));
+      }
+      if (parts.length === 2 && parts[1] === "search" && method === "GET") {
+        const q = String(url.searchParams.get("q") ?? "").trim();
+        if (!q || q.length > 200) throw new HttpError(400, "vcr_payload_invalid", "Search requires 1–200 characters.");
+        return reply(await service.searchReferenceTrials(user, { q }));
+      }
+      if (parts.length === 2 && ["record", "apply"].includes(parts[1]) && (method === "GET" || method === "POST")) {
+        const input = method === "POST" ? await bodyOf(req, maxJsonBytes, ["studyId", "registry", "registryId"]) : Object.fromEntries(url.searchParams);
+        if (!["clinicaltrials.gov", "chictr", "ctis"].includes(String(input.registry)) || typeof input.registryId !== "string"
+          || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$/.test(input.registryId)) {
+          throw new HttpError(400, "vcr_payload_invalid", "A supported registry and registration number are required.");
+        }
+        if (parts[1] === "record" && method === "GET") return reply(await service.readReferenceTrial(user, input));
+        if (parts[1] === "apply" && method === "POST") {
+          if (typeof input.studyId !== "string" || !ID.test(input.studyId)) throw new HttpError(400, "vcr_payload_invalid", "studyId is an id.");
+          await authorize(input.studyId, "write");
+          return reply(await audited("vcr.reference.apply", () => ({ code: input.registryId }), { studyId: input.studyId },
+            () => service.applyReferenceTrial(user, input)), 201);
+        }
       }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
@@ -1182,6 +1201,12 @@ export function createVcrRoutes(dependencies) {
       return reply({ ...answer, evaluated });
     }
 
+    if (section === "model-sources" && parts.length === 4 && method === "GET") {
+      await authorize(id, "read");
+      if (!/^src_[a-f0-9]{64}$/.test(parts[3])) throw new HttpError(404, "source_not_found", "Source not found.");
+      return reply(await service.modelSourcePreview(user, id, parts[3]));
+    }
+
     // --- jobs ------------------------------------------------------------------
     if (section === "jobs") {
       if (parts.length === 3 && method === "GET") {
@@ -1190,7 +1215,7 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection", "modelId"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
         if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
           throw new HttpError(400, "vcr_job_scenario_invalid", "subjectId is the id of one of the study's objects.");
@@ -1204,17 +1229,21 @@ export function createVcrRoutes(dependencies) {
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
         if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,body.kind)) {
+          if (body.modelId != null) throw new HttpError(400, "vcr_model_invalid", "Literature reference profiles do not execute longitudinal adapters.");
           if (!service.packages.longitudinal) throw UNAVAILABLE();
           const {job} = await service.packages.longitudinal.prepare(study,body,String(user.id));
           return reply(job,201);
         }
         if (body.kind === 'match_criteria') {
+          if (body.modelId != null) throw new HttpError(400, "vcr_model_invalid", "Matching uses its owned record selection, not a reference simulator.");
           await requireAbility(study, 'read_patient_level');
           if (body.scenario || body.inputs) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Matching accepts owned record selection, not a caller scenario.');
           if (!hooks.matching?.enqueuePanel) throw UNAVAILABLE();
           return reply(await hooks.matching.enqueuePanel(study, body.selection ?? {}, String(user.id)), 201);
         }
         if (body.selection != null) throw new HttpError(400, 'vcr_matching_selection_invalid', 'selection is for matching only.');
+        if (body.modelId != null && (typeof body.modelId !== "string" || !ID.test(body.modelId))) throw new HttpError(400, "vcr_model_invalid", "modelId is an id.");
+        const sourceModel = body.modelId ? await service.modelExecution(user, study, body.modelId, body.kind, body.scenario ?? {}) : null;
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
         const subject = hooks.jobs.store
@@ -1223,7 +1252,7 @@ export function createVcrRoutes(dependencies) {
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
             studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [],
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
-            detail: subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {}),
+            detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...(sourceModel ? { sourceModel } : {}) },
           }));
         if (subject && hooks.orchestrator?.noteRuntimeJob) await hooks.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
         return reply(job, created ? 201 : 200);
@@ -1234,6 +1263,16 @@ export function createVcrRoutes(dependencies) {
         const job = await hooks.jobs.get(study.id, parts[3]);
         if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
         return reply(job);
+      }
+      if (parts.length === 5 && parts[4] === "configuration" && method === "GET") {
+        const { study } = await authorize(id, "run");
+        // Historical scenarios may describe patient-level selections; a general
+        // study reader must not acquire them through configuration reuse.
+        await requireAbility(study, "read_patient_level");
+        if (!hooks.jobs?.configuration) throw UNAVAILABLE();
+        const configuration = await hooks.jobs.configuration(study.id, parts[3]);
+        if (!configuration) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
+        return reply(configuration);
       }
       if (parts.length === 5 && parts[4] === "cancel" && method === "POST") {
         await bodyOf(req, maxJsonBytes, []);

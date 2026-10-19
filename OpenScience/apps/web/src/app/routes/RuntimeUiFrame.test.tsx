@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
 import { SessionRoute } from "./SessionRoute";
@@ -41,10 +41,10 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   fetchWebConnectors: mocks.connectors, saveWebConnectorCredential: mocks.saveConnector, dispatchWebAgentRun: mocks.dispatch,
 }));
 // 循证 GEO's two calls: which GEO project this is, and writing an option to it.
-const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn() }));
+const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn(), getGeoProject: vi.fn() }));
 vi.mock("@/lib/geoClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
-  listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject,
+  listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject, getGeoProject: geo.getGeoProject,
 }));
 // 虚拟临床研究's two calls: the study this project is and what the chip needs of it (a draft included), and writing an option to it.
 // The home list is mocked too, only to say that the frame never reads it: the list leaves out a draft.
@@ -77,12 +77,14 @@ function PathProbe() {
  */
 const taskPane = { sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
 function TaskPaneProbe() {
+  const { sessionId: geoSession } = useParams();
+  const heldSession = geoSession ?? taskPane.sessionId;
   const element = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const pane = element.current!;
     pane.getBoundingClientRect = () => ({ ...taskPane.rect, x: taskPane.rect.left, y: taskPane.rect.top, right: taskPane.rect.left + taskPane.rect.width, bottom: taskPane.rect.top + taskPane.rect.height, toJSON: () => ({}) }) as DOMRect;
-    return taskPane.sessionId ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: taskPane.sessionId }) : undefined;
-  }, []);
+    return heldSession ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: heldSession }) : undefined;
+  }, [heldSession]);
   return <div ref={element} data-testid="task-pane">task bar and pane</div>;
 }
 /**
@@ -91,13 +93,15 @@ function TaskPaneProbe() {
  * the chat route, which is a placeholder beside it.
  */
 function mount(state: unknown = null, path = "/app/chat") {
-  return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><SessionFrameHost /><Routes>
+  const [pathname, query] = path.split("?");
+  return render(<MemoryRouter initialEntries={[{ pathname, search: query ? `?${query}` : "", state }]}><PathProbe /><SessionFrameHost /><Routes>
     <Route path="/app/chat/:sessionId?" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
     <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
     <Route path="/app/autopilot/:taskId" element={<TaskPaneProbe />} />
+    <Route path="/app/geo/:geoId/chat/:sessionId?" element={<TaskPaneProbe />} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
@@ -106,6 +110,7 @@ function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = 
     data: { version: 1, frameId: binding.frameId, projectId: "default", seq: 1, ...data } })));
 }
 beforeEach(() => {
+  geo.getGeoProject.mockReset(); geo.getGeoProject.mockRejectedValue(new Error("not a module project in this test"));
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
   mocks.listRuns.mockReset(); mocks.listRuns.mockResolvedValue([]);
@@ -1000,6 +1005,27 @@ describe("native frame identity and readiness", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法连接");
     expect(mocks.create).not.toHaveBeenCalled();
   });
+  it("keeps GEO acknowledgements and native session selection inside the workflow using one resident frame", async () => {
+    const state = { runtimeUiIntent: { kind: "create", projectId: "default", requestId: "request-geo", sessionId: "session-a" } };
+    const { container } = mount(state, "/app/geo/geo_one/chat/session-a?step=evidence&result=evidence&view=value");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-geo", ok: true, sessionId: "session-a" });
+    await waitFor(() => expect(screen.getByTestId("state")).not.toHaveTextContent("runtimeUiIntent"));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo_one/chat/session-a");
+    expect(screen.getByTestId("search")).toHaveTextContent("?step=evidence&result=evidence&view=value");
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, sessionId: "session-native" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo_one/chat/session-native"));
+    expect(screen.getByTestId("search")).toHaveTextContent("view=value");
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo_one/chat/session-a"));
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
   it("opens deep links and back navigation in the same frame, and mirrors native session selection", async () => {
     const { container } = mount(null, "/app/chat/session-a");
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
@@ -1853,6 +1879,16 @@ describe("循证 GEO in the conversation", () => {
     const geoPosts = () => post.mock.calls.map(call => call[0]).filter(data => data.type === "evimed.runtime-ui.geo");
     return { view, frame, post, geoPosts };
   }
+
+  it("adopts an ordinary-chat GEO binding into its project workflow without remounting the native frame", async () => {
+    geo.getGeoProject.mockResolvedValue({ id: "geo_1", projectId: "default", sessionId: "session-a" });
+    const { view, frame } = await openGeoConversation();
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo_1/chat/session-a"));
+    expect(geo.getGeoProject).toHaveBeenCalledWith("geo_1");
+    expect(view.container.querySelector("iframe")).toBe(frame);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
 
   it("tells the chip the project's coverage window, engines and single-step starters", async () => {
     const { view, geoPosts } = await openGeoConversation("geo-strategy");

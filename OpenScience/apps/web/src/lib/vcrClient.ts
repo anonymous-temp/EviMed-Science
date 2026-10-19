@@ -66,7 +66,7 @@ export type VcrReviewKind = "clinical" | "statistical" | "data";
 export type VcrDataTier = "T0" | "T1" | "T2" | "T3";
 export type VcrIntendedUse = "exploratory" | "design_support" | "specified_analysis" | "submission_preparation";
 export type VcrModelTier = "scenario" | "literature" | "data" | "validated";
-export type VcrModelRisk = "none" | "low" | "medium" | "high";
+export type VcrModelRisk = "unassessed" | "none" | "low" | "medium" | "high";
 export type VcrIntervalKind = "confidence" | "credible" | "prediction" | "monte_carlo";
 export type VcrStudyStatus = "draft" | "active" | "paused" | "archived";
 /** The seven steps, in order (`VCR_STEPS`). */
@@ -724,6 +724,16 @@ export interface VcrPopulationTab {
 
 /** A model's card (plan §8.2). */
 export interface VcrModelCard {
+  studyId?: string | null;
+  executionSpec?: { method: string; scenario: Record<string, unknown> } | null;
+  specificationMissing?: string[];
+  registrationState?: string | null;
+  revisionCard?: Record<string, unknown>;
+  revisionApplicability?: Record<string, unknown>;
+  sourceRefs?: string[];
+  endpointType?: VcrModelBody["endpointType"] | null;
+  sourceRegistryId?: string | null;
+  sourceStatus?: string | null;
   id: string;
   name: string;
   family?: string | null;
@@ -755,7 +765,7 @@ export interface VcrModelCard {
   missingData?: string | null;
   retirement?: string | null;
   /** `digital_twin` only with all four pieces of evidence (`twinLabel`). */
-  twin?: "digital_twin" | "baseline_conditioned_prediction" | null;
+  twin?: "digital_twin" | "baseline_conditioned_prediction" | "scenario_simulation" | null;
   /** The label the model has earned, in words. */
   twinLabel?: string | null;
   twinReason?: string | null;
@@ -3202,3 +3212,58 @@ export interface VcrCorrectionDataset {
 export interface VcrCorrectionReplay { evaluated: number; matched: number; partition: 'held_out'; extractionRerun: false }
 export const exportVcrCorrectionCases = (studyId: string, after = '0') => productRequest<VcrCorrectionDataset>(`${study(studyId)}/correction-cases`, 'POST', { after, limit: 100 });
 export const replayVcrCorrectionCases = (studyId: string, datasetId: string) => productRequest<VcrCorrectionReplay>(`${study(studyId)}/correction-cases/${id(datasetId)}/replay`, 'POST', {});
+
+export interface VcrReferenceCandidate {
+  registry: string;
+  registryId: string;
+  title: string;
+  conditions?: string[];
+  enrollment?: number | null;
+}
+export interface VcrReferenceSearch {
+  status: string;
+  candidates: VcrReferenceCandidate[];
+  registries: Array<{ registry: string; status: string; reason?: string | null; total?: number | null }>;
+}
+export interface VcrReferenceRecord {
+  registryId?: string;
+  available: boolean;
+  status: string;
+  reason?: string;
+  record?: {
+    title?: string;
+    text?: string;
+    enrollment?: { planned?: number | null; actual?: number | null };
+    values?: Array<{ parameter: string; value: number | null; unit: string; verification: string }>;
+    unavailable?: string[];
+  };
+}
+export function searchVcrReferenceTrials(q: string) {
+  return productRequest<VcrReferenceSearch>(`/vcr/precedents/search?${new URLSearchParams({ q })}`);
+}
+export function readVcrReferenceTrial(registry: string, registryId: string) {
+  return productRequest<VcrReferenceRecord>(`/vcr/precedents/record?${new URLSearchParams({ registry, registryId })}`);
+}
+export function applyVcrReferenceTrial(studyId: string, registry: string, registryId: string) {
+  return productRequest<{ status: string; reason?: string; counts?: { verified: number; refused: number } }>("/vcr/precedents/apply", "POST", { studyId, registry, registryId });
+}
+
+/** Only reproducible caller references are returned; engine locations and resolved data stay server-side. */
+export interface VcrMethodConfiguration {
+  sourceModel?: { id: string; version: string } | null;
+  kind: string;
+  method: string;
+  methodVersion: string | null;
+  scenarioHash: string | null;
+  scenario: Record<string, unknown>;
+  seed: number;
+  replicates: number | null;
+  inputRefs: Array<{ kind: "snapshot"; id: string }>;
+  unavailableInputs: number;
+}
+export function getVcrMethodHistory(studyId: string) {
+  return productRequest<{ jobs: Array<VcrJob & { method?: string; methodVersion?: string | null; scenarioHash?: string | null; createdAt?: string }> }>(`${study(studyId)}/jobs`);
+}
+export function getVcrMethodConfiguration(studyId: string, jobId: string) {
+  return productRequest<VcrMethodConfiguration>(`${study(studyId)}/jobs/${id(jobId)}/configuration`);
+}

@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage } from "../../../scripts/ops/ui-walk.mjs";
+import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage, verifyCompactWorkflowViews } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -124,7 +124,7 @@ test("the band: sticky in its parent and held when the page moves; a band that s
 
 test("a module page without its steps is named; a rail on the page's own tab row of dots is steps", { skip }, async () => {
   const none = await compose(framed({ band: tabs(TABS) + toolbar(), body: section(rows(3)) }));
-  assert.match(textOf(none, "step-rail")[0], /^geo-plan@desktop: \[step-rail\] a module page shows no steps/);
+  assert.match(textOf(none, "step-rail")[0], /^geo-plan@desktop: \[step-rail\] the compact workflow does not expose all eight steps/);
   const dotted = await compose(framed({ band: tabs(["总览", "人群", "患者", "对照", "试验", "匹配", "数据"], { dots: true, label: "研究视图" }) + toolbar(), body: section(rows(3)) }), { name: "vcr-trial" });
   assert.deepEqual(textOf(dotted, "step-rail"), []);
   assert.deepEqual(dotted.facts.tablists.map((entry) => [entry.tabs, entry.dots]), [[7, 6]]);
@@ -289,3 +289,32 @@ test("the project the app remembers is forgotten at the start of every document,
   }
 });
 
+
+test("the compact workflow collector reads the progress menu and result selector", { skip }, async () => {
+  for (const viewport of ["desktop", "phone"]) {
+    const read = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="查看：总览">总览</button>'), body: section(rows(3)) + LONG }), { viewport });
+    assert.deepEqual(read.facts.compactWorkflow, { count: 8, views: true, folded: false, inChrome: true });
+    assert.ok(!rulesOf(read).includes("step-rail"));
+    if (viewport === "phone") {
+      const folded = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="筛选，已选 1 项">筛选</button>'), body: section(rows(3)) + LONG }), { viewport });
+      assert.deepEqual(folded.facts.compactWorkflow, { count: 8, views: false, folded: true, inChrome: true });
+      assert.ok(rulesOf(folded).includes("chrome"), "a folded trigger alone does not certify its destinations");
+    }
+    const absent = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar(), body: section(rows(3)) + LONG }), { viewport });
+    assert.ok(rulesOf(absent).includes("chrome"));
+  }
+});
+
+
+test("the folded workflow probe opens the menu, checks all destinations and closes it", { skip }, async () => {
+  const labels = ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
+  const content = (choices) => framed({ band: `<button aria-label="筛选，已选 1 项" onclick="document.querySelector('[role=menu]').hidden=false">筛选</button><div hidden role="menu" aria-label="筛选">${choices.map((label) => `<button role="menuitemradio">${label}</button>`).join("")}</div>`, body: section(rows(3)) }) + `<script>document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelector('[role=menu]').hidden=true})</script>`;
+  await page.setContent(content(labels));
+  assert.equal(await verifyCompactWorkflowViews(page), true);
+  assert.equal(await page.getByRole("menu", { name: "筛选" }).isVisible(), false);
+  await page.setContent(content(labels.slice(0, -1)));
+  page.setDefaultTimeout(200);
+  await assert.rejects(verifyCompactWorkflowViews(page), /Timeout/);
+  page.setDefaultTimeout(30_000);
+  assert.equal(await page.getByRole("menu", { name: "筛选" }).isVisible(), false, "a failed destination check also restores the menu");
+});

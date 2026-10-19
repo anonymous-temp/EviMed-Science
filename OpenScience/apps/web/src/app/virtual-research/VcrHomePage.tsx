@@ -36,7 +36,7 @@ type HomeTab = "studies" | "models" | "precedents" | "definitions";
 const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
   { value: "studies", label: "研究" },
   { value: "models", label: "方法库" },
-  { value: "precedents", label: "试验先例" },
+  { value: "precedents", label: "参考试验" },
   { value: "definitions", label: "人群定义" },
 ]);
 
@@ -192,7 +192,7 @@ export function VcrHomePage() {
 
   return (
     <HomeFrame
-      actions={none ? undefined : newStudy}
+      actions={tab === "studies" && !none ? newStudy : undefined}
       toolbar={{
         views: {
           label: "虚拟临床研究的视图",

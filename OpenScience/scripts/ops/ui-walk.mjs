@@ -159,7 +159,7 @@ import { brotliDecompressSync } from "node:zlib";
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO's is a step rail above its tabs.","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO uses one compact progress menu and a result-view selector (owner, 2026-10-19).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
@@ -187,6 +187,7 @@ const WALK_TABLES = {
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
       {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
+      {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -198,7 +199,7 @@ const WALK_TABLES = {
       {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
       {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
-      {"view":"memory","route":"/app/memory","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
@@ -217,15 +218,15 @@ const WALK_TABLES = {
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
-      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":true},
-      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
+      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
+      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
+      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
+      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
+      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
+      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
+      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
+      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"compact","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the compact workflow): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -548,6 +549,12 @@ export function frontierTargets({ zones, cards, links, hot }) {
   };
 }
 
+/** The first published article offered by the account-scoped frontier items endpoint. */
+export function frontierItemRoute(page) {
+  const item = Array.isArray(page?.items) ? page.items.find((entry) => typeof entry?.id === "string" && entry.id) : null;
+  return item ? `/app/frontier/items/${encodeURIComponent(item.id)}` : null;
+}
+
 /**
  * The run and path of a finished evidence matrix, from the run list: the newest delivered `clinical-evidence-synthesis` deliverable,
  * whose package holds `clinical-evidence-matrix.json` beside the report (the one capability that writes it).
@@ -651,6 +658,9 @@ async function discoverRoutes(context, base, notices, failures) {
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
 
+  const article = frontierItemRoute(await readData(context, base, "/api/frontier/items?limit=1", failures));
+  if (article) routes.push(["frontier-item", article]);
+  else skip("frontier-item", "the account has no published frontier article");
   const zones = await readData(context, base, "/api/frontier/zones", failures);
   const hot = await readData(context, base, "/api/frontier/hot", failures);
   const first = frontierTargets({ zones, hot });
@@ -1349,12 +1359,35 @@ export function measureComposition([options] = [{}]) {
   const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
 
   const read = {
-    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail, tablists, viewGroups, toolbars, controlsAfterContent,
+    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    compactWorkflow: (() => {
+      const progress = live("button[aria-label]").find((el) => /^进度，已完成 \d+\/(\d+) 步/.test(el.getAttribute("aria-label") ?? ""));
+      const views = live("button[aria-label]").find((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
+      const folded = !views ? live("[data-page-chrome] button[aria-label]").find((el) => /^筛选(?:，|$)/.test(el.getAttribute("aria-label") ?? "")) : null;
+      return progress ? { count: Number(progress.getAttribute("aria-label")?.match(/\/(\d+) 步/)?.[1]), views: Boolean(views), folded: Boolean(folded), inChrome: Boolean((views ?? folded)?.closest("[data-page-chrome]")) } : null;
+    })(), tablists, viewGroups, toolbars, controlsAfterContent,
     orphans, tags, tagLike, words, primaries, zeroCounts, outline, chartGrids, empties, notes, headline: live("[data-headline]").length,
     activity: live("[data-activity]").length, stepStates: live("[data-step-state]").map((el) => el.getAttribute("data-step-state")),
   };
   if (startScroller && startTop) startScroller.scrollTop = startTop;
   return read;
+}
+
+/** Open the folded toolbar and prove every GEO destination remains available, then restore its closed state. */
+export async function verifyCompactWorkflowViews(page) {
+  const trigger = page.locator("[data-page-chrome]").getByRole("button", { name: /^筛选(?:，|$)/ });
+  await trigger.click();
+  try {
+    const menu = page.getByRole("menu", { name: "筛选", exact: true });
+    await menu.waitFor({ state: "visible" });
+    for (const label of ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"]) {
+      await menu.getByRole("menuitemradio", { name: label, exact: true }).waitFor({ state: "visible" });
+    }
+    return true;
+  } finally {
+    await page.keyboard.press("Escape");
+    await page.getByRole("menu", { name: "筛选", exact: true }).waitFor({ state: "hidden" });
+  }
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
@@ -1388,7 +1421,7 @@ export function compositionFindings(name, viewportName, c) {
   const current = `${name}@${viewportName}`;
   /** @type {Finding[]} */ const found = [];
   if (!c) return { failures: [], notices: [finding("not-observable", current, `${current}: not observable: the page's composition was not read`)] };
-  const { template } = templateOf(name);
+  const { view, template } = templateOf(name);
   const add = (/** @type {string} */ rule, /** @type {string} */ text, /** @type {number} */ value) => found.push(finding(rule, current, `${current}: [${rule}] ${text}`, value));
   const pageLevel = (/** @type {Array<{ inSection: boolean }>} */ list) => list.filter((entry) => !entry.inSection);
   const quote = (/** @type {string[]} */ list, limit = 3) => `${list.slice(0, limit).map((text) => `“${text}”`).join("、")}${list.length > limit ? ` and ${list.length - limit} more` : ""}`;
@@ -1423,7 +1456,11 @@ export function compositionFindings(name, viewportName, c) {
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
     if (template.stepRail === "every-tab") {
       if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
-      if (!c.stepRail && !dotted) add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+      if (!c.stepRail && !dotted && view?.workflow !== "compact") add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+    }
+    if (view?.workflow === "compact" && !c.stepRail) {
+      if (c.compactWorkflow?.count !== 8) add("step-rail", "the compact workflow does not expose all eight steps");
+      if (!c.compactWorkflow?.views || !c.compactWorkflow?.inChrome) add("chrome", "the compact workflow has no result-view selector in the page band");
     }
     if (template.stepRail === "none" && c.stepRail) add("template-slot", `a ${template.name} has a step rail (only a module page does)`);
     if (template.tablist === "none" && tablists.length > 0) add("template-slot", `a ${template.name} has a tab list: ${quote(tablists.map((entry) => entry.label || "unnamed"))}`, tablists.length);
@@ -1493,7 +1530,7 @@ export function familyFindings(pages) {
   }
   for (const [key, tabs] of modules) {
     if (tabs.length < 2) continue;
-    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
+    const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : c.compactWorkflow?.count ?? (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
     const counts = tabs.map((tab) => steps(tab.c));
     if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
     const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
@@ -3290,6 +3327,9 @@ async function main() {
           // The composition (R19): what the framework's markers say about the order and the places of the page's parts. It moves the scroll
           // area by a few hundred pixels and puts it back, so it is read before anything is clicked.
           const composition = await page.evaluate(measureComposition, [{ hold: true }]);
+          if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
+            composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
+          }
           report.pages[current].composition = composition;
           const arranged = compositionFindings(name, viewportName, composition);
           failures.push(...arranged.failures);
@@ -3874,8 +3914,8 @@ async function walkAddressState(page, base) {
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // A memory row that opens in a drawer: in the address while open, closed by Back. A row that goes to a page (a work's document) is not one.
-  await openRoute(page, base, "/app/memory");
+  // The landing address opens the map; the self tab holds the memory rows whose drawers this probe exercises.
+  await openRoute(page, base, "/app/memory?tab=self");
   const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {

@@ -171,11 +171,11 @@ per-project workspace + JSONL provenance.
   explaining the system. Nothing shows back-office provenance, an engine name or a file address.
 - **Page structure** (2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
   kind of object (a data page — the 记忆地图, the knowledge base's reader and graph — is the one
-  exception, `DESIGN.md` rule 1), detail opens in the right-hand drawer, the header is the title, the scope
+  exception, `DESIGN.md` rule 1), short record detail opens in a drawer; articles and documents have addressed reading pages, and conversations remain in their project workspace. The header is the title, the scope
   and at most one primary button, and nothing that looks clickable may be silent.
   `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
   Since R19 (2026-10-14) a page is **composed from slots**, not drawn: `PageShell` takes `scope`, `steps`, `activity`,
-  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the steps, tabs and toolbar in one sticky band;
+  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the appropriate workflow selector, view navigation and toolbar in one band without redundant step/tab bars (owner, 2026-10-19);
   the pieces are `Toolbar`, `StepRail`, `StepState`, `ActivityStrip`, `Note`, `Headline`, `Section`, `FactList`,
   `ChartGrid`, `Outline`, `MasterDetail`, `ScopeMenu` and `StateScreen` in `components/ui/`. A page does not write its own
   filter row, step rail, tab bar or standalone grey sentence. `DESIGN.md` 「页面结构」 holds the six templates and rules 7–13;

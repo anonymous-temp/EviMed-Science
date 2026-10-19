@@ -24,8 +24,6 @@ export const REASON_TEXT: Readonly<Record<MapReason, string>> = {
 };
 
 /** Fewer marks or lines than this and a picture says less than the list under it. */
-export const MIN_NODES = 8;
-export const MIN_EDGES = 5;
 
 export interface NarrowedMap {
   nodes: MapNode[];
@@ -132,9 +130,9 @@ export function headlineText(parts: readonly HeadlinePart[]): string {
   return parts.map((part) => part.text).join("");
 }
 
-/** Whether the document has too little to draw as a graph: the headline, three numbers and the list say it better. */
+/** A single real mark is drawable; a lack of relationships must not hide memories or documents. */
 export function isThin(doc: Pick<MemoryMap, "nodes" | "edges">): boolean {
-  return doc.nodes.length < MIN_NODES || doc.edges.length < MIN_EDGES;
+  return !doc.nodes.some((node) => node.type !== "you");
 }
 
 /**

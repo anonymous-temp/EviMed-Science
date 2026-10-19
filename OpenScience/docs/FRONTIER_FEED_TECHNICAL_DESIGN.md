@@ -1695,7 +1695,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `OPEN_SCIENCE_FRONTIER_TIMEZONE` | `Asia/Shanghai` | IANA 时区 |
 | `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 10 | 0–10000；0=不设限；≥80% 节流，≥100% 停止 |
 | `OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` | 2 | 1–8 |
-| `OPEN_SCIENCE_FRONTIER_OFFPEAK` | `true` | 非紧急条目避开供应商高峰时段编辑 |
+| `OPEN_SCIENCE_FRONTIER_OFFPEAK` | `false` | Edit throughout the day within the existing daily budget; optional offpeak deferral must be explicitly enabled (owner freshness correction, 2026-10-19). |
 | `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` | 82 | 0–100 |
 | `OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH` | 50 | 1–200；周刊收件人分页、安全推送扇出与投递循环的批量（日报推送固定每次 50 人） |
 | `OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH` | 100 | 1–500 |

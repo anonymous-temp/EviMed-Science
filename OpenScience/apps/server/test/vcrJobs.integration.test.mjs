@@ -1383,3 +1383,32 @@ test("a submit the unreachable engine never received is the same wait, and the n
   assert.equal(retake.action, "resubmitted");
   assert.equal(jobView(await store.job(study.id, claimed.id), new Date()).waitingOn, undefined);
 });
+
+test("method reuse reads immutable configurations and retains only safe input references", options, async () => {
+  const study = await makeStudy("reuse");
+  const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+  const first = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], seed: 19 });
+  const saved = await jobs.configuration(study.id, first.job.id);
+  assert.deepEqual(saved.scenario, scenario);
+  assert.equal(saved.seed, 19);
+  assert.equal(saved.unavailableInputs, 0);
+  assert.deepEqual(saved.inputRefs, []);
+  assert.equal(await jobs.configuration("std_other", first.job.id), null);
+  const changed = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio: 0.6 } }, inputs: [], seed: 19 });
+  assert.notEqual(changed.job.id, first.job.id);
+  assert.notEqual(changed.job.scenarioHash, first.job.scenarioHash);
+  assert.deepEqual((await jobs.configuration(study.id, first.job.id)).scenario, scenario);
+});
+
+test("source model versions have distinct job identities even when numeric scenarios and seeds agree", options, async () => {
+  const study = await makeStudy("model-identity");
+  const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+  const input = { studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], seed: 19 };
+  const ordinary = await jobs.enqueue(input);
+  const first = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_a", version: "1" } } });
+  const second = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_b", version: "2" } } });
+  assert.equal(new Set([ordinary.job.id, first.job.id, second.job.id]).size, 3);
+  const again = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_a", version: "1" } } });
+  assert.equal(again.job.id, first.job.id);
+  assert.deepEqual((await jobs.configuration(study.id, second.job.id)).sourceModel, { id: "mdl_b", version: "2" });
+});

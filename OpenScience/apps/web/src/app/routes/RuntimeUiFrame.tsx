@@ -1,3 +1,4 @@
+import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
 import { putConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -931,10 +932,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         setFrameTask(message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
-        if (mirrorAddress && intent?.requestId === request.requestId) {
+        if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname)) && intent?.requestId === request.requestId) {
           const nextState = { ...location.state };
           delete nextState.runtimeUiIntent;
-          navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: nextState });
+          const geoId = geoIdFromChatPath(location.pathname);
+          navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : `/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: nextState });
         }
       } else if (message.type === "evimed.runtime-ui.session" && message.subagent === true
         && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
@@ -949,17 +951,21 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         || (typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)))) {
         incoming.current = message.seq;
         if (!currentRequest.current && navigated) setFrameTask(message.sessionId);
-        if (currentRequest.current || !navigated || mirroredSession.current?.sessionId === message.sessionId) return;
+        if (!roomHold.current.active || roomHold.current.suspended || currentRequest.current || !navigated || mirroredSession.current?.sessionId === message.sessionId) return;
         mirroredSession.current = message.sessionId === null ? null : { sessionId: message.sessionId, attempt };
         // Pushed, not replaced: choosing another task inside the frame is a
         // navigation the reader expects Back to undo (U9). A native clear is a
         // deliberate new task, and says so, so the route does not go looking
         // for a recent task to resume instead.
-        if (message.sessionId === null) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } });
+        const geoId = geoIdFromChatPath(location.pathname);
+        if (message.sessionId === null) {
+          const next = newRuntimeUiIntent();
+          navigate(geoId ? `${geoChatPath(geoId, next.sessionId)}${location.search}` : "/app/chat", { state: { runtimeUiIntent: next } });
+        }
         // A branch of a finished turn (`session/fork`) is a task of its own —
         // the control plane takes it into the ledger — and says where it came
         // from, for whatever renders the task.
-        else navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, {
+        else navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : `/app/chat/${encodeURIComponent(message.sessionId)}`, {
           state: typeof message.forkedFrom === "string" && SESSION_ID.test(message.forkedFrom) ? { forkedFrom: message.forkedFrom } : null,
         });
       }
@@ -1066,7 +1072,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // module's capabilities (`useFrameGeoOptions`).
   const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
   geoOptionsHandler.current = useFrameGeoOptions({
-    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postGeo,
+    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: active && booted > 0 && !error && Boolean(frameId), post: postGeo,
   });
   // 虚拟临床研究's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameVcrOptions`).

@@ -104,6 +104,33 @@ async def test_pinned_ip_with_host_and_sni(plain_settings, upstream):
     await fetcher.aclose()
 
 
+@pytest.mark.parametrize("target", ["https://other.example.net/feed", "http://www.example.org/feed", "https://api.example.org/feed"])
+async def test_discovery_redirects_never_expand_the_admitted_origin(plain_settings, upstream, target):
+    upstream.route("www.example.org", "/discovery", httpx.Response(302, headers={"location": target}))
+    fetcher = make_fetcher(plain_settings, upstream)
+    try:
+        with pytest.raises(FetchError) as refused:
+            await fetcher.fetch(RequestSpec(url="https://www.example.org/discovery", same_origin_redirects=True),
+                                allowed_hosts=["example.org"])
+        assert refused.value.detail == "redirect_origin_not_allowed"
+        assert all(request.headers["host"] == "www.example.org" for request in upstream.requests)
+    finally:
+        await fetcher.aclose()
+
+
+async def test_discovery_same_origin_redirect_keeps_robots_and_public_address_checks(plain_settings, upstream):
+    upstream.route("www.example.org", "/discovery", httpx.Response(302, headers={"location": "/allowed"}))
+    upstream.route("www.example.org", "/allowed", httpx.Response(200, content=ARTICLE))
+    fetcher = make_fetcher(plain_settings, upstream)
+    try:
+        result = await fetcher.fetch(RequestSpec(url="https://www.example.org/discovery", same_origin_redirects=True),
+                                     allowed_hosts=["www.example.org"])
+        assert result.final_url == "https://www.example.org/allowed"
+        assert any(request.url.path == "/robots.txt" for request in upstream.requests)
+    finally:
+        await fetcher.aclose()
+
+
 async def test_redirects_are_followed_by_hand_and_revetted(plain_settings, upstream):
     upstream.route("www.example.org", "/a", httpx.Response(301, headers={"location": "/b"}))
     upstream.route("www.example.org", "/b", httpx.Response(302, headers={"location": "https://other.example.net/c"}))

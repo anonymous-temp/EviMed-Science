@@ -30,7 +30,7 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
     frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 10,
-    frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
+    frontierProcessConcurrency: 2, frontierOffpeak: false, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
     frontierSafetyPushDailyCap: 3, knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
     knowledgePluginMinContract: "1.0",

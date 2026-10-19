@@ -175,7 +175,8 @@ describe("the page and its views", () => {
     renderPage();
     const title = screen.getByRole("heading", { level: 1, name: "前沿动态" });
     const header = title.closest("header")!;
-    expect(within(header).getByRole("link", { name: "证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+    expect(within(header).queryByRole("link", { name: "证据专区" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "证据专区" })).toBeInTheDocument();
     // The views, the filters and the search are one toolbar, in the band the shell keeps at the top of the page (R19, audit D C1d).
     const toolbar = screen.getByRole("group", { name: "动态筛选与搜索" });
     expect(toolbar).toContainElement(screen.getByRole("searchbox", { name: "搜索" }));
@@ -189,7 +190,7 @@ describe("the page and its views", () => {
     // The old second navigation row and the pill row of views are gone: the tabs are the one switch.
     expect(screen.queryByRole("navigation", { name: "前沿动态" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "动态视图" })).not.toBeInTheDocument();
-    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "热榜", "与我相关", "关注", "简报"]);
+    expect(viewTabs().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["精选", "全部", "证据专区", "热榜", "与我相关", "关注", "简报"]);
     expect(viewTabs().getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("精选");
     expect(lastFeedQuery()).toMatchObject({ view: "selected", q: null, lane: null, starred: false });
@@ -391,7 +392,7 @@ describe("精选's safety strip", () => {
     expect(strip).toHaveTextContent("安全警示 2");
     const newest = within(strip).getByRole("link", { name: /I 级召回：葡萄糖注射液含不锈钢颗粒/ });
     expect(newest).toHaveTextContent("· FDA · 2 小时前");
-    expect(newest).toHaveAttribute("target", "_blank");
+    expect(newest).toHaveAttribute("href", "/app/frontier/items/alert-1");
     // Every lane's alerts, three days of them, cut to 48 hours here.
     expect(client.listFrontierItems).toHaveBeenCalledWith({ view: "all", safety: true, window: "3d", limit: 50 });
     expect(strip).not.toHaveTextContent("三天前的召回");
@@ -1016,9 +1017,9 @@ it("lets the reader expand a cut summary and read details without replacing the 
     const expand = within(card).getByRole("button", { name: "展开摘要" });
     await userEvent.click(expand);
     expect(expand).toHaveAttribute("aria-expanded", "true");
-    expect(title).toHaveAttribute("target", "_blank");
+    expect(title).toHaveAttribute("href", "/app/frontier/items/today-1");
     await userEvent.click(within(card).getByRole("button", { name: "详情" }));
-    expect(await screen.findByRole("dialog", { name: "今天的一条 RCT" })).toBeInTheDocument();
+    expect(location()).toBe("/app/frontier/items/today-1");
   } finally {
     scrollHeight.mockRestore();
     clientHeight.mockRestore();
@@ -1075,4 +1076,11 @@ describe("the feed's composition", () => {
       expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" }), `${name}: the search is in it`).toBeInTheDocument();
     }
   });
+});
+
+it("opens the existing evidence-zone directory from its peer tab", async () => {
+  renderPage();
+  await screen.findByText("今天的一条 RCT");
+  await userEvent.click(screen.getByRole("tab", { name: "证据专区" }));
+  expect(location()).toBe("/app/frontier/zones");
 });

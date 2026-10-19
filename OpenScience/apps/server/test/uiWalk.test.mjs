@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { brotliCompressSync } from "node:zlib";
 import {
   AFTER_CLICK_KIND, afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
-  EXPECTED_REFUSALS, focusProbe, frontierTargets, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
+  EXPECTED_REFUSALS, focusProbe, frontierTargets, frontierItemRoute, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
@@ -34,7 +34,7 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["geo-answer", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -907,6 +907,7 @@ function context() {
         if (url.endsWith("/api/geo/projects")) return json(200, { data: { projects: [{ id: "geo_1" }] } });
         if (url.endsWith("/api/geo/projects/geo_1/diagnosis")) return json(200, { data: { errors: [{ snapshotId: "snap_old", firstSnapshotId: "snap_1" }] } });
         if (url.endsWith("/api/vcr/studies")) return json(200, { data: { studies: [{ id: "std_a", steps: {} }, { id: "std_b", steps: { population: { status: "done" }, trial: { status: "minimal" } } }, { id: "std_c", steps: { population: { status: "done" } } }] } });
+        if (url.endsWith("/api/frontier/items?limit=1")) return json(200, { data: { items: [{ id: "item_1" }] } });
         if (url.endsWith("/api/frontier/zones")) return json(200, { data: { items: [{ id: "z_user", kind: "user" }, { id: "z_official", kind: "official" }] } });
         if (url.endsWith("/api/frontier/hot")) return json(200, { data: { events: [{ id: "ev_1" }] } });
         if (url.endsWith("/api/frontier/zones/z_official/evidence")) return json(200, { data: { items: [{ id: "card_1" }] } });
@@ -2536,6 +2537,7 @@ test("记忆地图 is a data page: three kinds of section, and its first mark an
   assert.equal(SECTION_SHAPES_BY_PAGE["memory-map"], 3);
   assert.ok(ROW_CLICK_PAGES.has("memory-map"), "a mark that opens nothing fails the page");
   assert.ok(ROUTES.some(([name, route]) => name === "memory-map" && route === "/app/memory/map"));
+  assert.ok(ROUTES.some(([name, route]) => name === "memory" && route === "/app/memory?tab=self"), "the row-list probe names the list tab rather than the map landing");
   assert.deepEqual(PAGE_PROBES["memory-map"], [["memoryMap", ["desktop", "phone"]]]);
   // The sentence, the canvas and the list are three shapes; a fourth is one too many.
   const sentence = ["section>p+div", "canvas>", "ul>li"];
@@ -2623,4 +2625,11 @@ test("the walk presses the knowledge graph's first mark and comes back, and says
   const none = await walk({ FAKE_ROWS: "none" });
   assert.equal(none.code, 0, none.stdout + none.stderr);
   assert.match(none.report.notices.find((notice) => notice.startsWith("knowledge-graph@desktop: not observable")) ?? "", /not observable/u);
+});
+
+
+test("frontier readers are discovered only from the account's published items", () => {
+  assert.equal(frontierItemRoute({ items: [{ id: "article/a" }] }), "/app/frontier/items/article%2Fa");
+  assert.equal(frontierItemRoute({ items: [] }), null);
+  assert.equal(frontierItemRoute(null), null);
 });

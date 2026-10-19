@@ -4,15 +4,15 @@
  * §3.1: of seventeen products surveyed, none makes its workflow the
  * navigation) — and how the eight steps of the programme sit in those tabs.
  *
- * The eight steps are the rail in the band above every tab: one row, fixed,
- * the same on all eight tabs (rectification 2026-10-14, audit C A.1). The tabs
+ * The eight canonical steps live in the compact workflow selector shared by
+ * the result views and the project conversation (owner, 2026-10-19). The views
  * are not the steps, and the relation between them is written here **as data**
  * and nowhere else (A.2):
  *
  *  - `GEO_STEP_HOME` — where a step's own result is read: the tab, the view of
- *    it and the block inside it. A click on the rail goes there; so does an old
+ *    it and the block inside it. A workflow selection goes there; so does an old
  *    address that named the step.
- *  - `GEO_TAB_STEPS` — which steps a tab is built from. The rail underlines the
+ *  - `GEO_TAB_STEPS` — which steps a tab is built from. The workflow selector identifies the
  *    steps of the tab that is open; a tab may be built from more than one step,
  *    and a step may feed more than one tab (诊断 is read on 准确与安全 and, as a
  *    measurement, on 可见度; 信源 is read on 信源 and, as a strategy, on 方案).
@@ -66,7 +66,7 @@ export function geoEvidenceView(value: string | null | undefined): GeoEvidenceVi
 /* --------------------------------------------------------------- sections */
 
 /**
- * The anchors the rail and a 「需要你」 row scroll to, by the name the server and this table use. A block of a tab that is a
+ * The anchors workflow destinations and a 「需要你」 row scroll to, by the name the server and this table use. A block of a tab that is a
  * destination carries `id={geoSectionId(name)}`; a destination whose block is not on the page scrolls to nothing, and the tab opens
  * at its top.
  */
@@ -76,7 +76,7 @@ export function geoSectionId(section: string): string {
 
 /* -------------------------------------------------------- destinations */
 
-/** Where an address, a rail step or a to-do lands: a tab, the view of it that is open, and the block it scrolls to. */
+/** Where an address, a workflow step or a to-do lands: a tab, the view of it that is open, and the block it scrolls to. */
 export interface GeoDestination {
   tab: GeoTabKey;
   view?: string;
@@ -117,7 +117,7 @@ export const GEO_TAB_STEPS: Readonly<Record<GeoTabKey, readonly GeoStepKey[]>> =
 });
 
 /**
- * The blocks a tab is promised to have — what the rail's click, a 「需要你」 row and the server's `needsYou[].target.section` scroll
+ * The blocks a tab is promised to have — what a workflow selection, a 「需要你」 row and the server's `needsYou[].target.section` scroll
  * to, by the id `geoSectionId(name)` gives them. A tab that is rebuilt keeps them: `pageComposition.test.tsx` renders every tab and
  * reads this table, so a block that loses its id is a failing test and not a link that quietly lands at the top.
  *
@@ -173,7 +173,7 @@ export function resolveGeoTab(value: string | null | undefined): { tab: GeoTabKe
   return moved ? { tab: moved.tab, moved: true, ...(moved.view ? { view: moved.view } : {}) } : { tab: "overview", moved: true };
 }
 
-/** The path of one tab; 总览 is the project's own address. */
+/** The path of one result; 总览 is the project's own address. */
 export function geoTabPath(geoId: string, tab: GeoTabKey): string {
   const base = `/app/geo/${encodeURIComponent(geoId)}`;
   return tab === "overview" ? base : `${base}/${tab}`;

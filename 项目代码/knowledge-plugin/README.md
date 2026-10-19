@@ -72,6 +72,14 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_BUILD` | `dev` | shown as `manifest.plugin.build` (the image sets it from `PLUGIN_BUILD`) |
 | `KNOWLEDGE_PLUGIN_LOG_LEVEL` | `INFO` | log lines carry URLs without their query string |
 
+## Daily medical subscription discovery
+
+The existing crawler checks a bounded rotation of enabled medical publishers once per Shanghai calendar day. It reads explicit RSS/Atom links advertised by their own homepages, probes them through the normal protected fetch and robots policy, and validates nonempty feeds through the existing feed adapter. Only the already admitted HTTPS origin and medical category are inherited; mixed/general publishers, browser-only exits and owner-excluded institutions are not silently reclassified. Source discovery does not inherit an API robots exemption.
+
+Validated feeds are stored under the existing `medical_sources_admitted` metadata key and enter the ordinary polling queue. Startup, file reload, AI source-request admission and medical discovery compose both dynamic channels together under one registry transaction lock. Parent removal/disable and current operator exclusions are checked again on composition. The source table owns the first successful fetch and entry count; a successful probe is not a published article.
+
+`medical_source_discovery` retains the cursor, current lease and the last thirty measured runs: attempted publishers, validated candidates, admitted feeds, deferrals and zero-growth days. `newInstitutions` is zero by construction: this mechanism expands subscription coverage within trusted institutions, not the set of trusted institutions. It never invents a new-source quota or bypasses robots/challenges. The hourly discovery loop skips a day it has already completed; bounded interrupted attempts can resume on a later tick.
+
 ## Add or change a source
 
 The registry is data, not code. `registry/sources.json` is generated from the probe registry
