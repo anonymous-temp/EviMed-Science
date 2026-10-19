@@ -24,7 +24,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
   if (!state) return null;
   const waiting = needsMaterial(agenda);
   const section = (label: string, items: string[]) => items.length > 0 && <section aria-label={label} className="space-y-1">
-    <h3 className="text-caption font-medium text-text-3">{label}</h3>
+    <h3 className="text-caption text-text-3">{label}</h3>
     <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="leading-relaxed"><ClampedText text={item} lines={3} /></li>)}</ul>
   </section>;
   return <div className="space-y-4">
@@ -32,7 +32,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
     {section("已发现", state.found.map(item => `${FOUND_PREFIX[item.check]}${item.statement}`))}
     {section("尚未解决", state.unresolved.map(unresolvedText))}
     <section aria-label="补充材料" className="space-y-2">
-      <h3 className="text-caption font-medium text-text-3">补充材料</h3>
+      <h3 className="text-caption text-text-3">补充材料</h3>
       {state.materials.length > 0 && <ul className="space-y-1">{state.materials.map(item => <li key={item.sourceId} className="flex items-center gap-2 text-ui text-text">
         <FileText size={16} className="shrink-0 text-text-3" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{item.name}</span>

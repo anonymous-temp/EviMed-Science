@@ -118,7 +118,7 @@ export function InventoryDrawer({ item, groupTitle, tools, onClose }: {
             <dl className="flex flex-col gap-3">
               {item.parts.map(part => (
                 <div key={part.title} className="flex flex-col gap-0.5">
-                  <dt className="text-ui font-medium text-text">{part.title}</dt>
+                  <dt className="text-ui font-semibold text-text">{part.title}</dt>
                   <dd className="text-ui text-text-2">{part.does}</dd>
                 </div>
               ))}
@@ -130,7 +130,7 @@ export function InventoryDrawer({ item, groupTitle, tools, onClose }: {
             <div className="flex flex-col gap-5">
               {tools.groups.map(group => (
                 <section key={group.title} aria-label={group.title}>
-                  <h4 className="mb-1 text-ui font-medium text-text">{group.title}</h4>
+                  <h4 className="mb-1 text-ui font-semibold text-text">{group.title}</h4>
                   <ul className="list-disc pl-5 text-ui text-text-2">{group.tools.map(sentence => <li key={sentence}>{sentence}</li>)}</ul>
                 </section>
               ))}

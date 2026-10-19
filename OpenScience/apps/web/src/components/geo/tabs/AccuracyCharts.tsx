@@ -115,7 +115,7 @@ function BySeverity({ errors, selection }: { errors: readonly GeoErrorRow[]; sel
                 onClick={() => selection.onEngine(chosen ? null : row.engine)}
                 className={cn("flex h-sm w-full items-center gap-4 rounded px-2 hover:bg-surface-2", chosen && "bg-accent-soft")}
               >
-                <span className="w-20 shrink-0 truncate text-left text-compact text-text-2">{engineName(row.engine)}</span>
+                <span className="w-20 shrink-0 truncate text-left text-ui text-text-2">{engineName(row.engine)}</span>
                 <span className="min-w-0 flex-1"><ShareBar label={`${engineName(row.engine)} 的讲错`} segments={row.segments} legend={false} /></span>
                 <span className="w-8 shrink-0 text-right text-ui tabular-nums text-text">{row.total}</span>
               </button>

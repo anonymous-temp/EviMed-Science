@@ -212,7 +212,7 @@ export function FilePreviewInspector({
   return (
     <div className="flex h-full flex-col">
       {!embedded && <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-        <span className="truncate text-ui font-medium text-text">{data.filename}</span>
+        <span className="truncate text-ui font-semibold text-text">{data.filename}</span>
         {tag && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{tag}</span>}
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
@@ -627,7 +627,7 @@ export function PreviewError({
   return (
     <div className="p-4">
       <div className="text-ui text-text-3">
-        <div className="mb-3 font-medium text-text">文件过大，无法预览</div>
+        <div className="mb-3 font-semibold text-text">文件过大，无法预览</div>
         <div className="flex flex-wrap gap-2">
           {path && (
             <Button variant="secondary" onClick={() => void inspect()} loading={probing}>

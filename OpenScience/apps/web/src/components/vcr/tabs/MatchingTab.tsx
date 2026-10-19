@@ -451,7 +451,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
             <Card
               header={(
                 <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="text-ui font-semibold text-text">待复核排除</h2>
+                  <h2 className="text-section font-semibold text-text">待复核排除</h2>
                   <span className="text-caption tabular-nums text-text-3">{`${numberText(data.pendingReview.count, 0)} 人`}</span>
                 </div>
               )}
@@ -480,7 +480,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 {selected.facts.map((fact) => (
                   <div key={fact.label} className="p-3">
                     <dt className="truncate text-caption text-text-3">{fact.label}</dt>
-                    <dd className={cn("mt-0.5 truncate text-ui font-medium", fact.tone === "attention" ? "text-warn-strong" : "text-text")}>{fact.value}</dd>
+                    <dd className={cn("mt-0.5 truncate text-ui", fact.tone === "attention" ? "text-warn-strong" : "text-text")}>{fact.value}</dd>
                   </div>
                 ))}
               </dl>
@@ -524,7 +524,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 <p data-vcr-eligibility={allMet ? "met" : "open"} className={cn("flex min-w-0 flex-1 items-center gap-2 text-ui max-sm:basis-full", allMet ? "text-ok" : "text-warn-strong")}>
                   {/* The mark follows the judgements, not the sentence: every applicable criterion satisfied is a check, anything else keeps its warning. */}
                   {allMet ? <CircleCheck size={16} aria-hidden="true" className="shrink-0" /> : <TriangleAlert size={16} aria-hidden="true" className="shrink-0" />}
-                  <span className="font-medium">{selected.verdict.text}</span>
+                  <span>{selected.verdict.text}</span>
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}
@@ -684,7 +684,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
             {data.ledger.map((entry) => (
               <li key={entry.state} data-vcr-referral-state={entry.state} className={cn("p-4", entry.waiting && "bg-accent-soft")}>
                 <p className="truncate text-caption text-text-3">{referralStateLabel(entry.state)}</p>
-                <p className={cn("mt-1 text-heading font-semibold tabular-nums", entry.waiting ? "text-accent" : "text-text")}>
+                <p className={cn("mt-1 text-section font-semibold tabular-nums", entry.waiting ? "text-accent" : "text-text")}>
                   {numberText(entry.count, 0)}
                 </p>
                 {entry.note && <p className="mt-0.5 truncate text-caption text-text-3">{entry.note}</p>}
@@ -800,7 +800,7 @@ function SitesView({ data }: { data: MatchingData }) {
             header: "最后核实",
             align: "right",
             cell: (site) => (
-              <span className={cn("whitespace-nowrap", site.alert && "font-medium text-warn-strong")}>
+              <span className={cn("whitespace-nowrap", site.alert && "text-warn-strong")}>
                 {site.checkedAt ?? "—"}
                 {site.alert && <span className="ml-1.5">{site.alert}</span>}
               </span>

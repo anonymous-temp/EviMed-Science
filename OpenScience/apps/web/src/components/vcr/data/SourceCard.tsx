@@ -20,7 +20,7 @@ import { IMPORT_FORMATS, documentAccept, importAccept, importProblem, importSumm
 function Step({ number, title, meta, children }: { number: number; title: string; meta?: ReactNode; children: ReactNode }) {
   return (
     <section data-vcr-intake-step={number} className="border-t border-faint pt-4 first:border-t-0 first:pt-0">
-      <h3 className="mb-2 flex flex-wrap items-baseline gap-x-2 text-ui font-medium text-text">
+      <h3 className="mb-2 flex flex-wrap items-baseline gap-x-2 text-ui font-semibold text-text">
         <span className="tabular-nums text-text-3">{number}</span>
         {title}
         {meta && <span className="text-caption font-normal text-text-3">{meta}</span>}
@@ -67,11 +67,11 @@ function ImportReport({ result }: { result: VcrImportResult }) {
   const summary = importSummary(result);
   return (
     <div data-vcr-import-report="" className="rounded-card border border-border bg-surface-1 p-3">
-      <p className="text-ui font-medium text-text">{`已按 ${IMPORT_FORMATS.find((entry) => entry.value === result.format)?.label ?? result.format} 导入 ${result.tables.filter((table) => table.stored).length} 张表，并提出了字段映射。`}</p>
+      <p className="text-ui font-semibold text-text">{`已按 ${IMPORT_FORMATS.find((entry) => entry.value === result.format)?.label ?? result.format} 导入 ${result.tables.filter((table) => table.stored).length} 张表，并提出了字段映射。`}</p>
       <ul className="mt-1 flex flex-col gap-0.5 text-caption text-text-2">{summary.tables.map((line) => <li key={line}>{line}</li>)}</ul>
       {summary.skipped.length > 0 && (
         <>
-          <p className="mt-2 text-caption font-medium text-text">没有导入的部分</p>
+          <p className="mt-2 text-caption text-text">没有导入的部分</p>
           <ul className="mt-1 flex flex-col gap-0.5 text-caption text-text-3">{summary.skipped.map((line) => <li key={line}>{line}</li>)}</ul>
         </>
       )}
@@ -235,7 +235,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
           }}
         >
           <div>
-            <label htmlFor={`${source.id}-grantee-kind`} className="mb-2 block text-ui font-medium text-text">授权给</label>
+            <label htmlFor={`${source.id}-grantee-kind`} className="mb-2 block text-ui text-text">授权给</label>
             <select id={`${source.id}-grantee-kind`} value={kind} onChange={(event) => setKind(event.target.value as "account" | "role" | "study")} className={inputClasses()}>
               <option value="role">某个角色</option>
               <option value="account">某个成员账号</option>
@@ -244,7 +244,7 @@ function GrantsSection({ studyId, source, options, onChanged }: { studyId: strin
           </div>
           {kind === "role" && (
             <div>
-              <label htmlFor={`${source.id}-grantee-role`} className="mb-2 block text-ui font-medium text-text">角色</label>
+              <label htmlFor={`${source.id}-grantee-role`} className="mb-2 block text-ui text-text">角色</label>
               <select id={`${source.id}-grantee-role`} value={role} onChange={(event) => setRole(event.target.value)} className={inputClasses()}>
                 {options.memberRoles.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -270,7 +270,7 @@ function SnapshotRow({ snapshot }: { snapshot: VcrIntakeSnapshot }) {
   return (
     <li data-vcr-snapshot={snapshot.id} className="py-2">
       <p className="flex flex-wrap items-baseline gap-x-2 text-ui text-text">
-        <span className="font-medium">{snapshot.label}</span>
+        <span className="font-semibold">{snapshot.label}</span>
         <span className="text-caption tabular-nums text-text-3">{[snapshot.at, snapshot.rows != null ? `${snapshot.rows} 行` : null, snapshot.findings ? `${snapshot.findings} 条质量提示` : null].filter(Boolean).join(" · ")}</span>
         {snapshot.sealedFields.length > 0 && <Tag tone={snapshot.sealed ? "warn" : "neutral"}>{snapshot.sealed ? "结局封存中" : "封存已解除"}</Tag>}
       </p>

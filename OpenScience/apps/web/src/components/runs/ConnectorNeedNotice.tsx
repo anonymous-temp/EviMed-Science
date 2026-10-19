@@ -93,7 +93,7 @@ export function ConnectorNeedNotice({ run }: { run: WebAgentRun | null }) {
   };
 
   return (
-    <div role="status" aria-live="polite" data-connector-need="" className="flex shrink-0 items-start gap-3 border-b border-border bg-surface-2 px-4 py-2 text-compact text-text">
+    <div role="status" aria-live="polite" data-connector-need="" className="flex shrink-0 items-start gap-3 border-b border-border bg-surface-2 px-4 py-2 text-ui text-text">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         {needs.map((need) => {
           const connector = connectors?.find((candidate) => candidate.id === need.connectorId) ?? null;

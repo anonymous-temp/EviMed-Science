@@ -26,7 +26,7 @@ export function EvidenceReviews({ evidence }: { evidence: EvidenceCard }) {
     <>
       {findings.length > 0 && (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">AI 证据评议</h3>
+          <h3 className="mb-2 text-ui font-semibold text-text">AI 证据评议</h3>
           <ul className="space-y-2">
             {findings.map((finding, index) => (
               <li key={index} className="text-ui text-text-2">
@@ -45,7 +45,7 @@ export function EvidenceReviews({ evidence }: { evidence: EvidenceCard }) {
       )}
       {evidence.review && (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">学术评议</h3>
+          <h3 className="mb-2 text-ui font-semibold text-text">学术评议</h3>
           <p className="text-ui text-text-2">
             {evidence.review.label}
             {evidence.review.score !== null && (
@@ -56,7 +56,7 @@ export function EvidenceReviews({ evidence }: { evidence: EvidenceCard }) {
       )}
       {evidence.reviews?.length ? (
         <section>
-          <h3 className="mb-2 text-ui font-medium text-text">用户评议意见</h3>
+          <h3 className="mb-2 text-ui font-semibold text-text">用户评议意见</h3>
           <ul className="space-y-3">
             {evidence.reviews.map((entry, index) => (
               <li key={index} className="text-ui text-text-2">
@@ -83,7 +83,7 @@ export function EvidenceDiscussionList({
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-ui font-medium text-text">讨论</h3>
+      <h3 className="mb-2 text-ui font-semibold text-text">讨论</h3>
       {evidence.discussion.length ? (
         <List divided label="讨论">
           {evidence.discussion.map((entry, index) => (

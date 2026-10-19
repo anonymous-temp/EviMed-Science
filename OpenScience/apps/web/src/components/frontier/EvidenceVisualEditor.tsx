@@ -72,7 +72,7 @@ export function EvidenceVisualEditor({
     <div className="space-y-4">
       {sections.map((item, index) => (
         <fieldset key={index} className="space-y-3 border-t border-border pt-3">
-          <legend className="text-ui font-medium text-text">
+          <legend className="text-ui text-text">
             解读段落 {index + 1}
           </legend>
           <Input
@@ -136,7 +136,7 @@ export function EvidenceVisualEditor({
       ))}
       {comparisons.map((item, index) => (
         <fieldset key={index} className="space-y-3 border-t border-border pt-3">
-          <legend className="text-ui font-medium text-text">
+          <legend className="text-ui text-text">
             绝对效应图 {index + 1}
           </legend>
           <Input
@@ -296,7 +296,7 @@ export function EvidenceVisualEditor({
       ))}
       {tables.map((item, index) => (
         <fieldset key={index} className="space-y-3 border-t border-border pt-3">
-          <legend className="text-ui font-medium text-text">
+          <legend className="text-ui text-text">
             证据表 {index + 1}
           </legend>
           <Input

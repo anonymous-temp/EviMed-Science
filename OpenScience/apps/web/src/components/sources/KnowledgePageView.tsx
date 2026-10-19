@@ -113,7 +113,7 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
               const named = page.stale.filter((entry) => (entry.reason in STALE_LABEL ? entry.reason : "changed") === reason);
               return (
                 <span key={reason} className="flex flex-wrap items-center gap-x-2">
-                  <span className="font-medium">{STALE_LABEL[reason]}</span>
+                  <span className="font-semibold">{STALE_LABEL[reason]}</span>
                   {named.map((entry) => (
                     <Link key={entry.sourceId} to={`/app/files/${encodeURIComponent(entry.sourceId)}`} className="text-link underline underline-offset-2">
                       {titles.get(entry.sourceId) ?? "这份资料"}

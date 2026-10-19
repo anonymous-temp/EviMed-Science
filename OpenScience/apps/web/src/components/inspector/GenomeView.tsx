@@ -109,7 +109,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-caption">
-        <span className="flex items-center gap-1 font-medium text-muted">
+        <span className="flex items-center gap-1 text-muted">
           <Dna size={16} aria-hidden="true" /> {format.toUpperCase()}
         </span>
         {data.contigs.length > 1 ? (
@@ -227,7 +227,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
             className="pointer-events-none absolute z-sticky max-w-xs rounded-input border border-border bg-surface px-2.5 py-1.5 text-caption shadow-e2"
             style={{ left: Math.min(hover.x + 12, width - 200), top: hover.y + 12 }}
           >
-            {hover.f.name && <div className="font-medium text-text">{hover.f.name}</div>}
+            {hover.f.name && <div className="font-semibold text-text">{hover.f.name}</div>}
             <div className="font-mono text-muted">
               {hover.f.chrom}:{formatBp(hover.f.start)}–{formatBp(hover.f.end)}
               {hover.f.strand ? ` (${hover.f.strand})` : ""}

@@ -28,7 +28,7 @@ export function CalibrationStrip({ calibration, id }: { calibration: VcrCalibrat
         <table className="w-full border-separate border-spacing-0 text-ui">
           <caption className="sr-only">设定的数、生成的数和证据区间</caption>
           <thead>
-            <tr className="text-compact text-text-3">
+            <tr className="text-caption text-text-3">
               <th scope="col" className="border-b border-border px-2 pb-2 pt-1 text-left font-normal">指标</th>
               <th scope="col" className="border-b border-border px-2 pb-2 pt-1 text-right font-normal">设定</th>
               <th scope="col" className="border-b border-border px-2 pb-2 pt-1 text-right font-normal">生成</th>
@@ -54,7 +54,7 @@ function Row({ row }: { row: VcrCalibrationRow }) {
     <tr data-vcr-calibration-row={row.key} data-vcr-calibration-status={row.status}>
       <th scope="row" className="border-b border-faint px-2 py-2.5 text-left font-normal text-text">{row.label}</th>
       <td className="whitespace-nowrap border-b border-faint px-2 py-2.5 text-right tabular-nums text-text-2">{withUnit(row.declared, row.unit)}</td>
-      <td className={cn("whitespace-nowrap border-b border-faint px-2 py-2.5 text-right tabular-nums", row.status === "outside" ? "font-medium text-warn-strong" : "text-text")}>
+      <td className={cn("whitespace-nowrap border-b border-faint px-2 py-2.5 text-right tabular-nums", row.status === "outside" ? "text-warn-strong" : "text-text")}>
         {withUnit(row.generated, row.unit)}
       </td>
       <td className="border-b border-faint px-2 py-2.5 text-right tabular-nums text-text-2">

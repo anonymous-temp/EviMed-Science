@@ -57,13 +57,13 @@ export function VcrModelAdoptDialog({ onClose, onSaved }: { onClose: () => void;
         <Input label="模型名称" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoComplete="off" />
         <Input label="版本" placeholder="1.0.0" value={version} onChange={(event) => setVersion(event.target.value)} autoComplete="off" />
         <div>
-          <label htmlFor={riskId} className="mb-2 block text-ui font-medium text-text">模型风险</label>
+          <label htmlFor={riskId} className="mb-2 block text-ui text-text">模型风险</label>
           <select id={riskId} value={risk} onChange={(event) => setRisk(event.target.value as VcrModelRisk)} className={inputClasses()}>
             {RISKS.map((each) => <option key={each} value={each}>{modelRiskLabel(each)}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor={endpointId} className="mb-2 block text-ui font-medium text-text">终点</label>
+          <label htmlFor={endpointId} className="mb-2 block text-ui text-text">终点</label>
           <select id={endpointId} value={endpoint} onChange={(event) => setEndpoint(event.target.value as typeof endpoint)} className={inputClasses()}>
             <option value="">不限</option>
             {ENDPOINTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}

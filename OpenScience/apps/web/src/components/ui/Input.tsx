@@ -64,7 +64,7 @@ function FieldShell({ id, label, error, hint, children }: FieldShellProps) {
   return (
     <div className="min-w-0">
       {label != null && (
-        <label htmlFor={id} className="mb-2 block text-ui font-medium text-text">
+        <label htmlFor={id} className="mb-2 block text-ui text-text">
           {label}
         </label>
       )}

@@ -47,7 +47,7 @@ export function FrontierLinkedItem({ id, onClose }: { id: string; onClose: () =>
   };
   return (
     <section aria-label="相关动态" className="mt-5">
-      <h2 className="text-ui font-medium text-text">相关动态</h2>
+      <h2 className="text-ui font-semibold text-text">相关动态</h2>
       {loading ? <FrontierSkeleton />
         : error ? <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} />
           : !item || item.state.hidden ? <EmptyState title="这条动态已隐藏" />

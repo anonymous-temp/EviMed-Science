@@ -60,12 +60,12 @@ export const SearchInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes
         aria-label={label}
         placeholder={placeholder ?? label}
         className={cn(
-          "w-full bg-surface-2 pl-8 pr-3 text-text outline-none transition-colors duration-fast max-md:text-body",
+          "w-full bg-surface-2 pl-8 pr-3 text-ui text-text outline-none transition-colors duration-fast max-md:text-body",
           pill
-            // In a toolbar row it is a pill like the chips beside it — 28 high, 13 px, grey, no border: the look of a selected chip, so the
+            // In a toolbar row it is a pill like the chips beside it — 28 high, 14 px, grey, no border: the look of a selected chip, so the
             // row's filled controls are one kind. Focus is a 2 px line inside the pill (an outline, which forced colours keep).
-            ? "rounded-full text-compact focus:outline-2 focus:-outline-offset-2 focus:outline-focus"
-            : "rounded border border-transparent text-ui focus:border-focus",
+            ? "rounded-full focus:outline-2 focus:-outline-offset-2 focus:outline-focus"
+            : "rounded border border-transparent focus:border-focus",
           "placeholder:text-text-3 hover:bg-surface-3 focus:bg-surface",
           "[&::-webkit-search-cancel-button]:hidden",
           height,

@@ -65,7 +65,7 @@ export function SafetyStrip({ alerts, onRetry, onOpened }: {
     <section aria-label="安全警示" className="rounded bg-danger-soft px-3">
       <div className="flex items-center gap-3">
         <ShieldAlert size={16} className="shrink-0 text-danger-strong" aria-hidden="true" />
-        <span className="shrink-0 text-ui font-semibold text-danger-strong">安全警示 <span className="tabular-nums">{alerts.length}</span></span>
+        <span className="shrink-0 text-body font-semibold text-danger-strong">安全警示 <span className="tabular-nums">{alerts.length}</span></span>
         <AlertLink item={first} onOpened={onOpened} />
         {rest.length > 0 && (
           <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}

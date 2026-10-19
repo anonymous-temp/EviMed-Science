@@ -22,7 +22,7 @@ export function VcrReviews({ reviews = [], studyId, onNavigate }: { reviews?: Vc
   return <section aria-label="研究复核" className="mt-6 space-y-3">
     <h3 className="text-section font-semibold text-text">研究复核</h3>
     {reviews.slice(0, 6).map(review => <article key={review.id} className="rounded-card border border-border p-4">
-      <p className="text-ui font-medium text-text">{review.label} · {review.state}</p>
+      <p className="text-ui font-semibold text-text">{review.label} · {review.state}</p>
       <p className="mt-1 text-caption text-text-3">{[review.by, review.at].filter(Boolean).join(' · ')}</p>
       {review.note && <p className="mt-1 text-caption text-text-2">{review.note}</p>}
       {review.findings.length > 0 && <ul className="mt-2 space-y-2">

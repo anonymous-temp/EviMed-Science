@@ -12,6 +12,9 @@ import { cn } from "@/lib/cn";
  * the system, and a divider under a card's title was a second edge inside
  * the first. `hint` is kept for the pages not yet rewritten and renders
  * nothing.
+ *
+ * The built-in title is a block heading of a data page and is set as the others are (`ChartCard`, `Section`: 18 / 600). A card that
+ * stood among them with a 14 / 600 title made a page carry a heading size more than the four it may hold (R19.2).
  */
 export function Card({
   title,
@@ -39,7 +42,7 @@ export function Card({
     <section className={cn("rounded-card border border-border bg-surface", className)}>
       {hasHeader && (
         <header className="px-4 pt-4">
-          {header ?? <h2 className="text-ui font-semibold text-text">{title}</h2>}
+          {header ?? <h2 className="text-section font-semibold text-text">{title}</h2>}
         </header>
       )}
       <div className={padding}>{children}</div>

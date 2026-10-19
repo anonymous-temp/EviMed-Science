@@ -71,12 +71,12 @@ export function VcrForecastComparison({ studyId, selected, records, canRun, onCo
       {!other && !comparisons.length && <p className="text-caption text-text-2">同一终点有两个预测版本后，可以比较治疗情景、输入变化或新增观测后的结果。</p>}
       {message && <p role={error ? 'alert' : 'status'} className={error ? 'text-caption text-error' : 'text-caption text-text-2'}>{message}</p>}
       {comparisons.map(record => <div key={record.id} className="flex flex-col gap-2">
-        <h3 className="text-ui font-medium text-text">{modes[record.summary.mode ?? 'scenario'] ?? '预测'}比较</h3>
+        <h3 className="text-ui font-semibold text-text">{modes[record.summary.mode ?? 'scenario'] ?? '预测'}比较</h3>
         <p className="text-caption text-text-3">第一版本：{version(record, 0, records)}<br />第二版本：{version(record, 1, records)}<br />差值为第一版本减第二版本。</p>
         {record.summary.available === false && <p className="text-caption text-text-2">没有可配对的目标日期和受试者，请核对两个预测的终点、单位及目标日期。</p>}
         <div className="overflow-x-auto"><table className="w-full text-left text-caption tabular-nums">
           <caption className="sr-only">同一日期、相同受试者的预测差异</caption>
-          <thead><tr className="border-b border-border text-text-3">{['目标日期', '配对人数', '第一版本', '第二版本', '均值差', '95% 抽样区间'].map(label => <th key={label} className="p-2 font-medium">{label}</th>)}</tr></thead>
+          <thead><tr className="border-b border-border text-text-3">{['目标日期', '配对人数', '第一版本', '第二版本', '均值差', '95% 抽样区间'].map(label => <th key={label} className="p-2 font-normal">{label}</th>)}</tr></thead>
           <tbody>{record.summary.groups?.map(group => <tr key={group.horizonDays} className="border-b border-faint text-text-2">
             <td className="p-2">{group.targetAt ? date(group.targetAt) : `${group.horizonDays} 天`}</td>
             {group.displayReason ? <td className="p-2" colSpan={5}>涉及小样本，汇总数值未展示。</td> : <>

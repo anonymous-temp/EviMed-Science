@@ -15,7 +15,7 @@ export function DuplicateGroups({ groups, busy, onDecide }: { groups: DuplicateG
   if (groups.length === 0) return <p className="text-ui text-text-3">没有发现疑似重复的资料。</p>;
   return <div className="divide-y divide-border">{groups.map((group) => <section key={group.groupKey} className="space-y-2 py-4 first:pt-0">
     <div className="flex flex-wrap items-baseline gap-x-2">
-      <h3 className="min-w-0 flex-1 truncate text-ui font-medium text-text">{baseName(group.label)}</h3>
+      <h3 className="min-w-0 flex-1 truncate text-ui font-semibold text-text">{baseName(group.label)}</h3>
       <span className="text-caption text-text-3">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
     </div>
     <ul className="space-y-0.5 text-caption text-text-3">{group.members.map((item) => <li key={item.sourceId}>

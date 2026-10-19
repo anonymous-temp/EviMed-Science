@@ -7,8 +7,9 @@ import { Menu } from "@/components/ui/Menu";
  * Filters: one row of quiet chips, and what does not fit goes into a chip of
  * the same kind that opens a menu (2026-09-23 plan §4).
  *
- * A chip is 28 px high, 13 px text (`text-compact`), fully round, with no
- * border (spec §20.3, appendix E #10 — it was 32 / 14): unselected it is plain
+ * A chip is 28 px high, 14 px text (`text-ui`), fully round, with no
+ * border (spec §20.3, appendix E #10 — it was 32 / 14, then 28 / 13 until R19.2, when the toolbar's controls went back to the page's
+ * own 14 px: a 13 was a size pair of its own on every page that had a toolbar): unselected it is plain
  * text, selected it sits on the grey ground (at the same weight: the toolbar's
  * search pill is the same grey pill). The frontier feed used to wrap
  * into a second row that held nothing but “只看收藏”, beside a native select
@@ -30,7 +31,7 @@ export interface FilterOption<V extends string = string> {
 
 export function filterChipClasses({ selected = false, className }: { selected?: boolean; className?: string } = {}): string {
   return cn(
-    "inline-flex h-sm shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-compact outline-none transition-colors duration-fast",
+    "inline-flex h-sm shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-ui outline-none transition-colors duration-fast",
     // Under a finger the hit area is 40 high; chips sit 4 px apart, so it grows up and down only.
     "relative coarse:before:absolute coarse:before:-inset-y-1.5 coarse:before:inset-x-0",
     // The selected chip is told by its ground and its colour, not by a weight (as a selected tab is): it is then the look of the toolbar's

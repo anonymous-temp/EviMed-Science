@@ -195,7 +195,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
                       selected={selected?.id === assumption.id}
                       titleProps={{ "data-vcr-assumption": assumption.id }}
                       trailing={(
-                        <span className="text-ui font-medium tabular-nums text-text">
+                        <span className="text-ui tabular-nums text-text">
                           {valueText(assumption.value)}
                           {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
                         </span>
@@ -350,7 +350,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
 
       <div>
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} /></span>
+          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} large /></span>
           {assumption.value.interval && (
             <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
           )}
@@ -435,7 +435,7 @@ const NEWS_CAUSE_LABELS: Readonly<Record<NonNullable<VcrAssumption["newEvidence"
 function NewEvidence({ news }: { news: NonNullable<VcrAssumption["newEvidence"]> }) {
   return (
     <div data-vcr-new-evidence="" role="status" className="mt-4 rounded-card border border-border bg-surface-1 p-3">
-      <p className="text-ui font-medium text-text">{news.label}</p>
+      <p className="text-ui font-semibold text-text">{news.label}</p>
       {news.open.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-1">
           {news.open.map((entry) => (

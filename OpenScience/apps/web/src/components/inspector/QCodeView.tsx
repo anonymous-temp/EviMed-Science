@@ -57,7 +57,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
       <div className="flex min-h-0 flex-1">
         {/* Codebook */}
         <div className="w-52 shrink-0 overflow-y-auto border-r border-border p-2">
-          <div className="px-1 pb-1 text-caption font-medium uppercase tracking-wide text-muted">
+          <div className="px-1 pb-1 text-caption uppercase tracking-wide text-muted">
             编码表
           </div>
           {doc.codes.map((c) => {
@@ -110,7 +110,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
           )}
           {doc.sources.map((s) => (
             <div key={s.id} className="mb-5">
-              <div className="mb-1.5 text-ui font-medium text-text">{s.title ?? s.id}</div>
+              <div className="mb-1.5 text-ui font-semibold text-text">{s.title ?? s.id}</div>
               <p className="whitespace-pre-wrap text-ui leading-relaxed text-text">
                 {segmentsFor(doc, s.id).map((seg, i) => {
                   if (seg.codes.length === 0) return <span key={i}>{seg.text}</span>;
