@@ -237,7 +237,9 @@ are given by role: **600** is a heading, a name that must be told from the text 
 selected navigation item, an unread row, a figure that is the point of a line; **400** is everything
 a ground, a rule, a colour or a position already says — a button, a tab, a step, a chip, a
 segment, a link, a table head in the muted colour, a flagged value on a warm ground. Weight is
-spent only at 14 px and above; a 12 or 13 px line is 400 and says the rest in colour. No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
+spent only at 14 px and above; a 12 or 13 px line is 400 and says the rest in colour.
+
+No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
 character grid.
 
 **Mixed-script spacing** (spec §5.5): **interface copy we write types a half-width space** between
@@ -320,11 +322,11 @@ hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8); under a fin
 their drawn size. A table or grid that scrolls sideways (`DataTable`, `HeatGrid`, a Markdown table) freezes its row-header
 column and is a named, focusable region while it overflows (`ScrollRegion`).
 
-`Button` sizes map onto that: `sm` 28 with 13 px text, `md` 36 (the default), `lg` 44.
+`Button` sizes map onto that: `sm` 28 with 14 px text (13 until R19.2), `md` 36 (the default), `lg` 44.
 `IconButton` is 28 in a row and 36 in a header. `Input`, `Textarea` and `SearchInput` are 36 (28
 with `size="sm"` in a table, toolbar or filter row) and 8 px round — except that the 28 px search in a
-toolbar row is a pill of 13 px text on the grey ground, the look of a selected chip, so the row's filled
-controls are one kind. Filter chips are 28 high with 13 px text.
+toolbar row is a pill of 14 px text on the grey ground, the look of a selected chip, so the row's filled
+controls are one kind. Filter chips are 28 high with 14 px text.
 
 ### Layers, opacity, timing (2.1)
 

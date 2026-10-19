@@ -148,7 +148,7 @@ per-project workspace + JSONL provenance.
   (12/13/14/16/18/20/24/32/40) as `text-badge/meta/caption/compact/ui/body/
   wordmark/section/heading/title/doc-title/display/metric/metric-lg/hero`, still
   at most four size × weight pairs per page, and **32/40 on data pages only**;
-  weights 400/500/600; a line of text at most 40 CJK characters (`max-w-measure`
+  weights 400/600 for Chinese (`font-medium` is an ESLint error); a line of text at most 40 CJK characters (`max-w-measure`
   560 / `-body` 640). **Three columns through `PageShell`**: `max-w-read` 720
   (answers, reports), `max-w-page` 1040 (lists), `max-w-wide` 1200 (dashboards);
   its header is one line with **no subtitle**. Radii: `rounded-tag` 6, `rounded`
