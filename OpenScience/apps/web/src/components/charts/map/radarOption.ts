@@ -42,6 +42,29 @@ export function radarValue(scale: MapDimension["scale"], value: number): string 
   return scale === "share" ? `${Math.round(value * 100)}%` : String(Math.round(value));
 }
 
+/** Sparse dimensions retain their real values as bars rather than disappearing or implying a meaningful polygon. */
+export function dimensionBarOption(dimension: MapDimension, palette: MapPalette): EChartsCoreOption {
+  return {
+    animation: false,
+    grid: { top: 16, bottom: 24, left: 12, right: 48, containLabel: true },
+    tooltip: { trigger: "axis", confine: true,
+      valueFormatter: (value: unknown) => radarValue(dimension.scale, Number(value)) },
+    xAxis: { type: "value", min: 0, ...(dimension.scale === "share" ? { max: 1 } : {}),
+      axisLabel: { color: palette.text, formatter: (value: number) => radarValue(dimension.scale, value) },
+      splitLine: { lineStyle: { color: palette.grid } } },
+    yAxis: { type: "category", inverse: true, data: dimension.axes.map((axis) => axis.label),
+      triggerEvent: true, axisLabel: { color: palette.text }, axisLine: { show: false }, axisTick: { show: false } },
+    series: [
+      { name: dimension.previous, type: "bar", data: dimension.axes.map((axis) => axis.previousValue),
+        itemStyle: { color: palette.replaced }, barMaxWidth: 16 },
+      { name: "当前", type: "bar", data: dimension.axes.map((axis) => axis.value),
+        itemStyle: { color: palette.current }, barMaxWidth: 16,
+        label: { show: true, position: "right", color: palette.text,
+          formatter: (params: { value?: unknown }) => radarValue(dimension.scale, Number(params.value ?? 0)) } },
+    ],
+  };
+}
+
 /** One scale for both polygons: the larger of the two, with room, rounded to a number a reader can find on the rings. */
 export function radarMax(dimension: MapDimension): number {
   const top = Math.max(0, ...dimension.axes.flatMap((axis) => [axis.value, axis.previousValue]));

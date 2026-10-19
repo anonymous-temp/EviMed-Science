@@ -139,7 +139,8 @@ export function MemoryMapPage() {
     }));
   }, [doc, narrowed, selection.view, selection.q, byId, openNode]);
 
-  const sentence = doc ? headlineParts(headline(doc), () => narrow({ look: true })) : null;
+  const sentence = doc && (doc.summary.memories > 0 || (!failed && doc.missing.length === 0))
+    ? headlineParts(headline(doc), () => narrow({ look: true })) : null;
   const toolbar = mapToolbar({ selection, doc, topicName, aspectName, focusLabel, onView: setView, onNarrow: narrow, onClear: clear, search });
   const showListFor = selection.view !== "topics" || Boolean(selection.topic);
   const listLabel = selection.view === "time" || selection.view === "activity" ? "记下的事" : selection.view === "topics" ? `主题“${topicName ?? ""}”的记忆` : "标记";
@@ -148,10 +149,12 @@ export function MemoryMapPage() {
     if (!doc || !narrowed) return null;
     if (selection.view === "graph") {
       if (thin) {
+        // The existing read-error panel owns the retry. Unknown inputs must not become zero-valued summary tiles.
+        if (failed || doc.missing.length > 0) return null;
         return (
           <div className="space-y-4">
             <StatBand label="三个数字" columns={3}>
-              <StatTile label="记忆" value={doc.summary.memories} to={doc.summary.memories > 0 ? "/app/memory" : undefined} />
+              <StatTile label="记忆" value={doc.summary.memories} to={doc.summary.memories > 0 ? "/app/memory?tab=self" : undefined} />
               <StatTile label="资料" value={doc.summary.documents} to={doc.summary.documents > 0 ? "/app/files" : undefined} />
               <StatTile label="需要看一眼" value={doc.summary.needsLook} onOpen={doc.summary.needsLook > 0 ? () => narrow({ look: true }) : undefined} />
             </StatBand>
@@ -176,7 +179,9 @@ export function MemoryMapPage() {
     return <ActivityView doc={doc} range={selection.range} onDay={(day) => narrow({ range: day ? `${day}..${day}` : "all" })} />;
   };
 
-  const empty = doc !== null && doc.summary.memories === 0 && doc.nodes.length === 0 && !selection.project && selection.range === "all" && !loading;
+  const empty = doc !== null && !failed && doc.missing.length === 0 && doc.summary.memories === 0 && doc.nodes.length === 0
+    && doc.events.length === 0 && doc.facets.dimensions.every((dimension) => dimension.total === 0 && dimension.previousTotal === 0)
+    && !selection.project && selection.range === "all" && !loading;
   return (
     <MemoryFrame
       tab="map" map documentTitle="记忆地图"

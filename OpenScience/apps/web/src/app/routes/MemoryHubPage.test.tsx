@@ -221,11 +221,11 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_1"] }));
   });
 
-  it("offers 地图 as the last tab where the deployment draws the map, and it opens the map's own page", async () => {
+  it("keeps the visualization first while explicit list addresses remain available", async () => {
     const user = userEvent.setup();
     map.feature = "on";
     render(
-      <MemoryRouter initialEntries={["/app/memory"]}>
+      <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
         <Routes>
           <Route path="/app/memory" element={<MemoryHubPage />} />
           <Route path="/app/memory/map" element={<p>地图页</p>} />
@@ -234,10 +234,19 @@ describe("记忆胶囊", () => {
     );
     await screen.findByRole("switch", { name: "记忆" });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["关于你", "项目", "做法", "地图"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["地图", "关于你", "项目", "做法"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
     await user.click(within(tabs).getByRole("tab", { name: "地图" }));
     expect(await screen.findByText("地图页")).toBeInTheDocument();
+  });
+
+  it("opens the real map on the unqualified memory landing address", async () => {
+    map.feature = "on";
+    render(<MemoryRouter initialEntries={["/app/memory"]}><Routes>
+      <Route path="/app/memory" element={<MemoryHubPage />} />
+      <Route path="/app/memory/map" element={<p>地图首页</p>} />
+    </Routes></MemoryRouter>);
+    expect(await screen.findByText("地图首页")).toBeInTheDocument();
   });
 
   it("draws no 地图 tab where the deployment does not draw the map", async () => {

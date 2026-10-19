@@ -12,7 +12,7 @@ export type MemoryTab = "self" | "project" | "methods";
 export type MemoryPageTab = MemoryTab | "map";
 
 export const MEMORY_TAB_NAMES: Record<MemoryPageTab, string> = { self: "关于你", project: "项目", methods: "做法", map: "地图" };
-const ORDER: readonly MemoryPageTab[] = ["self", "project", "methods", "map"];
+const ORDER: readonly MemoryPageTab[] = ["map", "self", "project", "methods"];
 
 /** Where a tab goes: the lists are tabs of the memory page, the map is its own address. */
 export function memoryTabAddress(tab: MemoryPageTab): string {
@@ -23,7 +23,7 @@ export function memoryTabAddress(tab: MemoryPageTab): string {
 export const MEMORY_TIME_ADDRESS = "/app/memory/map?view=time";
 
 /**
- * The tabs of 记忆胶囊: 关于你 · 项目 · 做法 · 地图. 地图 is drawn where the deployment draws the map (`useMemoryMapFeature`), and always
+ * The visual overview leads 记忆胶囊, followed by its three editable lists. 地图 is drawn where the deployment draws the map (`useMemoryMapFeature`), and always
  * on the map page itself, where it is the tab in force. A tab with nothing in it carries no number.
  */
 export function memoryTabItems(value: MemoryPageTab, { map, counts = {} }: { map: boolean; counts?: Partial<Record<MemoryTab, number | undefined>> }): TabItem<MemoryPageTab>[] {
