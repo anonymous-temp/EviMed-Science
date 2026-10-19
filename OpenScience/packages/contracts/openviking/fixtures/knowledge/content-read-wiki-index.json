@@ -1,7 +1,0 @@
-{
-  "status": "ok",
-  "result": "---\ntype: index\ntitle: Lumen 时间同步生态 Wiki\ndescription: 汇总 Lumen 工作组 Alpha 协议时间同步生态的实体与概念页面，作为检索入口。\ntags: [lumen, 时间同步, 导航]\n---\n\n# Lumen 时间同步生态 Wiki\n\n本 Wiki 收录 Lumen 工作组围绕设备间时间同步所构建的协议、参考实现、网关产品与管理界面。当前知识全部来自 5 个源文件，覆盖 Alpha 协议、其 Rust 参考实现 alphad、内置该实现的 Beta 网关，以及 Beta 网关 2.0 自带的 Gamma 仪表盘。\n\n## 概念\n\n- [Alpha 协议](concept/Alpha协议.md)：Lumen 工作组 2021 年发布的轻量设备间时间同步协议，使用 UDP 端口 4123、默认同步周期 64 秒。\n- [设备间时间同步](concept/设备间时间同步.md)：Alpha 协议所属的问题域，说明同步周期与时间偏差在本生态中的含义。\n\n## 实体\n\n- [Lumen 工作组](entity/Lumen工作组.md)：Alpha 协议与 Beta 网关的发布与维护方。\n- [alphad](entity/alphad.md)：Alpha 协议的 Rust 参考实现。\n- [Beta 网关](entity/Beta网关.md)：Lumen 工作组维护的边缘网关产品，2.0 版本于 2023 年 3 月发布。\n- [Gamma 仪表盘](entity/Gamma仪表盘.md)：Beta 网关 2.0 自带的 Web 管理界面，默认监听 TCP 8443。\n\n## 来源\n\n- [Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)\n- [Beta 网关源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md)\n- [Gamma 仪表盘源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000003.md)\n- [关系边数据](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/edges.jsonl)\n- [门店代码表](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table.csv)\n",
-  "error": null,
-  "telemetry": null,
-  "profile": null
-}

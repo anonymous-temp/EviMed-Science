@@ -1,7 +1,0 @@
-# A scratch Vite root for previewing one component set in isolation (it was
-# committed with the GEO rebuild, 646d165d5, empty index.html.bak included).
-# Local only: never a build input, never reviewed (audit F-G18).
-.geo-preview/
-
-# A gallery check writes the photograph it compared next to the reference.
-src/test/__screenshots__/*.actual.png

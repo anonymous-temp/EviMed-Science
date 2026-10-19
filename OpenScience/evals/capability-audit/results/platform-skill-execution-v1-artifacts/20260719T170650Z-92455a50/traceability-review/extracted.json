@@ -1,3 +1,0 @@
-{
-  "error": "no PDF backend installed — install one of: pymupdf, pypdf, PyPDF2, pdfminer.six"
-}
