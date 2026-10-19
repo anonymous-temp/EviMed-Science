@@ -53,7 +53,7 @@ from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
 from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState, RequestSpec
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
-from .registry import RegistryError, load_registry, source_from_row, sync_registry
+from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
 from .store import (StoreResult, claim_texts, insert_fetch, reliability_24h, reliability_24h_all, save_text_result,
                     store_entries, text_failure)
@@ -133,6 +133,7 @@ class Crawler:
             asyncio.create_task(self._loop("maintenance", self.maintenance, MAINTENANCE_EVERY_S, initial_delay=60.0)),
             asyncio.create_task(self._loop("health", self.recheck_health, HEALTH_RECHECK_EVERY_S, initial_delay=120.0)),
             asyncio.create_task(self._loop("source-requests", self.pull_source_requests, 86400.0, initial_delay=90.0)),
+            asyncio.create_task(self._loop("medical-discovery", self.discover_medical_sources, 3600.0, initial_delay=180.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
@@ -201,14 +202,26 @@ class Crawler:
                 return await (await conn.execute(
                     """WITH candidates AS (
                          SELECT DISTINCT ON (coalesce(host, id)) id, priority, next_poll_at
-                           FROM evimed_knowledge.sources
-                          WHERE enabled AND retired_at IS NULL AND next_poll_at <= %(now)s
+                           FROM evimed_knowledge.sources candidate
+                          WHERE enabled AND operator_enabled IS DISTINCT FROM false
+                            AND retired_at IS NULL AND next_poll_at <= %(now)s
+                            AND (NOT (config ? 'medical_parent') OR EXISTS (
+                              SELECT 1 FROM evimed_knowledge.sources parent
+                               WHERE parent.id = candidate.config->>'medical_parent'
+                                 AND parent.enabled AND parent.operator_enabled IS DISTINCT FROM false
+                                 AND parent.retired_at IS NULL))
                             AND (lease_until IS NULL OR lease_until < %(now)s)
                             AND NOT (coalesce(host, id) = ANY(%(busy)s))
                           ORDER BY coalesce(host, id), priority, next_poll_at),
                        picked AS (
                          SELECT s.id FROM evimed_knowledge.sources s JOIN candidates c ON c.id = s.id
-                          WHERE s.enabled AND s.next_poll_at <= %(now)s
+                          WHERE s.enabled AND s.operator_enabled IS DISTINCT FROM false
+                            AND s.retired_at IS NULL AND s.next_poll_at <= %(now)s
+                            AND (NOT (s.config ? 'medical_parent') OR EXISTS (
+                              SELECT 1 FROM evimed_knowledge.sources parent
+                               WHERE parent.id = s.config->>'medical_parent'
+                                 AND parent.enabled AND parent.operator_enabled IS DISTINCT FROM false
+                                 AND parent.retired_at IS NULL))
                             AND (s.lease_until IS NULL OR s.lease_until < %(now)s)
                           ORDER BY c.priority, c.next_poll_at
                           LIMIT %(limit)s
@@ -739,6 +752,10 @@ class Crawler:
                              row["id"], row["health"], health, successes, episodes)
         return changed
 
+    async def discover_medical_sources(self) -> dict:
+        from .medical_discovery import run_daily_discovery
+        return await run_daily_discovery(self._settings, self._pool, self._fetcher, self._clock)
+
     async def pull_source_requests(self) -> dict:
         """Read the platform's public wish list through the same protected fetch boundary."""
         url = os.environ.get("EVIMED_SOURCE_REQUESTS_URL", "")
@@ -759,18 +776,20 @@ class Crawler:
             return {"status": "deferred", "reason": "manifest_invalid"}
         if not isinstance(document, dict) or not isinstance(document.get("sources"), list):
             return {"status": "deferred", "reason": "manifest_invalid"}
-        base = load_registry(self._settings.registry_path)
         async with self._pool.connection() as conn:
-            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
-            saved_rows, _ = admitted_requests(saved, base)
-            admitted, dispositions = admitted_requests(document, [*base, *saved_rows])
-            all_rows = [*base, *saved_rows, *admitted]
-            await sync_registry(conn, all_rows, self._clock())
-            retained = [row for row in saved.get("sources", []) if isinstance(row, dict)]
-            accepted_ids = {row.source.id for row in admitted}
-            retained.extend(row for row in document["sources"][:25] if isinstance(row, dict) and row.get("id") in accepted_ids)
-            await meta_set(conn, "source_requests_admitted", {"sources": retained})
-            await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
+            async with conn.transaction():
+                from .dynamic_registry import lock_registry, sync_dynamic_registry
+                await lock_registry(conn)
+                base = load_registry(self._settings.registry_path)
+                saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
+                saved_rows, _ = admitted_requests(saved, base)
+                admitted, dispositions = admitted_requests(document, [*base, *saved_rows])
+                retained = [row for row in saved.get("sources", []) if isinstance(row, dict)]
+                accepted_ids = {row.source.id for row in admitted}
+                retained.extend(row for row in document["sources"][:25] if isinstance(row, dict) and row.get("id") in accepted_ids)
+                await meta_set(conn, "source_requests_admitted", {"sources": retained})
+                await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
+                await sync_dynamic_registry(conn, base, self._clock())
         return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions}
 
     async def watch_registry(self) -> None:
@@ -787,15 +806,11 @@ class Crawler:
             return
         self._registry_mtime = mtime
         try:
-            rows = load_registry(path)
+            async with self._pool.connection() as conn:
+                from .dynamic_registry import sync_dynamic_registry
+                await sync_dynamic_registry(conn, lambda: load_registry(path), self._clock())
         except RegistryError as error:
             log.error("registry file changed but is invalid; keeping the loaded registry: %s", error)
-            return
-        async with self._pool.connection() as conn:
-            from .source_requests import admitted_requests
-            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
-            admitted, _ = admitted_requests(saved, rows)
-            await sync_registry(conn, [*rows, *admitted], self._clock())
 
 
 def _load_enricher() -> tuple[Callable | None, Callable | None]:

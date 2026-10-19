@@ -256,6 +256,8 @@ class RequestSpec:
     body: bytes | None = None
     conditional: bool = True
     api: bool = False
+    # Discovery may follow only the publisher origin already admitted; ordinary readers retain their existing redirect policy.
+    same_origin_redirects: bool = False
 
 
 @dataclass(frozen=True)

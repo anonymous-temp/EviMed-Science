@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import calendar
 import re
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -218,7 +219,8 @@ class FeedAdapter:
         return problems
 
     def plan(self, source: SourceConfig, state: SourceState, now: datetime) -> list[RequestSpec]:
-        return plan_from_template(source, state, now, api=bool((source.config or {}).get("api")), conditional=True)
+        requests = plan_from_template(source, state, now, api=bool((source.config or {}).get("api")), conditional=True)
+        return [replace(request, same_origin_redirects=source.config.get("same_origin_redirects") is True) for request in requests]
 
     def parse(self, result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
         return parse_feed(result, source, now)

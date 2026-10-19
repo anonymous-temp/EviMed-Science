@@ -32,14 +32,14 @@ async def _startup(settings: Settings, state: dict) -> None:
     from .budget import HostBudget, PgCounterStore, host_rules
     from .db import create_pool, migrate
     from .fetch import ProtectedFetcher
-    from .registry import load_registry, sync_registry
+    from .registry import load_registry
+    from .dynamic_registry import sync_dynamic_registry
     from .scheduler import Crawler
 
-    rows = load_registry(settings.registry_path)
     pool = await create_pool(settings)
     async with pool.connection() as conn:
         await migrate(conn)
-        await sync_registry(conn, rows, datetime.now(timezone.utc))
+        await sync_dynamic_registry(conn, lambda: load_registry(settings.registry_path), datetime.now(timezone.utc))
     budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
     await budget.load()
     fetcher = ProtectedFetcher(settings, budget)

@@ -484,6 +484,8 @@ class ProtectedFetcher:
         if allowed_hosts and not host_allowed(first.hostname or "", allowed_hosts):
             raise FetchError("blocked", "host_not_allowed")
         if egress == "browser":
+            if spec.same_origin_redirects:
+                raise FetchError("blocked", "strict_origin_browser_unavailable")
             return await self._fetch_browser(spec, first, allowed_hosts, robots_file, wait_for)
         url, body = spec.url, spec.body
         headers = {k: v for k, v in (spec.headers or {}).items() if k.lower() not in HEADERS_NEVER_FROM_ADAPTERS}
@@ -491,6 +493,11 @@ class ProtectedFetcher:
         for hop in range(self._settings.max_redirects + 1):
             parts = _check_url(url)
             host = (parts.hostname or "").lower()
+            if spec.same_origin_redirects and (
+                    parts.scheme != first.scheme or host != (first.hostname or "").lower()
+                    or (parts.port or 443) != (first.port or 443)
+                    or parts.username is not None or parts.password is not None):
+                raise FetchError("blocked", "redirect_origin_not_allowed")
             if not spec.api:
                 allowed, delay, unreachable = await self._robots_by_egress[egress].check(url)
                 self._budget.observe_crawl_delay(host, delay)
