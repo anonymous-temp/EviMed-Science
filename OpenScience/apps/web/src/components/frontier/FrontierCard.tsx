@@ -79,6 +79,7 @@ export function FrontierCard({ reader = false, item, expanded = false, onExpand,
   const band = scoreBand(item);
   const tags = cardTags(item);
   const starred = item.state.starred;
+  const actionTextClass = reader ? "text-ui" : "text-caption";
   const also = item.alsoReportedCount;
 
   const copy = async () => {
@@ -154,22 +155,22 @@ export function FrontierCard({ reader = false, item, expanded = false, onExpand,
         {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}</>}
 
         <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
-          {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
-          {!reader && <button type="button" onClick={openArticle} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
+          {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className={actionTextClass}>{expanded ? "收起摘要" : "展开摘要"}</span></button>}
+          {!reader && <button type="button" onClick={openArticle} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className={actionTextClass}>详情</span></button>}
           {also > 0 && (
             <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
               <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
-                <span className="text-caption">另有 {also} 家报道 ›</span>
+                <span className={actionTextClass}>另有 {also} 家报道 ›</span>
               </button>
             </Menu>
           )}
           {tags.map((tag) => (onTag ? (
             <Tooltip key={`${tag.kind}-${tag.key}`} content={tag.kind === "specialty" ? `只看${tag.label}` : `搜索“${tag.label}”`}>
               <button type="button" onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
-                <span className="text-caption">#{tag.label}</span>
+                <span className={actionTextClass}>#{tag.label}</span>
               </button>
             </Tooltip>
-          ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
+          ) : <span key={`${tag.kind}-${tag.key}`} className={cn("px-1", actionTextClass)}>#{tag.label}</span>))}
           <div className="ml-auto flex items-center gap-1">
             <IconButton
               icon={Star}
@@ -180,7 +181,7 @@ export function FrontierCard({ reader = false, item, expanded = false, onExpand,
               onClick={() => onStar(item)}
             />
             <button type="button" onClick={research} className={cn(INLINE_ACTION, "px-1.5 text-text-2 hover:text-text")}>
-              <span className="text-caption">深入研究</span>
+              <span className={actionTextClass}>深入研究</span>
             </button>
             <Menu label="更多操作" items={more} />
           </div>
