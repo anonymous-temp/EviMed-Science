@@ -8,7 +8,8 @@ description: |
   A decision about one particular project is a line under 已定事项 in that project's
   PROJECT_CONTEXT card and is not written here as well. A personal working style is a
   PREFERENCE. Only a decision the user stated in a user-role message; never a suggestion the
-  assistant made, and never an option still under discussion.
+  assistant made, and never an option still under discussion. A choice the user states and then
+  asks the assistant to check ("就这么定了，这样合理吗？") is taken, not under discussion.
   One file per subject; when the decision on that subject changes, update the file so it
   states the current decision (and, briefly, what it replaced).
 
