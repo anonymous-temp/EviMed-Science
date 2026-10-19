@@ -49,7 +49,7 @@ export function dimensionBarOption(dimension: MapDimension, palette: MapPalette)
     grid: { top: 16, bottom: 24, left: 12, right: 48, containLabel: true },
     tooltip: { trigger: "axis", confine: true,
       valueFormatter: (value: unknown) => radarValue(dimension.scale, Number(value)) },
-    xAxis: { type: "value", min: 0, ...(dimension.scale === "share" ? { max: 1 } : {}),
+    xAxis: { type: "value", min: 0, ...(dimension.scale === "share" ? { max: 1 } : { minInterval: 1 }),
       axisLabel: { color: palette.text, formatter: (value: number) => radarValue(dimension.scale, value) },
       splitLine: { lineStyle: { color: palette.grid } } },
     yAxis: { type: "category", inverse: true, data: dimension.axes.map((axis) => axis.label),
