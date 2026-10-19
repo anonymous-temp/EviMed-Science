@@ -101,7 +101,7 @@ describe("the home page", () => {
   it("has the four views, in the order the plan names them, and the list is the first", async () => {
     draw();
     await screen.findByRole("link", { name: EV201 });
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["研究2", "方法库", "试验先例", "人群定义"]);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["研究2", "方法库", "参考试验", "人群定义"]);
     expect(screen.getByRole("tab", { name: /^研究/ })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -252,7 +252,7 @@ describe("the study list", () => {
     expect(screen.queryByText(/从上面四个动作/)).toBeNull();
   });
 
-  it("keeps the header's 新建研究 while the list is read, when it cannot be read, and on the other views", async () => {
+  it("keeps study creation on the study list and removes it from the method view", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/studies": () => new Promise(() => undefined) });
     draw();
     expect(pageHeader().getByRole("button", { name: "新建研究" })).toBeInTheDocument();
@@ -266,8 +266,8 @@ describe("the study list", () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
     draw("/app/virtual-research?tab=models");
     await screen.findByRole("tab", { name: /方法库/ });
-    await waitFor(() => expect(pageHeader().getByRole("button", { name: "新建研究" })).toBeInTheDocument());
-    expect(screen.getAllByRole("button", { name: "新建研究" })).toHaveLength(1);
+    await waitFor(() => expect(pageHeader().queryByRole("button", { name: "新建研究" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "新建研究" })).toBeNull();
   });
 
   it("creates the first study from the empty state and lands in the study's conversation view", async () => {
@@ -338,7 +338,7 @@ describe("the home's other views", () => {
     expect(screen.queryByRole("searchbox", { name: "搜索研究" })).toBeNull();
   });
 
-  it("opens 试验先例 on the library", async () => {
+  it("opens 参考试验 on the library", async () => {
     draw("/app/virtual-research?tab=precedents");
     await waitFor(() => expect(server.calls.some((call) => call.path === "/vcr/precedents")).toBe(true));
     expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
@@ -357,15 +357,15 @@ describe("the home's other views", () => {
     expect(toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "模型" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("puts 试验先例's search in the same one toolbar, and takes 方法库's controls away when the view changes", async () => {
+  it("puts 参考试验's search in the same one toolbar, and takes 方法库's controls away when the view changes", async () => {
     draw("/app/virtual-research?tab=models");
     await screen.findByRole("button", { name: "引入文献模型" });
-    await userEvent.click(screen.getByRole("tab", { name: "试验先例" }));
+    await userEvent.click(screen.getByRole("tab", { name: "参考试验" }));
     expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
     const toolbars = document.querySelectorAll("[data-toolbar]");
     expect(toolbars).toHaveLength(1);
     expect(toolbars[0]).toContainElement(screen.getByRole("tablist"));
-    expect(toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索先例" }));
+    expect(toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索登记试验" }));
     expect(screen.queryByRole("button", { name: "引入文献模型" })).toBeNull();
   });
 
