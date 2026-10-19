@@ -405,12 +405,12 @@ pages after every release.
    scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
 2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
-   - a **record** — a memory entry, an inbox message, a frontier item, an evidence-matrix row, a GEO
+   - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
      source or a wrong answer — opens in the right-hand drawer (`Drawer`) and the list stays where it
      is; a record's row does not take the reader to another page to read what it holds;
    - a **conversation-type object** — a scheduled task — opens its conversation in the main area,
      with the list as a column inside the page (`/app/autopilot/:taskId`);
-   - a **document** — a knowledge-base source, a compiled wiki page, a report, an event, a file the
+   - a **document** — a frontier article, a knowledge-base source, a compiled wiki page, a report, an event, a file the
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
      its own that has an address (`/app/files/:sourceId`), and going back restores the list as it was.
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
@@ -689,3 +689,10 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
   2025.10 JSON Schema (it is not vendored, and CI does not fetch).
 - The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire
   that event prints the shell unless the event is dispatched first.
+
+
+### October 19 workflow correction
+
+The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
+
+Frontier evidence zones belong to the peer navigation. Article titles and Details open one addressed reader; the publisher link is separate and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.

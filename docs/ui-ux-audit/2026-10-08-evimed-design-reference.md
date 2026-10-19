@@ -1590,3 +1590,8 @@ v1.0 原文保存为 [v1.0-original.md](2026-10-08-design-reference-assets/v1.0-
 | 附录 | 新增裁定索引、产品词表、可见性表与本修订记录 | 让裁定与用词可检索 |
 
 定稿前另做了一次独立复核（核对记录 E：1 条高、13 条中、32 条低），全部已处理：基线改为已上线并入 main 的 R11.2；无引文结论的 ⚠、措辞表改用领域契约、走查只覆盖点名页面、“核验”与 ¥ 等用词缺口、两张图的线上文案等都已按代码改正。
+
+
+## October 19 owner correction
+
+The historical R10/R11/R19 layouts above are observations, not instructions to preserve the defects reported on October 19. The latest owner decisions supersede module-grouped project trees, frontier article drawers, stacked step/tab navigation and sparse-chart suppression. Preserve the underlying functions, ordinary-account access, source and tenant boundaries, native DSH frame and real data. The executable coverage matrix is `../superpowers/plans/2026-10-19-workflow-rectification.md`.
