@@ -36,8 +36,9 @@
  */
 
 import {
-  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_PLATFORM_PRODUCER_NAME, NUMBER_UNCOMPUTED, digestPlacement,
-  evidenceCardClaims, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
+  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_PLATFORM_PRODUCER_NAME,
+  NUMBER_UNCOMPUTED, digestPlacement,
+  evidenceCardClaims, evidenceCardCarry, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { evidenceSourceUrl } from "./evidenceZoneService.mjs";
@@ -47,10 +48,10 @@ import {
 } from "./evidenceProgrammeData.mjs";
 
 /** Why a claim of an episode's matrix is not in the card, closed so the counter's label set is. */
-export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified", "headline_unresolved", "calculation_not_verified"]);
+export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified", "headline_unresolved", "calculation_not_verified", "card_limit"]);
 
 /** Why no card is written for an episode, closed for the same reason. `pending` and `deferred` are not refusals: the episode is looked at again. */
-export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused"]);
+export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt", "card_refused", "superseded"]);
 
 /** The confidence labels a synthesized claim keeps, in the reader's words. */
 const CONFIDENCE_ZH = Object.freeze({ high: "高", moderate: "中", low: "低" });
@@ -189,6 +190,60 @@ function cardSources(claims, captured) {
 }
 
 /**
+ * The card's body: its claims, numbered, with how each stands, then their scope and uncertainty.
+ * @param {any[]} claims card claims
+ */
+function programmeCardBody(claims) {
+  const lines = claims.map((made, position) => {
+    const numbers = (made.sourceIndexes ?? []).map((/** @type {number} */ index) => `[${index}]`).join("");
+    const how = made.claimType === "synthesized" ? `综合判断（把握度：${CONFIDENCE_ZH[/** @type {keyof typeof CONFIDENCE_ZH} */ (made.confidence)] ?? "未标注"}），来源 ${numbers}` : `直接引用，来源 ${numbers}`;
+    return `${position + 1}. ${made.claim}（${how}）`;
+  });
+  const applicability = [...new Set(claims.map((made) => made.applicability).filter(Boolean))];
+  const uncertainty = [...new Set(claims.map((made) => made.uncertainty).filter(Boolean))];
+  return [
+    "## 已逐字核对的结论", ...lines,
+    ...(applicability.length ? ["", "## 适用范围", ...applicability.map((line) => `- ${line}`)] : []),
+    ...(uncertainty.length ? ["", "## 不确定性", ...uncertainty.map((line) => `- ${line}`)] : []),
+  ].join("\n");
+}
+
+/**
+ * Which standing claims one card can carry within the zone's bounds on a card: how many claims (`EVIDENCE_CLAIM_LIMIT`), how
+ * many sources they cite, how long the claims are together and how long the body they make is. A run's matrix may hold more —
+ * four episodes of 64 to 78 verified claims were refused whole by the zone as "claims." (2026-10-09 to 10-17) — and the ones a
+ * card cannot carry stay in the episode (`card_limit`), as every other claim the card leaves out does.
+ *
+ * Which ones come first is read from what the run left, never from the prose: headline claims, reproduced before gated; then
+ * the claims whose sources the platform read on the latest day (a claim is as recent as its latest captured source), because an
+ * update's matrix carries its earlier conclusions forward and appends what it found — the 2026-10-13 sentinel run repeated the
+ * 65 claims of the day before and added 13 from sources read that morning, and the matrix's first sixty would have published
+ * the day before's card again; then the matrix's order. The day and not the instant: within one run the order sources were read
+ * in is the order they were searched for, which says nothing about which conclusion matters, and the matrix's order does. A claim that would cross a bound is passed over and a later, smaller
+ * one may still fit. The card keeps the matrix's order.
+ *
+ * The sizes are measured on the claims as numbered in this round; once the left-out claims are gone the numbers and source
+ * indexes only get smaller, so what fits here fits in the card assembled next.
+ * @template {{ claim: any, agendaClaim: any | null, headline: boolean }} T
+ * @param {T[]} entries standing claims, in the matrix's order
+ * @param {any[]} made their card claims, in the same order
+ * @param {Map<string, { capturedAt?: string | null }>} captured artifact path → when the platform's copy of it was captured
+ * @returns {T[]}
+ */
+function withinCardBounds(entries, made, captured) {
+  const tier = (/** @type {any} */ entry) => TIER_RANK[/** @type {keyof typeof TIER_RANK} */ (entry.agendaClaim?.tier)] ?? 3;
+  const day = (/** @type {string} */ path) => { const at = Date.parse(String(captured.get(path)?.capturedAt ?? "")); return Number.isFinite(at) ? Math.floor(at / 86_400_000) : 0; };
+  const readAt = (/** @type {any} */ entry) => Math.max(0, ...pathsOf(entry.claim).map(day));
+  const order = entries.map((entry, position) => ({ entry, position, readAt: readAt(entry) })).sort((left, right) =>
+    Number(right.entry.headline) - Number(left.entry.headline)
+    || (left.entry.headline ? tier(left.entry) - tier(right.entry) : 0)
+    || right.readAt - left.readAt
+    || left.position - right.position);
+  const kept = evidenceCardCarry({ claims: made, order: order.map(({ position }) => position), sourceKeys: (position) => pathsOf(entries[position].claim), body: programmeCardBody });
+  return entries.filter((_, index) => kept.has(index));
+}
+
+/**
  * The card the programme would write for one finished episode, or why it writes none. Pure and deterministic: the same
  * inputs make the same card, which is what makes a replay of the settling step harmless.
  *
@@ -243,7 +298,13 @@ export function buildProgrammeCard(input) {
     for (const entry of holdable) if (!standing.has(entry.claim.claimId)) excluded.push({ claimId: entry.claim.claimId, reason: "card_not_verified" });
     const stable = holdable.length === candidates.length && holdable.every((entry) => standing.has(entry.claim.claimId));
     candidates = holdable.filter((entry) => standing.has(entry.claim.claimId));
-    if (stable || !candidates.length) { claims = stable ? held : []; break; }
+    if (!candidates.length) { claims = []; break; }
+    if (!stable) continue;
+    // Everything stands: what one card can carry of it is the card, and the rest is assembled out in one more round.
+    const carried = withinCardBounds(candidates, held, input.captured);
+    if (carried.length === candidates.length) { claims = held; break; }
+    for (const entry of candidates) if (!carried.includes(entry)) excluded.push({ claimId: entry.claim.claimId, reason: "card_limit" });
+    candidates = carried;
   }
   if (!claims.length) return { status: "refused", outcome: "no_qualifying_claims", excluded };
 
@@ -260,18 +321,8 @@ export function buildProgrammeCard(input) {
   // D C3): the list line is the first conclusion the card holds, which is the one thing that differs from card to card.
   const summary = leadClaim ? answer : labelled(claims[0]);
 
-  const lines = claims.map((made, position) => {
-    const numbers = (made.sourceIndexes ?? []).map((index) => `[${index}]`).join("");
-    const how = made.claimType === "synthesized" ? `综合判断（把握度：${CONFIDENCE_ZH[/** @type {keyof typeof CONFIDENCE_ZH} */ (made.confidence)] ?? "未标注"}），来源 ${numbers}` : `直接引用，来源 ${numbers}`;
-    return `${position + 1}. ${made.claim}（${how}）`;
-  });
-  const applicability = [...new Set(claims.map((made) => made.applicability).filter(Boolean))];
   const uncertainty = [...new Set(claims.map((made) => made.uncertainty).filter(Boolean))];
-  const body = [
-    "## 已逐字核对的结论", ...lines,
-    ...(applicability.length ? ["", "## 适用范围", ...applicability.map((line) => `- ${line}`)] : []),
-    ...(uncertainty.length ? ["", "## 不确定性", ...uncertainty.map((line) => `- ${line}`)] : []),
-  ].join("\n");
+  const body = programmeCardBody(claims);
 
   const taskTitle = PROGRAMME_CARD_TITLES[/** @type {keyof typeof PROGRAMME_CARD_TITLES} */ (input.taskType)] ?? "证据更新";
   const title = `${input.zone.title}：${taskTitle}`.slice(0, 300);

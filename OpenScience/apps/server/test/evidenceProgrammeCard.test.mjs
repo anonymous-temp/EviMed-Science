@@ -162,6 +162,98 @@ test("a card built with no decision id is refused by name", () => {
     (error) => error.code === "evidence_programme_decision_required" && error.status === 409);
 });
 
+// ── The zone's bounds on one card (production 2026-10-09 to 10-17: four episodes of 64, 65, 78 and 68 verified claims were
+// refused whole as "Invalid evidence content: claims." because no card carries more than EVIDENCE_CLAIM_LIMIT claims) ────────────
+
+/**
+ * A run's matrix in the shape those episodes left: direct claims, the matrix's own keys, one public abstract per source, every
+ * claim verified by the run and none graded by an independent check (the episodes carried no agenda claims).
+ * @param {{ sources: number, claims: number, firstId?: number, day?: string, claimText?: (n: number) => string, quoteText?: (n: number) => string }} spec
+ */
+function realisticRun({ sources, claims, firstId = 201, day = "2026-10-07", claimText = (n) => `第 ${n} 条结论：试验 ${n} 的主要复合终点下降。`, quoteText = (n) => `the primary composite outcome in trial ${n} was lower with treatment`, startSource = 0 }) {
+  /** @type {Record<string, string>} */
+  const texts = {};
+  /** @type {Map<string, any>} */
+  const held = new Map();
+  const matrix = [];
+  for (let n = 0; n < claims; n += 1) {
+    const s = startSource + (n % sources);
+    const path = `.evimed-sources/pubmed/PMID${3000000 + s}/${String(s).padStart(64, "0")}/abstract.md`;
+    const id = firstId + n;
+    const quote = quoteText(id);
+    texts[path] = `${texts[path] ?? `Abstract ${s}.`} In this report ${quote}.`;
+    matrix.push({ claimId: `CLM-${id}`, claim: claimText(id), referenceNumber: s + 1, sourceUrl: `https://pubmed.ncbi.nlm.nih.gov/${3000000 + s}/`, sourceTitle: `Trial ${s}`,
+      artifactPath: path, identifier: `PMID:${3000000 + s}`, accessLevel: "abstract", supportQuote: quote, applicability: `成人慢性肾脏病（来源 ${s}）`, uncertainty: `单项试验（来源 ${s}）。` });
+  }
+  for (const [path, text] of Object.entries(texts)) held.set(path, { text, digest: "d".repeat(64), capturedAt: `${day}T00:41:40.623Z` });
+  return { matrix, texts, held };
+}
+const runEvaluation = (/** @type {any[]} */ matrix, /** @type {Record<string, string>} */ texts, agendaClaims = []) =>
+  evaluateProgrammeClaims({ matrix: { claims: matrix }, verification: claimVerification({ matrix: { claims: matrix }, sourceArtifacts: texts }), agendaClaims });
+
+test("a matrix longer than a card carries publishes the sixty a card holds and leaves the rest in the episode, where the zone refused it whole", () => {
+  const { matrix, texts, held } = realisticRun({ sources: 26, claims: 64 });
+  const evaluation = runEvaluation(matrix, texts);
+  assert.equal(evaluation.included.length, 64, "every claim was verified by the run, as on production");
+  // The shape production built: all 64 on one card, which the zone's own contract refuses — and now says why.
+  assert.throws(() => evidenceCardClaims(evaluation.included.map(({ claim }) => ({ claimId: claim.claimId, claimType: "direct", claim: claim.claim, sourceIndexes: [1], supportQuote: claim.supportQuote })), 26),
+    (error) => error.code === "evidence_invalid" && /claims has 64 entries, more than the 60 a card carries/.test(error.message));
+  const built = buildProgrammeCard(input(evaluation, { captured: held }));
+  assert.equal(built.status, "card");
+  assert.equal(built.card.claims.length, 60);
+  assert.equal(built.includedCount, 60);
+  assert.deepEqual(built.excluded.map((entry) => entry.reason), ["card_limit", "card_limit", "card_limit", "card_limit"]);
+  assert.deepEqual(built.card.claims.map((claim) => claim.claimId), matrix.slice(0, 60).map((claim) => claim.claimId), "all read the same day: the matrix's order decides, and the card keeps it");
+  evidenceCardClaims(built.card.claims, built.card.sources.length);
+  assert.ok(verifyEvidenceCardClaims(built.card).claims.every((entry) => entry.mark === "✓"));
+  assert.match(built.card.body, /^60\. /m);
+  assert.doesNotMatch(built.card.body, /^61\. /m);
+});
+
+test("an update that carries its earlier claims forward publishes what it read that day first, not the day before's card again", () => {
+  // The 2026-10-13 sentinel: the 65 claims of 10-12, repeated, then 13 claims from sources read that morning.
+  const before = realisticRun({ sources: 20, claims: 65, firstId: 527, day: "2026-10-12" });
+  const today = realisticRun({ sources: 4, claims: 13, firstId: 592, day: "2026-10-13", startSource: 20 });
+  const matrix = [...before.matrix, ...today.matrix];
+  const held = new Map([...before.held, ...today.held]);
+  const built = buildProgrammeCard(input(runEvaluation(matrix, { ...before.texts, ...today.texts }), { captured: held }));
+  assert.equal(built.status, "card");
+  const ids = built.card.claims.map((claim) => claim.claimId);
+  assert.equal(ids.length, 60);
+  for (const claim of today.matrix) assert.ok(ids.includes(claim.claimId), `${claim.claimId}, read on 10-13, is on the card`);
+  assert.deepEqual(built.excluded.map((entry) => entry.claimId), before.matrix.slice(47).map((claim) => claim.claimId), "the last of the day before's, in the matrix's order");
+  assert.deepEqual(ids, matrix.map((claim) => claim.claimId).filter((id) => ids.includes(id)), "the card reads in the matrix's order");
+});
+
+test("a headline claim is carried before any other, however early its source was read", () => {
+  const before = realisticRun({ sources: 10, claims: 30, firstId: 101, day: "2026-10-01" });
+  const today = realisticRun({ sources: 10, claims: 40, firstId: 301, day: "2026-10-13", startSource: 10 });
+  const matrix = [...before.matrix, ...today.matrix];
+  const built = buildProgrammeCard(input(runEvaluation(matrix, { ...before.texts, ...today.texts }, [graded("CLM-130")]), { captured: new Map([...before.held, ...today.held]) }));
+  assert.equal(built.headlineClaimId, "CLM-130");
+  assert.ok(built.card.claims.some((claim) => claim.claimId === "CLM-130"));
+  assert.equal(built.card.content.answer, before.matrix.at(-1).claim);
+  assert.equal(built.card.claims.length, 60);
+});
+
+test("no card cites more sources, holds more claim text or a longer body than the zone accepts: what crosses a bound stays out", () => {
+  // One source per claim: the source list is the bound.
+  const wide = realisticRun({ sources: 55, claims: 55 });
+  const byWidth = buildProgrammeCard(input(runEvaluation(wide.matrix, wide.texts), { captured: wide.held }));
+  assert.equal(byWidth.card.sources.length, 50);
+  assert.equal(byWidth.card.claims.length, 50);
+  assert.equal(byWidth.excluded.filter((entry) => entry.reason === "card_limit").length, 5);
+  // Long statements and long quotations: the claims' size and the body are the bounds.
+  const long = realisticRun({ sources: 10, claims: 60, claimText: (n) => `结论 ${n}：${"肾小球滤过率下降速度减慢".repeat(120)}`, quoteText: (n) => `${"the estimated glomerular filtration rate declined more slowly ".repeat(30)}in trial ${n}` });
+  const bySize = buildProgrammeCard(input(runEvaluation(long.matrix, long.texts), { captured: long.held }));
+  assert.equal(bySize.status, "card");
+  assert.ok(bySize.card.claims.length < 60 && bySize.card.claims.length > 0, `${bySize.card.claims.length} claims`);
+  assert.ok(JSON.stringify(bySize.card.claims).length <= 120000);
+  assert.ok(bySize.card.body.length <= 50000);
+  evidenceCardClaims(bySize.card.claims, bySize.card.sources.length);
+  assert.equal(bySize.excluded.length + bySize.card.claims.length, 60, "each claim left out is counted once");
+});
+
 test("numbers are never typed: a comparison is kept only when every number is a machine value of the result", () => {
   const comparison = (events) => ({ title: "卒中或系统性栓塞", outcome: "卒中或系统性栓塞", timeframe: "中位随访 1.8 年", denominator: 9120, outcomeRole: "benefit",
     control: { label: "华法林", events }, intervention: { label: "阿哌沙班", events: 212 }, sourceIndexes: [1] });

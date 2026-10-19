@@ -4,8 +4,11 @@ import test from "node:test";
 
 import {
   EVIDENCE_CARD_ERROR_CODES,
+  EVIDENCE_CLAIMS_MAX_CHARS,
+  EVIDENCE_CLAIM_LIMIT,
   EVIDENCE_ORIGINALITY,
   EVIDENCE_PRIMARY_ORIGINALITY,
+  EVIDENCE_SOURCE_LIMIT,
   EVIDENCE_RANKING_INPUTS,
   EVIDENCE_WRITE_ORIGINS,
   EVIDENCE_ZONE_KINDS,
@@ -17,6 +20,7 @@ import {
   assertEvidenceWriteAllowed,
   createEvidenceCardHashing,
   evidenceAbsoluteEffect,
+  evidenceCardCarry,
   evidenceCardClaims,
   evidenceCardClinicalView,
   evidenceCardIdentifiers,
@@ -231,6 +235,17 @@ test("claims keep the run's three types, refer to the card's sources by index an
   assert.throws(bad({ claim: "" }), refusedWith("evidence_invalid"));
   assert.throws(bad({ valueSource: "invented" }), refusedWith("evidence_invalid"));
   assert.throws(() => evidenceCardClaims([claims[0], claims[0]], sources.length), /repeated claimId/);
+  // A refusal names what it refused: the claim and its field, or the bound the whole list crossed (2026-10-19: four programme cards
+  // were refused as "claims." and nothing else).
+  assert.throws(bad({ supportQuote: "" }), /Invalid evidence content: claims\[0\]\.supportQuote\./);
+  assert.throws(() => evidenceCardClaims("CLM-001", 3), /claims is not a list/);
+  const many = Array.from({ length: EVIDENCE_CLAIM_LIMIT + 1 }, (_, index) => ({ ...claims[0], claimId: `CLM-${index}` }));
+  assert.throws(() => evidenceCardClaims(many, sources.length), (error) => error instanceof EvidenceCardError && error.code === "evidence_invalid"
+    && error.message === `Invalid evidence content: claims has ${EVIDENCE_CLAIM_LIMIT + 1} entries, more than the ${EVIDENCE_CLAIM_LIMIT} a card carries.`);
+  assert.equal(evidenceCardClaims(many.slice(0, EVIDENCE_CLAIM_LIMIT), sources.length).length, EVIDENCE_CLAIM_LIMIT);
+  const heavy = Array.from({ length: 40 }, (_, index) => ({ ...claims[0], claimId: `CLM-${index}`, claim: "x".repeat(1500), supportQuote: "y".repeat(2000) }));
+  assert.ok(JSON.stringify(heavy).length > EVIDENCE_CLAIMS_MAX_CHARS);
+  assert.throws(() => evidenceCardClaims(heavy, sources.length), new RegExp(`claims take \\d+ characters, more than the ${EVIDENCE_CLAIMS_MAX_CHARS} a card carries`));
   // A synthesis needs two distinct sources and a confidence label.
   const synthesis = /** @type {any} */ (claims[3]);
   assert.throws(() => evidenceCardClaims([{ ...synthesis, supportingSources: [synthesis.supportingSources[0]] }], 3), refusedWith("evidence_invalid"));
@@ -460,4 +475,24 @@ test("identifiers are read from closed formats in a card's sources and verified 
 test("every code the card raises has a Chinese sentence in the registry", () => {
   assert.equal(EVIDENCE_CARD_ERROR_CODES.length, 12);
   for (const code of EVIDENCE_CARD_ERROR_CODES) assert.match(knownErrorCodeMessage(code) ?? "", /[一-鿿]/, code);
+});
+
+test("a card carries what fits under all four bounds, in the writer's order, passing over a claim that would cross one", () => {
+  const body = (/** @type {{ claim: string }[]} */ kept) => kept.map((entry) => entry.claim).join("\n");
+  const claim = (/** @type {string} */ text) => ({ claimId: "c", claim: text });
+  // Count: 70 small claims, preferred from the last to the first.
+  const many = Array.from({ length: 70 }, () => claim("a"));
+  const byCount = evidenceCardCarry({ claims: many, order: many.map((_, index) => 69 - index), sourceKeys: () => ["s"], body });
+  assert.equal(byCount.size, EVIDENCE_CLAIM_LIMIT);
+  assert.ok(byCount.has(69) && byCount.has(10) && !byCount.has(9), "the first sixty of the writer's order");
+  // Sources: 60 claims, one source each.
+  const sourced = Array.from({ length: 60 }, () => claim("a"));
+  assert.equal(evidenceCardCarry({ claims: sourced, order: sourced.map((_, index) => index), sourceKeys: (position) => [`s${position}`], body }).size, EVIDENCE_SOURCE_LIMIT);
+  // Characters of the claims, and of the body: a big claim is passed over and a later small one still fits.
+  const sized = [claim("x".repeat(EVIDENCE_CLAIMS_MAX_CHARS)), claim("a"), claim("b")];
+  assert.deepEqual([...evidenceCardCarry({ claims: sized, order: [0, 1, 2], sourceKeys: () => ["s"], body })], [1, 2]);
+  const lines = [claim("x".repeat(30000)), claim("y".repeat(30000)), claim("z")];
+  assert.deepEqual([...evidenceCardCarry({ claims: lines, order: [0, 1, 2], sourceKeys: () => ["s"], body })], [0, 2]);
+  // The same claims and order keep the same positions.
+  assert.deepEqual([...evidenceCardCarry({ claims: lines, order: [0, 1, 2], sourceKeys: () => ["s"], body })], [0, 2]);
 });
