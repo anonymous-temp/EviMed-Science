@@ -330,6 +330,7 @@ def audit_artifact_utilities(run_root: Path) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, required=True, help="New retained evidence directory; historical results are never overwritten")
+    parser.add_argument("--office-only", action="store_true", help="Execute only the four deterministic Office tasks; preserve other packages' existing evidence")
     args = parser.parse_args()
     results = args.results_dir.resolve()
     if not results.is_relative_to(REPO.resolve()):
@@ -341,12 +342,9 @@ def main() -> None:
     started = datetime.now(timezone.utc)
     run_root = artifact_root / (started.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8])
     run_root.mkdir(parents=True, exist_ok=False)
-    rows = (
-        audit_office(run_root)
-        + audit_reviewers(run_root)
-        + audit_run_recorders(run_root)
-        + audit_artifact_utilities(run_root)
-    )
+    rows = audit_office(run_root)
+    if not args.office_only:
+        rows += audit_reviewers(run_root) + audit_run_recorders(run_root) + audit_artifact_utilities(run_root)
     finished = datetime.now(timezone.utc)
     document = {
         "schemaVersion": 1,

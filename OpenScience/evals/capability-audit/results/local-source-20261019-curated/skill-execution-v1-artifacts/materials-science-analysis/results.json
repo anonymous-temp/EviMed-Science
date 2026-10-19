@@ -1,0 +1,14 @@
+{
+  "material": {
+    "cellVolume": 302.47842483059856,
+    "formula": "Fe2O3",
+    "lattice": {
+      "a": 5.04,
+      "alpha": 90,
+      "b": 5.04,
+      "beta": 90,
+      "c": 13.75,
+      "gamma": 120
+    }
+  }
+}

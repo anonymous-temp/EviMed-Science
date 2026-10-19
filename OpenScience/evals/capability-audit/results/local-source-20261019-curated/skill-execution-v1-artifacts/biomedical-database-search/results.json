@@ -1,0 +1,13 @@
+{
+  "retrieval": {
+    "query": "BRCA1",
+    "recordCount": 1,
+    "records": [
+      {
+        "id": "GENE:672",
+        "source": "ncbi-gene",
+        "title": "BRCA1 DNA repair associated"
+      }
+    ]
+  }
+}

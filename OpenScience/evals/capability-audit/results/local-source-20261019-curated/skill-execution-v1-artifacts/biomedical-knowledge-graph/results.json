@@ -1,0 +1,12 @@
+{
+  "graph": {
+    "components": 1,
+    "degree": {
+      "DISEASE:C": 2,
+      "DRUG:A": 2,
+      "GENE:B": 2
+    },
+    "edges": 3,
+    "nodes": 3
+  }
+}

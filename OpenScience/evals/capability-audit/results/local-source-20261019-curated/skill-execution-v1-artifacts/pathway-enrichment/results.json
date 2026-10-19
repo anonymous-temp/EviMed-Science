@@ -1,0 +1,23 @@
+{
+  "enrichment": [
+    {
+      "bhAdjustedP": 0.9999999999999998,
+      "overlap": [
+        "A",
+        "B"
+      ],
+      "overlapCount": 2,
+      "pValue": 0.4999999999999999,
+      "pathway": "pathway-1",
+      "setSize": 3
+    },
+    {
+      "bhAdjustedP": 1.0,
+      "overlap": [],
+      "overlapCount": 0,
+      "pValue": 1.0,
+      "pathway": "pathway-2",
+      "setSize": 2
+    }
+  ]
+}
