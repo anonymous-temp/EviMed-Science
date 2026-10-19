@@ -74,7 +74,7 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   assert.deepEqual(texts("geo-plan", "desktop", loose), ["geo-plan@desktop: [chrome] the tab list “项目视图” is outside the band, so it scrolls away", "geo-plan@desktop: [chrome] the step rail is outside the band, so it scrolls away"]);
   // A module page has a band and steps: a rail, or a tab row with a state dot on its tabs (虚拟临床研究's: the overview is not a step).
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
-  assert.match(texts("geo-plan", "desktop", good({ stepRail: null }))[0], /\[step-rail\] a module page shows no steps/);
+  assert.match(texts("vcr-trial", "desktop", good({ stepRail: null }))[0], /\[step-rail\] a module page shows no steps/);
   const dotted = good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 6, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] });
   assert.deepEqual(rules("vcr-trial", "desktop", dotted), []);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 1, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] })), ["step-rail"]);
@@ -199,4 +199,17 @@ test("a finding of a rule is accepted by the baseline entry that names the rule,
   assert.equal(applyBaseline(found, entry(3), { profile: "owner", today: "2026-10-17" }).accepted.length, 1);
   assert.equal(applyBaseline(found, entry(2), { profile: "owner", today: "2026-10-17" }).unaccepted.length, 1);
   assert.deepEqual(finding("orphan-sentence", "geo-plan@desktop", "x", 3).rule, "orphan-sentence");
+});
+
+test("the compact GEO workflow keeps eight steps and a result selector without a second rail", () => {
+  const compact = good({ stepRail: null, tablists: [], compactWorkflow: { count: 8, views: true, inChrome: true } });
+  for (const viewport of ["desktop", "phone"]) {
+    assert.deepEqual(compositionFindings("geo-plan", viewport, compact).notices, []);
+    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 7, views: true, inChrome: true } }).includes("step-rail"));
+    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: false, inChrome: true } }).includes("chrome"));
+    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: true, inChrome: false } }).includes("chrome"));
+    assert.ok(rules("vcr-trial", viewport, compact).includes("step-rail"), "VCR still needs its own step navigation");
+  }
+  const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: compact }]));
+  assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));
 });
