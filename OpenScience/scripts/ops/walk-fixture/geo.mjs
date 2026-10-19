@@ -282,6 +282,9 @@ export async function furnishGeo(app, user, { log }) {
     const created = await geoStore.createProject({ userId: user.id, projectId: extra.id, engines: ENGINES.slice(0, 3), coverageDays: 90, product: { brandName: name } });
     await geoStore.updateProject(user.id, created.id, { status: "paused" }).catch((/** @type {any} */ error) => log(`geo: ${name} was not paused (${String(error?.message ?? error).slice(0, 160)})`));
   }
+  // Discovery reads the most recently updated project: keep the measured fixture ahead of the paused empty examples.
+  const measuredProject = await geoStore.getProject(user.id, project.id);
+  await geoStore.updateProject(user.id, project.id, { status: measuredProject.status });
   return { projectId: project.id, controlProjectId: controlProject.id };
 }
 
