@@ -394,7 +394,7 @@ function EvidenceReadingContent({
                     <EvidenceRevisions evidence={evidence} />
                     {upkeepLog && logOpened && (
                       <section aria-label="这张卡的变更记录">
-                        <h3 className="mb-2 text-ui font-medium text-text">变更记录</h3>
+                        <h3 className="mb-2 text-ui font-semibold text-text">变更记录</h3>
                         <EvidenceChangeLog zoneId={zoneId} cardId={evidence.id} pageSize={10} />
                       </section>
                     )}

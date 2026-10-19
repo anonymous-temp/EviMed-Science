@@ -68,7 +68,7 @@ const DECISION_MAX_TOKENS = 800;
 const DECISION_TIMEOUT_MS = 30_000;
 const MAX_REASON_CHARS = 300;
 /** An outcome that does not change on a later look is final; the others are looked at again by the sweep. */
-const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt"]);
+const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt", "card_refused"]);
 /** Looks at an episode whose matrix is not there yet before the absence is final: a capture that has not landed is not a run with no matrix. */
 const MATRIX_ATTEMPTS = 3;
 /** @param {{ outcome?: string, attempts?: number } | null | undefined} recorded @returns {boolean} */
@@ -87,6 +87,8 @@ const DECISION_INSTRUCTIONS = [
 
 /** @param {unknown} error @returns {string} */
 const codeOf = (error) => (typeof (/** @type {any} */ (error))?.code === "string" ? /** @type {any} */ (error).code : "evidence_programme_failed");
+/** Whether a write was refused for the card it carried (a 400 of the zone's validation), not for the moment it came at. @param {unknown} error */
+const isCardRefusal = (error) => /** @type {any} */ (error)?.status === 400 && /** @type {any} */ (error)?.code === "evidence_invalid";
 /** @param {unknown} value @param {number} max */
 const cut = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 /** @param {string} key an identifier key in the frontier's spelling @returns {string} the card's spelling */
@@ -182,7 +184,7 @@ export function summariseProgrammeDecision(document) {
       return {
         zone: action.zone, taskType: action.taskType, status: action.status, because: deferred ? null : action.reason ?? null, deferredFor: deferred ? action.reason ?? null : null,
         code: action.code ?? null, agendaId: action.agendaId ?? null, episodeId: action.episodeId ?? null, appliedAt: action.appliedAt ?? null,
-        outcome: outcome?.outcome ?? null, cardId: outcome?.cardId ?? null, claims: outcome?.claims ?? null,
+        outcome: outcome?.outcome ?? null, cardId: outcome?.cardId ?? null, claims: outcome?.claims ?? null, refusal: outcome?.reason ?? null,
       };
     }),
   };
@@ -912,7 +914,20 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       return countOutcome(built.outcome);
     }
     const body = existing ? { ...built.card, expectedRevision: existing.revision } : { ...built.card, requestId: built.requestId };
-    const saved = await zones.saveEditorial(user, body, zone.id, existing?.id ?? null, !existing, "programme");
+    /** @type {any} */ let saved;
+    try {
+      saved = await zones.saveEditorial(user, body, zone.id, existing?.id ?? null, !existing, "programme");
+    } catch (error) {
+      // The zone refused the card as invalid: the same episode builds the same card, so asking again only repeats the refusal —
+      // four episodes did, at every sweep, from 2026-10-09 to 2026-10-19, and the log said `evidence_invalid` and nothing else.
+      // Recorded once and final, with the zone's own sentence, where the operator's page and the log read it. Any other failure
+      // (a revision conflict, the database) is looked at again by the next sweep.
+      if (!isCardRefusal(error)) throw error;
+      const reason = cut(/** @type {any} */ (error).message, 300);
+      await recordOutcome(decisionId, episodeId, { outcome: "card_refused", code: codeOf(error), reason });
+      report(`evidence programme card refused for ${episodeId}: ${codeOf(error)}: ${reason}`);
+      return countOutcome("card_refused", { reason });
+    }
     const cardId = saved.evidence.id;
     const revision = saved.evidence.revision;
     counters.claimsPublished += built.includedCount;
@@ -1024,7 +1039,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
         if (action.status !== "scheduled" || !action.episodeId) continue;
         const outcome = decision.payload.outcomes?.[action.episodeId]?.outcome;
         if (outcome && FINAL_OUTCOMES.has(outcome)) continue;
-        try { await settleEpisode(action.episodeId); settled += 1; } catch (error) { counters.hookFailures += 1; report(`evidence programme sweep ${action.episodeId}: ${codeOf(error)}`); }
+        try { await settleEpisode(action.episodeId); settled += 1; } catch (error) { counters.hookFailures += 1; report(`evidence programme sweep ${action.episodeId}: ${codeOf(error)}${cut(/** @type {any} */ (error)?.message, 200) ? `: ${cut(/** @type {any} */ (error).message, 200)}` : ""}`); }
       }
     }
     return { settled, applied };

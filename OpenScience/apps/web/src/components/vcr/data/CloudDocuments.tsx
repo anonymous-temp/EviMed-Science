@@ -193,7 +193,7 @@ function Redaction({ document, identifiers, accepted, reviewed, busy, onIdentifi
     </ul>}
     <p className="text-caption text-text-3">{`共 ${spans.length} 处将被替换。请保留临床日期、剂量、单位和否定表达。`}</p>
     <div className="flex flex-col gap-1">
-      <p className="text-ui font-medium text-text">脱敏后的文本</p>
+      <p className="text-ui font-semibold text-text">脱敏后的文本</p>
       <p className="text-caption text-text-3">保存时遮蔽处换成代号，其余文字原样保留。</p>
       <div {...PREVIEW_REGION} className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded border border-border bg-surface-1 p-3 text-ui text-text">
         {maskedParts(document.text, spans).map((part, index) => part.masked
@@ -225,7 +225,7 @@ function Suggestions({ text, suggestions, accepted, onAccepted }: {
   const open = suggestions.filter(suggestion => !taken(suggestion));
   return <div className="flex flex-col gap-2">
     <div className="flex items-center justify-between gap-3">
-      <p className="text-ui font-medium text-text">{`建议遮蔽 · ${suggestions.length} 处`}</p>
+      <p className="text-ui font-semibold text-text">{`建议遮蔽 · ${suggestions.length} 处`}</p>
       {open.length > 0 && <Button variant="text" size="sm" onClick={() => onAccepted([...accepted, ...open])}>全部接受</Button>}
     </div>
     <ul aria-label="建议遮蔽" className="flex flex-col divide-y divide-faint">

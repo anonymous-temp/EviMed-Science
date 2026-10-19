@@ -20,8 +20,8 @@
   },
   "budgets": {
     "frontier": { "controls": 9, "colors": 8 },
-    "data": { "controls": 10, "colors": 7, "borders": 3 },
-    "geo": { "controls": 10, "colors": 7, "borders": 6 },
+    "data": { "controls": 10, "colors": 7, "borders": 3, "typePairs": 5 },
+    "geo": { "controls": 10, "colors": 7, "borders": 6, "typePairs": 5 },
     "extension": { "controls": 9, "borders": 5 }
   },
   "views": [

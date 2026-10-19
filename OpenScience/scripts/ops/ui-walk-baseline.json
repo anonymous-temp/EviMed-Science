@@ -71,14 +71,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "virtual-research-precedents@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "knowledge-graph@desktop",
       "rule": "type-pairs",
       "max": 6,
@@ -255,14 +247,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "vcr-population@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "vcr-patients@desktop",
       "rule": "type-pairs",
       "max": 7,
@@ -335,14 +319,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "files-reader@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "ops@desktop",
       "rule": "type-pairs",
       "max": 5,
@@ -366,15 +342,7 @@
       ],
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
-    },
-    {
-      "view": "geo@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
+      "why": "the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"
     },
     {
       "view": "memory-project@desktop",
@@ -384,7 +352,7 @@
       ],
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
+      "why": "the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"
     },
     {
       "view": "account-usage@desktop",
@@ -395,26 +363,9 @@
       "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
     },
     {
-      "view": "ops@desktop",
-      "contains": "identifiers in the visible text: standardized_ratio",
-      "owner": "controller",
-      "until": "2026-11-01",
-      "why": "a raw field name on the operator console (R19.1 walk); fix, not a debt to keep"
-    },
-    {
       "view": "geo-sources@desktop",
       "rule": "type-pairs",
       "max": 6,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
-    },
-    {
-      "view": "memory@desktop",
-      "rule": "not-observable",
-      "profiles": [
-        "owner"
-      ],
       "owner": "controller",
       "until": "2026-12-01",
       "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
@@ -427,7 +378,7 @@
       ],
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
+      "why": "the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"
     },
     {
       "view": "chat@phone",
@@ -437,14 +388,14 @@
       ],
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
+      "why": "the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"
     },
     {
       "view": "chat@desktop",
       "contains": "the runtime was already up, so a start refused for cleanup could not be shown",
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
+      "why": "the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"
     }
   ]
 }

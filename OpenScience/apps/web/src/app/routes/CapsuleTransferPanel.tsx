@@ -258,7 +258,7 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
     {notice && <p role="status" className="text-ui text-text-2">{notice}</p>}
 
     <section className="space-y-3" aria-label="导入文件">
-      <label className="block space-y-2 text-ui font-medium text-text">选择胶囊文件<input type="file" accept=".evimedcap" className={inputClasses({ className: "font-normal" })} disabled={busy} onChange={event => {
+      <label className="block space-y-2 text-ui text-text">选择胶囊文件<input type="file" accept=".evimedcap" className={inputClasses({ className: "font-normal" })} disabled={busy} onChange={event => {
         const file = event.target.files?.[0]; setArchive(""); setPreview(null);
         if (!file) return;
         if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的胶囊文件。"); return; }

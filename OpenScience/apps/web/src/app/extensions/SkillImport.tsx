@@ -182,7 +182,7 @@ export function PendingSkillTransfers({ onResume }: { onResume: (entry: PendingS
   useEffect(() => { const counter = requests; alive.current = true; void load(); return () => { alive.current = false; counter.current++; }; }, [load]);
   const current = snapshot?.projectId === projectId ? snapshot : null;
   if (!current?.items.length && !current?.nextCursor && !error) return null;
-  return <section aria-label="未完成的技能迁移" className="mb-4"><h2 className="text-ui font-medium text-text">未完成的技能迁移</h2>
+  return <section aria-label="未完成的技能迁移" className="mb-4"><h2 className="text-ui font-semibold text-text">未完成的技能迁移</h2>
     {error && <p role="status" className="text-ui text-text-2">未能读取迁移记录。{error}<Button variant="text" disabled={loading} onClick={() => void load(failedCursor.current)}>重试读取迁移记录</Button></p>}
     {current && <List divided>{current.items.map(entry => <ListRow key={`${entry.reference}\0${entry.idempotencyKey}`} title={entry.format === "account" ? "账户技能迁移" : "技能历史迁移"} meta={`已保存 ${entry.mappings.reduce((total, mapping) => total + mapping.imported, 0)} / ${entry.mappings.reduce((total, mapping) => total + mapping.total, 0)} 个版本`} actions={<Button variant="text" aria-label="继续未完成的迁移" onClick={() => onResume(entry)}>继续</Button>} />)}</List>}
     {current?.nextCursor && <Button variant="text" disabled={loading} loading={loading} onClick={() => void load(current.nextCursor)}>加载更多迁移记录</Button>}

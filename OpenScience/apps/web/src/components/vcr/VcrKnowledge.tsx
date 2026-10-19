@@ -144,7 +144,7 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
   return (
     <div data-vcr-pack={pack.status} className="flex flex-col gap-2">
       <p className="flex flex-wrap items-center gap-2 text-ui text-text">
-        <span className="font-medium">{packName(pack)}</span>
+        <span className="font-semibold">{packName(pack)}</span>
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
@@ -206,7 +206,7 @@ function PlatformRequest({ studyId, request, onChanged }: { studyId: string; req
       )}
       {failing.length > 0 && (
         <div role="status" data-vcr-platform-failing="" className="rounded-card border border-border bg-surface-1 p-3">
-          <p className="text-ui font-medium text-text">复核没有通过，病种定义包仍是你账号里的：</p>
+          <p className="text-ui font-semibold text-text">复核没有通过，病种定义包仍是你账号里的：</p>
           <ul className="mt-1.5 flex flex-col gap-1 text-caption text-text-2">
             {failing.map((entry) => <li key={`${entry.section ?? ""}-${entry.id}-${entry.code}`}>{`${entry.section ? `${entry.section} · ` : ""}${entry.id}：${entry.detail}`}</li>)}
           </ul>
@@ -473,7 +473,7 @@ export function ComparisonCard({ comparison, name }: { comparison: VcrComparison
                     <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">{entry.covariate}</th>
                     <td className="px-2 py-1.5 text-right tabular-nums text-text-2">{entry.skipped ? "—" : numberText(entry.meanA ?? null, 2)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums text-text-2">{entry.skipped ? "—" : numberText(entry.meanB ?? null, 2)}</td>
-                    <td className={cn("py-1.5 pl-2 text-right tabular-nums", flagged ? "font-medium text-warn-strong" : "text-text-2")}>
+                    <td className={cn("py-1.5 pl-2 text-right tabular-nums", flagged ? "text-warn-strong" : "text-text-2")}>
                       {smd !== null ? Math.abs(smd).toFixed(2) : "未比较"}
                     </td>
                     <td className="py-1.5 pl-2">{smd !== null && <VcrSmdDot smd={smd} floor={floor} label={entry.covariate} />}</td>
@@ -530,7 +530,7 @@ function LibraryRow({ entry }: { entry: VcrLibraryEntry }) {
         <li className="mb-2 flex flex-col gap-3 px-2 pb-3">
           {state.data.versions.map((version) => (
             <div key={version.version} data-vcr-library-version={version.version} className="rounded border border-border p-3">
-              <p className="text-ui font-medium text-text">{`v${version.version}`}</p>
+              <p className="text-ui font-semibold text-text">{`v${version.version}`}</p>
               {version.text && <p className="mt-1 text-caption text-text-2">{version.text}</p>}
               {version.rules.length > 0 && (
                 <p className="mt-2 flex flex-wrap gap-1.5">{version.rules.map((rule, index) => <Tag key={`${rule.name ?? index}`}>{rule.name ?? `条件 ${index + 1}`}</Tag>)}</p>

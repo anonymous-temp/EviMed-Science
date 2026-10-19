@@ -56,7 +56,7 @@ export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?
   if (!items?.length) return null;
   return (
     <section aria-label="社区卡片" className="space-y-3">
-      <h3 className="text-ui font-medium text-text">社区卡片</h3>
+      <h3 className="text-ui font-semibold text-text">社区卡片</h3>
       <List divided label="社区卡片">
         {items.map((card) => (
           <ListRow

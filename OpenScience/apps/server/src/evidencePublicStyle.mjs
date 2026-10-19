@@ -74,7 +74,7 @@ li { margin-bottom: ${gap(0)}; }
 }
 .producer strong { font-weight: 600; }
 .badge {
-  display: inline-block; ${rung("meta")} font-weight: 500; padding: 0 ${gap(1)}; border-radius: ${rem(RADII.tag)};
+  display: inline-block; ${rung("meta")} padding: 0 ${gap(1)}; border-radius: ${rem(RADII.tag)};
   background: var(--surface-2); color: var(--text-2); vertical-align: baseline;
 }
 .badge.ai { background: var(--info-soft); color: var(--info); }
@@ -117,7 +117,7 @@ dl.facts dd { margin: 0; }
 .cta { background: var(--accent-soft); border-radius: ${rem(RADII.card)}; padding: ${gap(4)}; margin: ${gap(6)} 0 0; }
 .cta h2 { margin-top: 0; }
 .button {
-  display: inline-block; ${rung("ui")} font-weight: 500; background: var(--accent); color: var(--accent-fg); padding: ${gap(1)} ${gap(4)};
+  display: inline-block; ${rung("ui")} background: var(--accent); color: var(--accent-fg); padding: ${gap(1)} ${gap(4)};
   border-radius: ${rem(RADII.control)}; text-decoration: none;
 }
 .button:hover { background: var(--accent-strong); color: var(--accent-fg); }

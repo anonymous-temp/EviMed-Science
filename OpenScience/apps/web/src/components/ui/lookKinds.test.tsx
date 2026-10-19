@@ -24,6 +24,8 @@ import { Tabs } from "./Tabs";
  */
 
 const classesOf = (element: Element) => new Set((element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean));
+/** The weight classes a set carries: a text that has the weight of the sentence it stands in has none. */
+const weights = (classes: Set<string>) => [...classes].filter((name) => /^font-(normal|medium|semibold|bold)$/.test(name));
 
 const STEPS: StepRailStep[] = [
   { id: "a", label: "证据", state: "done", href: "/a" },
@@ -42,15 +44,15 @@ describe("the module band", () => {
     const tab = classesOf(screen.getByRole("tab", { name: "总览" }));
     const steps = STEPS.map((step) => classesOf(screen.getByRole("link", { name: new RegExp(`^${step.label}`) })));
     for (const step of steps) {
-      // The type of the tab row: 14 px, 500, square (`rounded-none`: every link and button has the control corner unless it says
+      // The type of the tab row: 14 px, 400 (the rule and the colour carry the open one), square (`rounded-none`: every link and button has the control corner unless it says
       // otherwise, and a 2 px rule at the foot of a rounded box curves up at its ends), a 2 px rule at the foot.
       expect(step).toContain("text-ui");
-      expect(step).toContain("font-medium");
+      expect(step).toContain("font-normal");
       expect(step).toContain("border-b-2");
       expect([...step].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     }
     expect(tab).toContain("text-ui");
-    expect(tab).toContain("font-medium");
+    expect(tab).toContain("font-normal");
     expect([...tab].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     const open = steps[1];
     expect(open).toContain("border-accent");
@@ -77,12 +79,12 @@ describe("a toolbar row", () => {
     render(<><FilterChip pressed>全部</FilterChip><SearchInput label="搜索行动" size="sm" /></>);
     const chip = classesOf(screen.getByRole("button", { name: "全部" }));
     const search = classesOf(screen.getByRole("searchbox", { name: "搜索行动" }));
-    for (const shared of ["h-sm", "rounded-full", "bg-surface-2", "text-compact"]) {
+    for (const shared of ["h-sm", "rounded-full", "bg-surface-2", "text-ui"]) {
       expect(chip).toContain(shared);
       expect(search).toContain(shared);
     }
     for (const set of [chip, search]) {
-      expect(set).not.toContain("font-medium");
+      expect(weights(set)).toEqual([]);
       expect(set).not.toContain("border");
     }
   });
@@ -104,7 +106,7 @@ describe("a figure that opens what it counts", () => {
         <Headline parts={[{ n: 2, onOpen: () => {} }, " 个问题"]} />
       </MemoryRouter>,
     );
-    for (const name of ["6", "2"]) expect(classesOf(screen.getByRole("button", { name }))).not.toContain("font-medium");
+    for (const name of ["6", "2"]) expect(weights(classesOf(screen.getByRole("button", { name })))).toEqual([]);
   });
 
   it("is told apart in a held-up note by the ground, not by amber text", () => {
@@ -126,13 +128,12 @@ describe("the corner of a link and a button", () => {
 
 describe("the small type pairs", () => {
   // A page may hold four size × weight pairs. The owner's data put a 13 / 500 text button beside a 13 / 400 chip, and a 12 / 600 grade
-  // beside the 12 / 400 tag, on 循证 GEO's home, 记忆, 信源 and 额度 — one pair more each than the fixture's pages had.
-  it("sets a small button in the weight of the chip beside it, and the larger ones as they were", () => {
+  // beside the 12 / 400 tag, on 循证 GEO's home, 记忆, 信源 and 额度 — one pair more each than the fixture's pages had. Since R19.2 no
+  // control is set at 500 at all (Chinese hierarchy is 400 and 600; a button's ground, border and colour say what it is).
+  it("sets every button in the weight of the chip beside it", () => {
     render(<><Button size="sm" variant="text">继续</Button><Button>新建项目</Button><FilterChip>最近活动</FilterChip></>);
     expect(classesOf(screen.getByRole("button", { name: "继续" }))).toContain("font-normal");
-    expect(classesOf(screen.getByRole("button", { name: "继续" }))).not.toContain("font-medium");
-    expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).toContain("font-medium");
-    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-medium");
+    expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).toContain("font-normal");
     expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-semibold");
   });
 

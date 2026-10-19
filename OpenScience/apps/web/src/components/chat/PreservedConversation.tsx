@@ -18,7 +18,7 @@ export function PreservedConversation({ projectId, sessionId }: { projectId: str
     <div className="mx-auto max-w-read space-y-6">
       <p className="text-caption text-text-3">运行环境暂不可用，以下为已保存的对话{history.partial ? "，部分内容尚未保存" : ""}。</p>
       {history.messages.map(message => <article key={message.seq} aria-label={message.role === "user" ? "你的消息" : "回答"}>
-        {message.role === "user" ? <p className="whitespace-pre-wrap text-body font-medium">{message.text}</p>
+        {message.role === "user" ? <p className="whitespace-pre-wrap text-body font-semibold">{message.text}</p>
           : <MarkdownViewer>{sourceCitationProse(message.text)}</MarkdownViewer>}
       </article>)}
     </div>

@@ -63,6 +63,14 @@ const tokenRules = [
     "/-\\[#[0-9a-fA-F]{3,8}\\]/",
     "Arbitrary hex colors are banned in components. Use the color tokens (text-text / text-muted / bg-surface / border-border / text-accent …, defined as CSS variables in src/index.css).",
   ),
+  // Chinese hierarchy is 400 and 600 (DESIGN.md, “The nine sizes”): Microsoft YaHei has no 500 cut, so a font-medium title renders at
+  // 400 on Windows and the state it was meant to carry is lost there, and a 500 beside a 400 and a 600 is one more size × weight pair
+  // on a page that may hold four. 600 is a heading, a name, a selected or unread state; 400 is whatever a colour, an underline, a
+  // ground or a position already carries.
+  ...banned(
+    "/(^|[\\s:])font-(medium|bold|extrabold|black|thin|extralight|light)($|\\s)/",
+    "Chinese hierarchy uses 400 and 600 only (Microsoft YaHei has no 500, so font-medium renders at 400 on Windows). Use font-semibold for a heading, a name or a selected or unread state, and font-normal (or nothing) where a colour, an underline or a ground already carries the state (DESIGN.md, “The nine sizes”).",
+  ),
 ];
 
 // The 13 px rung merged into `text-ui` (14 px). Its own list so the two frame

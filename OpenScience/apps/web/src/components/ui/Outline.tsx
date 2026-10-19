@@ -152,7 +152,7 @@ export function Outline({ entries, active, onSelect, layout, onTop, label = "目
   };
   return (
     <aside ref={column} data-outline="" data-print-hide="" className={cn("sticky w-56 shrink-0 self-start overflow-y-auto", STICKY_BELOW_BAND, STICKY_COLUMN_MAX_HEIGHT, className)}>
-      <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
+      <p className="mb-2 flex items-center gap-1.5 px-2 text-caption text-muted"><ListTree size={16} aria-hidden="true" />{label}</p>
       {contents}
       {/* A 60 KB report needs a way back up (appendix D §4.5). */}
       <button type="button" onClick={top} className="mt-3 flex min-h-6 items-center gap-1 px-2 text-caption text-link hover:underline">

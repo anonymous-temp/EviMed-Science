@@ -17,7 +17,7 @@ export function TablePreview({ table }: { table: TableData }) {
           <thead>
             <tr className="border-b border-border text-left text-muted">
               {table.columns.map((c, i) => (
-                <th key={i} className="whitespace-nowrap px-3 py-2 font-medium">
+                <th key={i} className="whitespace-nowrap px-3 py-2 font-semibold">
                   {c}
                 </th>
               ))}

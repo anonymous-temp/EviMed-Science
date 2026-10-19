@@ -59,10 +59,10 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
         {dot}
         <span className="min-w-0 truncate">{waiting ? `${label}，排队中` : `正在${label}`}</span>
         {elapsed && <span className="shrink-0 tabular-nums text-text-3">{elapsed}</span>}
-        {to && <span className="shrink-0 font-medium">查看进度</span>}
+        {to && <span className="shrink-0">查看进度</span>}
       </>
     );
-    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-accent-soft px-3 text-compact text-accent", className);
+    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-accent-soft px-3 text-ui text-accent", className);
     return to
       ? <Link to={to} data-activity="chip" className={cn(look, "hover:bg-surface-3")}>{body}</Link>
       : <span data-activity="chip" className={look}>{body}</span>;

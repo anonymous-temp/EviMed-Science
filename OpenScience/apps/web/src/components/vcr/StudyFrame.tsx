@@ -254,7 +254,7 @@ function StudyMeta({ study }: { study: Pick<VcrStudy, "tier" | "ceiling"> }) {
             </div>
             <div className="flex items-baseline justify-between gap-4 py-2">
               <dt className="text-caption text-text-3">结果能承载的最高用途</dt>
-              <dd className="text-ui font-medium text-text">{intendedUseLabel(downgraded.ceiling)}</dd>
+              <dd className="text-ui text-text">{intendedUseLabel(downgraded.ceiling)}</dd>
             </div>
           </dl>
           {downgraded.reasons.length > 0 && (

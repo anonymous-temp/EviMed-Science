@@ -31,13 +31,16 @@ import { vcrTabPath } from "./vcrTabs";
  *    precision nobody computed.
  */
 
-/** The number, its unit and its Monte-Carlo error, inline. */
-export function VcrValueText({ value, className }: { value: VcrValue | null | undefined; className?: string }) {
+/**
+ * The number, its unit and its Monte-Carlo error, inline. `large` is a number set as a metric: its unit stays the page's own 14 px
+ * and 400, so a unit is never a second 32 px, 600 pair beside the figure it measures.
+ */
+export function VcrValueText({ value, className, large = false }: { value: VcrValue | null | undefined; className?: string; large?: boolean }) {
   const mcse = mcseText(value?.mcse);
   return (
     <span className={cn("tabular-nums", className)}>
       {valueText(value)}
-      {value?.unit && <span className="ml-0.5 text-text-3">{value.unit}</span>}
+      {value?.unit && <span className={cn("ml-0.5 text-text-3", large && "text-ui font-normal")}>{value.unit}</span>}
       {mcse && <span className="ml-1 text-caption font-normal text-text-3">{mcse}</span>}
     </span>
   );
@@ -47,16 +50,18 @@ export function VcrValueText({ value, className }: { value: VcrValue | null | un
  * A number a reader can open. With no `detail` it is the same text without a
  * control around it — a dotted underline that does nothing is worse than none.
  */
-export function VcrNumber({ value, label, className, children }: {
+export function VcrNumber({ value, label, className, large = false, children }: {
   value: VcrValue | null | undefined;
   /** What the number is of, for the control's accessible name. */
   label: string;
   className?: string;
+  /** The number is set as a metric (see `VcrValueText`). */
+  large?: boolean;
   /** Replaces the rendered number (a formatted cell of a table). */
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const body = children ?? <VcrValueText value={value} />;
+  const body = children ?? <VcrValueText value={value} large={large} />;
   if (!value?.detail) return <span className={className}>{body}</span>;
   return (
     <>
@@ -86,8 +91,8 @@ export function VcrValueDrawer({ label, value, onClose }: { label: string; value
     <Drawer title={label} onClose={onClose} widthClassName="max-w-md">
       <div data-vcr-number-detail="" className="flex flex-col gap-4">
         <div>
-          <p className={cn("flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums", isPlaceholder(value) ? "text-heading text-text-2" : "text-metric text-text")}>
-            <VcrValueText value={value} />
+          <p className={cn("flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums", isPlaceholder(value) ? "text-section text-text-2" : "text-metric text-text")}>
+            <VcrValueText value={value} large />
           </p>
           <p className="mt-2 flex flex-wrap items-center gap-2">
             <SourceTag source={value.source} />
@@ -97,7 +102,7 @@ export function VcrValueDrawer({ label, value, onClose }: { label: string; value
           {value.reason && <p className="mt-1 text-caption text-text-3">{value.reason}</p>}
         </div>
 
-        {detail?.title && <p className="text-ui font-medium text-text">{detail.title}</p>}
+        {detail?.title && <p className="text-ui font-semibold text-text">{detail.title}</p>}
 
         {detail?.fields && detail.fields.length > 0 && (
           <dl className="divide-y divide-border rounded-card border border-border">

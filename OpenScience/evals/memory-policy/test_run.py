@@ -301,3 +301,47 @@ class WholeRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReservedRuntime(unittest.TestCase):
+    """A project runtime reserved by the case's own scheduled research is waited for, not a reason to skip (R19.1 production run)."""
+
+    def _api(self, answers, wait=60):
+        import io
+        import urllib.error
+        api = run.Api("https://example.invalid", reserved_wait=wait, poll=5, sleep=lambda seconds: clock.append(clock[-1] + seconds), clock=lambda: clock[-1])
+        clock = [0]
+        calls = []
+
+        class Opener:
+            def open(self, request, timeout=None):
+                calls.append(request.full_url)
+                answer = answers.pop(0)
+                if isinstance(answer, int):
+                    body = b'{"code":"runtime_reserved_for_autopilot"}' if answer == 423 else b'{"code":"other"}'
+                    raise urllib.error.HTTPError(request.full_url, answer, "x", {}, io.BytesIO(body))
+
+                class Response(io.BytesIO):
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *rest):
+                        return False
+                return Response(json.dumps(answer).encode())
+        api.opener = Opener()
+        return api, calls, clock
+
+    def test_it_waits_for_the_reservation_to_end(self):
+        api, calls, _ = self._api([423, 423, {"data": {"id": "s1"}}])
+        self.assertEqual(api.call("/api/runtime/sessions", {})["data"]["id"], "s1")
+        self.assertEqual(len(calls), 3)
+
+    def test_it_gives_up_after_its_wait_and_other_refusals_are_not_retried(self):
+        api, calls, _ = self._api([423] * 30, wait=20)
+        with self.assertRaises(RuntimeError):
+            api.call("/api/runtime/sessions", {})
+        self.assertLessEqual(len(calls), 6)
+        api, calls, _ = self._api([409])
+        self.assertIn("error", api.call("/api/runtime/sessions", {}, tolerate=True))
+        self.assertEqual(len(calls), 1)
+

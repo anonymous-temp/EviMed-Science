@@ -382,7 +382,7 @@ function ComparatorNumbers({ data }: { data: ComparatorData }) {
             <SourceTag source={data.rmst.value.source} />
           </p>
           <p className="mt-1 text-metric font-semibold tabular-nums text-text">
-            <VcrNumber value={data.rmst.value} label={data.rmst.label ?? "限制平均生存时间"} />
+            <VcrNumber value={data.rmst.value} label={data.rmst.label ?? "限制平均生存时间"} large />
           </p>
           <p className="text-caption tabular-nums text-text-3">{intervalText(data.rmst.value.interval, data.rmst.value.precision)}</p>
         </div>
@@ -393,7 +393,7 @@ function ComparatorNumbers({ data }: { data: ComparatorData }) {
             中位数
             <SourceTag source={data.median.source} />
           </p>
-          <p className="mt-1 text-heading font-semibold tabular-nums text-text"><VcrNumber value={data.median} label="中位数" /></p>
+          <p className="mt-1 text-section font-semibold tabular-nums text-text"><VcrNumber value={data.median} label="中位数" large /></p>
           <p className="text-caption tabular-nums text-text-3">{intervalText(data.median.interval, data.median.precision)}</p>
         </div>
       )}

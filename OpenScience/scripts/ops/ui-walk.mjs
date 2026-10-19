@@ -172,8 +172,8 @@ const WALK_TABLES = {
     },
     "budgets": {
       "frontier": {"controls":9,"colors":8},
-      "data": {"controls":10,"colors":7,"borders":3},
-      "geo": {"controls":10,"colors":7,"borders":6},
+      "data": {"controls":10,"colors":7,"borders":3,"typePairs":5},
+      "geo": {"controls":10,"colors":7,"borders":6,"typePairs":5},
       "extension": {"controls":9,"borders":5}
     },
     "views": [
@@ -256,7 +256,6 @@ const WALK_TABLES = {
       {"view":"capabilities@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"virtual-research@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"virtual-research-models@desktop","rule":"type-pairs","max":8,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"virtual-research-precedents@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"knowledge-graph@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"memory-project@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"memory-map@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
@@ -279,7 +278,6 @@ const WALK_TABLES = {
       {"view":"geo-evidence@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"geo-answer@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"vcr-overview@desktop","rule":"type-pairs","max":9,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"vcr-population@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"vcr-patients@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"vcr-data@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"vcr-overview@2@desktop","rule":"type-pairs","max":10,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
@@ -289,19 +287,15 @@ const WALK_TABLES = {
       {"view":"frontier-zone@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"frontier-evidence@desktop","rule":"type-pairs","max":7,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"frontier-event@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
-      {"view":"files-reader@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"ops@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
       {"view":"memory@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
-      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"geo@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
+      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"},
+      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"},
       {"view":"account-usage@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"ops@desktop","contains":"identifiers in the visible text: standardized_ratio","owner":"controller","until":"2026-11-01","why":"a raw field name on the operator console (R19.1 walk); fix, not a debt to keep"},
       {"view":"geo-sources@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"}
+      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"}
     ]
   },
   "operatorSentences": [
@@ -944,7 +938,10 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
       budgetFindings.push(`${current}: the page stacks ${shapes.length} kinds of section (budget ${sectionBudget}): ${shapes.join(", ")}`);
     }
     const pairs = measured.sizeWeightPairs ?? [];
-    if (pairs.length > TYPE_PAIR_NOTICE) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`, pairs.length));
+    // Four pairs a page; a data page (the `data` and `geo` budgets: metric figures, two levels of heading) five — the owner's ruling
+    // of 2026-10-19, DESIGN.md §「The nine sizes」.
+    const typeBudget = /** @type {any} */ (budget).typePairs ?? TYPE_PAIR_NOTICE;
+    if (pairs.length > typeBudget) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
   }
   failures.push(...budgetFindings);
   return { failures, notices };
@@ -1835,7 +1832,21 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "opsOrder") {
     const text = words(main);
-    const tokens = [...new Set(text.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? [])].slice(0, 5);
+    // Only what a reader sees, and where it stands (R19.2): a token inside a collapsed list or a closed row is not on the
+    // page, and a finding that names the card it sits in can be fixed without walking the page again.
+    /** @type {Map<string, string>} */
+    const found = new Map();
+    for (const el of all("*")) {
+      const own = ownText(el);
+      if (!own || !visible(el)) continue;
+      for (const token of own.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? []) {
+        if (found.has(token)) continue;
+        const card = el.closest("section, article, [data-card]");
+        const heading = card ? card.querySelector("h1, h2, h3, h4, [role='heading']") : null;
+        found.set(token, heading ? words(heading).slice(0, 24) : "");
+      }
+    }
+    const tokens = [...found.entries()].slice(0, 5).map(([token, where]) => (where ? `${token} (in ${where})` : token));
     return { health: text.indexOf("运行状况"), config: text.indexOf("部署配置检查"), tokens };
   }
   if (kind === "notFound") {
@@ -2742,7 +2753,8 @@ export function routeReady() {
 /**
  * The first row of each list on the page, found, clicked and read again, in the
  * page (`page.evaluate`, so it reads nothing from this module). `["targets"]`
- * names the lists whose first row is a control; `["click", i]` clicks the
+ * names the lists whose first row is a control, `["inPlace"]` those whose
+ * first row opens where it is (a button, not a link); `["click", i]` clicks the
  * i-th; `["external", i]` says whether the i-th opens an outside address in a
  * new tab; `["state"]` reports what is on screen: whether a dialog is open, the
  * address, and how many rows are open in place. A row whose title is not a
@@ -2775,6 +2787,9 @@ export function rowProbe([action, index = 0]) {
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
+  // The lists whose rows open where they are (a button: a drawer, or the row itself), not those whose rows go to a page (a link). On 记忆胶囊's
+  // 项目 the works above the memories are links to their documents (R19.1 production walk: the owner's 关于你 is empty, so the page lands there).
+  if (action === "inPlace") return targets.filter(({ control }) => control.tagName !== "A").map(({ label }) => label);
   const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
   if (action === "has") return Boolean(target);
   if (action === "external") {
@@ -3902,12 +3917,12 @@ async function walkAddressState(page, base) {
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // A memory row that opens in a drawer: in the address while open, closed by Back.
+  // A memory row that opens in a drawer: in the address while open, closed by Back. A row that goes to a page (a work's document) is not one.
   await openRoute(page, base, "/app/memory");
-  const rows = (await page.evaluate(rowProbe, ["targets"])) ?? [];
+  const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {
-    await page.evaluate(rowProbe, ["click", 0]);
+    await page.evaluate(rowProbe, ["click", rows[0]]);
     await page.waitForTimeout(1_200);
     open.opened = await page.evaluate(addressProbe, ["memory"]);
     await page.goBack();

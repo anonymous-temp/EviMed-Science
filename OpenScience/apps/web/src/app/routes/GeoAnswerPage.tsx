@@ -388,7 +388,9 @@ function Paragraph({ paragraph }: { paragraph: AnswerParagraph }) {
   return (
     <p className="max-w-measure-body whitespace-pre-wrap">
       {paragraph.segments.map((segment, index) => {
-        const body = segment.ours ? <strong className="font-semibold">{segment.text}</strong> : segment.text;
+        // Our brand in the engine's prose is told by a ground, not a weight: a 600 inside 16 px prose was a sixth size × weight pair
+        // on the page (owner, 2026-10-19: a data page uses at most five).
+        const body = segment.ours ? <mark data-geo-ours="" className="rounded-tag bg-accent-soft px-0.5 text-text">{segment.text}</mark> : segment.text;
         if (segment.wrong === null) return <Fragment key={index}>{body}</Fragment>;
         return (
           <span key={index} data-geo-wrong="" className="underline decoration-danger decoration-wavy underline-offset-4">
@@ -505,7 +507,7 @@ function Mentioned({ brands }: { brands: NonNullable<GeoAnswer["facts"]>["brands
       {named.map((brand, index) => (
         <Fragment key={`${brand.name}-${index}`}>
           {index > 0 && "、"}
-          <span className={brand.ours ? "font-semibold text-text-2" : undefined}>{brand.name}</span>
+          <span className={brand.ours ? "text-text" : undefined}>{brand.name}</span>
           {(brand.position || brand.inRecommendation) && `（${[brand.position ? `第 ${brand.position} 个` : null, brand.inRecommendation ? "推荐" : null].filter(Boolean).join("，")}）`}
         </Fragment>
       ))}
@@ -524,7 +526,7 @@ function Citations({ citations }: { citations: GeoAnswer["snapshot"]["citations"
   if (list.length === 0) return null;
   return (
     <section aria-label="引用的信源" className="mt-10">
-      <h2 className="mb-3 text-ui font-semibold text-text">引用的信源</h2>
+      <h2 className="mb-3 text-section font-semibold text-text">引用的信源</h2>
       <ol className="flex flex-col divide-y divide-faint">
         {list.map((citation, index) => {
           const href = safeWebHref(citation.url);

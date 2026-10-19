@@ -4,6 +4,7 @@
 // below the kernel's own occupants, and does nothing outside a page the
 // control plane served.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, apply, inject, shellStylesheet } from '../src/runtimeUiShell.mjs';
@@ -215,4 +216,53 @@ test('unloading the body removes its stylesheet', () => {
   apply(f.ctx, {}, f.target, undefined, f.kit);
   f.ctx.dispose();
   assert.equal(f.target.document.head.children.filter((/** @type {any} */ node) => 'data-evimed-shell' in node.attributes).length, 0);
+});
+
+// R19.2 (found by the integrated acceptance of 2026-10-17 on a real frame at 390 px): three surfaces belong to bundles installed
+// beside the kernel and no slot or locale key reaches them, so the shell's stylesheet shapes them; what they draw is recorded
+// in fixtures/pluginSurfaces.json, and runtimeUiShell.chromium.test.mjs lays the sheet over it in a real browser.
+const surfaces = JSON.parse(readFileSync(new URL('./fixtures/pluginSurfaces.json', import.meta.url), 'utf8'));
+
+test('the Mermaid toolbars keep every label on one line and wrap as a whole, in the card and in the full-screen viewer', () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  assert.ok(css.includes('.dsh-mmd-badge,.dsh-mmd-btn,.dsh-mmd-viewer-title{white-space:nowrap}'));
+  assert.ok(css.includes('.dsh-mmd-bar,.dsh-mmd-viewer-bar{flex-wrap:wrap;row-gap:4px}'));
+  assert.ok(css.includes('@media (max-width:480px){'), 'the compact padding is a property of a narrow frame, not of the bundle');
+  // Every class the rules name is one the bundle draws, in its markup and its own sheet: a renamed class is a rule that matches nothing.
+  const drawn = surfaces.mermaid.html + surfaces.mermaid.viewerHtml;
+  for (const name of ['dsh-mmd-badge', 'dsh-mmd-btn', 'dsh-mmd-viewer-title', 'dsh-mmd-bar', 'dsh-mmd-viewer-bar', 'dsh-mmd-action-slot']) {
+    assert.ok(drawn.includes(`class="${name}"`) || drawn.includes(` ${name}"`) || drawn.includes(`${name} `), `${name} is drawn by the bundle`);
+    assert.ok(css.includes(`.${name}`), `${name} is shaped`);
+    assert.ok(surfaces.mermaid.css.includes(`.${name}`), `${name} is in the bundle's own sheet`);
+  }
+  // The bundle's own sheet sets no white-space on a label and no wrapping on its bars: the rules fill a gap, they override nothing.
+  assert.doesNotMatch(surfaces.mermaid.css, /\.dsh-mmd-(?:badge|btn|viewer-title|bar|viewer-bar)\{[^}]*(?:white-space|flex-wrap)/);
+});
+
+test("LoopX's goal bar gets the lower edge it was drawn without, and the dock's gap separates it from the composer card", () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  const dock = '[data-slot="conversation.input.dock"] > [class$="_dock"]:has(> section[aria-busy])';
+  assert.ok(css.includes(`${dock}{margin-bottom:0}`), 'the bundle tucks the dock three pixels under the card with a negative margin');
+  assert.ok(css.includes('[data-slot="conversation.input.dock"] > [class$="_dock"] > section[aria-busy]{border-bottom:1px solid var(--color-border,var(--dsw-alias-border-l1));border-radius:12px}'));
+  // Found by structure and a suffix: the bundle's hash is not ours (and a hashed class is a rule nobody can read).
+  assert.doesNotMatch(css, /_xPytW/);
+  // What the bundle draws: one dock holding one section that carries `aria-busy`, with the negative margin and the open lower edge.
+  assert.match(surfaces.goalbar.html, /^<div class="_xPytW_dock"><section class="_xPytW_panel"[^>]* aria-busy=/);
+  assert.match(surfaces.goalbar.css, /\._xPytW_dock\{[^}]*margin:0 auto calc\(0px - var\(--dsh-composer-stack-gap,0px\) - 3px\)/);
+  assert.match(surfaces.goalbar.css, /\._xPytW_panel\{[^}]*border-bottom:0/);
+});
+
+test("the `/` menu's skill rows show their name alone; the commands' own Chinese lines stay", () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  assert.ok(css.includes('[id^="dsh-slash-option-skill-"] [class$="_itemDescription"]{display:none}'));
+  assert.ok(css.includes('[id^="dsh-slash-option-skill-"] [class$="_itemName"]{max-width:100%}'), 'the name is held to 40% of the row only to leave room for a description');
+  assert.doesNotMatch(css, /dsh-slash-option-(?!skill-)/, 'a command, a file or a reference row keeps what it says');
+  assert.ok(surfaces.menu.html.includes('id="dsh-slash-option-skill-0"') && surfaces.menu.html.includes('id="dsh-slash-option-command-1"'));
+  assert.match(surfaces.menu.css, /_itemName\{[^}]*max-width:40%/);
+});
+
+test('the three rules are the researcher\'s and the operator\'s alike', () => {
+  for (const css of [shellStylesheet(GEOMETRY_KERNEL_PIN), shellStylesheet(GEOMETRY_KERNEL_PIN, true)]) {
+    assert.ok(css.includes('.dsh-mmd-badge,.dsh-mmd-btn') && css.includes('section[aria-busy]') && css.includes('dsh-slash-option-skill-'));
+  }
 });

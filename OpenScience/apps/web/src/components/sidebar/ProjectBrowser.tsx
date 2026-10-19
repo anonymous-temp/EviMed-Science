@@ -1000,7 +1000,7 @@ function TaskRow({
   const className = navItemClasses({ current: active, className: "pl-7" });
   const content = (
     <>
-      <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-medium text-text" : "text-text")}>{runTitle(conversation.titleRun)}</span>
+      <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-semibold text-text" : "text-text")}>{runTitle(conversation.titleRun)}</span>
       {running ? (
         <Loader2 size={16} className="shrink-0 animate-spin text-text-3 motion-reduce:animate-none" aria-label="进行中" />
       ) : (

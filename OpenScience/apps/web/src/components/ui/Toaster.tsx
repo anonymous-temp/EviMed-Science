@@ -72,7 +72,7 @@ function ToastCard({
       {t.action && (
         <button
           type="button"
-          className="shrink-0 font-medium text-link hover:underline"
+          className="shrink-0 text-link hover:underline"
           onClick={() => {
             t.action?.onClick();
             onDismiss();

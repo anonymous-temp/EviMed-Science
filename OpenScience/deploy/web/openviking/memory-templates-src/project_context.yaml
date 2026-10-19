@@ -21,7 +21,9 @@ description: |
     period and size. Describe a dataset by what it is (source, years, size, kinds of
     variables), not by its file or column names and never by its rows.
   - 已定事项: choices the user or their team made between options for this work ("先做
-    Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A reversed
+    Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A choice
+    stated and then questioned in the same message ("行，先做 Excel，CSV 放到下个迭代。这样排期
+    合理吗？") is taken: keep the choice; the question is not kept. A reversed
     decision replaces its line. A budget, a date or a standard is a limit, not a choice: it
     belongs under 约束.
   - 阶段: where the work stands now, and what the user said is still open or pending on

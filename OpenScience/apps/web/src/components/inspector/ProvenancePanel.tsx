@@ -141,7 +141,7 @@ export function LegacyProvenancePanel({ path, language }: { path: string; langua
               ) : (
                 <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />
               )}
-              <span className="rounded bg-surface-2 px-1.5 text-caption font-medium text-text">
+              <span className="rounded bg-surface-2 px-1.5 text-caption text-text">
                 v{r.version}
               </span>
               <span className="font-mono text-caption text-muted">{r.tool}</span>

@@ -160,7 +160,7 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
           {/* The dot and the number are one picture with a name of its own (review L-9); the number stays a bare grey number. */}
           {band && (
             <Tooltip content="编辑评分 · 满分 100">
-              <span role="img" aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
+              <span role="img" aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption tabular-nums text-text-3">
                 <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
                 {item.score}
               </span>

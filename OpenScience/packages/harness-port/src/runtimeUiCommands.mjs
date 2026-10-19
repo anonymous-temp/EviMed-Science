@@ -608,7 +608,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (!model) return null;
       // The name gives way first on a short line: the suffix is what says the
       // conversation is not on the defaults, and it is short.
-      const labelNode = h('span', { style: { display: 'inline-flex', minWidth: 0, fontWeight: 500 } },
+      const labelNode = h('span', { style: { display: 'inline-flex', minWidth: 0 } },
         h('span', { style: starterText }, model.title),
         suffix ? h('span', { style: { flex: 'none', whiteSpace: 'nowrap' } }, ` · ${suffix}`) : null);
       return h('span', {

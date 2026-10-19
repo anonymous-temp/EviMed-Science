@@ -289,9 +289,9 @@ function CohortBody({ data }: { data: PopulationData }) {
             <div className="mt-4 border-t border-border pt-3">
               <VcrFunnelBar eligible={data.outcome.eligible} insufficient={data.outcome.insufficient} ineligible={data.outcome.ineligible} />
               <p data-vcr-outcome="" className="mt-2 flex flex-wrap gap-x-6 text-ui tabular-nums text-text">
-                <span><span className="font-semibold">{numberText(data.outcome.eligible, 0)}</span> 符合</span>
-                <span><span className="font-semibold text-warn-strong">{numberText(data.outcome.insufficient, 0)}</span> 可能符合</span>
-                <span className="text-text-3"><span className="font-semibold">{numberText(data.outcome.ineligible, 0)}</span> 不符合</span>
+                <span>{numberText(data.outcome.eligible, 0)} 符合</span>
+                <span><span className="text-warn-strong">{numberText(data.outcome.insufficient, 0)}</span> 可能符合</span>
+                <span className="text-text-3">{numberText(data.outcome.ineligible, 0)} 不符合</span>
               </p>
             </div>
           )}
@@ -372,7 +372,7 @@ function CohortBody({ data }: { data: PopulationData }) {
                     key: "text",
                     header: "人数",
                     align: "right",
-                    cell: (blocker) => <span className={cn("tabular-nums", blocker.tone === "attention" ? "font-medium text-warn-strong" : "text-text-2")}>{blocker.text}</span>,
+                    cell: (blocker) => <span className={cn("tabular-nums", blocker.tone === "attention" ? "text-warn-strong" : "text-text-2")}>{blocker.text}</span>,
                   },
                 ]}
                 rows={data.blockers}
@@ -414,7 +414,7 @@ function criteriaColumns(): Array<DataColumn<PopulationData["criteria"][number]>
       header: "无法判断",
       align: "right",
       cell: (criterion) => (
-        <span data-vcr-rule-unknown="" className={cn("tabular-nums", (criterion.unknown ?? 0) > 0 ? "font-medium text-warn-strong" : "text-text-3")}>
+        <span data-vcr-rule-unknown="" className={cn("tabular-nums", (criterion.unknown ?? 0) > 0 ? "text-warn-strong" : "text-text-3")}>
           {numberText(criterion.unknown, 0)}
         </span>
       ),
@@ -443,7 +443,7 @@ function ProfileCard({ rows }: { rows: readonly VcrProfileRow[] }) {
               <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">{row.label}</th>
               <td className="px-2 py-1.5 text-right tabular-nums text-text"><VcrNumber value={row.ours} label={`本人群 ${row.label}`} /></td>
               <td className="px-2 py-1.5 text-right tabular-nums text-text-2"><VcrNumber value={row.theirs} label={`对照 ${row.label}`} /></td>
-              <td className={cn("py-1.5 pl-2 text-right tabular-nums", row.flagged ? "font-medium text-warn-strong" : "text-text-2")}>
+              <td className={cn("py-1.5 pl-2 text-right tabular-nums", row.flagged ? "text-warn-strong" : "text-text-2")}>
                 {row.smd != null ? row.smd.toFixed(2) : "—"}
               </td>
               <td className="py-1.5 pl-2"><VcrSmdDot smd={row.smd} label={row.label} /></td>

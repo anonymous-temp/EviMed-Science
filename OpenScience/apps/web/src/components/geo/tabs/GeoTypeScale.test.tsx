@@ -57,9 +57,8 @@ const RUNG_PX: Readonly<Record<string, number>> = Object.freeze({
   badge: 12, meta: 12, caption: 12, compact: 13, ui: 14, "ui-sm": 14, body: 16, wordmark: 16, section: 18, heading: 20,
   title: 24, "doc-title": 24, display: 24, metric: 32, "metric-lg": 40, hero: 40,
 });
-const WEIGHTS: Readonly<Record<string, number>> = Object.freeze({
-  "font-normal": 400, "font-medium": 500, "font-semibold": 600, "font-bold": 700,
-});
+// Chinese hierarchy is 400 and 600; `font-medium` and `font-bold` are banned in source (ESLint, `copyRules.test.ts`).
+const WEIGHTS: Readonly<Record<string, number>> = Object.freeze({ "font-normal": 400, "font-semibold": 600 });
 const SIZE_CLASS = new RegExp(`^text-(${Object.keys(RUNG_PX).map((rung) => rung.replace("-", "\\-")).join("|")})$`);
 
 function classOf(element: Element, read: (name: string) => number | null): number | null {
@@ -103,26 +102,25 @@ function typeCombos(root: Element): string[] {
 }
 
 /**
- * What each tab may carry today — a ratchet, not the target. Measured on
- * 2026-09-27 after the GEO files were moved onto the named levels (metric-lg
- * 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11,
- * 可见度 7 → 6, 准确与安全 10 → 10, 问题与回答 4 → 4 → 5 (R19: a pool is a subsection titled 14/600, the groups' rows are 14/400 and their counts 12/400), 信源 6 → 5 → 4 → 4 (R11: a list of rows, no section title; R19: the two charts above the list are titled at 18/600), 行动 8 → 7,
- * 方案 6 → 5 → 6 (R19: the plan's five blocks are titled at 18/600 again, and a tier's name is 14/600: 12/400, 14/400, 14/600 and
- * 18/600 are the page's own, the 13s are the buttons' and the chips') Every pair above four comes from a shared primitive the GEO
- * files do not own: `StatTile` (unit 14/500, a non-lead number 32/600, a
- * placeholder word 20/600), `Delta` (12/500), `Rank` and `SeverityBadge`
- * (12/600), `FilterChips`' selected chip and a small `Button` (13/500),
- * `DataTable`'s highlighted row (14/500). A new pair fails here; a primitive
- * moving onto 400/600 only ever shrinks a set, so tighten the ceiling then.
+ * What each tab may carry today — a ratchet, not the target. Measured on 2026-09-27 after the GEO files were moved onto the named
+ * levels (metric-lg 40/600 once a page, the title 18/600, body 14/400, meta 12/400): 总览 13 → 11, 可见度 7 → 6, 准确与安全 10 → 10,
+ * 问题与回答 4 → 4 → 5 (R19: a pool is a subsection titled 14/600, the groups' rows are 14/400 and their counts 12/400), 信源 6 → 5
+ * → 4 → 4 (R11: a list of rows, no section title; R19: the two charts above the list are titled at 18/600), 行动 8 → 7, 方案 6 → 5 → 6
+ * (R19: the plan's five blocks are titled at 18/600 again, and a tier's name is 14/600). Every pair above four came from a shared
+ * primitive the GEO files do not own — a unit at 14/500, a delta at 12/500, a rank at 12/600, a chip or a small button at 13, a
+ * highlighted table row at 14/500 — and since R19.2 none of those is left: no control or label is set at 500 (Chinese hierarchy is 400
+ * and 600), a toolbar's controls are the page's own 14/400, a rank is a tag at 12/400, and a table row of ours is told by its ground.
+ * What remains above four is the two tabs that set a KPI at 32/600 and a leading one at 40/600 beside the 24/18/14/12 of a page.
+ * A new pair fails here; tighten the ceiling when one goes.
  */
 const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  总览: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "20/600", "32/600", "40/600"],
-  可见度: ["12/400", "13/400", "13/500", "14/400", "14/500", "18/600"],
-  准确与安全: ["12/400", "12/500", "12/600", "13/400", "13/500", "14/400", "14/500", "18/600", "32/600", "40/600"],
-  问题与回答: ["12/400", "13/400", "13/500", "14/400", "14/600"],
-  信源: ["12/400", "13/400", "13/500", "14/400", "18/600"],
-  行动: ["12/400", "13/400", "13/500", "14/400", "18/600"],
-  方案: ["12/400", "13/400", "13/500", "14/400", "14/600", "18/600"],
+  总览: ["12/400", "14/400", "18/600", "32/600", "40/600"],
+  可见度: ["12/400", "14/400", "18/600"],
+  准确与安全: ["12/400", "14/400", "18/600", "32/600", "40/600"],
+  问题与回答: ["12/400", "14/400", "14/600"],
+  信源: ["12/400", "14/400", "18/600"],
+  行动: ["12/400", "14/400", "18/600"],
+  方案: ["12/400", "14/400", "14/600", "18/600"],
 });
 
 beforeEach(() => {
@@ -165,7 +163,7 @@ describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
     // The walk proves it walked: a tab that rendered nothing would pass any ceiling.
     expect(combos).toContain("12/400");
     expect(combos.filter((combo) => !CEILING[name].includes(combo)), `${name}: ${combos.join(" ")}`).toEqual([]);
-    // Nothing is bold: Chinese is set at 400 or 600 (the 500s above are the primitives').
-    expect(combos.filter((combo) => combo.endsWith("/700"))).toEqual([]);
+    // Chinese is set at 400 or 600 only.
+    expect(combos.filter((combo) => !combo.endsWith("/400") && !combo.endsWith("/600"))).toEqual([]);
   });
 });

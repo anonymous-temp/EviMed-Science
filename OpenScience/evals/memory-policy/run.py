@@ -245,11 +245,17 @@ def summarise(rows):
 
 
 # ---------------------------------------------------------------------------------------------------------------------- HTTP
+RESERVED_FOR_AUTOPILOT = "runtime_reserved_for_autopilot"
+
+
 class Api:
-    def __init__(self, base, insecure=False):
+    def __init__(self, base, insecure=False, reserved_wait=900, poll=15, sleep=time.sleep, clock=time.monotonic):
         self.base = base.rstrip("/")
         self.csrf = None
         self.project = None
+        # A case's own scheduled research reserves its project's runtime for the episode (423 runtime_reserved_for_autopilot);
+        # the episode ends by itself, so the runner waits for it instead of skipping the cases after it (R19.1 production run).
+        self.reserved_wait, self.poll, self.sleep, self.clock = reserved_wait, poll, sleep, clock
         context = ssl.create_default_context()
         if insecure:
             context.check_hostname = False
@@ -262,20 +268,27 @@ class Api:
             headers["x-open-science-project"] = project or self.project
         if self.csrf:
             headers["x-open-science-csrf"] = self.csrf
-        request = urllib.request.Request(self.base + route, None if data is None else json.dumps(data).encode(), headers, method=method)
-        try:
-            with self.opener.open(request, timeout=timeout) as response:
-                raw = response.read()
-                return json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as error:
-            text = f"{error.code} {route.split('?')[0][:80]} {error.read().decode(errors='replace')[:200]}"
-            if tolerate:
-                return {"error": text}
-            raise RuntimeError(text) from None
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
-            if tolerate:
-                return {"error": f"{route.split('?')[0][:80]} {error}"}
-            raise
+        body = None if data is None else json.dumps(data).encode()
+        deadline = self.clock() + self.reserved_wait
+        while True:
+            request = urllib.request.Request(self.base + route, body, headers, method=method)
+            try:
+                with self.opener.open(request, timeout=timeout) as response:
+                    raw = response.read()
+                    return json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as error:
+                detail = error.read().decode(errors="replace")
+                if error.code == 423 and RESERVED_FOR_AUTOPILOT in detail and self.clock() < deadline:
+                    self.sleep(self.poll)
+                    continue
+                text = f"{error.code} {route.split('?')[0][:80]} {detail[:200]}"
+                if tolerate:
+                    return {"error": text}
+                raise RuntimeError(text) from None
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                if tolerate:
+                    return {"error": f"{route.split('?')[0][:80]} {error}"}
+                raise
 
 
 class Session:

@@ -55,7 +55,7 @@ export function SkillUpdatePanel({ skillId, revision, source, onApplied }: { ski
   const shown = staged?.plan.entries.filter((entry) => entry.decision !== "unchanged") ?? [];
   return (
     <section aria-label="更新技能" className="flex flex-col gap-3">
-      <h2 className="text-ui font-medium text-text">更新到新版本</h2>
+      <h2 className="text-ui font-semibold text-text">更新到新版本</h2>
       <p className="text-ui text-text-2">先看会改什么：你改过的部分保留，新版本改过的部分带过来，两边都改过的由你决定。更新会生成一个新版本，项目和正在进行的对话仍使用原来选用的版本。</p>
       <div className="flex gap-2">
         <Button type="button" variant={mode === "repository" ? "secondary" : "text"} disabled={busy} onClick={() => { setMode("repository"); setStaged(null); }}>公开仓库</Button>

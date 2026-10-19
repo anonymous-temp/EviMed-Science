@@ -193,6 +193,31 @@ test("a card with no qualifying claim is not written, and the reason is recorded
   } finally { await fx.close(); }
 });
 
+test("a card the zone refuses as invalid is recorded once with the zone's reason and not built again at every sweep; another failure is looked at again", options, async () => {
+  const fx = await setup("cardrefused");
+  const save = fx.zones.saveEditorial.bind(fx.zones);
+  let calls = 0;
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    // A failure that is not about the card (the database, a conflict) leaves the episode open.
+    fx.zones.saveEditorial = async () => { calls += 1; throw Object.assign(new Error("connection reset"), { status: 503, code: "evidence_unavailable" }); };
+    await assert.rejects(fx.programme.settleEpisode(run.episodeId), /connection reset/);
+    assert.equal(await outcomeOf(fx, "2026-10-05", run.episodeId), undefined);
+    // The zone's validation refusing the card is final, with its own sentence.
+    fx.zones.saveEditorial = async () => { calls += 1; throw Object.assign(new Error("A claim needs a quotation of its source."), { status: 400, code: "evidence_invalid" }); };
+    const result = await fx.programme.settleEpisode(run.episodeId);
+    assert.deepEqual([result.state, result.reason], ["card_refused", "A claim needs a quotation of its source."]);
+    const recorded = await outcomeOf(fx, "2026-10-05", run.episodeId);
+    assert.deepEqual([recorded.outcome, recorded.code, recorded.reason], ["card_refused", "evidence_invalid", "A claim needs a quotation of its source."]);
+    assert.deepEqual(await fx.programme.sweep(), { settled: 0, applied: 0 }, "a final outcome is not swept again");
+    assert.equal((await fx.programme.settleEpisode(run.episodeId)).state, "card_refused");
+    assert.equal(calls, 2, "the refused card was not built and saved again");
+    assert.equal(fx.programme.status().counters.cards.card_refused, 1);
+  } finally { fx.zones.saveEditorial = save; await fx.close(); }
+});
+
 test("a card built for an episode no decision chose is refused by name, and an episode with no matrix writes none", options, async () => {
   const fx = await setup("cardnodecision");
   try {

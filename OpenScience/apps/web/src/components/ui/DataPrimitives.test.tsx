@@ -77,7 +77,9 @@ describe("StatTile", () => {
     // The sample is a tooltip, never a printed line in the tile.
     expect(tile).toHaveAccessibleDescription("61，264 次回答");
     expect(tile).not.toHaveTextContent("264 次回答");
-    expect(within(tile).getByText("61")).toHaveClass("text-metric-lg");
+    // The leading tile is first, at the band's own metric rung: a 40 px figure was a sixth pair on a data page (owner, 2026-10-19).
+    expect(within(tile).getByText("61")).toHaveClass("text-metric");
+    expect(within(tile).getByText("61")).not.toHaveClass("text-metric-lg");
   });
 
   it("has a skeleton of its own, and says a missing number in words", () => {
@@ -362,14 +364,16 @@ describe("ProgressRail", () => {
 
   it("sets a word that stands in for a number smaller than a number", () => {
     // 「未测」 and 「样本不足」 are words, and a word at the 40 px metric rung
-    // shouts a non-measurement louder than every measurement beside it.
+    // shouts a non-measurement louder than every measurement beside it. It is set at the section rung (18 / 600) — the page's own
+    // heading pair — and not at a 20 / 600 of its own (R19.2).
     const { container, rerender } = render(<StatTile label="豆包" value="未测" placeholder />);
     const word = container.querySelector("[data-stat-value]");
-    expect(word).toHaveClass("text-heading");
+    expect(word).toHaveClass("text-section");
+    expect(word).not.toHaveClass("text-heading");
     expect(word).not.toHaveClass("text-metric");
     expect(word).not.toHaveClass("text-metric-lg");
     rerender(<StatTile label="品牌提及率" value="21" unit="%" lead />);
-    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
+    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric");
   });
 
 });
@@ -394,11 +398,15 @@ describe("HeatGrid sideways", () => {
     expect(within(table).getAllByRole("columnheader")[1]).not.toHaveClass("sticky");
   });
 
-  it("sets a row name in the regular weight unless it is the one in view: a th is bold by default, a seventh type pair (13/700)", () => {
+  it("sets every row name in the regular weight — a th is bold by default, a pair of its own — and tells the one in view by a ring round its cells", () => {
     render(<HeatGrid {...props} emphasis={{ row: "kimi" }} />);
     const [kimi, off] = within(screen.getByRole("table")).getAllByRole("rowheader");
-    expect(kimi).toHaveClass("font-semibold");
+    expect(kimi).toHaveClass("font-normal");
     expect(off).toHaveClass("font-normal");
+    expect(kimi).toHaveAttribute("data-heat-emphasis");
+    expect(off).not.toHaveAttribute("data-heat-emphasis");
+    const cells = [...document.querySelectorAll("[data-heat-row] td")];
+    expect(cells.filter((cell) => cell.classList.contains("ring-1")).map((cell) => cell.textContent)).toEqual(["10", "30"]);
   });
 
   it("takes the page's ground when it is drawn on the page", () => {

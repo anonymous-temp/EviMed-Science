@@ -505,6 +505,16 @@ test("rowProbe finds the first row of each list whose title is a control, clicks
     assert.deepEqual(rowProbe(["targets"]), ["测量问句分组"]);
     assert.equal(rowProbe(["click", 0]), true);
   });
+  // The rows that open where they are: a memory list beside the works, whose rows are links to their documents (记忆胶囊's 项目).
+  const works = node("ul", { attrs: { "aria-label": "作品" } }, [node("li", {}, [node("a", { attrs: { "data-row-title": "", href: "/app/files/src_1" }, text: "一份报告" })])]);
+  const memoryTab = page(header(), works, list(["本项目为系统评价"], "项目的记忆"));
+  inPage(memoryTab, () => {
+    assert.deepEqual(rowProbe(["targets"]), ["作品", "项目的记忆"]);
+    assert.deepEqual(rowProbe(["inPlace"]), ["项目的记忆"]);
+    assert.equal(rowProbe(["click", "项目的记忆"]), true);
+  });
+  assert.equal(descendants(memoryTab).find((el) => el.text === "本项目为系统评价").clicks, 1);
+  assert.equal(descendants(memoryTab).find((el) => el.text === "一份报告").clicks, 0);
   // A row that opens in place says so in aria-expanded.
   const expanding = page(header(), node("ul", {}, [node("li", {}, [node("button", { attrs: { "data-row-title": "", "aria-expanded": "true" }, text: "已展开" })])]));
   assert.equal(inPage(expanding, () => rowProbe(["state"])).expanded, 1);
@@ -757,7 +767,8 @@ function context() {
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
           const [action] = arg;
-          if (action === "targets") {
+          // Every fake row is a button, so the rows that open in place are all of them.
+          if (action === "targets" || action === "inPlace") {
             // FAKE_ROWS=none: a page with no row to click, as an account with no data draws.
             return process.env.FAKE_ROWS === "none" ? [] : process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
           }
@@ -961,9 +972,11 @@ test("the walk refuses every runtime start a page makes, and says how many", asy
   const visited = log.filter((entry) => entry.goto).map((entry) => new URL(entry.goto).pathname);
   for (const [, segment] of GEO_TABS) assert.ok(visited.includes(`/app/geo/geo_1${segment}`), `walked /app/geo/geo_1${segment}`);
   // The font pairs are a finding the baseline accepts here: in the report with the entry that accepted it, and the walk passed.
-  assert.ok(report.notices.some((notice) => /^files@desktop: 5 font-size × weight pairs/.test(notice)));
-  const pairs = report.findings.find((entry) => entry.rule === "type-pairs" && entry.view === "files@desktop");
+  assert.ok(report.notices.some((notice) => /^frontier@desktop: 5 font-size × weight pairs/.test(notice)));
+  const pairs = report.findings.find((entry) => entry.rule === "type-pairs" && entry.view === "frontier@desktop");
   assert.deepEqual([pairs.value, pairs.accepted], [5, { owner: "test", until: "2999-12-31" }]);
+  // A data page (the `data` and `geo` budgets) is allowed five (owner, 2026-10-19): the same five pairs are no finding there.
+  assert.equal(report.findings.some((entry) => entry.rule === "type-pairs" && (entry.view === "files@desktop" || entry.view === "geo-overview@desktop")), false);
   assert.match(stdout, /baseline \(owner walk\): \d+ finding\(s\) accepted by 1 entry\(ies\), 0 not accepted/);
   assert.deepEqual(report.failures, []);
 });
@@ -987,7 +1000,7 @@ test("a finding the baseline does not accept fails the walk, whatever kind of no
   assert.deepEqual(report.baseline, { ...report.baseline, source: "none", profile: "owner", accepted: 0 });
   assert.ok(report.baseline.unaccepted > 20, `${report.baseline.unaccepted} findings were not accepted`);
   assert.equal(report.failures.length, report.baseline.unaccepted, "the findings are the only failures of a walk whose pages are right");
-  assert.match(stdout, /FAIL \(not accepted by the baseline\) files@desktop: 5 font-size × weight pairs \(rule 4\).* \[type-pairs; no baseline entry accepts it\]/);
+  assert.match(stdout, /FAIL \(not accepted by the baseline\) frontier@desktop: 5 font-size × weight pairs \(rule 4\).* \[type-pairs; no baseline entry accepts it\]/);
   // A coverage gap and a measure are both there: the account has no row to click on some page, and a page sets its text in five pairs.
   assert.ok(report.findings.some((entry) => entry.rule === "not-observable" && entry.accepted === null));
   assert.ok(report.findings.some((entry) => entry.rule === "type-pairs" && entry.accepted === null));
@@ -1543,6 +1556,9 @@ test("the page probes read what a fix left behind: the empty 关注, the memory 
   });
   assert.equal(read([node("div", {}, [node("div", { text: "运行状况" }), node("div", { text: "部署配置检查" }), node("p", { text: "openlist_storage_missing" })])], "opsOrder").health, 0);
   assert.deepEqual(read([node("p", { text: "运行状况 部署配置检查 openlist_storage_missing geo_market_unconfigured" })], "opsOrder").tokens, ["openlist_storage_missing", "geo_market_unconfigured"]);
+  // Hidden text is not on the page, and a token says the card it stands in (R19.2: a token from a collapsed list was reported as visible).
+  assert.deepEqual(read([node("p", { text: "运行状况 部署配置检查" }), node("p", { text: "hidden_detail", style: { display: "none" } })], "opsOrder").tokens, []);
+  assert.deepEqual(read([node("section", {}, [node("h2", { text: "操作审计" }), node("p", { text: "standardized_ratio" })])], "opsOrder").tokens, ["standardized_ratio (in 操作审计)"]);
   assert.deepEqual(read([node("p", { text: "页面不存在" })], "notFound"), { said: true });
   const missing = inPage(node("body", {}, [node("main", {}, [node("div", { attrs: { role: "dialog" } }, [node("p", { text: "找不到这个插件，它可能已被移除。" }), node("button", { text: "回到插件列表" })])])]), () => pageProbe(["missingRecord", ["找不到这个插件，它可能已被移除。", "回到插件列表"]]));
   assert.deepEqual(missing, { dialog: true, said: true, back: true, failedWord: false });
