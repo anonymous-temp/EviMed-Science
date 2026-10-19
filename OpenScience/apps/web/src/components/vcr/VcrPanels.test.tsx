@@ -56,13 +56,13 @@ describe("模型与方法", () => {
     expect(screen.getByText('Constant event rate in the declared interval.', { exact: false })).toBeVisible();
   });
 
-  // UI-19: a one-shot prediction from baseline has a name of its own and is
-  // never shown as 「不适用」.
-  it("names a baseline-conditioned model's output as such, with what it lacks to be a twin", async () => {
+  // UI-19: a reference distribution without individual conditioning is a
+  // scenario simulation; its missing twin evidence remains visible.
+  it("names an unconditioned reference model as scenario simulation, with what it lacks to be a twin", async () => {
     draw(<VcrModelsPanel />);
     expect(await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" })).toBeInTheDocument();
     const twin = card().querySelector("[data-vcr-twin]") as HTMLElement;
-    expect(twin).toHaveTextContent("基线条件化预测");
+    expect(twin).toHaveTextContent("情景仿真");
     expect(twin).toHaveTextContent("缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录");
     expect(card().textContent).not.toContain("不适用");
   });
