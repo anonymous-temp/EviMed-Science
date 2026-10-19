@@ -1099,7 +1099,9 @@ the current turn may finish its checkpoint. The normal conversation Stop action
 cancels the running turn.
 
 The model's skill catalogue keeps LoopX's entry skill and `loopx-project` only; the build drops the CLI's six
-repository-management workflows and names them in `installation.json` (R19, CLI 1.4.0). The 「循证 GEO」 method
+repository-management workflows and names them in `installation.json` (R19, CLI 1.4.0), and takes out of the kept `loopx-project` the three pointers
+it has to `loopx-doc-registry`, one of the dropped six (`loopx.compatibility.skillEdit` in `deps-version.json`: a digest-bound edit of that one file,
+written back to the CLI's readback manifest, recorded in `installation.json` as `edits`; R19.2). The 「循证 GEO」 method
 pack is a skill root of a GEO project's runtime alone: the control plane decides per project and sends
 `geoSkills` to the runtime controller, whose protocol is **14** since R19 — a control plane and a controller of
 different protocol versions refuse each other at the first health call, so a release recreates the web service
