@@ -206,7 +206,11 @@ controls, 18 for a section heading inside a reading page, and 32 / 40 for metric
 rungs are admissible on a data page only.**
 
 A page still uses at most **four size × weight pairs**. That budget is what the five-size scale
-was protecting, and it survives unchanged.
+was protecting. A **data page** — one that sets figures at the metric rung or has two levels of
+heading (循证 GEO's and 虚拟临床研究's tabs, the model records) — uses at most **five** (owner,
+2026-10-19), and its leading figure is at 32 like the rest: the 40 px `metric-lg` beside the 32 px
+ones was a sixth pair. The release walk holds both (`typePairs` in the `data` and `geo` budgets of
+`scripts/ops/page-templates.json`).
 
 | Rung | Size / line | What it is |
 |---|---|---|
@@ -223,7 +227,7 @@ was protecting, and it survives unchanged.
 | `doc-title` | 24 / 34px · serif | the title of a report, article or evidence card |
 | `display` | 24 / 1.3 | the login page, a full-page empty state |
 | `metric` | 32 / 40px | a KPI number — **data pages only** |
-| `metric-lg` | 40 / 48px | the one leading KPI of a dashboard |
+| `metric-lg` | 40 / 48px | in the closed set, set by no page since 2026-10-19 (a leading KPI is 32 like the rest) |
 | `hero` | 40 / 50px · serif | the home headline — one per product |
 
 Sizes reach the browser in **rem** (2.1), so a reader who raised the browser's default font size

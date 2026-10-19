@@ -972,9 +972,11 @@ test("the walk refuses every runtime start a page makes, and says how many", asy
   const visited = log.filter((entry) => entry.goto).map((entry) => new URL(entry.goto).pathname);
   for (const [, segment] of GEO_TABS) assert.ok(visited.includes(`/app/geo/geo_1${segment}`), `walked /app/geo/geo_1${segment}`);
   // The font pairs are a finding the baseline accepts here: in the report with the entry that accepted it, and the walk passed.
-  assert.ok(report.notices.some((notice) => /^files@desktop: 5 font-size × weight pairs/.test(notice)));
-  const pairs = report.findings.find((entry) => entry.rule === "type-pairs" && entry.view === "files@desktop");
+  assert.ok(report.notices.some((notice) => /^frontier@desktop: 5 font-size × weight pairs/.test(notice)));
+  const pairs = report.findings.find((entry) => entry.rule === "type-pairs" && entry.view === "frontier@desktop");
   assert.deepEqual([pairs.value, pairs.accepted], [5, { owner: "test", until: "2999-12-31" }]);
+  // A data page (the `data` and `geo` budgets) is allowed five (owner, 2026-10-19): the same five pairs are no finding there.
+  assert.equal(report.findings.some((entry) => entry.rule === "type-pairs" && (entry.view === "files@desktop" || entry.view === "geo-overview@desktop")), false);
   assert.match(stdout, /baseline \(owner walk\): \d+ finding\(s\) accepted by 1 entry\(ies\), 0 not accepted/);
   assert.deepEqual(report.failures, []);
 });
@@ -998,7 +1000,7 @@ test("a finding the baseline does not accept fails the walk, whatever kind of no
   assert.deepEqual(report.baseline, { ...report.baseline, source: "none", profile: "owner", accepted: 0 });
   assert.ok(report.baseline.unaccepted > 20, `${report.baseline.unaccepted} findings were not accepted`);
   assert.equal(report.failures.length, report.baseline.unaccepted, "the findings are the only failures of a walk whose pages are right");
-  assert.match(stdout, /FAIL \(not accepted by the baseline\) files@desktop: 5 font-size × weight pairs \(rule 4\).* \[type-pairs; no baseline entry accepts it\]/);
+  assert.match(stdout, /FAIL \(not accepted by the baseline\) frontier@desktop: 5 font-size × weight pairs \(rule 4\).* \[type-pairs; no baseline entry accepts it\]/);
   // A coverage gap and a measure are both there: the account has no row to click on some page, and a page sets its text in five pairs.
   assert.ok(report.findings.some((entry) => entry.rule === "not-observable" && entry.accepted === null));
   assert.ok(report.findings.some((entry) => entry.rule === "type-pairs" && entry.accepted === null));

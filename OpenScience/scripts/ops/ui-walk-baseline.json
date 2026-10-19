@@ -71,14 +71,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "virtual-research-precedents@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "knowledge-graph@desktop",
       "rule": "type-pairs",
       "max": 6,
@@ -255,14 +247,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "vcr-population@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "vcr-patients@desktop",
       "rule": "type-pairs",
       "max": 7,
@@ -335,14 +319,6 @@
       "why": "type-scale pairs of R19 pages, to be reduced"
     },
     {
-      "view": "files-reader@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "type-scale pairs of R19 pages, to be reduced"
-    },
-    {
       "view": "ops@desktop",
       "rule": "type-pairs",
       "max": 5,
@@ -367,14 +343,6 @@
       "owner": "controller",
       "until": "2026-12-01",
       "why": "the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"
-    },
-    {
-      "view": "geo@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.1 production walk: debts measured on the owner's data after the class fixes"
     },
     {
       "view": "memory-project@desktop",
@@ -428,39 +396,6 @@
       "owner": "controller",
       "until": "2026-12-01",
       "why": "the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"
-    },
-    {
-      "view": "vcr-comparator@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "profiles": [
-        "fixture"
-      ],
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
-    },
-    {
-      "view": "vcr-matching@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "profiles": [
-        "fixture"
-      ],
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
-    },
-    {
-      "view": "vcr-matching@2@desktop",
-      "rule": "type-pairs",
-      "max": 5,
-      "profiles": [
-        "fixture"
-      ],
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
     }
   ]
 }

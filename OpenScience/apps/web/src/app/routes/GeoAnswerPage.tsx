@@ -388,7 +388,9 @@ function Paragraph({ paragraph }: { paragraph: AnswerParagraph }) {
   return (
     <p className="max-w-measure-body whitespace-pre-wrap">
       {paragraph.segments.map((segment, index) => {
-        const body = segment.ours ? <strong className="font-semibold">{segment.text}</strong> : segment.text;
+        // Our brand in the engine's prose is told by a ground, not a weight: a 600 inside 16 px prose was a sixth size × weight pair
+        // on the page (owner, 2026-10-19: a data page uses at most five).
+        const body = segment.ours ? <mark data-geo-ours="" className="rounded-tag bg-accent-soft px-0.5 text-text">{segment.text}</mark> : segment.text;
         if (segment.wrong === null) return <Fragment key={index}>{body}</Fragment>;
         return (
           <span key={index} data-geo-wrong="" className="underline decoration-danger decoration-wavy underline-offset-4">

@@ -166,7 +166,10 @@ describe("one answer", () => {
     });
     expect(wrong).toHaveTextContent("它需要每天注射一次");
     expect(wrong).toHaveClass("decoration-wavy", "decoration-danger");
-    expect(screen.getAllByText("玛仕度肽", { selector: "strong" }).length).toBeGreaterThan(0);
+    const ours = screen.getAllByText("玛仕度肽", { selector: "mark" });
+    expect(ours.length).toBeGreaterThan(0);
+    expect(ours[0]).toHaveClass("bg-accent-soft");
+    expect(ours[0]).not.toHaveClass("font-semibold");
 
     const correction = document.querySelector("[data-geo-correction]") as HTMLElement;
     // The correction sits right under the paragraph that says it.

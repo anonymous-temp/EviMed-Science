@@ -10,8 +10,10 @@ import { Tooltip } from "@/components/ui/Tooltip";
  *
  * The old board printed 「品牌提及率 7%」 alone in four identical grey cards,
  * and a reader could not tell whether 7 was good. A tile therefore carries
- * `rank`, `delta` and `note`, and the leading tile of a band is `lead` — 40 px
- * against 32 px, the reason the 32/40 rungs exist.
+ * `rank`, `delta` and `note`, and the leading tile of a band is `lead`: first in
+ * the band and set at the same 32 px metric rung as the rest. It was 40 px until
+ * the owner's ruling of 2026-10-19 — a data page uses at most five size × weight
+ * pairs, and a 40 px figure beside the 32 px ones was a sixth on 循证 GEO's tabs.
  *
  * The denominator is **not** repeated in every tile: a band declares it once
  * in its `footnote`, and a tile that wants it at hand passes `hint`, which
@@ -107,7 +109,7 @@ export function StatTile({
           "mt-1.5 flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums",
           // A word does not get a number's size: 「样本不足」 set in 32 px
           // shouts louder than every measurement beside it.
-          placeholder ? "text-section text-text-2" : lead ? "text-metric-lg" : "text-metric",
+          placeholder ? "text-section text-text-2" : "text-metric",
           dense && !lead && !placeholder && "max-sm:mt-1 max-sm:text-heading",
           !placeholder && (tone === "safety" ? "text-danger-strong" : "text-text"),
         )}

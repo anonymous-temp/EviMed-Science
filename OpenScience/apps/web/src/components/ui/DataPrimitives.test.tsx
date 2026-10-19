@@ -77,7 +77,9 @@ describe("StatTile", () => {
     // The sample is a tooltip, never a printed line in the tile.
     expect(tile).toHaveAccessibleDescription("61，264 次回答");
     expect(tile).not.toHaveTextContent("264 次回答");
-    expect(within(tile).getByText("61")).toHaveClass("text-metric-lg");
+    // The leading tile is first, at the band's own metric rung: a 40 px figure was a sixth pair on a data page (owner, 2026-10-19).
+    expect(within(tile).getByText("61")).toHaveClass("text-metric");
+    expect(within(tile).getByText("61")).not.toHaveClass("text-metric-lg");
   });
 
   it("has a skeleton of its own, and says a missing number in words", () => {
@@ -371,7 +373,7 @@ describe("ProgressRail", () => {
     expect(word).not.toHaveClass("text-metric");
     expect(word).not.toHaveClass("text-metric-lg");
     rerender(<StatTile label="品牌提及率" value="21" unit="%" lead />);
-    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
+    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric");
   });
 
 });
