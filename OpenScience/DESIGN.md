@@ -233,10 +233,10 @@ Weights **400 / 500 / 600**, nothing else — and Chinese hierarchy uses **400 a
 Microsoft YaHei has no 500, so a 500 title renders at 400 on Windows (an unread list row is 600
 for that reason). Since R19.2 nothing in the product is set at 500 — ESLint bans `font-medium` (and
 `font-bold`) in every component, and `copyRules.test.ts` reads every string — and the two weights
-are given by role: **600** is a heading, a name that must be told from the text around it, a
-selected navigation item, an unread row, a figure that is the point of a line; **400** is everything
+are given by role: **600** is a heading, a name that must be told from the text around it, an
+unread row, a figure that is the point of a line; **400** is everything
 a ground, a rule, a colour or a position already says — a button, a tab, a step, a chip, a
-segment, a link, a table head in the muted colour, a flagged value on a warm ground. Weight is
+segment, a navigation item (the current one too), a link, a table head in the muted colour, a flagged value on a warm ground. Weight is
 spent only at 14 px and above; a 12 or 13 px line is 400 and says the rest in colour.
 
 No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
@@ -353,7 +353,7 @@ bordered pill or bordered `<button>` outside it:
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
 | `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
-| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` in 600 when current |
+| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` when current, at the weight of the others |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
@@ -504,8 +504,8 @@ band a line taller on one tab, a tag in a link, a sort header after two pictures
 control on pages that had eight to ten. By class: a toolbar in the band is one row whatever the data — its filters fold into 「筛选」
 when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
 every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a toolbar's controls — search, chips, segments, a small button, the activity chip — are the page's own 14 / 400 (13 was a size pair of its
-own on every page that had a toolbar), a severity grade 12 / 400 like a tag, and no control is 500 (the current navigation item is 600: a
-selected state that must survive on Windows, and the 14 / 600 a page's card titles already draw); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+own on every page that had a toolbar), a severity grade 12 / 400 like a tag, and no control is 500, and the current navigation item is 400 (its ground says it: a 600 of its own was a
+second kind of 36 px control beside the secondary buttons on every page); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
 a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
 screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
 more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).

@@ -414,18 +414,18 @@ describe("Sidebar navigation", () => {
   });
 
   // Spec §20.6 and §8.3: a destination is a 36 px navigation item, the current
-  // one on accent-soft in 600 with aria-current; the bell is the sidebar's 36
+  // one on accent-soft with aria-current; the bell is the sidebar's 36
   // px icon button, the collapse button's twin. They were 32 px, one-offs
   // the release walk counted as kinds of control on every page.
   it("draws the destinations as 36 px navigation items and the bell as the sidebar's icon button", async () => {
     renderSidebar("/app/capabilities");
     const current = screen.getByRole("link", { name: "科研工具" });
     expect(current).toHaveAttribute("aria-current", "page");
-    expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft", "font-semibold");
+    expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft");
     const other = screen.getByRole("link", { name: "知识库" });
     expect(other).not.toHaveAttribute("aria-current");
     expect(other).toHaveClass("h-control", "hover:bg-surface-2");
-    expect(other).not.toHaveClass("bg-accent-soft", "font-semibold");
+    expect(other).not.toHaveClass("bg-accent-soft");
 
     const bell = await screen.findByRole("button", { name: "收件箱" });
     const collapse = screen.getByRole("button", { name: "收起侧边栏" });
