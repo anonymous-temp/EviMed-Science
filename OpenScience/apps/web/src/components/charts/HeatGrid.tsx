@@ -23,8 +23,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * names paint a ground of their own, so they cover the cells that slide under
  * them: `surface`, the card a chart lives in, unless the grid sits on the page.
  *
- * A page that has chosen one column (the metric in view) or one row (the engine in view) says so with `emphasis`: the name is set
- * in the heavier weight and the cells of the column are ringed, so the choice shows without hiding the rest of the picture.
+ * A page that has chosen one column (the metric in view) or one row (the engine in view) says so with `emphasis`: the name stays in
+ * the body colour while the others are muted, and the cells of the column or the row are ringed — not set in a heavier weight, which
+ * at 12 px was a size × weight pair of its own — so the choice shows without hiding the rest of the picture.
  */
 
 /** The six steps of the single-hue ramp, coldest first. */
@@ -111,7 +112,7 @@ export function HeatGrid({
                   key={column.key}
                   scope="col"
                   data-heat-emphasis={emphasis?.column === column.key ? "" : undefined}
-                  className={cn("px-1 pb-1 text-center text-meta", emphasis?.column === column.key ? "font-semibold text-text" : "font-normal text-text-3")}
+                  className={cn("px-1 pb-1 text-center text-meta font-normal", emphasis?.column === column.key ? "text-text" : "text-text-3")}
                 >
                   {column.header}
                 </th>
@@ -124,7 +125,7 @@ export function HeatGrid({
                 <th
                   scope="row"
                   data-heat-emphasis={emphasis?.row === row.key ? "" : undefined}
-                  className={cn("sticky left-0 z-page w-24 text-left text-caption text-text sm:w-28", emphasis?.row === row.key ? "font-semibold" : "font-normal", groundClass)}
+                  className={cn("sticky left-0 z-page w-24 text-left text-caption font-normal text-text sm:w-28", groundClass)}
                 >
                   {row.header}
                 </th>
@@ -142,7 +143,7 @@ export function HeatGrid({
                       className={cn(
                         "h-8 rounded text-center text-caption tabular-nums",
                         step === null ? "bg-surface-1 text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,
-                        emphasis?.column === columns[index]?.key && "ring-1 ring-inset ring-border-control",
+                        (emphasis?.column === columns[index]?.key || emphasis?.row === row.key) && "ring-1 ring-inset ring-border-control",
                       )}
                     >
                       {cell.text}

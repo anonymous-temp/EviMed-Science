@@ -396,11 +396,15 @@ describe("HeatGrid sideways", () => {
     expect(within(table).getAllByRole("columnheader")[1]).not.toHaveClass("sticky");
   });
 
-  it("sets a row name in the regular weight unless it is the one in view: a th is bold by default, a seventh type pair (13/700)", () => {
+  it("sets every row name in the regular weight — a th is bold by default, a pair of its own — and tells the one in view by a ring round its cells", () => {
     render(<HeatGrid {...props} emphasis={{ row: "kimi" }} />);
     const [kimi, off] = within(screen.getByRole("table")).getAllByRole("rowheader");
-    expect(kimi).toHaveClass("font-semibold");
+    expect(kimi).toHaveClass("font-normal");
     expect(off).toHaveClass("font-normal");
+    expect(kimi).toHaveAttribute("data-heat-emphasis");
+    expect(off).not.toHaveAttribute("data-heat-emphasis");
+    const cells = [...document.querySelectorAll("[data-heat-row] td")];
+    expect(cells.filter((cell) => cell.classList.contains("ring-1")).map((cell) => cell.textContent)).toEqual(["10", "30"]);
   });
 
   it("takes the page's ground when it is drawn on the page", () => {
