@@ -1062,6 +1062,20 @@ so it holds nothing and the conversation stays open; a person's cancel holds the
 asked for). The study page reads `activity` / `next` / `stepSummaries` from `GET /api/vcr/studies/:id`; a press of a step answers
 `{ accepted, runId, step, queuedBehind }` and no session to go to.
 
+### `memory_gateway_unauthenticated` and `evimed_workload_token_invalid` in bursts (2026-10-19)
+
+A runtime that is being stopped — the platform's evidence runtime yielded at the ceiling, an idle runtime past its
+timeout, the runtimes of an account or project being deleted — is taken out of the runtime manager before its container
+stops, and while the container shuts down the OpenViking memory plugin flushes its sessions and the tool servers finish
+their calls. Those requests carry a token whose runtime is no longer active, and every gateway refuses them by name:
+`open_science_workload_token_refusals_total{reason="runtime"}`, `open_science_memory_gateway_refusals_total{code="memory_gateway_unauthenticated"}`,
+`evimed_workload_token_invalid` on `/internal/tooluniverse/v1/rpc`. Nothing is lost: a platform-started turn's own messages
+are never forwarded to the engine, an attended turn is committed by the control plane a few seconds after it ends
+(`nativeTurnCommit.mjs`), and the engine's idle commit takes whatever stays pending. Measured on R19.1: 27 of 28 memory
+refusals fell in the half hour the acceptance runs deleted their throwaway accounts, the rest while the evidence runtime was
+yielded, none in seven hours of researchers' use. A refusal with `reason` other than `runtime`, or a burst while no runtime
+is stopping, is not this and is worth a look.
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
