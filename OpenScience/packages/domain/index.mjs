@@ -2289,6 +2289,7 @@ export {
   EVIDENCE_SOURCE_LIMIT,
   EVIDENCE_BODY_MAX_CHARS,
   evidenceCardClaims,
+  evidenceCardCarry,
   verifyEvidenceCardClaims,
   EVIDENCE_SIMULATED_VALUE_SOURCES,
   EVIDENCE_DERIVED_ONLY_VALUE_SOURCES,

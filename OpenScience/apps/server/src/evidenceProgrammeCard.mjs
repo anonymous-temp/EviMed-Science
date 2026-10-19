@@ -36,9 +36,9 @@
  */
 
 import {
-  EVIDENCE_AI_STEPS, EVIDENCE_BODY_MAX_CHARS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_CLAIMS_MAX_CHARS, EVIDENCE_CLAIM_LIMIT, EVIDENCE_PLATFORM_PRODUCER_NAME,
-  EVIDENCE_SOURCE_LIMIT, NUMBER_UNCOMPUTED, digestPlacement,
-  evidenceCardClaims, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
+  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_PLATFORM_PRODUCER_NAME,
+  NUMBER_UNCOMPUTED, digestPlacement,
+  evidenceCardClaims, evidenceCardCarry, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { evidenceSourceUrl } from "./evidenceZoneService.mjs";
@@ -239,19 +239,7 @@ function withinCardBounds(entries, made, captured) {
     || (left.entry.headline ? tier(left.entry) - tier(right.entry) : 0)
     || right.readAt - left.readAt
     || left.position - right.position);
-  /** @type {Set<number>} */
-  const kept = new Set();
-  /** @type {Set<string>} */
-  const cited = new Set();
-  for (const { entry, position } of order) {
-    if (kept.size >= EVIDENCE_CLAIM_LIMIT) break;
-    const paths = new Set([...cited, ...pathsOf(entry.claim)]);
-    if (paths.size > EVIDENCE_SOURCE_LIMIT) continue;
-    const trial = made.filter((_, index) => kept.has(index) || index === position);
-    if (JSON.stringify(trial).length > EVIDENCE_CLAIMS_MAX_CHARS || programmeCardBody(trial).length > EVIDENCE_BODY_MAX_CHARS) continue;
-    kept.add(position);
-    for (const path of paths) cited.add(path);
-  }
+  const kept = evidenceCardCarry({ claims: made, order: order.map(({ position }) => position), sourceKeys: (position) => pathsOf(entries[position].claim), body: programmeCardBody });
   return entries.filter((_, index) => kept.has(index));
 }
 

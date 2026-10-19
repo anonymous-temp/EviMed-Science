@@ -952,6 +952,41 @@ export const EVIDENCE_CLAIMS_MAX_CHARS = 120000
 export const EVIDENCE_SOURCE_LIMIT = 50
 /** The most characters of a card's body (the zone service refuses a longer one). */
 export const EVIDENCE_BODY_MAX_CHARS = 50000
+/**
+ * Which of a writer's claims one card can carry within every bound the zone holds a card to: how many claims
+ * (`EVIDENCE_CLAIM_LIMIT`), how many sources they cite (`EVIDENCE_SOURCE_LIMIT`), how long the claims are together
+ * (`EVIDENCE_CLAIMS_MAX_CHARS`) and how long the body they make is (`EVIDENCE_BODY_MAX_CHARS`). Every writer that builds a
+ * card from more claims than it knows will fit (the evidence programme, 「循证 GEO」) asks this, because the zone refuses a card
+ * over a bound whole and not one claim of it is wrong.
+ *
+ * The writer decides which claims matter first and says it in `order`; this walks that order and keeps a claim when the card
+ * still fits with it, passing over one that would cross a bound (a later, smaller one may still fit). Deterministic: the same
+ * claims and order keep the same positions.
+ *
+ * The sizes are measured on the claims as the caller numbered them; once the left-out claims are gone the numbers and source
+ * indexes only get smaller, so what fits here fits in the card assembled next.
+ * @param {{ claims: readonly unknown[], order: readonly number[], sourceKeys: (position: number) => Iterable<string>,
+ *   body: (claims: any[]) => string }} input `claims` are the card claims in card order; `order` their positions, most important
+ *   first; `sourceKeys` names the sources a claim stands on; `body` is the card body the kept claims make.
+ * @returns {Set<number>} the kept positions
+ */
+export function evidenceCardCarry({ claims, order, sourceKeys, body }) {
+  /** @type {Set<number>} */
+  const kept = new Set()
+  /** @type {Set<string>} */
+  let cited = new Set()
+  for (const position of order) {
+    if (kept.size >= EVIDENCE_CLAIM_LIMIT) break
+    const keys = new Set([...cited, ...sourceKeys(position)])
+    if (keys.size > EVIDENCE_SOURCE_LIMIT) continue
+    const trial = claims.filter((_, index) => kept.has(index) || index === position)
+    if (JSON.stringify(trial).length > EVIDENCE_CLAIMS_MAX_CHARS || body(trial).length > EVIDENCE_BODY_MAX_CHARS) continue
+    kept.add(position)
+    cited = keys
+  }
+  return kept
+}
+
 const CLAIM_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/
 const CLAIM_KEYS = ['claimId', 'claimType', 'claim', 'applicability', 'uncertainty', 'valueSource', 'sourceIndexes', 'supportQuote',
   'supportingSources', 'confidence', 'derivedFrom', 'method', 'assumptions', 'sensitivity', 'calculation']
