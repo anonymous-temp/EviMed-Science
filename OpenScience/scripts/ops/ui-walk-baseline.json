@@ -428,6 +428,39 @@
       "owner": "controller",
       "until": "2026-12-01",
       "why": "the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"
+    },
+    {
+      "view": "vcr-comparator@desktop",
+      "rule": "type-pairs",
+      "max": 5,
+      "profiles": [
+        "fixture"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
+    },
+    {
+      "view": "vcr-matching@desktop",
+      "rule": "type-pairs",
+      "max": 5,
+      "profiles": [
+        "fixture"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
+    },
+    {
+      "view": "vcr-matching@2@desktop",
+      "rule": "type-pairs",
+      "max": 5,
+      "profiles": [
+        "fixture"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "R19.2 fixture walk: a data page with the metric rung (32/600) beside the headline and card titles (18/600) is five pairs by construction under DESIGN.md's rungs; the owner rules on metric pages (production measured 4)"
     }
   ]
 }
