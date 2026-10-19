@@ -10,7 +10,7 @@
 
 **Tech stack:** React/TypeScript, existing design-token primitives, Node control plane, PostgreSQL, DSH, OpenViking and the existing R/Python VCR engine.
 
-**Implementation checkpoint (2026-10-19):** Product changes and evidence through `44b919079` are committed and independently reviewed. Checked items below mean local implementation plus focused checks, not deployment. The complete local browser walk and its focused corrections are recorded; exact-revision Linux CI, release artifacts and live acceptance remain open in section 9. Literature intake maps preserved source numbers into the existing reference simulators; an external fitted model without a supported execution contract remains an incomplete registration.
+**Implementation checkpoint (2026-10-19):** Product changes and evidence through `181b5bc65` are committed and independently reviewed. Checked items below mean local implementation plus focused checks, not deployment. The complete local browser walk and its focused corrections are recorded; exact-revision Linux CI, release artifacts and live acceptance remain open in section 9. Literature intake maps preserved source numbers into the existing reference simulators; an external fitted model without a supported execution contract remains an incomplete registration.
 
 ## Reconciliation and preserved scope
 
