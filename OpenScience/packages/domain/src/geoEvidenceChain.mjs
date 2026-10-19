@@ -40,6 +40,7 @@ import {
   EVIDENCE_PRODUCER_RELATIONS,
   EVIDENCE_PRODUCER_RELATION_LABELS_ZH,
   EVIDENCE_PUBLIC_PANEL_LIMITS,
+  evidenceCardCarry,
   evidenceJourneyStage,
   evidenceOriginalityIsPrimary,
   evidencePublicExcerpt,
@@ -297,6 +298,7 @@ export const GEO_CARD_HELD_REASONS_ZH = Object.freeze({
   quote_not_found: '引文在所依据的原文里找不到',
   no_quote: '这条结论没有引文',
   claim_unusable: '这条结论的内容不符合证据卡的格式',
+  card_limit: '这个问题下的结论多于一张证据卡能容纳的，这条没有放进卡片',
 })
 
 /** The longest title and summary a card carries (the zone service's own bound is 300). */
@@ -329,6 +331,73 @@ function cardClaim(claim, cardClaimId, sourceIndex) {
     sourceIndexes: [sourceIndex],
     supportQuote: clip(claim.quote.trim(), 2000),
   }
+}
+
+/** The source kinds in the order of how much a reader leans on them when a card cannot hold every claim. */
+const SOURCE_KIND_RANK = frozen(['guideline', 'trial', 'review', 'label', 'regulator', 'literature', 'other'])
+
+/**
+ * Which claims of a card group come first when the group has more than one card holds. A card answers one key question on the
+ * patient journey, so every claim of a group is about that question and the order is about how well each one stands:
+ *
+ * 1. a claim the label itself states (`inLabel`): the card's 「说明书怎么说」 panel is read from these and the product's own
+ *    statements are what a card of this module exists to carry;
+ * 2. a comparison that can bear its weight: head to head, then anchored indirect, then a claim that compares nothing, and last
+ *    the unanchored comparison that is shown only for reference (`GEO_COMPARISON_EVIDENCE_TYPES`);
+ * 3. the kind of source: a guideline, a trial, a review, the label or the regulator, other literature, other;
+ * 4. the claim key, the order the plan already keeps.
+ *
+ * Only closed vocabularies are read; the claim's `evidenceLevel` is the run's own free wording and decides nothing here.
+ * @param {readonly GeoCardInputClaim[]} claims the group's claims, in claim-key order @returns {number[]} positions, first choice first
+ */
+function carryOrder(claims) {
+  const comparison = (/** @type {GeoCardInputClaim} */ claim) => {
+    const type = geoComparisonEvidenceType(claim.comparisonType)
+    // The types are listed strongest first; a claim that compares nothing sits between the anchored and the unanchored ones.
+    return type == null ? GEO_COMPARISON_EVIDENCE_TYPES.indexOf('unanchored_reference') - 0.5 : GEO_COMPARISON_EVIDENCE_TYPES.indexOf(type)
+  }
+  const kind = (/** @type {GeoCardInputClaim} */ claim) => {
+    const at = SOURCE_KIND_RANK.indexOf(/** @type {string} */ (claim.sourceKind))
+    return at < 0 ? SOURCE_KIND_RANK.length : at
+  }
+  return claims.map((claim, position) => ({ claim, position }))
+    .sort((left, right) => Number(right.claim.inLabel === true) - Number(left.claim.inLabel === true)
+      || comparison(left.claim) - comparison(right.claim)
+      || kind(left.claim) - kind(right.claim)
+      || left.position - right.position)
+    .map(({ position }) => position)
+}
+
+/** The card body: the claims' statements, one a line. @param {readonly { claim: string }[]} claims */
+const cardBody = (claims) => claims.map((claim) => `- ${claim.claim}`).join('\n')
+
+/**
+ * The claims of a group as a card numbers them: the sources in the order the claims first use them, each claim's id and its
+ * source index. The sources themselves are made from `firsts` once the claims that stay are known.
+ * @param {readonly GeoCardInputClaim[]} groupClaims
+ */
+function numberClaims(groupClaims) {
+  /** @type {Map<string, number>} */
+  const sourceIndex = new Map()
+  /** @type {GeoCardInputClaim[]} */
+  const firsts = []
+  const taken = new Set()
+  /** @type {any[]} */
+  const cardClaims = []
+  /** @type {Array<{ claimId: string, claimKey: string, cardClaimId: string }>} */
+  const map = []
+  for (const claim of groupClaims) {
+    let index = sourceIndex.get(claim.sourceRef)
+    if (index == null) {
+      firsts.push(claim)
+      index = firsts.length
+      sourceIndex.set(claim.sourceRef, index)
+    }
+    const cardClaimId = geoCardClaimId(claim.claimKey, taken)
+    cardClaims.push(cardClaim(claim, cardClaimId, index))
+    map.push({ claimId: claim.id, claimKey: claim.claimKey, cardClaimId })
+  }
+  return { firsts, cardClaims, map }
 }
 
 /**
@@ -392,35 +461,35 @@ export function geoCardPlan({ claims, producer, authors, reviewers, entityKeys =
   }
   const cards = []
   for (const [groupKey, group] of groups) {
-    /** @type {Map<string, number>} */
-    const sourceIndex = new Map()
-    /** @type {any[]} */
-    const sources = []
-    const taken = new Set()
-    /** @type {any[]} */
-    const cardClaims = []
-    /** @type {Array<{ claimId: string, claimKey: string, cardClaimId: string }>} */
-    const map = []
-    for (const claim of group.claims) {
-      let index = sourceIndex.get(claim.sourceRef)
-      if (index == null) {
-        const documentText = String(claim.sourceText)
-        const url = geoSourceUrl(claim.sourceRef)
-        sources.push({
-          title: clip(text(claim.sourceLabel) || claim.sourceRef.trim(), 500),
-          ...(url ? { url } : {}),
-          excerpt: evidencePublicExcerpt(documentText, claim.quote.trim()),
-          documentText,
-          coverage: 'full-text',
-          checkedAt: now.toISOString(),
-        })
-        index = sources.length
-        sourceIndex.set(claim.sourceRef, index)
-      }
-      const cardClaimId = geoCardClaimId(claim.claimKey, taken)
-      cardClaims.push(cardClaim(claim, cardClaimId, index))
-      map.push({ claimId: claim.id, claimKey: claim.claimKey, cardClaimId })
+    // One card holds only so much (`evidenceCardCarry`: claims, sources, characters). A group above it keeps the claims that
+    // stand best (`carryOrder`) and holds the rest with their reason; the card is still one per question, because a card's
+    // identity is its group's and the project's claim mapping names that one card.
+    let numbered = numberClaims(group.claims)
+    const kept = evidenceCardCarry({
+      claims: numbered.cardClaims,
+      order: carryOrder(group.claims),
+      sourceKeys: (position) => [group.claims[position].sourceRef],
+      body: cardBody,
+    })
+    if (kept.size < group.claims.length) {
+      for (const [position, claim] of group.claims.entries()) if (!kept.has(position)) hold(claim, 'card_limit')
+      group.claims = group.claims.filter((_, position) => kept.has(position))
+      numbered = numberClaims(group.claims)
     }
+    const { firsts, cardClaims, map } = numbered
+    /** @type {any[]} */
+    const sources = firsts.map((claim) => {
+      const documentText = String(claim.sourceText)
+      const url = geoSourceUrl(claim.sourceRef)
+      return {
+        title: clip(text(claim.sourceLabel) || claim.sourceRef.trim(), 500),
+        ...(url ? { url } : {}),
+        excerpt: evidencePublicExcerpt(documentText, claim.quote.trim()),
+        documentText,
+        coverage: 'full-text',
+        checkedAt: now.toISOString(),
+      }
+    })
     const inLabel = group.claims.filter((claim) => claim.inLabel === true)
     /** @type {string[]} */
     const labelClaims = []
@@ -444,7 +513,7 @@ export function geoCardPlan({ claims, producer, authors, reviewers, entityKeys =
         title: clip(group.question, CARD_TITLE_MAX),
         subtype: academic ? 'academic' : 'knowledge',
         summary: clip(`${group.stage.label}：${group.claims.length} 条已核对的结论`, 500),
-        body: cardClaims.map((claim) => `- ${claim.claim}`).join('\n'),
+        body: cardBody(cardClaims),
         limitations: '',
         provenance: '出自循证 GEO 项目的结论库：每条结论的引文已在其原文中逐字核对。',
         sources,
