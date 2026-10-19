@@ -1,7 +1,7 @@
 /** Install the complete upstream distribution at image build time, never during a research turn. */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -105,6 +105,114 @@ export function pruneSkillInstallReadback(skillsDir, kept) {
   return true;
 }
 
+/**
+ * The CLI's own hash of one skill folder (`hash_skill_tree` in `loopx/skill_install_readback.py`): over the files in the order
+ * Python sorts `Path`s (component by component, not as one string), each as its relative path, a NUL, the file's sha256 in hex and
+ * a newline. The readback manifest records it for every folder the CLI installed and the CLI's own check reads it back, so a
+ * folder this build edits has to be written back to the manifest the way the CLI would have written it.
+ *
+ * @param {string} root the skill folder
+ * @returns {{ available: boolean, file_count: number, sha256: string | null }}
+ */
+export function hashSkillTree(root) {
+  if (!existsSync(root) || !lstatSync(root).isDirectory()) return { available: false, file_count: 0, sha256: null };
+  /** @type {string[][]} */
+  const files = [];
+  const walk = (/** @type {string} */ directory, /** @type {string[]} */ prefix) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(path.join(directory, entry.name), [...prefix, entry.name]);
+      else if (entry.isFile()) files.push([...prefix, entry.name]);
+    }
+  };
+  walk(root, []);
+  const compare = (/** @type {string[]} */ a, /** @type {string[]} */ b) => {
+    for (let i = 0; i < Math.min(a.length, b.length); i += 1) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    return a.length - b.length;
+  };
+  const digest = createHash('sha256');
+  for (const parts of files.sort(compare)) {
+    digest.update(parts.join('/'));
+    digest.update(Buffer.from([0]));
+    digest.update(createHash('sha256').update(readFileSync(path.join(root, ...parts))).digest('hex'));
+    digest.update('\n');
+  }
+  return { available: true, file_count: files.length, sha256: digest.digest('hex') };
+}
+
+/**
+ * The places where the CLI's `loopx-project` sends the model to `loopx-doc-registry`, the one workflow skill of the six this
+ * image leaves out. Each is exact text of the pinned CLI's file, present once, and none says anything but "go to that skill".
+ *
+ * Hidden cost: the first is in the skill's description line, which sits in every session's catalogue, and the second is the
+ * paragraph a model reads on loading the skill; a model told to "prefer" or to "load" a skill that is not there spends a call
+ * on the refusal, and the dropped skill's own description ("use even when the user does not mention LoopX") is the one
+ * that would have pulled ordinary note-taking into a LoopX registry. The third names the same skill as the "trigger" of a
+ * section whose commands stand on their own.
+ */
+export const LOOPX_PROJECT_EDITS = Object.freeze([
+  Object.freeze({ from: ' For registering durable project materials, prefer loopx-doc-registry.', to: '' }),
+  Object.freeze({
+    from: 'If the task is mainly about reading,\nremembering, recording, indexing, or registering a durable project material,\nload `loopx-doc-registry` and use that narrower workflow first.\n\n',
+    to: '',
+  }),
+  Object.freeze({ from: 'treat\nthat as a doc-registry skill trigger.', to: 'register\nit with the commands below.' }),
+]);
+
+/**
+ * Takes the dangling pointers out of the kept `loopx-project` skill, bound to the pinned CLI's bytes: the folder is edited only
+ * when its SKILL.md is the file the pin names (`loopx.compatibility.skillEdit.sha256`, the wheel's own), every fragment is
+ * there exactly once, and the result is the file the pin records (`adaptedSha256`). A CLI bump that changes the file fails the
+ * build by name until the edit is read again; the readback manifest is written back so the CLI's own check still passes.
+ *
+ * @param {{ skillsDir: string, edit: { skill?: string, file?: string, sha256?: string, adaptedSha256?: string } | undefined }} options
+ * @returns {{ skill: string, file: string, sourceSha256: string, adaptedSha256: string, edits: number } | null} null when the pin records no edit
+ */
+export function adaptLoopxProjectSkill({ skillsDir, edit }) {
+  if (!edit) return null;
+  const { skill = 'loopx-project', file = 'SKILL.md', sha256, adaptedSha256 } = edit;
+  const target = path.join(skillsDir, skill, file);
+  const original = readFileSync(target);
+  const hash = (/** @type {Buffer | string} */ body) => createHash('sha256').update(body).digest('hex');
+  if (hash(original) !== sha256) throw new Error(`The LoopX ${skill} skill differs from the reviewed compatibility input; read the pinned CLI's file again before the edit is applied.`);
+  let text = original.toString('utf8');
+  for (const { from, to } of LOOPX_PROJECT_EDITS) {
+    if (text.split(from).length !== 2) throw new Error(`The LoopX ${skill} skill does not hold the reviewed text exactly once: ${JSON.stringify(from.slice(0, 60))}`);
+    text = text.replace(from, () => to);
+  }
+  const adapted = Buffer.from(text, 'utf8');
+  if (hash(adapted) !== adaptedSha256) throw new Error(`The edited LoopX ${skill} skill is not the reviewed one.`);
+  // The CLI copies out of a read-only package and keeps the modes; the folder is writable for the edit and put back as it was.
+  const folder = path.dirname(target);
+  const modes = [statSync(folder).mode, statSync(target).mode];
+  chmodSync(folder, modes[0] | 0o200);
+  chmodSync(target, modes[1] | 0o200);
+  writeFileSync(target, adapted);
+  chmodSync(target, modes[1]);
+  chmodSync(folder, modes[0]);
+  return { skill, file, sourceSha256: sha256, adaptedSha256: hash(adapted), edits: LOOPX_PROJECT_EDITS.length };
+}
+
+/**
+ * Writes one or more folders back to the CLI's readback manifest as the CLI would have written them: the item of each (its tree
+ * hash) and the digest over all items. For a folder this build edited.
+ *
+ * @param {string} skillsDir @param {readonly string[]} skillIds
+ * @returns {boolean} whether there was a manifest
+ */
+export function refreshSkillInstallReadback(skillsDir, skillIds) {
+  const file = path.join(skillsDir, '.loopx-skill-install.json');
+  if (!existsSync(file)) return false;
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  const items = manifest.skills?.items;
+  if (!items || typeof items !== 'object') return false;
+  for (const id of skillIds) if (id in items) items[id] = hashSkillTree(path.join(skillsDir, id));
+  manifest.skills.digest = createHash('sha256').update(pythonJson(items)).digest('hex');
+  const sorted = (/** @type {any} */ value) => Array.isArray(value) ? value.map(sorted)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted(value[key])])) : value;
+  writeFileSync(file, `${JSON.stringify(sorted(manifest), null, 2)}\n`);
+  return true;
+}
+
 export function verifyLoopxArchive(file, expected) {
   const actual = createHash('sha256').update(readFileSync(file)).digest('hex');
   if (!/^[a-f0-9]{64}$/.test(expected) || actual !== expected) throw new Error('LoopX archive digest mismatch.');
@@ -157,10 +265,16 @@ export function installLoopx({ pins, root = '/opt/evimed/loopx', python = '/opt/
   pruneSkillInstallReadback(skillsDir, kept);
   const left = readdirSync(skillsDir).filter(name => !name.startsWith('.')).sort();
   if (JSON.stringify(left) !== JSON.stringify(kept)) throw new Error(`The LoopX skills left after filtering (${left.join(', ')}) are not the kept ones (${kept.join(', ')}).`);
+  // What the kept `loopx-project` says about the skill that was dropped, taken out (digest-bound to the pinned CLI's file).
+  const edit = adaptLoopxProjectSkill({ skillsDir, edit: pin.compatibility?.skillEdit });
+  if (edit) refreshSkillInstallReadback(skillsDir, [edit.skill]);
+  const carried = skills.filter(skill => kept.includes(skill.name)).map(skill => edit && skill.name === edit.skill
+    ? { name: skill.name, sha256: createHash('sha256').update(readFileSync(path.join(skillsDir, skill.name, 'SKILL.md'))).digest('hex') } : skill);
   const receipt = { schemaVersion: 1, version: pin.version, pluginVersion: pin.plugin.version,
     wheelSha256: pin.wheel.sha256, pluginSha256: pin.plugin.sha256,
-    // `skills` is what the image carries, as it always was; `shipped` is every folder the pinned CLI wrote, with its digest.
-    skills: skills.filter(skill => kept.includes(skill.name)), shipped: skills, kept, dropped };
+    // `skills` is what the image carries (after the edit below, when there is one), as it always was; `shipped` is every folder
+    // the pinned CLI wrote, with the digest it wrote it with, and `edits` says what this build changed in what it kept.
+    skills: carried, shipped: skills, kept, dropped, ...(edit ? { edits: [edit] } : {}) };
   writeFileSync(path.join(root, 'installation.json'), `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;
 }
