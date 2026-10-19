@@ -1,0 +1,218 @@
+name: One-purpose public D612 artifact transport
+on:
+  push:
+    branches: [codex/artifact-transport-d612-20261020]
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: public-d612-artifact-transport
+  cancel-in-progress: false
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Verify original public ZIP and split bounded raw chunks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRANSPORT_ROOT: ${{ runner.temp }}/evimed-public-d612-transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import hashlib, io, json, math, os, pathlib, re, shutil, tempfile, time
+          import urllib.error, urllib.parse, urllib.request
+          REPO='anonymous-temp/EviMed-Science'
+          ARTIFACT=12202637148
+          RUN=39276361904
+          SOURCE='d61205db20627880cf7f44b07907896435abab9c'
+          SIZE=4336146798
+          SHA='2d501172054c6f8d17ce7d68faa45e454b4c57bb5e2f7421a57445b7c6119377'
+          PART=480*1024*1024
+          FLOOR=10*1024**3
+          deadline=time.monotonic()+900
+          def require(ok, code):
+              if not ok: raise RuntimeError(code)
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          def request_api(path):
+              req=urllib.request.Request('https://api.github.com/repos/'+REPO+path,
+                  headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+                  'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+              return opener.open(req,timeout=30)
+          def api_json(path):
+              with request_api(path) as response:
+                  require(response.status==200,'api_status')
+                  data=response.read(1024*1024+1)
+                  require(len(data)<=1024*1024,'api_body_bound')
+                  return json.loads(data)
+          def split_stream(stream, root, expected_size, expected_sha, part_size, disk_guard):
+              total=0; whole=hashlib.sha256(); result=[]
+              while total<expected_size:
+                  require(time.monotonic()<deadline,'deadline')
+                  disk_guard()
+                  index=len(result)+1
+                  directory=root/('part-%02d'%index); directory.mkdir(mode=0o700)
+                  count=0; part_hash=hashlib.sha256()
+                  with (directory/'chunk.bin').open('xb') as output:
+                      while count<min(part_size,expected_size-total):
+                          require(time.monotonic()<deadline,'deadline')
+                          disk_guard()
+                          chunk=stream.read(min(1024*1024,part_size-count,expected_size-total-count))
+                          require(bool(chunk),'truncated_zip')
+                          count+=len(chunk); part_hash.update(chunk); whole.update(chunk)
+                          output.write(chunk)
+                      output.flush(); os.fsync(output.fileno())
+                  result.append({'part':index,'offset':total,'bytes':count,'sha256':part_hash.hexdigest()})
+                  total+=count
+              require(not stream.read(1),'oversize_zip')
+              require(total==expected_size and whole.hexdigest()==expected_sha,'whole_zip_identity')
+              return result
+          # Exercise the exact chunk writer before any network request.
+          sample=b'public-transport-fixture\x00'*37
+          with tempfile.TemporaryDirectory() as tmp:
+              root=pathlib.Path(tmp)
+              rows=split_stream(io.BytesIO(sample),root,len(sample),hashlib.sha256(sample).hexdigest(),73,lambda:None)
+              rebuilt=b''.join((root/('part-%02d'%r['part'])/'chunk.bin').read_bytes() for r in rows)
+              require(rebuilt==sample and sum(r['bytes'] for r in rows)==len(sample),'synthetic_reassembly')
+              for r in rows:
+                  require(hashlib.sha256(sample[r['offset']:r['offset']+r['bytes']]).hexdigest()==r['sha256'],'synthetic_offset_hash')
+          require(math.ceil(SIZE/PART)==9,'part_count_contract')
+          root=pathlib.Path(os.environ['TRANSPORT_ROOT'])
+          require(not root.exists(),'fresh_directory_required')
+          root.mkdir(mode=0o700)
+          require(shutil.disk_usage(root).free>=SIZE+FLOOR,'download_disk_admission')
+          def disk_guard(): require(shutil.disk_usage(root).free>=FLOOR,'ten_gib_floor')
+          artifact=api_json('/actions/artifacts/'+str(ARTIFACT))
+          run=api_json('/actions/runs/'+str(RUN))
+          require(artifact.get('id')==ARTIFACT and artifact.get('size_in_bytes')==SIZE
+                  and artifact.get('expired') is False and artifact.get('digest')=='sha256:'+SHA,
+                  'artifact_metadata_identity')
+          origin=artifact.get('workflow_run') or {}
+          require(origin.get('id')==RUN and origin.get('head_sha')==SOURCE,'artifact_run_identity')
+          require(run.get('id')==RUN and run.get('head_sha')==SOURCE and run.get('run_attempt')==1
+                  and run.get('path')=='.github/workflows/web.yml' and run.get('event')=='push'
+                  and run.get('repository',{}).get('full_name')==REPO,'workflow_identity')
+          # This transport need not assert whole-run success; deployment admission does.
+          location=None
+          try:
+              with request_api('/actions/artifacts/'+str(ARTIFACT)+'/zip') as response:
+                  raise RuntimeError('expected_manual_302')
+          except urllib.error.HTTPError as error:
+              require(error.code==302,'artifact_redirect_status')
+              location=error.headers.get('Location')
+              error.close()
+          url=urllib.parse.urlsplit(location or '')
+          require(url.scheme=='https' and url.port in (None,443) and not url.username
+                  and not url.password and not url.fragment
+                  and re.fullmatch(r'productionresults[a-z0-9]+\.blob\.core\.windows\.net',url.hostname or ''),
+                  'azure_artifact_host')
+          # A NEW request deliberately has NO GitHub authorization header.
+          req=urllib.request.Request(location,headers={'Accept-Encoding':'identity'})
+          started=time.monotonic()
+          try:
+              with opener.open(req,timeout=60) as response:
+                  require(response.status==200,'azure_status')
+                  require(response.headers.get('Content-Encoding','identity')=='identity','azure_encoding')
+                  require(response.headers.get('Content-Length')==str(SIZE),'azure_length')
+                  rows=split_stream(response,root,SIZE,SHA,PART,disk_guard)
+          except Exception:
+              raise RuntimeError('azure_transfer_failed_no_url_logged') from None
+          require(len(rows)==9,'actual_part_count')
+          identity={'schemaVersion':1,'repository':REPO,'artifactId':ARTIFACT,'workflowRun':RUN,
+                    'workflowAttempt':1,'sourceRevision':SOURCE,'originalZipBytes':SIZE,
+                    'originalZipSha256':SHA,'partCount':9,'originalZipValidated':True,
+                    'transportCommit':os.environ['GITHUB_SHA'],'transportRun':os.environ['GITHUB_RUN_ID']}
+          for row in rows:
+              row['artifactName']='evimed-original-12202637148-part-%02d-of-09'%row['part']
+              require(row['bytes']<=PART and row['bytes']+1024*1024<512*1024*1024,'connector_size_bound')
+              (root/('part-%02d'%row['part'])/'part.json').write_text(json.dumps(dict(identity,**row),sort_keys=True)+'\n')
+          manifest_dir=root/'manifest'; manifest_dir.mkdir(mode=0o700)
+          (manifest_dir/'transport-manifest.json').write_text(json.dumps(dict(identity,parts=rows),sort_keys=True)+'\n')
+          disk_guard()
+          print(json.dumps({'originalZipValidated':True,'bytes':SIZE,'parts':len(rows),
+                            'seconds':round(time.monotonic()-started,3),'sha256':SHA}))
+          PY
+      - name: Publish verified raw part 01 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-01-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-01/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 02 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-02-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-02/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 03 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-03-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-03/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 04 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-04-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-04/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 05 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-05-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-05/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 06 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-06-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-06/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 07 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-07-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-07/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 08 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-08-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-08/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified raw part 09 of 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-part-09-of-09
+          path: ${{ runner.temp }}/evimed-public-d612-transport/part-09/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Publish verified aggregate identity manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-original-12202637148-transport-manifest
+          path: ${{ runner.temp }}/evimed-public-d612-transport/manifest/transport-manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
