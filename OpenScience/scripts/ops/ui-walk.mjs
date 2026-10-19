@@ -187,6 +187,7 @@ const WALK_TABLES = {
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
       {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
+      {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -548,6 +549,12 @@ export function frontierTargets({ zones, cards, links, hot }) {
   };
 }
 
+/** The first published article offered by the account-scoped frontier items endpoint. */
+export function frontierItemRoute(page) {
+  const item = Array.isArray(page?.items) ? page.items.find((entry) => typeof entry?.id === "string" && entry.id) : null;
+  return item ? `/app/frontier/items/${encodeURIComponent(item.id)}` : null;
+}
+
 /**
  * The run and path of a finished evidence matrix, from the run list: the newest delivered `clinical-evidence-synthesis` deliverable,
  * whose package holds `clinical-evidence-matrix.json` beside the report (the one capability that writes it).
@@ -651,6 +658,9 @@ async function discoverRoutes(context, base, notices, failures) {
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
 
+  const article = frontierItemRoute(await readData(context, base, "/api/frontier/items?limit=1", failures));
+  if (article) routes.push(["frontier-item", article]);
+  else skip("frontier-item", "the account has no published frontier article");
   const zones = await readData(context, base, "/api/frontier/zones", failures);
   const hot = await readData(context, base, "/api/frontier/hot", failures);
   const first = frontierTargets({ zones, hot });
