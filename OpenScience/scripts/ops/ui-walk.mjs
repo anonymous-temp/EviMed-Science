@@ -292,16 +292,14 @@ const WALK_TABLES = {
       {"view":"files-reader@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced"},
       {"view":"ops@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
       {"view":"memory@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"type-scale pairs of R19 pages, to be reduced (R19.1: production 9 and 6 before the class fixes, the fixture 5 and 4 after)"},
-      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
+      {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"},
       {"view":"geo@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
+      {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"},
       {"view":"account-usage@desktop","rule":"type-pairs","max":5,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"ops@desktop","contains":"identifiers in the visible text: standardized_ratio","owner":"controller","until":"2026-11-01","why":"a raw field name on the operator console (R19.1 walk); fix, not a debt to keep"},
       {"view":"geo-sources@desktop","rule":"type-pairs","max":6,"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"},
-      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"R19.1 production walk: debts measured on the owner's data after the class fixes"}
+      {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
+      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"}
     ]
   },
   "operatorSentences": [
@@ -2756,7 +2754,8 @@ export function routeReady() {
 /**
  * The first row of each list on the page, found, clicked and read again, in the
  * page (`page.evaluate`, so it reads nothing from this module). `["targets"]`
- * names the lists whose first row is a control; `["click", i]` clicks the
+ * names the lists whose first row is a control, `["inPlace"]` those whose
+ * first row opens where it is (a button, not a link); `["click", i]` clicks the
  * i-th; `["external", i]` says whether the i-th opens an outside address in a
  * new tab; `["state"]` reports what is on screen: whether a dialog is open, the
  * address, and how many rows are open in place. A row whose title is not a
@@ -2789,6 +2788,9 @@ export function rowProbe([action, index = 0]) {
     targets.push({ control, label: (list.getAttribute("aria-label") || title.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40) });
   }
   if (action === "targets") return targets.map(({ label }) => label);
+  // The lists whose rows open where they are (a button: a drawer, or the row itself), not those whose rows go to a page (a link). On 记忆胶囊's
+  // 项目 the works above the memories are links to their documents (R19.1 production walk: the owner's 关于你 is empty, so the page lands there).
+  if (action === "inPlace") return targets.filter(({ control }) => control.tagName !== "A").map(({ label }) => label);
   const target = typeof index === "string" ? targets.find(({ label }) => label === index) : targets[index];
   if (action === "has") return Boolean(target);
   if (action === "external") {
@@ -3916,12 +3918,12 @@ async function walkAddressState(page, base) {
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // A memory row that opens in a drawer: in the address while open, closed by Back.
+  // A memory row that opens in a drawer: in the address while open, closed by Back. A row that goes to a page (a work's document) is not one.
   await openRoute(page, base, "/app/memory");
-  const rows = (await page.evaluate(rowProbe, ["targets"])) ?? [];
+  const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {
-    await page.evaluate(rowProbe, ["click", 0]);
+    await page.evaluate(rowProbe, ["click", rows[0]]);
     await page.waitForTimeout(1_200);
     open.opened = await page.evaluate(addressProbe, ["memory"]);
     await page.goBack();

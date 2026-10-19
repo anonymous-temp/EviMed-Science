@@ -505,6 +505,16 @@ test("rowProbe finds the first row of each list whose title is a control, clicks
     assert.deepEqual(rowProbe(["targets"]), ["测量问句分组"]);
     assert.equal(rowProbe(["click", 0]), true);
   });
+  // The rows that open where they are: a memory list beside the works, whose rows are links to their documents (记忆胶囊's 项目).
+  const works = node("ul", { attrs: { "aria-label": "作品" } }, [node("li", {}, [node("a", { attrs: { "data-row-title": "", href: "/app/files/src_1" }, text: "一份报告" })])]);
+  const memoryTab = page(header(), works, list(["本项目为系统评价"], "项目的记忆"));
+  inPage(memoryTab, () => {
+    assert.deepEqual(rowProbe(["targets"]), ["作品", "项目的记忆"]);
+    assert.deepEqual(rowProbe(["inPlace"]), ["项目的记忆"]);
+    assert.equal(rowProbe(["click", "项目的记忆"]), true);
+  });
+  assert.equal(descendants(memoryTab).find((el) => el.text === "本项目为系统评价").clicks, 1);
+  assert.equal(descendants(memoryTab).find((el) => el.text === "一份报告").clicks, 0);
   // A row that opens in place says so in aria-expanded.
   const expanding = page(header(), node("ul", {}, [node("li", {}, [node("button", { attrs: { "data-row-title": "", "aria-expanded": "true" }, text: "已展开" })])]));
   assert.equal(inPage(expanding, () => rowProbe(["state"])).expanded, 1);
@@ -757,7 +767,8 @@ function context() {
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
           const [action] = arg;
-          if (action === "targets") {
+          // Every fake row is a button, so the rows that open in place are all of them.
+          if (action === "targets" || action === "inPlace") {
             // FAKE_ROWS=none: a page with no row to click, as an account with no data draws.
             return process.env.FAKE_ROWS === "none" ? [] : process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
           }
