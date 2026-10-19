@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { HeadingLevelScope, useBlockHeadingLevel } from "@/components/ui/Section";
@@ -55,11 +55,13 @@ export function ChartCard({
   className?: string;
   children?: ReactNode;
 }) {
+  const footnoteId = useId();
+  const showsFootnote = footnote != null && state === "content";
   const standing = useBlockHeadingLevel();
   const own = level ?? standing;
   const Heading = (`h${own}`) as "h2" | "h3" | "h4" | "h5" | "h6";
   return (
-    <section className={cn("flex min-w-0 flex-col rounded-card border border-border bg-surface p-4", className)}>
+    <section aria-describedby={showsFootnote ? footnoteId : undefined} className={cn("flex min-w-0 flex-col rounded-card border border-border bg-surface p-4", className)}>
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <Heading className="min-w-0 text-section font-semibold text-text">{title}</Heading>
         {meta != null && <span className="max-w-full shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}
@@ -81,7 +83,7 @@ export function ChartCard({
           <p data-chart-empty="" className="py-6 text-ui text-text-3">{emptyText ?? "还没有可以画出来的测量。"}</p>
         ) : <HeadingLevelScope level={own}>{children}</HeadingLevelScope>}
       </div>
-      {footnote != null && state === "content" && <p className="mt-3 text-caption text-text-3">{footnote}</p>}
+      {showsFootnote && <p id={footnoteId} data-note="" className="mt-3 text-caption text-text-3">{footnote}</p>}
     </section>
   );
 }

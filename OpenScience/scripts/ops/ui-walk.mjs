@@ -953,6 +953,54 @@ export async function navigateForWalk(page, url, onRetry) {
   }
 }
 
+/** A visible failed read is not a successfully loaded module without its chrome. */
+export function routeLoadProbe() {
+  const visible = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none"; };
+  const alerts = [...document.querySelectorAll("main [role='alert']")].filter(visible);
+  const failed = alerts.find((el) => [...el.querySelectorAll("button")].some((button) => visible(button) && button.textContent?.trim() === "重试"));
+  return { failed: Boolean(failed), message: failed?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? null };
+}
+
+/** Retry a rendered load error once only after this view's observed network change, never an HTTP failure. */
+export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false) {
+  const initial = await page.evaluate(routeLoadProbe);
+  const networkChanges = errors.filter((entry) => /net::ERR_NETWORK_CHANGED\b/.test(entry)).length;
+  if (!initial?.failed) return { loaded: true, retried: false, networkChanges };
+  if (navigationRetried || networkChanges === 0 || httpErrors.length > 0) return { loaded: false, retried: false, initial, networkChanges, httpErrors: [...httpErrors] };
+  // Same-address reload is the bounded equivalent of the visible user retry. Keep the original error in the report.
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+    await page.waitForTimeout(3_000);
+    const final = await page.evaluate(routeLoadProbe);
+    return { loaded: !final?.failed, retried: true, initial, final, networkChanges, httpErrors: [...httpErrors] };
+  } catch (error) {
+    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error).slice(0, 160), httpErrors: [...httpErrors] };
+  }
+}
+
+/** A separate row probe may use a populated tab without changing the assertion on the explicit self address. */
+export function memoryRowCoverage(tabs, emptyTitle) {
+  const selected = tabs?.find((tab) => tab.selected);
+  if (selected?.name !== "关于你" || selected.count !== 0 || emptyTitle !== "还没有关于你的记忆") return null;
+  const next = tabs.find((tab) => ["项目", "做法"].includes(tab.name) && tab.count > 0);
+  if (!next) return null;
+  return { explicitEmpty: "self", emptyTitle, rowTab: next.name === "项目" ? "project" : "methods", route: `/app/memory?tab=${next.name === "项目" ? "project" : "methods"}` };
+}
+
+/** Only a real scheduled pending day may use a separately identified published archive for row coverage. */
+export function dailyRowCoverage(emptyTitle, archive) {
+  const publication = archive?.publication;
+  const schedule = archive?.schedule;
+  if (publication?.state !== "pending" || !/^\d{4}-\d{2}-\d{2}$/.test(publication.day ?? "") || !/^\d{2}:\d{2}$/.test(schedule?.time ?? "")) throw new Error("daily_pending_identity_missing");
+  const [, month, day] = publication.day.split("-").map(Number);
+  const zone = schedule.timeZone === "Asia/Shanghai" ? "北京时间" : schedule.timeZone;
+  if (typeof zone !== "string" || !emptyTitle?.includes(`${month}月${day}日`) || !emptyTitle.includes("尚未发布") || !emptyTitle.includes(schedule.time) || !emptyTitle.includes(zone)) throw new Error("daily_pending_ui_mismatch");
+  const latest = archive.dailies?.filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry.day ?? "") && entry.day < publication.day && entry.itemCount > 0 && Number.isFinite(Date.parse(entry.generatedAt ?? ""))).sort((a, b) => b.day.localeCompare(a.day))[0];
+  if (!latest) throw new Error("daily_published_archive_missing");
+  return { publicationDay: publication.day, publicationState: publication.state, schedule, publishedDay: latest.day, route: `/app/frontier?view=daily&day=${latest.day}` };
+}
+
 /**
  * What clicking the first row of a page's lists showed. A row that looks
  * clickable has to do something where the reader is looking: open a drawer,
@@ -2016,7 +2064,7 @@ async function walkKnowledgeGraph(page, base, route) {
 }
 
 /** The tabs a memory address names, and the one it must open on. */
-const MEMORY_TAB_OF = { "memory-project": "项目", "memory-methods": "做法" };
+const MEMORY_TAB_OF = { memory: "关于你", "memory-project": "项目", "memory-methods": "做法" };
 
 /**
  * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
@@ -2058,7 +2106,7 @@ export function probeFindings(name, viewportName, kind, r) {
       const count = (tabName) => r.tabs.find((tab) => tab.name === tabName)?.count ?? 0;
       const wanted = MEMORY_TAB_OF[/** @type {keyof typeof MEMORY_TAB_OF} */ (key)];
       if (wanted && selected && selected.name !== wanted) failures.push(`${current}: the address names ${wanted} and the page opens on ${selected.name}`);
-      if (key === "memory" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
+      if (key === "memory-landing" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
       }
       break;
@@ -3307,12 +3355,21 @@ async function main() {
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
         try {
-          await navigateForWalk(page, `${base}${route}`, () => report.info.push(`${current}: retried once after Chromium reported a host network change`));
+          let navigationRetried = false;
+          await navigateForWalk(page, `${base}${route}`, () => { navigationRetried = true; report.info.push(`${current}: retried once after Chromium reported a host network change`); });
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
+          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried);
+          if (!routeLoad.loaded) {
+            report.pages[current] = { route, routeLoad, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+            await page.screenshot({ path: path.join(out, `${current}.load-error.jpg`), type: "jpeg", quality: CAPTURE_QUALITY });
+            failures.push(`${current}: route load failed (${routeLoad.initial?.message ?? "failed read"}); composition was not judged`);
+            continue;
+          }
+          if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
-          report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
+          report.pages[current] = { route, routeLoad, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
           const verdict = pageFindings(name, viewportName, measured, refusals);
@@ -3382,7 +3439,24 @@ async function main() {
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
             // Read-only by construction: a row's title opens a drawer, a page or itself; the pages new to the walk in R13 also have
             // every request that is not a read refused in the browser while their row is clicked (`walkRowClicks`).
-            const clicked = await walkRowClicks(page, base, route, name, popups);
+            let rowRoute = route;
+            if (name === "memory") {
+              const read = await page.evaluate(pageProbe, ["memoryTabs"]);
+              const coverage = memoryRowCoverage(read?.tabs, composition.empties?.[0]?.title);
+              if (coverage) { report.pages[current].rowCoverage = coverage; rowRoute = coverage.route; await openRoute(page, base, rowRoute); }
+            }
+            if (name === "frontier-daily" && composition.empties?.length) {
+              const response = await context.request.get(`${base}/api/frontier/dailies?limit=30`);
+              if (!response.ok()) throw new Error(`daily_archive_http_${response.status()}`);
+              const coverage = dailyRowCoverage(composition.empties[0].title, (await response.json())?.data);
+              report.pages[current].rowCoverage = coverage;
+              rowRoute = coverage.route;
+              await openRoute(page, base, rowRoute);
+              const loaded = new URL(page.url());
+              if (loaded.pathname !== "/app/frontier" || loaded.searchParams.get("day") !== coverage.publishedDay || loaded.searchParams.get("view") !== "daily") throw new Error("daily_archive_address_mismatch");
+              report.pages[current].rowCoverage.loadedAddress = loaded.pathname + loaded.search;
+            }
+            const clicked = await walkRowClicks(page, base, rowRoute, name, popups);
             report.pages[current].rowClicks = clicked.rows;
             failures.push(...clicked.failures);
             notices.push(...clicked.notices);
@@ -3881,6 +3955,7 @@ export function addressOpenFindings(page, read) {
 async function walkAddressState(page, base) {
   /** @type {string[]} */ const notices = [];
   const reads = {};
+  const failures = [];
   for (const c of ADDRESS_CASES) {
     await openRoute(page, base, c.route);
     const pressed = [];
@@ -3914,8 +3989,20 @@ async function walkAddressState(page, base) {
     reads[c.page] = read;
     notices.push(...addressStateFindings(c, read).notices);
   }
-  // The landing address opens the map; the self tab holds the memory rows whose drawers this probe exercises.
+  // Test the unqualified landing separately; explicit self must never be overridden because another tab has rows.
+  await openRoute(page, base, "/app/memory");
+  const landingRoute = page.url();
+  const landing = await page.evaluate(pageProbe, ["memoryTabs"]);
+  reads["memory-landing"] = { route: landingRoute, ...landing };
+  if (!new URL(landingRoute).pathname.endsWith("/memory/map")) {
+    failures.push(...probeFindings("memory-landing", "desktop", "memoryTabs", landing).failures);
+  }
   await openRoute(page, base, "/app/memory?tab=self");
+  const self = await page.evaluate(pageProbe, ["memoryTabs"]);
+  const composition = await page.evaluate(measureComposition, [{ hold: false }]);
+  const coverage = memoryRowCoverage(self?.tabs, composition.empties?.[0]?.title);
+  if (coverage) await openRoute(page, base, coverage.route);
+  reads["memory-row-coverage"] = coverage ?? { route: "/app/memory?tab=self" };
   const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
   if (rows.length > 0) {
@@ -3928,7 +4015,7 @@ async function walkAddressState(page, base) {
   }
   reads["memory-open"] = open;
   notices.push(...addressOpenFindings("memory", open).notices);
-  return { failures: [], notices, read: reads };
+  return { failures, notices, read: reads };
 }
 
 /**

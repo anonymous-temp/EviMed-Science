@@ -4,7 +4,7 @@ import test from "node:test";
 import { createVcrModelSources } from "../src/vcrModelSources.mjs";
 const sha = text => createHash("sha256").update(text).digest("hex");
 function fixture(text = "Control response was 40%; intervention response was 60%.") {
-  const source = { id: `src_${"a".repeat(64)}`, userId: "u1", projectId: "project1", payload: { title: "Trial source", generation: 2, status: "ready", analysis: { textSha256: sha(text) } } };
+  const source = { id: `src_${"a".repeat(32)}`, userId: "u1", projectId: "project1", payload: { title: "Trial source", generation: 2, status: "ready", analysis: { textSha256: sha(text) } } };
   const sources = { async get(userId, id) { if (userId !== source.userId || id !== source.id) throw Object.assign(new Error("missing"), { status: 404 }); return source; },
     async loadCapture() { return { input: { text } }; }, async getUnderstanding() { return { current: { methods: [], units: [{ text: "Do not send the whole capture" }] } }; }, async getMaterials() { return { materials: { coverage: { tables: { extracted: 0 } } } }; } };
   return { port: createVcrModelSources({ sources }), source, sources, user: { id: "u1" }, study: { projectId: "project1" } };

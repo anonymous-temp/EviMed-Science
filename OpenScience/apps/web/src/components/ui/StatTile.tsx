@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -189,8 +189,9 @@ export function StatBand({
   className?: string;
   children: ReactNode;
 }) {
+  const footnoteId = useId();
   return (
-    <section aria-label={label} className={className}>
+    <section aria-label={label} aria-describedby={footnote != null ? footnoteId : undefined} className={className}>
       {/* Every tile's left and top line, 1 px out of its box: a divider wherever two tiles meet, at any wrap, and none on the band's
           edge (the clip takes it). */}
       <div
@@ -202,7 +203,7 @@ export function StatBand({
       >
         {children}
       </div>
-      {footnote != null && <p className="mt-2 text-caption text-text-3">{footnote}</p>}
+      {footnote != null && <p id={footnoteId} data-note="" className="mt-2 text-caption text-text-3">{footnote}</p>}
     </section>
   );
 }

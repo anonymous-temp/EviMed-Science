@@ -148,6 +148,22 @@ describe("StatTile", () => {
     expect(within(screen.getByRole("region", { name: "本轮指标" })).getAllByText(/次有效回答计算/)).toHaveLength(1);
   });
 
+  it("associates visible scientific disclosures with their own figures", () => {
+    render(<>
+      <StatBand label="本轮指标" footnote="按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停"><StatTile label="提及率" value="31%" /></StatBand>
+      <StatBand label="未知指标" footnote="事实准确率、引用命中率、检索触发率这一轮没有读数"><StatTile label="事实准确率" value="—" /></StatBand>
+      <StatBand label="无注释"><StatTile label="数量" value="2" /></StatBand>
+    </>);
+    const measured = screen.getByRole("region", { name: "本轮指标" });
+    const unknown = screen.getByRole("region", { name: "未知指标" });
+    expect(measured).toHaveAccessibleDescription("按 4 个引擎、178 次有效回答计算 · DeepSeek 本轮未测：探测暂停");
+    expect(unknown).toHaveAccessibleDescription("事实准确率、引用命中率、检索触发率这一轮没有读数");
+    expect(measured.getAttribute("aria-describedby")).not.toBe(unknown.getAttribute("aria-describedby"));
+    expect(within(measured).getByText(/178 次有效回答/)).toBeVisible();
+    expect(within(unknown).getByText(/这一轮没有读数/)).toHaveAttribute("data-note");
+    expect(screen.getByRole("region", { name: "无注释" })).not.toHaveAttribute("aria-describedby");
+  });
+
   it("puts the target and the leading rival on the same measure as the value", () => {
     const { container } = render(<BulletBar label="综合可见度" value={61} target={65} targetLabel="目标 65" rival={72} rivalLabel="诺和盈 72" />);
     expect(screen.getByRole("img", { name: "综合可见度 61，目标 65，诺和盈 72" })).toBeInTheDocument();
@@ -198,6 +214,22 @@ describe("ChartCard", () => {
     rerender(<ChartCard title="可见度升到 61" footnote="按 4 个引擎计算">x</ChartCard>);
     expect(screen.getByRole("heading", { name: "可见度升到 61" })).toBeInTheDocument();
     expect(screen.getByText("按 4 个引擎计算")).toBeInTheDocument();
+  });
+
+  it("associates chart denominators only while their chart is drawn", () => {
+    const note = "每格是提到我们的回答数 / 回答数";
+    const { rerender } = render(<ChartCard title="引擎对比" footnote={note}>plot</ChartCard>);
+    const card = () => screen.getByRole("heading", { name: "引擎对比" }).closest("section")!;
+    expect(card()).toHaveAccessibleDescription(note);
+    expect(screen.getByText(note)).toBeVisible();
+    expect(screen.getByText(note)).toHaveAttribute("data-note");
+    for (const state of ["loading", "empty", "error"] as const) {
+      rerender(<ChartCard title="引擎对比" state={state} footnote={note}>plot</ChartCard>);
+      expect(card()).not.toHaveAttribute("aria-describedby");
+      expect(screen.queryByText(note)).not.toBeInTheDocument();
+    }
+    rerender(<ChartCard title="引擎对比" footnote={note}>plot</ChartCard>);
+    expect(card()).toHaveAccessibleDescription(note);
   });
 
   it("retries from the card", async () => {
