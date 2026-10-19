@@ -1399,3 +1399,16 @@ test("method reuse reads immutable configurations and retains only safe input re
   assert.notEqual(changed.job.scenarioHash, first.job.scenarioHash);
   assert.deepEqual((await jobs.configuration(study.id, first.job.id)).scenario, scenario);
 });
+
+test("source model versions have distinct job identities even when numeric scenarios and seeds agree", options, async () => {
+  const study = await makeStudy("model-identity");
+  const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+  const input = { studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], seed: 19 };
+  const ordinary = await jobs.enqueue(input);
+  const first = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_a", version: "1" } } });
+  const second = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_b", version: "2" } } });
+  assert.equal(new Set([ordinary.job.id, first.job.id, second.job.id]).size, 3);
+  const again = await jobs.enqueue({ ...input, detail: { sourceModel: { id: "mdl_a", version: "1" } } });
+  assert.equal(again.job.id, first.job.id);
+  assert.deepEqual((await jobs.configuration(study.id, second.job.id)).sourceModel, { id: "mdl_b", version: "2" });
+});

@@ -28,6 +28,7 @@ export function VcrModelsPanel() {
   const [adopting, setAdopting] = useState(false);
   const [revisingModel, setRevisingModel] = useState<VcrModelCard | null>(null);
   const [runningMethod, setRunningMethod] = useState<VcrModelsMethod | null>(null);
+  const [sourceModel, setSourceModel] = useState<VcrModelCard | null>(null);
   const { state, reload } = useVcrLoad("vcr:models", () => getVcrModels());
   const data = state.kind === "ready" ? state.data : null;
   const tiers = (["scenario", "literature", "data", "validated"] as const)
@@ -98,6 +99,9 @@ export function VcrModelsPanel() {
                 <div className="pl-6 max-lg:pl-0">
                   <Section title={model.name}>
                     <VcrModelRecord model={model} />
+                    {model.registrationState && <p className="text-caption text-text-2">{model.registrationState === "parameterized_reference" ? "已有来源参数参考配置；个体预测能力及临床验证尚未建立。" : "文献来源已登记，模型说明或参数仍待补充。"}</p>}
+                    {model.specificationMissing?.length ? <ul className="text-caption text-text-2">{model.specificationMissing.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
+                    {model.executionSpec && <Button variant="secondary" onClick={() => { const method = data.methods.find(row => row.method === model.executionSpec?.method); if (method) { setSourceModel(model); setRunningMethod(method); } }}>配置来源参数参考仿真</Button>}
                     {model.tier === "literature" && <Button variant="secondary" onClick={() => { setRevisingModel(model); setAdopting(true); }}>补充来源并登记新版本</Button>}
                   </Section>
                 </div>
@@ -112,7 +116,7 @@ export function VcrModelsPanel() {
             <Section key={task} title={task}>
               <List label={task}>
                 {data.methods.filter((method) => methodTask(method.method ?? method.id) === task).map((method) => (
-                  <ListRow key={method.id} title={method.name} onOpen={() => setRunningMethod(method)}
+                  <ListRow key={method.id} title={method.name} onOpen={() => { setSourceModel(null); setRunningMethod(method); }}
                     titleProps={{ "data-vcr-method": method.id }}
                     meta={<span className="text-caption text-text-3">{method.endpoints ?? "终点要求未说明"} · {method.usedIn ?? "选择研究后配置"}</span>} />
                 ))}
@@ -121,7 +125,7 @@ export function VcrModelsPanel() {
           ))}
         </Section>
       )}
-      {runningMethod && <VcrMethodRunner key={runningMethod.id} method={runningMethod} onClose={() => setRunningMethod(null)} />}
+      {runningMethod && <VcrMethodRunner key={`${runningMethod.id}:${sourceModel?.id ?? ""}`} method={runningMethod} sourceModel={sourceModel?.executionSpec ? { id: sourceModel.id, version: sourceModel.version, studyId: sourceModel.studyId, scenario: sourceModel.executionSpec.scenario } : undefined} onClose={() => { setRunningMethod(null); setSourceModel(null); }} />}
 
       {data.ladder && data.ladder.length > 0 && (
         <Disclosure summary="可信度要求（按用途）">

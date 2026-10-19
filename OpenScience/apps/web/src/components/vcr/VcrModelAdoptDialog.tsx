@@ -8,24 +8,14 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses, Textarea } from "@/components/ui/Input";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { modelRiskLabel } from "./vcrText";
+import { VcrLiteratureSource, type LiteratureSelection } from "./VcrLiteratureSource";
 
 const RISKS: readonly VcrModelRisk[] = Object.freeze(["low", "medium", "high"]);
 const ENDPOINTS = Object.freeze(Object.entries(VCR_ENDPOINT_TYPE_LABELS_ZH) as Array<[NonNullable<VcrModelBody["endpointType"]>, string]>);
 
-/**
- * 引入文献模型: take a prediction model a published trial fitted into the
- * library both studies draw on.
- *
- * Hidden knowledge:
- *  - **The tier is not asked.** An adopted model is a literature-tier model, and
- *    the server says so; the page has no field that could name a higher one. A
- *    model earns 「数据」 or 「已验证」 by evidence the library holds, not by being
- *    typed in (plan §8.2).
- *  - **The population is written from the trials named here.** There is no
- *    「适用人群」 field: a model that claims a population nobody fitted it on is the
- *    failure the ceiling exists to prevent, so the server writes the population
- *    from the sources and the page only lists them, one trial a line.
- *  - One request at a time; a second click while one is in flight does nothing.
+/** Register or revise a literature model from existing preserved sources.
+ * Parameter mappings are resolved by the server, certification is never granted
+ * by this form, and incomplete registrations remain useful records.
  */
 export function VcrModelAdoptDialog({ onClose, onSaved, initialModel }: { onClose: () => void; onSaved: () => void; initialModel?: VcrModelCard | null }) {
   const [name, setName] = useState(initialModel?.name ?? "");
@@ -33,7 +23,8 @@ export function VcrModelAdoptDialog({ onClose, onSaved, initialModel }: { onClos
   const [risk, setRisk] = useState<VcrModelRisk | "">(initialModel && ["none", "low", "medium", "high"].includes(initialModel.risk) ? initialModel.risk : "");
   const [endpoint, setEndpoint] = useState<NonNullable<VcrModelBody["endpointType"]> | "">(initialModel?.endpointType ?? "");
   const [sources, setSources] = useState((initialModel?.sourceRefs ?? []).join("\n"));
-  const [studyId, setStudyId] = useState("");
+  const [studyId, setStudyId] = useState(initialModel?.studyId ?? "");
+  const [literature, setLiterature] = useState<LiteratureSelection | null>(null);
   const studies = useVcrLoad("model-intake:studies", getVcrHome);
   const studyFieldId = useId();
   const [registryId, setRegistryId] = useState(initialModel?.sourceRegistryId ?? "");
@@ -52,8 +43,9 @@ export function VcrModelAdoptDialog({ onClose, onSaved, initialModel }: { onClos
     setBusy(true);
     void adoptVcrModel({
       name, version, ...(studyId ? { studyId } : {}), ...(risk ? { risk: risk as NonNullable<VcrModelBody["risk"]> } : {}), ...(endpoint ? { endpointType: endpoint } : {}),
-      sources: sources.split("\n"),
-      ...((record?.available || initialModel) ? { card: { ...initialModel?.revisionCard,
+      sources: [...sources.split("\n"), ...(literature ? [literature.title] : [])],
+      ...((record?.available || initialModel || literature) ? { card: { ...initialModel?.revisionCard,
+        ...(literature ? { literatureSource: literature.literatureSource, parameterBindings: literature.parameterBindings, executionProfile: literature.executionProfile } : {}),
         ...(record?.available ? { sourceRegistryId: record.registryId, sourceParameters: record.record?.values ?? [],
           knownLimits: initialModel?.limits?.length ? initialModel.limits : ["登记记录的参数不构成已验证的预测模型；尚缺模型方程、系数与可调用集成。"] } : {}),
       }, applicability: initialModel?.revisionApplicability } : {}),
@@ -66,7 +58,13 @@ export function VcrModelAdoptDialog({ onClose, onSaved, initialModel }: { onClos
   return (
     <Drawer title={initialModel ? "登记模型新版本" : "引入文献模型"} onClose={onClose} widthClassName="max-w-md">
       <form data-vcr-model-adopt="" className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); save(); }}>
-        <Input label="登记来源编号" placeholder="NCT02296125" value={registryId} disabled={reading} onChange={event => { setRegistryId(event.target.value); setRecord(null); }} />
+        {studies.state.kind === "ready" && studies.state.data.studies.length > 0 && <div>
+          <label htmlFor={studyFieldId} className="mb-2 block text-ui text-text">用于现有研究</label>
+          <select id={studyFieldId} value={studyId} className={inputClasses()} onChange={event => { setStudyId(event.target.value); setLiterature(null); }}><option value="">仅登记模型库</option>{studies.state.data.studies.map(study => <option key={study.id} value={study.id}>{study.name}</option>)}</select>
+        </div>}
+        {studies.state.kind === "error" && <VcrTabError message={studies.state.message} onRetry={studies.reload} />}
+        {studyId && studies.state.kind === "ready" && <VcrLiteratureSource key={studyId} studyId={studyId} projectId={studies.state.data.studies.find(study => study.id === studyId)?.projectId ?? ""} onChange={setLiterature} />}
+        <Input label="试验登记来源编号（可选）" placeholder="NCT02296125" value={registryId} disabled={reading} onChange={event => { setRegistryId(event.target.value); setRecord(null); }} />
         <Button type="button" variant="secondary" disabled={!/^NCT\d{8}$/.test(registryId.trim()) || reading} loading={reading} onClick={() => {
           const requestedId = registryId.trim();
           setReading(true); setReadError("");
@@ -94,11 +92,6 @@ export function VcrModelAdoptDialog({ onClose, onSaved, initialModel }: { onClos
             {ENDPOINTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
-        {studies.state.kind === "ready" && studies.state.data.studies.length > 0 && <div>
-          <label htmlFor={studyFieldId} className="mb-2 block text-ui text-text">用于现有研究</label>
-          <select id={studyFieldId} value={studyId} className={inputClasses()} onChange={event => setStudyId(event.target.value)}><option value="">仅登记模型库</option>{studies.state.data.studies.map(study => <option key={study.id} value={study.id}>{study.name}</option>)}</select>
-        </div>}
-        {studies.state.kind === "error" && <VcrTabError message={studies.state.message} onRetry={studies.reload} />}
         <Textarea label="来源试验（每行一项）" rows={4} value={sources} onChange={(event) => setSources(event.target.value)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>

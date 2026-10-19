@@ -833,6 +833,7 @@ export const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>
 }));
 /** What kind of model a card says it is, in Chinese. */
 export const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  literature_parameterized_reference: "文献参数参考仿真",
   mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", generative: "生成模型", mechanistic: "机制模型",
 }));
 

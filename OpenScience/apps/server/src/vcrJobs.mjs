@@ -655,7 +655,9 @@ export class VcrJobs {
       : validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
     if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
 
-    const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
+    const baseKey = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
+    const sourceModel = object(object(input.detail).sourceModel);
+    const key = sourceModel.id ? `${baseKey}:model:${vcrScenarioHash({ id: sourceModel.id, version: sourceModel.version })}` : baseKey;
     const row = await this.store.transaction(async (client) => {
       // A distinct request must reserve against the same locked study budget
       // as every other enqueue and confirmation, before its job becomes visible.
@@ -781,6 +783,7 @@ export class VcrJobs {
     const refs = list(object(row.checkpoint).configurationInputRefs);
     return { kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
       scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
+      sourceModel: object(row.checkpoint).sourceModel ? { id: object(object(row.checkpoint).sourceModel).id, version: object(object(row.checkpoint).sourceModel).version } : null,
       inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),
       unavailableInputs: refs.length ? refs.filter((entry) => object(entry).kind !== "snapshot").length : list(row.inputs).length,
     };

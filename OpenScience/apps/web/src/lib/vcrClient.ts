@@ -724,6 +724,10 @@ export interface VcrPopulationTab {
 
 /** A model's card (plan §8.2). */
 export interface VcrModelCard {
+  studyId?: string | null;
+  executionSpec?: { method: string; scenario: Record<string, unknown> } | null;
+  specificationMissing?: string[];
+  registrationState?: string | null;
   revisionCard?: Record<string, unknown>;
   revisionApplicability?: Record<string, unknown>;
   sourceRefs?: string[];
@@ -3246,6 +3250,7 @@ export function applyVcrReferenceTrial(studyId: string, registry: string, regist
 
 /** Only reproducible caller references are returned; engine locations and resolved data stay server-side. */
 export interface VcrMethodConfiguration {
+  sourceModel?: { id: string; version: string } | null;
   kind: string;
   method: string;
   methodVersion: string | null;

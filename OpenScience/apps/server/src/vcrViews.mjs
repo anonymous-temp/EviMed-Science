@@ -1238,6 +1238,10 @@ export function presentModelCard(model, usedBy) {
   return {
     id: String(model.id),
     name: text(card.title) ?? String(model.name),
+    studyId: text(model.studyId),
+    executionSpec: card.executionSpec ?? null,
+    specificationMissing: list(card.specificationMissing).map(String),
+    registrationState: text(card.registrationState),
     revisionCard: card,
     revisionApplicability: applicability,
     sourceRefs: list(applicability.sources).map(String),

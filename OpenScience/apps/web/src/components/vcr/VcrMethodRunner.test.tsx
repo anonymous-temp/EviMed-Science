@@ -103,3 +103,16 @@ it('keeps matching and curve reconstruction in their source-authorized study wor
   expect(screen.queryByRole('button', { name: '保存配置并运行' })).toBeNull();
   expect(await screen.findByRole('link', { name: 'Existing study' })).toHaveAttribute('href', '/app/virtual-research/study_1/matching');
 });
+
+it('replaces the opening model identity when reusing another immutable model configuration', async () => {
+  const scenario = { design: { nTreat: 10, nControl: 10 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.4, treatmentRate: 0.6 } };
+  api.getVcrMethodHistory.mockResolvedValue({ jobs: [{ id: 'model_b_job', kind: 'generate_patients_binary', state: 'succeeded' }] });
+  api.getVcrMethodConfiguration.mockResolvedValue({ kind: 'generate_patients_binary', method: 'patients.binary', scenario, seed: 987, inputRefs: [], unavailableInputs: 0, sourceModel: { id: 'model_b', version: '2' } });
+  render(<MemoryRouter><VcrMethodRunner method={{ id: 'binary', name: 'Binary', method: 'patients.binary' }} sourceModel={{ id: 'model_a', version: '1', studyId: 'study_1', scenario }} onClose={vi.fn()} /></MemoryRouter>);
+  await screen.findByRole('option', { name: 'Existing study' });
+  fireEvent.click(screen.getByText('复用历史配置'));
+  fireEvent.click(await screen.findByRole('button', { name: '复用此配置' }));
+  await waitFor(() => expect(screen.getByLabelText('随机种子')).toHaveValue(987));
+  fireEvent.click(screen.getByRole('button', { name: '保存配置并运行' }));
+  await waitFor(() => expect(api.queueVcrJob).toHaveBeenCalledWith('study_1', expect.objectContaining({ modelId: 'model_b' })));
+});

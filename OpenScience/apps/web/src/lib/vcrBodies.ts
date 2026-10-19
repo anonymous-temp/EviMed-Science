@@ -54,6 +54,7 @@ export interface VcrPatchBody {
 
 export interface VcrJobBody {
   kind: string;
+  modelId?: string;
   scenario?: Record<string, unknown>;
   inputs?: unknown[];
   seed?: number;
@@ -195,7 +196,7 @@ export function trialSearchBody(subjectKey: string) {
 export function jobBody(input: VcrJobBody) {
   return said({
     kind: input.kind, scenario: input.scenario, inputs: input.inputs, seed: input.seed, replicates: input.replicates,
-    cpuSecondsLimit: input.cpuSecondsLimit,
+    cpuSecondsLimit: input.cpuSecondsLimit, modelId: input.modelId,
   });
 }
 

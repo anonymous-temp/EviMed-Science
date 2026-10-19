@@ -39,7 +39,7 @@ import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
-  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
+  VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
   vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
@@ -1316,12 +1316,22 @@ export class VcrService {
       Object.assign(card, { sourceImport });
       if (!sources.includes(sourceRegistryId)) sources.push(sourceRegistryId);
     }
+    for (const key of ["executionSpec", "registrationState", "specificationMissing"]) delete card[key];
+    if (object(input.card).literatureSource) {
+      if (!study) throw failure(400, "vcr_model_invalid", "A preserved literature source belongs to an existing study project.");
+      if (!this.packages.modelSources) throw failure(503, "vcr_unavailable", "文献来源读取暂不可用。");
+      Object.assign(card, await this.packages.modelSources.prepare(user, study, object(input.card)));
+      const title = String(object(card.literatureSource).title ?? object(card.literatureSource).sourceId);
+      if (!sources.includes(title)) sources.push(title);
+    }
     const applicability = { ...object(input.applicability), sources };
+    const parameterEndpoint = object(object(object(card.executionSpec).scenario).endpoint).type ?? null;
+    if (parameterEndpoint && input.endpointType && input.endpointType !== parameterEndpoint) throw failure(400, "vcr_model_invalid", "The declared endpoint disagrees with the source reference profile.");
     const validation = object(input.validation);
     const saved = await this.store.saveModel({
       userId: String(user.id), studyId: study?.id ?? null,
       name: String(input.name), version: String(input.version ?? "1.0.0"),
-      tier: "literature", risk: input.risk ?? null, endpointType: input.endpointType ?? null,
+      tier: "literature", risk: input.risk ?? null, endpointType: parameterEndpoint ?? input.endpointType ?? null,
       card, applicability, validation, evidence: list(input.evidence).map(String),
     });
     await this.store.audit({ studyId: study?.id ?? null, userId: String(user.id), actor: String(user.id),
@@ -1347,6 +1357,35 @@ export class VcrService {
     const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
     const candidates = this.packages.frontierEvents?.candidatesFor ? await this.packages.frontierEvents.candidatesFor(String(user.id)) : null;
     return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null, candidates });
+  }
+
+  /** @param {{ id: string }} user @param {string} studyId @param {string} sourceId */
+  async modelSourcePreview(user, studyId, sourceId) {
+    const study = await this.requireStudy(user, studyId);
+    if (!this.packages.modelSources) throw failure(503, "vcr_unavailable", "文献来源读取暂不可用。");
+    return this.packages.modelSources.preview(user, study, sourceId);
+  }
+
+  /** Bind an actual computation to one immutable source-based model version.
+   * @param {{id:string}} user @param {any} study @param {string} modelId @param {string} kind @param {any} scenario
+   */
+  async modelExecution(user, study, modelId, kind, scenario) {
+    const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
+    if (!model) throw failure(404, "not_found", "Model not found.");
+    if (!model.studyId || !this.packages.modelSources || !object(model.card).literatureSource) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
+    const sourceStudy = await this.requireStudy(user, model.studyId);
+    const prepared = await this.packages.modelSources.prepare(user, sourceStudy, model.card);
+    const spec = object(prepared.executionSpec);
+    if (!spec.method || VCR_JOB_METHODS[kind] !== spec.method) throw failure(400, "vcr_model_invalid", "This model version has no supported configuration for that method.");
+    const expected = object(spec.scenario);
+    if (object(scenario.endpoint).type !== object(expected.endpoint).type || (expected.timeUnit && scenario.timeUnit !== expected.timeUnit)) {
+      throw failure(400, "vcr_model_invalid", "The endpoint and time unit must agree with this source model version.");
+    }
+    for (const parameter of list(spec.sourceParameters)) {
+      const key = String(parameter.field).split(".")[1];
+      if (object(scenario.truth)[key] !== parameter.value) throw failure(400, "vcr_model_invalid", "A source parameter changed; register a corrected model version first.");
+    }
+    return { id: model.id, version: model.version, source: object(model.card).literatureSource, scenarioHash: spec.scenarioHash ?? null };
   }
 
   /** Browser adapter to the existing registry pipeline; no source URL is fetched here.

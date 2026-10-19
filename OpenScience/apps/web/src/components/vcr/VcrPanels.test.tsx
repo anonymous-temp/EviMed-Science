@@ -186,7 +186,7 @@ describe("模型与方法", () => {
     await userEvent.click(await screen.findByRole("button", { name: "引入文献模型" }));
     expect(screen.getByLabelText("模型风险")).toHaveValue("");
     expect(screen.getByLabelText("终点")).toHaveValue("");
-    await userEvent.type(screen.getByLabelText("登记来源编号"), "NCT02296125");
+    await userEvent.type(screen.getByLabelText("试验登记来源编号（可选）"), "NCT02296125");
     await userEvent.click(screen.getByRole("button", { name: "读取来源参数" }));
     expect(await screen.findByText(/enrollment_actual：674 participants/)).toBeVisible();
     expect(screen.getByLabelText("模型名称")).toHaveValue("Source model");
@@ -197,6 +197,16 @@ describe("模型与方法", () => {
     const body = network.productRequest.mock.calls.find(call => call[0] === "/vcr/models" && call[1] === "POST")?.[2];
     expect(body).not.toHaveProperty("risk");
     expect(body).not.toHaveProperty("endpointType");
+  });
+
+  it("shows the preserved value, explicit conversion and a source excerpt link for mapped literature parameters", async () => {
+    const payload = fixture("ev201/models.json");
+    payload.models[0].revisionCard = { parameterBindings: [{ field: "truth.controlRate", value: 40, mappedValue: 0.4, unit: "%", quote: "Control response was 40%.", quoteStart: 10, quoteEnd: 34, sourceId: "src_original", textSha256: "a".repeat(64) }] };
+    installVcrServer(network.productRequest, { "GET /vcr/models": payload });
+    draw(<VcrModelsPanel />);
+    expect(await screen.findByRole("table", { name: "文献参数与来源" })).toHaveTextContent("40 %");
+    expect(screen.getByRole("table", { name: "文献参数与来源" })).toHaveTextContent("0.4");
+    expect(screen.getByRole("link", { name: "Control response was 40%." })).toHaveAttribute("href", `/app/files/src_original?start=10&end=34&sha=${"a".repeat(64)}`);
   });
 
   it("registers a corrected version without discarding its source, interface or applicability", async () => {

@@ -227,6 +227,7 @@ import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
+import { createVcrModelSources } from "./vcrModelSources.mjs";
 import { SourceService, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
@@ -2368,6 +2369,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return predictionRegistry.register(prediction);
     } } : null),
   });
+  if (vcr && sourceService) vcr.service.attach({ modelSources: createVcrModelSources({ sources: sourceService }) });
   vcrSimulations.current = vcr?.simulations ?? null;
   // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
   // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
