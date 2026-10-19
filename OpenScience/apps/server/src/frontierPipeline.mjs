@@ -622,7 +622,7 @@ export class FrontierPipeline {
     this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
     this.preprintLaneMinScore = frontierPreprintLaneMinScore(this.config);
     this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
-    this.offpeak = this.config.frontierOffpeak !== false;
+    this.offpeak = this.config.frontierOffpeak === true;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     // The width the schema's vector column is created with; it must be the
     // one the server migrates with, or the migration would empty the vectors.

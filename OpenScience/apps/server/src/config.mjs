@@ -441,7 +441,7 @@ function frontierSettings(overrides) {
     // cap, as every spend limit on this platform reads 0.
     frontierDailyBudgetCny: budget,
     frontierProcessConcurrency: integer("frontierProcessConcurrency", "OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY", 2, 1, 8),
-    frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", true),
+    frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", false),
     // FRONTIER_SELECT_THRESHOLD_DEFAULT (frontierPipeline.mjs, where its calibration is written).
     frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 82, 0, 100),
     // The preprint lane (owner ruling 2026-10-10, review B D-08): preprint servers and company newsrooms cannot reach the line above
