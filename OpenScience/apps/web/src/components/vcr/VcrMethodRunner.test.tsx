@@ -116,3 +116,34 @@ it('replaces the opening model identity when reusing another immutable model con
   fireEvent.click(screen.getByRole('button', { name: '保存配置并运行' }));
   await waitFor(() => expect(api.queueVcrJob).toHaveBeenCalledWith('study_1', expect.objectContaining({ modelId: 'model_b' })));
 });
+
+it('renders Gamma recruitment parameters and Beta screening priors as shapes rather than trial significance', async () => {
+  draw({ id: 'accrual', name: 'Accrual', method: 'accrual.poisson_gamma' });
+  await screen.findByRole('option', { name: 'Existing study' });
+  fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+  expect(screen.getAllByLabelText('招募强度 Gamma 形状 α（无量纲）')[0]).toHaveValue(2);
+  expect(screen.getAllByLabelText('招募强度 Gamma 速率 β（月）')[0]).toHaveValue(4);
+  expect(screen.queryByLabelText(/显著性水平/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选失败率 Beta 先验' }));
+  expect(screen.getByLabelText('筛选失败率 Beta 先验形状 α（无量纲）')).toBeInTheDocument();
+  expect(screen.getByLabelText('筛选失败率 Beta 先验形状 β（无量纲）')).toBeInTheDocument();
+});
+
+it('retains a test-alpha and calendar-unit boundary in a trial-design example', async () => {
+  draw({ id: 'trial', name: 'Trial', method: 'design.analytic' });
+  await screen.findByRole('option', { name: 'Existing study' });
+  fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+  expect(screen.getByLabelText('检验显著性水平 α（比例）')).toHaveValue(0.025);
+  expect(screen.getByLabelText('对照中位时间（月（方法默认））')).toHaveValue(12);
+  expect(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' })).toBeInTheDocument();
+});
+
+it('keeps the population Beta distribution shape labels after selecting a variant inside an array', async () => {
+  draw({ id: 'population', name: 'Population', method: 'population.scenario' });
+  await screen.findByRole('option', { name: 'Existing study' });
+  fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+  fireEvent.change(screen.getAllByLabelText('类型')[0], { target: { value: 'beta' } });
+  expect(screen.getByLabelText('Beta 分布形状参数 α（无量纲）')).toBeInTheDocument();
+  expect(screen.getByLabelText('Beta 分布形状参数 β（无量纲）')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/显著性水平/)).toBeNull();
+});
