@@ -1339,7 +1339,7 @@ const WRITERS = {
     const name = item.str("name", { max: 120, required: true });
     const version = item.str("version", { max: 40 }) ?? "1.0.0";
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
-    const risk = item.choice("risk", VCR_MODEL_RISKS, { fallback: "low" });
+    const risk = item.choice("risk", VCR_MODEL_RISKS, { fallback: null });
     const card = item.obj("card") ?? {};
     const sources = (item.arr("sources", { max: 30 }) ?? []).map((source) => String(typeof source === "object" ? object(source).label : source).slice(0, 200));
     if (!item.ok) return null;

@@ -1217,3 +1217,40 @@ test("the study page says which flywheel actions this deployment offers, and a r
   await off.routes(request("GET", "/api/vcr/studies/std_1/export/exp_sim"), hidden);
   assert.equal("publication" in hidden.json().data, false);
 });
+
+test("reference registry adapters validate inputs and preserve study write authorization", async () => {
+  const { routes, service, as, calls } = fixture({ roles: { member: ["viewer"] } });
+  service.searchReferenceTrials = async (user, input) => ({ userId: user.id, query: input.q, candidates: [] });
+  service.readReferenceTrial = async (user, input) => ({ userId: user.id, ...input, available: true });
+  service.applyReferenceTrial = async (user, input) => { calls.push(["reference.apply", user.id, input.studyId]); return { status: "ok" }; };
+  const search = response();
+  await routes(request("GET", "/api/vcr/precedents/search?q=diabetes"), search);
+  assert.equal(search.json().data.query, "diabetes");
+  await assert.rejects(routes(request("GET", "/api/vcr/precedents/search?q="), response()), { status: 400 });
+  await assert.rejects(routes(request("GET", "/api/vcr/precedents/record?registry=http://localhost&registryId=NCT00001"), response()), { status: 400 });
+  const input = { registry: "clinicaltrials.gov", registryId: "NCT00000001", studyId: "std_1" };
+  as("stranger");
+  await assert.rejects(routes(request("POST", "/api/vcr/precedents/apply", input), response()), { status: 404 });
+  as("member");
+  await assert.rejects(routes(request("POST", "/api/vcr/precedents/apply", input), response()), { status: 403 });
+  assert.ok(!calls.some(row => row[0] === "reference.apply"));
+  as(OWNER);
+  const applied = response();
+  await routes(request("POST", "/api/vcr/precedents/apply", input), applied);
+  assert.equal(applied.status, 201);
+  assert.deepEqual(calls.find(row => row[0] === "reference.apply"), ["reference.apply", OWNER, "std_1"]);
+  assert.ok(calls.some(row => row[0] === "csrf" && row[1] === "/api/vcr/precedents/apply"));
+});
+
+test("historical method configuration requires run and patient-data access and conceals other studies", async () => {
+  const { routes, as } = fixture({ roles: { member: ["viewer"] }, overrides: { jobs: { async configuration() { return { scenario: { alpha: 0.05 }, inputRefs: [] }; } } } });
+  as("stranger");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/jobs/job_1/configuration"), response()), { status: 404 });
+  as("member");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/jobs/job_1/configuration"), response()), { status: 403 });
+  as(OWNER);
+  const res = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/jobs/job_1/configuration"), res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json().data.inputRefs, []);
+});

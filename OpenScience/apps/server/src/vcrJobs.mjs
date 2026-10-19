@@ -676,7 +676,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...curveDetail, cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...curveDetail, configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       if (inserted?.inserted === true) await this.store.audit({ client, studyId, userId: String(input.userId), action: "vcr.job.enqueue",
         object: String(inserted.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
       return inserted;
@@ -770,6 +770,20 @@ export class VcrJobs {
   /** @param {string} studyId @param {string} jobId */
   async get(studyId, jobId) {
     return this.store.job(studyId, jobId);
+  }
+
+  /** A reusable configuration exposes references, never engine file locations.
+   * @param {string} studyId @param {string} jobId
+   */
+  async configuration(studyId, jobId) {
+    const row = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [studyId, jobId]);
+    if (!row) return null;
+    const refs = list(object(row.checkpoint).configurationInputRefs);
+    return { kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
+      scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
+      inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),
+      unavailableInputs: refs.length ? refs.filter((entry) => object(entry).kind !== "snapshot").length : list(row.inputs).length,
+    };
   }
 
   /**

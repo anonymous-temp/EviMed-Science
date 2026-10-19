@@ -935,8 +935,8 @@ test("a patient set's model card says what the model is, where it may be used, a
     evidence: ["code_verification"], missingEvidence: ["seed_reproducible"],
   }, [{ id: "std_1", label: "EV-201" }]);
   assert.equal(card.name, "标题");
-  assert.equal(card.twin, "baseline_conditioned_prediction", "a twin is derived from evidence, never granted");
-  assert.equal(card.twinLabel, "基线条件化预测");
+  assert.equal(card.twin, "scenario_simulation", "an unconditioned model has not demonstrated individual prediction");
+  assert.equal(card.twinLabel, "情景仿真");
   assert.match(String(card.twinReason), /缺少/);
   assert.equal(card.region, "含中国人群");
   assert.deepEqual(card.validation.map((row) => row.label), ["外部验证", "内部验证"], "a key the page has no word for is not printed as a raw id");

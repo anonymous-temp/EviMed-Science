@@ -1284,20 +1284,44 @@ export class VcrService {
    */
   async adoptModel(user, input) {
     const study = input.studyId ? await this.requireStudy(user, String(input.studyId)) : null;
-    const sources = list(input.sources).map((source) => String(object(source).label ?? source));
+    const sources = list(input.sources).map((source) => String(object(source).label ?? source).trim()).filter(Boolean);
+    if (input.risk != null && !["none", "low", "medium", "high"].includes(input.risk)) throw failure(400, "vcr_model_invalid", "Unknown model risk.");
     // The call shape a card declares is one of the two plan §5.2 names (a card that says nothing is the first). A model of the second
     // shape is taken in with the card it arrives with; what that card has not said is returned as notices, never as a refusal, and
     // the applicability check then declines to answer for it field by field (`vcrModelCardIssues`).
     const shape = vcrModelInterfaceOf({ card: object(input.card) });
     if (shape === null) throw failure(400, "vcr_model_invalid", `card.interfaceShape is one of: ${VCR_MODEL_INTERFACES.join(", ")}.`);
-    const card = { ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
-      provider: study ? `研究 ${study.name}` : "虚拟临床研究" };
-    const applicability = { ...object(input.applicability), population: sources.length ? `来源试验的人群：${sources.join("、")}` : "来源试验的人群", sources };
+    const card = /** @type {Record<string, any>} */ ({ ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
+      provider: study ? `研究 ${study.name}` : "虚拟临床研究" });
+    // Browser copies are a preview only. Preserve source bytes and re-read the verified
+    // extraction ledger server-side before attaching parameters to a model version.
+    for (const key of ["sourceParameters", "sourceRecordHash", "sourcePrecedentId", "sourceEvidenceIds", "sourceImport"]) delete card[key];
+    const sourceRegistryId = String(object(input.card).sourceRegistryId ?? "").trim();
+    if (sourceRegistryId) {
+      if (!/^NCT\d{8}$/.test(sourceRegistryId)) throw failure(400, "vcr_model_invalid", "A ClinicalTrials.gov registration number is required.");
+      let sourceImport = { status: "unavailable", reason: "registry_not_configured" };
+      if (this.packages.evidence?.extractPrecedent && this.packages.evidenceStore?.itemsById) {
+        try {
+          const preserved = await this.packages.evidence.extractPrecedent({ userId: String(user.id), studyId: study?.id ?? null, registry: "clinicaltrials.gov", registryId: sourceRegistryId });
+          sourceImport = { status: preserved.status, reason: preserved.reason ?? "" };
+          if (preserved.status === "ok") {
+            const parameters = await this.packages.evidenceStore.itemsById({ userId: String(user.id), studyId: study?.id ?? null, ids: preserved.evidenceIds });
+            Object.assign(card, { sourceRecordHash: preserved.record?.hash ?? null, sourcePrecedentId: preserved.precedent.id,
+              sourceEvidenceIds: preserved.evidenceIds, sourceParameters: parameters.map((/** @type {any} */ row) => ({
+                parameter: row.parameter, value: row.value, unit: row.unit, quote: row.quote, locator: row.locator,
+              })) });
+          }
+        } catch { sourceImport = { status: "unavailable", reason: "source_preservation_failed" }; }
+      }
+      Object.assign(card, { sourceImport });
+      if (!sources.includes(sourceRegistryId)) sources.push(sourceRegistryId);
+    }
+    const applicability = { ...object(input.applicability), sources };
     const validation = object(input.validation);
     const saved = await this.store.saveModel({
       userId: String(user.id), studyId: study?.id ?? null,
       name: String(input.name), version: String(input.version ?? "1.0.0"),
-      tier: "literature", risk: String(input.risk ?? "low"), endpointType: input.endpointType ?? null,
+      tier: "literature", risk: input.risk ?? null, endpointType: input.endpointType ?? null,
       card, applicability, validation, evidence: list(input.evidence).map(String),
     });
     await this.store.audit({ studyId: study?.id ?? null, userId: String(user.id), actor: String(user.id),
@@ -1323,6 +1347,32 @@ export class VcrService {
     const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
     const candidates = this.packages.frontierEvents?.candidatesFor ? await this.packages.frontierEvents.candidatesFor(String(user.id)) : null;
     return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null, candidates });
+  }
+
+  /** Browser adapter to the existing registry pipeline; no source URL is fetched here.
+   * @param {{ id: string }} user @param {Record<string, any>} input
+   */
+  async searchReferenceTrials(user, input) {
+    const evidence = this.packages.evidence;
+    if (!evidence?.findPrecedents) throw failure(503, "vcr_unavailable", "参考试验检索暂不可用。");
+    return evidence.findPrecedents({ userId: String(user.id), target: { condition: String(input.q ?? "").trim() }, limit: 20 });
+  }
+
+  /** @param {{ id: string }} user @param {Record<string, any>} input */
+  async readReferenceTrial(user, input) {
+    const evidence = this.packages.evidence;
+    if (!evidence?.readRegistryRecord) throw failure(503, "vcr_unavailable", "登记记录暂不可用。");
+    return evidence.readRegistryRecord({ userId: String(user.id), registry: input.registry, registryId: input.registryId });
+  }
+
+  /** The pipeline preserves registry bytes, enrollment kind and verified values together.
+   * @param {{ id: string }} user @param {Record<string, any>} input
+   */
+  async applyReferenceTrial(user, input) {
+    const study = await this.requireStudy(user, String(input.studyId));
+    const evidence = this.packages.evidence;
+    if (!evidence?.extractPrecedent) throw failure(503, "vcr_unavailable", "登记记录暂不可用。");
+    return evidence.extractPrecedent({ userId: study.userId, studyId: study.id, registry: input.registry, registryId: input.registryId });
   }
 
   // --- the runtime's read (build contract §3.2, §4) ---------------------------------------

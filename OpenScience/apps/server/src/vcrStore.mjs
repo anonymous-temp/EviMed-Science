@@ -1644,13 +1644,13 @@ export class VcrStore extends VcrStoreBase {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.models
       WHERE retired_at IS NULL AND (user_id IS NULL OR user_id = $1) ORDER BY name, version DESC LIMIT 500`, [userId]);
     return rows.map((row) => ({
-      id: String(row.id), name: String(row.name), version: String(row.version), tier: String(row.tier), risk: String(row.risk ?? "none"),
+      id: String(row.id), name: String(row.name), version: String(row.version), tier: String(row.tier), risk: String(row.risk ?? "unassessed"),
       endpointType: text(row.endpoint_type), card: object(row.card), applicability: object(row.applicability),
       validation: object(row.validation), evidence: list(row.evidence).map(String), studyId: text(row.study_id),
       createdAt: iso(row.created_at),
       // What the model's own evidence is short of, for its declared risk. The
       // page shows it beside the tier; nothing is blocked by it (§8.2).
-      missingEvidence: missingModelEvidence(String(row.risk ?? "none"), list(row.evidence).map(String)),
+      missingEvidence: missingModelEvidence(String(row.risk ?? "unassessed"), list(row.evidence).map(String)),
       useCeiling: intendedUseCeiling([String(row.tier)]),
     }));
   }
@@ -1681,7 +1681,7 @@ export class VcrStore extends VcrStoreBase {
     const evidence = list(input.evidence).map(String);
     const validation = object(input.validation);
     const values = [vcrId("model"), owner, input.studyId ?? null, String(input.name), String(input.version), String(input.tier),
-      String(input.risk ?? "none"), input.endpointType ?? null, JSON.stringify(input.card ?? {}),
+      input.risk ?? null, input.endpointType ?? null, JSON.stringify(input.card ?? {}),
       JSON.stringify(input.applicability ?? {}),
       JSON.stringify(owner === null ? validation : { ...validation, declaredEvidence: evidence }),
       owner === null ? evidence : []];

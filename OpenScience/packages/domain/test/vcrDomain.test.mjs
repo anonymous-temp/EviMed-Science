@@ -95,6 +95,8 @@ test("missing model evidence is listed, never thrown", () => {
 });
 
 test("the digital-twin label is derived from four pieces of evidence, never granted", () => {
+  assert.equal(twinLabel([]), "scenario_simulation");
+  assert.equal(twinLabel(["validation_record", "calibrated_uncertainty"]), "scenario_simulation");
   assert.equal(twinLabel(["individual_conditioned"]), "baseline_conditioned_prediction");
   assert.equal(
     twinLabel(["individual_conditioned", "updates_with_new_data", "calibrated_uncertainty", "validation_record"]),

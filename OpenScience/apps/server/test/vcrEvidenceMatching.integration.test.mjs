@@ -933,3 +933,33 @@ test("an answer names a subject the study has: an invented key is refused and ne
   assert.equal(await vcr.matchStore.holdsSubject(otherStudy.id, "P-001"), false);
   assert.equal(await vcr.matchStore.holdsSubject(study.id, "P-001"), true, "a subject with a recorded fact is held");
 });
+
+test("browser reference adapter reads and preserves the same registry bytes and verified values for an existing study", options, async () => {
+  const target = await vcr.store.createStudy({ userId: USER, projectId: "prj-browser-reference", name: "Reference workflow", question: "q", dataTier: "T0" });
+  const input = { registry: "clinicaltrials.gov", registryId: "NCT02296125", studyId: target.id };
+  const read = await vcr.service.readReferenceTrial({ id: USER }, input);
+  assert.equal(read.available, true);
+  assert.ok(read.record.text.includes("enrollmentInfo.count: 674"));
+  assert.equal(read.record.enrollment.actual, 674);
+  assert.equal(read.record.enrollment.planned, null);
+  await assert.rejects(vcr.service.applyReferenceTrial({ id: OTHER_USER }, input), { code: "vcr_study_not_found" });
+  const applied = await vcr.service.applyReferenceTrial({ id: USER }, input);
+  assert.equal(applied.status, "ok");
+  assert.ok(applied.counts.verified > 0);
+  const preserved = await vcr.evidenceStore.getPrecedent(USER, applied.precedent.id, { withText: true });
+  assert.equal(preserved.record_text.split("\n").slice(1).join("\n"), read.record.text.split("\n").slice(1).join("\n"), "source fields agree across reads; each preservation retains its own retrieval timestamp");
+  const items = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: target.id, parameter: "enrollment_actual" });
+  assert.ok(items.some(row => Number(row.value) === 674));
+  const model = await vcr.service.adoptModel({ id: USER }, { name: "Source-bound model", version: "1.0.0", card: {
+    sourceRegistryId: "NCT02296125", sourceRecordHash: "forged", sourceEvidenceIds: ["forged"], sourceParameters: [{ parameter: "enrollment_actual", value: 999 }],
+  } });
+  const stored = (await vcr.store.models(USER)).find(row => row.id === model.id);
+  assert.equal(stored.card.sourceImport.status, "ok");
+  assert.notEqual(stored.card.sourceRecordHash, "forged");
+  assert.ok(stored.card.sourceParameters.some(row => row.parameter === "enrollment_actual" && Number(row.value) === 674));
+  assert.ok(!stored.card.sourceParameters.some(row => Number(row.value) === 999));
+  const exact = await vcr.evidenceStore.itemsById({ userId: USER, studyId: null, ids: stored.card.sourceEvidenceIds });
+  assert.equal(exact.length, stored.card.sourceParameters.length);
+  assert.equal((await vcr.evidenceStore.itemsById({ userId: OTHER_USER, studyId: null, ids: stored.card.sourceEvidenceIds })).length, 0);
+
+});

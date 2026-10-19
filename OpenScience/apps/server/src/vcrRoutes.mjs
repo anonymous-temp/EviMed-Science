@@ -602,6 +602,25 @@ export function createVcrRoutes(dependencies) {
       if (parts.length === 1 && method === "GET") {
         return reply(await service.precedents(user, Object.fromEntries([...url.searchParams].slice(0, 20))));
       }
+      if (parts.length === 2 && parts[1] === "search" && method === "GET") {
+        const q = String(url.searchParams.get("q") ?? "").trim();
+        if (!q || q.length > 200) throw new HttpError(400, "vcr_payload_invalid", "Search requires 1–200 characters.");
+        return reply(await service.searchReferenceTrials(user, { q }));
+      }
+      if (parts.length === 2 && ["record", "apply"].includes(parts[1]) && (method === "GET" || method === "POST")) {
+        const input = method === "POST" ? await bodyOf(req, maxJsonBytes, ["studyId", "registry", "registryId"]) : Object.fromEntries(url.searchParams);
+        if (!["clinicaltrials.gov", "chictr", "ctis"].includes(String(input.registry)) || typeof input.registryId !== "string"
+          || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$/.test(input.registryId)) {
+          throw new HttpError(400, "vcr_payload_invalid", "A supported registry and registration number are required.");
+        }
+        if (parts[1] === "record" && method === "GET") return reply(await service.readReferenceTrial(user, input));
+        if (parts[1] === "apply" && method === "POST") {
+          if (typeof input.studyId !== "string" || !ID.test(input.studyId)) throw new HttpError(400, "vcr_payload_invalid", "studyId is an id.");
+          await authorize(input.studyId, "write");
+          return reply(await audited("vcr.reference.apply", () => ({ code: input.registryId }), { studyId: input.studyId },
+            () => service.applyReferenceTrial(user, input)), 201);
+        }
+      }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
     // The packs the account can use, and its library of population definitions: the account's, so no study is named.
@@ -1234,6 +1253,16 @@ export function createVcrRoutes(dependencies) {
         const job = await hooks.jobs.get(study.id, parts[3]);
         if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
         return reply(job);
+      }
+      if (parts.length === 5 && parts[4] === "configuration" && method === "GET") {
+        const { study } = await authorize(id, "run");
+        // Historical scenarios may describe patient-level selections; a general
+        // study reader must not acquire them through configuration reuse.
+        await requireAbility(study, "read_patient_level");
+        if (!hooks.jobs?.configuration) throw UNAVAILABLE();
+        const configuration = await hooks.jobs.configuration(study.id, parts[3]);
+        if (!configuration) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
+        return reply(configuration);
       }
       if (parts.length === 5 && parts[4] === "cancel" && method === "POST") {
         await bodyOf(req, maxJsonBytes, []);

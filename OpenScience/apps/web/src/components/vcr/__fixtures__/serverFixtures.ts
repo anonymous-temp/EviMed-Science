@@ -58,6 +58,8 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
       if (path === "/vcr/studies") return fixture("ev201/home.json");
       if (path === "/vcr/models") return fixture("ev201/models.json");
       if (path === "/vcr/precedents") return fixture("ev201/precedents.json");
+      if (path === "/vcr/precedents/search") return { status: "ok", candidates: [], registries: [] };
+      if (path === "/vcr/precedents/record") return { status: "unavailable", available: false, reason: "not_configured" };
       const study = /^\/vcr\/studies\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?$/.exec(path);
       if (study) {
         const [, id, section, item] = study;

@@ -800,7 +800,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.models (
   name           text NOT NULL,
   version        text NOT NULL,
   tier           text NOT NULL CHECK (tier IN ${inList(VCR_MODEL_TIERS)}),
-  risk           text NOT NULL DEFAULT 'none' CHECK (risk IN ${inList(VCR_MODEL_RISKS)}),
+  risk           text CHECK (risk IN ${inList(VCR_MODEL_RISKS)}),
   endpoint_type  text CHECK (endpoint_type IS NULL OR endpoint_type IN ${inList(VCR_ENDPOINT_TYPES)}),
   card           jsonb NOT NULL DEFAULT '{}'::jsonb,
   applicability  jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -809,6 +809,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.models (
   retired_at     timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- An omitted assessment is unknown, distinct from the explicit reference-simulation risk.
+ALTER TABLE evimed_vcr.models ALTER COLUMN risk DROP NOT NULL;
+ALTER TABLE evimed_vcr.models ALTER COLUMN risk DROP DEFAULT;
 
 -- One model per owner, name and version; the platform's own rows (user_id NULL)
 -- are their own scope. The table used to say UNIQUE (name, version), which made

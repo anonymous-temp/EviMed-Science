@@ -1238,6 +1238,12 @@ export function presentModelCard(model, usedBy) {
   return {
     id: String(model.id),
     name: text(card.title) ?? String(model.name),
+    revisionCard: card,
+    revisionApplicability: applicability,
+    sourceRefs: list(applicability.sources).map(String),
+    endpointType: text(model.endpointType),
+    sourceRegistryId: text(card.sourceRegistryId),
+    sourceStatus: text(object(card.sourceImport).status),
     family: text(card.type) ? (MODEL_TYPE_LABELS[String(card.type)] ?? String(card.type)) : null,
     version: text(model.version),
     tier,

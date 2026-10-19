@@ -220,7 +220,7 @@ test("the model library answers from the seeded catalogue, and a study may take 
   assert.ok(library.models.some((model) => model.name === "连续终点纵向轨迹参考仿真器" && model.tier === "scenario"), "the trajectory model is in the library");
   const reference = library.models.find((model) => model.name === "事件时间终点参考仿真器");
   assert.deepEqual(reference.missingEvidence, []);
-  assert.equal(reference.twinLabel, "基线条件化预测", "the label a model has earned, never 数字孪生 by default");
+  assert.equal(reference.twinLabel, "情景仿真", "the label a model has earned, never 数字孪生 by default");
 
   const adopted = await service.adoptModel({ id: study.userId }, {
     studyId: study.id, name: "ev201-control-weibull", version: "1.0.0",
@@ -231,7 +231,11 @@ test("the model library answers from the seeded catalogue, and a study may take 
   const after = await service.modelLibrary({ id: study.userId });
   const fitted = after.models.find((model) => model.version === "1.0.0" && model.tier === "literature");
   assert.equal(fitted.useCeiling, "design_support", "a literature model carries design support and no more");
-  assert.match(String(fitted.scope), /KEYNOTE-010、OAK/, "its range is written from the trials it was fitted on");
+  assert.equal(fitted.scope, null, "naming a source does not establish a population");
+  assert.equal(fitted.risk, "unassessed");
+  assert.equal(fitted.endpoint, null);
+  assert.match(fitted.sources, /KEYNOTE-010、OAK/);
+  assert.equal((await store.one("SELECT risk FROM evimed_vcr.models WHERE id = $1", [adopted.id])).risk, null);
 });
 
 test("deleting a study hides it from 虚拟临床研究 and keeps what it recorded", options, async () => {

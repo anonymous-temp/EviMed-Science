@@ -1,0 +1,105 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { VCR_SCENARIO_SCHEMAS, validateScenario } from '@evimed/domain';
+import { methodKind, methodTask, schemaDefault, VcrMethodRunner } from './VcrMethodRunner';
+const api = vi.hoisted(() => ({ queueVcrJob: vi.fn(), getVcrHome: vi.fn(), getVcrJob: vi.fn(), cancelVcrJob: vi.fn(), getVcrMethodHistory: vi.fn(), getVcrMethodConfiguration: vi.fn() }));
+vi.mock('@/lib/vcrClient', async (load) => ({ ...await load<object>(), ...api }));
+const draw = (method = { id: 'evalue', name: 'E-value', method: 'comparator.evalue' }) => render(<MemoryRouter><VcrMethodRunner method={method} onClose={vi.fn()} /></MemoryRouter>);
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.getVcrMethodHistory.mockResolvedValue({ jobs: [] });
+  api.getVcrHome.mockResolvedValue({ studies: [{ id: 'study_1', name: 'Existing study' }] });
+  api.queueVcrJob.mockResolvedValue({ id: 'job_1', kind: 'evalue', label: '敏感性分析', state: 'succeeded', seed: 42 });
+});
+describe('method configuration', () => {
+  it('uses the actual domain method mapping and leaves unsupported methods unsupported', async () => {
+    expect(methodKind('comparator.evalue')).toBe('evalue');
+    expect(methodKind('model_comparator')).toBeNull();
+    expect(methodTask('design.analytic')).toBe('设计试验');
+    draw({ id: 'model_comparator', name: 'Model comparator', method: 'model_comparator' });
+    expect(screen.getByText('此方法暂不支持直接运行。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存配置并运行' })).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getVcrHome).toHaveBeenCalled());
+  });
+  it('never treats an empty required numeric field as zero', () => {
+    const schema = VCR_SCENARIO_SCHEMAS['comparator.evalue'];
+    const initial = schemaDefault(schema as never);
+    expect(validateScenario('comparator.evalue', initial).length).toBeGreaterThan(0);
+  });
+  it('queues only the chosen study with typed scenario, seed and snapshot references and reuses its frozen configuration', async () => {
+    draw();
+    await screen.findByRole('option', { name: 'Existing study' });
+    fireEvent.change(screen.getByLabelText('用于现有研究'), { target: { value: 'study_1' } });
+    fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+    fireEvent.change(screen.getByLabelText('研究数据快照引用'), { target: { value: 'snapshot_saved' } });
+    fireEvent.change(screen.getByLabelText('随机种子'), { target: { value: '123' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并运行' }));
+    await waitFor(() => expect(api.queueVcrJob).toHaveBeenCalledWith('study_1', expect.objectContaining({ kind: 'evalue', seed: 123, inputs: [{ kind: 'snapshot', id: 'snapshot_saved' }] })));
+    const sent = api.queueVcrJob.mock.calls[0][1];
+    expect(validateScenario('comparator.evalue', sent.scenario)).toEqual([]);
+    expect(await screen.findByText(/运行完成/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('随机种子'), { target: { value: '456' } });
+    fireEvent.click(screen.getByRole('button', { name: '复用本次配置' }));
+    expect(screen.getByLabelText('随机种子')).toHaveValue(123);
+    expect(screen.getByRole('link', { name: '查看研究结果' })).toHaveAttribute('href', '/app/virtual-research/study_1/comparator');
+  });
+  it('allows multiple matrix rows when max constrains each correlation cell', async () => {
+    draw({ id: 'population', name: 'Population', method: 'population.scenario' });
+    await screen.findByRole('option', { name: 'Existing study' });
+    fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加相关矩阵' }));
+    const matrix = screen.getByRole('group', { name: '相关矩阵' });
+    const addRow = () => within(matrix).getAllByRole('button', { name: '添加一项' }).at(-1)!;
+    fireEvent.click(addRow());
+    expect(addRow()).not.toBeDisabled();
+    fireEvent.click(addRow());
+    expect(within(matrix).getByRole('group', { name: '相关矩阵 2' })).toBeInTheDocument();
+  });
+  it('restores persisted configuration after reopening with its seed, replicates and references', async () => {
+    api.getVcrMethodHistory.mockResolvedValue({ jobs: [{ id: 'old_job', kind: 'evalue', label: 'Previous run', state: 'succeeded' }, { id: 'other_job', kind: 'design_analytic', label: 'Other method', state: 'succeeded' }] });
+    api.getVcrMethodConfiguration.mockResolvedValue({ kind: 'evalue', method: 'comparator.evalue', methodVersion: '1.0.0', scenarioHash: 'saved-fingerprint', scenario: { riskRatio: 2 }, seed: 987, replicates: 1234, inputRefs: [{ kind: 'snapshot', id: 'snapshot_preserved' }], unavailableInputs: 0 });
+    draw();
+    await screen.findByRole('option', { name: 'Existing study' });
+    fireEvent.change(screen.getByLabelText('用于现有研究'), { target: { value: 'study_1' } });
+    fireEvent.click(screen.getByText('复用历史配置'));
+    fireEvent.click(await screen.findByRole('button', { name: '复用此配置' }));
+    await waitFor(() => expect(screen.getByLabelText('随机种子')).toHaveValue(987));
+    expect(api.getVcrMethodConfiguration).toHaveBeenCalledWith('study_1', 'old_job');
+    expect(screen.getByLabelText('重复计算次数')).toHaveValue(1234);
+    expect(screen.getByLabelText('研究数据快照引用')).toHaveValue('snapshot_preserved');
+    expect(screen.queryByText('Other method')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并运行' }));
+    await waitFor(() => expect(api.queueVcrJob).toHaveBeenCalledWith('study_1', expect.objectContaining({ scenario: { riskRatio: 2 }, seed: 987, replicates: 1234, inputs: [{ kind: 'snapshot', id: 'snapshot_preserved' }] })));
+  });
+  it('refuses reuse when derived data references cannot be reconstructed', async () => {
+    api.getVcrMethodHistory.mockResolvedValue({ jobs: [{ id: 'old_job', kind: 'evalue', state: 'failed' }] });
+    api.getVcrMethodConfiguration.mockResolvedValue({ kind: 'evalue', method: 'comparator.evalue', scenario: { riskRatio: 2 }, seed: 987, inputRefs: [], unavailableInputs: 1 });
+    draw();
+    await screen.findByRole('option', { name: 'Existing study' });
+    fireEvent.change(screen.getByLabelText('用于现有研究'), { target: { value: 'study_1' } });
+    fireEvent.click(screen.getByText('复用历史配置'));
+    fireEvent.click(await screen.findByRole('button', { name: '复用此配置' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('此配置依赖的部分数据无法直接复用');
+    expect(screen.getByLabelText('随机种子')).toHaveValue(42);
+    expect(api.queueVcrJob).not.toHaveBeenCalled();
+  });
+  it('shows submission failure without inventing a successful result', async () => {
+    api.queueVcrJob.mockRejectedValue(new Error('refused'));
+    draw();
+    await screen.findByRole('option', { name: 'Existing study' });
+    fireEvent.change(screen.getByLabelText('用于现有研究'), { target: { value: 'study_1' } });
+    fireEvent.click(screen.getByRole('button', { name: '载入示例 1（需按研究修改）' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并运行' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText(/运行完成/)).not.toBeInTheDocument();
+  });
+});
+
+it('keeps matching and curve reconstruction in their source-authorized study workflows', async () => {
+  expect(methodKind('matching.evaluate')).toBeNull();
+  expect(methodKind('evidence.reconstruct_km')).toBeNull();
+  draw({ id: 'matching', name: 'Matching', method: 'matching.evaluate' });
+  expect(screen.queryByRole('button', { name: '保存配置并运行' })).toBeNull();
+  expect(await screen.findByRole('link', { name: 'Existing study' })).toHaveAttribute('href', '/app/virtual-research/study_1/matching');
+});

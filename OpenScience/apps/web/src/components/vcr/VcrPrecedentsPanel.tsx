@@ -12,13 +12,14 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { useVcrToolbar } from "./studyFrameContext";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
+import { VcrReferenceSearch } from "./VcrReferenceSearch";
 import { numberText } from "./vcrText";
 
 /** What a registry's enrolment figure is: what happened, or what a sponsor hoped for. */
 const ENROLMENT_KIND: Readonly<Record<string, string>> = Object.freeze({ actual: "实际", anticipated: "预计", estimated: "预计" });
 
 /**
- * 试验先例: what comparable trials actually planned and what they actually
+ * 参考试验: what comparable trials actually planned and what they actually
  * enrolled.
  *
  * Planned and actual are two columns and never one. A registry's estimated
@@ -42,9 +43,9 @@ export function VcrPrecedentsPanel() {
   useVcrToolbar(off || unavailable
     ? null
     : {
-      label: "试验先例的检索",
+      label: "参考试验的检索",
       search: {
-        label: "搜索先例",
+        label: "搜索登记试验",
         value: query,
         onChange: (next) => {
           setQuery(next);
@@ -59,20 +60,22 @@ export function VcrPrecedentsPanel() {
   if (state.kind === "ready" && !state.data.available) {
     return (
       <div data-vcr-precedents-unavailable="">
-        <EmptyState icon={Library} title={state.data.message ?? "试验先例库在本部署尚未接入。"} />
+        <EmptyState icon={Library} title={state.data.message ?? "参考试验库在本部署尚未接入。"} />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {asked && <VcrReferenceSearch query={asked} onApplied={reload} />}
+      {!asked && <Button variant="text" onClick={() => { setQuery("diabetes"); setAsked("diabetes"); }}>检索示例：diabetes</Button>}
       {state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
           : state.data.precedents.length === 0
             ? (
               <EmptyState
                 icon={Library}
-                title={asked ? "没有找到先例" : "先例库里还没有先例"}
+                title={asked ? "没有找到已保存的参考试验" : "尚未保存参考试验"}
                 action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
               />
             )
@@ -157,7 +160,7 @@ export function VcrPrecedentTable({ rows, withUse = false }: {
   return (
     <>
       <DataTable
-        label="试验先例"
+        label="参考试验"
         minWidth="min-w-[48rem]"
         columns={columns}
         rows={rows}
