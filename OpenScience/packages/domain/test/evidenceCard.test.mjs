@@ -4,6 +4,8 @@ import test from "node:test";
 
 import {
   EVIDENCE_CARD_ERROR_CODES,
+  EVIDENCE_CLAIMS_MAX_CHARS,
+  EVIDENCE_CLAIM_LIMIT,
   EVIDENCE_ORIGINALITY,
   EVIDENCE_PRIMARY_ORIGINALITY,
   EVIDENCE_RANKING_INPUTS,
@@ -231,6 +233,17 @@ test("claims keep the run's three types, refer to the card's sources by index an
   assert.throws(bad({ claim: "" }), refusedWith("evidence_invalid"));
   assert.throws(bad({ valueSource: "invented" }), refusedWith("evidence_invalid"));
   assert.throws(() => evidenceCardClaims([claims[0], claims[0]], sources.length), /repeated claimId/);
+  // A refusal names what it refused: the claim and its field, or the bound the whole list crossed (2026-10-19: four programme cards
+  // were refused as "claims." and nothing else).
+  assert.throws(bad({ supportQuote: "" }), /Invalid evidence content: claims\[0\]\.supportQuote\./);
+  assert.throws(() => evidenceCardClaims("CLM-001", 3), /claims is not a list/);
+  const many = Array.from({ length: EVIDENCE_CLAIM_LIMIT + 1 }, (_, index) => ({ ...claims[0], claimId: `CLM-${index}` }));
+  assert.throws(() => evidenceCardClaims(many, sources.length), (error) => error instanceof EvidenceCardError && error.code === "evidence_invalid"
+    && error.message === `Invalid evidence content: claims has ${EVIDENCE_CLAIM_LIMIT + 1} entries, more than the ${EVIDENCE_CLAIM_LIMIT} a card carries.`);
+  assert.equal(evidenceCardClaims(many.slice(0, EVIDENCE_CLAIM_LIMIT), sources.length).length, EVIDENCE_CLAIM_LIMIT);
+  const heavy = Array.from({ length: 40 }, (_, index) => ({ ...claims[0], claimId: `CLM-${index}`, claim: "x".repeat(1500), supportQuote: "y".repeat(2000) }));
+  assert.ok(JSON.stringify(heavy).length > EVIDENCE_CLAIMS_MAX_CHARS);
+  assert.throws(() => evidenceCardClaims(heavy, sources.length), new RegExp(`claims take \\d+ characters, more than the ${EVIDENCE_CLAIMS_MAX_CHARS} a card carries`));
   // A synthesis needs two distinct sources and a confidence label.
   const synthesis = /** @type {any} */ (claims[3]);
   assert.throws(() => evidenceCardClaims([{ ...synthesis, supportingSources: [synthesis.supportingSources[0]] }], 3), refusedWith("evidence_invalid"));

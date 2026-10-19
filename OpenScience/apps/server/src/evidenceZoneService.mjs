@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import {
+  EVIDENCE_BODY_MAX_CHARS,
   EVIDENCE_PLATFORM_LINEAGE_KEYS,
+  EVIDENCE_SOURCE_LIMIT,
   EVIDENCE_WRITE_ORIGINS,
   EVIDENCE_ZONE_KINDS,
   EVIDENCE_ZONE_VISIBILITY,
@@ -40,14 +42,20 @@ const error = (
 ) => new HttpError(status, `evidence_${code}`, message);
 const missing = () =>
   error(404, "not_found", "No such visible evidence content.");
-/** @param {unknown} value @param {number} max @param {boolean} [required] */
-function text(value, max, required = false) {
+/**
+ * A text field within its bound. `name` is said in the refusal, with the length against the bound, so a writer reads which
+ * field it sent too much of instead of "a field".
+ * @param {unknown} value @param {number} max @param {boolean} [required] @param {string} [name]
+ */
+function text(value, max, required = false, name = "") {
   if (
     typeof value !== "string" ||
     value.length > max ||
     (required && !value.trim())
-  )
-    throw error(400, "invalid", "Invalid evidence field.");
+  ) {
+    const what = typeof value !== "string" ? "is not text" : value.length > max ? `has ${value.length} characters, more than ${max}` : "is empty";
+    throw error(400, "invalid", name ? `Invalid evidence field: ${name} ${what}.` : "Invalid evidence field.");
+  }
   return value.trim();
 }
 /** @param {unknown} value */
@@ -166,8 +174,8 @@ function keepQuotedPassages(list, claims) {
 }
 /** @param {any} value */
 function sources(value) {
-  if (!Array.isArray(value) || value.length > 50)
-    throw error(400, "invalid", "Invalid source list.");
+  if (!Array.isArray(value) || value.length > EVIDENCE_SOURCE_LIMIT)
+    throw error(400, "invalid", Array.isArray(value) ? `Invalid source list: ${value.length} sources, more than the ${EVIDENCE_SOURCE_LIMIT} a card cites.` : "Invalid source list.");
   return value.map((source) => {
     fields(source, ["title", "url", "excerpt", "sha256", "checkedAt", "coverage", "documentText", "fetchedSha256", "publicationStatus"]);
     const publicationStatus = evidencePublicationStatus(source.publicationStatus);
@@ -818,9 +826,10 @@ export class EvidenceZoneService {
                 key === "title"
                   ? 300
                   : key === "body" || key === "background"
-                    ? 50000
+                    ? EVIDENCE_BODY_MAX_CHARS
                     : 12000,
                 key === "title",
+                key,
               );
       if (!value.title) throw error(400, "invalid", "A title is required.");
       value.state = body.state ?? existing?.state ?? "draft";

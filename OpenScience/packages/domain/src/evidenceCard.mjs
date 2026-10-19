@@ -946,6 +946,12 @@ export function evidenceOriginalityBasisIssues({ originality, claims, zoneKind =
 
 /** The most claims one card carries. */
 export const EVIDENCE_CLAIM_LIMIT = 60
+/** The most characters a card's claims take together, as JSON. */
+export const EVIDENCE_CLAIMS_MAX_CHARS = 120000
+/** The most sources one card cites (the zone service refuses a longer list). */
+export const EVIDENCE_SOURCE_LIMIT = 50
+/** The most characters of a card's body (the zone service refuses a longer one). */
+export const EVIDENCE_BODY_MAX_CHARS = 50000
 const CLAIM_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/
 const CLAIM_KEYS = ['claimId', 'claimType', 'claim', 'applicability', 'uncertainty', 'valueSource', 'sourceIndexes', 'supportQuote',
   'supportingSources', 'confidence', 'derivedFrom', 'method', 'assumptions', 'sensitivity', 'calculation']
@@ -970,7 +976,12 @@ const CLAIM_KEYS = ['claimId', 'claimType', 'claim', 'applicability', 'uncertain
  */
 export function evidenceCardClaims(value, sourceCount) {
   if (value == null) return []
-  if (!Array.isArray(value) || value.length > EVIDENCE_CLAIM_LIMIT || JSON.stringify(value).length > 120000) throw invalid('claims')
+  // Each refusal of the list as a whole says which bound it crossed, so a writer that sent too much reads why (2026-10-19: four
+  // programme cards of 64-78 claims were refused as "claims." and nothing else).
+  if (!Array.isArray(value)) throw invalid('claims is not a list')
+  if (value.length > EVIDENCE_CLAIM_LIMIT) throw invalid(`claims has ${value.length} entries, more than the ${EVIDENCE_CLAIM_LIMIT} a card carries`)
+  const size = JSON.stringify(value).length
+  if (size > EVIDENCE_CLAIMS_MAX_CHARS) throw invalid(`claims take ${size} characters, more than the ${EVIDENCE_CLAIMS_MAX_CHARS} a card carries`)
   /** @type {any[]} */
   const claims = value.map((raw, position) => {
     const where = `claims[${position}]`
