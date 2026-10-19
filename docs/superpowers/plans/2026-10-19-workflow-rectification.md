@@ -10,7 +10,7 @@
 
 **Tech stack:** React/TypeScript, existing design-token primitives, Node control plane, PostgreSQL, DSH, OpenViking and the existing R/Python VCR engine.
 
-**Implementation checkpoint (2026-10-19):** Product changes through `d8d4c435e` are committed and independently reviewed. Checked items below mean local implementation plus focused checks, not deployment. Integrated CI, the complete browser walk, release artifacts and live acceptance remain open in section 9. Literature intake maps preserved source numbers into the existing reference simulators; an external fitted model without a supported execution contract remains an incomplete registration.
+**Implementation checkpoint (2026-10-19):** Product changes and evidence through `44b919079` are committed and independently reviewed. Checked items below mean local implementation plus focused checks, not deployment. The complete local browser walk and its focused corrections are recorded; exact-revision Linux CI, release artifacts and live acceptance remain open in section 9. Literature intake maps preserved source numbers into the existing reference simulators; an external fitted model without a supported execution contract remains an incomplete registration.
 
 ## Reconciliation and preserved scope
 
@@ -122,7 +122,7 @@ Verify frontend form/error states, API validation and scope, source-bound parame
 
 ## 9. Review, host reclamation and release
 
-- [ ] Review each slice against this coverage matrix, then run independent TypeScript/JavaScript, Python, database and security reviews as applicable.
+- [x] Review each slice against this coverage matrix, then run independent TypeScript/JavaScript, Python, database and security reviews as applicable.
 - [ ] Run focused meaningful checks first, then required full CI/audits/types/build and real browser flows; do not replace behavioral assertions with permissive snapshots.
 - [ ] Inventory Tencent disk/images/containers/build contexts; remove only exact superseded EviMed artifacts/caches/temp files after confirming no active references or original data. Keep other products and credentials intact.
 - [ ] Build via the current isolated release workflow; verify source/config/image identity and reuse unchanged engines only with source-closure proof.
@@ -131,3 +131,12 @@ Verify frontend form/error states, API validation and scope, source-bound parame
 - [ ] Persist observations/screenshots, update PROGRESS and this checklist, merge/push the reviewed code and synchronize the primary checkout while retaining its untracked owner files.
 
 Completion requires the implemented behavior to work on the deployed revision. Tests, a staged image, a generated report and a completed rollout are separately recorded facts.
+
+## Verification boundaries recorded before release
+
+- Complete web suite: 389 files / 4,701 tests passed; the later method-label change passed all 802 relevant VCR/copy/layout checks and actual browser spot checks. Method field labels now follow method, distribution and complete field path; Gamma/Beta shape parameters are not test significance levels.
+- The rich synthetic fixture walk covered 127 views with no functional or axe failures. Its obsolete memory-list probe was corrected without a waiver; the official four-view memory/reader recheck passed, and four real-browser reader contexts checked direct links, reload, original-source navigation and retained nonzero scroll. Synthetic fixture results do not certify native DSH or deployed computation.
+- Local plugin suite: 1,300 passed / 8 external probes skipped. Real configured OpenViking browse/read/grep plus cross-user/project, invalid-token and traversal checks passed; the temporary namespace was removed. Curated 38 and Office 4 bounded deterministic tasks passed locally; these are not image/native-dispatch certifications.
+- The existing global live-tool/connector/skill audit remains a separate legacy evidence boundary. Old registry/source identities cannot be relabeled current. The nine-workflow remediation does not claim all 57 tools, 128 connector queries or 44 native/delegated tasks were newly certified. No audit gate or historical receipt was loosened to hide this.
+- Local Mac server tests include Linux `/proc`, Bash and case-sensitive-filesystem assumptions; short canonical temp paths fixed socket-path issues, but remaining host-specific results must be judged by clean Linux CI. Owner untracked historical peer-review outputs were left untouched; committed-source capability checks ran in an isolated archive rather than publishing those private runs.
+- Existing full-release CI exports twelve built images and omits the knowledge plugin. The new independent plugin workflow produces its thirteenth, separately qualified artifact with exact source, base, config, layer and platform identities. Deployment needs both artifacts.
