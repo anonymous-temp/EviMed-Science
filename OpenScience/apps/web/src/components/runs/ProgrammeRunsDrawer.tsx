@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router";
+import { safeWorkspacePath } from "@/lib/claimCitations";
 import { ChevronLeft } from "lucide-react";
 import { sourceCitationProse } from "@evimed/domain";
-import { getWebConversationHistory, webErrorMessage, type PreservedConversationHistory } from "@/lib/apiClient";
+import { getWebConversationHistory, listWebAgentRuns, webErrorMessage, type PreservedConversationHistory } from "@/lib/apiClient";
 import type { ProgrammeRun } from "@/lib/programmeRuns";
 import { withoutPlatformText } from "@/lib/platformText";
 import { LoadError } from "@/components/cards/LoadError";
@@ -107,21 +109,50 @@ const recordLink = (href: string | undefined, children: ReactNode): ReactNode =>
 /** What one run said and wrote, as the platform kept it: read-only, with no way into the conversation it was made in. */
 function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; projectId: string; onBack: () => void }) {
   const [history, setHistory] = useState<PreservedConversationHistory | "error" | null>(null);
+  const [files, setFiles] = useState<Array<{ runId: string; path: string }> | "error" | null>(null);
+  const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
     setHistory(null);
+    setFiles(null);
+    void listWebAgentRuns({ projectId }).then((runs) => {
+      if (!live) return;
+      const seen = new Set<string>();
+      setFiles(runs.filter((candidate) => candidate.sessionId === run.sessionId).flatMap((candidate) => {
+        const paths = [...(candidate.artifacts ?? []), ...(candidate.unverifiedArtifacts ?? []), ...(candidate.outputFiles ?? []), ...(candidate.presentedFiles ?? [])];
+        return paths.flatMap((path) => {
+          const safe = safeWorkspacePath(path);
+          const key = `${candidate.id}:${safe}`;
+          if (!safe || seen.has(key)) return [];
+          seen.add(key);
+          return [{ runId: candidate.id, path: safe }];
+        });
+      }));
+    }, () => { if (live) setFiles("error"); });
     void getWebConversationHistory(run.sessionId, projectId).then(
       (value) => { if (live) setHistory(value); },
       () => { if (live) setHistory("error"); },
     );
     return () => { live = false; };
-  }, [run.sessionId, projectId]);
+  }, [run.sessionId, projectId, round]);
   return (
     <div data-programme-run-record="" className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <Button variant="text" size="sm" onClick={onBack} className="pl-0"><ChevronLeft size={16} aria-hidden="true" />全部运行</Button>
         <span className="text-caption tabular-nums text-text-3">{metaOf(run)}</span>
       </div>
+      {files === "error" ? <LoadError message="结果文件暂时读不到。" onRetry={() => setRound((value) => value + 1)} />
+        : files && files.length > 0 ? (
+          <List label="结果文件" divided>
+            {files.map((file) => (
+              <li key={`${file.runId}:${file.path}`}>
+                <Link className="block py-2 text-ui text-link hover:underline" to={`/app/runs/${encodeURIComponent(file.runId)}/files/${file.path.split("/").map(encodeURIComponent).join("/")}`}>
+                  {file.path.split("/").at(-1)}
+                </Link>
+              </li>
+            ))}
+          </List>
+        ) : null}
       {history === null ? <RunsSkeleton />
         : history === "error" ? <p className="py-6 text-ui text-text-3">这次运行的记录暂时读不到。</p>
           : history.messages.length === 0 ? <p className="py-6 text-ui text-text-3">这次运行还没有留下文字记录。</p>

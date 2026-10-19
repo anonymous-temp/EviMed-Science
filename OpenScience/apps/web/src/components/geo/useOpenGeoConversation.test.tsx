@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; name: string }>,
   listWebProjects: vi.fn(),
   fetchWebMe: vi.fn(),
+  listGeoProjects: vi.fn(),
+  getGeoProject: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
@@ -20,6 +22,8 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   listWebProjects: mocks.listWebProjects,
   fetchWebMe: mocks.fetchWebMe,
 }));
+
+vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), listGeoProjects: mocks.listGeoProjects, getGeoProject: mocks.getGeoProject }));
 
 vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
 
@@ -51,6 +55,8 @@ const probe = () => JSON.parse(screen.getByTestId("probe").textContent!) as { pa
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.listGeoProjects.mockResolvedValue([{ id: "geo_new", projectId: "p-new" }]);
+  mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: null });
   window.sessionStorage.clear();
   // The remembered project is the next test's current one otherwise, and a switch to it would not be a switch.
   window.localStorage.clear();
@@ -71,7 +77,7 @@ describe("opening a GEO project's conversation", () => {
     mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
     renderOpener({ sessionId: "ses_new", draft: "品牌提及率：18%" });
     await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toBe("/app/chat"));
+    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_new"));
     expect(probe().intent).toMatchObject({ kind: "create", projectId: "p-new", sessionId: "ses_new", draft: "品牌提及率：18%" });
     expect(useProjectStore.getState().currentId).toBe("p-new");
     expect(getWebProjectId()).toBe("p-new");
@@ -85,7 +91,7 @@ describe("opening a GEO project's conversation", () => {
     mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
     renderOpener({ sessionId: null });
     await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toBe("/app/chat"));
+    await waitFor(() => expect(probe().path).toMatch(/^\/app\/geo\/geo_new\/chat\/[^/]+$/));
     const intent = probe().intent!;
     expect(intent).toMatchObject({ kind: "create", projectId: "p-new" });
     expect(intent.draft).toBeUndefined();
@@ -118,4 +124,29 @@ describe("opening a GEO project's conversation", () => {
     expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]);
     expect(probe().path).toBe("/app/geo");
   });
+  it("abandons a pending GEO lookup when a later project switch wins", async () => {
+    let resolveProject!: (value: { id: string; projectId: string; sessionId: null }) => void;
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "GEO" }, { id: "p-later", name: "Later" }];
+    mocks.getGeoProject.mockReturnValue(new Promise((resolve) => { resolveProject = resolve; }));
+    renderOpener({ sessionId: "ses_new" });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(mocks.getGeoProject).toHaveBeenCalled());
+    await act(async () => { await useProjectStore.getState().select("p-later"); });
+    await act(async () => { resolveProject({ id: "geo_new", projectId: "p-new", sessionId: null }); });
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    expect(useProjectStore.getState().currentId).toBe("p-later");
+    expect(probe().path).toBe("/app/geo");
+    expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it("refuses a GEO response for a different control-plane project", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "GEO" }];
+    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-other", sessionId: null });
+    renderOpener({ sessionId: "ses_new" });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    expect(mocks.fetchWebMe).not.toHaveBeenCalled();
+    expect(probe().path).toBe("/app/geo");
+  });
+
 });

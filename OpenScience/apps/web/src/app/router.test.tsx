@@ -179,6 +179,14 @@ describe("循证 GEO's addresses", () => {
     expect(chain("/app/geo/geo_1/evidence").params).toMatchObject({ tab: "evidence" });
   });
 
+  it("addresses a GEO conversation under the same authorized project layout", () => {
+    expect(chain("/app/geo/geo_1/chat/ses_1")).toMatchObject({
+      paths: ["/app", undefined, "geo/:geoId", "chat/:sessionId?"],
+      params: { geoId: "geo_1", sessionId: "ses_1" },
+    });
+    expect(chain("/app/geo/geo_1/chat").params.tab).toBeUndefined();
+  });
+
   it("opens one answer inside the project's layout, not as a tab called 「answers」", () => {
     expect(chain("/app/geo/geo_1/answers/snap_9")).toMatchObject({
       paths: ["/app", undefined, "geo/:geoId", "answers/:snapshotId"],

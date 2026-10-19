@@ -100,11 +100,8 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
-        // 「循证 GEO」: the projects, and one project as a layout — the header, the fixed band of steps and tabs, and below it the
-        // project's eight tabs (总览 when none is named) or one AI answer, which is read inside the band under 问题与回答. The tab
-        // routes have no element of their own: the layout draws the tab the address names in the body of the band, so a tab switch is
-        // never a chunk to wait for and never takes the band away. Like the frontier feed, each answers for itself when the module is
-        // off here.
+        // GEO conversations, results and preserved answers share one authorized project layout.
+        // The resident native frame is placed over its chat pane; result routes keep all existing views and anchors.
         { path: "geo", element: <GeoHomePage /> },
         {
           path: "geo/:geoId",
@@ -112,6 +109,7 @@ export const routes: RouteObject[] = [
           children: [
             { index: true, element: null },
             { path: "answers/:snapshotId", element: <GeoAnswerPage /> },
+            { path: "chat/:sessionId?", element: null },
             { path: ":tab", element: null },
           ],
         },

@@ -7,7 +7,7 @@ import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
 import { diagnosisFilled, diagnosisWith, monitoringFilled } from "@/components/geo/__fixtures__/geoTabs";
 import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
 import { GEO_TABS } from "@/components/geo/geoTabs";
-import { expectComposed } from "@/test/expectComposed";
+import { useProjectStore } from "@/lib/projects";
 import { GeoProjectLayout } from "./GeoProjectPage";
 
 const client = vi.hoisted(() => ({
@@ -85,6 +85,7 @@ function Routed() {
       <Route path="/app/geo/:geoId" element={<><GeoProjectLayout /><Landed /></>}>
         <Route index element={null} />
         <Route path="answers/:snapshotId" element={<div data-testid="answer-page">一条回答</div>} />
+        <Route path="chat/:sessionId?" element={null} />
         <Route path=":tab" element={null} />
       </Route>
       <Route path="/app/geo" element={<Landed />} />
@@ -104,6 +105,7 @@ const severeDiagnosis = diagnosisWith([
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useProjectStore.setState({ currentId: GEO_PROJECT.projectId });
   client.useGeoFeature.mockReturnValue("on");
   client.getGeoProject.mockResolvedValue(GEO_PROJECT);
   client.getGeoDiagnosis.mockResolvedValue(severeDiagnosis);
@@ -116,96 +118,61 @@ beforeEach(() => {
   client.deleteGeoProject.mockResolvedValue({});
 });
 
-/** The tab list of the band, by the open tab's name. */
-const tabsOf = () => within(screen.getByRole("tablist", { name: "项目视图" }));
+async function chooseResult(label: string) {
+  await userEvent.click(await screen.findByRole("button", { name: /^查看：/ }));
+  await userEvent.click(screen.getByRole("menuitemradio", { name: label }));
+}
+async function chooseStep(label: RegExp) {
+  await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
+  await userEvent.click(screen.getByRole("menuitemradio", { name: label }));
+}
 const band = () => document.querySelector("[data-page-chrome]") as HTMLElement;
-const railSteps = () => [...document.querySelectorAll("[data-step-rail] [data-rail-step]")].map((step) => step.getAttribute("data-rail-step"));
 
 describe("a GEO project's page", () => {
-  it("is one header line, then one band: the eight steps, eight tabs by question", async () => {
+  it("keeps one workflow menu and one result selector without duplicate navigation bars", async () => {
     renderProject();
     expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "周报" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "对话" })).toBeInTheDocument();
-    // The header's 「⋯」 is the header's 36 px icon button, not a row's 28.
-    expect(screen.getByRole("button", { name: "更多操作" })).toHaveClass("h-control", "w-9");
-
-    expect(tabsOf().getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"]);
-    expect(screen.getByRole("tab", { name: "总览" })).toHaveAttribute("aria-selected", "true");
-
-    expect(railSteps()).toEqual(["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]);
-    const states = [...document.querySelectorAll("[data-step-rail] [data-rail-step]")].map((step) => step.getAttribute("data-rail-state"));
-    expect(states).toEqual(["done", "done", "done", "done", "done", "active", "active", "active"]);
-    // The rail is the only progress there is: no second bar underneath it.
-    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^进度，已完成 5\/8 步/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /^查看：/ }));
+    for (const tab of GEO_TABS) expect(screen.getByRole("menuitemradio", { name: tab.label })).toBeInTheDocument();
   });
 
   // R19 (audit C A.1; the reverse of R11's "rail on 总览 only"): the band is the layout's, so it is the same on every tab — present,
   // fixed, eight steps, the rail before the tabs and the tabs before the body.
-  it("has the band on every tab, fixed at the top, with the same eight steps and the same rows", async () => {
+  it("keeps every result view reachable through one compact selector", async () => {
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const rows: number[] = [];
     for (const tab of GEO_TABS) {
-      await userEvent.click(tabsOf().getByRole("tab", { name: tab.label }));
-      await waitFor(() => expect(tabsOf().getByRole("tab", { name: tab.label })).toHaveAttribute("aria-selected", "true"));
-      expect(railSteps(), tab.label).toHaveLength(8);
-      expect(band(), tab.label).toHaveClass("sticky", "top-0");
-      // The rail, the tabs and the toolbar's row (drawn or reserved): the same three, in that order.
-      expect(band().children.length, tab.label).toBe(3);
-      const [rail, tabList, toolbar] = [...band().children];
-      expect(rail).toHaveAttribute("data-step-rail");
-      expect(tabList.querySelector("[role=tablist]") ?? tabList).toBeTruthy();
-      expect(toolbar).toBeTruthy();
-      rows.push(band().children.length);
-      const facts = expectComposed(document.body, { stepRail: true, tablists: 1 });
-      expect(facts.stepRails, tab.label).toHaveLength(1);
+      await chooseResult(tab.label);
+      expect(screen.getByRole("button", { name: `查看：${tab.label}` })).toBeInTheDocument();
+      expect(band()).toHaveClass("sticky", "top-0");
+      expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     }
-    expect(new Set(rows)).toEqual(new Set([3]));
   });
 
-  it("keeps the band on the answer page, with 问题与回答 selected", async () => {
+  it("keeps the answer inside its project with the questions result selected", async () => {
     renderProject("/app/geo/geo_masi/answers/snap_1");
     expect(await screen.findByTestId("answer-page")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "问题与回答" })).toHaveAttribute("aria-selected", "true");
-    expect(railSteps()).toHaveLength(8);
+    expect(screen.getByRole("button", { name: "查看：问题与回答" })).toBeInTheDocument();
     expect(band()).toHaveClass("sticky");
-    // The answer is in the band's body: the tab panel the open tab names.
-    expect(document.getElementById("geo-tab-panel")).toContainElement(screen.getByTestId("answer-page"));
-    expect(document.title).toBe("玛仕度肽注射液 · AI 回答监测 · EviMed");
   });
 
-  it("underlines the steps the open tab is made of, and moves the underline with the tab", async () => {
-    renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const current = () => [...document.querySelectorAll("[data-step-rail] [aria-current='step']")].map((node) => node.closest("[data-rail-step]")?.getAttribute("data-rail-step"));
-    // 总览 is the summary of all of them and belongs to none.
-    expect(current()).toEqual([]);
-    await userEvent.click(tabsOf().getByRole("tab", { name: "行动" }));
-    await waitFor(() => expect(current()).toEqual(["content", "distribution", "monitoring"]));
-    await userEvent.click(tabsOf().getByRole("tab", { name: "准确与安全" }));
-    await waitFor(() => expect(current()).toEqual(["diagnosis"]));
-    await userEvent.click(tabsOf().getByRole("tab", { name: "依据" }));
-    await waitFor(() => expect(current()).toEqual(["evidence"]));
+  it("keeps the selected workflow step and conversation in the result address", async () => {
+    renderProject("/app/geo/geo_masi/actions?session=ses_second&step=distribution");
+    await chooseResult("准确与安全");
+    expect(screen.getByTestId("landed")).toHaveTextContent("/accuracy?session=ses_second&step=distribution");
   });
 
-  it("takes a step to where its result is read: the tab, the view, the block", async () => {
+  it("takes workflow steps to their mapped result view and block", async () => {
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const rail = document.querySelector("[data-step-rail]") as HTMLElement;
-    const hrefOf = (step: string) => rail.querySelector(`[data-rail-step='${step}'] a`)?.getAttribute("href");
-    expect(hrefOf("evidence")).toBe("/app/geo/geo_masi/evidence");
-    expect(hrefOf("journey")).toBe("/app/geo/geo_masi/questions?view=journey");
-    expect(hrefOf("questions")).toBe("/app/geo/geo_masi/questions");
-    expect(hrefOf("diagnosis")).toBe("/app/geo/geo_masi/accuracy#geo-errors");
-    expect(hrefOf("sources")).toBe("/app/geo/geo_masi/sources");
-    expect(hrefOf("content")).toBe("/app/geo/geo_masi/actions");
-    expect(hrefOf("distribution")).toBe("/app/geo/geo_masi/actions#geo-delivery");
-    expect(hrefOf("monitoring")).toBe("/app/geo/geo_masi/visibility#geo-trend");
-    // A click goes there, and the tab that holds it opens.
-    await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
+    await chooseStep(/^诊断 ·/);
     expect(await screen.findByTestId("accuracy-tab")).toBeInTheDocument();
-    expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/accuracy#geo-errors");
+    expect(screen.getByTestId("landed")).toHaveTextContent("/accuracy?session=ses_geo_masi&step=diagnosis#geo-errors");
+    await chooseStep(/^旅程 ·/);
+    expect(screen.getByTestId("landed")).toHaveTextContent("/questions?view=journey&session=ses_geo_masi&step=journey");
   });
 
   // The live walk: `scrollIntoView` also scrolls the app shell's clipped root and carried the sidebar and the band off the screen.
@@ -223,24 +190,12 @@ describe("a GEO project's page", () => {
     }
   });
 
-  it("scrolls again when the same step is pressed again, and not when the query is only rewritten in place", async () => {
-    const block = Object.assign(document.createElement("div"), { id: "geo-errors" });
-    document.body.append(block);
-    try {
-      renderProject("/app/geo/geo_masi/accuracy#geo-errors");
-      await screen.findByTestId("accuracy-tab");
-      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1));
-      // A filter chip rewrites the query where it is: the reader stays where they scrolled to.
-      await userEvent.click(screen.getByRole("button", { name: "改写查询" }));
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(1);
-      // 「诊断」 again, from the same address, brings the block back.
-      const rail = document.querySelector("[data-step-rail]") as HTMLElement;
-      await userEvent.click(within(rail).getByRole("link", { name: /诊断/ }));
-      await waitFor(() => expect(scroll.scrollBlockToTop).toHaveBeenCalledTimes(2));
-    } finally {
-      block.remove();
-    }
+  it("does not scroll a block again when only filters are replaced", async () => {
+    renderProject("/app/geo/geo_masi/accuracy#geo-errors");
+    await screen.findByTestId("accuracy-tab");
+    scroll.scrollBlockToTop.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "改写查询" }));
+    expect(scroll.scrollBlockToTop).not.toHaveBeenCalled();
   });
 
   it("scrolls to nothing where the block is not on the tab, and leaves the tab at its top", async () => {
@@ -259,13 +214,13 @@ describe("a GEO project's page", () => {
     expect(body).not.toContainElement(group);
     // Before the body in the document, and the same one toolbar on the next tab.
     expect(group.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.click(tabsOf().getByRole("tab", { name: "方案" }));
+    await chooseResult("方案");
     expect(await screen.findByRole("group", { name: "plan 的筛选" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "sources 的筛选" })).not.toBeInTheDocument();
     expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
     // 总览 has no controls: the row is reserved and empty, so the band does not change height.
-    await userEvent.click(tabsOf().getByRole("tab", { name: "总览" }));
-    await waitFor(() => expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(0));
+    await chooseResult("总览");
+    await waitFor(() => expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1));
     expect(band().lastElementChild).toHaveClass("min-h-11");
   });
 
@@ -274,24 +229,24 @@ describe("a GEO project's page", () => {
     await screen.findByTestId("evidence-tab");
     const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
     // The chips of the marker's own filter are pressed-or-not buttons; the text button that continues the step is the one that is not.
-    const buttons = () => [...toolbar().querySelectorAll("button:not([aria-pressed])")].map((button) => button.textContent);
+    const buttons = () => [...toolbar().querySelectorAll("button:not([aria-pressed]):not([aria-haspopup])")].map((button) => button.textContent);
     await waitFor(() => expect(buttons()).toContain("让 AI 补充结论"));
     // It asks in the project's conversation, with the brief waiting unsent.
     await userEvent.click(within(toolbar()).getByRole("button", { name: "让 AI 补充结论" }));
-    expect(client.open).toHaveBeenCalledWith({ projectId: "p-masi", sessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
+    expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
 
-    await userEvent.click(tabsOf().getByRole("tab", { name: "信源" }));
+    await chooseResult("信源");
     await waitFor(() => expect(buttons()).toEqual(["选目标档"]));
     await userEvent.click(within(toolbar()).getByRole("button", { name: "选目标档" }));
     expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/plan#geo-targets");
 
     // 准确与安全 and 可见度 are measured by the schedule: no button.
-    await userEvent.click(tabsOf().getByRole("tab", { name: "准确与安全" }));
+    await chooseResult("准确与安全");
     await waitFor(() => expect(buttons()).toEqual([]));
-    await userEvent.click(tabsOf().getByRole("tab", { name: "可见度" }));
+    await chooseResult("可见度");
     await waitFor(() => expect(buttons()).toEqual([]));
 
-    await userEvent.click(tabsOf().getByRole("tab", { name: "行动" }));
+    await chooseResult("行动");
     await waitFor(() => expect(buttons()).toEqual(["让 AI 写下一批"]));
   });
 
@@ -305,13 +260,11 @@ describe("a GEO project's page", () => {
     expect(client.getGeoDistribution).toHaveBeenCalledWith("geo_masi");
   });
 
-  it("says what is going on and when it measures next, in the band's one sentence", async () => {
+  it("keeps truthful workflow statuses available in its progress menu", async () => {
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const rail = document.querySelector("[data-step-rail]") as HTMLElement;
-    // 内容 and 投放 are running; the next measurement is the monitoring read's.
-    await waitFor(() => expect(rail).toHaveTextContent(/正在写稿、投放 · 下次复测/));
-    expect(rail.textContent).not.toMatch(/%/);
+    await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
+    expect(screen.getByRole("menuitemradio", { name: /^内容 · 进行中/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: /^投放 · 进行中/ })).toBeInTheDocument();
   });
 
   it("opens the answer a 本周 line quotes, whichever tab the server files it under; a line that quotes none lands on its tab", async () => {
@@ -325,57 +278,36 @@ describe("a GEO project's page", () => {
 
   it("opens each tab with a heading of its own, so the outline never jumps from the title to a third-level block", async () => {
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const panel = document.getElementById("geo-tab-panel") as HTMLElement;
+    await screen.findByRole("heading", { level: 1 });
+    const panel = document.querySelector("[data-page-body]") as HTMLElement;
     const headings = [...panel.querySelectorAll("h2, h3")];
     expect(headings[0].tagName).toBe("H2");
     expect(headings[0]).toHaveTextContent("总览");
     expect(headings[0]).toHaveClass("sr-only");
-    await userEvent.click(tabsOf().getByRole("tab", { name: "信源" }));
+    await chooseResult("信源");
     await screen.findByTestId("sources-tab");
     expect(panel.querySelector("h2")).toHaveTextContent("信源");
   });
 
-  it("folds the rail to one chip on a phone, with the steps in its menu, and keeps it on every tab", async () => {
-    const real = window.matchMedia;
-    window.matchMedia = ((query: string) => ({
-      matches: query === "(max-width: 639px)", media: query, onchange: null, addListener: () => {}, removeListener: () => {},
-      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
-    try {
-      client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null, market: { configured: false } });
-      renderProject();
-      const rail = await waitFor(() => {
-        const found = document.querySelector("[data-step-rail]");
-        expect(found).toBeTruthy();
-        return found as HTMLElement;
-      });
-      expect(within(rail).getByRole("button", { name: /已完成 5\/8 步/ })).toBeInTheDocument();
-      await userEvent.click(tabsOf().getByRole("tab", { name: "方案" }));
-      await screen.findByTestId("plan-tab");
-      expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
-    } finally {
-      window.matchMedia = real;
-    }
+  it("keeps a conversation deep link inside the project shell and native pane", async () => {
+    renderProject("/app/geo/geo_masi/chat/ses_geo_masi?step=evidence");
+    expect(await screen.findByRole("heading", { name: "玛仕度肽注射液", level: 1 })).toBeInTheDocument();
+    expect(screen.getByLabelText("项目对话")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
-  it("marks the step that is waiting on the reader, and says what it waits for", async () => {
+  it("marks placing that waits on the reader in the workflow menu", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null });
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    const distribution = document.querySelector("[data-rail-step='distribution']") as HTMLElement;
-    expect(distribution).toHaveAttribute("data-rail-state", "waiting");
-    expect(distribution).toHaveTextContent("投放");
+    await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
+    expect(screen.getByRole("menuitemradio", { name: /^投放 · 等你/ })).toBeInTheDocument();
   });
 
-  it("without a media market, asks for no budget and says what placing waits for", async () => {
+  it("without a media market offers no budget action", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null, market: { configured: false } });
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    // The step is untouched — it waits for the market, which is a tooltip — and nothing owes a budget.
-    const distribution = document.querySelector("[data-rail-step='distribution']") as HTMLElement;
-    expect(distribution).toHaveAttribute("data-rail-state", "todo");
-    expect(screen.queryByText("待你确认预算")).not.toBeInTheDocument();
+    await screen.findByRole("heading", { level: 1 });
     expect(screen.queryByRole("button", { name: "设预算" })).not.toBeInTheDocument();
   });
 
@@ -435,18 +367,18 @@ describe("a GEO project's page", () => {
 
   it("switches tabs by address", async () => {
     renderProject();
-    await userEvent.click(await screen.findByRole("tab", { name: "准确与安全" }));
+    await chooseResult("准确与安全");
     await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/accuracy"));
     expect(await screen.findByTestId("accuracy-tab")).toHaveTextContent("geo_masi:玛仕度肽注射液");
-    await userEvent.click(screen.getByRole("tab", { name: "总览" }));
-    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/));
+    await chooseResult("总览");
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\?session=ses_geo_masi$/));
   });
 
   it("names the three measurement tabs 「AI 回答监测」 in the browser tab, and the others by the project", async () => {
     renderProject("/app/geo/geo_masi/accuracy");
     await screen.findByTestId("accuracy-tab");
     await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · AI 回答监测 · EviMed"));
-    await userEvent.click(screen.getByRole("tab", { name: "信源" }));
+    await chooseResult("信源");
     await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · EviMed"));
   });
 
@@ -454,8 +386,10 @@ describe("a GEO project's page", () => {
     // A step that ends begins: the page reads itself again while it is under way.
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, diagnosis: { status: "running", requested: true } }, overview: { ...GEO_PROJECT.overview, steps: { ...GEO_PROJECT.overview.steps, diagnosis: { status: "running", requested: true } } } });
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    expect(document.querySelector("[data-rail-step='diagnosis']")).toHaveAttribute("data-rail-state", "active");
+    await screen.findByRole("heading", { level: 1 });
+    await userEvent.click(screen.getByRole("button", { name: /^进度，已完成/ }));
+    expect(screen.getByRole("menuitemradio", { name: /^诊断 · 进行中/ })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     // The poll is a timer: the one read is all this test waits for.
     expect(client.getGeoProject).toHaveBeenCalledTimes(1);
   });
@@ -490,7 +424,7 @@ describe("a GEO project's page", () => {
     client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-masi", sessionId: "ses_geo_masi" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi" }));
     client.open.mockClear();
 
     await userEvent.click(screen.getByRole("button", { name: "周报" }));
@@ -517,7 +451,7 @@ describe("a GEO project's page", () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, sessionId: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-masi", sessionId: null }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: null }));
   });
 
   it("“⋯” holds the AI-run record: the steps the programme ran, read where the reader is — and the toast of a start leads to it", async () => {
@@ -613,8 +547,8 @@ describe("a GEO project's page", () => {
     client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] });
     client.getGeoMonitoring.mockResolvedValue({ series: [], arms: { pilot: [], control: [], netEffect: {} }, byEngine: [], cited: [], newErrors: [], next: null });
     renderProject();
-    await screen.findByRole("tablist", { name: "项目视图" });
-    expect([...document.querySelectorAll("[data-step-rail] [data-rail-state]")].map((step) => step.getAttribute("data-rail-state"))).toEqual(Array(8).fill("todo"));
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByRole("button", { name: /^进度，已完成 0\/8 步/ })).toBeInTheDocument();
     expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "品类问题可见率" })).toHaveTextContent("—");
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
@@ -633,7 +567,8 @@ describe("a GEO project's page", () => {
       <MemoryRouter initialEntries={["/app/geo/geo_masi/visibility"]}>
         <Routes>
           <Route path="/app/geo/:geoId" element={<><GeoProjectLayout /><Switch /></>}>
-            <Route path=":tab" element={null} />
+            <Route path="chat/:sessionId?" element={null} />
+        <Route path=":tab" element={null} />
           </Route>
         </Routes>
       </MemoryRouter>,

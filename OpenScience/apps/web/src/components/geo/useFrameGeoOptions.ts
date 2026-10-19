@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { listGeoProjects, patchGeoProject, type GeoProjectSummary } from "@/lib/geoClient";
+import { useProjectStore } from "@/lib/projects";
+import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
+import { rememberGeoProject } from "./useGeoProjectIds";
 import { toast } from "@/lib/toast";
 import type { FrameGeoOptions } from "./frameGeoOptions";
 import { GEO_CAPABILITY_IDS } from "./geoCapabilities";
@@ -53,6 +56,13 @@ export function useFrameGeoOptions({
 }) {
   const found = useRef<{ sessionId: string; project: GeoProjectSummary | null } | null>(null);
   const geo = Boolean(capabilityId && GEO_CAPABILITY_IDS.includes(capabilityId));
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (!enabled || !geo) return undefined;
+    const refresh = () => setRevision((value) => value + 1);
+    window.addEventListener(RUNS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(RUNS_CHANGED_EVENT, refresh);
+  }, [enabled, geo]);
 
   useEffect(() => {
     if (!enabled || !sessionId) return undefined;
@@ -62,6 +72,8 @@ export function useFrameGeoOptions({
       return undefined;
     }
     let live = true;
+    let discovery: ReturnType<typeof setTimeout> | undefined;
+    const controlName = useProjectStore.getState().projects.find((project) => project.id === projectId)?.name;
     void Promise.all([
       listGeoProjects()
         .then((projects) => projects.find((project) => project.projectId === projectId) ?? null)
@@ -72,13 +84,16 @@ export function useFrameGeoOptions({
     ])
       .then(([project, { frameGeoOptions }]) => {
         if (!live) return;
+        if (project) rememberGeoProject(project, controlName);
+        // A first GEO turn may create its project after the capability chip appears.
+        else discovery = setTimeout(() => setRevision((value) => value + 1), 10_000);
         found.current = { sessionId, project };
         post(frameGeoOptions(sessionId, project));
       })
       // The builders' chunk would not load: the chip draws nothing extra.
       .catch(() => {});
-    return () => { live = false; };
-  }, [enabled, geo, projectId, sessionId, post]);
+    return () => { live = false; clearTimeout(discovery); };
+  }, [enabled, geo, projectId, sessionId, post, revision]);
 
   return useCallback((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => {
     const current = found.current;

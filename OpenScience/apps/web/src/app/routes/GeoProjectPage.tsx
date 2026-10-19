@@ -17,6 +17,10 @@ import {
   type GeoStartAnswer,
   type GeoStepKey,
 } from "@/lib/geoClient";
+import { geoChatPath } from "@/lib/geoLocation";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { RAIL_STATE_WORDS } from "@/components/ui/ProgressRail";
+import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -47,7 +51,6 @@ import {
   GEO_TABS,
   geoDestinationPath,
   geoQuestionsView,
-  geoTabPath,
   resolveGeoTab,
   type GeoTabKey,
 } from "@/components/geo/geoTabs";
@@ -105,34 +108,10 @@ function stepsWorking(project: GeoProject): boolean {
 }
 
 /**
- * One GEO project, on the wide column a dashboard needs (fusion plan §4.8) — and **the layout** of all of its pages (R19, audit C
- * A.1): the 总览 and the other seven tabs are its children, and so is one answer. What stands above them is one fixed band, the same
- * on every one of them and the same height:
- *
- * ```
- * ‹                                                              [周报] [对话] [⋯]
- * 信尔美  第 3 周
- * ┌ band (sticky) ─────────────────────────────────────────────────────────────────────┐
- * │ ●证据 ●旅程 ●问题 ●诊断 ●信源 ●内容 ◎投放 ●监测        正在写稿 · 下次复测 周一 10月21日 │ the steps, the open tab's underlined
- * │ 总览  可见度  准确与安全  问题与回答  信源  行动  方案  依据                            │
- * │ [the tab's own filters]                                    [继续这一步的一个按钮]       │ drawn by `useGeoToolbar`
- * └────────────────────────────────────────────────────────────────────────────────────┘
- * ```
- *
- * Hidden knowledge:
- *  - **The band is the layout's and no tab's.** A tab never draws the rail, the tabs or a filter row: it calls `useGeoToolbar` and
- *    the layout draws them in the shell's slots, so a control cannot be placed under the content it controls or scroll away with it.
- *    A tab that has no controls leaves the row reserved: the tab row's top is the same on all eight tabs.
- *  - **The rail says which steps the open tab is made of** (`GEO_TAB_STEPS`) and a click goes to the step's home (`GEO_STEP_HOME`),
- *    scrolling to its block when the tab has one. The tabs are the reader's questions, the steps the platform's work, and the table
- *    between them is data (`geoTabs.ts`).
- *  - **Each tab ends its toolbar with at most one text button that continues its step** — and only the layout draws it, so it is
- *    there whether the tab has anything yet or not (the empty state is `StepPending`).
- *  - **The data is the project's.** The layout owns one cache (`GeoDataCache`): the diagnosis, the monitoring and the value analysis
- *    are read once and shared by the tabs that ask, and read again when a step of the programme changes state.
- *  - Every old address resolves (`resolveGeoTab`): a link to “诊断” lands on 准确与安全 and the browser's bar says so.
- *
- * There is one AI entry on the page — “对话” in the header — where there used to be one beside every number.
+ * One authorized project shell for results, preserved answers and native conversations.
+ * The compact workflow menu maps canonical steps to result destinations; one toolbar
+ * holds result navigation and the active result's controls. Data and member abilities
+ * remain shared, while SessionFrameHost places its resident conversation over the pane.
  */
 export function GeoProjectLayout() {
   const { geoId = "" } = useParams();
@@ -142,17 +121,20 @@ export function GeoProjectLayout() {
 }
 
 function GeoProjectView({ geoId }: { geoId: string }) {
-  const { tab: tabParam, snapshotId } = useParams();
+  const { tab: tabParam, snapshotId, sessionId: addressedSession } = useParams();
+  const location = useLocation();
+  const onChat = /\/chat(?:\/[^/]+)?\/?$/.test(location.pathname);
   const navigate = useNavigate();
   const feature = useGeoFeature();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
+  const [conversationError, setConversationError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const [data] = useState(() => new GeoDataCache());
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   /** The dialog the ⋯ menu — or a tab — opened: who else is in the project, who speaks for the product, its name, or the budget. */
   const [panel, setPanel] = useState<GeoPanel | null>(null);
   const [suggested, setSuggested] = useState<number | null>(null);
-  const resolved = resolveGeoTab(tabParam);
+  const resolved = resolveGeoTab(onChat ? new URLSearchParams(location.search).get("result") : tabParam);
   // An answer is read inside the band and keeps 问题与回答 selected: it is where the answer was asked.
   const tab: GeoTabKey = snapshotId ? "questions" : resolved.tab;
   const shown = useRef<string | null>(null);
@@ -160,17 +142,30 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   useEffect(() => {
     // An address that named a step is rewritten to where that step is read now, in place, so the reader leaves with a link that
     // will keep working.
-    if (!snapshotId && resolved.moved && geoId) {
+    if (!onChat && !snapshotId && resolved.moved && geoId) {
       navigate(geoDestinationPath(geoId, { tab: resolved.tab, ...(resolved.view ? { view: resolved.view } : {}) }), { replace: true });
     }
-  }, [snapshotId, resolved.moved, resolved.tab, resolved.view, geoId, navigate]);
+  }, [onChat, snapshotId, resolved.moved, resolved.tab, resolved.view, geoId, navigate]);
 
   useEffect(() => {
     if (feature === "loading" || feature === "off") return undefined;
     let live = true;
+    setConversationError(null);
     void getGeoProject(geoId).then(
-      (project) => {
+      async (project) => {
         if (!live) return;
+        try {
+          const store = useProjectStore.getState();
+          if (onChat && store.currentId !== project.projectId) {
+            if (!store.projects.some((item) => item.id === project.projectId)) await store.load();
+            if (!live) return;
+            await useProjectStore.getState().select(project.projectId);
+          }
+          if (!live) return;
+        } catch (error: unknown) {
+          if (!live) return;
+          setConversationError(webErrorMessage(error, { fallback: "对话暂时无法打开。" }));
+        }
         // A step that began or ended makes what the tabs have read stale; the cache re-reads what is on screen.
         const state = stepsState(project);
         if (shown.current !== null && shown.current !== state) data.invalidate();
@@ -186,7 +181,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
       },
     );
     return () => { live = false; };
-  }, [feature, geoId, reloads, data]);
+  }, [feature, geoId, reloads, data, onChat]);
 
   const reload = useCallback(() => setReloads((value) => value + 1), []);
 
@@ -232,7 +227,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 
   return (
     <GeoFrameContext.Provider value={api}>
-      <GeoBand api={api} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} />
+      <GeoBand api={api} onChat={onChat} addressedSession={addressedSession} conversationError={conversationError} toolbar={toolbar} panel={panel} suggested={suggested} onPanel={setPanel} />
     </GeoFrameContext.Provider>
   );
 }
@@ -240,12 +235,18 @@ function GeoProjectView({ geoId }: { geoId: string }) {
 /** The page: the header, the fixed band and the body that is the route's child. Below the cache's provider, so it reads through it. */
 function GeoBand({
   api,
+  onChat,
+  addressedSession,
+  conversationError,
   toolbar,
   panel,
   suggested,
   onPanel,
 }: {
   api: GeoFrameApi;
+  onChat: boolean;
+  addressedSession?: string;
+  conversationError: string | null;
   toolbar: ToolbarProps | null | undefined;
   panel: GeoPanel | null;
   suggested: number | null;
@@ -303,7 +304,16 @@ function GeoBand({
   const startWeekly = () => start("weekly", () => exportGeo(geoId, "weekly"),
     { started: "已开始生成周报。", queued: "周报排在前一项之后，做完会自动开始。" }, "周报无法导出，请稍后重试。");
   /** The person's own conversation in the project (the server's `sessionId`: never a step the programme ran); none yet opens a new one. */
-  const target = { projectId: project.projectId, sessionId: project.sessionId };
+  const params = new URLSearchParams(location.search);
+  const heldSession = addressedSession ?? params.get("session") ?? project.sessionId;
+  const target = { geoId, projectId: project.projectId, sessionId: heldSession };
+  useEffect(() => {
+    if (!onChat || addressedSession) return;
+    const intent = newRuntimeUiIntent(undefined, heldSession ?? undefined);
+    navigate(`${geoChatPath(geoId, intent.sessionId)}${location.search}`, {
+      replace: true, state: { ...location.state, runtimeUiIntent: intent },
+    });
+  }, [onChat, addressedSession, heldSession, geoId, location.search, location.state, navigate]);
   const openChat = () => {
     if (busy) return;
     setBusy("conversation");
@@ -348,7 +358,12 @@ function GeoBand({
 
   const week = weekOf(project.startedAt ?? project.createdAt ?? null);
   const now = bandNow(project, monitoring.state.kind === "ready" ? monitoring.state.data.next : null);
-  const steps = bandSteps(project, (step) => geoDestinationPath(geoId, GEO_STEP_HOME[step]));
+  const destination = (next: GeoTabKey, view?: string, step?: string, section?: string) => geoDestinationPath(geoId, { tab: next, view: view ?? (next === tab ? params.get("view") ?? undefined : undefined), section }, {
+    session: heldSession, step: step ?? params.get("step"),
+  });
+  const steps = bandSteps(project, (step) => destination(GEO_STEP_HOME[step].tab, GEO_STEP_HOME[step].view, step, GEO_STEP_HOME[step].section));
+  const selectedStep = params.get("step") ?? GEO_TAB_STEPS[tab][0] ?? null;
+  const complete = steps.filter((step) => step.state === "done").length;
 
   // The one text button that continues this tab's step. It is drawn here, so it is there whether the tab has anything yet or not.
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -365,24 +380,36 @@ function GeoBand({
             ? { label: "设预算", onClick: () => api.openPanel("budget") }
             : { label: "让 AI 写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") })
             : null;
-  const bandToolbar: ToolbarProps | null = toolbar || continues
-    ? {
-      ...(toolbar ?? {}),
-      actions: (
-        <>
-          {toolbar?.actions}
-          {continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}
-        </>
-      ),
-    }
-    : null;
+  const controls = onChat ? undefined : toolbar;
+  const bandToolbar: ToolbarProps = {
+    ...(controls ?? {}),
+    views: undefined,
+    summary: controls?.summary ?? now,
+    filters: [
+      { kind: "select", label: "查看", value: onChat ? "chat" : tab,
+        options: [{ value: "chat", label: "对话" }, ...GEO_TABS.map((item) => ({ value: item.key, label: item.label }))],
+        onChange: (next) => {
+          if (next === "chat") openChat();
+          else if (next) navigate(destination(next as GeoTabKey));
+        } },
+      ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label,
+        value: controls.views.value, options: controls.views.items.map((item) => ({ value: item.value, label: item.label })),
+        onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
+      ...(controls?.filters ?? []),
+    ],
+    actions: <>{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
+  };
 
   return (
     <PageShell<GeoTabKey>
       title={project.name}
+      scope={{ label: `进度，已完成 ${complete}/${steps.length} 步`, value: selectedStep,
+        groups: [{ choices: steps.map((step) => ({ id: step.id, label: `${step.label} · ${RAIL_STATE_WORDS[step.state]}` })) }],
+        onChange: (step) => { const choice = steps.find((item) => item.id === step); if (choice?.href) navigate(choice.href); } }}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
-      width="wide"
-      meta={<Tag>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
+      width={onChat ? "full" : "wide"}
+      contentClassName={onChat ? "flex min-h-96 flex-col" : undefined}
+      meta={<Tag title={now ?? undefined}>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
       actions={(
         <>
           <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
@@ -400,17 +427,11 @@ function GeoBand({
           </Menu>
         </>
       )}
-      steps={{ label: "进度", steps, activeSteps: GEO_TAB_STEPS[tab], trailing: now }}
-      tabs={{
-        label: "项目视图",
-        items: GEO_TABS.map((item) => ({ value: item.key, label: item.label })),
-        value: tab,
-        onChange: (next) => navigate(geoTabPath(geoId, next)),
-        panelId: "geo-tab-panel",
-      }}
       toolbar={bandToolbar}
     >
-      {snapshotId ? (
+      {onChat ? (
+        conversationError ? <LoadError message={conversationError} onRetry={reload} /> : addressedSession ? <GeoConversationPane projectId={project.projectId} sessionId={addressedSession} /> : <TabSkeleton rows={4} />
+      ) : snapshotId ? (
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
       ) : (

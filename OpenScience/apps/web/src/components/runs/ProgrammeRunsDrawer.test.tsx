@@ -6,10 +6,11 @@ import { WebApiError } from "@/lib/apiClient";
 import type { ProgrammeRun } from "@/lib/programmeRuns";
 import { ProgrammeRunsDrawer } from "./ProgrammeRunsDrawer";
 
-const api = vi.hoisted(() => ({ history: vi.fn() }));
+const api = vi.hoisted(() => ({ history: vi.fn(), runs: vi.fn() }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   getWebConversationHistory: api.history,
+  listWebAgentRuns: api.runs,
 }));
 
 const RUNS: ProgrammeRun[] = [
@@ -36,6 +37,8 @@ function draw(props: Partial<React.ComponentProps<typeof ProgrammeRunsDrawer>> =
 
 beforeEach(() => {
   api.history.mockReset();
+  api.runs.mockReset();
+  api.runs.mockResolvedValue([]);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -72,6 +75,21 @@ describe("AI 运行 — the record of what a module's programme did in the backg
     // And back to the list.
     await userEvent.click(within(record).getByRole("button", { name: /全部运行/ }));
     expect(await screen.findByRole("dialog", { name: "AI 运行" })).toBeInTheDocument();
+  });
+
+  it("opens real recorded outputs, including partial files, from the exact session and authorized project", async () => {
+    api.history.mockResolvedValue({ messages: [] });
+    api.runs.mockResolvedValue([
+      { id: "run_weekly", sessionId: "ses_weekly", artifacts: ["deliverables/report.md"], unverifiedArtifacts: ["deliverables/partial.docx"], outputFiles: ["deliverables/report.md", "../private.md"] },
+      { id: "run_other", sessionId: "ses_other", artifacts: ["deliverables/wrong.md"] },
+    ]);
+    draw();
+    await userEvent.click(await screen.findByRole("button", { name: "生成周报" }));
+    expect(await screen.findByRole("link", { name: "report.md" })).toHaveAttribute("href", "/app/runs/run_weekly/files/deliverables/report.md");
+    expect(screen.getByRole("link", { name: "partial.docx" })).toHaveAttribute("href", "/app/runs/run_weekly/files/deliverables/partial.docx");
+    expect(screen.queryByRole("link", { name: "wrong.md" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "private.md" })).toBeNull();
+    expect(api.runs).toHaveBeenCalledWith({ projectId: "p-masi" });
   });
 
   it("draws a path inside the run's workspace as its name, not as a link to a page that does not exist; an address on the web is a link that opens in a tab of its own", async () => {
