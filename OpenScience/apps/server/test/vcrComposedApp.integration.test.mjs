@@ -14,7 +14,7 @@
 // two things that leave the process are replaced — the run dispatch (a run
 // needs a kernel) and `fetch` (the engine is not started).
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +30,8 @@ import { VcrStore } from "../src/vcrStore.mjs";
 import { VCR_ROUTE_ABILITIES } from "../src/vcrRoutes.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { ProductJobs } from "../src/productJobs.mjs";
+import { sourceIdFor } from "../src/sourceService.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 // The browser's own body builders: what the page posts is proven against the real routes, not against a copy of their allow-lists.
 import { confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "../../web/src/lib/vcrIntakeBodies.ts";
@@ -910,4 +912,55 @@ test("a draft nobody spoke in is swept with its project an hour on, through the 
   assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
   assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
   assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
+});
+
+
+test("real source registration reaches the composed VCR parameter route without confusing source IDs with content hashes", options, async () => {
+  const study = await sharedStudy();
+  const text = "Synthetic source only. Control response was 40%; intervention response was 60%.";
+  const textSha256 = createHash("sha256").update(text).digest("hex");
+  const sources = context.app.sourceService;
+  const jobs = new ProductJobs(context.app.vcr.store.database);
+  const { source } = await sources.register(accounts.owner, { projectId: study.projectId,
+    connector: { type: "upload", id: "library" }, path: "knowledge-base/vcr-reference.txt", sha256: textSha256,
+    size: Buffer.byteLength(text), mimeType: "text/plain", mtime: "2026-10-19T00:00:00Z" });
+  assert.equal(source.id, sourceIdFor(study.projectId, textSha256), "use the real intake ID, not a route-shaped fixture");
+  assert.match(source.id, /^src_[a-f0-9]{32}$/);
+  const ingest = await jobs.claim(["ingest"], "vcr-composed-source", { leaseMs: 30000 });
+  assert.equal(ingest.payload.sourceId, source.id);
+  await sources.beginIngestion(accounts.owner, source.id, { generation: source.payload.generation, job: ingest });
+  await sources.freezeCapture(ingest, { text, summary: "Synthetic reference", extractor: { name: "fixture", version: "1", parser: "fallback" },
+    units: [{ id: "page1", unitType: "page", status: "extracted", itemIds: [] }] });
+  const route = `/api/vcr/studies/${study.id}/model-sources/${source.id}`;
+  const read = await call("owner", "GET", route);
+  assert.equal(read.status, 200, read.text);
+  const preview = read.body.data;
+  assert.equal(preview.sourceId, source.id);
+  assert.equal(preview.textSha256, textSha256, "the preserved content digest remains the full 64 hexadecimal characters");
+  assert.equal(preview.generation, source.payload.generation);
+  assert.deepEqual(preview.parameters.map((value) => [value.value, value.unit]), [[40, "%"], [60, "%"]]);
+  const sourceCard = { literatureSource: { sourceId: source.id, generation: preview.generation, textSha256: preview.textSha256 },
+    executionProfile: "patients.binary", parameterBindings: [
+      { field: "truth.controlRate", candidateId: preview.parameters[0].id },
+      { field: "truth.treatmentRate", candidateId: preview.parameters[1].id },
+    ] };
+  const adopted = await call("owner", "POST", "/api/vcr/models", { studyId: study.id, name: `source-bound-${suffix}`, version: "1", card: sourceCard });
+  assert.equal(adopted.status, 201, adopted.text);
+  const changedHash = await call("owner", "POST", "/api/vcr/models", { studyId: study.id, name: `changed-source-${suffix}`, version: "1",
+    card: { ...sourceCard, literatureSource: { ...sourceCard.literatureSource, textSha256: "f".repeat(64) } } });
+  assert.equal(changedHash.status, 409, changedHash.text);
+  assert.equal(changedHash.body.code, "source_changed");
+  assert.equal((await call("stranger", "GET", route)).status, 404);
+  const listed = await call("owner", "GET", "/api/vcr/studies");
+  let other = listed.body.data.studies.find((row) => row.id !== study.id && row.projectId !== study.projectId);
+  if (!other) {
+    const created = await call("owner", "POST", "/api/vcr/studies", { name: "Other source project", action: "patients" });
+    assert.equal(created.status, 201, created.text);
+    other = created.body.data;
+  }
+  assert.notEqual(other.projectId, study.projectId);
+  assert.equal((await call("owner", "GET", `/api/vcr/studies/${other.id}/model-sources/${source.id}`)).status, 404);
+  for (const invalid of [`src_${"a".repeat(31)}`, `src_${"a".repeat(33)}`, `src_${"a".repeat(64)}`, `src_${"A".repeat(32)}`]) {
+    assert.equal((await call("owner", "GET", `/api/vcr/studies/${study.id}/model-sources/${invalid}`)).status, 404, invalid);
+  }
 });

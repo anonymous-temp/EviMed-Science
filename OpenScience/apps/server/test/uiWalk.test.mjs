@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -614,7 +614,7 @@ function probe(kind, arg, search) {
     case "rowWidth": return wrong ? { widths: [96], min: 96 } : { widths: [300], min: 300 };
     case "capabilityCards": return wrong ? { hits: ["可运行"], wraps: 2 } : { hits: [], wraps: 0 };
     case "memoryTabs": {
-      const names = { project: "项目", methods: "做法", growth: "成长" };
+      const names = { self: "关于你", project: "项目", methods: "做法", growth: "成长" };
       const selected = wrong ? "关于你" : names[tab] || "项目";
       return { tabs: [["关于你", 0], ["项目", 2], ["做法", 3], ["成长", 0]].map(([name, count]) => ({ name, count, selected: name === selected })), headline: { memories: 5, practices: wrong ? 9 : 3 } };
     }
@@ -689,6 +689,8 @@ function context() {
     let routeSettled = false;
     let dialogOpen = false;
     const failed = [];
+    const consoles = [];
+    let loadAttempts = 0;
     const pageRoutes = [];
     let phone = false;
     // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
@@ -711,7 +713,7 @@ function context() {
     return {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       mouse: { move: async () => {} },
-      on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
+      on(event, handler) { if (event === "requestfailed") failed.push(handler); if (event === "console") consoles.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
       async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },
       async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
@@ -722,6 +724,7 @@ function context() {
         if (process.env.FAKE_NO_MATRIX && url.endsWith("clinical-evidence-matrix.json")) throw Error("no matrix");
         routeSettled = true;
       },
+      url: () => url,
       frames: () => [{
         url: () => "https://evimed.example.org/__evimed/f/x",
         evaluate: async (fn, arg) => {
@@ -732,6 +735,10 @@ function context() {
       getByRole: (role, { name }) => locator(role, name),
       async goto(target, options) {
         url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
+        if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
+          loadAttempts++;
+          for (const handler of consoles) handler({ type: () => "error", text: () => "Failed to load resource: net::ERR_NETWORK_CHANGED" });
+        }
         const start = new URL("/api/commands/start_runtime", target).href;
         // A page's own route answers before the context's: the walk's cleanup cover answers the start itself.
         const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
@@ -740,6 +747,10 @@ function context() {
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
+        if (typeof fn === "function" && fn.name === "routeLoadProbe") {
+          const bad = process.env.FAKE_ROUTE_LOAD && phone && url.endsWith("/std_a/comparator") && (process.env.FAKE_ROUTE_LOAD === "persistent" || loadAttempts < 2);
+          return { failed: Boolean(bad), message: bad ? "研究暂时无法读取。重试" : null };
+        }
         if (typeof fn === "function" && fn.name === "measureComposition") return compositionRead(target().pathname);
         // FAKE_SCROLL=stretch|tall|taller: a page two windows tall (photographed whole), nine, and fifty (photographed in slices, and cut off).
         if (typeof fn === "function" && fn.name === "scrollPage") {
@@ -1591,9 +1602,10 @@ test("a page probe is judged on what it exists to guard, and a probe that read n
     failures: ["capabilities@desktop: the tool cards still say 可运行, 已安装"], notices: ["capabilities@desktop: 1 card footer(s) take two lines"] });
 
   const tabs = (selected, counts) => ({ tabs: ["关于你", "项目", "做法", "地图"].map((name, index) => ({ name, count: counts[index], selected: name === selected })) });
-  assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("项目", [0, 5, 15, 0])).failures, []);
+  assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("项目", [0, 5, 15, 0])).failures, ["memory@desktop: the address names 关于你 and the page opens on 项目"]);
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [3, 5, 15, 0])).failures, []);
-  assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [0, 5, 15, 0])).failures, ["memory@desktop: the page opens on an empty 关于你 while 项目 holds 5 and 做法 15"]);
+  assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [0, 5, 15, 0])).failures, []);
+  assert.deepEqual(one("memory-landing", "desktop", "memoryTabs", tabs("关于你", [0, 5, 15, 0])).failures, ["memory-landing@desktop: the page opens on an empty 关于你 while 项目 holds 5 and 做法 15"]);
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [0, 0, 0, 0])).failures, []);
   assert.deepEqual(one("memory-project", "desktop", "memoryTabs", tabs("做法", [0, 5, 15, 0])).failures, ["memory-project@desktop: the address names 项目 and the page opens on 做法"]);
   assert.deepEqual(one("memory-methods", "desktop", "memoryTabs", tabs("做法", [0, 5, 15, 0])).failures, []);
@@ -1947,7 +1959,7 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok((await failures({ FAKE_STRUCTURE: "cutoff" })).failures.includes("vcr-overview@phone: 2 count label(s) of the study are cut off at 390 px"));
 
   assert.ok((await failures({ FAKE_PROBE: "followingEmpty" })).failures.includes("frontier-following@desktop: 「没有结果」 is on the page, and nothing was searched or filtered"));
-  assert.ok((await failures({ FAKE_PROBE: "memoryTabs" })).failures.includes("memory@desktop: the page opens on an empty 关于你 while 项目 holds 2 and 做法 3"));
+  assert.ok((await failures({ FAKE_PROBE: "memoryTabs" })).failures.some((entry) => entry.includes("the address names 项目 and the page opens on 关于你")));
   assert.ok((await failures({ FAKE_PROBE: "inboxSafety" })).failures.includes("inbox@desktop: the safety heading counts 2 unread and the bell 5"));
   assert.ok((await failures({ FAKE_PROBE: "connectorRows" })).failures.includes("account-connectors@desktop: Semantic Scholar needs no key and reads 未配置"));
   assert.ok((await failures({ FAKE_PROBE: "sharedMissing" })).failures.includes("memory-shared-missing@desktop: 重试 is offered for a share that does not exist"));
@@ -2286,7 +2298,7 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
     [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"]]);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
-  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-open"]);
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-landing", "memory-row-coverage", "memory-open"]);
   assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
 
   // The address that does not come back, a row that stays open after Back.
@@ -2632,4 +2644,71 @@ test("frontier readers are discovered only from the account's published items", 
   assert.equal(frontierItemRoute({ items: [{ id: "article/a" }] }), "/app/frontier/items/article%2Fa");
   assert.equal(frontierItemRoute({ items: [] }), null);
   assert.equal(frontierItemRoute(null), null);
+});
+
+
+test("explicit empty self remains self while a separate populated methods route supplies real row coverage", () => {
+  const tabs = [{ name: "关于你", count: 0, selected: true }, { name: "项目", count: 0, selected: false }, { name: "做法", count: 24, selected: false }];
+  assert.deepEqual(probeFindings("memory", "desktop", "memoryTabs", { tabs }).failures, []);
+  assert.deepEqual(memoryRowCoverage(tabs, "还没有关于你的记忆"), { explicitEmpty: "self", emptyTitle: "还没有关于你的记忆", rowTab: "methods", route: "/app/memory?tab=methods" });
+  assert.equal(memoryRowCoverage(tabs, "读取失败"), null);
+  assert.equal(memoryRowCoverage(tabs.map((t) => ({ ...t, count: 0 })), "还没有关于你的记忆"), null);
+  assert.equal(probeFindings("memory-landing", "desktop", "memoryTabs", { tabs }).failures.length, 1);
+});
+
+test("scheduled pending daily preserves today's truth and separately names a real published archive day", () => {
+  const archive = { publication: { day: "2026-10-20", state: "pending" }, schedule: { time: "07:30", timeZone: "Asia/Shanghai" }, dailies: [{ day: "2026-10-19", itemCount: 14, generatedAt: "2026-10-18T23:30:57.759Z" }] };
+  const title = "10月20日 周二的日报尚未发布，每天 07:30（北京时间）发布。";
+  assert.deepEqual(dailyRowCoverage(title, archive), { publicationDay: "2026-10-20", publicationState: "pending", schedule: archive.schedule, publishedDay: "2026-10-19", route: "/app/frontier?view=daily&day=2026-10-19" });
+  assert.throws(() => dailyRowCoverage(title, { ...archive, publication: { ...archive.publication, state: "failed" } }), /daily_pending_identity_missing/);
+  assert.throws(() => dailyRowCoverage("今日日报尚未发布", archive), /daily_pending_ui_mismatch/);
+  assert.throws(() => dailyRowCoverage(title, { ...archive, dailies: [] }), /daily_published_archive_missing/);
+  assert.throws(() => dailyRowCoverage(title, { ...archive, dailies: [{ ...archive.dailies[0], itemCount: 0 }] }), /daily_published_archive_missing/);
+});
+
+test("a rendered load error retries exactly once only for this view's observed network change", async () => {
+  const failed = { failed: true, message: "研究暂时无法读取。重试" }, ready = { failed: false, message: null };
+  let states, visits;
+  const page = { evaluate: async () => states.shift(), goto: async (url) => { visits.push(url); }, waitForFunction: async () => {}, waitForTimeout: async () => {} };
+  states = [failed, ready]; visits = [];
+  const recovered = await recoverWalkLoad(page, "https://example.org/app/virtual-research/a/comparator", ["net::ERR_NETWORK_CHANGED"], []);
+  assert.equal(recovered.loaded, true); assert.equal(recovered.retried, true); assert.deepEqual(recovered.initial, failed); assert.equal(visits.length, 1);
+  states = [failed, failed]; visits = [];
+  const persistent = await recoverWalkLoad(page, "https://example.org/app/vcr", ["net::ERR_NETWORK_CHANGED"], []);
+  assert.equal(persistent.loaded, false); assert.equal(visits.length, 1);
+  for (const [errors, http, prior] of [[[], [], false], [["net::ERR_FAILED"], [], false], [["net::ERR_NETWORK_CHANGED"], ["500 /api/vcr/studies/a"], false], [["net::ERR_NETWORK_CHANGED"], [], true]]) {
+    states = [failed]; visits = [];
+    const result = await recoverWalkLoad(page, "https://example.org/app/vcr", errors, http, prior);
+    assert.equal(result.loaded, false); assert.equal(result.retried, false); assert.equal(visits.length, 0);
+  }
+});
+
+
+test("captured comparator network failure is retried once and an unrecovered view never invents chrome or family defects", async () => {
+  const recovered = await walk({ OPEN_SCIENCE_WALK_ONLY: "vcr-comparator", FAKE_ROUTE_LOAD: "recover" });
+  const view = "vcr-comparator@2@phone";
+  assert.equal(recovered.report.pages[view].routeLoad.retried, true);
+  assert.equal(recovered.report.pages[view].routeLoad.loaded, true);
+  assert.equal(recovered.report.pages[view].routeLoad.initial.message, "研究暂时无法读取。重试");
+  const failed = await walk({ OPEN_SCIENCE_WALK_ONLY: "vcr-comparator", FAKE_ROUTE_LOAD: "persistent" });
+  assert.equal(failed.report.pages[view].routeLoad.loaded, false);
+  assert.equal(failed.report.pages[view].composition, undefined);
+  assert.ok(failed.report.failures.some((entry) => entry.includes(view + ": route load failed")));
+  assert.ok(!failed.report.findings.some((entry) => entry.view === view && ["chrome", "step-rail", "module-steps"].includes(entry.rule)));
+});
+
+
+test("rendered load probe distinguishes the actual retry alert from honest empty or hidden states", () => {
+  const alert = node("div", { attrs: { role: "alert" } }, [node("span", { text: "研究暂时无法读取。" }), node("button", { text: "重试" })]);
+  const result = inPage(page(alert), routeLoadProbe);
+  assert.equal(result.failed, true); assert.match(result.message, /研究暂时无法读取/);
+  assert.equal(inPage(page(node("div", { attrs: { "data-empty": "" }, text: "日报尚未发布" })), routeLoadProbe).failed, false);
+  assert.equal(inPage(page(node("div", { attrs: { role: "alert" }, style: { display: "none" } }, [node("button", { text: "重试" })])), routeLoadProbe).failed, false);
+});
+
+test("a retry navigation failure retains the original error and remains a failed read", async () => {
+  const initial = { failed: true, message: "研究暂时无法读取。重试" };
+  const page = { evaluate: async () => initial, goto: async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); } };
+  const result = await recoverWalkLoad(page, "https://example.org/app/vcr", ["net::ERR_NETWORK_CHANGED"], []);
+  assert.equal(result.loaded, false); assert.equal(result.retried, true); assert.deepEqual(result.initial, initial); assert.match(result.retryError, /ERR_CONNECTION_REFUSED/);
 });

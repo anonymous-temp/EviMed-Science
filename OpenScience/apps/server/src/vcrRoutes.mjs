@@ -1203,7 +1203,7 @@ export function createVcrRoutes(dependencies) {
 
     if (section === "model-sources" && parts.length === 4 && method === "GET") {
       await authorize(id, "read");
-      if (!/^src_[a-f0-9]{64}$/.test(parts[3])) throw new HttpError(404, "source_not_found", "Source not found.");
+      if (!/^src_[a-f0-9]{32}$/.test(parts[3])) throw new HttpError(404, "source_not_found", "Source not found.");
       return reply(await service.modelSourcePreview(user, id, parts[3]));
     }
 

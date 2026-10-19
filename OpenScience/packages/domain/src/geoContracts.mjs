@@ -292,7 +292,7 @@ export function geoInsightFindings(input) {
     const artifactPath = text(claim.artifactPath)
     const sourceRef = text(claim.sourceRef)
     if (!text(claim.statement) || !quote || (!artifactPath && !sourceRef)) { unbound.push(label); return }
-    if (!CLAIM_SOURCE_KINDS.includes(text(claim.sourceKind)) || !isRecord(claim.elements) || !text(claim.verifiedAt) || typeof claim.inLabel !== 'boolean') {
+    if (!CLAIM_SOURCE_KINDS.includes(text(claim.sourceKind)) || !isRecord(claim.elements) || !text(claim.verifiedAt) || !Object.hasOwn(claim, 'inLabel') || (claim.inLabel !== null && typeof claim.inLabel !== 'boolean')) {
       incomplete.push(label)
     }
     const source = artifactPath ? artifacts.get(artifactPath) : undefined
@@ -307,7 +307,7 @@ export function geoInsightFindings(input) {
     issues.push(finding('geo_claim_unverified', `${files.claims}: ${unchecked.length} claim quote(s) could not be checked because no preserved source text reached the check (${named(unchecked)}). Cite the .evimed-sources/ path a reading tool preserved (a label read through drug_label_search is preserved), or preserve the source first.`, { path: files.claims, check: 'geo-claim-source' }))
   }
   if (incomplete.length) {
-    issues.push(finding('geo_claim_library_notice', `${files.claims}: ${incomplete.length} claim(s) miss a source kind, the evidence elements, the verification date or whether it is in the label (${named(incomplete)}).`, { path: files.claims, check: 'geo-claim-schema' }))
+    issues.push(finding('geo_claim_library_notice', `${files.claims}: ${incomplete.length} claim(s) miss a source kind, the evidence elements, the verification date or an explicit label status (true, false, or null when unverified) (${named(incomplete)}).`, { path: files.claims, check: 'geo-claim-schema' }))
   }
 
   const map = readIndex(input, files.questions, (value) => (Array.isArray(value.groups) ? null : 'has no groups[] list: the question map is that list.'), issues)

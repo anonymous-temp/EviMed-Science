@@ -176,6 +176,20 @@ describe("证据", () => {
     expect(screen.getByText("说明书内")).toBeInTheDocument();
   });
 
+  it("does not call unknown label scope off-label, while preserving explicit label decisions", async () => {
+    client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims: [
+      { ...evidenceFilled.claims[0], id: "unknown-label", statement: "Approved label not checked.", sourceKind: "other", inLabel: null },
+      { ...evidenceFilled.claims[0], id: "known-in-label", statement: "Confirmed in the checked label.", inLabel: true },
+      { ...evidenceFilled.claims[0], id: "known-off-label", statement: "Explicit use outside the checked label.", sourceKind: "regulator", quote: "This study use is not approved in this jurisdiction.", inLabel: false },
+    ] });
+    renderTab(<EvidenceTab {...props()} />);
+    const unknown = await screen.findByRole("button", { name: /Approved label not checked/ });
+    expect(within(unknown.closest("li")!).queryByText("说明书内")).not.toBeInTheDocument();
+    expect(within(unknown.closest("li")!).queryByText("说明书外")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /Confirmed in the checked label/ }).closest("li")!).getByText("说明书内")).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /Explicit use outside the checked label/ }).closest("li")!).getByText("说明书外")).toBeInTheDocument();
+  });
+
   it("a claim past its validity is marked 待重核, not shown as current", async () => {
     const [first, ...rest] = evidenceFilled.claims;
     client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims: [{ ...first, validUntil: "2026-01-01T00:00:00.000Z", status: "expired" }, ...rest] });

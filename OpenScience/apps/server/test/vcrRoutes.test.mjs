@@ -1258,7 +1258,7 @@ test("historical method configuration requires run and patient-data access and c
 test("paper-source previews use study read authorization before resolving a source identity", async () => {
   const { routes, service, as, calls } = fixture();
   service.modelSourcePreview = async (_user, studyId, sourceId) => { calls.push(["source.preview", studyId, sourceId]); return { parameters: [] }; };
-  const sourceId = `src_${"a".repeat(64)}`;
+  const sourceId = `src_${"a".repeat(32)}`;
   as("stranger");
   await assert.rejects(routes(request("GET", `/api/vcr/studies/std_1/model-sources/${sourceId}`), response()), { status: 404 });
   assert.ok(!calls.some(row => row[0] === "source.preview"));
