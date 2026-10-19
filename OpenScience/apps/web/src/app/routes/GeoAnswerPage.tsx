@@ -505,7 +505,7 @@ function Mentioned({ brands }: { brands: NonNullable<GeoAnswer["facts"]>["brands
       {named.map((brand, index) => (
         <Fragment key={`${brand.name}-${index}`}>
           {index > 0 && "、"}
-          <span className={brand.ours ? "font-semibold text-text-2" : undefined}>{brand.name}</span>
+          <span className={brand.ours ? "text-text" : undefined}>{brand.name}</span>
           {(brand.position || brand.inRecommendation) && `（${[brand.position ? `第 ${brand.position} 个` : null, brand.inRecommendation ? "推荐" : null].filter(Boolean).join("，")}）`}
         </Fragment>
       ))}
@@ -524,7 +524,7 @@ function Citations({ citations }: { citations: GeoAnswer["snapshot"]["citations"
   if (list.length === 0) return null;
   return (
     <section aria-label="引用的信源" className="mt-10">
-      <h2 className="mb-3 text-ui font-semibold text-text">引用的信源</h2>
+      <h2 className="mb-3 text-section font-semibold text-text">引用的信源</h2>
       <ol className="flex flex-col divide-y divide-faint">
         {list.map((citation, index) => {
           const href = safeWebHref(citation.url);

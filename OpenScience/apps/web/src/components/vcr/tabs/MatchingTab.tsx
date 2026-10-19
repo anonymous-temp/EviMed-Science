@@ -451,7 +451,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
             <Card
               header={(
                 <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="text-ui font-semibold text-text">待复核排除</h2>
+                  <h2 className="text-section font-semibold text-text">待复核排除</h2>
                   <span className="text-caption tabular-nums text-text-3">{`${numberText(data.pendingReview.count, 0)} 人`}</span>
                 </div>
               )}
