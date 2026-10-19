@@ -509,7 +509,7 @@ export function VcrTradeoffScatter({
           const mcse = mcseText(measure?.mcse);
           return (
             <span key={design.id} data-vcr-scatter-label={design.code} className="flex flex-wrap items-baseline gap-x-2">
-              <span className={cn("font-semibold", design.dominated ? "text-text-3" : design.chosen ? "text-accent" : "text-text-2")}>{design.code}</span>
+              <span className={design.dominated ? "text-text-3" : design.chosen ? "text-accent" : "text-text-2"}>{design.code}</span>
               <span className={cn(design.dominated ? "text-text-3" : design.chosen ? "text-accent" : "text-text-2")}>{design.name || design.code}</span>
               {design.dominated
                 ? <span>{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>

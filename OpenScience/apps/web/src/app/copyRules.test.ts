@@ -184,7 +184,9 @@ describe("copy follows the writing rules", () => {
     expect(STATUS_ELLIPSIS.test("正在重试…")).toBe(true);
     expect(STATUS_ELLIPSIS.test("正在读取 报告.pdf…")).toBe(true);
     expect(IDLE_STATUS.test("加载中")).toBe(true);
-    expect(WEIGHT_500_OR_700.test("text-ui font-medium text-text")).toBe(true);
+    // The banned class is assembled here so that the lint rule that bans it does not forbid the proof that the test sees it.
+    expect(WEIGHT_500_OR_700.test(`text-ui font-${"medium"} text-text`)).toBe(true);
+    expect(WEIGHT_500_OR_700.test(`text-ui font-${"bold"}`)).toBe(true);
     expect(WEIGHT_500_OR_700.test("text-ui font-semibold")).toBe(false);
     expect(ORPHAN_PROGRESS.test("正在进行，做完会显示在这里。")).toBe(true);
     expect(ORPHAN_PROGRESS.test("正在进行：证据")).toBe(true);

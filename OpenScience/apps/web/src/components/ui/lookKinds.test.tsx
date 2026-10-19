@@ -24,6 +24,8 @@ import { Tabs } from "./Tabs";
  */
 
 const classesOf = (element: Element) => new Set((element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean));
+/** The weight classes a set carries: a text that has the weight of the sentence it stands in has none. */
+const weights = (classes: Set<string>) => [...classes].filter((name) => /^font-(normal|medium|semibold|bold)$/.test(name));
 
 const STEPS: StepRailStep[] = [
   { id: "a", label: "证据", state: "done", href: "/a" },
@@ -46,13 +48,11 @@ describe("the module band", () => {
       // otherwise, and a 2 px rule at the foot of a rounded box curves up at its ends), a 2 px rule at the foot.
       expect(step).toContain("text-ui");
       expect(step).toContain("font-normal");
-      expect(step).not.toContain("font-medium");
       expect(step).toContain("border-b-2");
       expect([...step].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     }
     expect(tab).toContain("text-ui");
     expect(tab).toContain("font-normal");
-    expect(tab).not.toContain("font-medium");
     expect([...tab].filter((name) => /^rounded/.test(name))).toEqual(["rounded-none"]);
     const open = steps[1];
     expect(open).toContain("border-accent");
@@ -84,7 +84,7 @@ describe("a toolbar row", () => {
       expect(search).toContain(shared);
     }
     for (const set of [chip, search]) {
-      expect(set).not.toContain("font-medium");
+      expect(weights(set)).toEqual([]);
       expect(set).not.toContain("border");
     }
   });
@@ -106,7 +106,7 @@ describe("a figure that opens what it counts", () => {
         <Headline parts={[{ n: 2, onOpen: () => {} }, " 个问题"]} />
       </MemoryRouter>,
     );
-    for (const name of ["6", "2"]) expect(classesOf(screen.getByRole("button", { name }))).not.toContain("font-medium");
+    for (const name of ["6", "2"]) expect(weights(classesOf(screen.getByRole("button", { name })))).toEqual([]);
   });
 
   it("is told apart in a held-up note by the ground, not by amber text", () => {
@@ -133,10 +133,7 @@ describe("the small type pairs", () => {
   it("sets every button in the weight of the chip beside it", () => {
     render(<><Button size="sm" variant="text">继续</Button><Button>新建项目</Button><FilterChip>最近活动</FilterChip></>);
     expect(classesOf(screen.getByRole("button", { name: "继续" }))).toContain("font-normal");
-    expect(classesOf(screen.getByRole("button", { name: "继续" }))).not.toContain("font-medium");
     expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).toContain("font-normal");
-    expect(classesOf(screen.getByRole("button", { name: "新建项目" }))).not.toContain("font-medium");
-    expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-medium");
     expect(classesOf(screen.getByRole("button", { name: "最近活动" }))).not.toContain("font-semibold");
   });
 

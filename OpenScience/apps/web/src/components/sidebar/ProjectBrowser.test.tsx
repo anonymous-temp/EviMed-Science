@@ -310,7 +310,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     mocks.runs.default = [run({ id: "a", question: "打开着的任务" }), run({ id: "b", question: "另一个任务" })];
     renderBrowser("/app/chat/ses-a");
     const open = await screen.findByRole("link", { name: /打开着的任务/ });
-    expect(open).toHaveClass("h-control", "rounded", "bg-accent-soft", "font-medium");
+    expect(open).toHaveClass("h-control", "rounded", "bg-accent-soft", "font-semibold");
     expect(screen.getByRole("link", { name: /另一个任务/ })).toHaveClass("h-control", "hover:bg-surface-2");
     expect(screen.getByRole("button", { name: /^我的研究/ })).toHaveClass("h-control", "rounded");
     for (const name of ["在“我的研究”新建对话", "重命名项目“我的研究”"]) {

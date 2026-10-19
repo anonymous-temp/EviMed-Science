@@ -5,7 +5,6 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
 import { DataTable, InlineBar, type DataColumn } from "@/components/ui/DataTable";
@@ -311,7 +310,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       // Five scenarios do not fit in half a page: the grid takes the row, and its last column is not cut.
       ...(data.grid.columns.length > 3 ? { span: 2 as const } : {}),
       node: (
-        <Card title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
+        <ChartCard title={data.grid.measure ? `设计网格：${data.grid.measure}` : "设计网格"}>
           {data.grid.xLabel && <p className="mb-2 text-caption text-text-3">{data.grid.xLabel}</p>}
           <HeatGrid
             label={data.grid.measure ?? "设计网格"}
@@ -319,12 +318,12 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             rows={data.grid.rows.map((row) => ({ key: row.key, header: row.header, cells: row.cells }))}
             legend={{ low: "低", high: "高" }}
           />
-        </Card>
+        </ChartCard>
       ),
     });
   }
   if (data.milestones.length > 0) {
-    cells.push({ key: "milestones", node: <Card title="里程碑"><VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} /></Card> });
+    cells.push({ key: "milestones", node: <ChartCard title="里程碑"><VcrMilestoneTimeline milestones={data.milestones} chosen={chosenCodes} /></ChartCard> });
   }
 
   const setup: Fact[] = data.ademp.map((line) => ({ label: line.label, value: line.text }));
