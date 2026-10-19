@@ -1835,7 +1835,21 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "opsOrder") {
     const text = words(main);
-    const tokens = [...new Set(text.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? [])].slice(0, 5);
+    // Only what a reader sees, and where it stands (R19.2): a token inside a collapsed list or a closed row is not on the
+    // page, and a finding that names the card it sits in can be fixed without walking the page again.
+    /** @type {Map<string, string>} */
+    const found = new Map();
+    for (const el of all("*")) {
+      const own = ownText(el);
+      if (!own || !visible(el)) continue;
+      for (const token of own.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? []) {
+        if (found.has(token)) continue;
+        const card = el.closest("section, article, [data-card]");
+        const heading = card ? card.querySelector("h1, h2, h3, h4, [role='heading']") : null;
+        found.set(token, heading ? words(heading).slice(0, 24) : "");
+      }
+    }
+    const tokens = [...found.entries()].slice(0, 5).map(([token, where]) => (where ? `${token} (in ${where})` : token));
     return { health: text.indexOf("运行状况"), config: text.indexOf("部署配置检查"), tokens };
   }
   if (kind === "notFound") {

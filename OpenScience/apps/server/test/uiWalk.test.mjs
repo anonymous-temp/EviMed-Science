@@ -1543,6 +1543,9 @@ test("the page probes read what a fix left behind: the empty 关注, the memory 
   });
   assert.equal(read([node("div", {}, [node("div", { text: "运行状况" }), node("div", { text: "部署配置检查" }), node("p", { text: "openlist_storage_missing" })])], "opsOrder").health, 0);
   assert.deepEqual(read([node("p", { text: "运行状况 部署配置检查 openlist_storage_missing geo_market_unconfigured" })], "opsOrder").tokens, ["openlist_storage_missing", "geo_market_unconfigured"]);
+  // Hidden text is not on the page, and a token says the card it stands in (R19.2: a token from a collapsed list was reported as visible).
+  assert.deepEqual(read([node("p", { text: "运行状况 部署配置检查" }), node("p", { text: "hidden_detail", style: { display: "none" } })], "opsOrder").tokens, []);
+  assert.deepEqual(read([node("section", {}, [node("h2", { text: "操作审计" }), node("p", { text: "standardized_ratio" })])], "opsOrder").tokens, ["standardized_ratio (in 操作审计)"]);
   assert.deepEqual(read([node("p", { text: "页面不存在" })], "notFound"), { said: true });
   const missing = inPage(node("body", {}, [node("main", {}, [node("div", { attrs: { role: "dialog" } }, [node("p", { text: "找不到这个插件，它可能已被移除。" }), node("button", { text: "回到插件列表" })])])]), () => pageProbe(["missingRecord", ["找不到这个插件，它可能已被移除。", "回到插件列表"]]));
   assert.deepEqual(missing, { dialog: true, said: true, back: true, failedWord: false });
