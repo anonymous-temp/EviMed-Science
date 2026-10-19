@@ -40,7 +40,7 @@ for (const [size, viewport] of [["desktop", { width: 1512, height: 945 }], ["pho
         await page.goto(`${base}/app/frontier?view=all`);
         const link = page.locator(`a[href="${route}"]`).filter({ hasText: item.title }).first();
         await link.scrollIntoViewIfNeeded();
-        const scroll = () => [...document.querySelectorAll("*")].filter((node) => node.scrollTop > 0).map((node) => Math.round(node.scrollTop));
+        const scroll = () => [...globalThis.document.querySelectorAll("*")].filter((node) => node.scrollTop > 0).map((node) => Math.round(node.scrollTop));
         const before = await page.evaluate(scroll);
         if (published.items.length > 5) assert.ok(before.some((top) => top > 0), "the history check starts away from the top of a populated feed");
         await link.click();
@@ -51,7 +51,7 @@ for (const [size, viewport] of [["desktop", { width: 1512, height: 945 }], ["pho
         await page.goBack();
         await page.waitForURL(`${base}/app/frontier?view=all`);
         await page.getByRole("heading", { level: 1, name: "前沿动态", exact: true }).waitFor();
-        await page.waitForFunction((expected) => JSON.stringify([...document.querySelectorAll("*")].filter((node) => node.scrollTop > 0).map((node) => Math.round(node.scrollTop))) === JSON.stringify(expected), before);
+        await page.waitForFunction((expected) => JSON.stringify([...globalThis.document.querySelectorAll("*")].filter((node) => node.scrollTop > 0).map((node) => Math.round(node.scrollTop))) === JSON.stringify(expected), before);
         assert.deepEqual(await page.evaluate(scroll), before);
       } finally {
         await browser.close();
