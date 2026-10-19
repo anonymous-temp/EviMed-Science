@@ -350,7 +350,9 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
 
       <div>
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-metric font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} large /></span>
+          {/* An assumption's value is a parameter of the study, not a dashboard figure: set at the section rung beside the card's name,
+              so the data tab keeps to a data page's five pairs (owner, 2026-10-19). */}
+          <span className="text-section font-semibold tabular-nums text-text"><VcrValueText value={assumption.value} large /></span>
           {assumption.value.interval && (
             <span className="text-ui tabular-nums text-text-2">{intervalText(assumption.value.interval, assumption.value.precision)}</span>
           )}
