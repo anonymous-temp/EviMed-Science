@@ -1350,13 +1350,13 @@ export class VcrService {
     const asked = queryOf(query);
     const evidenceStore = this.packages.evidenceStore;
     if (!evidenceStore) {
-      return presentPrecedents({ available: false, message: "试验先例库在本部署尚未接入。" });
+      return presentPrecedents({ available: false, message: "参考试验库在本部署尚未接入。" });
     }
     const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
     const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
     const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
     const candidates = this.packages.frontierEvents?.candidatesFor ? await this.packages.frontierEvents.candidatesFor(String(user.id)) : null;
-    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null, candidates });
+    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项参考试验` : null, candidates });
   }
 
   /** @param {{ id: string }} user @param {string} studyId @param {string} sourceId */
@@ -1647,7 +1647,7 @@ export class VcrService {
       case "precedents": {
         const evidence = this.packages.evidence;
         if (!evidence?.runtimeRead) {
-          return { available: false, code: "vcr_evidence_unavailable", message: "试验先例库未接入：这一步暂不可用，其余步骤照常。" };
+          return { available: false, code: "vcr_evidence_unavailable", message: "参考试验库未接入：这一步暂不可用，其余步骤照常。" };
         }
         return evidence.runtimeRead(study, { ...filter, what: "precedents" });
       }

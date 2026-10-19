@@ -4,6 +4,7 @@ import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { productRequest } from "@/lib/productClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import { Input, inputClasses } from "@/components/ui/Input";
 
 export interface LiteratureSelection {
@@ -70,12 +71,12 @@ export function VcrLiteratureSource({ studyId, projectId, onChange }: { studyId:
   };
   const parameters = (preview?.parameters ?? []).filter(item => !parameterQuery.trim() || `${item.quote} ${item.value} ${item.unit}`.toLowerCase().includes(parameterQuery.trim().toLowerCase()));
   const selectedProfile = preview?.supportedProfiles.find(item => item.method === profile);
+  const intakeActions = <div className="flex gap-2"><Button type="button" variant="secondary" disabled={busy || !link.trim()} onClick={() => void intake(false)}>加入文献</Button><Button type="button" variant="secondary" disabled={busy} onClick={() => void intake(true)}>上传文献</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setError(""); void refresh().catch(cause => setError(webErrorMessage(cause, { fallback: "文献列表暂时无法读取。" }))); }}>刷新文献</Button></div>;
   return <section className="space-y-3" aria-label="文献来源与参数">
     <Input label="文献 DOI 或链接" value={link} onChange={event => setLink(event.target.value)} />
-    <div className="flex gap-2"><Button type="button" variant="secondary" disabled={busy || !link.trim()} onClick={() => void intake(false)}>加入文献</Button><Button type="button" variant="secondary" disabled={busy} onClick={() => void intake(true)}>上传文献</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setError(""); void refresh().catch(cause => setError(webErrorMessage(cause, { fallback: "文献列表暂时无法读取。" }))); }}>刷新文献</Button></div>
+    {loaded && !sources.length ? <Note action={intakeActions}>此研究还没有文献，可加入链接或上传文件。</Note> : intakeActions}
     <div><label htmlFor={selectionId} className="mb-2 block text-ui text-text">已有文献</label><select id={selectionId} className={inputClasses()} value={sourceId} disabled={busy} onChange={event => { request.current += 1; setSourceId(event.target.value); setPreview(null); setProfile(""); setBindings({}); change.current(null); }}><option value="">选择文献</option>{sources.map(source => <option key={source.id} value={source.id}>{source.display.title}</option>)}</select></div>
-    {loaded && !sources.length && <p className="text-caption text-text-2">此研究还没有文献，可加入链接或上传文件。</p>}
-    {!loaded && !error && <p role="status" className="text-caption text-text-2">正在读取文献…</p>}
+    {!loaded && !error && <p role="status" className="text-caption text-text-2">正在读取文献</p>}
     <Button type="button" variant="secondary" disabled={busy || !sourceId} loading={busy} onClick={() => void load()}>读取文献参数</Button>
     {error && <p role="alert" className="text-caption text-error">{error}</p>}
     {preview && <div className="space-y-3 text-caption text-text-2"><p>{preview.title}</p>{!preview.textSha256 && <p>文献仍在解析或尚无可读正文，请稍后刷新重试。</p>}

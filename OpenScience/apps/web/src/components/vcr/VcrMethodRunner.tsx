@@ -4,6 +4,7 @@ import { VCR_JOB_METHODS, VCR_ROW_RULE_COMPARATORS, VCR_ROW_RULE_OPS, VCR_SCENAR
 import { cancelVcrJob, getVcrHome, getVcrJob, getVcrMethodHistory, getVcrMethodConfiguration, queueVcrJob, type VcrMethodConfiguration, type VcrJob, type VcrModels } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
+import { Note } from "@/components/ui/Note";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { safeLink } from "@/lib/frontierClient";
 import { Drawer } from "@/components/ui/Drawer";
@@ -105,7 +106,7 @@ function MethodHistory({ studyId, kind, revision, disabled, onReuse }: { studyId
     finally { holding.current = false; if (active.current) setLoading(null); }
   }
   return <Disclosure summary="复用历史配置">
-    {state.kind === "loading" ? <VcrTabSkeleton rows={2} /> : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} /> : <ul className="flex flex-col gap-3">{state.data.jobs.filter((entry) => entry.kind === kind).map((entry) => <li key={entry.id} className="flex flex-col gap-1"><span>{entry.label || "方法运行"} · {entry.createdAt ?? entry.updatedAt ?? "日期未记录"}</span><Button size="sm" variant="secondary" disabled={disabled || loading !== null} onClick={() => { void reuse(entry); }}>{loading === entry.id ? "正在读取…" : "复用此配置"}</Button></li>)}{!state.data.jobs.some((entry) => entry.kind === kind) && <li>还没有此方法的历史配置。</li>}</ul>}
+    {state.kind === "loading" ? <VcrTabSkeleton rows={2} /> : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} /> : <ul className="flex flex-col gap-3">{state.data.jobs.filter((entry) => entry.kind === kind).map((entry) => <li key={entry.id} className="flex flex-col gap-1"><span>{entry.label || "方法运行"} · {entry.createdAt ?? entry.updatedAt ?? "日期未记录"}</span><Button size="sm" variant="secondary" disabled={disabled || loading !== null} onClick={() => { void reuse(entry); }}>{loading === entry.id ? "正在读取" : "复用此配置"}</Button></li>)}{!state.data.jobs.some((entry) => entry.kind === kind) && <li>还没有此方法的历史配置。</li>}</ul>}
     {problem && <p role="alert" className="text-error">{problem}</p>}
   </Disclosure>;
 }
@@ -151,14 +152,15 @@ export function VcrMethodRunner({ method, onClose, sourceModel }: { method: Meth
   }
   const cardKind = engineMethod.startsWith("population.") ? "population" : engineMethod === "matching.evaluate" ? "criteria" : null;
   return <Drawer title={method.name} onClose={onClose} widthClassName="max-w-2xl"><div className="flex flex-col gap-4">
-    {activeModel && <p className="text-caption text-text-2">来源模型版本：{activeModel.version ?? "未记录"}。文献参数在提交时重新核对；修改参数请先登记新版本。</p>}
     <p className="text-caption text-text-2">{methodTask(engineMethod)} · {method.endpoints ?? "终点要求未说明"}</p>
     {method.assumptions?.length ? <ul className="list-disc pl-5 text-caption">{method.assumptions.map((item, index) => <li key={index}>{item.text}（{item.source}）</li>)}</ul> : <p>适用假设尚未说明。</p>}
-    <p className="text-caption text-text-3">数值参考用例不代表临床适用性。运行结果与配置保留在所选研究中。</p>
-    <Disclosure summary="版本与数值参考">
+    <Note action={<Disclosure summary="版本与数值参考">
       <p>{method.version ?? "版本未说明"} · {method.numeric ?? "未提供数值参考用例"}</p>
       {method.validation?.ciUrl && safeLink(method.validation.ciUrl) && <a href={safeLink(method.validation.ciUrl) ?? undefined} target="_blank" rel="noreferrer" className="text-link hover:underline">查看验证来源</a>}
-    </Disclosure>
+    </Disclosure>}>
+      {activeModel && <span>来源模型版本：{activeModel.version ?? "未记录"}。文献参数在提交时重新核对；修改参数请先登记新版本。</span>}
+      数值参考用例不代表临床适用性。运行结果与配置保留在所选研究中。
+    </Note>
     {!schema || !kind ? <><p>此方法暂不支持直接运行。</p>{["matching.evaluate", "evidence.reconstruct_km"].includes(engineMethod) && <>
       <p>{engineMethod === "matching.evaluate" ? "从研究中选择已有记录与入排条件进行匹配。" : "从研究的证据流程读取曲线来源并取得重建凭证。"}</p>
       {state.kind === "ready" && state.data.studies.map(study => <Link key={study.id} className="text-link hover:underline" to={`/app/virtual-research/${encodeURIComponent(study.id)}/${engineMethod === "matching.evaluate" ? "matching" : "data"}`}>{study.name}</Link>)}
@@ -177,7 +179,7 @@ export function VcrMethodRunner({ method, onClose, sourceModel }: { method: Meth
         <Input label="随机种子" type="number" min={0} max={2147483647} step={1} value={seed} error={!validSeed ? "填写 0 至 2147483647 的整数" : undefined} onChange={(event) => setSeed(event.target.value)} />
         <Input label="重复计算次数" type="number" min={1} step={1} value={replicates} hint="留空时使用方法默认值。" error={!validReplicates ? "填写正整数" : undefined} onChange={(event) => setReplicates(event.target.value)} />
         {problems.length > 0 && <ul className="text-caption text-error" aria-label="参数问题">{problems.slice(0, 12).map((problem, index) => <li key={index}>{problem.field.replace(/^scenario\.?/, "").split(".").map(part => label(part)).join(" / ")}：{problem.code === "scenario_field_missing" ? "请补充此参数或选择其中一项。" : "请检查此参数的取值、范围和适用条件。"}</li>)}</ul>}
-        <Button type="submit" disabled={busy || Boolean(live) || !studyId || problems.length > 0 || !validSeed || !validReplicates}>{busy ? "正在提交…" : "保存配置并运行"}</Button>
+        <Button type="submit" disabled={busy || Boolean(live) || !studyId || problems.length > 0 || !validSeed || !validReplicates}>{busy ? "正在提交" : "保存配置并运行"}</Button>
       </form>
     </>}
     {error && <p role="alert" className="text-error">{error}</p>}

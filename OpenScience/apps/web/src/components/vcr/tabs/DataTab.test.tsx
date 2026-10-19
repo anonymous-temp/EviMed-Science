@@ -130,7 +130,7 @@ describe("what moved here from 总览", () => {
     await ready();
     expect(screen.queryByText("研究复核")).toBeNull();
     expect(screen.queryByText("决策记录")).toBeNull();
-    expect(screen.queryByText(/试验先例 3 项 · 假设卡 4 张/)).toBeNull();
+    expect(screen.queryByText(/参考试验 3 项 · 假设卡 4 张/)).toBeNull();
   });
 });
 
@@ -200,8 +200,8 @@ describe("the cards beside the one in view", () => {
       const { container } = draw(<DataTab studyId={STUDY_ID} study={study()} />);
       await ready();
       const headline = container.querySelector("[data-headline]") as HTMLElement;
-      expect(headline).toHaveTextContent("4 张假设卡 · 3 项试验先例");
-      await userEvent.click(within(headline).getByRole("button", { name: "看试验先例" }));
+      expect(headline).toHaveTextContent("4 张假设卡 · 3 项参考试验");
+      await userEvent.click(within(headline).getByRole("button", { name: "看参考试验" }));
       expect(scroll).toHaveBeenCalledTimes(1);
       expect(scroll.mock.contexts[0]).toBe(container.querySelector("[data-vcr-precedents]"));
       await userEvent.click(within(headline).getByRole("button", { name: "看假设卡" }));
@@ -237,8 +237,8 @@ describe("the precedents", () => {
   it("are a table with planned and actual in columns of their own and no line under it explaining which is which", async () => {
     draw(<DataTab studyId={STUDY_ID} study={study()} />);
     await ready();
-    const section = screen.getByRole("heading", { name: "试验先例" }).closest("section") as HTMLElement;
-    const table = within(section).getByRole("table", { name: "试验先例" });
+    const section = screen.getByRole("heading", { name: "参考试验" }).closest("section") as HTMLElement;
+    const table = within(section).getByRole("table", { name: "参考试验" });
     const headers = within(table).getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers).toEqual(expect.arrayContaining(["计划入组", "实际入组", "用于"]));
     expect(document.body.textContent).not.toContain("计划值取自登记记录的预计字段");
@@ -247,7 +247,7 @@ describe("the precedents", () => {
   it("open a registry record in a drawer from the row — a press anywhere on it, or the registry number", async () => {
     draw(<DataTab studyId={STUDY_ID} study={study()} />);
     await ready();
-    const table = screen.getByRole("table", { name: "试验先例" });
+    const table = screen.getByRole("table", { name: "参考试验" });
     await userEvent.click(within(table).getAllByRole("button", { name: /^打开 .* 的登记记录$/ })[0]);
     const drawer = await screen.findByRole("dialog");
     expect(drawer.querySelector("[data-vcr-precedent-detail]")).not.toBeNull();

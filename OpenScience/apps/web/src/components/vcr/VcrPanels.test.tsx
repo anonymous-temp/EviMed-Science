@@ -272,9 +272,9 @@ describe("模型与方法", () => {
   });
 });
 
-/* ------------------------------------------------------------------ 试验先例 */
+/* ------------------------------------------------------------------ 参考试验 */
 
-describe("试验先例", () => {
+describe("参考试验", () => {
   it("keeps planned and actual apart, and opens a row to the registry's own words", async () => {
     draw(<VcrPrecedentsPanel />);
     const row = await waitFor(() => {
@@ -379,7 +379,7 @@ describe("试验先例", () => {
   it("says the library is not here, in the server's words, with no table that reads as 「没有先例」", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/precedents": fixture("ev201/precedents-unavailable.json") });
     draw(<VcrPrecedentsPanel />);
-    expect(await screen.findByText("试验先例库在本部署尚未接入。")).toBeInTheDocument();
+    expect(await screen.findByText("参考试验库在本部署尚未接入。")).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByText(/没有找到先例|还没有先例/)).toBeNull();
     expect(screen.queryByText("0 项")).toBeNull();

@@ -129,7 +129,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   const headline: NotePart[] = [
     ...(cards ? [{ n: numberText(data.assumptions.length, 0), onOpen: scrollTo(CARDS), label: "看假设卡" }, " 张假设卡"] : []),
     ...(cards && data.precedents.length > 0 ? [" · "] : []),
-    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看试验先例" }, " 项试验先例"] : []),
+    ...(data.precedents.length > 0 ? [{ n: numberText(data.precedents.length, 0), onOpen: scrollTo(PRECEDENTS), label: "看参考试验" }, " 项参考试验"] : []),
   ];
 
   // The intake is not here: it is one entry of the header's 「⋯」 on every tier (`VcrIntakeDrawer`), where the study's data came from.
@@ -226,7 +226,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
 
       {data.precedents.length > 0 && (
         <div data-vcr-precedents="">
-          <Section title="试验先例" count={data.precedents.length}>
+          <Section title="参考试验" count={data.precedents.length}>
             <VcrPrecedentTable rows={data.precedents} withUse />
             <VcrRegistryCoverage sources={data.registryCoverage} />
           </Section>
@@ -270,15 +270,15 @@ const CANDIDATE_EVENT_LABELS: Readonly<Record<VcrPrecedentCandidate["event"], st
 });
 
 /**
- * 待核对的先例: trial events the frontier feed reported for what the study is about. Each is marked 待核对 — a candidate is a pointer,
+ * 待核对的参考试验: trial events the frontier feed reported for what the study is about. Each is marked 待核对 — a candidate is a pointer,
  * and a precedent is a registry record the evidence step fetched and checked against its own text — so the mark is in the row and
  * no sentence has to say it.
  */
 function PrecedentCandidates({ rows }: { rows: readonly VcrPrecedentCandidate[] }) {
   return (
-    <Section title="待核对的先例" count={`${rows.length} 项`}>
+    <Section title="待核对的参考试验" count={`${rows.length} 项`}>
       <DataTable
-        label="待核对的先例"
+        label="待核对的参考试验"
         minWidth="min-w-0"
         columns={[
           { key: "state", header: "状态", width: "w-24", cell: () => <Tag>待核对</Tag> },
