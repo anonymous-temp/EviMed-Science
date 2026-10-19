@@ -963,3 +963,17 @@ test("browser reference adapter reads and preserves the same registry bytes and 
   assert.equal((await vcr.evidenceStore.itemsById({ userId: OTHER_USER, studyId: null, ids: stored.card.sourceEvidenceIds })).length, 0);
 
 });
+
+test("a legacy calendar-only exit is compared as recorded, without a timezone rewrite finding", options, async () => {
+  const subjectKey = "P-legacy-exit";
+  await vcr.matchStore.query(`INSERT INTO evimed_vcr.followup_episodes
+    (id, study_id, user_id, subject_key, kind, window_end, restricted, exit_reason)
+    VALUES ('fup_legacy_calendar', $1, $2, $3, 'study_specific', $4::timestamptz, '{}'::jsonb, 'Original reason')`,
+  [study.id, USER, subjectKey, "2026-08-01"]);
+  const saved = await write("followup", [{ subjectKey, kind: "study_specific", exitDate: "2026-08-01", exitReason: "Original reason" }]);
+  assert.equal(saved.ids.length, 1);
+  assert.ok(!saved.issues.some(row => row.code === "vcr_exit_date_rewritten" || row.code === "vcr_exit_reason_rewritten"));
+  const original = await vcr.matchStore.firstTrialExit({ studyId: study.id, subjectKey });
+  assert.equal(original.id, "fup_legacy_calendar");
+  assert.equal(original.exitDate, null, "the migration never invents missing verbatim input on old rows");
+});

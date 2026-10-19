@@ -1280,6 +1280,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.followup_episodes (
   observations  jsonb NOT NULL DEFAULT '[]'::jsonb,
   restricted    jsonb NOT NULL DEFAULT '{}'::jsonb,
   exit_reason   text,
+  exit_date     text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -1307,6 +1308,8 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.stale_marks (
   cleared_at  timestamptz,
   PRIMARY KEY (study_id, node)
 );
+
+ALTER TABLE evimed_vcr.followup_episodes ADD COLUMN IF NOT EXISTS exit_date text;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.reviews (
   id           text PRIMARY KEY,
