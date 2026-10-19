@@ -95,6 +95,11 @@ test("missing model evidence is listed, never thrown", () => {
 });
 
 test("the digital-twin label is derived from four pieces of evidence, never granted", () => {
+  const evidence = ["individual_conditioned", "updates_with_new_data", "calibrated_uncertainty", "validation_record"];
+  const expectedSubsets = Array.from({ length: 16 }, (_, mask) => mask === 15 ? "digital_twin" : mask % 2 ? "baseline_conditioned_prediction" : "scenario_simulation");
+  const labels = expectedSubsets.map((_, mask) => twinLabel(evidence.filter((_, bit) => mask & (1 << bit))));
+  assert.deepEqual(labels, expectedSubsets, "all evidence subsets retain the scenario/prediction/twin boundary");
+  assert.equal(twinLabel(["individual_conditioned", "individual_conditioned", "unknown"]), "baseline_conditioned_prediction");
   assert.equal(twinLabel([]), "scenario_simulation");
   assert.equal(twinLabel(["validation_record", "calibrated_uncertainty"]), "scenario_simulation");
   assert.equal(twinLabel(["individual_conditioned"]), "baseline_conditioned_prediction");
