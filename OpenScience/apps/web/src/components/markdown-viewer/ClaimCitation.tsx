@@ -152,7 +152,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
           <li key={id} data-claim-id={id}>
             <p className="text-ui text-text">{claim.claim}</p>
             {appraisal && <ClaimAppraisalSummary display={appraisal} sourceCount={sources.length} />}
-            {warning && <p className="mt-1 text-caption font-medium text-verify-pending">⚠ {warning}</p>}
+            {warning && <p className="mt-1 text-caption text-verify-pending">⚠ {warning}</p>}
             {sources.map((source, index) => (
               <Source
                 key={index}
@@ -231,7 +231,7 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
           data-claims={ids.join(" ")}
           className={cn(
             tagClasses({ tone: attention ? "warn" : "neutral" }),
-            "mx-0.5 gap-0.5 align-super font-medium hover:bg-surface-3",
+            "mx-0.5 gap-0.5 align-super hover:bg-surface-3",
             tone,
           )}
         >

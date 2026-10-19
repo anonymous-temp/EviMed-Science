@@ -97,7 +97,7 @@ export function VcrValueDrawer({ label, value, onClose }: { label: string; value
           {value.reason && <p className="mt-1 text-caption text-text-3">{value.reason}</p>}
         </div>
 
-        {detail?.title && <p className="text-ui font-medium text-text">{detail.title}</p>}
+        {detail?.title && <p className="text-ui font-semibold text-text">{detail.title}</p>}
 
         {detail?.fields && detail.fields.length > 0 && (
           <dl className="divide-y divide-border rounded-card border border-border">

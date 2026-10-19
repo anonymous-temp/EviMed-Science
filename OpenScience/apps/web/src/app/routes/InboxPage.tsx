@@ -371,7 +371,7 @@ export function InboxPage() {
               <>
                 {pinnedEntries.length > 0 && (
                   <section aria-labelledby="inbox-pinned" className="mb-4">
-                    <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
+                    <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption text-danger-strong">
                       <ShieldAlert size={16} aria-hidden="true" />需要优先查看 · 未读 {safetyUnread} 条
                     </h2>
                     <List label="需要优先查看">{pinnedEntries.map(entryRow)}</List>

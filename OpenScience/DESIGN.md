@@ -213,7 +213,7 @@ was protecting, and it survives unchanged.
 | `badge` | 12 / 1 | a count inside a pill |
 | `meta` | 12 / 1.5 | the densest metadata: dates, journals, counts, legends |
 | `caption` | 12 / 20px | captions and secondary one-liners (a line in a row) |
-| `compact` | 13 / 20px | a small control, a filter chip, a dense data table |
+| `compact` | 13 / 20px | a cell of a dense data grid (the heat table, the cluster grid) — a control is `ui`, a table head `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
 | `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |
@@ -231,7 +231,13 @@ gets a larger interface; the table itself speaks px.
 
 Weights **400 / 500 / 600**, nothing else — and Chinese hierarchy uses **400 and 600 only**:
 Microsoft YaHei has no 500, so a 500 title renders at 400 on Windows (an unread list row is 600
-for that reason). No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
+for that reason). Since R19.2 nothing in the product is set at 500 — ESLint bans `font-medium` (and
+`font-bold`) in every component, and `copyRules.test.ts` reads every string — and the two weights
+are given by role: **600** is a heading, a name that must be told from the text around it, a
+selected navigation item, an unread row, a figure that is the point of a line; **400** is everything
+a ground, a rule, a colour or a position already says — a button, a tab, a step, a chip, a
+segment, a link, a table head in the muted colour, a flagged value on a warm ground. Weight is
+spent only at 14 px and above; a 12 or 13 px line is 400 and says the rest in colour. No `letter-spacing` and no `uppercase` on Chinese — tracking breaks the
 character grid.
 
 **Mixed-script spacing** (spec §5.5): **interface copy we write types a half-width space** between
@@ -340,17 +346,17 @@ bordered pill or bordered `<button>` outside it:
 |---|---|
 | `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」) |
 | `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px; the open tab is always scrolled whole into its row |
-| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾” |
+| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 14 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
 | `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
-| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` at 500 when current |
+| `navItemClasses` | a column of places — the sidebar's destinations, projects and conversations, 设置's sections, the knowledge base's rail: 36 high, 8 px padding and corner, `accent-soft` in 600 when current |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
 | `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle — drawn by the toolbar, folded into one 「筛选」 chip below 640 px), `search`, `summary`, `actions`. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
-| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 500, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
+| `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 400, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
 | `StepState` | the body of a step's tab while it has nothing to show: `empty` (a recipe: what it uses, what it gives, one verb-and-object button), `queued`, `running`, `failed`, `credits`. Props are facts; the sentences are composed once |
 | `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
 | `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts (the figure is the link colour at the sentence's weight). A bare string does not compile; `tone="warn"` is a pale amber band with the text colour — the ground says it, not amber text |
@@ -495,9 +501,9 @@ needs a kind of its own says what it is in its `budgetNote`. `lookKinds.test.tsx
 band a line taller on one tab, a tag in a link, a sort header after two pictures, 41 rows on a first screen, nine to eleven kinds of
 control on pages that had eight to ten. By class: a toolbar in the band is one row whatever the data — its filters fold into 「筛选」
 when the row would wrap (`Toolbar` `inBand`); a `Tag` is never in a link, a button or a row's title (`tagNotInControl.test.ts` reads
-every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a small button is 13 / 400 like the chip
-beside it, a severity grade 12 / 400 like a tag (the current navigation item stays 14 / 500 on purpose: it is the one kind of control the page's
-secondary buttons already are, and a weight of its own would split them); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
+every source); every `a` and `button` has the control corner unless it sets one (`index.css`); a toolbar's controls — search, chips, segments, a small button, the activity chip — are the page's own 14 / 400 (13 was a size pair of its
+own on every page that had a toolbar), a severity grade 12 / 400 like a tag, and no control is 500 (the current navigation item is 600: a
+selected state that must survive on Windows, and the 14 / 600 a page's card titles already draw); a table's controls are 28 high; every rule is the *top* of the thing below it — a list's, a panel's, a card's body under its header — one stroke and not a top and a bottom; a list's bulk action (「全部已读」) is the toolbar's; a tab's one primary (选定方案) is the header's (`useVcrPrimary`);
 a list that is a heading and a fold on one account and a heading and rows on another is one shape (the overview's 交付物); the first
 screen of a data page holds at most twenty rows, so the list under two pictures starts with five (准确与安全) or twenty (信源) and says how many
 more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).

@@ -173,7 +173,7 @@ const MOST_PROTOCOLS = 10;
 function ProtocolChecklist({ protocols, chosen, onChange }: { protocols: readonly VcrProtocolChoice[]; chosen: readonly string[]; onChange: (next: string[]) => void }) {
   const full = chosen.length >= MOST_PROTOCOLS;
   return <fieldset className="min-w-0">
-    <legend className="mb-2 text-ui font-medium text-text">{`选择方案（最多 ${MOST_PROTOCOLS} 项）`}</legend>
+    <legend className="mb-2 text-ui font-semibold text-text">{`选择方案（最多 ${MOST_PROTOCOLS} 项）`}</legend>
     <ul className="flex flex-col">
       {protocols.map(protocol => {
         const checked = chosen.includes(protocol.id);

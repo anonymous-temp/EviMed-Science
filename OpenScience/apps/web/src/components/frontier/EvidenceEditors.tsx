@@ -346,7 +346,7 @@ export function CardEditor({
             onChange={(event) => field("limitations", event.target.value)}
           />
           <fieldset className="space-y-3">
-            <legend className="mb-2 text-ui font-medium text-text">
+            <legend className="mb-2 text-ui font-semibold text-text">
               来源与引用
             </legend>
             <p className="text-caption text-text-3">

@@ -43,7 +43,7 @@ export function BarList({
         const chosen = selected === row.key;
         const body = (
           <>
-            <span className="w-24 shrink-0 truncate text-left text-compact text-text-2 sm:w-32">{row.label}</span>
+            <span className="w-24 shrink-0 truncate text-left text-ui text-text-2 sm:w-32">{row.label}</span>
             <span className="min-w-0 flex-1"><InlineBar value={row.value} max={max} tone={tone} label={`${row.label}：${row.value}${row.unit ?? ""}`} /></span>
             <span className="w-20 shrink-0 text-right text-ui tabular-nums text-text">
               {row.value.toLocaleString("zh-CN")}

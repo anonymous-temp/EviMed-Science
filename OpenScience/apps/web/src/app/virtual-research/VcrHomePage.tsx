@@ -294,7 +294,7 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
               </Link>
             )}
           >
-            <span className="font-medium">需要你</span>
+            <span className="font-semibold">需要你</span>
             {` · ${need ? (todos.length > 1 ? `${need.title}，另有 ${todos.length - 1} 件待办` : need.title) : line?.text}`}
           </Note>
         </div>

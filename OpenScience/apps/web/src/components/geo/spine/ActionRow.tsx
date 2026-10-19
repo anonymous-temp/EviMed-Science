@@ -128,7 +128,7 @@ export function ActionRow({ action, showCluster, article, busy = false, canRun, 
             {what.detail && <span className="text-text-2">{` · ${what.detail}`}</span>}
           </button>
         </div>
-        <div className="grid min-w-0 gap-x-6 gap-y-0.5 text-compact text-text-2 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.2fr)]">
+        <div className="grid min-w-0 gap-x-6 gap-y-0.5 text-ui text-text-2 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.2fr)]">
           <p data-geo-action-article="" className="min-w-0 truncate">
             <span className="mr-1.5 text-caption text-text-3">稿件</span>
             {[written.kind, written.engines].filter(Boolean).join(" · ") || "还没有稿件"}

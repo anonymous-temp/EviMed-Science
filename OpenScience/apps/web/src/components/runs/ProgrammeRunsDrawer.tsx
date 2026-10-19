@@ -128,7 +128,7 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
             : history.messages.map((message) => ({ ...message, text: withoutPlatformText(message.text) })).filter((message) => message.text).map((message) => (
               <article key={message.seq} aria-label={message.role === "user" ? "要求" : "结果"}>
                 {message.role === "user"
-                  ? <p className="whitespace-pre-wrap text-ui font-medium text-text">{message.text}</p>
+                  ? <p className="whitespace-pre-wrap text-ui font-semibold text-text">{message.text}</p>
                   : <MarkdownViewer renderLink={recordLink}>{sourceCitationProse(message.text)}</MarkdownViewer>}
               </article>
             ))}

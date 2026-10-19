@@ -185,12 +185,12 @@ export function SourceCard({ entry, runId }: { entry: SourceCardEntry; runId?: s
         <span className="shrink-0 tabular-nums text-caption text-text-3">{entry.index}</span>
         <div className="min-w-0 flex-1 space-y-1">
           {entry.url ? (
-            <a href={entry.url} target="_blank" rel="noreferrer" className="inline-flex items-start gap-1 text-ui font-medium text-link hover:underline">
+            <a href={entry.url} target="_blank" rel="noreferrer" className="inline-flex items-start gap-1 text-ui text-link hover:underline">
               {entry.title}
               <ExternalLink size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
             </a>
           ) : (
-            <p className="text-ui font-medium text-text">{entry.title}</p>
+            <p className="text-ui font-semibold text-text">{entry.title}</p>
           )}
           <p className="flex flex-wrap items-center gap-1.5 text-caption text-text-3">
             <StudyTypeBadge sourceType={entry.sourceType} />

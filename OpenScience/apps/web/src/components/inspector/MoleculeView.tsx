@@ -182,7 +182,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-e2 backdrop-blur"
         data-molecule-controls="true"
       >
-        <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
+        <div className="flex items-center gap-1 px-1.5 text-caption text-muted">
           <Atom size={16} aria-hidden="true" /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
@@ -192,7 +192,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
               type="button"
               onClick={() => setStyleMode(o.value)}
               className={cn(
-                "rounded px-2 py-1 text-caption font-medium transition-colors",
+                "rounded px-2 py-1 text-caption transition-colors",
                 styleMode === o.value ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
               )}
             >
@@ -204,7 +204,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
       </div>
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-e2 backdrop-blur">
-        <span className="font-medium text-text">{format.toUpperCase()}</span>
+        <span className="font-semibold text-text">{format.toUpperCase()}</span>
         {atomCount !== null && <span className="ml-2">{atomCount} 个原子</span>}
       </div>
 

@@ -195,7 +195,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
                       selected={selected?.id === assumption.id}
                       titleProps={{ "data-vcr-assumption": assumption.id }}
                       trailing={(
-                        <span className="text-ui font-medium tabular-nums text-text">
+                        <span className="text-ui font-semibold tabular-nums text-text">
                           {valueText(assumption.value)}
                           {assumption.value.unit && <span className="ml-0.5 font-normal text-text-3">{assumption.value.unit}</span>}
                         </span>
@@ -435,7 +435,7 @@ const NEWS_CAUSE_LABELS: Readonly<Record<NonNullable<VcrAssumption["newEvidence"
 function NewEvidence({ news }: { news: NonNullable<VcrAssumption["newEvidence"]> }) {
   return (
     <div data-vcr-new-evidence="" role="status" className="mt-4 rounded-card border border-border bg-surface-1 p-3">
-      <p className="text-ui font-medium text-text">{news.label}</p>
+      <p className="text-ui font-semibold text-text">{news.label}</p>
       {news.open.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-1">
           {news.open.map((entry) => (

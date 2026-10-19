@@ -130,7 +130,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
               </List>
               {compared && (
                 <section aria-label="版本比较" className="flex flex-col gap-3">
-                  <h3 className="text-ui font-medium text-text">{formatDay(compared.recordedAt)} {formatClock(compared.recordedAt)} 与当前内容</h3>
+                  <h3 className="text-ui font-semibold text-text">{formatDay(compared.recordedAt)} {formatClock(compared.recordedAt)} 与当前内容</h3>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div><p className="mb-2 text-caption text-text-3">这一版</p><pre className="whitespace-pre-wrap break-words rounded-card bg-surface-1 p-4 text-ui text-text">{compared.payload.instructions}</pre></div>
                     <div><p className="mb-2 text-caption text-text-3">当前内容</p><pre className="whitespace-pre-wrap break-words rounded-card bg-surface-1 p-4 text-ui text-text">{skill.payload.instructions}</pre></div>

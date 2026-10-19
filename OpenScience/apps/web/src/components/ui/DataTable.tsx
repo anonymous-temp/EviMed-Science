@@ -139,7 +139,7 @@ export function DataTable<T>({
                   key={column.key}
                   scope="col"
                   className={cn(
-                    "sticky top-0 border-b border-border px-2 pb-2 pt-1 text-compact font-normal text-text-3",
+                    "sticky top-0 border-b border-border px-2 pb-2 pt-1 text-caption font-normal text-text-3",
                     groundClass,
                     // The corner is above the headers that slide under it.
                     frozenAt(column, index) ? "left-0 z-sticky" : "z-page",
@@ -177,7 +177,7 @@ export function DataTable<T>({
                     const shared = cn(
                       "border-b border-border px-2 py-2.5 align-middle text-ui",
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
-                      ours ? "font-medium text-text" : "text-text",
+                      ours ? "font-semibold text-text" : "text-text",
                     );
                     return column.rowHeader
                       ? (
@@ -187,7 +187,7 @@ export function DataTable<T>({
                           className={cn(
                             shared,
                             "font-normal",
-                            ours && "font-medium",
+                            ours && "font-semibold",
                             // Frozen: opaque, in the row's own ground.
                             frozenAt(column, index) && cn("sticky left-0 z-page", ours ? "bg-accent-soft" : groundClass),
                           )}

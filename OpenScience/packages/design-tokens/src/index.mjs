@@ -633,7 +633,7 @@ export const TYPE_SCALE = Object.freeze(
     badge: { size: 12, lineHeight: '1', use: 'a count inside a pill' },
     meta: { size: 12, lineHeight: '1.5', use: 'the densest metadata: dates, journals, counts, legends' },
     caption: { size: 12, lineHeight: '20px', use: 'captions and secondary one-liners' },
-    compact: { size: 13, lineHeight: '20px', use: 'a small control, a filter chip, a dense data table' },
+    compact: { size: 13, lineHeight: '20px', use: 'a cell of a dense data grid (a control is ui, a table head caption)' },
     ui: { size: 14, lineHeight: '22px', use: 'interface text, chat, list rows, controls — the default' },
     // Retired: the 13 px `ui-sm` was an unnamed second interface size. `compact`
     // is the deliberate one; this alias keeps unmigrated pages rendering at `ui`.

@@ -71,7 +71,7 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
               {deliverable.document.status.map((item) => (
                 <div key={item.label} className="p-3">
                   <dt className="truncate text-caption text-text-3">{item.label}</dt>
-                  <dd className={cn("mt-1 flex items-center gap-1.5 text-ui font-medium",
+                  <dd className={cn("mt-1 flex items-center gap-1.5 text-ui font-semibold",
                     item.state === "ok" ? "text-ok" : item.state === "attention" ? "text-warn-strong" : "text-text")}
                   >
                     {item.state === "ok" ? <CircleCheck size={16} aria-hidden="true" />

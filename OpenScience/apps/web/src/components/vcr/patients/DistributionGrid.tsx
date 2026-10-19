@@ -37,7 +37,7 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
     : row.levels && row.levels.length > 0 ? "" : row.result ?? "";
   return (
     <section data-vcr-distribution={row.variable} className="min-w-0">
-      <h4 className="truncate text-ui font-medium text-text">{row.label}</h4>
+      <h4 className="truncate text-ui font-semibold text-text">{row.label}</h4>
       <div className="mt-2">{continuous && row.histogram ? <Bins row={row} /> : <Levels row={row} />}</div>
       {stats && <p className="mt-1.5 text-caption tabular-nums text-text-2">{stats}</p>}
       {row.missing && <p className="text-caption tabular-nums text-text-3">{row.missing}</p>}

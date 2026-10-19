@@ -117,7 +117,7 @@ export function EvidenceMaintenance({
   };
   return (
     <details className="border-t border-border pt-4">
-      <summary className="cursor-pointer text-ui font-medium text-text">
+      <summary className="cursor-pointer text-ui font-semibold text-text">
         持续更新
       </summary>
       <div className="mt-3 max-w-measure space-y-4">
@@ -173,7 +173,7 @@ export function EvidenceMaintenance({
                     onChange={(event) => patch({ query: event.target.value })}
                   />
                   <fieldset className="space-y-3">
-                    <legend className="mb-2 text-ui font-medium text-text">
+                    <legend className="mb-2 text-ui font-semibold text-text">
                       来源范围
                     </legend>
                     <div className="flex flex-wrap gap-x-4 gap-y-3">

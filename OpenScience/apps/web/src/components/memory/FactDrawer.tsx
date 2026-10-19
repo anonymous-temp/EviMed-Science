@@ -280,7 +280,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
               ? (
                 <div className="space-y-2">
                   {/* A file is a topic with statements under it: the topic leads, unless the file's own first heading already is it. */}
-                  {record && !/^#\s/u.test(text.trimStart()) && <p className="text-body font-medium text-text">{fileTopic(record)}</p>}
+                  {record && !/^#\s/u.test(text.trimStart()) && <p className="text-body font-semibold text-text">{fileTopic(record)}</p>}
                   <MarkdownViewer className="text-ui text-text">{sentence}</MarkdownViewer>
                 </div>
               )

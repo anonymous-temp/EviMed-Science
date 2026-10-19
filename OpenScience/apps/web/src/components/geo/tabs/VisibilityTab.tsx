@@ -270,7 +270,7 @@ function ByEngine({ rows, diagnosis, engine }: { rows: GeoMonitoring["byEngine"]
             : earlier && !reading ? `上次 ${formatGeoValue(statedValue(earlier) as number, unit)} · ${monthDay(earlier.date)}` : null;
           return (
             <li key={row.engine} data-geo-engine-trend={row.engine} className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-compact text-text-2">{engineName(row.engine)}</span>
+              <span className="truncate text-ui text-text-2">{engineName(row.engine)}</span>
               <GeoCellText cell={current ? pointCell(last) : pointCell(undefined)} unit={unit} layout="stack" />
               {reading
                 ? <GeoSparkline values={comparableRun(row.points).map(statedValue)} width={140} height={28} className="mt-1 w-full" />

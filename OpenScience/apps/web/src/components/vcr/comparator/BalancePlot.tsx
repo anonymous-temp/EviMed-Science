@@ -75,7 +75,7 @@ export function BalancePlot({ rows, floor = 0.1 }: { rows: readonly VcrProfileRo
                   <span className={cn("absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full", over ? "bg-warn" : "bg-text-graphic")} style={{ left: at(after) }} />
                 )}
               </span>
-              <span className={cn("text-right text-caption tabular-nums", over ? "font-medium text-warn-strong" : "text-text-2")}>
+              <span className={cn("text-right text-caption tabular-nums", over ? "text-warn-strong" : "text-text-2")}>
                 {before !== null ? `${before.toFixed(2)} → ` : ""}{after !== null ? after.toFixed(2) : "—"}
               </span>
             </li>

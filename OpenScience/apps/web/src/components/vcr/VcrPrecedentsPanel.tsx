@@ -83,7 +83,7 @@ export function VcrPrecedentsPanel() {
         <Disclosure
           summary={(
             <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <span className="font-medium text-text">注册源覆盖</span>
+              <span className="font-semibold text-text">注册源覆盖</span>
               <span data-vcr-coverage-summary="" className="text-caption text-text-3">{registryCoverageSummary(state.data.registryCoverage ?? [])}</span>
             </span>
           )}
@@ -146,7 +146,7 @@ export function VcrPrecedentTable({ rows, withUse = false }: {
     },
     { key: "design", header: "设计", isEmpty: (row) => !row.design, cell: (row) => row.design ?? "—" },
     { key: "planned", header: "计划入组", align: "right", isEmpty: (row) => row.planned == null, cell: (row) => <span className="text-text-3">{numberText(row.planned, 0)}</span> },
-    { key: "actual", header: "实际入组", align: "right", isEmpty: (row) => row.actual == null, cell: (row) => <span className="font-medium">{numberText(row.actual, 0)}</span> },
+    { key: "actual", header: "实际入组", align: "right", isEmpty: (row) => row.actual == null, cell: (row) => <span>{numberText(row.actual, 0)}</span> },
     { key: "sites", header: "中心数", align: "right", isEmpty: (row) => row.sites == null, cell: (row) => numberText(row.sites, 0) },
     { key: "plannedMonths", header: "计划入组月数", align: "right", isEmpty: (row) => row.plannedMonths == null, cell: (row) => <span className="text-text-3">{numberText(row.plannedMonths, 0)}</span> },
     { key: "actualMonths", header: "实际入组月数", align: "right", isEmpty: (row) => row.actualMonths == null, cell: (row) => numberText(row.actualMonths, 0) },

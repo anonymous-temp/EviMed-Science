@@ -31,7 +31,7 @@ export function FollowedEvidenceZones({ zones, cards }: { zones: readonly Eviden
       </List>
       {shownCards.length > 0 && (
         <div>
-          <h3 className="mt-4 text-ui font-medium text-text">最近证据更新</h3>
+          <h3 className="mt-4 text-ui font-semibold text-text">最近证据更新</h3>
           <List divided label="最近证据更新" className="mt-3">
             {shownCards.map((card) => (
               <ListRow

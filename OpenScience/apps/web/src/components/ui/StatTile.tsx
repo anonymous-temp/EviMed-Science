@@ -100,7 +100,7 @@ export function StatTile({
   const opens = !placeholder && (to !== undefined || onOpen !== undefined);
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
-      <p className="truncate text-compact text-text-3">{label}</p>
+      <p className="truncate text-caption text-text-3">{label}</p>
       <p
         data-stat-value
         className={cn(
@@ -113,7 +113,7 @@ export function StatTile({
         )}
       >
         {opens ? <OpenNumber label={label} value={value} to={to} onOpen={onOpen} /> : value}
-        {unit != null && <span className="text-ui font-medium text-text-3">{unit}</span>}
+        {unit != null && <span className="text-ui text-text-3">{unit}</span>}
         {rank != null && <Rank>{rank}</Rank>}
       </p>
       {(delta != null || note != null) && (

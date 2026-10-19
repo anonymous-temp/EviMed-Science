@@ -239,7 +239,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
             <p className={cn("max-w-measure whitespace-pre-line text-ui", event.digest ? "text-text" : "text-text-3")}>{event.digest ?? "暂无综述"}</p>
             {event.latest && (
               <p className="mt-3 max-w-measure text-ui text-text-2">
-                <span className="mr-1.5 font-medium text-accent">最新</span>
+                <span className="mr-1.5 text-accent">最新</span>
                 {event.latest.text}
                 {event.latest.at && <span className="text-text-3"> · {ago(event.latest.at)}</span>}
               </p>
@@ -297,7 +297,7 @@ function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole 
   return (
     <li className="relative py-2 pl-5">
       <span aria-hidden="true" className={cn("absolute -left-[5px] top-3.5 h-2.5 w-2.5 rounded-full", primary ? "bg-accent" : "bg-bg ring-1 ring-inset ring-border-control")} />
-      <p className="text-ui font-medium text-text">{primary && <span className="sr-only">一手来源：</span>}<a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
+      <p className="text-ui font-semibold text-text">{primary && <span className="sr-only">一手来源：</span>}<a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">
         <span>{item.source.name}</span>
         {item.sourceTypeLabel && <><span aria-hidden="true">·</span><span>{item.sourceTypeLabel}</span></>}

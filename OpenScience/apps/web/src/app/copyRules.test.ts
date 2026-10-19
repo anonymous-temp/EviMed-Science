@@ -17,9 +17,10 @@ import { EVIMED_DICTIONARIES } from "../../../../packages/harness-port/src/runti
  *  - interface copy types a half-width space between Chinese and a Latin
  *    letter or a digit (“共 29 条”, “打开 PubMed 检索”), except inside a
  *    formatted date (“9月26日”);
- *  - 循证 GEO sets its Chinese at 400 or 600: no `font-medium`, no
- *    `font-bold` (the lead's 2026-09-27 GEO sweep; the rest of the shell
- *    still sets a field label at 500, spec §5.3 rule 2);
+ *  - the whole shell sets its Chinese at 400 or 600: no `font-medium`, no
+ *    `font-bold` (the lead's 2026-09-27 GEO sweep, widened to every file in
+ *    R19.2: Microsoft YaHei has no 500 cut, so a 500 title rendered at 400
+ *    on Windows; ESLint holds the same rule at the editor);
  *  - a step in progress is never an orphan 「正在进行」 (R19): `StepState` says
  *    what is being done, how far, since when and where the conversation is.
  *    The four sites that still say it the old way are listed below and may
@@ -43,7 +44,7 @@ import { EVIMED_DICTIONARIES } from "../../../../packages/harness-port/src/runti
  * test and one walk.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-/** 循证 GEO: where the 400 / 600 weight rule is held. */
+/** 循证 GEO: where the walk-through of the module's own files is held (the weight rule used to be only theirs). */
 const GEO_SCOPE = [/^components\/geo\//, /^components\/charts\//, /^lib\/geoClient\.ts$/, /^app\/routes\/Geo/];
 
 function files(path: string): string[] {
@@ -150,8 +151,8 @@ describe("copy follows the writing rules", () => {
     expect(offenders((text) => UNSPACED.test(text.replace(DATE_PARTS, "")))).toEqual([]);
   });
 
-  it("sets 循证 GEO's Chinese at 400 or 600 only", () => {
-    expect(offenders((text) => WEIGHT_500_OR_700.test(text), geoSources)).toEqual([]);
+  it("sets the shell's Chinese at 400 or 600 only", () => {
+    expect(offenders((text) => WEIGHT_500_OR_700.test(text))).toEqual([]);
   });
 
   it("holds the conversation language pack to the same rules", () => {

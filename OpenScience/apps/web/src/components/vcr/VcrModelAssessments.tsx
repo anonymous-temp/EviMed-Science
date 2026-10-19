@@ -155,7 +155,7 @@ function EditAssessment({ studyId, record, onClose, onSaved }: {
         <div className="flex flex-col gap-2">
           <p className="text-ui text-text">
             模型风险
-            <span data-vcr-assessment-risk="" className="ml-2 font-medium">{derived ? VCR_RATING_LABELS_ZH[derived.risk] : "待评级"}</span>
+            <span data-vcr-assessment-risk="" className="ml-2 font-semibold">{derived ? VCR_RATING_LABELS_ZH[derived.risk] : "待评级"}</span>
             <span className="ml-2 text-caption text-text-3">由影响力和后果推算</span>
           </p>
           <Textarea label="模型风险的理由" rows={2} value={form.riskJustification} onChange={(event) => set("riskJustification", event.target.value)} />

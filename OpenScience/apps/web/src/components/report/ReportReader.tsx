@@ -182,7 +182,7 @@ export function ReportReader({
       {isReport && <ReportFacts facts={facts} onJump={scrollTo} />}
       {immutableVersion && !matrix && <p role="note" className="mb-6 text-ui text-verify-pending">此版本尚无可读取的逐句证据核对记录。</p>}
       {isReport && summary && (
-        <p role="note" className="mb-6 text-ui font-medium text-verify-pending">{summary.text}</p>
+        <p role="note" className="mb-6 text-ui text-verify-pending">{summary.text}</p>
       )}
       {matrix && safetyInMatrix.length > 0 && (
         <section aria-labelledby="report-safety" className="mb-8 rounded-card bg-danger-soft p-4">

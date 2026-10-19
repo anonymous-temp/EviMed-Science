@@ -48,7 +48,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
             <li key={event.id} className={index > 0 ? "max-sm:hidden" : undefined}>
               <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
-                <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
+                <span data-row-title className="min-w-0 flex-1 truncate font-semibold text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
                 {change && <span className="shrink-0 text-caption text-text-2">{change}</span>}
               </Link>

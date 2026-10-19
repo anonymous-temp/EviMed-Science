@@ -357,7 +357,7 @@ export function NotEstimableCard({
       <ol className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item, index) => (
           <li key={item.title} className="rounded border border-border bg-surface-1 p-3">
-            <p className="flex items-baseline gap-2 text-ui font-medium text-text">
+            <p className="flex items-baseline gap-2 text-ui font-semibold text-text">
               <span aria-hidden="true" className="text-caption tabular-nums text-text-3">{index + 1}</span>
               {item.title}
             </p>

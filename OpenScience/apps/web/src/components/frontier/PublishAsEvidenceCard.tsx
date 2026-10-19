@@ -81,7 +81,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
     <FormDialog title="发布为证据卡" onClose={onClose} busy={busy}>
       <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (ready) void submit(); }}>
         <fieldset className="space-y-2">
-          <legend className="mb-1 text-ui font-medium text-text">结论</legend>
+          <legend className="mb-1 text-ui font-semibold text-text">结论</legend>
           {listed ? (
             <ul className="max-h-64 space-y-2 overflow-y-auto">
               {claims.map((claim) => {
@@ -105,7 +105,7 @@ export function PublishAsEvidenceCard({ version, onClose }: { version: ResultVer
           )}
         </fieldset>
         <div className="space-y-2">
-          <p id={zoneLabelId} className="text-ui font-medium text-text">专区</p>
+          <p id={zoneLabelId} className="text-ui font-semibold text-text">专区</p>
           {zonesError ? (
             <p role="alert" className="text-ui text-error">
               {zonesError}

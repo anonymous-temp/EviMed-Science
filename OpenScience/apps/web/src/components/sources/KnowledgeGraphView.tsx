@@ -142,7 +142,7 @@ export function KnowledgeGraphView({ projectId, kind, listState, version, onChan
     : `${scope.marks.length} 个${noun}，${scope.lines.length} 条${connection}`;
   const focusBar = focusMark && (
     <span role="group" aria-label="聚焦" className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-ui text-text-2">
-      <span className="min-w-0 max-w-48 truncate">聚焦：<strong className="font-medium text-text">{focusMark.title}</strong></span>
+      <span className="min-w-0 max-w-48 truncate">聚焦：<strong className="font-semibold text-text">{focusMark.title}</strong></span>
       <label className="flex items-center gap-2 text-caption text-text-3">
         范围
         <input type="range" min={1} max={3} step={1} value={depth} aria-label="聚焦范围，几步以内" className="w-24 accent-accent"
