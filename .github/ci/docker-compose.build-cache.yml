@@ -1,0 +1,58 @@
+# CI only: the layer cache the release images are built with, in GitHub's
+# Actions cache (BuildKit's `gha` backend), one scope per image.
+#
+# Why: the serving host credits a release only for the layers it already holds,
+# by diff ID. Every CI build used to start on a fresh runner with no cache, so
+# no layer was ever byte-identical to the serving one and each full release
+# loaded the whole runtime again (~5.5 GB of new layers, an admission of about
+# 22.8 GB free on a shared host). With this cache a layer whose inputs did not
+# change is the same blob, and so the same diff ID, from one build to the next;
+# deploy/runtime-dsh/Dockerfile orders its layers so that a socket or web change
+# rebuilds only the top of the runtime.
+#
+# Only the images the host admits together (the core subset: web, runtime,
+# deterministic replay, evidence adapters) are cached; the specialist engines
+# and the VCR engine build as before, so the 10 GB repository cache holds what
+# a release needs. `mode=min` keeps only the final image's layers (not builder
+# stages); `ignore-error` makes a cache-service failure a slower build, never a
+# failed one.
+#
+# Which caches a run may read is GitHub's rule, not ours: its own branch's and
+# the default branch's. A release branch therefore reuses what the last `main`
+# build wrote, and nothing a pull request or another branch wrote.
+#
+# BASE_REFRESH is the refresh key (YYYY-MM plus a generation, set by the
+# docker-hosted job): a new month rebuilds every cached image from upstream,
+# which is what the full release's --no-cache used to stand for.
+#
+# Not a deployment file: it is in no release manifest, and the host's own delta
+# builds never read it.
+services:
+  open-science-web:
+    build:
+      args:
+        BASE_REFRESH: ${EVIMED_BASE_REFRESH:?Set the CI refresh key}
+      cache_from:
+        - type=gha,scope=evimed-web
+      cache_to:
+        - type=gha,scope=evimed-web,mode=min,ignore-error=true
+  dsh-runtime-image:
+    build:
+      args:
+        BASE_REFRESH: ${EVIMED_BASE_REFRESH:?Set the CI refresh key}
+      cache_from:
+        - type=gha,scope=evimed-runtime
+      cache_to:
+        - type=gha,scope=evimed-runtime,mode=min,ignore-error=true
+  result-replay:
+    build:
+      cache_from:
+        - type=gha,scope=evimed-result-replay
+      cache_to:
+        - type=gha,scope=evimed-result-replay,mode=min,ignore-error=true
+  evimed-drug-evidence-adapter:
+    build:
+      cache_from:
+        - type=gha,scope=evimed-drug-evidence-adapter
+      cache_to:
+        - type=gha,scope=evimed-drug-evidence-adapter,mode=min,ignore-error=true

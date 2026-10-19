@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -57,8 +58,9 @@ test("the python-methods phase adds the curated skills' libraries once, after th
   const { docker, agentbay, script } = await sources();
   for (const dockerfile of [docker, agentbay]) {
     const calls = installPhaseCalls(dockerfile);
-    assert.ok(calls.indexOf("verify-tools") < calls.indexOf("python-methods") && calls.indexOf("python-methods") < calls.indexOf("curated-smoke"));
-    // Before the skill trees are copied in: a SKILL.md edit invalidates that COPY, and everything after it with it.
+    assert.ok(calls.indexOf("python") < calls.indexOf("python-methods") && calls.indexOf("python-methods") < calls.indexOf("curated-smoke"));
+    // Before the kernel and the skill trees: a kernel pin bump or a SKILL.md edit invalidates what follows it.
+    assert.ok(calls.indexOf("python-methods") < calls.indexOf("kernel"));
     assert.ok(dockerfile.indexOf("install-runtime.sh python-methods") < dockerfile.indexOf("COPY runtime/skills/curated-scientific"));
   }
   const phases = definedInstallPhases(script);
@@ -295,5 +297,95 @@ test("the runtime tool verification cannot pass after any required tool fails", 
     const result = spawnSync("bash", ["-c", `set -e\n${commands}\nRscript() { echo unexpected-fallthrough; }\nverify() {\n${phase}\n}\nverify`], { encoding: "utf8" });
     assert.equal(result.status, 73, `${failed} must fail the phase, not only its intermediate command`);
     assert.doesNotMatch(result.stdout, /unexpected-fallthrough/);
+  }
+});
+
+test("the runtime layers are ordered by how often they change, so a release reuses the stable ones", async () => {
+  // A layer is reused from the CI cache only while everything before it is
+  // unchanged, and a reused layer is one the serving host already holds. Every
+  // full release used to load the whole runtime again (2026-10-19).
+  const { docker } = await sources();
+  const calls = installPhaseCalls(docker);
+  const stable = ["system", "renderer", "toolchain", "python", "browser", "python-methods"];
+  assert.deepEqual(calls.slice(0, stable.length), stable, "the heavy, stable phases come first");
+  assert.ok(calls.indexOf("kernel") === stable.length, "the kernel pin is the first thing a kernel bump rebuilds");
+  // The tool checks prove the LibreOffice Kit, which ships in the kernel's closure, and the Office smoke needs it.
+  assert.ok(calls.indexOf("kernel") < calls.indexOf("verify-tools") && calls.indexOf("verify-tools") < calls.indexOf("office-smoke"));
+
+  const lines = docker.split("\n");
+  const stage = lines.findLastIndex((line) => /^FROM /.test(line));
+  const runOf = (phase) => lines.findIndex((line) => line === `RUN bash /usr/local/lib/evimed/install-runtime.sh ${phase}`);
+  // BuildKit hands every ARG declared in a stage to each later RUN as its environment, so an ARG is part of the cache
+  // key of every phase after it: each is declared just above the first phase that reads it, never at the top.
+  const firstReader = { APT_MIRROR: "system", PANDOC_VERSION: "renderer", NODE_VERSION: "toolchain", UV_VERSION: "toolchain",
+    PIP_INDEX_URL: "python", NPM_REGISTRY: "kernel", DSH_VERSION: "kernel", DSH_PUBLISHED_BEFORE: "kernel", PNPM_VERSION: "pnpm",
+    SOCKET_VERSION: "smoke" };
+  const previousRun = (index) => lines.slice(0, index).findLastIndex((line) => /^RUN /.test(line));
+  for (const [name, phase] of Object.entries(firstReader)) {
+    const declared = lines.findIndex((line) => line.startsWith(`ARG ${name}=`));
+    assert.ok(declared > stage && declared < runOf(phase), `${name} is declared before the ${phase} phase`);
+    assert.ok(previousRun(declared) === -1 || previousRun(declared) === previousRun(runOf(phase)), `${name} is declared after the phase before ${phase}`);
+  }
+  // The refresh key is above every install phase, so a new month rebuilds the image from upstream.
+  const refresh = lines.findIndex((line) => line === "ARG BASE_REFRESH=unset");
+  assert.ok(refresh > stage && refresh < runOf("system"));
+  // The release identity is last; the version LABELs, which are configuration and not layers, sit just above it.
+  const release = lines.findIndex((line) => line.startsWith("ARG RELEASE_ID="));
+  assert.ok(release > runOf("serve"));
+  for (const label of lines.filter((line) => line.startsWith("LABEL "))) assert.ok(lines.indexOf(label) > runOf("serve"), `${label} sits after the last phase`);
+});
+
+test("each install phase copies only its own cut of the script, and every cut runs exactly that phase", async () => {
+  const { docker, script } = await sources();
+  const lines = docker.split("\n");
+  // Each phase RUN is preceded by the copy of its own cut, from the stage that cuts them.
+  for (const phase of installPhaseCalls(docker)) {
+    const run = lines.indexOf(`RUN bash /usr/local/lib/evimed/install-runtime.sh ${phase}`);
+    assert.equal(lines[run - 1], `COPY --from=install-phases /phases/${phase}.sh /usr/local/lib/evimed/install-runtime.sh`);
+  }
+  assert.match(docker, /^FROM \$\{RUNTIME_BASE_IMAGE\} AS install-phases$/m);
+  assert.match(docker, /^RUN mkdir \/phases && awk -v out=\/phases -f \/usr\/local\/src\/evimed\/split-install-phases\.awk \/usr\/local\/src\/evimed\/install-runtime\.sh$/m);
+  // The whole script is never copied ahead of a phase (that is what rebuilt everything); it lands once, after the last.
+  const whole = lines.indexOf("COPY deploy/runtime-dsh/install-runtime.sh /usr/local/lib/evimed/install-runtime.sh");
+  assert.ok(whole > lines.indexOf("RUN bash /usr/local/lib/evimed/install-runtime.sh serve"));
+
+  const out = await mkdtemp(path.join(os.tmpdir(), "install-phases-"));
+  try {
+    const cut = spawnSync("awk", ["-v", `out=${out}`, "-f", path.join(repoRoot, "deploy/runtime-dsh/split-install-phases.awk"), path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh")], { encoding: "utf8" });
+    assert.equal(cut.status, 0, cut.stderr);
+    const defined = definedInstallPhases(script);
+    assert.deepEqual((await readdir(out)).sort(), [...defined.keys()].map((phase) => `${phase}.sh`).sort());
+    for (const [phase, body] of defined) {
+      const text = await readFile(path.join(out, `${phase}.sh`), "utf8");
+      // The cut holds the phase's function as the parser reads it, and no other phase's.
+      const own = definedInstallPhases(text);
+      assert.deepEqual([...own.keys()], [phase]);
+      assert.equal(own.get(phase), body);
+      assert.equal(spawnSync("bash", ["-n", path.join(out, `${phase}.sh`)]).status, 0, `${phase}.sh parses`);
+      // Run under another phase's name it refuses, as the whole script refuses an unknown phase.
+      const other = phase === "serve" ? "smoke" : "serve";
+      assert.equal(spawnSync("bash", [path.join(out, `${phase}.sh`), other], { encoding: "utf8", env: { PATH: process.env.PATH } }).status, 64);
+    }
+    // An edit to one phase changes that phase's cut alone.
+    const edited = script.replace("chmod 0755 /usr/local/bin/open-science-dsh-serve", "chmod 0755 /usr/local/bin/open-science-dsh-serve\n  true");
+    assert.notEqual(edited, script);
+    const again = await mkdtemp(path.join(os.tmpdir(), "install-phases-"));
+    try {
+      await writeFile(path.join(again, "install-runtime.sh"), edited);
+      assert.equal(spawnSync("awk", ["-v", `out=${again}`, "-f", path.join(repoRoot, "deploy/runtime-dsh/split-install-phases.awk"), path.join(again, "install-runtime.sh")]).status, 0);
+      for (const phase of defined.keys()) {
+        const same = (await readFile(path.join(out, `${phase}.sh`), "utf8")) === (await readFile(path.join(again, `${phase}.sh`), "utf8"));
+        assert.equal(same, phase !== "serve", `${phase}.sh ${phase === "serve" ? "changes" : "stays byte-identical"}`);
+      }
+      // Code outside every function would be lost from every cut, so the cut refuses the script.
+      await writeFile(path.join(again, "install-runtime.sh"), script.replace("serve() {", "echo stray\nserve() {"));
+      const stray = spawnSync("awk", ["-v", `out=${again}`, "-f", path.join(repoRoot, "deploy/runtime-dsh/split-install-phases.awk"), path.join(again, "install-runtime.sh")], { encoding: "utf8" });
+      assert.notEqual(stray.status, 0);
+      assert.match(stray.stderr, /outside every function/);
+    } finally {
+      await rm(again, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(out, { recursive: true, force: true });
   }
 });

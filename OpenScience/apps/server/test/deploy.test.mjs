@@ -1386,7 +1386,7 @@ test("the engine image build hands the workflow's token to the R install as a Bu
   // other run. The token must reach that one command and nothing else: no build argument, no ENV, no layer, no trace.
   const workflowText = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
   const step = workflowStep(workflowText, "Build hosted Web, agent runtime and deterministic replay images");
-  assert.match(step, /^        env:\n(?:          #[^\n]*\n)+          GITHUB_TOKEN: \$\{\{ github\.token \}\}\n        run: \|/, "the step, and only the step, is given the workflow's own token");
+  assert.match(step, /^        env:\n(?:          #[^\n]*\n)+          GITHUB_TOKEN: \$\{\{ github\.token \}\}\n(?:          ACTIONS_[A-Z0-9_]+: \$\{\{ steps\.actions-cache\.outputs\.[a-z0-9-]+ \}\}\n)*        run: \|/, "the step, and only the step, is given the workflow's own token");
   assert.match(step, /-f \.\.\/\.github\/ci\/docker-compose\.build-secrets\.yml/);
   assert.doesNotMatch(workflowText.replace(step, ""), /GITHUB_TOKEN: \$\{\{/, "no other step or job env carries it");
   const commands = step.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
@@ -1410,6 +1410,66 @@ test("the engine image build hands the workflow's token to the R install as a Bu
   const uses = dockerfile.split("\n").filter((line) => !line.startsWith("#") && line.includes("GITHUB_PAT"));
   assert.ok(uses.length > 0);
   assert.ok(uses.every((line) => install.includes(line)), "GITHUB_PAT appears nowhere but that command");
+});
+
+test("CI builds the images a release loads with a layer cache, refreshed monthly, and full releases use it too", async () => {
+  // 2026-10-19: every full release built with --no-cache on a fresh runner, so no layer was ever the serving one and the host
+  // loaded ~5.5 GB again each time. The cache makes an unchanged layer the same blob, and so the same diff ID, run to run.
+  const workflowText = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const step = workflowStep(workflowText, "Build hosted Web, agent runtime and deterministic replay images");
+  const commands = step.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  assert.doesNotMatch(commands, /--no-cache\b/, "no build discards the cache, full releases included");
+  assert.match(commands, /extra_compose\+=\(-f \.\.\/\.github\/ci\/docker-compose\.build-cache\.yml\)/);
+  assert.match(commands, /if \[ -n "\$ACTIONS_RUNTIME_TOKEN" \]; then/, "without the cache service the build goes on without the cache");
+  // The cache service's variables reach this step alone, from a first-party action pinned by commit.
+  const expose = workflowStep(workflowText, "Expose the Actions cache service to the image build");
+  assert.match(expose, /^        uses: actions\/github-script@[0-9a-f]{40}$/m);
+  assert.match(expose, /core\.setSecret\(value\)/);
+  assert.doesNotMatch(workflowText.replace(step, ""), /ACTIONS_RUNTIME_TOKEN: \$\{\{/, "no other step carries the runtime token");
+  assert.doesNotMatch(workflowText, /ACTIONS_RUNTIME_TOKEN[^\n]*GITHUB_ENV/);
+  // The refresh key: the month, and a generation a security fix can raise.
+  assert.match(workflowText, /^      EVIMED_BASE_REFRESH_GENERATION: "\d+"$/m);
+  assert.match(workflowText, /echo "EVIMED_BASE_REFRESH=\$\(date -u \+%Y-%m\)\.g\$\{EVIMED_BASE_REFRESH_GENERATION\}" >> "\$GITHUB_ENV"/);
+
+  const overlay = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-cache.yml"), "utf8"));
+  const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const replay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.result-replay.yml"), "utf8"));
+  // Each built service from the file that defines its build (the replay overlay also adds environment to the web service).
+  const services = Object.fromEntries([compose, replay].flatMap((file) => Object.entries(file.services).filter(([, service]) => service.build)));
+  // The core subset the host admits together, one scope each.
+  assert.deepEqual(Object.keys(overlay.services).sort(), ["dsh-runtime-image", "evimed-drug-evidence-adapter", "open-science-web", "result-replay"]);
+  const scopes = new Set();
+  for (const [name, service] of Object.entries(overlay.services)) {
+    const { cache_from: from, cache_to: to, args = {} } = service.build;
+    const scope = /^type=gha,scope=([a-z0-9-]+)$/.exec(from?.[0] ?? "")?.[1];
+    assert.ok(scope && from.length === 1, `${name} reads one gha scope`);
+    assert.deepEqual(to, [`type=gha,scope=${scope},mode=min,ignore-error=true`], `${name} writes the scope it reads, never failing the build`);
+    assert.ok(!scopes.has(scope), `${name} has a scope of its own`);
+    scopes.add(scope);
+    // The refresh key reaches exactly the images whose recipe declares it, above the OS-package layer it renews.
+    const context = path.resolve(repoRoot, "deploy/web", services[name].build.context);
+    const recipe = await readFile(path.join(context, services[name].build.dockerfile), "utf8");
+    const declares = /^ARG BASE_REFRESH=unset$/m.test(recipe);
+    assert.equal("BASE_REFRESH" in args, declares, `${name}: the refresh key is passed if and only if the recipe declares it`);
+    if (declares) {
+      assert.equal(args.BASE_REFRESH, "${EVIMED_BASE_REFRESH:?Set the CI refresh key}");
+      const stage = recipe.slice(recipe.lastIndexOf("\nFROM "));
+      const refresh = stage.indexOf("ARG BASE_REFRESH=unset");
+      const packages = stage.search(/^RUN (?:[^\n]*\\\n)*[^\n]*(?:apk add|install-runtime\.sh system)/m);
+      assert.ok(refresh > 0 && refresh < packages, `${name}: the refresh key is declared above the package install`);
+    }
+  }
+  // Release identity never sits above a RUN in a cached image: it changes every build and would rebuild everything after it.
+  for (const name of Object.keys(overlay.services)) {
+    const context = path.resolve(repoRoot, "deploy/web", services[name].build.context);
+    const recipe = await readFile(path.join(context, services[name].build.dockerfile), "utf8");
+    const stage = recipe.slice(recipe.lastIndexOf("\nFROM "));
+    const lastRun = stage.lastIndexOf("\nRUN ");
+    for (const arg of ["RELEASE_ID", "SOURCE_REVISION", "BUILD_CREATED"]) {
+      const declared = stage.indexOf(`\nARG ${arg}`);
+      assert.ok(declared === -1 || declared > lastRun, `${name}: ${arg} is declared after the last RUN`);
+    }
+  }
 });
 
 test("Web CI includes a Linux Docker Compose release and real runtime smoke job", async () => {

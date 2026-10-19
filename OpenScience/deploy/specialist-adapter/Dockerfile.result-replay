@@ -1,13 +1,6 @@
 ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
-ARG RELEASE_ID=untracked
-ARG SOURCE_REVISION=untracked
-ARG BUILD_CREATED=untracked
-LABEL org.opencontainers.image.version=${RELEASE_ID} \
-    org.opencontainers.image.revision=${SOURCE_REVISION} \
-    org.opencontainers.image.created=${BUILD_CREATED}
-
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -55,3 +48,13 @@ EXPOSE 8031
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import json,urllib.request; result=json.load(urllib.request.urlopen('http://127.0.0.1:8031/health', timeout=3)); raise SystemExit(0 if result.get('ready') else 1)"
 CMD ["uvicorn", "evimed_specialist_adapter.replay_app:app", "--host", "0.0.0.0", "--port", "8031", "--no-access-log"]
+
+# Release identity, last: an ARG is in the cache key of every RUN after it, and
+# these change on every release, so declared above the pip install they rebuilt
+# the whole image each time -- in CI and in the host's delta build alike.
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=untracked
+ARG BUILD_CREATED=untracked
+LABEL org.opencontainers.image.version=${RELEASE_ID} \
+    org.opencontainers.image.revision=${SOURCE_REVISION} \
+    org.opencontainers.image.created=${BUILD_CREATED}

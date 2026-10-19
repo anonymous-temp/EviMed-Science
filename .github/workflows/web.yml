@@ -739,7 +739,11 @@ jobs:
         shell: /usr/local/bin/evimed-ci-root-shell {0}
     env:
       COMPOSE_PARALLEL_LIMIT: "1"
-      EVIMED_FULL_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]') }}
+      # The layer cache's refresh generation (.github/ci/docker-compose.build-cache.yml):
+      # the images are rebuilt from upstream when the month turns, and when this
+      # number is raised -- for a security fix in the base packages that cannot
+      # wait for the month.
+      EVIMED_BASE_REFRESH_GENERATION: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -792,6 +796,7 @@ jobs:
           echo "OPEN_SCIENCE_RELEASE_ID=evimed-${GITHUB_SHA:0:12}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_SOURCE_REVISION=${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_BUILD_CREATED=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+          echo "EVIMED_BASE_REFRESH=$(date -u +%Y-%m).g${EVIMED_BASE_REFRESH_GENERATION}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           # One agent runtime image, under the one variable the server reads
           # (`config.mjs` resolves `runtimeContainerImage` from it and nothing
@@ -950,6 +955,23 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
           df -h /
 
+      # BuildKit's `gha` cache backend talks to the Actions cache service with
+      # the job's runtime token, which the runner hands to actions and not to
+      # `run` steps. This first-party action reads the four variables and hands
+      # them, masked, to the build step alone (its env below), rather than to
+      # every later step through GITHUB_ENV. Pinned by commit (v8.0.0).
+      - name: Expose the Actions cache service to the image build
+        id: actions-cache
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            for (const name of ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_SERVICE_V2']) {
+              const value = process.env[name] ?? '';
+              if (name === 'ACTIONS_RUNTIME_TOKEN' && value) core.setSecret(value);
+              core.setOutput(name.toLowerCase().replaceAll('_', '-'), value);
+              core.info(`${name}: ${value ? 'set' : 'absent'}`);
+            }
+
       - name: Build hosted Web, agent runtime and deterministic replay images
         env:
           # The workflow's own token, for the one build that reaches the GitHub
@@ -960,23 +982,38 @@ jobs:
           # exported as GITHUB_PAT for the R install command alone: no build
           # argument, no layer, no log.
           GITHUB_TOKEN: ${{ github.token }}
+          ACTIONS_RUNTIME_TOKEN: ${{ steps.actions-cache.outputs.actions-runtime-token }}
+          ACTIONS_CACHE_URL: ${{ steps.actions-cache.outputs.actions-cache-url }}
+          ACTIONS_RESULTS_URL: ${{ steps.actions-cache.outputs.actions-results-url }}
+          ACTIONS_CACHE_SERVICE_V2: ${{ steps.actions-cache.outputs.actions-cache-service-v2 }}
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          # An empty variable is not an absent one to buildx (an empty cache URL
+          # would be used as one), so whatever the runner did not provide is unset.
+          for name in ACTIONS_CACHE_URL ACTIONS_RESULTS_URL ACTIONS_CACHE_SERVICE_V2; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
           extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml -f ../.github/ci/docker-compose.build-secrets.yml)
-          build_flags=()
-          if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
-            build_flags=(--no-cache)
+          # Full releases build with the layer cache too: what their old
+          # --no-cache stood for, packages no older than a month, is the refresh
+          # key's job now, and a reused layer is one the host already holds.
+          # Without the cache service the build is slower and changes nothing else.
+          if [ -n "$ACTIONS_RUNTIME_TOKEN" ]; then
+            extra_compose+=(-f ../.github/ci/docker-compose.build-cache.yml)
+            echo "layer cache on; refresh key $EVIMED_BASE_REFRESH"
+          else
+            echo "::warning::the Actions cache service is not available; building without the layer cache"
           fi
           docker compose --env-file deploy/web/.env.ci \
             -f deploy/web/docker-compose.yml \
             -f deploy/web/docker-compose.local-auth.yml \
             -f deploy/web/docker-compose.backup.yml \
             "${extra_compose[@]}" \
-            --profile backup --profile runtime-image --profile vcr build "${build_flags[@]}" &
+            --profile backup --profile runtime-image --profile vcr build &
           build_pid=$!
           while kill -0 "$build_pid" 2>/dev/null; do
             if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ]; then
@@ -998,6 +1035,28 @@ jobs:
           timeout 300 docker volume rm buildx_buildkit_evimed-ci0_state
           remaining_cache_volume="$(docker volume ls -q --filter name='^buildx_buildkit_evimed-ci0_state$')"
           test -z "$remaining_cache_volume"
+
+      # What a release of these images would ask of the serving host: the host
+      # credits the layers it already holds by diff ID, so the table names each
+      # layer of the four images it admits together (the core subset), with its
+      # bytes and the instruction that made it. The JSON is kept as an artifact;
+      # `image-layer-table.py --compare` on two runs' files prints the bytes the
+      # later run adds.
+      - name: Measure the layers of the core release images
+        run: |
+          evidence_adapter="$(docker image ls --format '{{.Repository}}:{{.Tag}}' evimed-drug-evidence-adapter)"
+          test "$(printf '%s\n' "$evidence_adapter" | wc -l)" = 1
+          images=(web="$OPEN_SCIENCE_WEB_CONTAINER_IMAGE" runtime="$OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE" resultReplay="$OPEN_SCIENCE_RESULT_REPLAY_IMAGE" evidenceAdapter="$evidence_adapter")
+          started=$SECONDS
+          docker save "${images[@]#*=}" | python3 -I scripts/ops/image-layer-table.py --json "$RUNNER_TEMP/image-layers.json" "${images[@]}"
+          echo "measured in $((SECONDS - started))s"
+
+      - name: Keep the layer table
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-layers-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image-layers.json
+          retention-days: 30
 
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the
