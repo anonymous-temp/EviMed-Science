@@ -374,7 +374,8 @@ import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
-import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
+import { recordNativeUploadAttempt } from "./nativeUploadActivity.mjs";
+import { createVcrDraftSweeper, createVcrDraftUsage } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
 import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
@@ -5375,44 +5376,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       conversations: { resolve: (study, options) => resolveStudyConversation(study, options) },
     });
-    // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
-    // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
-    /** Whether anybody has sent a message in a draft's conversation: the run ledger holds every one. @param {any} study */
-    const draftSpokenIn = async (study) => {
+    // Draft visibility and expiry share the same saved-input, research-object, source and run predicate.
+    // Unreadable state keeps the draft: absence must be established, never guessed.
+    const draftSpokenIn = createVcrDraftUsage({ store: vcr.store, projectUsed: async (study) => {
       const owner = await store.userById(study.userId);
-      if (!owner) return false;
-      return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
-    };
-    // The home list shows a draft somebody has spoken in, so the conversation is never out of reach.
+      if (!owner) return true;
+      const project = await store.requireProject(owner, study.projectId);
+      if ((await agentRuns.list(project)).length > 0) return true;
+      if (!productDocuments) return true;
+      const activity = await productDocuments.get(owner.id, "preferences", `native-upload-attempt:${project.id}`);
+      if (activity?.projectId === project.id && activity.payload?.recordType === "native-upload-attempt") return true;
+      // Older native attachments left no product row. Binding is not proof of materials,
+      // but makes emptiness unknown; keep the unfinished study reachable without claiming an upload.
+      if (study.conversationSessionId) return true;
+      if (!sourceService) return true;
+      const sources = await sourceService.list(owner.id, { projectId: project.id, limit: 1 });
+      return sources.items.length > 0;
+    } });
+    // A saved draft remains reachable even before the first AI conversation.
     vcr.service.attach({ draftSpokenIn });
     vcr.drafts = createVcrDraftSweeper({
       store: vcr.store, ttlMs: Number(config.vcrDraftTtlMinutes) > 0 ? Number(config.vcrDraftTtlMinutes) * 60_000 : undefined,
       spokenIn: draftSpokenIn,
-      remove: async (study) => {
-        const owner = await store.userById(study.userId);
-        if (!owner) {
-          // The account is gone: its rows go with it (`deleteVcrUserRows`); a stray draft has nothing else to wait for.
-          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
-          return;
-        }
-        // What the project holds beyond its rows goes first, as a project's deletion does it: the conversation's runtime (a draft was
-        // opened in one, and it would hold the workspace the deletion removes) and the memory the project may have written. A project
-        // with work in it, or one that is already gone, is told apart by the code the store answers with.
-        const project = await store.requireProject(owner, study.projectId).catch((error) => {
-          if (error?.code === "project_not_found") return null;
-          throw error;
-        });
-        if (project) {
-          if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
-          await runtimeManager.stop(project, { by: "platform" });
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id, { sessionIds: await projectConversationIds(project) });
-          if (await nativeMemoryHeldBy(owner.id)) await nativeMemory.deleteProject(owner.id, project.id);
-        }
-        await removeStudyProject(owner, study.projectId).catch(async (error) => {
-          // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
-          if (error?.code !== "project_not_found") throw error;
-          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
-        });
+      remove: async () => {
+        // Automatic expiry has no shared exclusion with study/source/upload writes. It must never
+        // remove a live project or stop its runtime: absence at a prior read cannot authorize deletion.
+        // Explicit user deletion retains its existing behavior. Keep even apparently empty projects.
+        return false;
       },
       report: (code) => process.stderr.write(`vcr drafts: ${code}\n`),
       audit: vcrAudit,
@@ -8048,6 +8038,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageLedger,
     managedBrowser,
     authorizeOpenSession: authorizeOwnedNativeSession,
+    recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
     authorizePrompt: assertPublicSessionPrompt,
     // A turn begun in the kernel's own application never passes through the
     // dispatch route, so the allowance is asked here too (§9.6). The capability

@@ -31,7 +31,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -77,7 +77,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -810,7 +810,8 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   // The paperclip (2026-09-22): the raw-byte route the upload Worker posts to,
   // and the Remote fallback the client uses for exact bytes. Both were refused
   // until then, which left the conversation with no way to hand over a file.
-  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const attempts = [];
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 }, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
   const arrived = [];
@@ -831,6 +832,7 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   assert.equal(arrived[1].fileBody, false);
   c.send(open("upload", "fileUploads/upload", { request: { sessionId: "s1" } }));
   assert.deepEqual((await c.next()).value, { reached: "fileUploads/upload" });
+  assert.deepEqual(attempts, ["default"], "mux records the authenticated project before forwarding");
 });
 
 test("an attachment's bytes reach the kernel as they are, and one past the file ceiling reaches nothing", { timeout: 5000 }, async (t) => {
@@ -839,6 +841,7 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
   // (production, 2026-09-22). A file is bytes: ceilinged, never parsed.
   const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
   const received = [];
+  const attempts = [];
   const kernel = createServer((req, res) => {
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -855,7 +858,7 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
   const started = [];
   manager.start = async () => { started.push(true); return { url: `http://127.0.0.1:${kernel.address().port}`, cookie: "k=1" }; };
   const server = createServer((req, res) => {
-    void manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true })
+    void manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true, beforeForward: async () => { attempts.push({ userId: project.userId, projectId: project.id, state: "attempted" }); } })
       .catch((error) => { res.writeHead(error.status ?? 500, { "content-type": "application/json" }); res.end(JSON.stringify({ code: error.code })); });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -873,6 +876,7 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
   assert.equal((await tooBig.json()).code, "runtime_proxy_body_too_large");
   assert.equal(received.length, 1, "refused before a byte reached the kernel");
   assert.equal(started.length, 1, "and before the runtime was even asked for");
+  assert.deepEqual(attempts, [{ userId: project.userId, projectId: project.id, state: "attempted" }], "only the authorized, size-checked attempt is recorded");
 });
 
 test("HTTP rejects revoked and malformed session cookies without dev-session minting", { timeout: 5000 }, async (t) => {
@@ -1691,4 +1695,14 @@ test("runtime UI shutdown joins its sockets and listener even when browser clean
   finally { refuse = false; }
   await closed;
   assert.equal(f.ui.address(), null);
+});
+
+test("a refused native upload cannot record activity for a foreign project", { timeout: 5000 }, async (t) => {
+  const attempts = [];
+  const f = await fixture(t, {}, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
+  const response = await fetch(`${f.base}/api/session/uploadFileBinary`, {
+    method: "POST", headers: { Origin: UI_ORIGIN, "content-type": "application/octet-stream" }, body: Buffer.from("input"),
+  });
+  assert.equal(response.status, 401);
+  assert.deepEqual(attempts, []);
 });

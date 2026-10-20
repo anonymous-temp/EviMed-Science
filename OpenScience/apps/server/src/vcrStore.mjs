@@ -548,6 +548,15 @@ export class VcrStore extends VcrStoreBase {
     return rows.map(vcrStudyFromRow);
   }
 
+  /** Research objects exclude automatic membership, step state and conversation binding. @param {string} studyId */
+  async draftHasResearchContent(studyId) {
+    const tables = ["study_definitions", "protocol_versions", "criteria", "study_precedents",
+      "evidence_items", "curve_extractions", "assumptions", "sources", "source_files", "snapshots",
+      "analysis_tables", "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids", "study_packs"];
+    const row = await this.one(`SELECT ${tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} WHERE study_id = $1)`).join(" OR ")} AS used`, [studyId]);
+    return row?.used === true;
+  }
+
   /**
    * Record the conversation a study was opened with. Written once, right after the
    * session is bound: a later call does not move it.

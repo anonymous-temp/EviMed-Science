@@ -328,10 +328,10 @@ test("the study a project belongs to is found by the project — a draft nobody 
   const made = await call("owner", "POST", "/api/vcr/studies", {});
   assert.equal(made.status, 201, made.text);
   assert.equal(made.body.data.status, "draft");
-  // The home list leaves the untouched draft out: that is why the frame cannot find its study there.
+  // A bound legacy conversation cannot prove absence of unsent native attachments. Keep it reachable.
   const listed = await call("owner", "GET", "/api/vcr/studies");
-  assert.ok(!listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
-  assert.ok(listed.body.data.draftProjectIds.includes(made.body.data.projectId));
+  assert.ok(listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
+  assert.ok(!listed.body.data.draftProjectIds.includes(made.body.data.projectId));
   const found = await call("owner", "GET", `/api/vcr/studies/of-project/${made.body.data.projectId}`);
   assert.equal(found.status, 200, found.text);
   assert.deepEqual(Object.keys(found.body.data).sort(), ["abilities", "id", "intendedUse", "projectId", "status", "steps"]);
@@ -894,11 +894,15 @@ test("shared exports serve all VCR kinds to current members without a new resear
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
 });
 
-test("a draft nobody spoke in is swept with its project an hour on, through the real server; one that was named is not a draft and stays", options, async () => {
+test("automatic draft expiry preserves projects and inputs through the real server", options, async (t) => {
   const projectIds = async () => (await call("viewer", "GET", "/api/projects")).body.data.map((/** @type {any} */ project) => project.id);
   const draft = await call("viewer", "POST", "/api/vcr/studies", {});
   assert.equal(draft.status, 201, draft.text);
   const { id, projectId } = draft.body.data;
+  t.after(async () => {
+    const removed = await call("viewer", "DELETE", `/api/projects/${projectId}`, { confirm: projectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   assert.equal((await rows(`SELECT status FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].status, "draft");
   assert.ok((await projectIds()).includes(projectId), "the project is there while the draft is");
 
@@ -908,12 +912,20 @@ test("a draft nobody spoke in is swept with its project an hour on, through the 
 
   const named = await call("viewer", "POST", "/api/vcr/studies", { name: "已命名的研究" });
   assert.equal(named.status, 201, named.text);
+  t.after(async () => {
+    const namedProjectId = named.body.data.projectId;
+    const removed = await call("viewer", "DELETE", `/api/projects/${namedProjectId}`, { confirm: namedProjectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   await rows(`UPDATE evimed_vcr.studies SET created_at = now() - interval '3 hours' WHERE id = ANY($1)`, [[id, named.body.data.id]]);
 
   const swept = await context.app.vcr.drafts.sweep();
-  assert.ok(swept.deleted >= 1, "the old draft is deleted");
-  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 0, "the study row goes");
-  assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
+  assert.equal(swept.deleted, 0, "expiry cannot prove absence against concurrent project writes");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 1, "the study row stays");
+  assert.equal((await projectIds()).includes(projectId), true, "the project and its materials stay");
+  await context.app.vcr.store.updateStudy(id, { question: "Saved after candidate selection" }, accounts.viewer);
+  assert.equal((await context.app.vcr.drafts.sweep()).deleted, 0);
+  assert.equal((await context.app.vcr.store.studyById(id)).question, "Saved after candidate selection");
   assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
   assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
 });

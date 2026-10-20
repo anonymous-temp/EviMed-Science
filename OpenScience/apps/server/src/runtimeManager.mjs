@@ -7074,14 +7074,14 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
    *   `rebaseDocument: false` serves bytes as they are (an asset route);
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -7115,6 +7115,7 @@ export class RuntimeManager {
       const runtime = await this.start(project);
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
+      if (beforeForward) await beforeForward();
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
       // UI suffix is the complete raw path and query, including native combo-bundle syntax.
