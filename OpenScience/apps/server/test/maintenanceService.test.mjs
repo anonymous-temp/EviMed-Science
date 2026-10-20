@@ -23,6 +23,7 @@ class FakeDatabase {
     this.pendingPrompts = 0;
     this.activeDatabaseSessions = 0;
     this.trace = [];
+    this.isolation = "read committed";
   }
 
   async transaction(operation) {
@@ -40,6 +41,7 @@ class FakeDatabase {
   async query(text, values = []) {
     const sql = typeof text === "string" ? text : text.text;
     this.trace.push(sql.replace(/\s+/g, " ").trim());
+    if (/current_setting\('transaction_isolation'\)/.test(sql)) return { rows: [{ isolation: this.isolation }] };
     if (/pg_advisory_xact_lock_shared/.test(sql)) return { rows: [{ locked: true }] };
     if (/pg_advisory_xact_lock/.test(sql)) return { rows: [{ locked: true }] };
     if (/INSERT INTO evimed_product\.maintenance_lease/.test(sql)) {
@@ -298,4 +300,30 @@ test("the interactive activity is what a researcher owns, and says nothing when 
   await service.initialize();
   assert.equal((await service.activity()).runningAgentRuns, 3);
   assert.equal((await service.activity()).busyRuntimes, 2);
+});
+
+test("read-fence failure rolls back the admitted counter and successful release remains idempotent", async () => {
+  const { database, service } = fixture();
+  database.readFence = async operation => {
+    await database.transaction(operation);
+    throw new Error('synthetic read-fence cleanup failure');
+  };
+  await assert.rejects(service.admitMutation(), /synthetic read-fence cleanup failure/);
+  assert.equal(service.activeMutations, 0);
+  database.readFence = operation => database.transaction(operation);
+  const release = await service.admitMutation();
+  assert.equal(service.activeMutations, 1);
+  release(); release();
+  assert.equal(service.activeMutations, 0);
+});
+
+
+test("maintenance admission refuses snapshot isolation before acquiring a lock or incrementing work", async () => {
+  for (const isolation of ['repeatable read', 'serializable', undefined]) {
+    const { database, service } = fixture();
+    database.isolation = isolation;
+    await assert.rejects(service.admitMutation(), { code: 'maintenance_state_invalid' });
+    assert.equal(service.activeMutations, 0);
+    assert.equal(database.trace.some(sql => /pg_advisory_xact_lock_shared/.test(sql)), false);
+  }
 });

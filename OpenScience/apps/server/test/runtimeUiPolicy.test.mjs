@@ -1706,3 +1706,35 @@ test("a refused native upload cannot record activity for a foreign project", { t
   assert.equal(response.status, 401);
   assert.deepEqual(attempts, []);
 });
+
+test("maintenance rejects cold native frame GET and WebSocket starts while warm reads remain available", async t => {
+  const f = await fixture(t);
+  let blocked = true, creations = 0, admissions = 0;
+  f.manager.runtimeCreationMutation = async operation => {
+    admissions += 1;
+    if (blocked) throw new HttpError(503, 'maintenance_active', 'Draining');
+    return operation();
+  };
+  // Exercise the actual shared creation boundary rather than the fixture's start stub.
+  f.manager.start = RuntimeManager.prototype.start.bind(f.manager);
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.manager.startKernel = async project => {
+    creations += 1;
+    return { project, workspaceDir: project.workspaceDir, proxyWorkspaceDir: project.workspaceDir,
+      url: 'http://kernel.local', socketPath: path.join(f.dataDir, 'mux.sock'), cookie: 'kernel_auth=internal-only', close: async () => {} };
+  };
+  f.config.runtimeMode = 'kernel';
+  f.upstream.on('request', (_request, response) => { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<html><body>fixture</body></html>'); });
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 503);
+  assert.equal(await f.connect().opened, 503);
+  assert.equal(creations, 0);
+  assert.equal(admissions, 2);
+  blocked = false;
+  const project = await f.store.requireProject(f.user, 'default');
+  await f.manager.start(project);
+  blocked = true;
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 200);
+  assert.equal(await f.connect().opened, 101);
+  assert.equal(creations, 1);
+  assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
+});
