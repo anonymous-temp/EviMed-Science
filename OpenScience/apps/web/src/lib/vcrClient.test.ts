@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  cancelVcrJob, confirmVcrBudget, contactVcrReferral, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
+  createVcrStudy, queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, contactVcrReferral, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
   saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers, transitionVcrReferral,
   adoptVcrModel, getVcrReferrals, overrideVcrJudgment, readVcrReferrals, reviewVcrAssessment,
@@ -230,7 +230,8 @@ describe("the routes the client calls, and the bodies it posts", () => {
 
   it("confirms a contact on the person's referral, cancels a job, exports, and cannot put a budget in the settings", async () => {
     await contactVcrReferral(STUDY_ID, "ref_seed_1", { note: "已确认" });
-    await cancelVcrJob(STUDY_ID, "job_seed_16");
+    network.productRequest.mockResolvedValueOnce({ job: { id: "job_seed_16", kind: "generate_patients_binary", state: "canceled" }, canceled: true });
+    expect((await cancelVcrJob(STUDY_ID, "job_seed_16")).state).toBe("canceled");
     const answer = await exportVcrStudy(STUDY_ID, "study_package");
     await patchVcrStudy(STUDY_ID, { status: "paused", budget: { limitSeconds: 1 } } as never);
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/contact`, "POST", { note: "已确认" });
@@ -302,4 +303,58 @@ describe("members and the referral ledger", () => {
     await patchVcrStudy(STUDY_ID, { action: "trial" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}`, "PATCH", { action: "trial" });
   });
+});
+
+
+describe("method workbench requests", () => {
+  it("sends calculation purpose and queue subject through the actual body builders", async () => {
+    network.productRequest.mockResolvedValue({ id: "calculation_1" });
+    await createVcrStudy({ name: "Independent", purpose: "calculation" });
+    expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies", "POST", { name: "Independent", purpose: "calculation" });
+    await queueVcrJob("calculation_1", { kind: "generate_patients_binary", subjectId: "patient_set_1", modelId: "source_model", scenario: { n: 40 }, seed: 42, inputs: [] });
+    expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/calculation_1/jobs", "POST", { kind: "generate_patients_binary", subjectId: "patient_set_1", modelId: "source_model", scenario: { n: 40 }, seed: 42, inputs: [] });
+  });
+  it("prepares exact method versions and addresses the original job configuration and result", async () => {
+    network.productRequest.mockResolvedValue({ subjectId: "comparator_2", objectKind: "comparator", version: 2 });
+    await saveVcrMethodConfiguration("calculation_1", { method: "comparator.evalue", name: "Sensitivity", scenario: { riskRatio: 2 }, subjectId: "comparator_1" });
+    expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/calculation_1/method-configurations", "POST", { method: "comparator.evalue", name: "Sensitivity", scenario: { riskRatio: 2 }, subjectId: "comparator_1" });
+    await getVcrMethodConfiguration("calculation_1", "old_job");
+    expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/calculation_1/jobs/old_job/configuration");
+    network.productRequest.mockResolvedValue({ jobId: "old_job", result: { id: "old_result", kind: "patient_set" }, execution: { method: "patients.binary", sourceModel: { id: "old_source", version: "1.0.0" } }, records: { available: true, profile: [{ variable: "response", kind: "binary", levels: [{ level: "1", n: 20, p: 0.4 }] }] } });
+    const historical = await getVcrMethodResult("calculation_1", "old_job");
+    expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/calculation_1/jobs/old_job/result");
+    expect(historical.result?.id).toBe("old_result");
+    expect(historical.execution?.sourceModel?.version).toBe("1.0.0");
+    expect(historical.records.profile?.[0].levels?.[0].percent).toBe(40);
+  });
+  it("includes the four domain forecast protocols omitted by older catalogues", async () => {
+    network.productRequest.mockResolvedValue({ models: [], methods: [{ id: "binary", method: "patients.binary", name: "Binary" }] });
+    const catalogue = await getVcrModels();
+    expect(catalogue.methods.filter(method => method.method?.startsWith("forecast.")).map(method => method.method)).toEqual(["forecast.trajectories", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"]);
+  });
+});
+
+
+it("unwraps only the documented cancellation envelope while queue and get retain flat jobs", async () => {
+  const job = { id: "job_1", kind: "generate_patients_binary", method: "patients.binary", state: "canceled" };
+  network.productRequest.mockResolvedValue({ job, canceled: false });
+  expect(await cancelVcrJob("calculation_1", "job_1")).toEqual(job);
+  expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/calculation_1/jobs/job_1/cancel", "POST", {});
+});
+it("sends only the six public quality basis fields through the actual job body builder", async () => {
+  const basis = { populationId: "population_1", populationVersion: 2, resultId: "generation_1", table: "population" as const, inputId: "server_generation_ref", sha256: "a".repeat(64) };
+  network.productRequest.mockResolvedValue({ id: "quality_job", kind: "population_quality", state: "queued" });
+  await queueVcrJob("calculation_1", { kind: "population_quality", subjectId: "population_1", scenario: { trainingInputId: "server_training_ref", syntheticInputId: basis.inputId }, inputs: [{ kind: "snapshot", id: "training_1" }], qualityBasis: { ...basis, location: "must-not-be-sent" } as typeof basis });
+  expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/calculation_1/jobs", "POST", { kind: "population_quality", subjectId: "population_1", scenario: { trainingInputId: "server_training_ref", syntheticInputId: basis.inputId }, inputs: [{ kind: "snapshot", id: "training_1" }], qualityBasis: basis });
+});
+
+it("uses the public reconstruction selection in prepare and the real queue body, retaining historical availability", async () => {
+  const scenario = { covariates: ["age"], targets: { age: 60 } };
+  network.productRequest.mockResolvedValue({ subjectId: "maic_1", objectKind: "comparator", version: 1, reconstructionResultId: "reconstruction_1", scenario });
+  expect(await saveVcrMethodConfiguration("study_1", { method: "comparator.maic_time_to_event", name: "MAIC", scenario, reconstructionResultId: "reconstruction_1" })).toEqual({ subjectId: "maic_1", objectKind: "comparator", version: 1, reconstructionResultId: "reconstruction_1", scenario });
+  expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/study_1/method-configurations", "POST", { method: "comparator.maic_time_to_event", name: "MAIC", scenario, reconstructionResultId: "reconstruction_1" });
+  await queueVcrJob("study_1", { kind: "maic_time_to_event_comparator", subjectId: "maic_1", scenario, inputs: [{ kind: "snapshot", id: "snapshot_1" }], reconstructionResultId: "reconstruction_1" });
+  expect(network.productRequest).toHaveBeenLastCalledWith("/vcr/studies/study_1/jobs", "POST", { kind: "maic_time_to_event_comparator", subjectId: "maic_1", scenario, inputs: [{ kind: "snapshot", id: "snapshot_1" }], reconstructionResultId: "reconstruction_1" });
+  network.productRequest.mockResolvedValue({ reconstructionResultId: "original_reconstruction", reconstructionResultAvailable: false, scenario });
+  expect(await getVcrMethodConfiguration("study_1", "old_maic")).toMatchObject({ reconstructionResultId: "original_reconstruction", reconstructionResultAvailable: false, scenario });
 });

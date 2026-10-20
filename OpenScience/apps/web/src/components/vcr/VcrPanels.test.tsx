@@ -45,8 +45,10 @@ describe("模型与方法", () => {
     Object.assign(payload.methods[1], { numeric: null, validation: { status: 'unmeasured' }, assumptions: [] });
     installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
-    await userEvent.click(await screen.findByText(payload.methods[0].name));
-    await userEvent.click(screen.getByText('版本与数值参考'));
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
+    await userEvent.click(await screen.findByRole("button", { name: "招募与匹配" }));
+    await userEvent.click(screen.getByText(payload.methods[0].name));
+    await userEvent.click(screen.getByText('科学假设与方法依据'));
     expect(await screen.findByRole('link', { name: '查看验证来源' })).toHaveAttribute('href', 'https://example.org/ci/101');
     expect(screen.getByText(/1 个参考用例通过/)).toBeInTheDocument();
     // A method with no reference case says nothing in its row — and no sentence says what a passed one does not mean.
@@ -60,6 +62,7 @@ describe("模型与方法", () => {
   // scenario simulation; its missing twin evidence remains visible.
   it("names an unconditioned reference model as scenario simulation, with what it lacks to be a twin", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     expect(await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" })).toBeInTheDocument();
     const twin = card().querySelector("[data-vcr-twin]") as HTMLElement;
     expect(twin).toHaveTextContent("情景仿真");
@@ -76,6 +79,7 @@ describe("模型与方法", () => {
     });
     server = installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     expect(within(card()).getByText("调用接口").nextElementSibling).toHaveTextContent("基线 → 结局分布");
     expect(card().querySelector("[data-vcr-model-shape-missing]")).toBeNull();
@@ -94,12 +98,14 @@ describe("模型与方法", () => {
     Object.assign(payload.models[0], { twin: "digital_twin", twinLabel: null, twinReason: null });
     server = installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     expect(card().querySelector("[data-vcr-twin]")).toHaveTextContent("数字孪生");
   });
 
   it("gives the card's §8.2 sections, the regional population on a line of its own", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     const facts = within(card());
     expect(facts.getByText("适用地区")).toBeInTheDocument();
@@ -124,25 +130,30 @@ describe("模型与方法", () => {
 
   it("groups methods by research task and opens their configuration before execution", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     expect(screen.queryByRole("columnheader", { name: "适用假设" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "模拟患者结局" }));
     expect(document.querySelectorAll("[data-vcr-method]").length).toBeGreaterThan(0);
     const first = document.querySelector("[data-vcr-method]") as HTMLElement;
     await userEvent.click(first);
-    expect(await screen.findByLabelText("用于现有研究")).toBeInTheDocument();
+    expect(await screen.findByLabelText("保存到研究或独立计算")).toBeInTheDocument();
   });
 
   it("opens another model's card, and lists the method packages by their own rows", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     await userEvent.click(document.querySelector("[data-vcr-model='mdl_2']") as HTMLElement);
     expect(await screen.findByRole("heading", { name: "二分类终点参考仿真器" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "招募与匹配" }));
     expect(document.querySelector("[data-vcr-method='mth_1']")).not.toBeNull();
   });
 
   // UI-27: the ladder is a table, not a sentence about the system.
   it("draws the credibility ladder with no line explaining it", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     expect(await screen.findByText("可信度要求（按用途）")).toBeInTheDocument();
     expect(screen.queryByText(/自动降一级/)).toBeNull();
     expect(document.querySelector("[data-vcr-engine-mismatch]")).toBeNull();
@@ -153,6 +164,7 @@ describe("模型与方法", () => {
     payload.engineMismatch = ["目录有引擎没有：comparator.maic"];
     server = installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     expect(document.body.textContent).not.toContain("计算引擎与方法目录不一致");
     expect(document.querySelector("[data-vcr-engine-mismatch]")).toBeNull();
@@ -161,19 +173,18 @@ describe("模型与方法", () => {
   // C2-12: the library page is where a model a trial fitted is taken in; before, `POST /api/vcr/models` had no caller in the browser.
   it("takes a literature model into the library: the name, the risk, the endpoint and the trials it was fitted on, then re-reads the list", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
-    await userEvent.type(await screen.findByLabelText("模型名称"), "  EV-201 对照组 PFS 模型 ");
-    await userEvent.type(screen.getByLabelText("版本"), "2.1.0");
-    await userEvent.selectOptions(screen.getByLabelText("模型风险"), "medium");
+    await userEvent.click(screen.getByRole("button", { name: "使用文献参数" }));
+    await userEvent.type(await screen.findByLabelText("参数集名称"), "  EV-201 对照组 PFS 模型 ");
     await userEvent.selectOptions(screen.getByLabelText("终点"), "time_to_event");
     await userEvent.type(screen.getByLabelText("来源试验（每行一项）"), "NCT02296125{enter}{enter}  CTR20990001 ");
     const reads = server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/models").length;
-    await userEvent.click(screen.getByRole("button", { name: "引入" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存文献参数" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", {
-      name: "EV-201 对照组 PFS 模型", version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"],
+      name: "EV-201 对照组 PFS 模型", version: "1.0.0", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"],
     }));
-    expect(toasts.success).toHaveBeenCalledWith("已引入模型库。");
+    expect(toasts.success).toHaveBeenCalledWith("已保存文献参数。");
     await waitFor(() => expect(server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/models").length).toBeGreaterThan(reads));
     await waitFor(() => expect(screen.queryByLabelText("模型名称")).toBeNull());
   });
@@ -183,14 +194,15 @@ describe("模型与方法", () => {
       "GET /vcr/precedents/record": { available: true, status: "ok", record: { title: "Source model", values: [{ parameter: "enrollment_actual", value: 674, unit: "participants", verification: "verified" }] } },
     });
     draw(<VcrModelsPanel />);
-    await userEvent.click(await screen.findByRole("button", { name: "引入文献模型" }));
-    expect(screen.getByLabelText("模型风险")).toHaveValue("");
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
+    await userEvent.click(await screen.findByRole("button", { name: "使用文献参数" }));
+    expect(screen.queryByLabelText("模型风险")).toBeNull();
     expect(screen.getByLabelText("终点")).toHaveValue("");
     await userEvent.type(screen.getByLabelText("试验登记来源编号（可选）"), "NCT02296125");
     await userEvent.click(screen.getByRole("button", { name: "读取来源参数" }));
     expect(await screen.findByText(/enrollment_actual：674 participants/)).toBeVisible();
-    expect(screen.getByLabelText("模型名称")).toHaveValue("Source model");
-    await userEvent.click(screen.getByRole("button", { name: "引入" }));
+    expect(screen.getByLabelText("参数集名称")).toHaveValue("Source model");
+    await userEvent.click(screen.getByRole("button", { name: "保存文献参数" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", expect.objectContaining({
       name: "Source model", sources: ["NCT02296125"], card: expect.objectContaining({ sourceRegistryId: "NCT02296125", sourceParameters: expect.arrayContaining([expect.objectContaining({ value: 674, unit: "participants" })]) }),
     })));
@@ -204,6 +216,7 @@ describe("模型与方法", () => {
     payload.models[0].revisionCard = { parameterBindings: [{ field: "truth.controlRate", value: 40, mappedValue: 0.4, unit: "%", quote: "Control response was 40%.", quoteStart: 10, quoteEnd: 34, sourceId: "src_original", textSha256: "a".repeat(64) }] };
     installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     expect(await screen.findByRole("table", { name: "文献参数与来源" })).toHaveTextContent("40 %");
     expect(screen.getByRole("table", { name: "文献参数与来源" })).toHaveTextContent("0.4");
     expect(screen.getByRole("link", { name: "Control response was 40%." })).toHaveAttribute("href", `/app/files/src_original?start=10&end=34&sha=${"a".repeat(64)}`);
@@ -216,52 +229,55 @@ describe("模型与方法", () => {
       revisionApplicability: { population: "Source cohort", requiredFields: ["age"] } });
     installVcrServer(network.productRequest, { "GET /vcr/models": payload });
     draw(<VcrModelsPanel />);
-    await userEvent.click(await screen.findByRole("button", { name: "补充来源并登记新版本" }));
-    expect(screen.getByLabelText("模型风险")).toHaveValue("medium");
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
+    await userEvent.click(await screen.findByRole("button", { name: "补充来源并保存新版本" }));
+    expect(screen.queryByLabelText("模型风险")).toBeNull();
     expect(screen.getByLabelText("终点")).toHaveValue("time_to_event");
     expect(screen.getByLabelText("来源试验（每行一项）")).toHaveValue("NCT02296125");
-    expect(screen.getByRole("button", { name: "引入" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText("版本"), "2.2.0");
-    await userEvent.click(screen.getByRole("button", { name: "引入" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", expect.objectContaining({ version: "2.2.0", risk: "medium", endpointType: "time_to_event", card: payload.models[0].revisionCard, applicability: payload.models[0].revisionApplicability })));
+    expect(screen.queryByLabelText("版本")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "保存文献参数" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", expect.objectContaining({ version: "1.2.1", risk: "medium", endpointType: "time_to_event", card: payload.models[0].revisionCard, applicability: payload.models[0].revisionApplicability })));
   });
 
   it("never names a tier or a population for the model: the page has no such field to send", async () => {
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
-    await userEvent.type(await screen.findByLabelText("模型名称"), "m");
-    await userEvent.click(screen.getByRole("button", { name: "引入" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", { name: "m" }));
+    await userEvent.click(screen.getByRole("button", { name: "使用文献参数" }));
+    await userEvent.type(await screen.findByLabelText("参数集名称"), "m");
+    await userEvent.click(screen.getByRole("button", { name: "保存文献参数" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", { name: "m", version: "1.0.0" }));
     const body = server.calls.find((call) => call.method === "POST")?.body as Record<string, unknown>;
-    expect(Object.keys(body).sort()).toEqual(["name"]);
+    expect(Object.keys(body).sort()).toEqual(["name", "version"]);
   });
 
   it("is a request that cannot be sent without a name, and one at a time", async () => {
     let finish: (value: unknown) => void = () => undefined;
     server = installVcrServer(network.productRequest, { "POST /vcr/models": () => new Promise((resolve) => { finish = resolve; }) });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
-    expect(await screen.findByRole("button", { name: "引入" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText("模型名称"), "m");
-    const adopt = screen.getByRole("button", { name: "引入" });
+    await userEvent.click(screen.getByRole("button", { name: "使用文献参数" }));
+    expect(await screen.findByRole("button", { name: "保存文献参数" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("参数集名称"), "m");
+    const adopt = screen.getByRole("button", { name: "保存文献参数" });
     await userEvent.click(adopt);
     await userEvent.click(adopt);
     expect(server.calls.filter((call) => call.method === "POST")).toHaveLength(1);
     await act(async () => { finish({ id: "mdl_9" }); });
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已引入模型库。"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已保存文献参数。"));
   });
 
   it("says a refusal in words and keeps what was typed", async () => {
     server = installVcrServer(network.productRequest, { "POST /vcr/models": () => { throw new WebApiError("exists", { status: 409, code: "vcr_model_exists" }); } });
     draw(<VcrModelsPanel />);
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
-    await userEvent.type(await screen.findByLabelText("模型名称"), "重名的模型");
-    await userEvent.click(screen.getByRole("button", { name: "引入" }));
-    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
-    expect(screen.getByLabelText("模型名称")).toHaveValue("重名的模型");
+    await userEvent.click(screen.getByRole("button", { name: "使用文献参数" }));
+    await userEvent.type(await screen.findByLabelText("参数集名称"), "重名的模型");
+    await userEvent.click(screen.getByRole("button", { name: "保存文献参数" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("当前输入已保留");
+    expect(screen.getByLabelText("参数集名称")).toHaveValue("重名的模型");
   });
 
   it("is the module-off sentence, not an error, when the module is off", async () => {
@@ -482,4 +498,12 @@ describe("the compute budget", () => {
     expect(server.calls).toHaveLength(1);
     await act(async () => { finish({ released: [], budget: null }); });
   });
+});
+
+it("names source inputs in human terms and distinguishes original percentages from computation proportions", async () => {
+  const payload = fixture("ev201/models.json"); payload.models[0].inputs = ["研究设计人数", "truth.controlRate（%）"];
+  payload.models[0].revisionCard = { parameterBindings: [{ field: "truth.controlRate", value: 30, mappedValue: 0.3, unit: "%", quote: "Control response was 30%.", quoteStart: 10, quoteEnd: 34, sourceId: "src_original", textSha256: "a".repeat(64) }] };
+  installVcrServer(network.productRequest, { "GET /vcr/models": payload }); draw(<VcrModelsPanel />); await userEvent.click(await screen.findByText("文献参数与模型来源"));
+  const table = await screen.findByRole("table", { name: "文献参数与来源" }); expect(table).toHaveTextContent("30 %"); expect(table).toHaveTextContent("0.3 比例（0–1）");
+  expect(document.body.textContent).not.toContain("truth.controlRate（%）"); expect(document.body.textContent).toContain("对照发生率（计算单位：比例（0–1））");
 });

@@ -27,6 +27,8 @@ const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m)
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
+const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
@@ -142,6 +144,8 @@ export const routes: RouteObject[] = [
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
+        { path: "capabilities/methods/:methodId", element: <VcrMethodWorkbenchPage /> },
+        { path: "capabilities/calculations/:studyId", element: <VcrCalculationWorkbenchPage /> },
         { path: "account", element: <AccountPage /> },
         // The simulated wallet's two commerce pages — 模拟充值 and 模拟订单 — at the
         // addresses the domain names (`SIMULATED_WALLET_PAGES`), which is where

@@ -16,6 +16,10 @@ import { SimulatedAllowanceNotice } from "@/components/settings/SimulatedAllowan
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
+import { getVcrModels } from "@/lib/vcrClient";
+import { VcrMethodCatalogue } from "@/components/vcr/VcrMethodCatalogue";
+import { METHOD_FAMILIES, methodEntries, methodEntryId, methodPurpose, methodTask, methodTitle } from "@/lib/vcrMethodDisplay";
+import { useVcrLoad } from "@/components/vcr/vcrTabKit";
 import { Tag } from "@/components/ui/Tag";
 
 /**
@@ -82,6 +86,7 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
  */
 export function CapabilitiesPage() {
   const navigate = useNavigate();
+  const methods = useVcrLoad("tools:methods", getVcrModels);
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -124,9 +129,9 @@ export function CapabilitiesPage() {
   }, [billing.simulated, listed]);
 
   const categories = useMemo(
-    () => [...new Set(catalogue.map((ui) => ui.category))]
+    () => [...new Set([...catalogue.map((ui) => ui.category), ...(methods.state.kind === "ready" && methods.state.data.methods.length ? METHOD_FAMILIES : [])])]
       .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
-    [catalogue],
+    [catalogue, methods.state],
   );
   const groups = useMemo(() => categories
     .filter((name) => category === "all" || name === category)
@@ -134,7 +139,8 @@ export function CapabilitiesPage() {
       // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
       && searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))] as const)
     .filter(([, items]) => items.length > 0), [catalogue, categories, category, query]);
-  const shown = groups.reduce((sum, [, items]) => sum + items.length, 0);
+  const visibleMethods = methods.state.kind === "ready" ? methodEntries(methods.state.data.methods).filter(method => (category === "all" || category === methodTask(method.method ?? method.id)) && searchMatches(query, [methodTitle(method), method.name, methodTask(method.method ?? method.id), ...Object.values(methodPurpose(method))])) : [];
+  const shown = groups.reduce((sum, [, items]) => sum + items.length, 0) + visibleMethods.length;
 
   /**
    * A tool is chosen by opening a conversation that runs it — bound before the
@@ -164,7 +170,9 @@ export function CapabilitiesPage() {
       toolbar={{
         label: "科研工具筛选",
         filters: categories.length > 1
-          ? [{ kind: "chips", label: "分类", options: [{ value: "all", label: "全部" }, ...categories.map((name) => ({ value: name, label: name }))], value: category, onChange: setCategory }]
+          ? methods.state.kind === "ready" && methods.state.data.methods.length
+            ? [{ kind: "select", label: "分类", allLabel: "全部", options: categories.map(name => ({ value: name, label: name })), value: category === "all" ? null : category, onChange: next => setCategory(next ?? "all") }]
+            : [{ kind: "chips", label: "分类", options: [{ value: "all", label: "全部" }, ...categories.map((name) => ({ value: name, label: name }))], value: category, onChange: setCategory }]
           : [],
         onClear: clear,
         search: { label: "搜索工具", value: query, onChange: setQuery, onClear: () => setQuery("") },
@@ -173,11 +181,12 @@ export function CapabilitiesPage() {
     >
       {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
       {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}
+      {methods.state.kind === "loading" ? <ToolListSkeleton /> : methods.state.kind === "error" ? <LoadError message="计算方法目录暂时无法读取，其他科研工具仍可使用。" onRetry={methods.reload} /> : <VcrMethodCatalogue methods={methods.state.data.methods} query={query} family={category} onSelectFamily={setCategory} onOpen={method => navigate(`/app/capabilities/methods/${encodeURIComponent(methodEntryId(method))}`)} />}
       {loading ? <ToolListSkeleton />
         // Error with a way out, not a dead end: a catalogue that failed to
         // load once is usually a control plane that was briefly away.
         : error ? <LoadError message={`无法加载工具目录：${error}`} onRetry={() => setReloads((value) => value + 1)} />
-          : groups.length === 0 ? (
+          : groups.length === 0 && visibleMethods.length === 0 ? (
             <EmptyState
               icon={Search}
               title={`没有符合条件的${RESEARCH_TOOLS_NAME}`}

@@ -16,7 +16,7 @@ it("preserves source identity and binds candidate IDs without submitting caller-
   await userEvent.selectOptions(screen.getByLabelText("已有文献"), "source-1");
   await userEvent.click(screen.getByRole("button", { name: "读取文献参数" }));
   expect(await screen.findByText("Difference was 4 mg.")).toBeInTheDocument();
-  await userEvent.selectOptions(screen.getByLabelText("参数化参考场景"), "patients.continuous");
+  await userEvent.selectOptions(screen.getByLabelText("参数使用目的"), "patients.continuous");
   await userEvent.selectOptions(screen.getByLabelText("结局差值（outcome units）"), "p-1");
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ literatureSource: { sourceId: "source-1", generation: 3, textSha256: "preserved-hash" }, title: "Outcome trial", executionProfile: "patients.continuous", parameterBindings: [{ field: "truth.effect", candidateId: "p-1" }] }));
   expect(mocks.productRequest).toHaveBeenCalledWith("/vcr/studies/study-1/model-sources/source-1");
@@ -42,5 +42,5 @@ it("shows unreadable source failure without claiming an executable model", async
   await userEvent.click(screen.getByRole("button", { name: "读取文献参数" }));
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(onChange).toHaveBeenLastCalledWith(null);
-  expect(screen.queryByLabelText("参数化参考场景")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("参数使用目的")).not.toBeInTheDocument();
 });

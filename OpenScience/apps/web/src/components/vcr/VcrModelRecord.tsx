@@ -42,6 +42,8 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
   const twin = twinLabelOf(model);
   const sourceBindings = (Array.isArray(model.revisionCard?.parameterBindings) ? model.revisionCard.parameterBindings : []).filter(row => row && typeof row === "object" && typeof row.field === "string" && typeof row.sourceId === "string" && typeof row.quote === "string" && typeof row.textSha256 === "string" && Number.isFinite(row.mappedValue)) as Array<{ field: string; value: number; mappedValue: number; unit: string; quote: string; quoteStart: number; quoteEnd: number; sourceId: string; textSha256: string }>;
   const parameterLabels: Record<string, string> = { "truth.effect": "结局差值", "truth.sd": "标准差", "truth.controlRate": "对照发生率", "truth.treatmentRate": "干预发生率", "truth.hazardRatio": "风险比", "truth.controlMedian": "对照中位时间" };
+  const calculationUnit = (field: string, originalUnit: string) => ["truth.controlRate", "truth.treatmentRate"].includes(field) ? "比例（0–1）" : field === "truth.hazardRatio" ? "无量纲比值" : originalUnit || "单位未声明";
+  const inputs = sourceBindings.length ? ["研究设计人数", ...sourceBindings.map(row => `${parameterLabels[row.field] ?? row.field}（计算单位：${calculationUnit(row.field, row.unit)}）`)] : model.inputs;
   const rows: Fact[] = [
     ...(model.scope ? [{ label: "适用人群", value: model.scope }] : []),
     ...(model.region ? [{ label: "适用地区", value: model.region }] : []),
@@ -62,7 +64,7 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
     ...(model.events && model.events.length > 0 ? [{ label: "读取的事件", value: model.events.join("、") }] : []),
     ...(model.horizon ? [{ label: "最长推演时间", value: model.horizon }] : []),
     ...(model.trajectoriesMax ? [{ label: "每份历史最多轨迹数", value: String(model.trajectoriesMax) }] : []),
-    ...(model.inputs && model.inputs.length > 0 ? [{ label: "输入", value: model.inputs.join("、") }] : []),
+    ...(inputs && inputs.length > 0 ? [{ label: "输入", value: inputs.join("、") }] : []),
     ...(model.outputs ? [{ label: "输出", value: model.outputs }] : []),
     ...(model.missingData ? [{ label: "缺失数据", value: model.missingData }] : []),
     ...(model.uncertainty ? [{ label: "不确定性", value: model.uncertainty }] : []),
@@ -86,8 +88,8 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
       {sourceBindings.length > 0 && <Section title="文献参数" level="sub">
         <DataTable label="文献参数与来源" rows={sourceBindings} rowKey={row => row.field} columns={[
           { key: "field", header: "参数", cell: row => parameterLabels[row.field] ?? row.field },
-          { key: "value", header: "来源取值", cell: row => `${row.value} ${row.unit || "单位未声明"}` },
-          { key: "mapped", header: "计算取值", cell: row => row.mappedValue },
+          { key: "value", header: "原文取值与单位", cell: row => `${row.value} ${row.unit || "单位未声明"}` },
+          { key: "mapped", header: "计算取值与单位", cell: row => `${row.mappedValue} ${calculationUnit(row.field, row.unit)}` },
           { key: "source", header: "依据", cell: row => <Link className="inline-flex min-h-8 items-center py-1 text-link hover:underline" to={`/app/files/${encodeURIComponent(row.sourceId)}?${new URLSearchParams({ start: String(row.quoteStart), end: String(row.quoteEnd), sha: row.textSha256 })}`}>{row.quote}</Link> },
         ]} />
       </Section>}

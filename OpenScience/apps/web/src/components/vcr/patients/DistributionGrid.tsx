@@ -36,8 +36,8 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
     ? [row.mean !== null ? `均数 ${numberText(row.mean)}` : null, row.sd !== null ? `标准差 ${numberText(row.sd)}` : null].filter(Boolean).join(" · ")
     : row.levels && row.levels.length > 0 ? "" : row.result ?? "";
   return (
-    <section data-vcr-distribution={row.variable} className="min-w-0">
-      <h4 className="truncate text-ui font-semibold text-text">{row.label}</h4>
+    <figure data-vcr-distribution={row.variable} className="min-w-0">
+      <figcaption className="truncate text-ui font-semibold text-text">{row.label}</figcaption>
       <div className="mt-2">{continuous && row.histogram ? <Bins row={row} /> : <Levels row={row} />}</div>
       {stats && <p className="mt-1.5 text-caption tabular-nums text-text-2">{stats}</p>}
       {row.missing && <p className="text-caption tabular-nums text-text-3">{row.missing}</p>}
@@ -58,7 +58,7 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
           {state.text}
         </p>
       )}
-    </section>
+    </figure>
   );
 }
 
