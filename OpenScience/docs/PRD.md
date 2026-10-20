@@ -25,6 +25,19 @@
 > Resources and compiled into a wiki and a graph by its official skills), and both are shown to the
 > user as maps, pages and graphs. The root `AGENTS.md` is authoritative.
 
+
+## Current UX requirements (2026-10-20)
+
+These presentation decisions supersede conflicting September 23, October 7/8 and October 14/19 rules precisely as described below. Earlier records remain historical; this is an acceptance target, not a claim that the implementation has passed. See `../../docs/superpowers/plans/2026-10-19-workflow-rectification.md`, October 20 owner review.
+
+- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home lists studies and progress with one New Study action. Methods, reference search and population templates are contextual tools, not competing study-home tabs; retain compatible links and saved objects.
+- Keep the seven VCR and eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
+- Research Tools is the existing shared discovery surface for task-oriented methods, visible on its initial screen and reused inside study steps. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
+- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. Long method configuration and literature-to-parameter mapping use the main area; drawers hold only short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
+- Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
+- The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
+- Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.
+
 ## 1. Positioning
 
 **AI4S Workbench Desktop** is an open-source AI research workbench with macOS /
