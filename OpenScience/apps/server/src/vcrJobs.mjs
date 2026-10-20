@@ -694,7 +694,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...curveDetail, ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...curveDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -757,6 +757,51 @@ export class VcrJobs {
     return out;
   }
 
+  /** Resolve the narrow public reconstruction selection using the queue's canonical binder.
+   * @param {string} studyId @param {string} kind @param {Record<string, any>} scenario @param {unknown} resultId
+   */
+  async prepareReconstruction(studyId, kind, scenario, resultId) {
+    if (resultId == null) {
+      if (kind === VCR_RECONSTRUCTION_REFERENCE.kind && (Object.hasOwn(scenario, "pseudoIpdInputId") || scenario.anchored !== true)) {
+        throw new HttpError(400, "vcr_job_scenario_invalid", "Select an owned reconstruction result for the comparator.");
+      }
+      return { scenario, derived: [], reconstructionResultId: null };
+    }
+    if (kind !== VCR_RECONSTRUCTION_REFERENCE.kind || typeof resultId !== "string" || !/^[-a-zA-Z0-9_]+$/.test(resultId)) {
+      throw new HttpError(400, "vcr_job_scenario_invalid", "A reconstruction result is only supported for the time-to-event comparator.");
+    }
+    const entry = { resultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo };
+    const resolved = await this.#resolveDerived(studyId, entry);
+    const bound = vcrBindReconstruction(kind, scenario, [entry], [resolved]);
+    if ("code" in bound) throw new HttpError(400, bound.code, bound.message);
+    return { scenario: bound.scenario, derived: [entry], reconstructionResultId: resultId };
+  }
+
+  /** Available owned reconstructions, without paths or patient rows. @param {string} studyId */
+  async reconstructionResults(studyId) {
+    const rows = await this.store.rows(`SELECT r.*, c.origin AS curve_origin,
+        c.digitization #>> '{calibration,x,unit}' AS curve_time_unit
+      FROM ${VCR_SCHEMA}.results r
+      JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
+      JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
+      JOIN ${VCR_SCHEMA}.curve_extractions c ON c.id=j.checkpoint->>'curveReceiptId' AND c.study_id=r.study_id
+      WHERE r.study_id=$1 AND e.method='evidence.reconstruct_km'
+        AND e.receipt @> '{"signed":true}'::jsonb
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.tables) t WHERE t->>'name'='reconstructed-ipd'
+          AND t->>'location' LIKE 'derived/%' AND t->>'sha256' ~ '^[a-f0-9]{64}$')
+      ORDER BY r.created_at DESC LIMIT 100`, [studyId]);
+    const choices = [];
+    for (const row of rows) {
+      const result = resultFromRow(row);
+      const table = list(result.tables).find(candidate => object(candidate).name === VCR_RECONSTRUCTION_REFERENCE.table);
+      if (!vcrLocationIsValid(String(table?.location ?? ""))) continue;
+      choices.push({ resultId: result.id, label: "Kaplan–Meier reconstruction", version: result.version,
+        createdAt: result.createdAt, method: "evidence.reconstruct_km", valueSource: "reconstructed", table: "reconstructed-ipd",
+        source: { kind: "published_curve", origin: row.curve_origin }, timeUnit: row.curve_time_unit ?? null });
+    }
+    return choices;
+  }
+
   /**
    * A table one job wrote, as the next job's input: found through the result
    * that lists it, checked against the sha256 the result carries, and given the
@@ -773,9 +818,22 @@ export class VcrJobs {
       throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表没有存入数据平面：这一步需要它，暂时算不了。");
     }
     const execution = result.executionId
-      ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id = $1`, [result.executionId]) : null;
+      ? await this.store.one(`SELECT method, receipt, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
+    if (entry.bindTo !== undefined) {
+      if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
+      const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
+      if (execution?.method !== "evidence.reconstruct_km" || object(execution.receipt).signed !== true
+        || !producer?.checkpoint?.curveReceiptId || !producer.checkpoint.curveImageHash || !producer.checkpoint.curvePointsHash || !this.curveVerifier) {
+        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
+      }
+      const verified = await this.curveVerifier({ studyId, principal: producer.checkpoint.curvePrincipal,
+        scenario: producer.scenario, inputs: producer.inputs, receiptId: producer.checkpoint.curveReceiptId });
+      if (verified.detail.curveImageHash !== producer.checkpoint.curveImageHash || verified.detail.curvePointsHash !== producer.checkpoint.curvePointsHash) {
+        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction source receipt changed.");
+      }
+    }
     const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir ?? ""));
     const file = path.resolve(root, location);
     if (!file.startsWith(`${root}${path.sep}`)) throw new HttpError(409, "vcr_derived_table_missing", "输出表的位置不在数据平面里。");
@@ -830,8 +888,24 @@ export class VcrJobs {
       try { await this.#qualityBasis(studyId, String(row.kind), object(row.checkpoint).subjectId, object(row.scenario), qualityBasis);
         await this.#resolveDerived(studyId, qualityBasis); qualityBasisAvailable = true; } catch { qualityBasisAvailable = false; }
     }
-    return { qualityBasis, qualityBasisAvailable, subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
-      scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
+    const frozenReconstruction = list(row.inputs).map(object).filter(input => input.valueSource === "reconstructed"
+      && input.id === object(row.scenario).pseudoIpdInputId && String(input.id).endsWith(":reconstructed-ipd"));
+    const reconstructionResultId = object(row.checkpoint).reconstructionResultId
+      ?? (row.kind === VCR_RECONSTRUCTION_REFERENCE.kind && frozenReconstruction.length === 1
+        ? String(frozenReconstruction[0].id).slice(0, -":reconstructed-ipd".length) : null);
+    let reconstructionResultAvailable = null;
+    const scenario = { ...object(row.scenario) };
+    if (reconstructionResultId) {
+      delete scenario.pseudoIpdInputId;
+      try {
+        const selected = await this.prepareReconstruction(studyId, String(row.kind), scenario, reconstructionResultId);
+        const original = list(row.inputs).find(input => object(input).id === selected.scenario.pseudoIpdInputId);
+        const resolved = await this.#resolveDerived(studyId, selected.derived[0]);
+        reconstructionResultAvailable = !!original && object(original).hash === resolved.hash;
+      } catch { reconstructionResultAvailable = false; }
+    }
+    return { reconstructionResultId, reconstructionResultAvailable, qualityBasis, qualityBasisAvailable, subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
+      scenario, seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
       sourceModel: object(row.checkpoint).sourceModel ? { id: object(object(row.checkpoint).sourceModel).id, version: object(object(row.checkpoint).sourceModel).version } : null,
       inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),
       unavailableInputs: refs.length ? refs.filter((entry) => object(entry).kind !== "snapshot").length : list(row.inputs).length,

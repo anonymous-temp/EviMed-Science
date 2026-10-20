@@ -16,6 +16,9 @@ import { ProductDocuments } from '../src/productStore.mjs';
 import { ProductJobs } from '../src/productJobs.mjs';
 import { SourceService } from '../src/sourceService.mjs';
 import { createVcrModelSources } from '../src/vcrModelSources.mjs';
+import { createVcrCurveEvidence } from '../src/vcrCurveEvidence.mjs';
+import { VcrEvidenceStore } from '../src/vcrEvidenceStore.mjs';
+import { FIELD_MAP, cohortCsv } from './helpers/vcrIntakeData.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
@@ -218,6 +221,8 @@ test('two source-bound model versions retain their configuration and exact resul
     const text = `Control response was 40%; intervention response was ${treatmentRate * 100}%.`;
     const { source } = await sources.register(user.id, { projectId: 'method-source-project', connector: { type: 'upload', id: 'library' },
       path: `knowledge-base/trial-${index}.txt`, sha256: createHash('sha256').update(text).digest('hex'), size: text.length, mimeType: 'text/plain', mtime: '2026-10-20T00:00:00Z' });
+    // This fixture processes immediately even when the local host clock leads PostgreSQL.
+    await productJobs.bringForward(user.id, `ingest:${source.id}:generation:${source.payload.generation}`);
     const ingest = await productJobs.claim(['ingest'], 'workbench-source-fixture', { leaseMs: 3000 });
     await sources.beginIngestion(user.id, source.id, { generation: source.payload.generation, job: ingest });
     await sources.freezeCapture(ingest, { text, summary: 'Trial source', extractor: { name: 'fixture', version: '1', parser: 'fallback' }, units: [{ id: 'page1', unitType: 'page', status: 'extracted', itemIds: [] }] });
@@ -535,4 +540,103 @@ test('quality input options use real raw aliases and frozen file order, and resp
   assert.deepEqual(await visible(), []);
   const other = await composed.store.createStudy({ userId: user.id, projectId: 'other-raw-study', purpose: 'calculation' });
   await assert.rejects(dataPlane.resolveEngineInputs({ studyId: other.id, snapshotId: snapshot.id, principal: user.id, method: 'population.quality', purpose: 'vcr' }), { code: 'vcr_snapshot_not_found' });
+});
+
+
+test('owned curve reconstruction prepares, queues and reopens the exact comparator binding with real preserved files', options, async () => {
+  const study = await composed.store.createStudy({ userId: user.id, projectId: 'reconstruction-binding', name: 'Curve comparator', dataTier: 'T2', intendedUse: 'exploratory' });
+  const prefix = `/api/vcr/studies/${study.id}`;
+  const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/L1sAAAAASUVORK5CYII=', 'base64');
+  await fs.writeFile(path.join(plane, 'curve.png'), image);
+  const curves = createVcrCurveEvidence({ store: new VcrEvidenceStore({ database }), studyStore: composed.store,
+    access: composed.access, resolveProject: async () => ({ workspaceDir: plane }) });
+  const previousVerifier = composed.jobs.curveVerifier;
+  composed.jobs.curveVerifier = curves.curveVerifier;
+  const receipt = await curves.recordSelection({ studyId: study.id, principal: user.id, imageArtifactId: 'curve.png',
+    points: { curve: [{ time: 0, surv: 1 }, { time: 12, surv: .5 }], riskTable: [{ time: 0, atRisk: 100 }, { time: 12, atRisk: 50 }] } });
+  const csv = 'time,status,arm\n1,1,0\n12,0,0\n';
+  const hash = createHash('sha256').update(csv).digest('hex');
+  const transport = engine();
+  const baseResult = transport.result.bind(transport);
+  transport.result = async id => {
+    const answer = await baseResult(id);
+    answer.result.counts = { realPatients: 0, reconstructedPseudoPatients: 2 };
+    answer.result.tables = [{ name: 'reconstructed-ipd', sha256: hash, rows: 2 }];
+    answer.result.manifest.outputHash = vcrComputedOutputHash(answer.result);
+    return answer;
+  };
+  transport.downloadTable = async (_id, _name, target) => { await fs.writeFile(target.destination, csv, { mode: target.mode }); };
+  composed.jobs.engine = transport;
+  try {
+    const reconstructed = await composed.jobs.enqueue({ studyId: study.id, userId: user.id, kind: 'reconstruct_km', scenario: { provenance: { receiptId: receipt.id } } });
+    const [claim] = await composed.jobs.claim();
+    await composed.jobs.advance(claim); await composed.jobs.advance(claim);
+    assert.equal((await composed.jobs.get(study.id, reconstructed.job.id)).state, 'succeeded');
+    const result = (await composed.jobs.resultOf(study.id, reconstructed.job.id));
+    assert.ok(result);
+    await database.query(`INSERT INTO evimed_vcr.results(id,study_id,user_id,kind,created_at)
+      SELECT 'unrelated_' || n, $1, $2, 'patient_set', now()+interval '1 second' FROM generate_series(1,501) n`, [study.id, user.id]);
+    const choices = (await request(`${prefix}/jobs`)).reconstructionResults;
+    assert.equal(choices[0].resultId, result.id);
+    assert.doesNotMatch(JSON.stringify(choices), /location|sha256|derived\//);
+    const source = await composed.dataPlane.registerSource({ userId: user.id, studyId: study.id, name: 'Treatment cohort', ownerParty: 'Research team', allowedUses: ['vcr'] });
+    await composed.dataPlane.storeUpload({ actor: user.id, studyId: study.id, sourceId: source.id, name: 'cohort.csv', stream: Readable.from([cohortCsv()]) });
+    const proposed = await composed.dataPlane.proposeFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, columns: FIELD_MAP.filter(column => column.table === 'cohort.csv') });
+    await composed.dataPlane.confirmFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, hash: proposed.hash });
+    const { snapshot } = await composed.dataPlane.freezeSnapshot({ userId: user.id, studyId: study.id, sourceId: source.id });
+    const scenario = { covariates: ['age'], targets: { age: 60 }, endpoint: { type: 'time_to_event' }, timeUnit: 'months' };
+    const prepare = { method: 'comparator.maic_time_to_event', name: 'Reconstructed comparator', scenario, reconstructionResultId: result.id };
+    const prepared = await request(`${prefix}/method-configurations`, 'POST', prepare);
+    assert.equal(prepared.reconstructionResultId, result.id);
+    assert.deepEqual(prepared.scenario, scenario);
+    assert.deepEqual(await request(`${prefix}/method-configurations`, 'POST', { ...prepare, subjectId: prepared.subjectId }), prepared);
+    const payload = { kind: 'maic_time_to_event_comparator', subjectId: prepared.subjectId, scenario, reconstructionResultId: result.id, inputs: [{ kind: 'snapshot', id: snapshot.id }] };
+    const queued = await request(`${prefix}/jobs`, 'POST', payload);
+    assert.equal((await request(`${prefix}/jobs`, 'POST', payload)).id, queued.id);
+    const original = await composed.store.one("SELECT scenario, inputs FROM evimed_vcr.jobs WHERE study_id=$1 AND id=$2", [study.id, queued.id]);
+    assert.equal(original.scenario.pseudoIpdInputId, `${result.id}:reconstructed-ipd`);
+    assert.equal(original.inputs.find(input => input.valueSource === 'reconstructed').hash, hash);
+    const history = await request(`${prefix}/jobs/${queued.id}/configuration`);
+    assert.equal(history.reconstructionResultId, result.id);
+    assert.equal(history.reconstructionResultAvailable, true);
+    assert.deepEqual(history.scenario, scenario);
+    await database.query("UPDATE evimed_vcr.jobs SET checkpoint=checkpoint-'reconstructionResultId' WHERE id=$1", [queued.id]);
+    assert.equal((await request(`${prefix}/jobs/${queued.id}/configuration`)).reconstructionResultId, result.id, 'legacy history recovers only the exact frozen reconstructed input');
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { ...payload, scenario: { ...scenario, pseudoIpdInputId: 'forged' } }), { code: 'vcr_job_scenario_invalid' });
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { ...payload, derived: [] }), { code: 'vcr_payload_invalid' });
+    const foreign = await composed.store.createStudy({ userId: user.id, projectId: 'other-reconstruction', name: 'Other' });
+    await assert.rejects(request(`/api/vcr/studies/${foreign.id}/method-configurations`, 'POST', prepare), { code: 'vcr_derived_table_missing' });
+    await assert.rejects(request(`${prefix}/method-configurations`, 'POST', { ...prepare, reconstructionResultId: snapshot.id }), { code: 'vcr_derived_table_missing' });
+    await assert.rejects(request(`${prefix}/method-configurations`, 'POST', { ...prepare, method: 'patients.binary', scenario: binary() }), { code: 'vcr_job_scenario_invalid' });
+    await assert.rejects(request(`${prefix}/method-configurations`, 'POST', { ...prepare, scenario: { ...scenario, pseudoIpdInputId: 'caller-selected' } }), { code: 'vcr_job_scenario_invalid' });
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { ...payload, reconstructionResultId: undefined }), { code: 'vcr_job_scenario_invalid' });
+    const foreignSource = await composed.dataPlane.registerSource({ userId: user.id, studyId: foreign.id, name: 'Other cohort', ownerParty: 'Research team', allowedUses: ['vcr'] });
+    await composed.dataPlane.storeUpload({ actor: user.id, studyId: foreign.id, sourceId: foreignSource.id, name: 'cohort.csv', stream: Readable.from([cohortCsv()]) });
+    const foreignMap = await composed.dataPlane.proposeFieldMap({ actor: user.id, studyId: foreign.id, sourceId: foreignSource.id, columns: FIELD_MAP.filter(column => column.table === 'cohort.csv') });
+    await composed.dataPlane.confirmFieldMap({ actor: user.id, studyId: foreign.id, sourceId: foreignSource.id, hash: foreignMap.hash });
+    const foreignFrozen = await composed.dataPlane.freezeSnapshot({ userId: user.id, studyId: foreign.id, sourceId: foreignSource.id });
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { ...payload, inputs: [{ kind: 'snapshot', id: foreignFrozen.snapshot.id }] }));
+    await database.query("UPDATE evimed_vcr.results SET tables='[]'::jsonb WHERE id=$1", [result.id]);
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_derived_table_missing' });
+    await database.query('UPDATE evimed_vcr.results SET tables=$2::jsonb WHERE id=$1', [result.id, JSON.stringify(result.tables)]);
+    const retained = result.tables.find(table => table.name === 'reconstructed-ipd');
+    await fs.appendFile(path.join(plane, retained.location), 'changed');
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_derived_table_missing' });
+    assert.equal((await request(`${prefix}/jobs/${queued.id}/configuration`)).reconstructionResultAvailable, false);
+    await fs.writeFile(path.join(plane, retained.location), csv);
+    await database.query("UPDATE evimed_vcr.executions SET method='patients.binary' WHERE id=$1", [result.executionId]);
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_derived_table_unsupported' });
+    await database.query("UPDATE evimed_vcr.executions SET method='evidence.reconstruct_km',receipt='{}'::jsonb WHERE id=$1", [result.executionId]);
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_curve_provenance_unavailable' });
+    const anchored = await request(`${prefix}/method-configurations`, 'POST', { method: prepare.method, name: 'Published anchored comparator',
+      scenario: { ...scenario, anchored: true, aggregateEstimate: .1, aggregateSe: .2 } });
+    assert.ok(anchored.subjectId);
+    assert.equal(anchored.reconstructionResultId, undefined);
+    const anchoredQueued = await request(`${prefix}/jobs`, 'POST', { ...payload, subjectId: anchored.subjectId, reconstructionResultId: undefined,
+      scenario: { ...scenario, anchored: true, aggregateEstimate: .1, aggregateSe: .2 } });
+    assert.ok(anchoredQueued.id);
+    await database.query("UPDATE evimed_vcr.executions SET receipt='{\"signed\":true}'::jsonb WHERE id=$1", [result.executionId]);
+    await database.query('DELETE FROM evimed_vcr.curve_extractions WHERE id=$1', [receipt.id]);
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_curve_provenance_unavailable' });
+  } finally { composed.jobs.curveVerifier = previousVerifier; }
 });

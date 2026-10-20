@@ -1235,7 +1235,7 @@ export function createVcrRoutes(dependencies) {
 
     if (section === "method-configurations" && parts.length === 3 && method === "POST") {
       const { study } = await authorize(id, "run");
-      const body = await bodyOf(req, maxJsonBytes, ["method", "name", "scenario", "subjectId", "modelId"]);
+      const body = await bodyOf(req, maxJsonBytes, ["method", "name", "scenario", "subjectId", "modelId", "reconstructionResultId"]);
       const name = vcrStudyName(body.name);
       if (!name || typeof body.method !== "string" || !body.scenario || typeof body.scenario !== "object" || Array.isArray(body.scenario)) {
         throw new HttpError(400, "vcr_job_scenario_invalid", "A method, name and scenario are required.");
@@ -1245,8 +1245,13 @@ export function createVcrRoutes(dependencies) {
       }
       const kind = Object.entries(VCR_JOB_METHODS).find(([, value]) => value === body.method)?.[0];
       const model = body.modelId ? await service.modelExecution(user, study, body.modelId, kind ?? "", body.scenario) : null;
-      return reply(await prepareVcrMethodConfiguration({ store: service.store, study, userId: String(user.id),
-        method: body.method, name, scenario: body.scenario, subjectId: body.subjectId, model }), 201);
+      if (body.reconstructionResultId != null && !hooks.jobs?.prepareReconstruction) throw UNAVAILABLE();
+      const reconstruction = hooks.jobs?.prepareReconstruction
+        ? await hooks.jobs.prepareReconstruction(study.id, kind ?? "", body.scenario, body.reconstructionResultId)
+        : { scenario: body.scenario, reconstructionResultId: null };
+      const prepared = await prepareVcrMethodConfiguration({ store: service.store, study, userId: String(user.id),
+        method: body.method, name, scenario: reconstruction.scenario, subjectId: body.subjectId, model });
+      return reply(reconstruction.reconstructionResultId ? { ...prepared, reconstructionResultId: reconstruction.reconstructionResultId, scenario: body.scenario } : prepared, 201);
     }
 
     // --- jobs ------------------------------------------------------------------
@@ -1254,10 +1259,10 @@ export function createVcrRoutes(dependencies) {
       if (parts.length === 3 && method === "GET") {
         const { study } = await authorize(id, "read");
         if (!hooks.jobs?.listForStudy) throw UNAVAILABLE();
-        return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
+        return reply({ jobs: await hooks.jobs.listForStudy(study.id), reconstructionResults: await hooks.jobs.reconstructionResults?.(study.id) ?? [], budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection", "modelId", "qualityBasis"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection", "modelId", "qualityBasis", "reconstructionResultId"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
         if (body.qualityBasis != null && body.kind !== "population_quality") throw new HttpError(400, "vcr_job_scenario_invalid", "qualityBasis is for population quality only.");
         if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
@@ -1271,6 +1276,10 @@ export function createVcrRoutes(dependencies) {
         }
         const { study } = await authorize(id, "run");
         if (!hooks.jobs?.enqueue) throw UNAVAILABLE();
+        const reconstruction = hooks.jobs.prepareReconstruction
+          ? await hooks.jobs.prepareReconstruction(study.id, body.kind, body.scenario ?? {}, body.reconstructionResultId)
+          : { derived: [] };
+        if (body.reconstructionResultId != null && !hooks.jobs.prepareReconstruction) throw UNAVAILABLE();
         if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,body.kind)) {
           if (body.modelId != null) throw new HttpError(400, "vcr_model_invalid", "Literature reference profiles do not execute longitudinal adapters.");
           if (!service.packages.longitudinal) throw UNAVAILABLE();
@@ -1290,10 +1299,10 @@ export function createVcrRoutes(dependencies) {
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
         const subject = hooks.jobs.store
-          ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: body.scenario ?? {} }) : null;
+          ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: reconstruction.scenario ?? body.scenario ?? {} }) : null;
         const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
-            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [], qualityBasis: body.qualityBasis ?? null,
+            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, derived: reconstruction.derived, inputs: body.inputs ?? [], qualityBasis: body.qualityBasis ?? null,
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
             detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...(sourceModel ? { sourceModel } : {}) },
           }));
