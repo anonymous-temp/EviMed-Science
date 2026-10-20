@@ -102,6 +102,7 @@ before(async () => {
         await writeFile(path.join(root, "output/manifest.json"), JSON.stringify({ sourceDigest: input.sourceDigest, rendererVersion: input.rendererVersion, formats }));
       },
     },
+    vcrStartStudy: async () => ({ accepted: true }),
     vcrDispatchRun: async (/** @type {any} */ input) => {
       dispatches.push(input);
       return { runId: `run_${dispatches.length}`, sessionId: `session_${dispatches.length}`, status: "running" };
@@ -192,6 +193,7 @@ function requests(target, ids) {
     "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
+    "POST /studies/:id/start": async () => ["POST", `${S}/start`, { brief: "Partial research brief", requestId: "request_123" }],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
     // Stop what the study is doing: the run its slot holds and its open jobs (nothing is out here, so nothing is stopped).
     "POST /studies/:id/cancel": async () => ["POST", `${S}/cancel`, {}],
@@ -203,6 +205,8 @@ function requests(target, ids) {
     "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],
     "GET /studies/:id/jobs/:job": async () => ["GET", `${S}/jobs/job_none`, undefined],
+    "GET /studies/:id/jobs/:job/result": async () => ["GET", `${S}/jobs/job_none/result`, undefined],
+    "POST /studies/:id/method-configurations": async () => ["POST", `${S}/method-configurations`, { method: "profile.snapshot", name: "Profile", scenario: {} }],
     "POST /studies/:id/jobs": async () => ["POST", `${S}/jobs`, { kind: "design_simulation", scenario: {} }],
     "POST /studies/:id/jobs/:job/cancel": async () => ["POST", `${S}/jobs/job_none/cancel`, {}],
     "POST /studies/:id/budget": async () => ["POST", `${S}/budget`, { cpuSeconds: 600 }],
@@ -301,7 +305,7 @@ test("CS-45 every route, driven through the real server as the owner and as each
       const answer = await call(who, method, route, body);
       // Reference-only case export still requires current patient-level read
       // authority; study export alone cannot read its underlying documents.
-      const allowed = holdsAny(held, abilities) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);

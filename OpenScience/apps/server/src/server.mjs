@@ -1,3 +1,4 @@
+import { createVcrStudyStart } from "./vcrStudyStart.mjs";
 import { WebVitals } from './webVitals.mjs';
 import { GeoJudge } from './geoJudge.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
@@ -2829,11 +2830,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return null;
     }
   }
+  const startVcrStudy = createVcrStudyStart({
+    conversations: study => resolveStudyConversation(study, { create: true }),
+    runs: { list: project => agentRuns.list(project), existingDispatch: (project, run) => agentRuns.existingDispatch(project, run) },
+    projectFor: async study => store.requireProject(await store.userById(study.userId), study.projectId),
+    inbox: (project, sessionId) => runtimeManager.sessionInbox(project, sessionId),
+    orchestrator: () => vcr.orchestrator,
+    save: async (user, study, input) => {
+      await vcr.store.updateStudy(study.id, { question: input.brief, ...(input.name ? { name: input.name } : {}) }, String(user.id));
+      if (input.name && input.name !== study.name) {
+        const owner = await store.userById(study.userId);
+        const project = await store.requireProject(owner, study.projectId);
+        if (project.name === study.name) await store.renameProject(owner, project.id, [...input.name].slice(0, 40).join(""));
+      }
+    },
+    dispatch: (user, project, sessionId, dispatchId, text, options) => dispatchChannelRun(user, project, sessionId, dispatchId, text, options),
+  });
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
     store, vcrStore: vcr?.store ?? null, service: vcr?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
+    startStudy: overrides.vcrStartStudy ?? ((user, study, input) => startVcrStudy(user, study, input)),
     projects: {
       create: (user, name) => createResearcherProject(user, { name }),
       // A study whose row (or first conversation) could not be made takes the
@@ -3847,6 +3865,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             code: typeof error?.code === "string" ? error.code : "vcr_run_completion_failed",
           }));
         }
+      }
+      if (vcr?.orchestrator && !String(run.dispatchId ?? "").startsWith("vcr-")) {
+        await vcr.orchestrator.onRunFinished(project, run).catch(error => securityAudit(config, "vcr.intake.complete", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id, code: error?.code ?? "vcr_run_completion_failed",
+        }));
       }
       // A GEO run (dispatch id `geo-…`): its bounded runtime is let go, then
       // the orchestrator folds it into the program's steps.
@@ -5935,7 +5958,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * never reaches a kernel.
    * @param {any} user @param {any} project @param {string} sessionId @param {string} dispatchId @param {string} text
    */
-  async function dispatchChannelRun(user, project, sessionId, dispatchId, text) {
+  async function dispatchChannelRun(user, project, sessionId, dispatchId, text, options = /** @type {any} */ ({})) {
     if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
     }
@@ -5955,10 +5978,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ? registry.get(route.effectiveAgentId) : null;
     const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
-    const dispatch = () => agentRuns.dispatch(project, {
+    const dispatch = async () => {
+      if (options.beforeReserve) await options.beforeReserve();
+      return agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
-      waitForRoom: true,
+      ...(options.dispatchFingerprint ? { dispatchFingerprint: options.dispatchFingerprint } : { waitForRoom: true }),
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: text,
       effectiveAgentId: route.effectiveAgentId ?? null,
@@ -5966,52 +5991,67 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       effectiveRuntimeAgent: route.effectiveRuntimeAgent ?? null,
       effectiveRouteReason: route.effectiveRouteReason ?? null,
     }, async (session, dispatchedRun, repairText = null) => {
-      // A repair round is the gate's words in the researcher's conversation,
-      // so it carries the gate's tag (see the chat route).
-      const promptText = typeof repairText === "string" && repairText.trim()
-        ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
-        : text;
-      let resident;
+      let promptAttempted = false;
       try {
-        resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId });
-      } catch (error) {
-        throw memoryRecallRejection(error);
-      }
-      const prepared = await prepareOwnedResearchContext(project, session, {
-        query: text,
-        resident,
-        specialists: routableAgents,
-        // A person sent this from their channel and reads the reply there.
-        attended: true,
-        routedSpecialist: routed
-          ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
-            skill: routed.skill, companionSkills: routed.companionSkills }
-          : null,
-      }, dispatchedRun);
-      if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
-        await agentRuns.recordLearning(project, dispatchedRun.id, {
-          ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
-          ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+        // A repair round is the gate's words in the researcher's conversation,
+        // so it carries the gate's tag (see the chat route).
+        const promptText = typeof repairText === "string" && repairText.trim()
+          ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
+          : text;
+        if (options.beforeSend) await options.beforeSend(dispatchedRun);
+        let resident;
+        try {
+          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId });
+        } catch (error) {
+          throw memoryRecallRejection(error);
+        }
+        const prepared = await prepareOwnedResearchContext(project, session, {
+          query: text,
+          resident,
+          specialists: routableAgents,
+          // A person sent this from their channel and reads the reply there.
+          attended: true,
+          routedSpecialist: routed
+            ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
+              skill: routed.skill, companionSkills: routed.companionSkills }
+            : null,
+        }, dispatchedRun);
+        if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
+          await agentRuns.recordLearning(project, dispatchedRun.id, {
+            ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
+            ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+          });
+        }
+        // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
+        // the run is reserved and the person is waiting on this answer, so a place in
+        // line is the right shape and a refusal is the wrong one.
+        if (options.dispatchFingerprint) await runtimeManager.start(project);
+        else await runtimeManager.startWhenRoom(project);
+        if (options.dispatchFingerprint) {
+          const state = await runtimeManager.sessionInbox(project, session.sessionId);
+          if (!state || state.running !== false || state.queued !== 0) throw new HttpError(409, "vcr_conversation_busy", "The study conversation is busy. Retry when it finishes.");
+        }
+        if (options.beforePrompt) await options.beforePrompt();
+        promptAttempted = true;
+        await runtimeManager.dispatchPrompt(project, session.sessionId, {
+          recordPromptActor: request => recordExtensionPromptActor(user, project, request),
+          text: promptText,
+          system: options.systemSupplement ? `${prepared.system ?? ""}\n\n${options.systemSupplement}` : prepared.system,
+          routedCapability: prepared.routedCapability,
+          memoryContext: prepared.memoryContext,
+          agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
+          model: `deepseek/${config.deepseekModel}`,
+          runId: dispatchedRun.id,
+          requestId: dispatchedRun.kernelRequestIds?.at(-1),
+          strictContext: true,
         });
+        await resident.delivered();
+      } catch (error) {
+        if (options.dispatchFingerprint && !promptAttempted) error.definitivelyRejected = true;
+        throw error;
       }
-      // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
-      // the run is reserved and the person is waiting on this answer, so a place in
-      // line is the right shape and a refusal is the wrong one.
-      await runtimeManager.startWhenRoom(project);
-      await runtimeManager.dispatchPrompt(project, session.sessionId, {
-        recordPromptActor: request => recordExtensionPromptActor(user, project, request),
-        text: promptText,
-        system: prepared.system,
-        routedCapability: prepared.routedCapability,
-        memoryContext: prepared.memoryContext,
-        agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
-        model: `deepseek/${config.deepseekModel}`,
-        runId: dispatchedRun.id,
-        requestId: dispatchedRun.kernelRequestIds?.at(-1),
-        strictContext: true,
-      });
-      await resident.delivered();
     });
+    };
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
   }
 

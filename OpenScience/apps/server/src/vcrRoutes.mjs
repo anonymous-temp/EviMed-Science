@@ -94,6 +94,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   // 「为该患者找试验」 for a patient the study does not hold.
   "vcr_subject_not_found",
   "vcr_name_invalid",
+  "vcr_conversation_busy",
+  "vcr_conversation_unavailable",
+  "vcr_calculation_research_required",
   "vcr_action_invalid",
   "vcr_criterion_state_invalid",
   "vcr_tier_invalid",
@@ -172,6 +175,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
   "POST /studies/:id/run": ["run"],
+  "POST /studies/:id/start": ["run", "write"],
   "POST /studies/:id/cancel": ["run"],
   "GET /studies/:id/patients/rows": ["read"],
   "GET /studies/:id/patients/:patient": ["read"],
@@ -393,7 +397,7 @@ function wholeNumber(value, field, max) {
  *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, cards?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, cards?: any, startStudy?: (user: any, study: any, input: any) => Promise<any> }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -647,8 +651,10 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 1) {
       if (method === "GET") return reply(await service.listStudies(user));
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "action", "purpose"]);
+        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "action", "purpose", "draft"]);
+        if (body.draft != null && typeof body.draft !== "boolean") throw new HttpError(400, "vcr_payload_invalid", "draft must be a boolean.");
         const input = {
+          draft: body.draft === true,
           purpose: body.purpose == null ? undefined : word(body.purpose, ["programme", "calculation"], "vcr_payload_invalid", "purpose"),
           name: body.name == null ? undefined : vcrStudyName(body.name),
           question: body.question == null ? "" : String(body.question).slice(0, QUESTION_MAX),
@@ -1168,6 +1174,23 @@ export function createVcrRoutes(dependencies) {
         return reply({ grant: revoked });
       }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    }
+
+    if (parts.length === 3 && method === "POST" && section === "start") {
+      const body = await bodyOf(req, maxJsonBytes, ["brief", "name", "requestId", "action"]);
+      if (typeof body.brief !== "string" || !body.brief.trim() || body.brief.length > QUESTION_MAX
+        || typeof body.requestId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(body.requestId)) {
+        throw new HttpError(400, "vcr_payload_invalid", "Provide a research brief and a stable request id.");
+      }
+      const { study } = await authorize(id, "run");
+      await authorize(id, "write");
+      if (body.name !== undefined) await authorize(id, "manage_study");
+      const input = { brief: body.brief, requestId: body.requestId,
+        ...(body.name !== undefined ? { name: vcrStudyName(body.name) } : {}),
+        action: body.action === "auto" ? "auto" : body.action == null ? "definition" : word(body.action, VCR_ACTIONS, "vcr_action_invalid", "action") };
+      if (!dependencies.startStudy) throw UNAVAILABLE();
+      return reply(await audited("vcr.study.start", () => ({ code: id }), { code: id },
+        () => dependencies.startStudy(user, study, input)));
     }
 
     // --- 「让 AI 做」 ------------------------------------------------------------

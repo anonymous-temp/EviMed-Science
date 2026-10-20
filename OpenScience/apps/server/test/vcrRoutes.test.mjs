@@ -483,6 +483,7 @@ const REQUESTS = {
   "PATCH /studies/:id name,question,action": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
+  "POST /studies/:id/start": ["POST", "/api/vcr/studies/std_1/start", { brief: "Partial research brief", requestId: "request_123" }],
   "POST /studies/:id/run": ["POST", "/api/vcr/studies/std_1/run", { step: "definition" }],
   "POST /studies/:id/cancel": ["POST", "/api/vcr/studies/std_1/cancel", {}],
   "GET /studies/:id/patients/rows": ["GET", "/api/vcr/studies/std_1/patients/rows?result=res_1", undefined],
@@ -555,6 +556,7 @@ function composedHooks() {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
     longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
+    startStudy: ok,
     orchestrator: { runStep: ok, recomputeAfterChange: ok, requestTrialSearch: async () => ({ sessionId: "ses_1", runId: "run_1", deferred: null }) },
     jobs: { resultOf: async () => null, enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
@@ -616,7 +618,8 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
     as(who);
     for (const [key, abilities] of Object.entries(VCR_ROUTE_ABILITIES)) {
       const [method, path, body] = REQUESTS[key];
-      const allowed = abilities.some((ability) => held.some((each) => roleAllows(each, roleFor(ability)) || roleAllows(each, ability)));
+      const has = ability => held.some(each => roleAllows(each, roleFor(ability)) || roleAllows(each, ability));
+      const allowed = key === "POST /studies/:id/start" ? abilities.every(has) : abilities.some(has);
       const res = response();
       let status = 0;
       try { await routes(request(method, path, body), res); status = res.status; } catch (error) { status = error instanceof HttpError ? error.status : 500; }
@@ -913,7 +916,7 @@ test("every code these routes emit is one this module declares", async () => {
   // are declared here because this is the list the page reads and the domain's
   // registry takes verbatim. Naming them keeps that true: a declared code that
   // nobody raises is dropped, not left as decoration.
-  const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
+  const fromElsewhere = ["vcr_conversation_busy", "vcr_conversation_unavailable", "vcr_calculation_research_required", "vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
     "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
     "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated",
     "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable",
@@ -1269,4 +1272,18 @@ test("paper-source previews use study read authorization before resolving a sour
   await routes(request("GET", `/api/vcr/studies/std_1/model-sources/${sourceId}`), res);
   assert.equal(res.status, 200);
   await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/model-sources/http_localhost"), response()), { status: 404 });
+});
+
+
+test("Start requires run and write; naming also requires the lead and the original brief stays exact", async () => {
+  const received = [];
+  const f = fixture({ who: "data-manager", roles: { "data-manager": ["data_manager"] },
+    overrides: { startStudy: async (user, current, input) => { received.push({ user, current, input }); return { state: "accepted" }; } } });
+  const brief = "  Partial brief\nwith missing inputs  ";
+  await f.routes(request("POST", "/api/vcr/studies/std_1/start", { brief, requestId: "request_123" }), response());
+  assert.equal(received[0].input.brief, brief);
+  assert.equal(received[0].input.action, "definition");
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/start", { brief, name: "Renamed", requestId: "request_124" }), response()), { status: 403 });
+  assert.equal(received.length, 1);
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/start", { brief, requestId: "request_124", sessionId: "foreign" }), response()), { status: 400 });
 });

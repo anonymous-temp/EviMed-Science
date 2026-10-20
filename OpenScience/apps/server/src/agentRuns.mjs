@@ -142,6 +142,7 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "dispatchFingerprint",
   "agendaId",
   "automated",
   // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
@@ -400,6 +401,21 @@ function deliveryProducts(run) {
   return normalizeEffectiveProducts(declared);
 }
 
+/** @param {unknown} value */
+function normalizeDispatchFingerprint(value) {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw invalid("Dispatch fingerprint must be a SHA-256 digest.");
+  return value;
+}
+
+/** Fingerprinted callers cannot reuse a request key for another payload or conversation.
+ * @param {any} run @param {string} sessionId @param {string | null} fingerprint */
+function assertDispatchIdentity(run, sessionId, fingerprint) {
+  if ((fingerprint != null || run.dispatchFingerprint != null)
+    && (run.sessionId !== sessionId || run.dispatchFingerprint !== fingerprint)) {
+    throw new HttpError(409, "agent_run_dispatch_conflict", "This request id already belongs to another research request.");
+  }
+}
+
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
@@ -430,6 +446,7 @@ function normalizeDispatchInput(input) {
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    dispatchFingerprint: input.dispatchFingerprint == null ? null : normalizeDispatchFingerprint(input.dispatchFingerprint),
     agendaId: input.agendaId == null ? null : safeId(input.agendaId, "research agenda id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
@@ -585,6 +602,7 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         id,
         dispatchId,
+        ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
         dispatchStatus,
         ...(event.agendaId ? { agendaId: safeStoredId(event.agendaId, "agendaId") } : {}),
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
@@ -4831,6 +4849,7 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    dispatchFingerprint = null,
     agendaId = null,
     automated = false,
     estimatedMinutes = null,
@@ -4870,7 +4889,10 @@ export class AgentRunStore {
       const duplicate = dispatchId == null
         ? null
         : [...runs.values()].find((run) => run.dispatchId === dispatchId);
-      if (duplicate) return { run: duplicate, owner: false };
+      if (duplicate) {
+        assertDispatchIdentity(duplicate, session.sessionId, dispatchFingerprint);
+        return { run: duplicate, owner: false };
+      }
       const active = [...runs.values()].find((run) => run.sessionId === session.sessionId && run.status === "running");
       // An adopted run is a placeholder for a session nobody had claimed. A
       // dispatch is somebody claiming it, so it takes the session over instead
@@ -4922,6 +4944,7 @@ export class AgentRunStore {
         event: "started",
         id,
         dispatchId,
+        ...(dispatchFingerprint != null ? { dispatchFingerprint } : {}),
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
         ...(agendaId ? { agendaId } : {}),
         ...(nativeTurn ? { nativeTurn } : {}),
@@ -4995,6 +5018,7 @@ export class AgentRunStore {
     const {
       sessionId,
       dispatchId,
+      dispatchFingerprint,
       automated,
       agendaId,
       estimatedMinutes,
@@ -5009,7 +5033,10 @@ export class AgentRunStore {
     } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
-    if (existing) return this.existingDispatch(project, existing);
+    if (existing) {
+      assertDispatchIdentity(existing, sessionId, dispatchFingerprint);
+      return this.existingDispatch(project, existing);
+    }
     const session = await this.researchSessions.get(project, sessionId);
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
@@ -5034,7 +5061,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
