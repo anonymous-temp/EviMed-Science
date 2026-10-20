@@ -36,7 +36,7 @@ describe("the readers over the server's own pages", () => {
     expect(population.criteria).toHaveLength(fixture("ev201/population.json").criteria.length);
     expect(population.attrition.length).toBeGreaterThan(0);
     expect(population.stale?.queued).toBe(true);
-    expect(population.quality?.tag).toBe("合成 · 探索性");
+    expect(population.quality).toBeNull();
 
     const patients = await getVcrPatients(STUDY_ID);
     expect(patients.model?.twin).toBe("scenario_simulation");
