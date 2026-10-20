@@ -76,7 +76,7 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_EDITOR_VERSION, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, isChineseTitle } from "./frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
@@ -1129,6 +1129,8 @@ export class FrontierPipeline {
           published_at = CASE WHEN state = 'published' THEN published_at ELSE $7 END,
           date_precision = CASE WHEN state = 'published' THEN date_precision ELSE $8 END,
           editor_version = CASE WHEN state = 'published' AND $9::boolean AND rescored_at IS NULL THEN NULL ELSE editor_version END,
+          editor_diagnostics = CASE WHEN $9::boolean THEN '{}'::jsonb ELSE editor_diagnostics END,
+          state = CASE WHEN $9::boolean AND state='scored' THEN 'screened' ELSE state END,
           updated_at = clock_timestamp()
         WHERE id = $1`, [item.id, entry.title_raw, entry.canonical_url, entry.doi, entry.pmid, entry.registry_ids ?? [],
         entry.published_at, entry.date_precision, moved]);
@@ -1333,9 +1335,7 @@ export class FrontierPipeline {
       const item = (await client.query("SELECT * FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [itemId])).rows[0];
       if (!item) throw Object.assign(new Error("The entry's item is gone."), { code: "frontier_item_missing" });
       const enrichment = available?.enrichment && typeof available.enrichment === "object" ? available.enrichment : null;
-      const existing = promoted
-        ? (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0]
-        : null;
+      const existing = (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0] ?? null;
       const texts = {
         abstract_raw: available?.abstract ?? existing?.abstract_raw ?? null,
         body_excerpt: available?.body_excerpt ? String(available.body_excerpt).slice(0, 12_000) : existing?.body_excerpt ?? null,
@@ -1346,7 +1346,10 @@ export class FrontierPipeline {
         open_access: enrichment?.open_access ?? existing?.open_access ?? null,
         enrichment: enrichment ?? existing?.enrichment ?? {},
       };
-      const gained = Boolean(available && (available.abstract || available.body_excerpt) && !existing?.abstract_raw && !existing?.body_excerpt);
+      const effectiveInput = buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.editor.timeZone });
+      const previousInput = existing ? buildModelInput(this.#editItem(item, existing, entry, source, glossary), { timeZone: this.editor.timeZone }) : null;
+      const inputChanged = Boolean(existing && (previousInput !== effectiveInput
+        || (item.editor_diagnostics?.inputSha256 && item.editor_diagnostics.inputSha256 !== sha256(effectiveInput))));
       // The text the edit will use; the edit stores what it actually sent.
       const modelInput = existing && item.editor_version ? existing.model_input
         : buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.timeZone });
@@ -1374,9 +1377,14 @@ export class FrontierPipeline {
         await client.query(`UPDATE evimed_frontier.items SET flags = $2, evidence_type = $3, evidence_basis = $4, score_authority = $5,
             score_total = CASE WHEN score_impact IS NULL THEN NULL ELSE $5 + score_impact + score_novelty + score_relevance END,
             editor_version = CASE WHEN $6::boolean AND rescored_at IS NULL THEN NULL ELSE editor_version END,
+            editor_diagnostics = CASE WHEN $6::boolean THEN '{}'::jsonb ELSE editor_diagnostics END,
             updated_at = clock_timestamp()
           WHERE id = $1`, [itemId, flags, evidenceType, evidence.fixed?.basis ?? item.evidence_basis,
-          frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" }), gained]);
+          frontierAuthorityScore({ authority: source?.authority, evidenceType, preprint: source?.source_type === "preprint" }), inputChanged]);
+      }
+      if (inputChanged && item.state !== "published") {
+        await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics='{}'::jsonb,
+          state=CASE WHEN state='scored' THEN 'screened' ELSE state END WHERE id=$1`, [item.id]);
       }
       if (linked || item.state === "published") await bumpFrontierVersion(client);
       const hold = decision.action === "promote-hold" && !available;
@@ -1477,13 +1485,13 @@ export class FrontierPipeline {
 
   /**
    * Everything an item's processing reads, in one place.
-   * @param {any} item
+   * @param {any} item @param {any} [database]
    */
-  async #itemContext(item) {
+  async #itemContext(item, database = this.database) {
     const [texts, sources, entries] = await Promise.all([
-      this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id]),
-      this.database.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id]),
-      this.database.query(`SELECT * FROM evimed_frontier.entries WHERE item_id = $1 AND state IN ('promoted', 'held', 'received')
+      database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id]),
+      database.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id]),
+      database.query(`SELECT * FROM evimed_frontier.entries WHERE item_id = $1 AND state IN ('promoted', 'held', 'received')
         ORDER BY revision DESC, id DESC LIMIT 1`, [item.id]),
     ]);
     return { texts: texts.rows[0] ?? null, source: sources.rows[0] ?? null, entry: entries.rows[0] ?? null };
@@ -1506,6 +1514,83 @@ export class FrontierPipeline {
     return result.rows;
   }
 
+  /** Capture source identity independently of the last model_input retained on disk.
+   * @param {any} item @param {any} texts @param {any} source @param {any} entry @param {FrontierGlossary} glossary */
+  #captureEditClaim(item, texts, source, entry, glossary) {
+    item.editClaim = { inputSha256: sha256(buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.editor.timeZone })),
+      primarySourceId: item.primary_source_id, identityKey: item.identity_key,
+      entryId: entry?.id ?? null, revision: entry?.revision ?? null, entrySha256: entry?.content_sha256 ?? null, glossary };
+  }
+
+  /** All edit-side writes hold the same item row lock as source intake. Exact expiry is the claim token.
+   * @param {any} client @param {any} item */
+  async #lockEditClaim(client, item) {
+    // If context could not be read, no source identity was proved; expiry retains the existing retry accounting.
+    if (!item.editClaim) return null;
+    const current = (await client.query(`SELECT * FROM evimed_frontier.items
+      WHERE id=$1 AND lease_owner=$2 AND lease_until=$3 AND lease_until>$4 FOR UPDATE`,
+    [item.id, this.workerId, item.lease_until, this.now()])).rows[0];
+    if (!current) return null;
+    if (item.editClaim) {
+      const { texts, source, entry } = await this.#itemContext(current, client);
+      const inputSha256 = sha256(buildModelInput(this.#editItem(current, texts, entry, source, item.editClaim.glossary), { timeZone: this.editor.timeZone }));
+      if (current.primary_source_id !== item.editClaim.primarySourceId || current.identity_key !== item.editClaim.identityKey
+        || inputSha256 !== item.editClaim.inputSha256 || (entry?.id ?? null) !== item.editClaim.entryId
+        || (entry?.revision ?? null) !== item.editClaim.revision || (entry?.content_sha256 ?? null) !== item.editClaim.entrySha256) {
+        // Commit only release of this obsolete claim; never touch a replacement owner's lease or newer content.
+        await client.query("UPDATE evimed_frontier.items SET lease_owner=NULL,lease_until=NULL WHERE id=$1 AND lease_owner=$2 AND lease_until=$3",
+          [item.id,this.workerId,item.lease_until]);
+        return null;
+      }
+    }
+    return current;
+  }
+
+  /** @param {any} item @param {(client: any, current: any) => Promise<any>} work @param {boolean} [selectionLock] */
+  async #withEditClaim(item, work, selectionLock = false) {
+    const result = await this.database.transaction(async (/** @type {any} */ client) => {
+      if (selectionLock) await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
+      const current = await this.#lockEditClaim(client, item);
+      return current ? { applied: true, value: await work(client, current) } : { applied: false, value: null };
+    });
+    if (!result.applied) throw Object.assign(new Error("The frontier edit's source or claim changed."), { code: "frontier_edit_obsolete" });
+    return result.value;
+  }
+
+  /** Store only closed metadata, including waits that never reach scoring.
+   * @param {any} item @param {any} input @param {any} result @param {Date} now @param {string | null} [reason] */
+  async #recordEditDiagnostics(item, input, result, now, reason = null) {
+    const called = result !== null;
+    const modelInput = input ? buildModelInput(input, { timeZone: this.editor.timeZone }) : null;
+    const metadata = frontierEditorDiagnostics({ schemaVersion: 1,
+      outcome: result?.verification ?? "deferred", attempts: called ? result.attempts : 0,
+      inputSha256: result?.modelInputSha256 ?? (modelInput ? sha256(modelInput) : null),
+      editorVersion: result?.editorVersion ?? null, checkedAt: now.toISOString(),
+      reason: (reason === "exhausted" ? "budget" : reason) ?? (result?.error === "usage_budget_exceeded" ? "budget" : result?.error ? "call_failed" : null),
+      fields: result?.fieldDiagnostics ?? { title_zh: ["not_checked"],
+        summary_zh: input && !(input.abstract || input.summary || input.bodyExcerpt) ? ["source_missing"] : ["not_checked"] } });
+    await this.#withEditClaim(item, async (client) => {
+      await client.query("UPDATE evimed_frontier.items SET editor_diagnostics=$2::jsonb WHERE id=$1", [item.id, JSON.stringify(metadata)]);
+      if (item.state === "published") await bumpFrontierVersion(client);
+    });
+    item.editor_diagnostics = metadata;
+  }
+
+  /** @param {any} item @param {any} input */
+  async #editWithDiagnostics(item, input) {
+    let result;
+    try { result = await this.editor.edit(input); }
+    catch (error) {
+      // A throwing adapter cannot prove how many provider calls it made or which policy it resolved.
+      await this.#recordEditDiagnostics(item, input, { verification: "pending", attempts: null }, this.now(),
+        frontierProviderUnavailable(error) ? "provider_unavailable" : "call_failed");
+      throw error;
+    }
+    await this.#recordEditDiagnostics(item, input, result, this.now(),
+      frontierProviderUnavailable({ ...result, code: result.error }) ? "provider_unavailable" : null);
+    return result;
+  }
+
   /**
    * Promoted items not yet published: edited when allowed, else published
    * title-only and edited later; then labelled, selected and published.
@@ -1517,33 +1602,37 @@ export class FrontierPipeline {
       AND EXISTS (SELECT 1 FROM evimed_frontier.item_texts t WHERE t.item_id = i.id)`, [], ITEM_BATCH);
     for (const item of items) {
       try {
+        const { texts, source, entry } = await this.#itemContext(item);
+        this.#captureEditClaim(item, texts, source, entry, context.glossary);
         if (item.attempts >= FRONTIER_MAX_ATTEMPTS) {
-          await this.database.query(`UPDATE evimed_frontier.items SET state = 'failed', lease_owner = NULL, lease_until = NULL,
-            updated_at = clock_timestamp() WHERE id = $1`, [item.id]);
+          await this.#withEditClaim(item, async (client) => {
+            await client.query(`UPDATE evimed_frontier.items SET state = 'failed', lease_owner = NULL, lease_until = NULL,
+              updated_at = clock_timestamp() WHERE id = $1`, [item.id]);
+          });
           summary.failed += 1;
           continue;
         }
-        const { texts, source, entry } = await this.#itemContext(item);
         if (item.state === "screened") {
           // A paused provider is an unavailable editor: published title-only, edited later.
           const available = this.editor.available && !this.#providerPause(now);
           const decision = frontierEditDecision({ source, budget: context.budget, offpeak: this.offpeak, now, available });
           let result = null;
           if (decision.edit) {
-            result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
+            result = await this.#editWithDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary));
             if (frontierProviderUnavailable({...result,code:result.error})) {
               await this.#waitItem(item,this.#pauseForProvider(now,result.error),result.error);
               summary.deferred += 1;
               continue;
             }
-            if (result.verification !== "pending") summary.edited += 1;
           } else {
+            await this.#recordEditDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary), null, now, decision.reason);
             this.counters.editSkipped[decision.reason] += 1;
             summary.deferred += 1;
           }
           await this.#score(item, { texts, source, entry, result, context });
+          if (result && result.verification !== "pending") summary.edited += 1;
         }
-        if (await this.#publish(item.id, context)) summary.published += 1;
+        if (await this.#publish(item, context)) summary.published += 1;
       } catch (error) {
         await this.#failItem(item, error, summary);
       }
@@ -1569,12 +1658,14 @@ export class FrontierPipeline {
     for (const item of items) {
       try {
         const { texts, source, entry } = await this.#itemContext(item);
+        this.#captureEditClaim(item, texts, source, entry, context.glossary);
         if (this.#providerPause(now)) {
-          // An outage earlier in this batch leaves all remaining edits untouched.
+          // An outage earlier in this batch spends no edit attempt.
+          await this.#recordEditDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary), null, this.now(), "provider_unavailable");
           await this.#waitItem(item, this.#providerPause(now), this.providerPauseReason ?? "provider-refused");
           continue;
         }
-        const result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
+        const result = await this.#editWithDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary));
         if (frontierProviderUnavailable({...result,code:result.error})) {
           await this.#waitItem(item, this.#pauseForProvider(now, result.error), result.error);
           summary.deferred += 1;
@@ -1584,15 +1675,19 @@ export class FrontierPipeline {
         if (result.verification === "pending") {
           // No answer: the attempt is spent; the third leaves the item title-only for good.
           const attempts = Number(item.attempts) + 1;
-          await this.database.query(`UPDATE evimed_frontier.items SET attempts = $2::integer,
-              verification = CASE WHEN $2::integer >= $3::integer THEN 'title-only' ELSE verification END,
-              editor_version = CASE WHEN $2::integer >= $3::integer THEN $4::text ELSE editor_version END,
-              lease_owner = NULL, lease_until = NULL WHERE id = $1`,
-          [item.id, attempts, FRONTIER_MAX_ATTEMPTS, FRONTIER_EDITOR_VERSION]);
+          await this.#withEditClaim(item, async (client) => {
+            await client.query(`UPDATE evimed_frontier.items SET attempts = $2::integer,
+                verification = CASE WHEN $2::integer >= $3::integer THEN 'title-only' ELSE verification END,
+                editor_diagnostics = CASE WHEN $2::integer >= $3::integer THEN editor_diagnostics || '{"outcome":"title-only","reason":"retry_exhausted"}'::jsonb ELSE editor_diagnostics END,
+                editor_version = CASE WHEN $2::integer >= $3::integer THEN $4::text ELSE editor_version END,
+                lease_owner = NULL, lease_until = NULL WHERE id = $1`,
+            [item.id, attempts, FRONTIER_MAX_ATTEMPTS, FRONTIER_EDITOR_VERSION]);
+            if (attempts >= FRONTIER_MAX_ATTEMPTS) await bumpFrontierVersion(client);
+          });
           continue;
         }
-        summary.edited += 1;
         await this.#score(item, { texts, source, entry, result, context });
+        summary.edited += 1;
         await this.#reselect(item.id, context);
         summary.rescored += 1;
       } catch (error) {
@@ -1604,30 +1699,39 @@ export class FrontierPipeline {
   /** The existing claim predicate also respects an ownerless future lease_until.
    * @param {any} item @param {Date} until @param {string} reason */
   async #waitItem(item, until, reason) {
-    const released = await this.database.query(`UPDATE evimed_frontier.items SET lease_owner=NULL,lease_until=$3
-      WHERE id=$1 AND lease_owner=$2 RETURNING id`, [item.id,this.workerId,until]);
-    if (released.rowCount) await this.database.query("UPDATE evimed_frontier.entries SET state_reason=$2 WHERE item_id=$1",[item.id,reason]);
+    await this.#withEditClaim(item, async (client) => {
+      await client.query("UPDATE evimed_frontier.items SET lease_owner=NULL,lease_until=$2 WHERE id=$1", [item.id,until]);
+      await client.query("UPDATE evimed_frontier.entries SET state_reason=$2 WHERE item_id=$1", [item.id,reason]);
+    });
   }
 
   /** @param {any} item @param {unknown} error @param {FrontierBatchSummary} summary */
   async #failItem(item, error, summary) {
     const code = codeOf(error);
+    if (code === "frontier_edit_obsolete") return;
     this.lastError = code;
     if (frontierProviderUnavailable(error)) {
-      await this.#waitItem(item, this.#pauseForProvider(this.now(), code), code);
+      try { await this.#waitItem(item, this.#pauseForProvider(this.now(), code), code); }
+      catch (stale) { if (codeOf(stale) === "frontier_edit_obsolete") return; throw stale; }
       summary.deferred += 1;
       return;
     }
     try {
       const attempts = Number(item.attempts) + 1;
       const published = item.state === "published";
-      await this.database.query(`UPDATE evimed_frontier.items SET attempts = $2::integer, lease_owner = NULL, lease_until = NULL,
-          state = CASE WHEN $2::integer >= $3::integer AND NOT $4::boolean THEN 'failed' ELSE state END,
-          editor_version = CASE WHEN $2::integer >= $3::integer AND $4::boolean THEN $5::text ELSE editor_version END,
-          updated_at = clock_timestamp()
-        WHERE id = $1`, [item.id, attempts, FRONTIER_MAX_ATTEMPTS, published, FRONTIER_EDITOR_VERSION]);
+      await this.#withEditClaim(item, async (client) => {
+        await client.query(`UPDATE evimed_frontier.items SET attempts = $2::integer, lease_owner = NULL, lease_until = NULL,
+            state = CASE WHEN $2::integer >= $3::integer AND NOT $4::boolean THEN 'failed' ELSE state END,
+            editor_version = CASE WHEN $2::integer >= $3::integer AND $4::boolean THEN $5::text ELSE editor_version END,
+            editor_diagnostics = CASE WHEN $2::integer >= $3::integer AND $4::boolean AND editor_diagnostics->>'schemaVersion' = '1'
+              THEN editor_diagnostics || '{"outcome":"title-only","reason":"retry_exhausted"}'::jsonb ELSE editor_diagnostics END,
+            updated_at = clock_timestamp()
+          WHERE id = $1`, [item.id, attempts, FRONTIER_MAX_ATTEMPTS, published, FRONTIER_EDITOR_VERSION]);
+        if (published && attempts >= FRONTIER_MAX_ATTEMPTS) await bumpFrontierVersion(client);
+      });
       if (attempts >= FRONTIER_MAX_ATTEMPTS && !published) summary.failed += 1;
     } catch (release) {
+      if (codeOf(release) === "frontier_edit_obsolete") return;
       // The lease expires and the next claim counts the attempt.
       this.counters.releaseFailures += 1;
       this.lastError = codeOf(release);
@@ -1668,7 +1772,7 @@ export class FrontierPipeline {
       editorVersion: output ? result.editorVersion : null,
       editorModel: output ? result.model : item.editor_model ?? null,
     };
-    await this.database.transaction(async (/** @type {any} */ client) => {
+    await this.#withEditClaim(item, async (client) => {
       const linkFlags = await this.#linkFlags(client, item);
       const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: output?.flags ?? [], linkFlags, safetyAlert });
       await client.query(`UPDATE evimed_frontier.items SET title_zh = $2, summary_zh = $3, reason_zh = $4, lane = $5, specialties = $6,
@@ -1728,13 +1832,12 @@ export class FrontierPipeline {
    * Publish a scored item (plan §10.3.1 step 10): visible now, its timeline
    * instant fixed for good, selected or not, searchable, and announced — the
    * change row and the content version in the same transaction.
-   * @param {number} itemId @param {any} context @returns {Promise<boolean>}
+   * @param {any} claim @param {any} context @returns {Promise<boolean>}
    */
-  async #publish(itemId, context) {
+  async #publish(claim, context) {
     const { now } = context;
-    return this.database.transaction(async (/** @type {any} */ client) => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const item = (await client.query("SELECT * FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [itemId])).rows[0];
+    return this.#withEditClaim(claim, async (client, item) => {
+      const itemId = item.id;
       if (!item || item.state !== "scored") return false;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
@@ -1756,7 +1859,7 @@ export class FrontierPipeline {
       await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'published')", [itemId]);
       await bumpFrontierVersion(client);
       return true;
-    });
+    }, true);
   }
 
   /**

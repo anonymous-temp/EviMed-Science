@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fetchFrontierAbstractZh, fetchFrontierItem, frontierErrorMessage, type FrontierItem, type FrontierItemDetail } from "@/lib/frontierClient";
 import { dayKey } from "@/lib/inboxGroups";
+import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { cardFacts } from "./frontierFacts";
@@ -22,6 +23,7 @@ export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierIte
 }
 
 export function FrontierArticleContent({ item, onOpened }: { item: FrontierItem | FrontierItemDetail; onOpened?: (item: FrontierItem) => void }) {
+  const fallback = frontierFallbackReason(item);
   const facts = cardFacts(item);
   const pdf = freeFullText(item);
   const published = publishedLabel(item);
@@ -35,6 +37,7 @@ export function FrontierArticleContent({ item, onOpened }: { item: FrontierItem 
   ];
   return (
       <div className="space-y-6">
+        {fallback && <Note action={<a href={item.url} {...EXTERNAL} className="text-link hover:underline">阅读来源</a>}>{fallback}</Note>}
         {item.summary && <section className="space-y-2"><h2 className="text-ui font-semibold text-text">AI 导读</h2><p className="max-w-measure whitespace-pre-line text-body leading-7 text-text">{item.summary}</p></section>}
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-ui">
           {rows.map(([label, value, lang]) => (
@@ -57,6 +60,26 @@ export function FrontierArticleContent({ item, onOpened }: { item: FrontierItem 
         {"abstractZh" in item && item.abstractZh ? <StoredAbstract text={item.abstractZh} chinese /> : abstractOffered(item) ? <AbstractSection itemId={item.id} /> : "abstract" in item && item.abstract ? <StoredAbstract text={item.abstract} /> : null}
       </div>
   );
+}
+
+/** Explain only observed field failures; old records keep their cause unknown. */
+function frontierFallbackReason(item: FrontierItem): string | null {
+  if (item.titleZh && item.summary) return null;
+  const diagnostics = item.editorDiagnostics;
+  if (!diagnostics) return item.verification === "title-only" ? (item.titleZh ? "中文导读暂缺，可阅读来源了解详情。" : "目前保留来源标题，中文导读暂缺，可阅读来源了解详情。") : null;
+  const title = diagnostics.fields.title_zh;
+  const summary = diagnostics.fields.summary_zh;
+  const messages: string[] = [];
+  if (!item.titleZh && title.some((code) => ["empty", "length", "link", "language", "number", "answer_invalid"].includes(code))) {
+    messages.push(title.includes("number") ? "中文标题中的数字未能与来源对应，保留原标题。" : "中文标题未能完整表达来源内容，保留原标题。");
+  }
+  if (!item.summary) {
+    if (summary.includes("source_missing")) messages.push("来源暂未提供可用于导读的摘要或正文，可阅读来源了解详情。");
+    else if (summary.includes("number")) messages.push("导读中的数字未能与来源对应，暂不展示中文导读。");
+    else if (summary.some((code) => ["empty", "length", "link", "language", "answer_invalid", "withheld"].includes(code))) messages.push("中文导读尚未完成内容核对，可阅读来源了解详情。");
+    else if (["pending", "deferred", "stale"].includes(diagnostics.outcome)) messages.push("中文内容暂未完成，先保留来源内容供阅读。");
+  }
+  return messages.join(" ") || null;
 }
 
 function StoredAbstract({ text, chinese = false }: { text: string; chinese?: boolean }) {

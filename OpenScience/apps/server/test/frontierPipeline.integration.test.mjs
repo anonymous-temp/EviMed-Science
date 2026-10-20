@@ -201,7 +201,7 @@ function fakeEditor(provider = { balanceSpent: false }) {
       if (item.titleRaw.includes("[edit-throws]")) throw Object.assign(new Error("boom"), { code: "frontier_test_boom" });
       const modelInput = buildModelInput(item);
       const base = { modelInput, modelInputSha256: sha256(modelInput), attempts: 1, issues: [], numbers: null, error: null,
-        model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION };
+        model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION, fieldDiagnostics: { title_zh: ["passed"], summary_zh: ["passed"] } };
       if (item.titleRaw.includes("[pending]")) return { ...base, verification: "pending", output: null, error: "model_gateway_timeout" };
       if (provider.balanceSpent) return { ...base, verification: "pending", output: null, error: "model_gateway_payment_required" };
       const share = Number(marker(item.titleRaw, "score") ?? 30);
@@ -358,6 +358,10 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   plugin.texts.set(nejm.pluginEntryId, { entry_id: nejm.pluginEntryId, revision: 1, status: "available", abstract: "In 17,604 patients, events fell by 20%.",
     body_excerpt: null, enrichment: { publication_types: ["Randomized Controlled Trial", "Journal Article"], journal: "N Engl J Med" } });
   const editsBefore = editor.calls.edit.length;
+  editor.available = false;
+  await pipeline.processBatch();
+  assert.deepEqual((await item(Number(paper.id))).editor_diagnostics, {}, "late source text invalidates previous field diagnoses");
+  editor.available = true;
   const third = await pipeline.processBatch();
   assert.equal(third.rescored, 1);
   assert.equal((await entry(nejm.id)).state, "promoted");
@@ -515,6 +519,11 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(peak.deferred, 1);
   const titleOnly = await item(Number((await entry(media.id)).item_id));
   assert.deepEqual([titleOnly.verification, titleOnly.editor_version, titleOnly.title_zh, titleOnly.selected], ["pending", null, null, false]);
+  assert.equal(titleOnly.editor_diagnostics.outcome, "deferred");
+  assert.equal(titleOnly.editor_diagnostics.reason, "peak");
+  assert.equal(titleOnly.editor_diagnostics.attempts, 0);
+  assert.equal(titleOnly.editor_diagnostics.editorVersion, null);
+  assert.match(titleOnly.editor_diagnostics.inputSha256, /^[a-f0-9]{64}$/);
   const urgent = await item(Number((await entry(regulator.id)).item_id));
   assert.equal(urgent.verification, "passed", "a regulator is edited at peak");
   assert.deepEqual(editor.calls.edit, ["EMA recommends approval of a new medicine [score:50]"]);
@@ -525,6 +534,11 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(evening.rescored, 1);
   const done = await item(Number(titleOnly.id));
   assert.deepEqual([done.verification, done.selected, done.selected_rule], ["passed", true, "threshold"]);
+  assert.equal(done.editor_diagnostics.outcome, "passed");
+  assert.equal(done.editor_diagnostics.reason, null);
+  assert.equal(done.editor_diagnostics.attempts, 1);
+  assert.equal(done.editor_diagnostics.editorVersion, FRONTIER_EDITOR_VERSION);
+  assert.deepEqual(done.editor_diagnostics.fields, { title_zh: ["passed"], summary_zh: ["passed"] });
   assert.ok(done.rescored_at);
   assert.deepEqual(await changes(Number(done.id)), ["published", "rescored", "selected"]);
   assert.equal(done.timeline_at.toISOString(), titleOnly.timeline_at.toISOString());
@@ -804,6 +818,10 @@ test("failures are attempts: a third one fails the entry or the item with its re
   assert.deepEqual([failed.state, failed.state_reason, failed.attempts], ["failed", "frontier_screen_invalid", 3]);
   const exploded = await item(Number((await entry(boom.id)).item_id));
   assert.deepEqual([exploded.state, exploded.attempts], ["failed", 3]);
+  assert.equal(exploded.editor_diagnostics.reason, "call_failed");
+  assert.equal(exploded.editor_diagnostics.attempts, null, "throwing adapter has no proven call count");
+  assert.equal(exploded.editor_diagnostics.editorVersion, null);
+  assert.ok(!JSON.stringify(exploded.editor_diagnostics).includes("boom"));
   const status = pipeline.status();
   assert.equal(status.lastError, null, "a failed row is the row's, not the batch's");
   assert.ok(status.counters.failed >= 2);
@@ -899,16 +917,22 @@ test("transient owed edits preserve attempts and existing prose across restart; 
   clock = new Date("2026-09-22T12:00:00Z");
   for (const failure of [
     {error:"frontier_model_timeout"},
+    {error:"frontier_model_timeout",throws:true},
     {error:"model_gateway_upstream_error",upstreamStatus:429},
     {error:"model_gateway_upstream_error",upstreamStatus:503,verification:"title-only"},
     {error:"frontier_model_failed",networkCode:"ECONNRESET"},
     {error:"model_gateway_payment_required",verification:"title-only",waitMinutes:30},
   ]) {
     let calls=0;
-    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);return {verification:"pending",...failure};};
+    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);
+      if(failure.throws)throw Object.assign(new Error("private provider response"),{code:failure.error});
+      return {verification:"pending",...failure};};
     const {pipeline}=pipelineWith({config:{frontierOffpeak:true},now:()=>clock,editor:setup.editor,plugin:setup.plugin});
     await pipeline.processBatch();
     const waiting=await item(id);
+    assert.equal(waiting.editor_diagnostics.reason,"provider_unavailable");
+    assert.equal(waiting.editor_diagnostics.checkedAt,clock.toISOString());
+    assert.equal(waiting.editor_diagnostics.attempts,null,"adapter did not report its actual call count");
     assert.deepEqual([waiting.attempts,waiting.editor_version,waiting.summary_zh,waiting.lease_owner],[2,null,"Existing valid prose",null]);
     const waitMs=(failure.waitMinutes??5)*60_000;
     assert.equal(new Date(waiting.lease_until).getTime(),clock.getTime()+waitMs);
@@ -944,6 +968,8 @@ test("transient owed edits preserve attempts and existing prose across restart; 
     assert.equal(exhausted.attempts,3);
     assert.equal(exhausted.editor_version,FRONTIER_EDITOR_VERSION);
     assert.equal(exhausted.lease_until,null);
+    assert.equal(exhausted.editor_diagnostics.outcome,"title-only");
+    assert.equal(exhausted.editor_diagnostics.reason,"retry_exhausted");
   }
 });
 
@@ -998,4 +1024,172 @@ test("ordinary daytime articles are edited by default and preserve their origina
   assert.ok(snapshot.model_input.includes(rawSummary.trim()));
   assert.equal(snapshot.abstract_raw, null, "the feed summary is not relabeled as a fetched abstract");
   assert.equal(stored.state, "held", "the original text request still completes later");
+});
+
+
+test("a source revision invalidates previous field diagnoses before a later successful edit", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const setup = pipelineWith({ now: () => clock });
+  const first = await deliver({ source_id: "m-stat", doi: "10.1000/diagnostics", title: "Original kidney trial", summary: "S".repeat(200) });
+  setup.plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(first.id)).item_id);
+  const initial = await item(id);
+  assert.equal(initial.editor_diagnostics.outcome,"passed");
+  clock = new Date(clock.getTime() + HOUR);
+  setup.editor.available = false;
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 2, doi: "10.1000/diagnostics",
+    title: "Corrected kidney trial", summary: "S".repeat(200) });
+  setup.plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 2, status: "unavailable", enrichment: {} });
+  await setup.pipeline.processBatch();
+  assert.deepEqual((await item(id)).editor_diagnostics,{},"old hash and field failures cannot describe revised input");
+  setup.editor.available = true;
+  await setup.pipeline.processBatch();
+  const final = await item(id);
+  assert.equal(final.editor_diagnostics.outcome,"passed");
+  assert.notEqual(final.editor_diagnostics.inputSha256,initial.editor_diagnostics.inputSha256);
+  assert.equal(final.published_at?.toISOString(),initial.published_at?.toISOString());
+});
+
+
+/** A paused adapter lets another transaction change the source/claim before settlement. */
+function pausedEdit(editor, outcome = "passed") {
+  const original = editor.edit.bind(editor);
+  let begin, finish;
+  const started = new Promise((resolve) => { begin = resolve; });
+  const released = new Promise((resolve) => { finish = resolve; });
+  editor.edit = async (input) => {
+    const result = await original(input);
+    begin();
+    await released;
+    if (outcome === "throw") throw Object.assign(new Error("private provider failure"), { code: "frontier_model_timeout" });
+    if (outcome === "pending") return { ...result, verification: "pending", output: null, error: "frontier_model_timeout" };
+    return result;
+  };
+  return { started, release: () => finish() };
+}
+
+test("a source revision arriving during an edit cannot restore stale prose, input or diagnostics", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const first = pipelineWith({ now: () => clock });
+  const delivered = await deliver({ source_id: "m-stat", doi: "10.1000/edit-race", title: "Original kidney source", summary: "S".repeat(200) });
+  first.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  await first.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  await database.query("UPDATE evimed_frontier.items SET editor_version=NULL WHERE id=$1", [id]);
+  const paused = pausedEdit(first.editor);
+  const running = first.pipeline.processBatch();
+  await paused.started;
+  const second = pipelineWith({ now: () => clock, plugin: first.plugin });
+  second.editor.available = false;
+  await deliver({ source_id: "m-stat", doi: "10.1000/edit-race", plugin_entry_id: delivered.pluginEntryId, revision: 2,
+    title: "Corrected kidney source", summary: "New source text ".repeat(20) });
+  first.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 2, status: "available", abstract: "Corrected source abstract", enrichment: {} });
+  await second.pipeline.processBatch();
+  const fresh = await item(id);
+  const freshText = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+  paused.release();
+  await running;
+  const settled = await item(id);
+  const settledText = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+  assert.equal(settled.title_raw, fresh.title_raw);
+  assert.equal(settled.title_zh, fresh.title_zh);
+  assert.equal(settled.summary_zh, fresh.summary_zh);
+  assert.deepEqual(settled.editor_diagnostics, fresh.editor_diagnostics);
+  assert.equal(settledText.model_input_sha256, freshText.model_input_sha256);
+  assert.equal(settled.lease_owner, null, "only the obsolete owned claim is released for a fresh edit");
+});
+
+test("expired and replaced claims fence every old editor completion, including same-worker ABA", options, async () => {
+  for (const mode of ["expired", "reassigned", "same-worker"]) for (const outcome of ["passed", "pending", "throw"]) {
+    await reset();
+    let clock = new Date("2026-09-22T12:00:00Z");
+    const setup = pipelineWith({ now: () => clock });
+    const delivered = await deliver({ source_id: "m-stat", title: `Kidney claim ${mode} ${outcome}`, summary: "S".repeat(200) });
+    setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    await setup.pipeline.processBatch();
+    const id = Number((await entry(delivered.id)).item_id);
+    await database.query("UPDATE evimed_frontier.items SET editor_version=NULL,attempts=2 WHERE id=$1", [id]);
+    const paused = pausedEdit(setup.editor, outcome);
+    const running = setup.pipeline.processBatch();
+    await paused.started;
+    const claimed = await item(id);
+    clock = new Date(claimed.lease_until.getTime() + 1_000);
+    if (mode !== "expired") await database.query("UPDATE evimed_frontier.items SET lease_owner=$2,lease_until=$3 WHERE id=$1",
+      [id, mode === "same-worker" ? claimed.lease_owner : "replacement-worker", new Date(clock.getTime() + HOUR)]);
+    const fresh = await item(id);
+    const freshText = (await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0];
+    paused.release();
+    await running;
+    const settled = await item(id);
+    assert.deepEqual([settled.title_zh,settled.summary_zh,settled.editor_diagnostics,settled.attempts,settled.lease_owner,settled.lease_until],
+      [fresh.title_zh,fresh.summary_zh,fresh.editor_diagnostics,fresh.attempts,fresh.lease_owner,fresh.lease_until], `${mode}/${outcome}`);
+    assert.equal((await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1", [id])).rows[0].model_input_sha256,freshText.model_input_sha256);
+  }
+});
+
+
+test("corrected existing abstract, body and trial facts invalidate diagnostics without unbounded re-edits", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const setup = pipelineWith({ now: () => clock });
+  const delivered = await deliver({ source_id: "m-stat", doi: "10.1000/existing-input", title: "Kidney source correction", summary: "S".repeat(200) });
+  setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "available",
+    abstract: "Existing abstract one", body_excerpt: "Existing body one", enrichment: {trial_facts:{enrollment:100}} });
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  for (const revision of [2,3]) {
+    clock = new Date(clock.getTime() + HOUR);
+    setup.editor.available = false;
+    await deliver({ source_id: "m-stat", doi: "10.1000/existing-input", plugin_entry_id: delivered.pluginEntryId, revision,
+      title: "Kidney source correction", summary: "S".repeat(200) });
+    setup.plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision, status: "available",
+      abstract: "Corrected abstract two", body_excerpt: `Corrected body ${revision}`,
+      enrichment: {trial_facts:{enrollment:100*revision}} });
+    const calls = setup.editor.calls.edit.length;
+    await setup.pipeline.processBatch();
+    const fresh = await item(id);
+    assert.deepEqual(fresh.editor_diagnostics,{},`revision ${revision} invalidates old input diagnostics`);
+    assert.equal(setup.editor.calls.edit.length,calls,"intake does not add an editing call");
+    setup.editor.available = true;
+    await setup.pipeline.processBatch();
+    assert.equal(setup.editor.calls.edit.length,calls + Number(revision === 2),"only the existing one-rescore allowance is used");
+  }
+});
+
+
+test("a same-revision late abstract arriving during an edit fences its old source snapshot", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const first = pipelineWith({ now: () => clock });
+  const delivered = await deliver({ source_id: "j-nejm", title: "Kidney paper awaiting abstract", summary: "Short.", defects: ["short-summary"] });
+  await first.pipeline.processBatch();
+  const storedEntry = await entry(delivered.id);
+  assert.equal(storedEntry.state,"held");
+  const id = Number(storedEntry.item_id);
+  clock = new Date(clock.getTime() + 24 * HOUR);
+  await database.query("UPDATE evimed_frontier.items SET editor_version=NULL WHERE id=$1",[id]);
+  const paused = pausedEdit(first.editor);
+  const running = first.pipeline.processBatch();
+  await paused.started;
+  first.plugin.texts.set(delivered.pluginEntryId,{ entry_id:delivered.pluginEntryId,revision:1,status:"available",
+    abstract:"Newly available original abstract",body_excerpt:"Newly available original body",enrichment:{} });
+  // The plugin now has the text; make this test's pending poll explicitly due without advancing the item's active claim.
+  await database.query("UPDATE evimed_frontier.entries SET state='held',hold_until=$2,lease_owner=NULL,lease_until=NULL WHERE id=$1",
+    [delivered.id,new Date(clock.getTime()-1_000)]);
+  const second = pipelineWith({ now: () => clock, plugin:first.plugin });
+  second.editor.available=false;
+  await second.pipeline.processBatch();
+  const fresh = await item(id);
+  const text = (await database.query("SELECT model_input_sha256,abstract_raw FROM evimed_frontier.item_texts WHERE item_id=$1",[id])).rows[0];
+  assert.equal(text.abstract_raw,"Newly available original abstract");
+  paused.release();
+  await running;
+  const settled=await item(id);
+  assert.deepEqual(settled.editor_diagnostics,fresh.editor_diagnostics);
+  assert.equal(settled.summary_zh,fresh.summary_zh);
+  assert.equal((await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1",[id])).rows[0].model_input_sha256,text.model_input_sha256);
+  assert.equal(settled.lease_owner,null);
 });

@@ -24,6 +24,7 @@ import {
   operateFrontierItem,
   parseFacts,
   parseFrontierItem,
+  parseFrontierEditorDiagnostics,
   saveFrontierItemToLibrary,
   setFrontierDigestSwitch,
   starFrontierItem,
@@ -457,4 +458,17 @@ it("weekly and safety settings preserve each other, quiet hours, channels and le
   await expect(setFrontierNotificationSwitch("frontierWeekly", true)).resolves.toBe(true);
   expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ quietHours: current.quietHours, digestTime: current.digestTime, channels: current.channels,
     switches: { ...current.switches, frontierWeekly: true }, expectedRevision: 7 });
+});
+
+
+it("parses bounded editor diagnostics without arbitrary model or error content", () => {
+  expect(parseFrontierEditorDiagnostics({})).toBeNull();
+  const raw = { schemaVersion: 1, outcome: "title-only", attempts: 2, inputSha256: "a".repeat(64),
+    editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z", reason: "private error", answer: "private answer",
+    fields: { title_zh: ["language", "private answer", "language"], summary_zh: ["number"] } };
+  const parsed = parseFrontierItem(rawItem({ editorDiagnostics: raw }));
+  expect(parsed?.editorDiagnostics).toEqual({ schemaVersion: 1, outcome: "title-only", attempts: 2,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z", reason: null,
+    fields: { title_zh: ["language"], summary_zh: ["number"] } });
+  expect(JSON.stringify(parsed?.editorDiagnostics)).not.toContain("private");
 });
