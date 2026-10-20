@@ -5,6 +5,7 @@
   "versions": [
     {
       "id": "pop_1",
+      "generationInput": null,
       "label": "人群 v2",
       "stale": true,
       "counts": {
@@ -13,6 +14,7 @@
     },
     {
       "id": "pop_2",
+      "generationInput": null,
       "label": "人群 v1",
       "stale": false,
       "counts": {

@@ -1262,7 +1262,7 @@ export class VcrStore extends VcrStoreBase {
       // A quality assessment is an attachment to its population, not a replacement for the generated population or its table.
       if (input.kind === "population_quality" && input.subjectId && !object(input.diagnostics).partial) {
         const quality = object(object(input.diagnostics).quality ?? input.diagnostics);
-        const basis = (await client.query(`SELECT p.result_id, r.tables, e.inputs, j.scenario FROM ${VCR_SCHEMA}.populations p
+        const basis = (await client.query(`SELECT p.result_id, r.tables, e.inputs, j.scenario, j.checkpoint FROM ${VCR_SCHEMA}.populations p
           JOIN ${VCR_SCHEMA}.results r ON r.id=p.result_id AND r.study_id=p.study_id
           JOIN ${VCR_SCHEMA}.executions e ON e.id=$3 AND e.study_id=p.study_id
           JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=p.study_id
@@ -1270,8 +1270,17 @@ export class VcrStore extends VcrStoreBase {
         const synthetic = list(basis?.inputs).map(object).find(entry => entry.id === object(basis?.scenario).syntheticInputId);
         const table = list(basis?.tables).map(object).find(entry => ["population", "synthetic-population"].includes(entry.name)
           && synthetic?.hash && entry.sha256 === synthetic.hash);
-        if (table && Object.keys(quality).length) await client.query(`UPDATE ${VCR_SCHEMA}.populations SET quality=$1::jsonb WHERE study_id=$2 AND id=$3 AND result_id=$4`,
+        const checkpoint = object(basis?.checkpoint);
+        // Old pending jobs can prove the bond through a resolved derived identity; a hash alone never identifies a generation.
+        const attachmentResultId = Object.hasOwn(checkpoint, "qualityAttachmentResultId") ? checkpoint.qualityAttachmentResultId
+          : synthetic?.kind === "snapshot_file" && synthetic.valueSource === "synthetic" && String(synthetic.location).startsWith("derived/")
+            ? /^([^:]+):(?:population|synthetic-population)$/.exec(String(synthetic.id))?.[1] ?? null : null;
+        const attached = Boolean(table && attachmentResultId === basis.result_id && Object.keys(quality).length);
+        if (attached) await client.query(`UPDATE ${VCR_SCHEMA}.populations SET quality=$1::jsonb WHERE study_id=$2 AND id=$3 AND result_id=$4`,
           [JSON.stringify({ ...quality, sourceResultId: String(basis.result_id), syntheticInputHash: table.sha256, assessmentResultId: id }), input.studyId, input.subjectId, basis.result_id]);
+        row.diagnostics = { ...object(row.diagnostics), qualityAttachment: { attached,
+          sourceResultId: attachmentResultId, reason: attached ? "generation_matched" : attachmentResultId ? "generation_changed" : "generation_basis_unavailable" } };
+        await client.query(`UPDATE ${VCR_SCHEMA}.results SET diagnostics=$1::jsonb WHERE id=$2`, [JSON.stringify(row.diagnostics), id]);
       }
       // Manual calculations have no programme observer to attach their result later. File the pointer with the result itself.
       const subjectTable = /** @type {Record<string, string>} */ ({ population: "populations", patient_set: "patient_sets", comparator: "comparator_designs", trial_scenario: "trial_scenarios" })[String(input.kind)];

@@ -257,21 +257,79 @@ test('population quality references and assesses an existing population without 
   await composed.jobs.advance(claimed); await composed.jobs.advance(claimed);
   const original = await composed.store.latestPopulation(study.id);
   const originalResult = await composed.store.result(study.id, original.resultId);
-  const qualityScenario = { trainingInputId: 'quality_training:subject', syntheticInputId: 'quality_synthetic:subject' };
+  const dataPlane = composed.dataPlane;
+  async function trainingSnapshot(name) {
+    const source = await dataPlane.registerSource({ userId: user.id, studyId: study.id, name, ownerParty: 'Research team', allowedUses: ['vcr'] });
+    await dataPlane.storeUpload({ actor: user.id, studyId: study.id, sourceId: source.id, name: 'training.csv', stream: Readable.from(['ID,AGE\n1,61\n2,56\n3,70\n']) });
+    const proposed = await dataPlane.proposeFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, columns: [
+      { table: 'training.csv', column: 'ID', role: 'subject_key', identifier: true },
+      { table: 'training.csv', column: 'AGE', role: 'covariate', alias: 'age', concept: 'age' },
+    ] });
+    await dataPlane.confirmFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, hash: proposed.hash });
+    return (await dataPlane.freezeSnapshot({ userId: user.id, studyId: study.id, sourceId: source.id })).snapshot;
+  }
+  const training = await trainingSnapshot('Training');
+  const holdout = await trainingSnapshot('Holdout');
+  const intake = (await composed.service.tab(user, study.id, 'data')).intake;
+  const trainingInput = intake.snapshots.find(row => row.id === training.id).qualityInputs[0];
+  const holdoutInput = intake.snapshots.find(row => row.id === holdout.id).qualityInputs[0];
+  assert.ok(trainingInput.columns.includes('age'));
+  assert.equal(trainingInput.inputId, `${training.id}:subject`);
+  assert.equal(intake.snapshots.find(row => row.id === training.id).qualityInputs.length, 1, 'derived subject inputs hide raw references the quality resolver would ignore');
+  assert.deepEqual(trainingInput.columnLabels, { age: 'AGE' });
+  assert.doesNotMatch(JSON.stringify(intake.snapshots), /location|derived\//);
+  let qualityBasis = (await composed.service.tab(user, study.id, 'population')).versions.find(row => row.id === population.id).generationInput;
+  assert.ok(qualityBasis);
+  let qualityScenario = { trainingInputId: trainingInput.inputId, holdoutInputId: holdoutInput.inputId, syntheticInputId: qualityBasis.inputId };
+  const qualityInputs = [{ kind: 'snapshot', id: training.id }, { kind: 'snapshot', id: holdout.id }];
   await assert.rejects(request(`${prefix}/method-configurations`, 'POST', { method: 'population.quality', name: 'Quality', scenario: qualityScenario }), { code: 'vcr_simulate_subject_required' });
   const prepared = await request(`${prefix}/method-configurations`, 'POST', { method: 'population.quality', name: 'Quality', subjectId: population.id, scenario: qualityScenario });
   assert.equal(prepared.subjectId, population.id);
   assert.deepEqual(await composed.store.latestPopulation(study.id), original, 'preparing a quality check does not revise the population');
-  const oldPlane = composed.jobs.dataPlane;
-  let syntheticHash = originalResult.tables[0].sha256;
-  composed.jobs.dataPlane = { async resolveEngineInputs() { return [
-    { kind: 'analysis_table', id: 'quality_training:subject', shape: 'subject', location: 'snapshots/quality_training/subject.csv', hash: 'a'.repeat(64), valueSource: 'observed' },
-    { kind: 'analysis_table', id: 'quality_synthetic:subject', shape: 'subject', location: 'snapshots/quality_synthetic/subject.csv', hash: syntheticHash, valueSource: 'synthetic' },
-  ]; } };
-  try {
-    const queued = await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: [{ kind: 'snapshot', id: 'quality_training' }] });
+  {
+    const queued = await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis });
     [claimed] = await composed.jobs.claim();
-    await composed.jobs.advance(claimed); await composed.jobs.advance(claimed);
+    await composed.jobs.advance(claimed);
+    const transactionBeforeRetry = composed.store.transaction.bind(composed.store);
+    let finishReady, releaseFinish, retryReady;
+    const finishPaused = new Promise(resolve => { finishReady = resolve; });
+    const finishGate = new Promise(resolve => { releaseFinish = resolve; });
+    const retryStarted = new Promise(resolve => { retryReady = resolve; });
+    let finishPid, retryPid;
+    composed.store.transaction = operation => transactionBeforeRetry(client => operation({ async query(sql, values) {
+      if (/SELECT p\.result_id/.test(sql)) {
+        finishPid = Number((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+        finishReady(); await finishGate;
+      }
+      if (/INSERT INTO evimed_vcr\.jobs/.test(sql)) {
+        retryPid = Number((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+        retryReady();
+      }
+      return client.query(sql, values);
+    } }));
+    const finishing = composed.jobs.advance(claimed);
+    let retrying;
+    try {
+      await finishPaused;
+      retrying = request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis });
+      await retryStarted;
+      let blockers = [];
+      for (let pass = 0; pass < 100; pass++) {
+        blockers = (await database.query('SELECT pg_blocking_pids($1) AS blockers', [retryPid])).rows[0].blockers;
+        if (blockers.includes(finishPid)) break;
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+      assert.ok(blockers.includes(finishPid), 'PostgreSQL confirms the identical enqueue waits on the completing quality job');
+      releaseFinish();
+      const [finished, retried] = await Promise.all([finishing, retrying]);
+      assert.equal(finished.action, 'finished');
+      assert.equal(retried.id, queued.id, 'the retry returns the same finished job without a population/job lock cycle');
+      assert.equal(retried.state, 'succeeded');
+    } finally {
+      releaseFinish();
+      await Promise.allSettled([finishing, retrying]);
+      composed.store.transaction = transactionBeforeRetry;
+    }
     const assessment = await request(`${prefix}/jobs/${queued.id}/result`);
     assert.equal(assessment.result.kind, 'population_quality');
     assert.equal(assessment.result.subjectId, population.id);
@@ -283,16 +341,58 @@ test('population quality references and assesses an existing population without 
     assert.deepEqual(await composed.store.result(study.id, original.resultId), originalResult, 'quality does not supersede or rewrite the generated result');
     assert.equal((await composed.service.tab(user, study.id, 'population')).records.rows, 3);
     assert.equal(quality.assessmentResultId, assessment.result.id);
-    syntheticHash = 'b'.repeat(64);
-    const differentData = await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: [{ kind: 'snapshot', id: 'quality_training' }], seed: 987 });
-    [claimed] = await composed.jobs.claim();
-    await composed.jobs.advance(claimed); await composed.jobs.advance(claimed);
-    assert.notEqual((await request(`${prefix}/jobs/${differentData.id}/result`)).result.id, assessment.result.id);
-    assert.deepEqual((await composed.store.latestPopulation(study.id)).quality, quality, 'an assessment of a different input hash cannot replace this population attachment');
+    assert.deepEqual((await composed.jobs.configuration(study.id, queued.id)).qualityBasis, qualityBasis);
+    assert.equal((await composed.jobs.configuration(study.id, queued.id)).qualityBasisAvailable, true);
+    const executionInputs = (await database.query('SELECT inputs FROM evimed_vcr.executions WHERE job_id=$1', [queued.id])).rows[0].inputs;
+    assert.deepEqual(executionInputs.map(entry => entry.id).sort(), [trainingInput.inputId, holdoutInput.inputId, qualityBasis.inputId].sort());
+    for (const entry of executionInputs) {
+      const bytes = await fs.readFile(path.join(plane, entry.location));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.hash);
+    }
+    for (const forged of [{ ...qualityBasis, sha256: 'b'.repeat(64) }, { ...qualityBasis, table: 'virtual-patients' }, { ...qualityBasis, location: '/etc/passwd' }]) {
+      await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis: forged }));
+    }
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: [{ kind: 'snapshot_file', id: training.id, location: '/etc/passwd' }], qualityBasis }));
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: { ...qualityScenario, syntheticInputId: trainingInput.inputId }, inputs: qualityInputs, qualityBasis }), { code: 'vcr_derived_table_missing' });
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'generate_population', subjectId: population.id, scenario, inputs: [], qualityBasis }), { code: 'vcr_job_scenario_invalid' });
+    const otherStudy = await composed.store.createStudy({ userId: user.id, projectId: 'quality-foreign-study', purpose: 'calculation' });
+    await assert.rejects(request(`/api/vcr/studies/${otherStudy.id}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis }), { code: 'vcr_simulate_subject_unknown' });
+    const otherPopulation = await composed.store.savePopulation({ studyId: otherStudy.id, userId: user.id, name: 'Foreign population', kind: 'scenario', definition: scenario });
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs,
+      qualityBasis: { ...qualityBasis, populationId: otherPopulation.id } }), { code: 'vcr_job_scenario_invalid' });
+
     const historicalGeneration = await request(`${prefix}/jobs/${generation.id}/result`);
     const nextGeneration = await request(`${prefix}/jobs`, 'POST', { kind: 'generate_population', subjectId: population.id, scenario, inputs: [], seed: 999 });
     [claimed] = await composed.jobs.claim();
-    await composed.jobs.advance(claimed); await composed.jobs.advance(claimed);
+    await composed.jobs.advance(claimed);
+    // A valid selection can become stale after the INSERT but before the transaction's locked recheck.
+    const transactionBeforeStale = composed.store.transaction.bind(composed.store);
+    let insertedReady, releaseInsert;
+    const insertedPaused = new Promise(resolve => { insertedReady = resolve; });
+    const insertGate = new Promise(resolve => { releaseInsert = resolve; });
+    let rolledBackId;
+    composed.store.transaction = operation => transactionBeforeStale(client => operation({ async query(sql, values) {
+      const result = await client.query(sql, values);
+      if (/INSERT INTO evimed_vcr\.jobs/.test(sql) && values[3] === 'population_quality' && values[10] === 988) {
+        rolledBackId = result.rows[0].id; insertedReady(); await insertGate;
+      }
+      return result;
+    } }));
+    const staleEnqueue = request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id,
+      scenario: qualityScenario, inputs: qualityInputs, qualityBasis, seed: 988 });
+    try {
+      await insertedPaused;
+      assert.equal(await composed.store.job(study.id, rolledBackId), null, 'a newly inserted job remains invisible before its current-generation recheck');
+      await composed.jobs.advance(claimed);
+      releaseInsert();
+      await assert.rejects(staleEnqueue, { code: 'vcr_derived_table_missing' });
+    } finally {
+      releaseInsert();
+      await Promise.allSettled([staleEnqueue]);
+      composed.store.transaction = transactionBeforeStale;
+    }
+    assert.equal(await composed.store.job(study.id, rolledBackId), null, 'the stale-generation refusal rolls the entire inserted job back');
+    assert.equal(Number((await database.query('SELECT count(*) AS n FROM evimed_vcr.audit WHERE object=$1', [rolledBackId])).rows[0].n), 0);
     const regenerated = await composed.store.latestPopulation(study.id);
     const regeneratedResult = await composed.store.result(study.id, regenerated.resultId);
     assert.notEqual(regeneratedResult.tables[0].sha256, originalResult.tables[0].sha256);
@@ -301,8 +401,11 @@ test('population quality references and assesses an existing population without 
     assert.deepEqual(await request(`${prefix}/jobs/${queued.id}/result`), assessment);
 
     // Pause a real engine completion after its quality basis is locked, then complete another generation concurrently.
-    syntheticHash = regeneratedResult.tables[0].sha256;
-    const qualityRace = await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: [{ kind: 'snapshot', id: 'quality_training' }], seed: 991 });
+    assert.equal((await composed.jobs.configuration(study.id, queued.id)).qualityBasisAvailable, false);
+    await assert.rejects(request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis }), { code: 'vcr_derived_table_missing' });
+    qualityBasis = (await composed.service.tab(user, study.id, 'population')).versions.find(row => row.id === population.id).generationInput;
+    qualityScenario = { ...qualityScenario, syntheticInputId: qualityBasis.inputId };
+    const qualityRace = await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis, seed: 991 });
     const generationRace = await request(`${prefix}/jobs`, 'POST', { kind: 'generate_population', subjectId: population.id, scenario, inputs: [], seed: 992 });
     const concurrencyBefore = composed.jobs.config.vcrMaxConcurrentJobs;
     composed.jobs.config.vcrMaxConcurrentJobs = 2;
@@ -356,6 +459,80 @@ test('population quality references and assesses an existing population without 
     assert.deepEqual(await request(`${prefix}/jobs/${queued.id}/result`), assessment);
     assert.equal((await request(`${prefix}/jobs/${nextGeneration.id}/result`)).result.id, regeneratedResult.id);
 
+    // Identical bytes from a later generation still have a different identity, on the public and internal paths.
+    for (const mode of ["public", "internal", "legacy-derived"]) {
+      const internal = mode !== "public";
+      qualityBasis = (await composed.service.tab(user, study.id, 'population')).versions.find(row => row.id === population.id).generationInput;
+      qualityScenario = { ...qualityScenario, syntheticInputId: qualityBasis.inputId };
+      const oldBasis = qualityBasis;
+      const waitingQuality = internal ? (await composed.jobs.enqueue({ studyId: study.id, userId: user.id, kind: 'population_quality',
+        scenario: qualityScenario, inputs: qualityInputs, internal: true, derived: [{ resultId: qualityBasis.resultId, table: qualityBasis.table }],
+        detail: { subjectId: population.id }, seed: mode === 'legacy-derived' ? 2005 : 2003 })).job
+        : await request(`${prefix}/jobs`, 'POST', { kind: 'population_quality', subjectId: population.id, scenario: qualityScenario, inputs: qualityInputs, qualityBasis, seed: 2001 });
+      const identicalGeneration = await request(`${prefix}/jobs`, 'POST', { kind: 'generate_population', subjectId: population.id, scenario, inputs: [], seed: mode === 'legacy-derived' ? 2006 : internal ? 2004 : 2002 });
+      composed.jobs.config.vcrMaxConcurrentJobs = 2;
+      try {
+        const both = await composed.jobs.claim({ limit: 2 });
+        const newer = both.find(job => job.id === identicalGeneration.id);
+        const waiting = both.find(job => job.id === waitingQuality.id);
+        if (mode === 'legacy-derived') await database.query("UPDATE evimed_vcr.jobs SET checkpoint=checkpoint-'qualityAttachmentResultId' WHERE id=$1", [waitingQuality.id]);
+        await composed.jobs.advance(newer); await composed.jobs.advance(newer);
+        const newBasis = (await composed.service.tab(user, study.id, 'population')).versions.find(row => row.id === population.id).generationInput;
+        assert.equal(newBasis.sha256, oldBasis.sha256);
+        assert.notEqual(newBasis.resultId, oldBasis.resultId);
+        await composed.jobs.advance(waiting); await composed.jobs.advance(waiting);
+        const independent = await request(`${prefix}/jobs/${waitingQuality.id}/result`);
+        assert.equal(independent.result.kind, 'population_quality');
+        assert.deepEqual(independent.result.diagnostics.qualityAttachment, { attached: false, sourceResultId: oldBasis.resultId, reason: 'generation_changed' });
+        assert.deepEqual((await composed.store.latestPopulation(study.id)).quality, {});
+        assert.deepEqual((await composed.jobs.configuration(study.id, waitingQuality.id)).qualityBasis, oldBasis);
+        assert.equal((await composed.jobs.configuration(study.id, waitingQuality.id)).qualityBasisAvailable, false);
+      } finally { composed.jobs.config.vcrMaxConcurrentJobs = concurrencyBefore; }
+    }
 
-  } finally { composed.jobs.dataPlane = oldPlane; }
+
+
+  }
+});
+
+
+test('quality input options use real raw aliases and frozen file order, and respect seals and source grants', options, async () => {
+  const created = await request('/api/vcr/studies', 'POST', { name: 'Raw inputs', purpose: 'calculation' });
+  const study = await composed.store.studyById(created.id);
+  const dataPlane = composed.dataPlane;
+  const source = await dataPlane.registerSource({ userId: user.id, studyId: study.id, name: 'Raw training', ownerParty: 'Research team', allowedUses: ['vcr'] });
+  await dataPlane.storeUpload({ actor: user.id, studyId: study.id, sourceId: source.id, name: 'raw.csv', stream: Readable.from(['年龄,col_1\n60,10\n70,12\n80,13\n']) });
+  const proposed = await dataPlane.proposeFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, columns: [
+    { table: 'raw.csv', column: '年龄', role: 'other', concept: 'age' },
+    { table: 'raw.csv', column: 'col_1', role: 'other', concept: 'measurement' },
+  ] });
+  await dataPlane.confirmFieldMap({ actor: user.id, studyId: study.id, sourceId: source.id, hash: proposed.hash });
+  const { snapshot } = await dataPlane.freezeSnapshot({ userId: user.id, studyId: study.id, sourceId: source.id });
+  const visible = async () => (await composed.service.tab(user, study.id, 'data')).intake.snapshots.find(row => row.id === snapshot.id).qualityInputs;
+  const [option] = await visible();
+  assert.equal(option.kind, 'snapshot_file');
+  assert.equal(option.inputId, `${snapshot.id}:1`);
+  assert.deepEqual(option.columns, ['col_1', 'col_1_2']);
+  assert.deepEqual(option.columnLabels, { col_1: '年龄', col_1_2: 'col_1' });
+  const resolved = await dataPlane.resolveEngineInputs({ studyId: study.id, snapshotId: snapshot.id, principal: user.id, method: 'population.quality', purpose: 'vcr' });
+  assert.equal(resolved[0].id, option.inputId);
+  const header = (await fs.readFile(path.join(plane, resolved[0].location), 'utf8')).split('\n')[0].split(',');
+  assert.ok(option.columns.every(column => header.includes(column)));
+  await database.query("UPDATE evimed_vcr.studies SET intended_use='specified_analysis' WHERE id=$1", [study.id]);
+  await dataPlane.store.sealStudySnapshots({ studyId: study.id, snapshotIds: [snapshot.id], fields: ['年龄', 'col_1'], actor: user.id });
+  assert.deepEqual(await visible(), []);
+  await assert.rejects(dataPlane.resolveEngineInputs({ studyId: study.id, snapshotId: snapshot.id, principal: user.id, method: 'population.quality', purpose: 'vcr' }));
+  await database.query("UPDATE evimed_vcr.studies SET intended_use='exploratory' WHERE id=$1", [study.id]);
+  await dataPlane.store.liftStudySeal({ studyId: study.id, at: new Date().toISOString(), actor: user.id });
+  await database.query('UPDATE evimed_vcr.sources SET user_id=$1 WHERE id=$2', ['partner-owner', source.id]);
+  assert.deepEqual(await visible(), []);
+  await assert.rejects(dataPlane.resolveEngineInputs({ studyId: study.id, snapshotId: snapshot.id, principal: user.id, method: 'population.quality', purpose: 'vcr' }));
+  const grant = await dataPlane.store.createGrant({ sourceId: source.id, studyId: study.id, userId: 'partner-owner', grantee: user.id,
+    fields: ['年龄'], fieldMode: 'allow', purposes: ['vcr'], actor: 'partner-owner' });
+  assert.deepEqual((await visible())[0].columns, ['col_1']);
+  assert.deepEqual((await visible())[0].columnLabels, { col_1: '年龄' });
+  await dataPlane.store.revokeGrant({ grantId: grant.id, studyId: study.id, actor: 'partner-owner' });
+  assert.deepEqual(await visible(), []);
+  const other = await composed.store.createStudy({ userId: user.id, projectId: 'other-raw-study', purpose: 'calculation' });
+  await assert.rejects(dataPlane.resolveEngineInputs({ studyId: other.id, snapshotId: snapshot.id, principal: user.id, method: 'population.quality', purpose: 'vcr' }), { code: 'vcr_snapshot_not_found' });
 });

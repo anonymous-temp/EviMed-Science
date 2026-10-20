@@ -1257,8 +1257,9 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobs: await hooks.jobs.listForStudy(study.id), budget: await hooks.jobs.budgetOf?.(study.id) ?? null });
       }
       if (parts.length === 3 && method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection", "modelId"]);
+        const body = await bodyOf(req, maxJsonBytes, ["kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "selection", "modelId", "qualityBasis"]);
         word(body.kind, VCR_JOB_KINDS, "vcr_job_kind_invalid", "kind");
+        if (body.qualityBasis != null && body.kind !== "population_quality") throw new HttpError(400, "vcr_job_scenario_invalid", "qualityBasis is for population quality only.");
         if (body.subjectId != null && (typeof body.subjectId !== "string" || !ID.test(body.subjectId))) {
           throw new HttpError(400, "vcr_job_scenario_invalid", "subjectId is the id of one of the study's objects.");
         }
@@ -1292,7 +1293,7 @@ export function createVcrRoutes(dependencies) {
           ? await resolveJobSubject({ store: hooks.jobs.store, study, kind: body.kind, subjectId: body.subjectId ?? null, scenario: body.scenario ?? {} }) : null;
         const { job, created } = await audited("vcr.job.enqueue", (result) => ({ code: result.job.id, detail: String(body.kind) }),
           { code: id, detail: String(body.kind) }, () => hooks.jobs.enqueue({
-            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [],
+            studyId: study.id, userId: String(user.id), kind: body.kind, scenario: body.scenario ?? {}, inputs: body.inputs ?? [], qualityBasis: body.qualityBasis ?? null,
             seed: body.seed ?? null, replicates: body.replicates ?? null, cpuSecondsLimit,
             detail: { ...(subject ? { ...subject.detail, origin: "page" } : (body.subjectId ? { subjectId: body.subjectId } : {})), ...(sourceModel ? { sourceModel } : {}) },
           }));

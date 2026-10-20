@@ -22,7 +22,7 @@
  * @module vcrSubjects
  */
 
-import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario, VCR_SCENARIO_SCHEMAS } from "@evimed/domain";
+import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario, VCR_SCENARIO_SCHEMAS, vcrLocationIsValid } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
@@ -63,6 +63,18 @@ export const VCR_KEPT_TABLES = Object.freeze(/** @type {Record<string, readonly 
   generate_patients: ["virtual-patients"], generate_patients_continuous: ["virtual-patients"], generate_patients_binary: ["virtual-patients"],
   generate_patients_longitudinal: ["virtual-patients"],
 }));
+
+/** Public identity of the exact generated table currently attached to one population version.
+ * @param {any} population @param {any} result @param {any} execution
+ */
+export function vcrPopulationGenerationInput(population, result, execution) {
+  if (!population || population.kind === "real" || !result || result.id !== population.resultId || result.subjectId !== population.id || result.kind !== "population") return null;
+  const kind = Object.keys(VCR_KEPT_TABLES).find(key => VCR_JOB_METHODS[key] === execution?.method);
+  if (!kind || !["generate_population", "literature_population", "synthesize_population"].includes(kind)) return null;
+  const table = list(result.tables).find(entry => VCR_KEPT_TABLES[kind].includes(entry.name) && String(entry.location).startsWith("derived/") && vcrLocationIsValid(entry.location) && /^[a-f0-9]{64}$/.test(String(entry.sha256)));
+  return table ? { populationId: population.id, populationVersion: Number(population.version), resultId: result.id,
+    table: table.name, inputId: `${result.id}:${table.name}`, sha256: table.sha256 } : null;
+}
 
 /** The population `kind` each population job computes: a job for another kind is not about this population. */
 const POPULATION_KIND_OF_JOB = Object.freeze(/** @type {Record<string, string>} */ ({

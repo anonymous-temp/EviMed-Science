@@ -134,6 +134,7 @@ import { vcrId } from "./vcrStoreBase.mjs";
 import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues } from "./vcrEngineClient.mjs";
+import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -588,7 +589,7 @@ export class VcrJobs {
    * `principal`, else `userId`.
    *
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
-   *   derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
+   *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
    * @returns {Promise<{ job: any, created: boolean }>}
    */
@@ -632,13 +633,26 @@ export class VcrJobs {
     if (callerIssues.length) throw this.#invalid("vcr_job_scenario_invalid", callerIssues);
 
     // 2. what the control plane makes of it
+    let qualityBasis = input.qualityBasis == null ? null : await this.#qualityBasis(studyId, kind, object(input.detail).subjectId, scenario, input.qualityBasis);
+    const qualityInput = qualityBasis ? await this.#resolveDerived(studyId, qualityBasis) : null;
     const resolvedDerived = await Promise.all(derivedEntries.map((entry) => this.#resolveDerived(studyId, entry)));
     const bound = vcrBindReconstruction(kind, scenario, derivedEntries, resolvedDerived);
     if ("code" in bound) throw bound.invalid ? this.#invalid("vcr_job_scenario_invalid", bound.invalid) : new HttpError(400, bound.code, bound.message);
     scenario = bound.scenario;
+    const generatedDerived = derivedEntries.find(entry => ["population", "synthetic-population"].includes(entry.table)
+      && resolvedDerived.some(resolved => resolved.id === `${entry.resultId}:${entry.table}` && resolved.id === scenario.syntheticInputId && resolved.valueSource === "synthetic"));
+    const qualityAttachmentResultId = kind === "population_quality" ? qualityBasis?.resultId ?? generatedDerived?.resultId ?? null : null;
+    if (!qualityBasis && kind === "population_quality" && generatedDerived) {
+      const population = (await this.store.populations(studyId, 1000)).find(row => row.id === object(input.detail).subjectId);
+      const result = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+      const execution = result?.executionId ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, studyId]) : null;
+      const current = vcrPopulationGenerationInput(population, result, execution);
+      if (current?.resultId === generatedDerived.resultId && current?.table === generatedDerived.table) qualityBasis = current;
+    }
     const inputs = [
       ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
       ...resolvedDerived,
+      ...(qualityInput ? [qualityInput] : []),
     ];
 
     const scenarioHash = vcrScenarioHash(scenario);
@@ -680,7 +694,15 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...curveDetail, configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...curveDetail, ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      // Completion locks the job before its population. A duplicate enqueue must take the same order:
+      // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
+      if (qualityBasis) {
+        const current = (await client.query(`SELECT result_id, version FROM ${VCR_SCHEMA}.populations WHERE study_id=$1 AND id=$2 FOR SHARE`, [studyId, qualityBasis.populationId])).rows[0];
+        if (!current || current.result_id !== qualityBasis.resultId || Number(current.version) !== qualityBasis.populationVersion) {
+          throw new HttpError(409, "vcr_derived_table_missing", "所选人群生成结果已变更，请重新选择人群版本。");
+        }
+      }
       if (inserted?.inserted === true) await this.store.audit({ client, studyId, userId: String(input.userId), action: "vcr.job.enqueue",
         object: String(inserted.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
       return inserted;
@@ -766,6 +788,25 @@ export class VcrJobs {
     return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source };
   }
 
+  /** Validate only the server-selected generated quality input; this grants no general derived-input privilege.
+   * @param {string} studyId @param {string} kind @param {unknown} subjectId @param {Record<string, any>} scenario @param {Record<string, any>} raw
+   */
+  async #qualityBasis(studyId, kind, subjectId, scenario, raw) {
+    const keys = ["populationId", "populationVersion", "resultId", "table", "inputId", "sha256"];
+    if (kind !== "population_quality" || !raw || typeof raw !== "object" || Array.isArray(raw)
+      || Object.keys(raw).length !== keys.length || keys.some(key => !Object.hasOwn(raw, key)) || raw.populationId !== subjectId) {
+      throw new HttpError(400, "vcr_job_scenario_invalid", "质量评估必须选择本研究的已生成人群版本。");
+    }
+    const population = (await this.store.populations(studyId, 1000)).find(row => row.id === subjectId);
+    const result = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+    const execution = result?.executionId ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, studyId]) : null;
+    const basis = vcrPopulationGenerationInput(population, result, execution);
+    if (!basis || keys.some(key => basis[key] !== raw[key]) || scenario.syntheticInputId !== basis.inputId) {
+      throw new HttpError(409, "vcr_derived_table_missing", "所选人群生成结果已变更或不可用，请重新选择人群版本。");
+    }
+    return basis;
+  }
+
   /** @param {string} studyId @param {number} [limit] */
   async listForStudy(studyId, limit = 50) {
     return this.store.jobs(studyId, limit);
@@ -783,7 +824,13 @@ export class VcrJobs {
     const row = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [studyId, jobId]);
     if (!row) return null;
     const refs = list(object(row.checkpoint).configurationInputRefs);
-    return { subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
+    const qualityBasis = object(row.checkpoint).qualityBasis ?? null;
+    let qualityBasisAvailable = null;
+    if (qualityBasis) {
+      try { await this.#qualityBasis(studyId, String(row.kind), object(row.checkpoint).subjectId, object(row.scenario), qualityBasis);
+        await this.#resolveDerived(studyId, qualityBasis); qualityBasisAvailable = true; } catch { qualityBasisAvailable = false; }
+    }
+    return { qualityBasis, qualityBasisAvailable, subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
       scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
       sourceModel: object(row.checkpoint).sourceModel ? { id: object(object(row.checkpoint).sourceModel).id, version: object(object(row.checkpoint).sourceModel).version } : null,
       inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),

@@ -1,3 +1,4 @@
+import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
  * The six data tabs of a study page, presented (contract 2026-09-29 §5).
@@ -256,6 +257,7 @@ export function presentPopulationTab(bundle) {
     kind: (/** @type {Record<string, string>} */ (VCR_POPULATION_KIND_LABELS_ZH))[current.kind] ?? current.kind,
     versions: populations.map((/** @type {any} */ population) => ({
       id: population.id,
+      generationInput: vcrPopulationGenerationInput(population, resultById(bundle, population.resultId), executionOf(bundle, resultById(bundle, population.resultId))),
       label: `人群 v${population.version}`,
       stale: Boolean(markFor(stale, vcrObjectNode("population", population))),
       counts: countsView(population.counts, { tier: study.dataTier }),
@@ -1731,6 +1733,7 @@ export function presentIntake(bundle) {
       valueSource: (/** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH))[String(snapshot.valueSource)] ?? null,
       files: list(snapshot.files).map((file) => String(object(file).name)),
       sealed: snapshot.sealed === true, sealedFields: list(snapshot.sealedFields).map(String), sealedUntil: zhTime(snapshot.sealedUntil, now),
+      qualityInputs: list(snapshot.qualityInputs),
       findings: numeric(object(snapshot.quality).findings),
       quality: qualityRows(snapshot.quality),
       tables: list(snapshot.tables).map((table) => ({
