@@ -70,9 +70,9 @@ describe("the one band over every view of a study", () => {
     draw();
     const band = document.querySelector("[data-page-chrome]") as HTMLElement;
     expect(band).toHaveClass("sticky", "top-0");
-    expect(within(band).getByRole("tablist")).toBeInTheDocument();
+    expect(within(band).getByRole("navigation", { name: "研究进度" })).toBeInTheDocument();
     // The tab row IS the step bar: there is no second rail of the same seven things.
-    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
     const body = document.querySelector("[data-page-body]") as HTMLElement;
     expect(band.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -82,8 +82,8 @@ describe("the one band over every view of a study", () => {
     const band = document.querySelector("[data-page-chrome]") as HTMLElement;
     const row = band.lastElementChild as HTMLElement;
     expect(row).toHaveClass("min-h-11");
-    expect(row).toHaveAttribute("aria-hidden", "true");
-    expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(0);
+    expect(row).not.toHaveAttribute("aria-hidden");
+    expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
   });
 
   it("draws the tab's own toolbar in the band — not in the body — and takes it away with the tab", async () => {
@@ -108,46 +108,37 @@ describe("the one band over every view of a study", () => {
         </StudyFrame>
       </MemoryRouter>,
     );
-    await waitFor(() => expect(document.querySelector("[data-toolbar]")).toBeNull());
+    await waitFor(() => expect(document.querySelector("[data-toolbar]")).not.toHaveTextContent("2,000 名"));
     expect((document.querySelector("[data-page-chrome]") as HTMLElement).lastElementChild).toHaveClass("min-h-11");
   });
 
   it("draws no toolbar row in the conversation view, which has no tab-level controls, and leaves no tab selected", () => {
     draw({ view: "chat" });
-    expect(document.querySelector("[data-toolbar]")).toBeNull();
-    const band = document.querySelector("[data-page-chrome]") as HTMLElement;
-    expect(band.querySelector(".min-h-11")).toBeNull();
-    expect(screen.queryByRole("tab", { selected: true })).toBeNull();
-    // The first tab is still in the tab order, so the row can be reached from the keyboard.
-    expect(screen.getAllByRole("tab")[0]).toHaveAttribute("tabindex", "0");
-    expect(document.querySelector("[role=tabpanel]")).toBeNull();
+    expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(7);
   });
 });
 
 describe("the tab row", () => {
   it("says each stage's state as a dot, in words for a screen reader and as a tooltip, and what the stage found", () => {
     draw();
-    const patients = screen.getByRole("tab", { name: /^虚拟患者/ });
-    expect(patients.querySelector("[data-tab-dot]")).toHaveAttribute("data-tab-dot", "attention");
-    expect(patients).toHaveTextContent("2,000 名");
-    expect(patients).toHaveTextContent("需要留意");
-    // The legend of the dot is in the document for the keyboard and the pointer: the tooltip says why it needs a look.
-    const tip = document.getElementById(patients.getAttribute("aria-describedby") ?? "");
-    expect(tip).toHaveTextContent("需要留意：上次没有做完");
-    // 定义与证据 says what its evidence found; the overview has no stage and no dot.
-    expect(screen.getByRole("tab", { name: /^定义与证据/ })).toHaveTextContent("4 张假设卡");
-    expect(screen.getByRole("tab", { name: /^总览/ }).querySelector("[data-tab-dot]")).toBeNull();
+    const patient = document.querySelector('[data-rail-step="patients"]')!;
+    expect(patient).toHaveAttribute("data-rail-state", "attention");
+    expect(patient).toHaveTextContent("未完成");
+    const control = within(patient as HTMLElement).getByRole("link");
+    expect(document.getElementById(control.getAttribute("aria-describedby") ?? "")).toHaveTextContent("2,000 名");
+    expect(document.querySelector('[data-rail-step="definition"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-rail-step="evidence"]')).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 
   it("names a stage under way by the run that covers it", () => {
-    draw({
-      study: study((raw) => {
-        raw.steps.population = { ...raw.steps.population, status: "running" };
-        raw.activity = { run: { id: "run_1", step: "population", steps: ["population"], label: "构建人群", phase: null, counts: {}, startedAt: null, placement: "open-runtime", locked: false }, queue: [], jobs: [], last: null };
-      }),
-    });
-    const tab = screen.getByRole("tab", { name: /^人群/ });
-    expect(document.getElementById(tab.getAttribute("aria-describedby") ?? "")).toHaveTextContent("进行中：构建人群");
+    draw({ study: study(raw => { raw.steps.population = { ...raw.steps.population, status: "running" }; raw.activity = { run: { id: "r", step: "population", steps: ["population"], label: "构建人群", phase: null, counts: {}, startedAt: null, placement: "open-runtime", locked: false }, queue: [], jobs: [], last: null }; }) });
+    expect(document.querySelector('[data-rail-step="population"]')).toHaveTextContent("进行中");
+    expect(document.querySelector('[data-activity="strip"]')).toHaveTextContent("构建人群");
   });
 });
 
@@ -237,13 +228,11 @@ describe("对话 is a view of the page", () => {
     const onChat = vi.fn();
     const closed = draw({ onChat });
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
-    expect(onChat).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "对话" })).toHaveAttribute("aria-pressed", "false");
-    closed.unmount();
+    expect(onChat).toHaveBeenCalledOnce(); closed.unmount();
     draw({ view: "chat", onChat });
-    expect(screen.getByRole("button", { name: "对话" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(screen.getByRole("button", { name: "对话" }));
-    expect(onChat).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
+    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+    expect(onChat).toHaveBeenCalledOnce();
   });
 
   it("hands a tab the way in, with a draft that waits in the composer", async () => {
@@ -308,7 +297,8 @@ describe("the server's eight states of activity, drawn", () => {
     const { container } = draw({ study: study((raw) => { raw.activity = state("being-sent"); }), view: "chat" });
     // The conversation is not said to be held for it: `locked` is false and nothing in the frame disables it.
     expect(container.querySelector("[data-activity='strip']")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "对话" })).not.toBeDisabled();
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
+    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
   });
 
   it("a run that holds the project's runtime is drawn like any other: the pane, not the strip, says the conversation is held", () => {

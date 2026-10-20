@@ -380,7 +380,7 @@ describe("人群 · before there is one", () => {
     const { container } = renderTab(<PopulationTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />, { studyId: EMPTY_STUDY_ID });
     expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
-    expect(container.querySelector("[data-page-chrome]")).toBeNull();
+    expect(container.querySelector("[data-page-chrome]")).toContainElement(screen.getByRole("button", { name: "数据来源" }));
   });
 
   it("is a recipe with one verb-and-object button when the step was never asked for, and the button starts it where the reader is", async () => {

@@ -797,7 +797,7 @@ export class VcrJobs {
       if (!vcrLocationIsValid(String(table?.location ?? ""))) continue;
       choices.push({ resultId: result.id, label: "Kaplan–Meier reconstruction", version: result.version,
         createdAt: result.createdAt, method: "evidence.reconstruct_km", valueSource: "reconstructed", table: "reconstructed-ipd",
-        source: { kind: "published_curve", origin: row.curve_origin }, timeUnit: row.curve_time_unit ?? null });
+        source: { kind: "curve_image", origin: row.curve_origin }, timeUnit: row.curve_time_unit ?? null });
     }
     return choices;
   }

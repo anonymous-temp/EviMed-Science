@@ -18,7 +18,7 @@ it("reads the registration before applying preserved evidence to an existing stu
   await userEvent.click(await screen.findByText("NCT00000001"));
   expect(await screen.findByText("Preserved trial")).toBeInTheDocument();
   expect(screen.getByText("未登记")).toBeInTheDocument();
-  expect(screen.getByText(/ctis · 未能查询：timeout/)).toBeInTheDocument();
+  expect(screen.getByText(/ctis · 查询超时/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "保存为研究参考试验" })).toBeDisabled();
   const choice = await screen.findByLabelText("用于现有研究");
   const option = choice.querySelectorAll("option")[1];
@@ -27,4 +27,22 @@ it("reads the registration before applying preserved evidence to an existing stu
   await waitFor(() => expect(onApplied).toHaveBeenCalledOnce());
   const applied = server.calls.find(row => row.method === "POST");
   expect(applied?.body).toEqual({ studyId: option.value, registry: "clinicaltrials.gov", registryId: "NCT00000001" });
+});
+
+it("applies to the fixed study and distinguishes displayed records from registry totals", async () => {
+  const applied = vi.fn();
+  const server = installVcrServer(network.productRequest, {
+    "GET /vcr/precedents/search": { status: "ok", candidates: [{ registry: "clinicaltrials.gov", registryId: "NCT_FIXED", title: "One displayed trial" }], registries: [{ registry: "clinicaltrials.gov", status: "ok", total: 238 }] },
+    "GET /vcr/precedents/record": { status: "ok", available: true, record: { title: "One displayed trial", enrollment: { planned: 120, actual: 97 }, values: [] } },
+    "POST /vcr/precedents/apply": { status: "ok" },
+  });
+  render(<MemoryRouter><VcrReferenceSearch query="diabetes" studyId="fixed_study" onApplied={applied} /></MemoryRouter>);
+  await userEvent.click(await screen.findByText("NCT_FIXED"));
+  expect(screen.getByRole("status")).toHaveTextContent("本次显示 1 项");
+  expect(screen.getByText(/检索命中 238 项/)).toBeInTheDocument();
+  expect(screen.queryByLabelText("用于现有研究")).toBeNull();
+  await userEvent.click(await screen.findByRole("button", { name: "用于本研究" }));
+  await waitFor(() => expect(applied).toHaveBeenCalledOnce());
+  expect(server.calls.find(call => call.method === "POST")?.body).toEqual({ studyId: "fixed_study", registry: "clinicaltrials.gov", registryId: "NCT_FIXED" });
+  expect(screen.getByRole("button", { name: "已用于本研究" })).toBeDisabled();
 });

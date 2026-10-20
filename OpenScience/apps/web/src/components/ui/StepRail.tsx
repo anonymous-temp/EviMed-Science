@@ -32,6 +32,8 @@ export interface StepRailStep {
   state: RailState;
   /** What the step produced, in the reader's words (「86 条事实」): the tooltip, never a second line. */
   summary?: string | null;
+  /** A precise status supplied by the workflow, including unrequested steps. */
+  stateLabel?: string;
   /** The step's home: a route… */
   href?: string;
   /** …or a handler (a tab switch on the same route). */
@@ -47,16 +49,20 @@ export interface StepRailProps {
   /** The program's 「现在」 sentence, at the right end. */
   trailing?: ReactNode;
   className?: string;
+  /** Keep the reachable step row on narrow screens. */
+  visible?: boolean;
+  /** Show status words alongside the marks. */
+  showState?: boolean;
 }
 
-export function StepRail({ label, steps, activeSteps = [], trailing, className }: StepRailProps) {
+export function StepRail({ label, steps, activeSteps = [], trailing, className, visible = false, showState = false }: StepRailProps) {
   const narrow = useNarrow();
   const navigate = useNavigate();
   const done = steps.filter((step) => step.state === "done").length;
 
-  if (narrow) {
+  if (narrow && !visible) {
     const entries: MenuEntry[] = steps.map((step) => ({
-      label: `${step.label} · ${RAIL_STATE_WORDS[step.state]}`,
+      label: `${step.label} · ${(step.stateLabel ?? RAIL_STATE_WORDS[step.state])}`,
       checked: activeSteps.includes(step.id),
       onSelect: () => (step.onSelect ? step.onSelect() : step.href ? navigate(step.href) : undefined),
     }));
@@ -72,7 +78,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
   }
 
   return (
-    <nav data-step-rail="" aria-label={label} className={cn("flex h-10 items-stretch gap-4", className)}>
+    <nav data-step-rail="" aria-label={label} className={cn("flex min-w-0 items-stretch gap-4", showState ? "h-14" : "h-10", className)}>
       <ol className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
         {steps.map((step) => {
           const active = activeSteps.includes(step.id);
@@ -81,7 +87,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
               <RailMark state={step.state} />
               <span className="whitespace-nowrap">
                 {step.label}
-                <span className="sr-only">{`，${RAIL_STATE_WORDS[step.state]}`}</span>
+                <span className={showState ? "block text-caption text-text-3" : "sr-only"}>{showState ? (step.stateLabel ?? RAIL_STATE_WORDS[step.state]) : `，${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}`}</span>
               </span>
             </>
           );
@@ -92,7 +98,7 @@ export function StepRail({ label, steps, activeSteps = [], trailing, className }
             "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-none border-b-2 px-2 text-ui font-normal outline-none transition-colors duration-fast",
             active ? "border-accent text-text" : cn("border-transparent", step.state === "todo" ? "text-text-3" : "text-text-2"),
           );
-          const tip = `${RAIL_STATE_WORDS[step.state]}${step.summary ? `：${step.summary}` : ""}`;
+          const tip = `${step.stateLabel ?? RAIL_STATE_WORDS[step.state]}${step.summary ? `：${step.summary}` : ""}`;
           const control = step.href ? (
             <Link to={step.href} onClick={step.onSelect} aria-current={active ? "step" : undefined} className={cn(look, "hover:bg-surface-2 hover:text-text")}>{body}</Link>
           ) : step.onSelect ? (

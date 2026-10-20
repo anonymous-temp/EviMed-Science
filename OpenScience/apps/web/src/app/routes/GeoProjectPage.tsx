@@ -19,7 +19,6 @@ import {
 } from "@/lib/geoClient";
 import { geoChatPath } from "@/lib/geoLocation";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { RAIL_STATE_WORDS } from "@/components/ui/ProgressRail";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -363,7 +362,6 @@ function GeoBand({
   });
   const steps = bandSteps(project, (step) => destination(GEO_STEP_HOME[step].tab, GEO_STEP_HOME[step].view, step, GEO_STEP_HOME[step].section));
   const selectedStep = params.get("step") ?? GEO_TAB_STEPS[tab][0] ?? null;
-  const complete = steps.filter((step) => step.state === "done").length;
 
   // The one text button that continues this tab's step. It is drawn here, so it is there whether the tab has anything yet or not.
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -384,9 +382,9 @@ function GeoBand({
   const bandToolbar: ToolbarProps = {
     ...(controls ?? {}),
     views: undefined,
-    summary: controls?.summary ?? now,
+    summary: controls?.summary,
     filters: [
-      { kind: "select", label: "查看", value: onChat ? "chat" : tab,
+      { kind: "select", label: "查看", value: onChat ? "chat" : tab, pinned: true,
         options: [{ value: "chat", label: "对话" }, ...GEO_TABS.map((item) => ({ value: item.key, label: item.label }))],
         onChange: (next) => {
           if (next === "chat") openChat();
@@ -403,9 +401,7 @@ function GeoBand({
   return (
     <PageShell<GeoTabKey>
       title={project.name}
-      scope={{ label: `进度，已完成 ${complete}/${steps.length} 步`, value: selectedStep,
-        groups: [{ choices: steps.map((step) => ({ id: step.id, label: `${step.label} · ${RAIL_STATE_WORDS[step.state]}` })) }],
-        onChange: (step) => { const choice = steps.find((item) => item.id === step); if (choice?.href) navigate(choice.href); } }}
+      steps={{ label: "循证 GEO 进度", steps, activeSteps: selectedStep ? [selectedStep] : [], trailing: now, visible: true, showState: true }}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}
       contentClassName={onChat ? "flex min-h-96 flex-col" : undefined}
@@ -416,10 +412,10 @@ function GeoBand({
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>
-          <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
+          {!onChat && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
-          </Button>
+          </Button>}
           {/* The header's 「⋯」 is the header's icon button, 36 beside the two
             * 36 px buttons (spec §8.3) — the menu's own trigger is a row's 28. */}
           <Menu label="更多操作" items={menu}>

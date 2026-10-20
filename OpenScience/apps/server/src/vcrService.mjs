@@ -754,11 +754,16 @@ export class VcrService {
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
     const bundle = await this.#bundle(study, user);
-    const [activity, conversation] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user)]);
+    const [activity, conversation, intake] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user),
+      this.store.one(`SELECT run_id, session_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id])]);
+    // Activity has a short display tail. An acknowledged intake remains a conversation when it needs more information, including on reload.
+    const submitted = Boolean(conversation.sessionId && intake?.run_id && intake.session_id === conversation.sessionId
+      && (intake.detail?.goalsApplied === true || intake.detail?.awaitingInput === true));
     // `activity`: what is going on now, `null` when nothing is; `conversation`: the study's own conversation, which is never one of the
     // programme's runs; `sessionId` is the same id for the readers that predate `conversation`; `engine` is what the page's one line at
     // the top says.
-    return { ...presentStudy(bundle), activity, conversation, sessionId: conversation.sessionId, engine: this.engineState() };
+    return { ...presentStudy(bundle), activity, conversation: { ...conversation, ...(submitted ? { submitted: true, ...(intake.detail?.awaitingInput === true ? { awaitingInput: true } : {}) } : {}) }, sessionId: conversation.sessionId, engine: this.engineState() };
   }
 
   /**

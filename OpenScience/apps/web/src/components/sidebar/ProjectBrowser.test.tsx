@@ -1031,6 +1031,31 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     useProjectStore.setState({ currentId: "p-heart" });
   });
 
+
+  it("keeps an explicit null canonical session separate from an ordinary sibling", async () => {
+    mocks.runs["p-heart"] = [run({ id: "sibling", question: "另一段讨论" })];
+    const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: null });
+    try {
+      renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
+      expect(await screen.findByRole("link", { name: /另一段讨论/ })).toHaveAttribute("href", "/app/chat/ses-sibling?project=p-heart");
+      expect(document.querySelector("[data-conversation-placeholder]")).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+    } finally { withdraw(); }
+  });
+
+  it("keeps a held canonical conversation even when only a sibling has ledger rows", async () => {
+    mocks.runs["p-heart"] = [run({ id: "sibling", question: "另一段讨论" })];
+    const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: "ses_canonical_missing" });
+    try {
+      renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
+      expect(await screen.findByRole("link", { name: /另一段讨论/ })).toHaveAttribute("href", "/app/chat/ses-sibling?project=p-heart");
+      expect(document.querySelector("[data-conversation-placeholder]")).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+    } finally { withdraw(); }
+  });
+  it("opens a calculation container explicitly without treating it as a seven-step study", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "calc_1", projectId: "p-heart", name: "Small calculation", purpose: "calculation", status: "active" }], draftProjectIds: [] });
+    renderModules({ vcr: true }, "/app/capabilities/calculations/calc_1");
+    expect(await screen.findByRole("link", { name: "打开计算空间" })).toHaveAttribute("href", "/app/capabilities/calculations/calc_1");
+  });
   it("opens its group and brings its row into view when the study is opened, once per visit to it", async () => {
     const scroll = vi.fn();
     const original = Element.prototype.scrollIntoView;

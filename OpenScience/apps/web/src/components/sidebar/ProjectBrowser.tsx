@@ -9,6 +9,7 @@ import { chatPath, chatSessionId } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { conversationBegan, groupConversations, isConversationRun, type Conversation } from "@/lib/conversations";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
+import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { useOpenStudy } from "@/lib/studyPresence";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
@@ -80,11 +81,11 @@ function isOpenTask(run: WebAgentRun, pathname: string): boolean {
 
 /**
  * Which of a study project's conversations is the study's own — the one its conversation view shows, and whose row opens that view
- * (R19): the one its open page says it holds, else the oldest of the project's conversations, which is how the server resolves a study
- * that was made before it recorded one. Null when the project has no conversation to point at yet.
+ * (R19): the open page's canonical value, including explicit null. Only an absent study-page context permits the legacy oldest-session
+ * fallback, which is how the server resolves a study made before it recorded one.
  */
-function studyConversationOf(rows: readonly Conversation[], heldSessionId: string | null): string | null {
-  if (heldSessionId && rows.some((row) => row.sessionId === heldSessionId)) return heldSessionId;
+function studyConversationOf(rows: readonly Conversation[], heldSessionId: string | null | undefined): string | null {
+  if (heldSessionId !== undefined) return heldSessionId;
   if (rows.length === 0) return null;
   return [...rows].sort((a, b) => conversationBegan(a) - conversationBegan(b))[0].sessionId;
 }
@@ -144,7 +145,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   const geoProjectIds = useGeoProjectIds(geo, projectsKey);
   // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list
   // — unless it is the project the reader is in, which is the one thing they are looking at.
-  const { studies: vcrProjectIds, drafts: vcrDraftIds, studyOf } = useVcrProjects(vcr, projectsKey, currentId);
+  const { studies: vcrProjectIds, drafts: vcrDraftIds, studyOf, calculations } = useVcrProjects(vcr, projectsKey, currentId);
   const openStudy = useOpenStudy();
   // A project is one module's at most, GEO first — the order the list below sorts them in.
   const currentModule: ModuleName | null = geoProjectIds.has(currentId) ? "geo" : vcrProjectIds.has(currentId) || vcrDraftIds.has(currentId) ? "vcr" : null;
@@ -431,10 +432,10 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     // A study project: its own conversation's row opens the study's conversation view, not the chat surface.
     const held = openStudy && openStudy.projectId === project.id ? openStudy : null;
     const studyId = studyOf.get(project.id) ?? held?.studyId ?? null;
-    const studySession = studyId && rows ? studyConversationOf(rows, held?.sessionId ?? null) : null;
+    const studySession = studyId && rows ? studyConversationOf(rows, held?.sessionId) : null;
     let placeholder: { to: string } | null = null;
     if (rows && isCurrent) {
-      if (studyId && held && !studySession) placeholder = { to: vcrChatPath(studyId) };
+      if (studyId && held && !rows.some(row => row.sessionId === held.sessionId)) placeholder = { to: vcrChatPath(studyId) };
       else if (pendingSession && !rows.some((row) => row.sessionId === pendingSession)) placeholder = { to: geoIdFromChatPath(location.pathname) ? location.pathname : chatSessionId(location.pathname) ? chatPath(pendingSession) : "/app/chat" };
     }
     return (
@@ -452,6 +453,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
         runs={entry}
         switching={switching === project.id}
         failure={failures[project.id] ?? null}
+        calculationId={calculations.get(project.id) ?? null}
         studyId={studyId}
         studySession={studySession}
         placeholder={placeholder}
@@ -647,6 +649,7 @@ function ProjectGroup({
   switching,
   failure,
   studyId,
+  calculationId,
   studySession,
   placeholder,
   isPath,
@@ -680,6 +683,7 @@ function ProjectGroup({
   failure: string | null;
   /** The study this project is, and which of its conversations is the study's own (its row opens the study's conversation view). */
   studyId: string | null;
+  calculationId: string | null;
   studySession: string | null;
   /** A conversation begun and not yet spoken in has no run in the ledger: its row is drawn from here, where the address says it is. */
   placeholder: { to: string } | null;
@@ -828,6 +832,7 @@ function ProjectGroup({
       )}
       {renameError && <p role="alert" className="px-2 py-1 text-caption text-error">{renameError}</p>}
       {failure && <p role="alert" className="py-1 pl-7 pr-2 text-caption text-error">{failure}</p>}
+      {expanded && calculationId && <Link to={vcrCalculationPath(calculationId)} className="ml-8 rounded text-ui text-link hover:underline">打开计算空间</Link>}
       {expanded && (
         <ul id={listId} aria-label={`“${label}”的对话`} className="mt-0.5 flex flex-col">
           {(runs === undefined || runs.status === "loading") && (

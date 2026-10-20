@@ -1,7 +1,7 @@
 import { VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TAB_LABELS_ZH, VCR_TABS } from "@evimed/domain";
 import { describe, expect, it } from "vitest";
 import type { VcrStepKey, VcrStepStatus, VcrStudy } from "@/lib/vcrClient";
-import { hasDefinition, isVcrTab, resolveVcrTab, stepsOfTab, tabDot, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "./vcrTabs";
+import { hasDefinition, isVcrTab, resolveVcrTab, stepsOfTab, tabDot, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath, vcrWorkflowSteps } from "./vcrTabs";
 
 const steps = (status: Partial<Record<VcrStepKey, VcrStepStatus>>, extra: Partial<Record<VcrStepKey, Record<string, unknown>>> = {}): VcrStudy["steps"] =>
   Object.fromEntries(VCR_STEPS.map((step) => [step, { status: status[step as VcrStepKey] ?? "none", ...(extra[step as VcrStepKey] ?? {}) }])) as VcrStudy["steps"];
@@ -100,4 +100,10 @@ describe("an address", () => {
     expect(vcrTabPath("std_1", "trial")).toBe("/app/virtual-research/std_1/trial");
     expect(vcrTabPath("a/b", "overview")).toBe("/app/virtual-research/a%2Fb");
   });
+});
+
+it("distinguishes an explicitly unrequested step from an unknown legacy request flag", () => {
+  const rail = vcrWorkflowSteps({ id: "s1", steps: { definition: { status: "none", requested: true }, evidence: { status: "none", requested: false }, population: { status: "none" }, patients: { status: "queued", requested: true } }, stepSummaries: {} });
+  expect(rail.map(row => row.id)).toEqual(VCR_STEPS);
+  expect(rail[0].stateLabel).toBe("待开始"); expect(rail[1].stateLabel).toBe("未请求"); expect(rail[2].stateLabel).toBe("未开始"); expect(rail[3].stateLabel).toBe("排队中");
 });

@@ -38,12 +38,10 @@ export async function furnishVcr(app, user, { log }) {
   });
   await finish(store, first.study.id);
   // The account's library of population definitions: a real cohort with rules, kept from the study that made it (人群 → 存入定义库).
-  try {
-    const study = await store.studyById(first.study.id);
-    await app.vcr.knowledge.saveFromStudy(study, { populationId: first.population.id, name: "晚期 NSCLC 二线人群（入排条件 v1）", text: "年龄不小于 18 岁、ECOG 0–1，一线含铂双药化疗后进展，无活动性脑转移。" }, user.id);
-  } catch (error) {
-    log(`vcr: the definition library — ${String(/** @type {any} */ (error)?.message ?? error).slice(0, 200)}`);
-  }
+  const study = await store.studyById(first.study.id);
+  const template = await app.vcr.knowledge.saveFromStudy(study, { populationId: first.population.id, name: "成人 ECOG 0–1 人群模板", text: "年龄不小于 18 岁、ECOG 0–1；用于研究内选择与字段对应，不代表已建立队列。" }, user.id);
+  if (!template?.definitionId && !template?.id) throw new Error("the VCR walk fixture did not create its population template");
+
 
   // The mixed one, on a project of its own and under its own name.
   const second = await seedEv201({

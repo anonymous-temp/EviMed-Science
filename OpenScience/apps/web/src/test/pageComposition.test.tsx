@@ -236,11 +236,12 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
     await waitFor(() => expect(screen.getByRole("button", { name: `查看：${label}` })).toBeInTheDocument());
-    const facts = expectComposed(container, { stepRail: false, tablists: 0 });
-    expect(facts.stepRails).toHaveLength(0);
-    expect(screen.getByRole("button", { name: /^进度，已完成/ })).toBeInTheDocument();
+    const facts = expectComposed(container, { stepRail: true, tablists: 0 });
+    expect(facts.stepRails).toHaveLength(1);
+    expect(facts.stepRails[0].querySelectorAll("[data-rail-step]")).toHaveLength(8);
+    expect(screen.getByRole("navigation", { name: "循证 GEO 进度" })).toBeInTheDocument();
     expect(facts.chrome).toHaveClass("sticky", "top-0");
-    expect(facts.chrome!.children).toHaveLength(1);
+    expect(facts.chrome!.children).toHaveLength(2);
   });
 
   // The rail's click and a 「需要你」 row end in `#geo-<block>`; a tab that is rebuilt without the id leaves the link landing at the top
@@ -302,7 +303,7 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(container.querySelector("[data-geo-actions]")).not.toBeNull(), { timeout: 4000 });
-    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
+    const facts = expectComposed(container, { stepRail: true, tablists: 0, toolbar: true });
     const chart = container.querySelector("[data-geo-effect]") as HTMLElement;
     const list = container.querySelector("[data-geo-actions]") as HTMLElement;
     const toolbar = facts.toolbars[0];
@@ -368,7 +369,7 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
   it.each(Object.keys(ORDER))("%s: the band, then its toolbar, then its landmarks in order, with no control under what it controls", async (key) => {
     const { container } = renderAt(`/app/geo/geo_masi/${key}`);
     for (const selector of ORDER[key]) await waitFor(() => expect(container.querySelector(selector), `${key}: ${selector}`).not.toBeNull(), { timeout: 4000 });
-    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
+    const facts = expectComposed(container, { stepRail: true, tablists: 0, toolbar: true });
     const body = facts.body as HTMLElement;
     expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
     let earlier: Element = facts.toolbars[0];
@@ -395,7 +396,7 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
     const { container } = renderAt("/app/geo/geo_masi/answers/snap_deepseek");
     const heading = await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
     await waitFor(() => expect(container.querySelector("[data-geo-answer]")).not.toBeNull());
-    const facts = expectComposed(container, { stepRail: false, tablists: 0, toolbar: true });
+    const facts = expectComposed(container, { stepRail: true, tablists: 0, toolbar: true });
     const action = container.querySelector("[data-geo-answer-primary]") as HTMLElement;
     const text = container.querySelector("[data-geo-answer]") as HTMLElement;
     for (const [before, after] of [[facts.chrome!, heading], [heading, action], [action, text]] as const) expect(precedes(before, after)).toBe(true);

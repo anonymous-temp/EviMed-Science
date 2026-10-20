@@ -145,7 +145,7 @@ export const routes: RouteObject[] = [
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "capabilities/methods/:methodId", element: <VcrMethodWorkbenchPage /> },
-        { path: "capabilities/calculations/:studyId", element: <VcrCalculationWorkbenchPage /> },
+        { path: "capabilities/calculations/:studyId/:tab?", element: <VcrCalculationWorkbenchPage /> },
         { path: "account", element: <AccountPage /> },
         // The simulated wallet's two commerce pages — 模拟充值 and 模拟订单 — at the
         // addresses the domain names (`SIMULATED_WALLET_PAGES`), which is where

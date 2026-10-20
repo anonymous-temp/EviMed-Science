@@ -577,7 +577,9 @@ test('owned curve reconstruction prepares, queues and reopens the exact comparat
     await database.query(`INSERT INTO evimed_vcr.results(id,study_id,user_id,kind,created_at)
       SELECT 'unrelated_' || n, $1, $2, 'patient_set', now()+interval '1 second' FROM generate_series(1,501) n`, [study.id, user.id]);
     const choices = (await request(`${prefix}/jobs`)).reconstructionResults;
-    assert.equal(choices[0].resultId, result.id);
+    assert.deepEqual({ resultId: choices[0].resultId, version: choices[0].version, method: choices[0].method, table: choices[0].table },
+      { resultId: result.id, version: result.version, method: 'evidence.reconstruct_km', table: 'reconstructed-ipd' });
+    assert.deepEqual(choices[0].source, { kind: 'curve_image', origin: receipt.origin });
     assert.doesNotMatch(JSON.stringify(choices), /location|sha256|derived\//);
     const source = await composed.dataPlane.registerSource({ userId: user.id, studyId: study.id, name: 'Treatment cohort', ownerParty: 'Research team', allowedUses: ['vcr'] });
     await composed.dataPlane.storeUpload({ actor: user.id, studyId: study.id, sourceId: source.id, name: 'cohort.csv', stream: Readable.from([cohortCsv()]) });

@@ -166,6 +166,7 @@ export function CapabilitiesPage() {
   return (
     <PageShell
       title={RESEARCH_TOOLS_NAME}
+      actions={<Link to="/app/virtual-research?tab=precedents" className="rounded text-ui text-link hover:underline">参考试验检索</Link>}
       // One row, above the list it controls: the categories, the search and what is listed.
       toolbar={{
         label: "科研工具筛选",

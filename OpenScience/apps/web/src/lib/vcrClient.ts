@@ -539,10 +539,14 @@ export interface VcrStepSummary {
 export interface VcrConversationRef {
   sessionId: string | null;
   exists: boolean;
+  /** A persisted acknowledged intake, independent of the transient activity display. */
+  submitted?: boolean;
+  awaitingInput?: boolean;
 }
 
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
+  purpose?: "programme" | "calculation";
   id: string;
   projectId: string;
   name: string;
@@ -1766,8 +1770,10 @@ export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
   const conversation = obj(value.conversation);
   return {
+    purpose: value.purpose === "calculation" ? "calculation" : "programme",
     ...(value as unknown as VcrStudy),
-    conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true },
+    conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true,
+      ...(conversation.submitted === true ? { submitted: true } : {}), ...(conversation.awaitingInput === true ? { awaitingInput: true } : {}) },
     activity: readVcrActivity(value.activity),
     next: readNext(value.next),
     stepSummaries: readStepSummaries(value.stepSummaries),
@@ -2330,6 +2336,26 @@ export async function getVcrHome(): Promise<VcrHome> {
  */
 export function createVcrStudy(input: VcrCreateBody = {}) {
   return productRequest<{ id: string; projectId: string; sessionId: string | null; status?: VcrStudyStatus }>("/vcr/studies", "POST", studyCreateBody(input));
+}
+
+export interface VcrStartBody {
+  brief: string;
+  requestId: string;
+  name?: string;
+  action?: "definition" | "auto" | "cohort" | "patients" | "comparator" | "trial";
+}
+export interface VcrStartAnswer {
+  studyId: string;
+  sessionId: string;
+  runId: string;
+  status: string;
+  dispatchStatus: string;
+  errorCode: string | null;
+  state: "accepted" | "confirming" | "rejected" | "awaiting_input";
+}
+/** Retry the same immutable payload and request id after an uncertain receipt. */
+export function startVcrStudy(studyId: string, input: VcrStartBody) {
+  return productRequest<VcrStartAnswer>(`${study(studyId)}/start`, "POST", input);
 }
 
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {

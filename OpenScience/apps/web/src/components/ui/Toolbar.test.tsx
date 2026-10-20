@@ -205,3 +205,10 @@ describe("Toolbar", () => {
     });
   });
 });
+
+it("keeps an opted-in View select explicit on a phone while ordinary filters fold", () => {
+  narrow();
+  render(<Toolbar filters={[{ kind: "select", label: "查看", value: "chat", options: [{ value: "chat", label: "对话" }], onChange: () => undefined, pinned: true }, { kind: "select", label: "状态", value: "running", options: [{ value: "running", label: "进行中" }], onChange: () => undefined }]} />);
+  expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+});

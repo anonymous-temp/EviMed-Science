@@ -836,6 +836,25 @@
           "OS_MONTHS"
         ],
         "sealedUntil": null,
+        "qualityInputs": [
+          {
+            "inputId": "snp_1:subject",
+            "kind": "analysis_table",
+            "shape": "subject",
+            "label": "受试者级表",
+            "columns": [
+              "USUBJID",
+              "age",
+              "arm",
+              "sex"
+            ],
+            "columnLabels": {
+              "age": "AGE",
+              "arm": "ARM",
+              "sex": "SEX"
+            }
+          }
+        ],
         "findings": 11,
         "quality": [
           {

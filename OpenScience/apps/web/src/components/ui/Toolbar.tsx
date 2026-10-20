@@ -53,6 +53,8 @@ export interface ToolbarSelect {
   onChange(value: string | null): void;
   /** The option that clears the choice (「全部栏目」). Absent: the choice cannot be cleared. */
   allLabel?: string;
+  /** A contextual View selector stays explicit when other filters fold. */
+  pinned?: boolean;
 }
 
 export interface ToolbarChips {
@@ -195,7 +197,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const crowded = useCrowded(row, inBand && !views && !narrow);
   const fold = narrow || crowded;
   // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned views, which stay as the chips they are.
-  const kept = fold ? declared.filter((filter) => filter.kind === "chips" && filter.pinned) : [];
+  const kept = fold ? declared.filter((filter) => (filter.kind === "chips" || filter.kind === "select") && filter.pinned) : [];
   const filters = fold ? declared.filter((filter) => !kept.includes(filter)) : declared;
   const folded = filters.filter(isActive).length;
   // What 「清除筛选」 lets go of is every filter that is on, the pinned ones too.

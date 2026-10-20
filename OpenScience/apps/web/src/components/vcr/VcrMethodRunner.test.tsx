@@ -222,7 +222,7 @@ it("selects an owned reconstruction for the unanchored example without submittin
   api.saveVcrMethodConfiguration.mockResolvedValue({ subjectId: "maic_subject", objectKind: "comparator", version: 1, reconstructionResultId: reconstruction.resultId, scenario: maicExample() });
   draw(maic); await chooseStudy(); example("comparator.maic_time_to_event"); fireEvent.click(screen.getByLabelText("Authorized snapshot · 120 行"));
   expect(screen.queryByLabelText("重建数据引用")).toBeNull(); expect(screen.getByRole("button", { name: "保存配置并运行" })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("文献曲线重建结果"), { target: { value: reconstruction.resultId } });
+  fireEvent.change(screen.getByLabelText("曲线重建结果"), { target: { value: reconstruction.resultId } });
   expect(screen.getByText("Published curve fixture")).toBeInTheDocument(); expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled();
   fireEvent.change(screen.getByLabelText("age"), { target: { value: "" } }); expect(screen.getByRole("button", { name: "保存配置并运行" })).toBeDisabled(); fireEvent.change(screen.getByLabelText("age"), { target: { value: "60" } });
   fireEvent.click(screen.getByRole("button", { name: "保存配置并运行" })); await waitFor(() => expect(api.queueVcrJob).toHaveBeenCalled());
@@ -241,9 +241,9 @@ it("reopens the original reconstruction identity and never substitutes the newes
   api.getVcrMethodHistory.mockResolvedValue({ jobs: [{ id: "old_maic_job", kind: "maic_time_to_event_comparator", state: "succeeded" }], reconstructionResults: [reconstruction] });
   api.getVcrMethodConfiguration.mockResolvedValue({ kind: "maic_time_to_event_comparator", method: maic.method, reconstructionResultId: "old_reconstruction", reconstructionResultAvailable: false, subjectId: "old_comparator", scenario: maicExample(), seed: 987, inputRefs: [{ kind: "snapshot", id: "snapshot_saved" }], unavailableInputs: 0 });
   draw(maic); await chooseStudy(); fireEvent.click(screen.getByText("历史运行与原始配置")); fireEvent.click(await screen.findByRole("button", { name: "打开原始配置与结果" }));
-  await waitFor(() => expect(api.getVcrMethodResult).toHaveBeenCalledWith("study_1", "old_maic_job")); expect(screen.getByLabelText("文献曲线重建结果")).toHaveValue("historical-unavailable"); expect(screen.getByRole("button", { name: "保存配置并运行" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "复用本次配置" })); expect(screen.getByLabelText("文献曲线重建结果")).toHaveValue("historical-unavailable"); expect(api.queueVcrJob).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByLabelText("文献曲线重建结果"), { target: { value: reconstruction.resultId } }); expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled();
+  await waitFor(() => expect(api.getVcrMethodResult).toHaveBeenCalledWith("study_1", "old_maic_job")); expect(screen.getByLabelText("曲线重建结果")).toHaveValue("historical-unavailable"); expect(screen.getByRole("button", { name: "保存配置并运行" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "复用本次配置" })); expect(screen.getByLabelText("曲线重建结果")).toHaveValue("historical-unavailable"); expect(api.queueVcrJob).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("曲线重建结果"), { target: { value: reconstruction.resultId } }); expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled();
 });
 
 it("keeps one run action before the form and submits a manually entered fixed-endpoint scenario without examples", async () => {

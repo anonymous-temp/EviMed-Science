@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { Plus, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
-  createVcrStudy,
   getVcrHome,
   isVcrOff,
   useVcrFeature,
@@ -12,8 +11,9 @@ import {
   type VcrStudySummary,
 } from "@/lib/vcrClient";
 import { useProjectStore } from "@/lib/projects";
+import { VcrStudyBrief } from "@/components/vcr/VcrStudyBrief";
+import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrChatPath } from "@/lib/studyLocation";
-import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -23,7 +23,6 @@ import { Note } from "@/components/ui/Note";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { VcrStepProgress } from "@/components/vcr/VcrStepProgress";
-import { announceVcrStudiesChanged, hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
 import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
 import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
@@ -69,18 +68,8 @@ export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">
 }
 
 /**
- * 「虚拟临床研究」's home: the studies, and the libraries they draw on.
- *
- * One list and one way in. 「新建研究」 is the only entry: it makes a draft study and opens **its conversation view** with the study's
- * step bar already above it (R19, plan §5.3) — the first thing said there names the study, the bar and the title follow, and the
- * study stands at the top of the sidebar's group. It used to open the project's conversation in the chat surface, where nothing
- * pointed back at the study.
- *
- * Each row says what the study asks, what it has found and how far it has come — **all seven steps in order, each a link to its
- * tab**, how many are done and which is next — and a study that needs somebody (a failed step, a wait for the budget or the
- * allowance, a coordinator's confirmations) says so on its own row with the thing to do about it, so there is one column and nothing
- * to read twice. The toolbar holds the four views, the one filter (a state is not drawn when no study is in it), the sort and the
- * search, above the list they act on.
+ * The study list and one New Study action. New Study opens a local brief; meaningful save, material selection or Start creates the
+ * owned draft. Existing library query links remain compatible without competing with the study list as landing-page tabs.
  */
 export function VcrHomePage() {
   const feature = useVcrFeature();
@@ -89,7 +78,6 @@ export function VcrHomePage() {
   const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
-  const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [state, setState] = useState<StudyFilter>("all");
   const [sort, setSort] = useState<StudySort>("recent");
@@ -135,34 +123,27 @@ export function VcrHomePage() {
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
-  const start = () => {
-    if (creating) return;
-    setCreating(true);
-    void (async () => {
-      const created = await createVcrStudy({});
-      // The project exists from this moment and the list that would call it a draft is a request away: the sidebar is told now,
-      // and which study it is, so its row can open the study's conversation.
-      hintVcrDraftProject(created.projectId, created.id);
+  const start = () => setParams({ new: "1" });
+  const newStudy = <Button onClick={start}><Plus size={16} aria-hidden="true" />新建研究</Button>;
+  if (params.get("new") === "1") return <PageShell title="新建研究" width="wide" back={<Link to="/app/virtual-research" className="rounded text-ui text-link">虚拟临床研究</Link>}>
+    <VcrStudyBrief onStarted={async (created, _answer, isCurrent) => {
+      if (!isCurrent()) return false;
       const store = useProjectStore.getState();
-      if (!store.projects.some((project) => project.id === created.projectId)) await store.load();
-      announceVcrStudiesChanged();
-      // The shell moves to the study's project and lands on its conversation in the same render: the page it lands on is the study's
-      // own, with its step bar, and the first sentence said there names it.
-      await useProjectStore.getState().select(created.projectId, () => navigate(vcrChatPath(created.id), { flushSync: true }));
-    })()
-      .catch((error: unknown) => {
-        if (isVcrOff(error)) setListing({ kind: "off" });
-        else toast.error(webErrorMessage(error, { fallback: "无法新建研究，请稍后重试。" }));
-      })
-      .finally(() => setCreating(false));
-  };
-
-  const newStudy = (
-    <Button onClick={start} loading={creating}>
-      <Plus size={16} aria-hidden="true" />
-      新建研究
-    </Button>
-  );
+      if (!store.projects.some(project => project.id === created.projectId)) await store.load();
+      if (!isCurrent()) return false;
+      let landed = false;
+      await useProjectStore.getState().select(created.projectId, () => { if (isCurrent()) { navigate(vcrChatPath(created.id), { flushSync: true }); landed = true; } });
+      return landed;
+    }} onDataRequested={async (created, isCurrent) => {
+      if (!isCurrent()) return false;
+      const store = useProjectStore.getState();
+      if (!store.projects.some(project => project.id === created.projectId)) await store.load();
+      if (!isCurrent()) return false;
+      let landed = false;
+      await useProjectStore.getState().select(created.projectId, () => { if (isCurrent()) { navigate(`${vcrTabPath(created.id, "data")}?intake=1`, { flushSync: true }); landed = true; } });
+      return landed;
+    }} />
+  </PageShell>;
   // The empty state carries the button, so the header does not.
   const none = tab === "studies" && feature !== "loading" && ready !== null && ready.studies.length === 0;
 
@@ -194,13 +175,7 @@ export function VcrHomePage() {
     <HomeFrame
       actions={tab === "studies" && !none ? newStudy : undefined}
       toolbar={{
-        views: {
-          label: "虚拟临床研究的视图",
-          items: TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready && ready.studies.length > 0 ? { count: ready.studies.length } : {}) })),
-          value: tab,
-          onChange: (next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true }),
-          panelId: "vcr-home-panel",
-        },
+        ...(tab !== "studies" ? { label: TABS.find(item => item.value === tab)?.label ?? "研究" } : {}),
         ...(onStudies ? {
           filters,
           search: { label: "搜索研究", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
@@ -249,7 +224,7 @@ function HomeFrame({ actions, toolbar, children }: { actions: ReactNode; toolbar
   const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
-      <PageShell title="虚拟临床研究" width="wide" actions={actions} toolbar={panel ? { ...toolbar, ...panel, views: toolbar.views } : toolbar}>
+      <PageShell title="虚拟临床研究" width="wide" actions={actions} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={panel ? { ...toolbar, ...panel } : toolbar}>
         {children}
       </PageShell>
     </ToolbarSlotContext.Provider>
@@ -270,7 +245,7 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
         {/* The title has the row's whole line on a phone — the tier and the date go under it — and on a wide page the date stands at the right edge. */}
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <Link
-            to={vcrTabPath(study.id, "overview")}
+            to={study.purpose === "calculation" ? vcrCalculationPath(study.id) : vcrTabPath(study.id, "overview")}
             data-row-title
             className="min-w-0 text-body font-semibold text-text after:absolute after:inset-0 after:rounded after:content-[''] max-sm:basis-full"
           >
@@ -282,7 +257,7 @@ function StudyRow({ study, todos }: { study: VcrStudySummary; todos: readonly Vc
         {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
         {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
       </div>
-      <VcrStepProgress studyId={study.id} steps={study.steps} described={described} paused={study.status === "paused"} />
+      {study.purpose !== "calculation" && <VcrStepProgress studyId={study.id} steps={study.steps} described={described} paused={study.status === "paused"} />}
       {(need || line) && (
         // Above the stretched title, so its link stays a link.
         <div data-vcr-need="" data-vcr-todo={need ? "" : undefined} className="relative z-sticky">
