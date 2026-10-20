@@ -20,6 +20,7 @@ import { RouteError } from "./routes/RouteError";
  * flight shows the shell with its navigation rather than a blank page.
  */
 const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").then((m) => ({ default: m.FrontierArticlePage })));
+const GlobalHomeRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.GlobalHomeRoute })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
@@ -75,7 +76,8 @@ export const routes: RouteObject[] = [
       // the conversation frame stay where they were.
       errorElement: <RouteError />,
       children: [
-        { index: true, element: <Navigate to="/app/chat" replace /> },
+        { index: true, element: <Navigate to="/app/home" replace /> },
+        { path: "home", element: <GlobalHomeRoute /> },
         // One route, with or without the conversation's id. Two route objects
         // made `/app/chat` → `/app/chat/:id` a remount, and the surface resumes
         // the last conversation on arrival, so every plain visit paid for one
@@ -178,7 +180,7 @@ export const routes: RouteObject[] = [
   ...(import.meta.env.PROD && import.meta.env.VITE_EVIMED_GALLERY !== "1"
     ? []
     : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
-  { path: "/", element: <Navigate to="/app/chat" replace /> },
+  { path: "/", element: <Navigate to="/app/home" replace /> },
   // The paths this shell used before it had a prefix. They were linked to from
   // runs, from notification mail and from people's bookmarks, and a redirect
   // costs one route each; dropping them would turn every one of those into a

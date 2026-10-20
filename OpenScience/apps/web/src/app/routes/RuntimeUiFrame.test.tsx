@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
-import { SessionRoute } from "./SessionRoute";
+import { useProjectStore } from "@/lib/projects";
+import { SessionRoute, GlobalHomeRoute } from "./SessionRoute";
 import { WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { rememberConversationTitles } from "@/lib/conversationTitles";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
@@ -31,8 +32,8 @@ vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<t
 // dictionary renders, which is the defect this change removes, not the fix.
 vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  hasWebApi: true, fetchWebMe: () => mocks.me(), webRuntimeProfile: () => mocks.profile,
-  getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
+  hasWebApi: true, fetchWebMe: (options?: { projectId?: string }) => mocks.me(options), webRuntimeProfile: () => mocks.profile,
+  getWebProjectId: () => mocks.projectId, setWebProjectId: (id: string) => { mocks.projectId = id; }, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
   listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
@@ -60,14 +61,20 @@ const billing = (enabled: boolean) => ({
   commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null },
 });
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
+let testNavigate: ReturnType<typeof useNavigate>;
+let testPath = "/app/chat";
 function PathProbe() {
   const navigate = useNavigate();
   const location = useLocation();
+  testNavigate = navigate; testPath = location.pathname;
   return <div><span data-testid="path">{location.pathname}</span><span data-testid="search">{location.search}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate("/app/files")}>Knowledge</button>
     <button onClick={() => navigate("/app/autopilot/agenda-one")}>Task</button>
     <button onClick={() => navigate("/app/chat")}>Bare chat</button>
+    <button onClick={() => navigate("/app/home")}>Home</button>
+    <button onClick={() => { mocks.projectId = "geo-project"; useProjectStore.setState({ currentId: "geo-project" }); navigate("/app/geo/geo_1/chat/session-geo"); }}>GEO project</button>
+    <button onClick={() => navigate(1)}>Forward</button>
     <button onClick={() => navigate(-1)}>Back</button>
   </div>;
 }
@@ -95,6 +102,7 @@ function TaskPaneProbe() {
 function mount(state: unknown = null, path = "/app/chat") {
   const [pathname, query] = path.split("?");
   return render(<MemoryRouter initialEntries={[{ pathname, search: query ? `?${query}` : "", state }]}><PathProbe /><SessionFrameHost /><Routes>
+    <Route path="/app/home" element={<GlobalHomeRoute />} />
     <Route path="/app/chat/:sessionId?" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
     <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
@@ -110,6 +118,7 @@ function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = 
     data: { version: 1, frameId: binding.frameId, projectId: "default", seq: 1, ...data } })));
 }
 beforeEach(() => {
+  useProjectStore.setState({ currentId: "default", switching: null });
   geo.getGeoProject.mockReset(); geo.getGeoProject.mockRejectedValue(new Error("not a module project in this test"));
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
@@ -1401,7 +1410,7 @@ describe("the run behind the task, in the frame", () => {
     const { frame } = await openTask();
     emit(frame, { type: "evimed.runtime-ui.session", seq: 3, sessionId: "session-fork", forkedFrom: "session-a" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-fork"));
-    expect(screen.getByTestId("state")).toHaveTextContent('{"forkedFrom":"session-a"}');
+    expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ forkedFrom: "session-a", conversationProjectId: "default" });
   });
 
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {
@@ -1579,6 +1588,21 @@ describe("opening a task", () => {
     expect(mocks.listRuns).not.toHaveBeenCalled();
   });
 
+  it("discards a late resume answer after the current project changes", async () => {
+    const { useProjectStore } = await import("@/lib/projects");
+    let oldAnswer!: (value: object) => void;
+    mocks.me.mockImplementation((options?: { projectId?: string }) => options?.projectId === "default"
+      ? new Promise(resolve => { oldAnswer = resolve; }) : Promise.resolve({ lastSessionId: "session-project-b" }));
+    const view = mount();
+    await act(async () => { useProjectStore.setState({ currentId: "project-b" }); testNavigate(testPath, { replace: true, state: { conversationProjectId: "project-b" } }); });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-project-b"));
+    await act(async () => { oldAnswer({ lastSessionId: "session-old-project" }); });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-project-b");
+    expect(mocks.me).toHaveBeenCalledWith({ projectId: "project-b" });
+    view.unmount();
+    useProjectStore.setState({ currentId: "default" });
+  });
+
   it("starts the project's runtime from any page, so the conversation is warm when it is opened", async () => {
     // 2026-09-22: a cold start is six to eight seconds, and a researcher who
     // lands on 知识库 or 科研工具 first used to pay it on reaching the chat.
@@ -1683,13 +1707,13 @@ describe("the conversation surface outlives the route", () => {
     await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(1));
     const first = container.querySelector("iframe")!;
 
-    await act(async () => { useProjectStore.setState({ currentId: "project-b" }); });
+    await act(async () => { useProjectStore.setState({ currentId: "project-b" }); testNavigate(testPath, { replace: true, state: { conversationProjectId: "project-b" } }); });
     await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(2));
     // The first project's surface is still there, holding its binding.
     expect(container.querySelectorAll("iframe")[0]).toBe(first);
     expect(mocks.release).not.toHaveBeenCalled();
 
-    await act(async () => { useProjectStore.setState({ currentId: "project-c" }); });
+    await act(async () => { useProjectStore.setState({ currentId: "project-c" }); testNavigate(testPath, { replace: true, state: { conversationProjectId: "project-c" } }); });
     await waitFor(() => expect(mocks.release).toHaveBeenCalledWith("frame-a"));
     await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(2));
     expect(container.querySelector("iframe")).not.toBe(first);
@@ -1718,6 +1742,7 @@ describe("the conversation surface outlives the route", () => {
       const switchTo = async (projectId: string) => {
         await act(async () => {
           useProjectStore.setState({ currentId: projectId });
+          testNavigate(testPath, { replace: true, state: { conversationProjectId: projectId } });
           await settle();
         });
       };
@@ -1759,7 +1784,7 @@ describe("the conversation surface outlives the route", () => {
       // a real timer and cannot be used past this line.
       vi.useFakeTimers();
       const { useProjectStore } = await import("@/lib/projects");
-      await act(async () => { useProjectStore.setState({ currentId: "project-c" }); await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { useProjectStore.setState({ currentId: "project-c" }); testNavigate(testPath, { replace: true, state: { conversationProjectId: "project-c" } }); await vi.advanceTimersByTimeAsync(0); });
       expect(mocks.release).toHaveBeenCalledWith("frame-default");
       await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
       expect(mocks.create).not.toHaveBeenCalledWith("project-c");
@@ -2235,5 +2260,70 @@ describe("the frame over a task's pane", () => {
     await waitFor(() => expect(navigations(post)).toHaveLength(1));
     expect(navigations(post)[0].intent).toEqual({ kind: "open", sessionId: "session-exec" });
     finish({});
+  });
+});
+
+
+describe("conversation project history across global home", () => {
+  function ownedProjects() {
+    mocks.me.mockImplementation(async ({ projectId }: { projectId?: string } = {}) => ({ project: { id: projectId ?? mocks.projectId } }));
+    mocks.create.mockImplementation(async (projectId: string) => ({ ...binding, frameId: `frame-${projectId}`, frameUrl: `https://host.example:8443/__evimed/f/frame-${projectId}/` }));
+  }
+  async function acknowledge(frame: HTMLIFrameElement, projectId: string, sessionId: string) {
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready", frameId: `frame-${projectId}`, projectId });
+    await waitFor(() => expect(post.mock.calls.some(([message]) => message.type === "evimed.runtime-ui.navigate")).toBe(true));
+    const command = post.mock.calls.find(([message]) => message.type === "evimed.runtime-ui.navigate")![0];
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, frameId: `frame-${projectId}`, projectId, requestId: command.requestId, ok: true, sessionId });
+    return post;
+  }
+  it("Home → native choose B → GEO → Back restores the global conversation and its resident frame", async () => {
+    ownedProjects();
+    const view = mount(null, "/app/home");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    await acknowledge(frame, "default", "session-global");
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, frameId: "frame-default", projectId: "default", sessionId: "session-b" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b"));
+    expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ globalAssistant: true, conversationProjectId: "default" });
+    expect(screen.getByTestId("search")).toHaveTextContent("project=default");
+    await userEvent.click(screen.getByText("GEO project"));
+    await waitFor(() => expect(useProjectStore.getState().currentId).toBe("geo-project"));
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(useProjectStore.getState().currentId).toBe("default"));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b");
+    expect(view.container.querySelectorAll("iframe")[0]).toBe(frame);
+    expect(mocks.me).toHaveBeenCalledWith({ projectId: "default" });
+  });
+  it.each(["new", "fork"])("preserves global scope when the native frame requests %s", async kind => {
+    ownedProjects();
+    const view = mount(null, "/app/home");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    await acknowledge(frame, "default", "session-global");
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, frameId: "frame-default", projectId: "default",
+      sessionId: kind === "new" ? null : "session-fork", ...(kind === "fork" ? { forkedFrom: "session-global" } : {}) });
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ globalAssistant: true, conversationProjectId: "default" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("project=default");
+    if (kind === "new") expect(JSON.parse(screen.getByTestId("state").textContent!).runtimeUiIntent).toMatchObject({ kind: "create", projectId: "default" });
+    else expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ forkedFrom: "session-global" });
+  });
+  it("ordinary project P → Home → Back/Forward restores each owned project without rebuilding P", async () => {
+    ownedProjects();
+    mocks.projectId = "project-p";
+    useProjectStore.setState({ currentId: "project-p" });
+    const view = mount(null, "/app/chat/session-p?project=project-p");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    await acknowledge(frame, "project-p", "session-p");
+    await userEvent.click(screen.getByText("Home"));
+    await waitFor(() => expect(useProjectStore.getState().currentId).toBe("default"));
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(useProjectStore.getState().currentId).toBe("project-p"));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-p");
+    expect(view.container.querySelectorAll("iframe")[0]).toBe(frame);
+    expect(mocks.me).toHaveBeenCalledWith({ projectId: "project-p" });
+    await userEvent.click(screen.getByText("Forward"));
+    await waitFor(() => expect(useProjectStore.getState().currentId).toBe("default"));
   });
 });

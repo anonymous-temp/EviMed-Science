@@ -132,7 +132,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(current).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Paper 1" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: "心衰" })).toHaveAttribute("aria-expanded", "false");
-    expect(await screen.findByRole("link", { name: /阿司匹林一级预防的证据/ })).toHaveAttribute("href", "/app/chat/ses-run-1");
+    expect(await screen.findByRole("link", { name: /阿司匹林一级预防的证据/ })).toHaveAttribute("href", "/app/chat/ses-run-1?project=default");
     expect(screen.queryByText("论文一的任务")).not.toBeInTheDocument();
     // Never every project's ledger on load: the other two were not asked.
     expect(readProjects()).toEqual(["default"]);
@@ -454,7 +454,7 @@ describe("ProjectBrowser — task rows", () => {
     renderBrowser();
     const rows = await screen.findAllByRole("link", { name: /阿司匹林一级预防的获益与风险/ });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveAttribute("href", "/app/chat/ses-shared");
+    expect(rows[0]).toHaveAttribute("href", "/app/chat/ses-shared?project=default");
     expect(screen.queryByRole("link", { name: /那 65–69 岁呢/ })).toBeNull();
   });
 
@@ -1119,7 +1119,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     ];
     renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
     expect(await screen.findByRole("link", { name: /说明研究要做什么/ })).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
-    expect(screen.getByRole("link", { name: /后来另开的对话/ })).toHaveAttribute("href", "/app/chat/ses-later");
+    expect(screen.getByRole("link", { name: /后来另开的对话/ })).toHaveAttribute("href", "/app/chat/ses-later?project=p-heart");
   });
 
   it("does not list a step the programme dispatched as a conversation, and does not count it", async () => {

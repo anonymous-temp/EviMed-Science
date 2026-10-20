@@ -50,8 +50,8 @@ function landOn(path: string) {
 
 describe("every address people already have still arrives", () => {
   it.each([
-    ["/", "/app/chat"],
-    ["/app", "/app/chat"],
+    ["/", "/app/home"],
+    ["/app", "/app/home"],
     ["/live", "/app/chat"],
     ["/live/session-42", "/app/chat/session-42"],
     // The run ledger page was deleted on 2026-09-20; its addresses resolve to

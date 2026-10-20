@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from "@/lib/apiClient";
 import { isConversationRun } from "@/lib/conversations";
 import { conversationTitle } from "@/lib/conversationTitles";
+import { conversationProjectFromLocation } from "@/lib/runtimeUiNavigation";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
 import { isPanePath, useTaskPane } from "@/lib/taskPane";
@@ -79,7 +80,9 @@ export function SessionFrameHost() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((state) => state.currentId);
-  const onChat = isChatPath(location.pathname);
+  const addressedProject = conversationProjectFromLocation(location) ?? ((location.state as { globalAssistant?: boolean } | null)?.globalAssistant ? "default" : null);
+  const waitingForProject = addressedProject !== null && currentProjectId !== addressedProject;
+  const onChat = isChatPath(location.pathname) && !waitingForProject;
   // A page asking for the frame over its pane — a task's execution, a study's own conversation — in this project.
   const taskPane = useTaskPane();
   const onPane = isPanePath(location.pathname);
@@ -102,7 +105,10 @@ export function SessionFrameHost() {
   // is the same one either way, so warming it under the lookup costs nothing —
   // but it is told to open nothing, or it would mint an empty conversation the
   // lookup then navigates away from (2026-09-16 review, U9).
-  const [resolving, setResolving] = useState(() => onChat && !sessionId && !wantsNew);
+  const resumeKey = `${currentProjectId}:${location.key}`;
+  const [resolvedResume, setResolvedResume] = useState<string | null>(null);
+  // A different address/project must be suspended in its first render, before effects run.
+  const resolving = onChat && !sessionId && !wantsNew && resolvedResume !== resumeKey;
 
   // The projects whose surfaces are kept alive, in the order they were
   // mounted — never reordered: React moves a keyed element by reinserting it,
@@ -172,16 +178,14 @@ export function SessionFrameHost() {
   // minted another conversation and the kernel's own list filled with empty
   // rows (2026-09-15 walk, A7). Creating is what 「新对话」 does and only that.
   useEffect(() => {
-    if (!onChat) return;
-    if (sessionId || wantsNew) { setResolving(false); return; }
+    if (!onChat || !addressedProject || sessionId || wantsNew) return;
     let live = true;
-    setResolving(true);
     // A ledger that cannot be read, or does not answer, falls through to
     // creating a conversation, which is the behaviour this replaced: never a
     // blocked conversation surface.
-    const giveUp = setTimeout(() => { if (live) setResolving(false); }, 8_000);
+    const giveUp = setTimeout(() => { if (live) { live = false; setResolvedResume(resumeKey); } }, 8_000);
     const resume = (candidate: unknown) => {
-      if (typeof candidate !== "string") return false;
+      if (!live || useProjectStore.getState().currentId !== currentProjectId || typeof candidate !== "string") return false;
       const to = chatPath(candidate);
       if (to === "/app/chat") return false;
       navigate(to, { replace: true });
@@ -192,20 +196,20 @@ export function SessionFrameHost() {
     // the ledger walk below is one more round trip, and it finds a run's
     // conversation, not the one the reader was in. Read defensively: a control
     // plane that predates the field answers without it.
-    void fetchWebMe()
+    void fetchWebMe({ projectId: currentProjectId })
       .then((me) => {
         if (!live) return null;
         if (resume((me as { lastSessionId?: unknown } | null)?.lastSessionId)) return null;
-        return listWebAgentRuns().then((runs) => {
+        return listWebAgentRuns({ projectId: currentProjectId }).then((runs) => {
           if (!live) return;
           const recent = runs.find((run) => isConversationRun(run) && chatPath(run.sessionId) !== "/app/chat");
-          if (!recent || !resume(recent.sessionId)) setResolving(false);
+          if (!recent || !resume(recent.sessionId)) setResolvedResume(resumeKey);
         });
       })
-      .catch(() => { if (live) setResolving(false); })
+      .catch(() => { if (live) setResolvedResume(resumeKey); })
       .finally(() => clearTimeout(giveUp));
     return () => { live = false; clearTimeout(giveUp); };
-  }, [onChat, sessionId, wantsNew, navigate]);
+  }, [onChat, sessionId, wantsNew, navigate, currentProjectId, resumeKey, addressedProject]);
 
   // The frame's origin comes from the account's profile; a deployment without
   // one has no surface to show, which is a refusal rather than a wait.
@@ -297,7 +301,7 @@ export function SessionFrameHost() {
               sessionId={sessionId}
               active={onSurface && here}
               mirrorAddress={onChat}
-              suspended={onChat && resolving}
+              suspended={onChat && (resolving || !addressedProject)}
               onRelease={(released) => trackRelease(projectId, released)}
             />
           </div>

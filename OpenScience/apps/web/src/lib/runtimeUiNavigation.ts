@@ -46,3 +46,34 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
       || typeof ref.title !== "string" || ref.title.length > 300))) return null;
   return intent;
 }
+
+/** A history entry's project is a routing hint; project selection must still prove ownership. */
+export function conversationProjectFromState(state: unknown): string | null {
+  if (!state || typeof state !== "object") return null;
+  const value = (state as { conversationProjectId?: unknown }).conversationProjectId;
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value) ? value : null;
+}
+
+/** Preserve the conversation's scope across native selection, creation and forks. */
+export function conversationNavigationState(state: unknown, projectId: string): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(state && typeof state === "object" ? state : {}), conversationProjectId: projectId };
+  delete next.runtimeUiIntent;
+  if (projectId !== "default") delete next.globalAssistant;
+  return next;
+}
+
+/** Explicit URL scope survives refresh and copied links; ownership is proved by select. */
+export function conversationProjectFromLocation(location: { search: string; state: unknown }): string | null {
+  const params = new URLSearchParams(location.search);
+  if (params.has("project")) {
+    const project = params.get("project") ?? "";
+    return /^[A-Za-z0-9_-]{1,160}$/.test(project) ? project : "invalid-project-context";
+  }
+  return conversationProjectFromState(location.state);
+}
+
+export function scopedConversationPath(path: string, projectId: string): string {
+  const url = new URL(path, "https://conversation.invalid");
+  url.searchParams.set("project", projectId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}

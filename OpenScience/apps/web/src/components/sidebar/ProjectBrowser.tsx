@@ -12,7 +12,7 @@ import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { useOpenStudy } from "@/lib/studyPresence";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
-import { newRuntimeUiIntent, runtimeUiIntentFromState } from "@/lib/runtimeUiNavigation";
+import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
 import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
@@ -103,7 +103,7 @@ function taskKey(projectId: string, run: WebAgentRun): string {
 }
 
 /** Where a click is going: a path, and router state minted at the moment of arrival. */
-type Destination = () => { to: string; state?: unknown };
+type Destination = () => { to: string; state?: { runtimeUiIntent: RuntimeUiIntent } };
 
 /**
  * The sidebar's 「项目」 section: every project as a group, its conversations inside.
@@ -277,12 +277,12 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
       // answer: this click came later, and it is the one meant.
       void select(projectId);
       const { to, state } = destination();
-      navigate(to, { state });
+      navigate(to.startsWith("/app/chat") ? scopedConversationPath(to, projectId) : to, { state: to.startsWith("/app/chat") ? { ...conversationNavigationState(state, projectId), ...state } : state });
       return;
     }
     void select(projectId, () => {
       const { to, state } = destination();
-      navigate(to, { state, flushSync: true });
+      navigate(to.startsWith("/app/chat") ? scopedConversationPath(to, projectId) : to, { state: to.startsWith("/app/chat") ? { ...conversationNavigationState(state, projectId), ...state } : state, flushSync: true });
     }).catch((reason: unknown) => {
       setRefocus((pending) => (pending?.projectId === projectId ? null : pending));
       setFailures((map) => ({ ...map, [projectId]: webErrorMessage(reason, { fallback: "无法切换到这个项目，请稍后重试。" }) }));
@@ -851,7 +851,7 @@ function ProjectGroup({
           )}
           {shown.map((conversation) => {
             // The study's own conversation is a view of the study's page; every other conversation of its project is the chat surface's.
-            const address = geoId ? geoChatPath(geoId, conversation.sessionId) : studyId && conversation.sessionId === studySession ? vcrChatPath(studyId) : undefined;
+            const address = geoId ? geoChatPath(geoId, conversation.sessionId) : studyId && conversation.sessionId === studySession ? vcrChatPath(studyId) : scopedConversationPath(chatPath(conversation.sessionId), project.id);
             return (
               <li key={conversation.sessionId}>
                 <TaskRow
@@ -860,7 +860,7 @@ function ProjectGroup({
                   projectName={label}
                   current={current}
                   to={address}
-                  active={address ? isPath(address) : isOpen(conversation.lead)}
+                  active={address ? isPath(address.split("?")[0]) : isOpen(conversation.lead)}
                   onOpen={(row) => onOpenTask(conversation.lead, row, address)}
                 />
               </li>
