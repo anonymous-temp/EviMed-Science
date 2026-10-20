@@ -234,3 +234,12 @@ test("configured replay delta uses repository context and release labels without
   const file = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile.result-replay"), "utf8");
   for (const label of ["version", "revision", "created"]) assert.match(file, new RegExp(`org.opencontainers.image.${label}=`));
 });
+
+test("host dependency preparation precedes release CLI module imports and moving current", async () => {
+  const source = await code('host-release-switch.sh');
+  const prepared = source.indexOf('prepare-host-ops-dependencies.mjs');
+  const imported = source.indexOf('result-replay-deployment.mjs');
+  const moved = source.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');
+  assert.ok(prepared > 0 && prepared < imported && prepared < moved);
+  assert.match(source, /prepare-host-ops-dependencies\.mjs" --source-root "\$\{REL\}\/OpenScience"/);
+});
