@@ -6223,11 +6223,13 @@ test("a run whose container is already gone is judged from its receipt, not fail
       },
       monitorIntervalMs: 60_000,
     });
+    // This fixture owns the reconciliation boundary: no monitor may observe
+    // disappearance before the new receipt names this run.
+    store.scheduleMonitor = () => {};
     const started = await store.start(project, { sessionId: binding.sessionId });
     await relabelReceipt(project, started.id);
-    // Asserted on the ledger rather than on this call's return value: `start`
-    // also schedules the monitor, which reconciles on its own, and the run's
-    // recorded outcome is what the rest of the system reads either way.
+    // Assert the durable outcome that the rest of the system reads, after
+    // reconciling against the receipt bound above.
     await store.reconcileSession(project, binding.sessionId).catch(() => {});
     const finished = (await store.list(project)).find((item) => item.id === started.id);
 
@@ -7177,7 +7179,7 @@ test("a receipt naming a file that no longer matches its digest still ships the 
     /** A store whose container is alive for the run's first read and gone after it. */
     const goneAfterStart = () => {
       let alive = true;
-      return new AgentRunStore({ get: async () => binding }, {
+      const store = new AgentRunStore({ get: async () => binding }, {
         model: "deepseek/deepseek-v4-pro",
         readSessionHistory: async () => {
           if (alive) { alive = false; return []; }
@@ -7187,6 +7189,10 @@ test("a receipt naming a file that no longer matches its digest still ships the 
         },
         monitorIntervalMs: 60_000,
       });
+      // These cases drive reconcile/close explicitly, once their owned receipt
+      // is prepared. Automatic first polls would race relabelReceipt below.
+      store.scheduleMonitor = () => {};
+      return store;
     };
     const store = goneAfterStart();
     const started = await store.start(project, { sessionId: binding.sessionId });
