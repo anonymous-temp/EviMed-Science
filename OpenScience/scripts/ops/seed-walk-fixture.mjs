@@ -184,6 +184,7 @@ async function passwordOf(file) {
 async function furnish(app, user, { password, base, engine, setCompile }) {
   const context = { log };
   const studies = await furnishVcr(app, user, context);
+  await writeFile(path.join(app.config.vcrDataPlaneDir, "walk-calculation-fixture.json"), `${JSON.stringify(studies.calculation, null, 2)}\n`, { mode: 0o600 });
   const geo = await furnishGeo(app, user, context);
   await furnishFrontier(app, user, context);
   await furnishAccount(app, user, { geoProjectId: geo.projectId, studies, projects: { geo: geo.controlProjectId, finished: studies.projects.finished, mixed: studies.projects.mixed } }, context);

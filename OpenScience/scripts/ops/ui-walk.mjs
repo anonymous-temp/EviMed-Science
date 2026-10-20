@@ -190,8 +190,8 @@ const WALK_TABLES = {
       {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
-      {"view":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
-      {"view":"calculation-history","route":"/app/capabilities/calculations/not-found","pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"capabilities","template":"T1","rows":false},
+      {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
+      {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"capabilities","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
@@ -511,7 +511,7 @@ const ROW_CLICK_LISTS_PER_PAGE = 8;
  * @returns {{ primary: string | null, second: string | null }}
  */
 export function pickVcrStudies(studies) {
-  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string") : [];
+  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string" && row.purpose !== "calculation") : [];
   const produced = (row) => Object.values(row.steps ?? {}).filter((step) => ["done", "minimal"].includes(step?.status)).length;
   let primary = null;
   for (const row of rows) if (primary === null || produced(row) > produced(primary)) primary = row;
@@ -630,6 +630,30 @@ async function readData(context, base, pathname, failures) {
   return (await answer.json().catch(() => null))?.data ?? null;
 }
 
+/** A calculation's historical list has answered; a visible failure is terminal, never an empty-history success. */
+export function calculationHistoryReady() {
+  return [...document.querySelectorAll("main ul[aria-label='此计算空间的历史'] > li, main [role='alert']")].some((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+}
+
+/** Find a genuine calculation with frozen, readable history. Programme studies and unreadable results cannot stand in for it. */
+export async function discoverCalculationHistory(context, base, studies, failures = []) {
+  for (const candidate of (Array.isArray(studies) ? studies : []).filter((row) => row?.purpose === "calculation" && typeof row.id === "string").slice(0, 8)) {
+    const at = `/api/vcr/studies/${encodeURIComponent(candidate.id)}`;
+    const detail = await readData(context, base, at, failures);
+    if (detail?.purpose !== "calculation" || detail?.id !== candidate.id) continue;
+    const history = await readData(context, base, `${at}/jobs`, failures);
+    for (const job of (Array.isArray(history?.jobs) ? history.jobs : []).filter((row) => row?.state === "succeeded" && typeof row.id === "string").slice(0, 20)) {
+      const prefix = `${at}/jobs/${encodeURIComponent(job.id)}`;
+      const result = await readData(context, base, `${prefix}/result`, failures);
+      const configuration = await readData(context, base, `${prefix}/configuration`, failures);
+      if (typeof result?.result?.id === "string" && typeof configuration?.subjectId === "string" && typeof configuration?.method === "string") {
+        return { studyId: candidate.id, jobId: job.id, resultId: result.result.id, method: configuration.method, route: `/app/capabilities/calculations/${encodeURIComponent(candidate.id)}` };
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
@@ -653,7 +677,11 @@ async function discoverRoutes(context, base, notices, failures) {
     else skip("geo-answer", "the first project lists no wrong sentence with an answer");
   }
 
-  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies", failures))?.studies);
+  const studies = (await readData(context, base, "/api/vcr/studies", failures))?.studies;
+  const calculation = await discoverCalculationHistory(context, base, studies, failures);
+  if (calculation) routes.push(["calculation-history", calculation.route]);
+  else skip("calculation-history", "the account has no calculation-purpose workspace with readable configuration and successful history");
+  const { primary, second } = pickVcrStudies(studies);
   for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
     if (!id) continue;
     const at = `/app/virtual-research/${encodeURIComponent(id)}`;
@@ -1397,11 +1425,42 @@ export function measureComposition([options] = [{}]) {
     return cs.cursor === "pointer" || cs.textDecorationLine.includes("underline");
   }).map((el) => ({ text: cut(el.textContent, 20), tag: el.tagName.toLowerCase(), ...box(el) }));
 
-  // The one primary action of a page stands on the header's row. Empty states, recipes and forms carry their own.
+  // Ordinary primary actions belong to the header. A named analysis workbench has a measured main-area Run contract.
   const titleBottom = title ? title.bottom : 0;
   const primaries = live("button, a, [role='button']").filter((el) => el.classList.contains("bg-accent")).map((el) => {
     const at = box(el);
-    return { text: nameOf(el), ...at, inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    const bar = el.closest("[data-vcr-run-actions]");
+    const workbench = bar?.closest("[data-vcr-method-workbench]");
+    let run = null;
+    if (bar && workbench) {
+      const targets = [workbench.querySelector("[data-vcr-method-configuration]"), workbench.querySelector("[data-vcr-method-results]")];
+      const scroller = scrollerOf(bar);
+      const room = scroller.scrollHeight - scroller.clientHeight;
+      const saved = scroller.scrollTop;
+      const reachable = () => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth && Boolean(hit && (hit === el || el.contains(hit)));
+      };
+      const before = Math.round(bar.getBoundingClientRect().top);
+      const initialReachable = reachable();
+      let held = null;
+      if (hold && room > 0) {
+        scroller.scrollTop = Math.min(room, 480);
+        const scrolled = scroller.scrollTop - saved;
+        const after = Math.round(bar.getBoundingClientRect().top);
+        const inset = Number.parseFloat(getComputedStyle(bar).top);
+        const boundary = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+        held = { scrolled, after, expected: Math.round(Math.max(before - scrolled, boundary + inset)), reachable: reachable() };
+        scroller.scrollTop = saved;
+      }
+      run = { named: Boolean((el.getAttribute("aria-label") || (el.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim() || el.textContent || "").trim()), height: at.height, bars: workbench.querySelectorAll("[data-vcr-run-actions]").length,
+        primaries: workbench.querySelectorAll(".bg-accent").length, position: getComputedStyle(bar).position, initialReachable, room, held,
+        beforeContent: workbench.querySelectorAll("[data-vcr-method-configuration]").length === 1 && workbench.querySelectorAll("[data-vcr-method-results]").length === 1 && targets.every((target) => target && !bar.contains(target) && Boolean(bar.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+    }
+    return { text: nameOf(el), ...at, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
@@ -1438,6 +1497,7 @@ export function measureComposition([options] = [{}]) {
 
   const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
     viewSelector: (() => {
       const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
       return { count: choices.length, top: choices[0] ? box(choices[0]).top : null };
@@ -1708,8 +1768,16 @@ export function compositionFindings(name, viewportName, c) {
   }
   for (const control of c.tagLike) add("tag-as-control", `the ${control.tag} “${control.text}” is drawn as a tag (the tag's height, corner and type size) and can be pressed`);
   for (const word of c.words) add("word-as-link", `“${word.text}” is plain text in a ${word.tag} that looks pressable, and is the name of a tab or a step`);
+  if (view?.primaryPlacement === "method-workbench" && (c.workbenchActions?.workbenches !== 1 || c.workbenchActions?.bars !== 1
+    || c.primaries.filter((primary) => primary.markedRun && primary.run?.named).length !== 1)) {
+    add("primary-action", "the method workbench must expose one Run action bar and one named primary action");
+  }
   for (const primary of c.primaries) {
-    if (!primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+    const run = primary.run;
+    const workbenchRun = view?.primaryPlacement === "method-workbench" && run && run.named && run.height >= 44 && run.bars === 1 && run.primaries === 1
+      && run.beforeContent && run.position === "sticky" && run.initialReachable
+      && (run.room <= 0 || (run.held && run.held.scrolled >= Math.min(100, run.room) && run.held.reachable && Math.abs(run.held.after - run.held.expected) <= BAND_TOLERANCE_PX));
+    if (primary.markedRun && view?.primaryPlacement === "method-workbench" ? !workbenchRun : !primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
   }
   for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
 
@@ -1967,6 +2035,7 @@ export function pageProbe([kind, arg]) {
   const all = (selector, root = main) => [...root.querySelectorAll(selector)];
   const outside = (el) => !el.closest("[role='dialog'], nav, aside");
 
+  if (kind === "calculationHistory") return { rows: all("ul[aria-label='此计算空间的历史'] > li").filter(visible).length };
   if (kind === "geoMarketOff") {
     const el = all("[data-geo-market-off]")[0];
     return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
@@ -2114,6 +2183,7 @@ export const PAGE_PROBES = {
   "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
   "frontier-event": [["eventGroups", ["desktop", "phone"]]],
   frontier: [["firstRowTop", ["phone"]]],
+  "calculation-history": [["calculationHistory", ["desktop", "phone"]]],
   "virtual-research": [["rowWidth", ["phone"]]],
   capabilities: [["capabilityCards", ["desktop"]]],
   memory: [["memoryTabs", ["desktop"]]],
@@ -2300,6 +2370,10 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      break;
+    }
+    case "calculationHistory": {
+      if (!(r.rows > 0)) failures.push(`${current}: the calculation workspace shows no readable historical calculation`);
       break;
     }
     case "knowledgeGraph": {
@@ -3591,6 +3665,7 @@ async function main() {
             continue;
           }
           if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
+          if (name === "calculation-history") await page.waitForFunction(calculationHistoryReady, undefined, { timeout: 30_000 });
           phase = "measurement";
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);

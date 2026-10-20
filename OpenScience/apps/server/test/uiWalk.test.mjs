@@ -28,16 +28,17 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
+  if (name === "calculation-history") return "/app/capabilities/calculations/std_calc";
   const fixed = ROUTES.find(([route]) => route === name);
   if (fixed) return fixed[1];
   const geo = GEO_TABS.find(([route]) => route === name);
@@ -622,6 +623,7 @@ function probe(kind, arg, search) {
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
     case "memoryMap": return wrong ? { views: ["关系"], figures: [{ kind: "relations", named: false }], lists: [], thin: false, empty: false }
       : { views: ["关系", "主题", "维度", "时间", "活跃"], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 3 }], thin: false, empty: false };
+    case "calculationHistory": return { rows: wrong ? 0 : 2 };
     case "knowledgeGraph": return wrong ? { figures: [{ kind: "knowledge-wiki", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true, empty: false }
       : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["资料", "知识页", "图谱"], engineAddress: false, empty: false };
     case "inboxSafety": return wrong ? { heading: 2, bell: 5 } : { heading: 2, bell: 2 };
@@ -653,7 +655,8 @@ function compositionRead(pathname) {
   const geo = /^\/app\/geo\/geo_1(\/(visibility|accuracy|questions|sources|actions|plan|evidence|answers\/[^/]+))?$/.test(pathname);
   const vcr = /^\/app\/virtual-research\/std_/.test(pathname);
   const read = { viewport: { width: 1512, height: 945 }, height: 945, title: { text: "页面", ...box(26, 32) }, chrome: null, stepRail: null, tablists: [], viewGroups: [], toolbars: [],
-    controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
+    workbenchActions: { workbenches: pathname.includes("/capabilities/methods/") ? 1 : 0, bars: pathname.includes("/capabilities/methods/") ? 1 : 0 },
+    controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: pathname.includes("/capabilities/methods/") ? [{ text: "保存配置并运行", top: 178, inHeader: false, excused: false, markedRun: true, run: { named: true, height: 44, bars: 1, primaries: 1, beforeContent: true, position: "sticky", initialReachable: true, room: 0 } }] : [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
     notes: [], headline: 0, activity: 0, stepStates: [] };
   if (geo || vcr) {
     read.chrome = { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: mode === "band" && pathname.endsWith("/plan") ? { scrolled: 400, before: 60, after: -340, scrollerTop: 0 } : null };
@@ -929,7 +932,11 @@ function context() {
         if (url.endsWith("/api/agents")) return json(200, { data: ["a1", "a2", "a3", "a4", "a5"].map((id) => ({ id: "capability-" + id })) });
         if (url.endsWith("/api/geo/projects")) return json(200, { data: { projects: [{ id: "geo_1" }] } });
         if (url.endsWith("/api/geo/projects/geo_1/diagnosis")) return json(200, { data: { errors: [{ snapshotId: "snap_old", firstSnapshotId: "snap_1" }] } });
-        if (url.endsWith("/api/vcr/studies")) return json(200, { data: { studies: [{ id: "std_a", steps: {} }, { id: "std_b", steps: { population: { status: "done" }, trial: { status: "minimal" } } }, { id: "std_c", steps: { population: { status: "done" } } }] } });
+        if (url.endsWith("/api/vcr/studies/std_calc")) return json(200, { data: { id: "std_calc", purpose: "calculation" } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs")) return json(200, { data: { jobs: [{ id: "job_calc", state: "succeeded" }] } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs/job_calc/result")) return json(200, { data: { result: { id: "res_calc" } } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs/job_calc/configuration")) return json(200, { data: { subjectId: "pset_calc", method: "patients.binary" } });
+        if (url.endsWith("/api/vcr/studies")) return json(200, { data: { studies: [{ id: "std_calc", purpose: "calculation", steps: {} }, { id: "std_a", steps: {} }, { id: "std_b", steps: { population: { status: "done" }, trial: { status: "minimal" } } }, { id: "std_c", steps: { population: { status: "done" } } }] } });
         if (url.endsWith("/api/frontier/items?limit=1")) return json(200, { data: { items: [{ id: "item_1" }] } });
         if (url.endsWith("/api/frontier/zones")) return json(200, { data: { items: [{ id: "z_user", kind: "user" }, { id: "z_official", kind: "official" }] } });
         if (url.endsWith("/api/frontier/hot")) return json(200, { data: { events: [{ id: "ev_1" }] } });
@@ -2807,4 +2814,21 @@ test("a retry navigation failure retains the original error and remains a failed
   const page = { evaluate: async () => initial, goto: async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); } };
   const result = await recoverWalkLoad(page, "https://example.org/app/vcr", ["net::ERR_NETWORK_CHANGED"], []);
   assert.equal(result.loaded, false); assert.equal(result.retried, true); assert.deepEqual(result.initial, initial); assert.match(result.retryError, /ERR_CONNECTION_REFUSED/);
+});
+
+
+test("calculation history discovery requires its real purpose, successful job, configuration and readable result", async () => {
+  const studies = [{ id: "programme", purpose: "programme" }, { id: "calc", purpose: "calculation" }];
+  const discover = (change = {}) => discoverCalculationHistory({ request: { get: async (url) => ({ ok: () => true, status: () => 200, json: async () => ({ data: {
+    "https://walk.test/api/vcr/studies/calc": { id: "calc", purpose: "calculation" },
+    "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [{ id: "job-real", state: "succeeded" }] },
+    "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": { result: { id: "result-real" } },
+    "https://walk.test/api/vcr/studies/calc/jobs/job-real/configuration": { subjectId: "configuration-real", method: "patients.binary" }, ...change,
+  }[url] }) }) } }, "https://walk.test", studies);
+  assert.equal((await discover()).route, "/app/capabilities/calculations/calc");
+  assert.equal((await discover()).jobId, "job-real");
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc": { id: "calc", purpose: "programme" } }), null);
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [] } }), null);
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": {} }), null);
+  assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
 });

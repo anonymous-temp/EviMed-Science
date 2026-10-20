@@ -495,3 +495,36 @@ test("module destination contracts retain GEO query context and addressed sessio
   assert.equal(moduleViewAddressHolds('vcr', '试验', vcr, vcr + '/trial', vcr + '/trial'), true, 'reselecting the actual current result is allowed');
   assert.equal(moduleViewAddressHolds('vcr', '对话', vcr, vcr, vcr + '/chat'), true);
 });
+
+test("only the measured main-area method workbench owns a named 44px sticky Run before configuration and results", { skip }, async () => {
+  const content = ({ orphan = false, below = false, offscreen = false, sticky = true, size = 44, unnamed = false, duplicate = false, covered = false } = {}) => {
+    const action = `<div data-vcr-run-actions style="position:${sticky ? "sticky" : "relative"};top:80px;background:white;z-index:5"><button class="bg-accent" style="height:${size}px">${unnamed ? "" : "保存配置并运行"}</button></div>`;
+    const targets = '<div data-vcr-method-configuration><form><label>Risk ratio<input value="1.5"></label></form><div style="height:1400px"></div></div><div data-vcr-method-results><table><tr><td>Preserved result</td></tr></table></div>';
+    return framed({ band: toolbar(), body: `${covered ? '<div style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.1)"></div>' : ""}<section ${orphan ? "" : "data-vcr-method-workbench"}><p>Purpose and required inputs.</p>${offscreen ? '<div style="height:1100px"></div>' : ""}${below ? targets + action : action + targets}${duplicate ? action : ""}</section>` });
+  };
+  for (const viewport of ["desktop", "phone"]) {
+    const good = await compose(content(), { name: "method-workbench", viewport });
+    assert.deepEqual(textOf(good, "primary-action"), []);
+    assert.equal(good.facts.primaries[0].run.height, 44);
+    assert.equal(good.facts.primaries[0].run.held.reachable, true);
+    for (const defect of [{ orphan: true }, { below: true }, { offscreen: true }, { sticky: false }, { size: 36 }, { unnamed: true }, { duplicate: true }, { covered: true }]) {
+      const bad = await compose(content(defect), { name: "method-workbench", viewport });
+      assert.ok(textOf(bad, "primary-action").length > 0, JSON.stringify(defect));
+    }
+    const ordinary = await compose(content(), { name: "capabilities", viewport });
+    assert.ok(textOf(ordinary, "primary-action").length > 0, "marking an arbitrary page does not grant the workbench contract");
+  }
+});
+
+
+test("the declared method workbench requires its Run bar and named primary even when they disappear entirely", { skip }, async () => {
+  for (const viewport of ["desktop", "phone"]) {
+    for (const controls of ["", '<div data-vcr-run-actions>Run unavailable</div>', '<div data-vcr-run-actions><button>保存配置并运行</button></div>']) {
+      const html = framed({ band: toolbar(), body: `<section data-vcr-method-workbench>${controls}<div data-vcr-method-configuration>Configuration</div><div data-vcr-method-results>Results</div></section>` });
+      const broken = await compose(html, { name: "method-workbench", viewport });
+      assert.ok(textOf(broken, "primary-action").some(text => text.includes("must expose one Run action bar and one named primary action")));
+      const optional = await compose(html, { name: "capabilities", viewport });
+      assert.deepEqual(textOf(optional, "primary-action"), [], "ordinary pages retain optional primary actions");
+    }
+  }
+});

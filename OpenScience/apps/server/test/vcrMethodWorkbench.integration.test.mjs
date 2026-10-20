@@ -18,6 +18,7 @@ import { SourceService } from '../src/sourceService.mjs';
 import { createVcrModelSources } from '../src/vcrModelSources.mjs';
 import { createVcrCurveEvidence } from '../src/vcrCurveEvidence.mjs';
 import { VcrEvidenceStore } from '../src/vcrEvidenceStore.mjs';
+import { furnishCalculation } from '../../../scripts/ops/walk-fixture/vcr.mjs';
 import { FIELD_MAP, cohortCsv } from './helpers/vcrIntakeData.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
@@ -641,4 +642,32 @@ test('owned curve reconstruction prepares, queues and reopens the exact comparat
     await database.query('DELETE FROM evimed_vcr.curve_extractions WHERE id=$1', [receipt.id]);
     await assert.rejects(request(`${prefix}/jobs`, 'POST', payload), { code: 'vcr_curve_provenance_unavailable' });
   } finally { composed.jobs.curveVerifier = previousVerifier; }
+});
+
+
+test('the UI fixture owns a genuine calculation and two immutable synthetic job/configuration/result histories', options, async () => {
+  const fixture = await furnishCalculation({ vcr: composed, store: { createProject: async () => ({ id: 'synthetic-ui-calculation-fixture' }) } }, user);
+  const study = await composed.store.studyById(fixture.studyId);
+  assert.equal(study.purpose, 'calculation');
+  assert.equal((await request(`/api/vcr/studies/${study.id}`)).purpose, 'calculation');
+  assert.equal(fixture.jobs.length, 2);
+  const histories = await request(`/api/vcr/studies/${study.id}/jobs`);
+  assert.equal(histories.jobs.length, 2);
+  const frozen = [];
+  for (let index = 0; index < 2; index++) {
+    const base = `/api/vcr/studies/${study.id}/jobs/${fixture.jobs[index]}`;
+    const configuration = await request(`${base}/configuration`);
+    const result = await request(`${base}/result`);
+    frozen.push(configuration);
+    assert.equal(configuration.subjectId, fixture.configurations[index]);
+    assert.equal(configuration.scenario.truth.treatmentRate, [0.6, 0.7][index]);
+    assert.equal(result.result.id, fixture.results[index]);
+    assert.equal(result.result.diagnostics.syntheticUiFixture, true);
+    assert.equal(result.result.diagnostics.engineExecuted, false);
+    assert.equal(histories.jobs.find(job => job.id === fixture.jobs[index]).state, 'succeeded');
+  }
+  assert.deepEqual(await request(`/api/vcr/studies/${study.id}/jobs/${fixture.jobs[0]}/configuration`), frozen[0]);
+  assert.deepEqual((await composed.store.patientSets(study.id)).map(row => row.version), [2, 1]);
+  await assert.rejects(request(`/api/vcr/studies/${study.id}`, 'GET', null, { id: 'foreign-ui-reader' }), { code: 'vcr_study_not_found', status: 404 });
+  await assert.rejects(request('/api/vcr/studies/study-that-does-not-exist'), { code: 'vcr_study_not_found', status: 404 });
 });

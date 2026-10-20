@@ -10,6 +10,7 @@
  *    job waiting for its budget, and no design chosen — which the walk reads second (`vcr-*@2`), so the header's 确认预算 and the frame's note are drawn.
  *  - **GLP-1 周制剂, empty**: a study nobody has started — the recipes of every tab.
  */
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,7 +21,7 @@ const seedModule = () => import(pathToFileURL(path.join(server, "test", "vcrView
 /**
  * @param {any} app the control plane (`createWebApiApp`'s return) @param {any} user the fixture account
  * @param {{ log: (line: string) => void }} context
- * @returns {Promise<{ finished: string, mixed: string, empty: string, projects: { finished: string, mixed: string, empty: string } }>} the studies' ids and their projects'
+ * @returns {Promise<{ calculation: { studyId: string, jobs: string[], configurations: string[], results: string[] }, finished: string, mixed: string, empty: string, projects: { finished: string, mixed: string, empty: string } }>} the studies' ids and their projects'
  
  */
 export async function furnishVcr(app, user, { log }) {
@@ -50,8 +51,10 @@ export async function furnishVcr(app, user, { log }) {
   // Nothing has been decided about this one yet: its designs have run and none is chosen, which is the state the page asks 选定方案 in —
   // the header's primary action (the owner's study was in it, and the walk found the button under the header's row).
   await store.query("DELETE FROM evimed_vcr.decisions WHERE study_id = $1", [second.study.id]);
+  const calculation = await furnishCalculation(app, user);
+  log(`calculation: ${calculation.studyId}, ${calculation.jobs.length} synthetic successful histories (no engine execution)`);
   log(`vcr: ${first.study.id} finished, ${second.study.id} mixed (no design chosen), ${first.empty.id} empty`);
-  return { finished: first.study.id, mixed: second.study.id, empty: first.empty.id, projects: { finished: "vcr-ev201", mixed: "vcr-ev202", empty: "vcr-glp1" } };
+  return { calculation, finished: first.study.id, mixed: second.study.id, empty: first.empty.id, projects: { finished: "vcr-ev201", mixed: "vcr-ev202", empty: "vcr-glp1" } };
 }
 
 /**
@@ -66,4 +69,31 @@ async function finish(store, studyId) {
   await store.query(`UPDATE evimed_vcr.jobs SET state = 'succeeded', finished_at = coalesce(finished_at, updated_at), cpu_seconds_used = greatest(cpu_seconds_used, 12)
     WHERE study_id = $1 AND state IN ('running', 'awaiting_budget', 'queued')`, [studyId]);
   await store.query("DELETE FROM evimed_vcr.stale_marks WHERE study_id = $1", [studyId]);
+}
+
+
+/** A real calculation-purpose container with two immutable histories, explicitly synthetic UI fixtures. No engine is invoked. */
+export async function furnishCalculation(app, user) {
+  const { store } = app.vcr;
+  const project = await app.store.createProject(user, "vcr-walk-calculation", "Synthetic UI calculation history");
+  const study = await store.createStudy({ userId: user.id, projectId: project.id, purpose: "calculation", name: "Synthetic UI calculation history", question: "UI fixture only; no R or scientific execution", intendedUse: "exploratory" });
+  const output = { studyId: study.id, jobs: [], configurations: [], results: [] };
+  for (const treatmentRate of [0.6, 0.7]) {
+    const scenario = { design: { nTreat: 20, nControl: 20 }, endpoint: { type: "binary" }, truth: { controlRate: 0.4, treatmentRate } };
+    const configuration = await store.savePatientSet({ studyId: study.id, userId: user.id, name: "Synthetic UI binary configuration", scenario, counts: {} });
+    const hash = createHash("sha256").update(JSON.stringify(scenario)).digest("hex");
+    const id = `job_walk_calc_${randomUUID().replaceAll("-", "")}`;
+    await store.query(`INSERT INTO evimed_vcr.jobs
+      (id, study_id, user_id, kind, method, method_version, state, scenario_hash, seed, scenario, inputs, checkpoint, finished_at)
+      VALUES ($1,$2,$3,'generate_patients_binary','patients.binary','1.0.0','succeeded',$4,17,$5::jsonb,'[]'::jsonb,$6::jsonb,now())`,
+    [id, study.id, user.id, hash, JSON.stringify(scenario), JSON.stringify({ subjectId: configuration.id, syntheticUiFixture: true, configurationVersion: configuration.version })]);
+    const execution = await store.recordExecution({ jobId: id, studyId: study.id, userId: user.id, method: "patients.binary", methodVersion: "1.0.0", scenarioHash: hash, seed: 17,
+      environment: { syntheticUiFixture: true, engineExecuted: false }, receipt: { syntheticUiFixture: true, note: "Stored UI fixture; no model or R execution" } });
+    const result = await store.recordResult({ studyId: study.id, userId: user.id, subjectId: configuration.id, executionId: execution.id, kind: "patient_set", requestedUse: "exploratory", conclusion: "limited",
+      counts: { realPatients: 0, generatedRecords: 40 }, measures: [{ key: "generated_records", label: "Synthetic UI fixture rows", value: 40, source: "synthetic" }],
+      diagnostics: { syntheticUiFixture: true, engineExecuted: false, headline: "Synthetic UI fixture only; no R execution or scientific validation" }, tables: [] });
+    await store.attachResult("patient_sets", configuration.id, result.id);
+    output.jobs.push(id); output.configurations.push(configuration.id); output.results.push(result.id);
+  }
+  return output;
 }
