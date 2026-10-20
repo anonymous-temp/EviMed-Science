@@ -162,6 +162,7 @@ class FakePool extends EventEmitter {
     this.calls = [];
     /** @type {any} */
     this.lease = null;
+    this.transactionIsolation = "read committed";
     /** CNY already settled in the rolling window, as the admission check reads it. */
     this.daySpendCny = 0;
     /** Expired rows of `evimed_control.auth_sessions`, as the purge deletes them. */
@@ -176,6 +177,7 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    if (sql === "SELECT current_setting('transaction_isolation') AS isolation") return { rows: [{ isolation: this.transactionIsolation }], rowCount: 1 };
     if (sql === "SELECT clock_timestamp()::timestamptz(3) AS created_at") return { rows: [{ created_at: new Date() }], rowCount: 1 };
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND id=\$3/.test(sql)) {
       const row = this.documents.get(`${values[1]}:${values[2]}`);
@@ -2439,4 +2441,17 @@ test("a programme step and a channel question are asked of the allowance before 
   balance = { allowed: true };
   assert.deepEqual(await app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-2" }), { runId: "run-gate-1", sessionId: "session-gate-1", status: "running" });
   assert.deepEqual([reserved, runs], [1, 1]);
+});
+
+
+test("composition refuses work when the database reports an unsafe or unknown isolation level", async t => {
+  const f = await composedApp(t);
+  for (const isolation of ["repeatable read", "serializable", undefined]) {
+    f.pool.transactionIsolation = isolation;
+    let entered = false;
+    await assert.rejects(f.app.maintenanceService.withMutation(async () => { entered = true; }), { code: "maintenance_state_invalid" });
+    assert.equal(entered, false);
+    assert.equal(f.app.maintenanceService.activeMutations, 0);
+  }
+  f.pool.transactionIsolation = "read committed";
 });
