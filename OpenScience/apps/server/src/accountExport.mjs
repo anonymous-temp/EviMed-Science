@@ -237,9 +237,9 @@ const producerKeys = ["kind", "sessionId", "runId", "callId", "eventId", "parent
  * `path` and `sha256`. The export embeds no file of its own accord: the base64
  * route `personalSkillResources` takes exists for bytes outside the account's
  * data root and is bounded at 32 MiB, and one result snapshot may be 64 MiB.
- * What a record itself holds leaves with it, which for a delivered report
- * includes the text of the evidence matrix it was checked against
- * (`review.matrixText`), exactly as the result routes serve it.
+ * A delivered report's compact review is hydrated through the result reader before projection, so its matrix text and
+ * frozen verdict leave in the same portable inline shape as historical records. An unreadable or restricted review is
+ * stated as unavailable and counted in omissions; its result record and the account's other usable records still leave.
  *
  * What stays behind. Another user's id (`requestedBy`, on a shared project a
  * collaborator's), queue and process bookkeeping (`jobId`, `execution`,
@@ -252,7 +252,7 @@ const producerKeys = ["kind", "sessionId", "runId", "callId", "eventId", "parent
  * files are written to in the workspace and the call its output version names
  * as producer, so it leaves in those two places and not as a queue pointer.
  *
- * What is as recorded rather than as served. A reference's `availability` is
+ * What is as recorded rather than as served. Apart from the hydrated review, a reference's `availability` is
  * the one captured with the result, not re-derived against today's sources:
  * the archive is the owner's across all their projects, and the per-project
  * re-authorization the result routes do answers a question it does not ask. A
@@ -375,7 +375,8 @@ export function exportedPriceLists(usageRows) {
  * user row stays shared-locked: account deletion locks it before removing files.
  * @param {any} database @param {any} user @param {Record<string,any>} config
  * @param {(snapshot:any) => Promise<any>} operation
- * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void}} limits */
+ * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void,
+ * readResultReview?:(user:any,row:any)=>Promise<any>}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
   // The platform's publishing account is nobody's to take a copy of (evidence-flywheel B2).
   assertNotPlatformAccount(user);
@@ -417,6 +418,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     const omissions = undecided.rows.map((/** @type {any} */ row) => ({ kind: String(row.kind), reason: "no_export_contract", documents: Number(row.documents) }));
     /** @type {Map<string, {kind:string,reason:string,documents:number,revisions:number}>} */
     const unreadable = new Map();
+    const unavailableReviews = { kind: "result-version", reason: "review_unavailable", documents: 0, revisions: 0 };
     const tables = {};
     let rows = 0;
     let bytes = 0;
@@ -432,16 +434,39 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       if (key === "shareDeliveriesReceived") {
         tables[key] = tables[key].map((/** @type {any} */ { ownerId, ...delivery }) => ({ ...delivery, senderName: senderDisplayName(delivery.senderName, ownerId) }));
       }
-      if (key === "documents" || key === "revisions") tables[key] = tables[key].flatMap((/** @type {any} */ row) => {
-        const exported = exportDocumentRow(row);
-        if (exported) return [exported];
-        const entry = unreadable.get(row.kind) ?? { kind: String(row.kind), reason: "unreadable_record", documents: 0, revisions: 0 };
-        if (key === "documents") entry.documents += 1; else entry.revisions += 1;
-        unreadable.set(row.kind, entry);
-        return [];
-      });
+      if (key === "documents" || key === "revisions") {
+        const projected = [];
+        for (const row of tables[key]) {
+          const exported = exportDocumentRow(row);
+          if (!exported) {
+            const entry = unreadable.get(row.kind) ?? { kind: String(row.kind), reason: "unreadable_record", documents: 0, revisions: 0 };
+            if (key === "documents") entry.documents += 1; else entry.revisions += 1;
+            unreadable.set(row.kind, entry);
+            continue;
+          }
+          if (row.kind === "result-version" && row.payload?.review && (limits.readResultReview || row.payload.review.verificationSnapshot)) {
+            let review;
+            try { review = await limits.readResultReview?.(user, row); }
+            catch { review = { status: "unavailable", matrixText: null, verification: null }; }
+            review ??= { status: "unknown", matrixText: null, verification: null };
+            // The archive does not carry the snapshot store: references cannot replace the review content here.
+            const { verificationSnapshot: _snapshot, ...portable } = { ...exported.payload.review, ...review };
+            exported.payload.review = portable;
+            if (portable.status !== "available") {
+              if (key === "documents") unavailableReviews.documents += 1; else unavailableReviews.revisions += 1;
+            }
+            // Hydration may expand a compact row substantially. Keep the original complete-export budget and stop
+            // incrementally, rather than accumulating unbounded matrices before the final buffer check.
+            bytes += Math.max(0, Buffer.byteLength(JSON.stringify(exported)) - Buffer.byteLength(JSON.stringify(row)));
+            if (bytes > maxBytes) throw tooLarge();
+          }
+          projected.push(exported);
+        }
+        tables[key] = projected;
+      }
     }
     omissions.push(...unreadable.values());
+    if (unavailableReviews.documents || unavailableReviews.revisions) omissions.push(unavailableReviews);
     // The archive says it; this line is so whoever runs the deployment hears
     // it too. Kinds and counts only: neither is the customer's data.
     for (const entry of omissions) {

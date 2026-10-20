@@ -38,7 +38,7 @@ import path from "node:path";
 
 import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
 import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
-import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
+import { HttpError, openScopedFileNoFollow, readStableFileHandle, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
 export const TRANSCRIPT_DIR_NAME = "transcripts";
@@ -615,6 +615,28 @@ export async function readRunTranscript(project, runId) {
     }
   }
   return { header, messages };
+}
+
+/** Repair reads the exact retained bytes, never a live session or a reserialized transcript.
+ * @param {any} project @param {any} run @param {string} expectedSha256 */
+export async function readVerifiedRunTranscript(project, run, expectedSha256) {
+  if (!/^[a-f0-9]{64}$/.test(expectedSha256 ?? "") || run.transcript?.sha256 !== expectedSha256) {
+    throw new HttpError(409, "run_transcript_changed", "The retained transcript does not match the expected digest.");
+  }
+  let opened;
+  try {
+    opened = await openScopedFileNoFollow(project.rootDir, transcriptPath(project, run.id));
+    if (opened.stat.size > TRANSCRIPT_MAX_BYTES || opened.stat.size !== run.transcript.bytes) throw new HttpError(409, "run_transcript_changed", "The retained transcript size changed.");
+    const bytes = await readStableFileHandle(opened.handle, opened.stat);
+    if (createHash("sha256").update(bytes).digest("hex") !== expectedSha256) throw new HttpError(409, "run_transcript_changed", "The retained transcript bytes changed.");
+    const rows = new TextDecoder("utf-8", { fatal: true }).decode(bytes).split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const header = rows.shift();
+    if (header?.schemaVersion !== TRANSCRIPT_SCHEMA_VERSION || header.runId !== run.id || !Array.isArray(header.sessions)
+      || !header.sessions.some(session => session.sessionId === run.sessionId && session.parentSessionId === null)) {
+      throw new HttpError(409, "run_transcript_scope_invalid", "The retained transcript does not belong to this run.");
+    }
+    return { header, messages: rows };
+  } finally { await opened?.handle.close(); }
 }
 
 /**

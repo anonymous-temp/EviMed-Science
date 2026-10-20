@@ -54,6 +54,7 @@ import {
 } from "./evidenceProgrammeData.mjs";
 import { PROGRAMME_CARD_OUTCOMES, PROGRAMME_CLAIM_EXCLUSIONS, buildOriginalAnalysisCard, buildProgrammeCard, evaluateProgrammeClaims, programmeCardProvenance } from "./evidenceProgrammeCard.mjs";
 import { receiptFromResultVersion } from "./evidenceCalculationReceipts.mjs";
+import { migrateProductStore } from "./productPersistence.mjs";
 
 /** Where one day's decision is kept: one document per local day, owned by the publisher in the evidence project. */
 export const PROGRAMME_DECISION_KIND = "programme-decision";
@@ -812,8 +813,31 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   async function recordOutcome(id, episodeId, outcome) {
     await mutateDecision(id, (payload) => {
       const previous = payload.outcomes?.[episodeId];
-      payload.outcomes = { ...payload.outcomes, [episodeId]: { ...outcome, attempts: (previous?.attempts ?? 0) + 1, at: now().toISOString() } };
+      const { history: _history, ...prior } = previous ?? {};
+      payload.outcomes = { ...payload.outcomes, [episodeId]: { ...outcome, attempts: (previous?.attempts ?? 0) + 1, at: now().toISOString(),
+        ...(previous?.captureRepair ? { captureRepair: { ...previous.captureRepair, state: "used" },
+          history: [...(previous.history ?? []), ...(previous.captureRepair.state === "pending" ? [prior] : [])].slice(-20) } : {}) } };
     });
+  }
+
+  /** One explicit, server-verified capture generation may reopen an exhausted absence; publication still uses normal checks.
+   * @param {any} receipt */
+  async function settleCaptureRepair(receipt) {
+    if (!enabled) return { state: "off" };
+    if (receipt?.projectId !== EVIDENCE_PROJECT_ID || !results?.captureRepairReceipt) throw new HttpError(409, "result_capture_repair_invalid", "This repair does not belong to the evidence programme.");
+    const verified = await results.captureRepairReceipt(publisher, EVIDENCE_PROJECT_ID, receipt.matrixVersionId, receipt.generation);
+    if (verified.runId !== receipt.runId) throw new HttpError(409, "result_capture_repair_invalid", "The repair run changed.");
+    const episode = await autopilot.episodeForRun(publisher, EVIDENCE_PROJECT_ID, verified.runId);
+    const decision = episode ? await decisionOf(episode.id) : null;
+    if (!decision) throw new HttpError(404, "evidence_programme_decision_missing", "No programme episode owns this repair.");
+    await mutateDecision(decision.id, payload => {
+      const previous = payload.outcomes?.[episode.id];
+      if (previous?.captureRepair?.generation === verified.generation) return;
+      if (previous?.outcome !== "no_evidence_matrix" || Number(previous.attempts) < MATRIX_ATTEMPTS) return;
+      payload.outcomes[episode.id] = { ...previous, captureRepair: { generation: verified.generation, matrixVersionId: verified.matrixVersionId,
+        state: "pending", at: now().toISOString() } };
+    });
+    return settleEpisode(episode.id);
   }
 
   /** @param {string} outcome @param {Record<string, any>} [more] */
@@ -831,11 +855,25 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    */
   function settleEpisode(episodeId) {
     if (!enabled) return Promise.resolve({ state: "off" });
-    // One settling of an episode at a time in this process: the hook of a verification and the sweep can meet, and two writers of
-    // one card would be a request conflict at best.
+    // The map coalesces local callers. The existing scoped transaction also fences other processes: reread only after
+    // the episode lock, and commit the card and outcome together. A lost connection rolls both back before another owner enters.
     const running = settling.get(episodeId);
     if (running) return running;
-    const started = settle(episodeId).finally(() => { settling.delete(episodeId); });
+    const started = (async () => {
+      // Resolve lazy schema readiness before holding research rows; a fresh process must not upgrade those tables
+      // while another settlement is waiting on its episode lock.
+      await migrateProductStore(database);
+      await zones.ready();
+      return database.transaction(async client => {
+        // Share the existing migration fences: a new process's lazy DDL cannot queue between this transaction's
+        // reads and writes and deadlock their relation-lock upgrade. Other settled episodes remain concurrent.
+        for (const schema of ["evimed-product-v1", "evimed-evidence-zones-v1"]) {
+          await client.query("SELECT pg_advisory_xact_lock_shared(hashtext($1))", [schema]);
+        }
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evidence-programme-settle:${publisher}:${episodeId}`]);
+        return database.withTransactionClient(client, () => settle(episodeId));
+      });
+    })().finally(() => { settling.delete(episodeId); });
     settling.set(episodeId, started);
     return started;
   }
@@ -849,8 +887,13 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     if (!decision) return countOutcome("decision_required");
     const decisionId = decision.id;
     const recorded = decision.payload.outcomes?.[episodeId];
-    if (recorded && isFinal(recorded)) return { state: recorded.outcome, cardId: recorded.cardId, revision: recorded.revision };
+    const repairPending = recorded?.outcome === "no_evidence_matrix" && recorded.captureRepair?.state === "pending";
+    if (recorded && isFinal(recorded) && !repairPending) return { state: recorded.outcome, cardId: recorded.cardId, revision: recorded.revision };
     const episode = await autopilot.getEpisode(publisher, episodeId);
+    if (repairPending) {
+      const repair = await results.captureRepairReceipt(publisher, EVIDENCE_PROJECT_ID, recorded.captureRepair.matrixVersionId, recorded.captureRepair.generation);
+      if (repair.runId !== episode.payload.runId) throw new HttpError(409, "result_capture_repair_invalid", "The repaired result belongs to another episode.");
+    }
     const phase = episode.payload.status;
     if (["failed", "canceled"].includes(phase)) { await recordOutcome(decisionId, episodeId, { outcome: "episode_failed" }); return countOutcome("episode_failed"); }
     if (phase !== "merged") return { state: "waiting", reason: phase };
@@ -1110,7 +1153,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     if (comparisons !== undefined) comparisonCandidates = comparisons;
   }
 
-  return { enabled, owns, assertAdmitted, ensureOfficialZones, gatherSignals, runDay, settleEpisode, onRunFinished, sweep, status, overview, worker, ready, useSignals,
+  return { enabled, owns, assertAdmitted, ensureOfficialZones, gatherSignals, runDay, settleEpisode, settleCaptureRepair, onRunFinished, sweep, status, overview, worker, ready, useSignals,
     /** The pieces a test drives directly. */
     internals: { decide, applyAction, applyDecision, ensureAgenda, resolveZones, localDay, localHour } };
 }

@@ -13,6 +13,8 @@ import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProje
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
+import { ResultCaptureRepairService } from "./resultCaptureRepair.mjs";
+import { createResultCaptureRepairRoutes } from "./resultCaptureRepairRoutes.mjs";
 import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
 import { captureFinishedRun, sourceCapture } from "./resultDeliveryCapture.mjs";
 import { createSourceIntakeHandoff } from "./sourceIntakeHandoff.mjs";
@@ -4181,6 +4183,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
   });
+  const resultCaptureRepairRoutes = createResultCaptureRepairRoutes({ store, runs: agentRuns, config, maxJsonBytes: config.maxJsonBytes,
+    service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns, programme: evidenceProgramme }) : null });
   // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
   // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
   // answers and no run asks which card it came from. The citation gift is the credits service's own grant entry
@@ -6315,6 +6319,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
       if (await resultRoutes(req, res)) return;
+      if (await resultCaptureRepairRoutes(req, res)) return;
       if (await resultReuseRoutes(req, res)) return;
       if (await resultImpactRoutes(req, res)) return;
       if (await dataSemanticsRoutes(req, res)) return;
@@ -7365,6 +7370,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
         assertNotPlatformAccount(user);
+        const exportProjects = new Map();
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
@@ -7378,7 +7384,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        }, { skillArtifacts });
+        }, { skillArtifacts, readResultReview: resultProvenance ? async (actor, row) => {
+          if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
+          const project = await exportProjects.get(row.projectId);
+          // Use this exact historical row, not the latest revision of its version.
+          return (await resultProvenance.project(actor.id, project, row.payload)).review;
+        } : undefined });
         return;
       }
 

@@ -6,6 +6,18 @@ const version = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repea
   projectId: "one", path: "report.md", digest: "c".repeat(64), size: 12, coverage: { gaps: [] },
   producer: { kind: "legacy", sessionId: "session", secret: "hidden" }, findings: [{ id: "finding", status: "failed" }] };
 
+test("review projection preserves bounded snapshot references and remains compatible with inline historical reviews", () => {
+  const snapshot = { digest: "a".repeat(64), size: 1234, schemaVersion: 1, storagePath: "/private" };
+  const result = projectResultVersion({ ...version, review: { status: "available", matrixVersionId: version.versionId, matrixDigest: version.digest,
+    verificationSnapshot: snapshot } });
+  assert.deepEqual(result.review.verificationSnapshot, { digest: snapshot.digest, size: 1234, schemaVersion: 1 });
+  assert.equal(result.review.matrixText, null);
+  assert.equal(projectResultVersion({ ...version, review: { status: "available", matrixText: "legacy", verification: { claims: [] } } }).review.matrixText, "legacy");
+  for (const bad of [{ ...snapshot, digest: "bad" }, { ...snapshot, size: -1 }, { ...snapshot, schemaVersion: 2 }]) {
+    assert.equal(projectResultVersion({ ...version, review: { verificationSnapshot: bad } }).review.verificationSnapshot, undefined);
+  }
+});
+
 test("projection preserves honest capture gaps and binds findings without leaking storage or producer extras", () => {
   const projected = projectResultVersion({ ...version, storagePath: "/private/secret", providerKey: "hidden" });
   assert.equal(projected.findings[0].versionId, version.versionId);

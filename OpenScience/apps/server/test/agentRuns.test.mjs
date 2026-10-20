@@ -35,6 +35,7 @@ import { HttpError } from "../src/security.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 import { learningTriggersFor } from "../src/learningTriggers.mjs";
+import { persistRunTranscript } from "../src/runTranscripts.mjs";
 
 /** Bind synthetic legacy fixture state to the actual platform-created run, never an inferred owner. */
 async function bindLegacyFixtureState(project, runId) {
@@ -8692,6 +8693,92 @@ function wordPackageBytes(parts = ["[Content_Types].xml", "word/document.xml"]) 
 /** A `bash` call as the ledger reads it: the command text is never parsed, so what it says is beside the point. */
 const bashPart = (command) => ({ type: "tool", tool: "bash", state: { status: "completed", input: { command }, output: "" } });
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("finished artifact refresh recovers a presented CSV and preserves the original unverified outcome", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const started = await dispatch("refresh-files");
+    const current = started?.id ? started : (await store.list(project))[0];
+    const files = ["report.md", "matrix.json", "agenda.json", "corrected.csv"];
+    await mkdir(path.join(project.workspaceDir, "deliverables", "refresh"), { recursive: true });
+    for (const name of files) await writeFile(path.join(project.workspaceDir, "deliverables", "refresh", name), name);
+    const finished = await store.finishInternal(project, current.id, { status: "succeeded", verification: "unverified",
+      artifacts: files.slice(0, 3).map(name => `deliverables/refresh/${name}`), qualityNotices: ["Original finding"] });
+    const transcript = { messages: [
+      { seq: 1, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed", input: { files: files.map(name => ({ path: `deliverables/refresh/${name}` })) }, output: "Presented" }] },
+      { seq: 2, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed", input: { files: [{ path: "bad.csv" }] }, output: '{"status":"error"}' }] },
+    ] };
+    const receipt = await persistRunTranscript({ project, run: finished, sessions: [{ sessionId: binding.sessionId, parentSessionId: null, label: "root", capability: null, transcript, error: null }] });
+    await store.recordLearning(project, current.id, { transcript: receipt });
+    const before = (await store.list(project))[0];
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: "0".repeat(64) }), { code: "run_transcript_changed" });
+    const refreshed = await store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(refreshed.artifacts, files.map(name => `deliverables/refresh/${name}`).sort());
+    for (const field of ["status", "finishedAt", "durationMs", "verification", "qualityNotices", "attempts"]) assert.deepEqual(refreshed[field], before[field], field);
+    const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    const replay = await store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(replay.artifacts, refreshed.artifacts);
+    assert.equal(await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8"), ledger, "replay appends nothing");
+    const transcriptPath = path.join(project.rootDir, receipt.path);
+    const original = await readFile(transcriptPath, "utf8");
+    await writeFile(transcriptPath, `${original} `);
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 }), { code: "run_transcript_changed" });
+    const lines = original.trim().split("\n");
+    lines[0] = JSON.stringify({ ...JSON.parse(lines[0]), runId: "foreign-run" });
+    const foreign = `${lines.join("\n")}\n`;
+    await writeFile(transcriptPath, foreign);
+    const foreignSha = createHash("sha256").update(foreign).digest("hex");
+    await store.recordLearning(project, current.id, { transcript: { ...receipt, sha256: foreignSha, bytes: Buffer.byteLength(foreign) } });
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: foreignSha }), { code: "run_transcript_scope_invalid" });
+    await writeFile(transcriptPath, original);
+    await store.recordLearning(project, current.id, { transcript: receipt });
+    await rename(transcriptPath, `${transcriptPath}.saved`);
+    await symlink(`${transcriptPath}.saved`, transcriptPath);
+    await assert.rejects(store.refreshArtifacts(project, current.id, { expectedTranscriptSha256: receipt.sha256 }), { code: "path_forbidden" });
+  });
+});
+
+test("a specialist's successful present and newly written deliverables join its partial inventory, including a shell CSV", async () => {
+  await withSpecialistRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    await dispatch("specialist-present-union");
+    await wait(10);
+    const directory = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(directory, { recursive: true });
+    for (const name of ["note.md", "report.md", "agenda.json", "table.csv"]) await writeFile(path.join(directory, name), name);
+    await writeFile(path.join(project.workspaceDir, "failed.csv"), "an existing file a failed call cannot present");
+    appendHistory([
+      { type: "tool", tool: "write", state: { status: "completed", input: { file_path: "deliverables/d1/note.md" }, output: "ok" } },
+      bashPart("python3 tool.py"),
+      { type: "tool", tool: "present", state: { status: "completed", input: { files: ["deliverables/d1/report.md", "deliverables/d1/agenda.json", "deliverables/d1/table.csv"] }, output: "Presented" } },
+      { type: "tool", tool: "present", state: { status: "completed", input: { files: ["failed.csv"] }, output: '{"ok":false,"code":"failed"}' } },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.deepEqual(run.artifacts, ["agenda.json", "note.md", "report.md", "table.csv"].map(name => `deliverables/d1/${name}`));
+    assert.ok(!run.artifacts.includes("failed.csv"));
+    assert.ok(run.presentedFiles.includes("deliverables/d1/table.csv"));
+  });
+});
+
+test("artifact refresh keeps full existing inventories when a lexically earlier presentation arrives and the ledger stays readable", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const started = await dispatch("full-refresh");
+    const artifacts = Array.from({ length: 64 }, (_, index) => `z-${String(index).padStart(2, "0")}.md`);
+    const presentedFiles = Array.from({ length: 64 }, (_, index) => `zz-presented-${String(index).padStart(2, "0")}.md`);
+    for (const file of artifacts) await writeFile(path.join(project.workspaceDir, file), file);
+    await writeFile(path.join(project.workspaceDir, "a-new.csv"), "value\n1\n");
+    const finished = await store.finishInternal(project, started.id, { status: "succeeded", artifacts, presentedFiles, outputFiles: presentedFiles, verification: "unverified" });
+    const transcript = { messages: [{ seq: 1, role: "tool", time: Date.parse(finished.finishedAt), parts: [{ type: "tool", tool: "present", status: "completed",
+      input: { files: ["z-00.md", "a-new.csv"] }, output: "Presented" }] }] };
+    const receipt = await persistRunTranscript({ project, run: finished, sessions: [{ sessionId: binding.sessionId, parentSessionId: null, label: "root", capability: null, transcript, error: null }] });
+    await store.recordLearning(project, started.id, { transcript: receipt });
+    const refreshed = await store.refreshArtifacts(project, started.id, { expectedTranscriptSha256: receipt.sha256 });
+    assert.deepEqual(refreshed.artifacts, artifacts);
+    assert.deepEqual(refreshed.presentedFiles, presentedFiles);
+    assert.deepEqual(refreshed.outputFiles, presentedFiles);
+    const reread = (await store.list(project)).find(run => run.id === started.id);
+    assert.deepEqual(reread.artifacts, artifacts);
+    assert.equal(reread.verification, "unverified");
+  });
+});
 
 test("a Word file a script wrote through bash, and a file a redirect wrote, are the run's files — and its outputs, not its scratch", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {

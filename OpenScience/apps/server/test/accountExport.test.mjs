@@ -126,6 +126,36 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
   return database;
 }
 
+test("account snapshots hydrate compact reviews into the legacy portable shape and keep unavailable records with an honest omission", async () => {
+  const base = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repeat(64)}`, projectId: "default", path: "report.md", digest: "c".repeat(64),
+    size: 12, coverage: { gaps: [] }, producer: { kind: "deliverable" }, findings: [], recordType: "result-version" };
+  const compact = { status: "available", matrixVersionId: `rv_${"d".repeat(64)}`, matrixDigest: "e".repeat(64), verificationSnapshot: { digest: "f".repeat(64), size: 1234, schemaVersion: 1 } };
+  const rows = [{ id: base.versionId, kind: "result-version", projectId: "default", payload: { ...base, review: compact } },
+    { id: "legacy", kind: "result-version", projectId: "default", payload: { ...base, review: { ...compact, verificationSnapshot: undefined, matrixText: '{"claims":[]}', verification: { claims: [] } } } },
+    { id: "fact", kind: "fact", payload: { content: "usable" } }];
+  const user = { id: "user-1", accountCreatedAt: "2026-09-06 00:00:00+00" };
+  const calls = [];
+  const readResultReview = async (actor, row) => { calls.push([actor.id, row.id]); return { ...row.payload.review, matrixText: '{"claims":[]}', verification: { claims: [] } }; };
+  const exportState = (read = readResultReview) => withAccountExportSnapshot(fakeDatabase([], rows), user, {}, async snapshot => JSON.parse(snapshot.data.toString()), { readResultReview: read, report: () => {} });
+  const allowed = await exportState();
+  assert.equal(allowed.documents[0].payload.review.matrixText, '{"claims":[]}');
+  assert.deepEqual(allowed.documents[0].payload.review.verification, { claims: [] });
+  assert.equal(allowed.documents[0].payload.review.verificationSnapshot, undefined);
+  assert.equal(allowed.documents[1].payload.review.matrixText, '{"claims":[]}');
+  assert.equal(calls.length, 2);
+  for (const state of ["unknown", "unavailable"]) {
+    const denied = await exportState(async () => ({ status: state, matrixText: null, verification: null }));
+    assert.equal(denied.documents.length, 3);
+    assert.equal(denied.documents[0].payload.review.status, state);
+    assert.equal(denied.documents[0].payload.review.matrixText, null);
+    assert.equal(denied.documents[0].payload.review.verificationSnapshot, undefined);
+    assert.equal(denied.documents.find(row => row.kind === "fact").payload.content, "usable");
+    assert.deepEqual(denied.omissions, [{ kind: "result-version", reason: "review_unavailable", documents: 2, revisions: 0 }]);
+  }
+  await assert.rejects(withAccountExportSnapshot(fakeDatabase([], rows), user, {}, async snapshot => snapshot, { maxBytes: 8192,
+    readResultReview: async () => ({ status: "available", matrixText: "x".repeat(8192), verification: {} }) }), { code: "archive_too_large" });
+});
+
 test("an exported account snapshot resolves the price versions of its own usage rows", async () => {
   const database = fakeDatabase([
     {
