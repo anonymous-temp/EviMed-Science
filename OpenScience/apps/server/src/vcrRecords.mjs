@@ -207,16 +207,21 @@ export function createVcrRecords({ store, config = {} }) {
      * cannot be read (not synthetic, not kept, no plane): the page then says what it holds without the rows.
      * @param {{ id: string }} study @param {string} resultId
      * @param {{ cards?: readonly Record<string, any>[], unitWord?: ((card: Record<string, any> | null) => string | null) | null,
-     *   labels?: Record<string, string> }} [context] `labels`: what the study calls a variable, by column (the population's own profile)
+     *   labels?: Record<string, string>, structuredErrors?: boolean }} [context] `labels`: what the study calls a variable, by column (the population's own profile)
      */
-    async describe(study, resultId, { cards = [], unitWord = null, labels = {} } = {}) {
+    async describe(study, resultId, { cards = [], unitWord = null, labels = {}, structuredErrors = false } = {}) {
       /** @type {Awaited<ReturnType<typeof readable>>} */
       let found;
       try { found = await readable(study, resultId); } catch (error) {
-        if (error instanceof HttpError) return null;
+        if (error instanceof HttpError) return structuredErrors ? { available: false, state: "unavailable", code: error.code, message: error.message } : null;
+        if (structuredErrors) return { available: false, state: "error", code: "vcr_records_unavailable", message: "记录读取失败；已保留汇总结果。" };
         throw error;
       }
-      const table = await loadRowTable(found.file);
+      let table;
+      try { table = await loadRowTable(found.file); } catch {
+        if (structuredErrors) return { available: false, state: "error", code: "vcr_records_unavailable", message: "记录读取失败；已保留汇总结果。" };
+        throw refusal("vcr_records_unavailable");
+      }
       const statistics = table.complete ? outcomeStatistics(table) : null;
       const executionJob = found.result.executionId
         ? await store.one(`SELECT j.scenario FROM ${VCR_SCHEMA}.executions e JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id

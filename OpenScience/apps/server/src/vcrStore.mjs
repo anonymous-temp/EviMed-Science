@@ -72,7 +72,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -131,6 +131,7 @@ export function vcrStudyFromRow(row) {
     dataTier: String(row.data_tier ?? "T0"),
     intendedUse: String(row.intended_use ?? "exploratory"),
     status: String(row.status ?? "active"),
+    purpose: row.purpose === "calculation" ? "calculation" : "programme",
     steps: normalizedVcrSteps(row.steps),
     budget: object(row.budget),
     outcomeSeal: object(row.outcome_seal),
@@ -262,8 +263,8 @@ function patientSetFromRow(row) {
 function comparatorFromRow(row) {
   if (!row) return null;
   return {
-    id: String(row.id), studyId: String(row.study_id), version: Number(row.version), route: String(row.route),
-    estimand: String(row.estimand ?? "ATT"), targetTrial: object(row.target_trial), configuration: object(row.configuration),
+    id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Comparator v${row.version}`, route: String(row.route),
+    estimand: row.estimand == null ? null : String(row.estimand), targetTrial: object(row.target_trial), configuration: object(row.configuration),
     conclusion: text(row.conclusion), gapList: list(row.gap_list), resultId: text(row.result_id),
     reviewState: String(row.review_state ?? "ai_set"), createdAt: iso(row.created_at),
   };
@@ -591,7 +592,7 @@ export class VcrStore extends VcrStoreBase {
    * `status` is `draft` for a study 「新建研究」 made before anyone has said what
    * it is about, and `active` otherwise.
    * @param {{ userId: string, projectId: string, name?: string, question?: string, dataTier?: string,
-   *   intendedUse?: string, budget?: Record<string, any>, status?: "draft" | "active" }} input
+   *   intendedUse?: string, budget?: Record<string, any>, status?: "draft" | "active", purpose?: "programme" | "calculation" }} input
    */
   async createStudy(input) {
     const userId = String(input.userId);
@@ -603,10 +604,10 @@ export class VcrStore extends VcrStoreBase {
     const question = String(input.question ?? "");
     const entityKeys = await this.#entityKeys({ name, question }, null);
     return this.transaction(async (client) => {
-      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget, entity_keys, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10) RETURNING *`,
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget, entity_keys, status, purpose)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11) RETURNING *`,
       [id, userId, String(input.projectId), name, question,
-        dataTier, intendedUse, JSON.stringify(input.budget ?? {}), entityKeys, status])).rows[0];
+        dataTier, intendedUse, JSON.stringify(input.budget ?? {}), entityKeys, status, input.purpose === "calculation" ? "calculation" : "programme"])).rows[0];
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id, user_id, role, invited_by)
         VALUES ($1, $2, 'lead', $2) ON CONFLICT DO NOTHING`, [id, userId]);
       await this.audit({ client, studyId: id, userId, actor: userId, action: "vcr.study.create", object: id,
@@ -961,11 +962,32 @@ export class VcrStore extends VcrStoreBase {
     return withReviewState(card, node, reviews);
   }
 
+  /** Exact owned-object lookup, on the caller's transaction, including historical versions.
+   * @param {any} client @param {string} studyId @param {string} objectKind @param {string | null} subjectId
+   * @param {Record<string, any>} scenario @param {string} name @param {any} model
+   */
+  async methodConfigurationObject(client, studyId, objectKind, subjectId, scenario, name, model) {
+    const spec = /** @type {Record<string, {table: string, scenario: string, name: string, read: (row: any) => any}>} */ ({
+      population: { table: "populations", scenario: "definition", name: "name", read: populationFromRow },
+      patient_set: { table: "patient_sets", scenario: "scenario", name: "name", read: patientSetFromRow },
+      comparator: { table: "comparator_designs", scenario: "configuration", name: "name", read: comparatorFromRow },
+      trial_scenario: { table: "trial_scenarios", scenario: "configuration", name: "label", read: scenarioFromRow },
+      design_grid: { table: "design_grids", scenario: "jsonb_build_object('designs', dimensions->'designs', 'truths', truth_scenarios) || coalesce(dimensions->'base', '{}'::jsonb)", name: "name",
+        read: row => row ? { id: String(row.id), studyId: String(row.study_id), name: text(row.name) ?? `Design grid v${row.version}`, version: Number(row.version), dimensions: object(row.dimensions), truthScenarios: list(row.truth_scenarios) } : null },
+    })[objectKind];
+    if (!spec) return null;
+    const query = subjectId ? `SELECT * FROM ${VCR_SCHEMA}.${spec.table} WHERE study_id=$1 AND id=$2`
+      : `SELECT * FROM ${VCR_SCHEMA}.${spec.table} WHERE study_id=$1 AND ${spec.scenario}=$2::jsonb AND ${spec.name}=$3`
+        + (objectKind === "patient_set" ? " AND model_id IS NOT DISTINCT FROM $4 AND model_version IS NOT DISTINCT FROM $5" : "") + " ORDER BY version DESC LIMIT 1";
+    const values = subjectId ? [studyId, subjectId] : [studyId, JSON.stringify(scenario), name, ...(objectKind === "patient_set" ? [model?.id ?? null, model?.version ?? null] : [])];
+    return spec.read((await client.query(query, values)).rows[0] ?? null);
+  }
+
   // --- research objects -------------------------------------------------------------
 
   /** @param {Record<string, any>} input */
-  async savePopulation(input) {
-    return this.transaction(async (client) => {
+  async savePopulation(input, { client: outer = null } = {}) {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "populations", "study_id = $1", [input.studyId]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.populations
         (id, study_id, user_id, version, name, kind, definition, snapshot_id, counts, waterfall, profile, quality, allowed_uses, review_state)
@@ -977,7 +999,8 @@ export class VcrStore extends VcrStoreBase {
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.population.save",
         object: String(row.id), detail: { version, kind: String(input.kind ?? "scenario") } });
       return populationFromRow(row);
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
   }
 
   /** @param {string} studyId */
@@ -992,8 +1015,8 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /** @param {Record<string, any>} input */
-  async savePatientSet(input) {
-    return this.transaction(async (client) => {
+  async savePatientSet(input, { client: outer = null } = {}) {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "patient_sets", "study_id = $1", [input.studyId]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.patient_sets
         (id, study_id, population_id, user_id, version, name, model_id, model_version, scenario, counts, twin_label)
@@ -1004,7 +1027,8 @@ export class VcrStore extends VcrStoreBase {
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.patient_set.save",
         object: String(row.id), detail: { version } });
       return patientSetFromRow(row);
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
   }
 
   /** @param {string} studyId */
@@ -1019,19 +1043,20 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /** @param {Record<string, any>} input */
-  async saveComparatorDesign(input) {
-    return this.transaction(async (client) => {
+  async saveComparatorDesign(input, { client: outer = null } = {}) {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "comparator_designs", "study_id = $1", [input.studyId]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.comparator_designs
-        (id, study_id, user_id, version, route, estimand, target_trial, configuration, conclusion, gap_list, review_state)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10::jsonb, $11) RETURNING *`,
-      [vcrId("comparator"), input.studyId, String(input.userId), version, String(input.route), String(input.estimand ?? "ATT"),
+        (id, study_id, user_id, version, route, estimand, target_trial, configuration, conclusion, gap_list, review_state, name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10::jsonb, $11, $12) RETURNING *`,
+      [vcrId("comparator"), input.studyId, String(input.userId), version, String(input.route), input.estimand === null ? null : String(input.estimand ?? "ATT"),
         JSON.stringify(input.targetTrial ?? {}), JSON.stringify(input.configuration ?? {}), input.conclusion ?? null,
-        JSON.stringify(input.gapList ?? []), input.reviewState ?? "ai_set"])).rows[0];
+        JSON.stringify(input.gapList ?? []), input.reviewState ?? "ai_set", String(input.name ?? "")])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.comparator.save",
         object: String(row.id), detail: { version, route: String(input.route) } });
       return comparatorFromRow(row);
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
   }
 
   /** @param {string} studyId */
@@ -1046,8 +1071,8 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /** @param {Record<string, any>} input */
-  async saveTrialScenario(input) {
-    return this.transaction(async (client) => {
+  async saveTrialScenario(input, { client: outer = null } = {}) {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "trial_scenarios", "study_id = $1", [input.studyId]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.trial_scenarios
         (id, study_id, user_id, version, label, design, endpoint_type, configuration, assumption_ids, comparator_id)
@@ -1058,7 +1083,8 @@ export class VcrStore extends VcrStoreBase {
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.trial_scenario.save",
         object: String(row.id), detail: { version, design: String(input.design) } });
       return scenarioFromRow(row);
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
   }
 
   /** @param {string} studyId @param {number} [limit] */
@@ -1068,28 +1094,29 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /** @param {Record<string, any>} input */
-  async saveDesignGrid(input) {
-    return this.transaction(async (client) => {
+  async saveDesignGrid(input, { client: outer = null } = {}) {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "design_grids", "study_id = $1", [input.studyId]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.design_grids
-        (id, study_id, user_id, version, dimensions, truth_scenarios, comparison_goal, cells)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb) RETURNING *`,
+        (id, study_id, user_id, version, dimensions, truth_scenarios, comparison_goal, cells, name)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9) RETURNING *`,
       [vcrId("grid"), input.studyId, String(input.userId), version, JSON.stringify(input.dimensions ?? {}),
         JSON.stringify(input.truthScenarios ?? []), input.comparisonGoal == null ? null : JSON.stringify(input.comparisonGoal),
-        JSON.stringify(input.cells ?? [])])).rows[0];
+        JSON.stringify(input.cells ?? []), String(input.name ?? "")])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.design_grid.save",
         object: String(row.id), detail: { version } });
-      return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), dimensions: object(row.dimensions),
+      return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
         truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
         cells: list(row.cells), createdAt: iso(row.created_at) };
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
   }
 
   /** @param {string} studyId */
   async latestDesignGrid(studyId) {
     const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]);
     if (!row) return null;
-    return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), dimensions: object(row.dimensions),
+    return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
       truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
       cells: list(row.cells), createdAt: iso(row.created_at) };
   }
@@ -1115,6 +1142,7 @@ export class VcrStore extends VcrStoreBase {
       throw new TypeError(`attachResult: ${JSON.stringify(table)} does not carry a result`);
     }
     const sets = ["result_id = $2"];
+    if (table === "populations") sets.push("quality = CASE WHEN result_id IS DISTINCT FROM $2 THEN '{}'::jsonb ELSE quality END");
     /** @type {unknown[]} */
     const values = [id, resultId];
     if (table === "comparator_designs" && extra.conclusion !== undefined) {
@@ -1200,7 +1228,7 @@ export class VcrStore extends VcrStoreBase {
       missingEvidence: shortfalls,
     };
     /** @param {any} client */
-    const write = async (client) => {
+    const write = async (/** @type {any} */ client) => {
       const version = await this.nextVersion(client, "results", "study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3",
         [input.studyId, input.kind, input.subjectId ?? null]);
       const id = vcrId("result");
@@ -1222,6 +1250,24 @@ export class VcrStore extends VcrStoreBase {
         WHERE study_id = $2 AND kind = $3 AND id <> $1 AND superseded_by IS NULL
           AND (subject_id IS NOT DISTINCT FROM $4 OR subject_id = ANY($5::text[]))`,
       [id, input.studyId, String(input.kind), input.subjectId ?? null, list(input.supersedesSubjects).map(String)]);
+      // A quality assessment is an attachment to its population, not a replacement for the generated population or its table.
+      if (input.kind === "population_quality" && input.subjectId && !object(input.diagnostics).partial) {
+        const quality = object(object(input.diagnostics).quality ?? input.diagnostics);
+        const basis = (await client.query(`SELECT p.result_id, r.tables, e.inputs, j.scenario FROM ${VCR_SCHEMA}.populations p
+          JOIN ${VCR_SCHEMA}.results r ON r.id=p.result_id AND r.study_id=p.study_id
+          JOIN ${VCR_SCHEMA}.executions e ON e.id=$3 AND e.study_id=p.study_id
+          JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=p.study_id
+          WHERE p.study_id=$1 AND p.id=$2 AND p.kind <> 'real' FOR UPDATE OF p`, [input.studyId, input.subjectId, input.executionId ?? null])).rows[0];
+        const synthetic = list(basis?.inputs).map(object).find(entry => entry.id === object(basis?.scenario).syntheticInputId);
+        const table = list(basis?.tables).map(object).find(entry => ["population", "synthetic-population"].includes(entry.name)
+          && synthetic?.hash && entry.sha256 === synthetic.hash);
+        if (table && Object.keys(quality).length) await client.query(`UPDATE ${VCR_SCHEMA}.populations SET quality=$1::jsonb WHERE study_id=$2 AND id=$3 AND result_id=$4`,
+          [JSON.stringify({ ...quality, sourceResultId: String(basis.result_id), syntheticInputHash: table.sha256, assessmentResultId: id }), input.studyId, input.subjectId, basis.result_id]);
+      }
+      // Manual calculations have no programme observer to attach their result later. File the pointer with the result itself.
+      const subjectTable = /** @type {Record<string, string>} */ ({ population: "populations", patient_set: "patient_sets", comparator: "comparator_designs", trial_scenario: "trial_scenarios" })[String(input.kind)];
+      if (subjectTable && input.subjectId) await client.query(`UPDATE ${VCR_SCHEMA}.${subjectTable} SET result_id = $1${subjectTable === "populations" ? ", quality = '{}'::jsonb" : ""} WHERE study_id = $2 AND id = $3`,
+        [id, input.studyId, input.subjectId]);
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.result.record", object: id,
         detail: { kind: String(input.kind), version, conclusion: input.conclusion ?? null, intendedUse, downgraded: Boolean(downgrade) } });
       return resultFromRow(row);

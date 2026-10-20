@@ -424,7 +424,8 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
 export function vcrResultKindFor(kind) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
-  if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
+  if (kind === "population_quality") return "population_quality";
+  if (["build_cohort", "generate_population", "literature_population", "synthesize_population"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
   if (method.startsWith("comparator.") || kind === "procova") return "comparator";
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
@@ -447,6 +448,7 @@ export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "co
  * @param {string} kind
  */
 export function vcrJobObjectKind(kind) {
+  if (kind === "population_quality") return "population";
   const filed = vcrResultKindFor(kind);
   return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
 }
@@ -781,7 +783,7 @@ export class VcrJobs {
     const row = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [studyId, jobId]);
     if (!row) return null;
     const refs = list(object(row.checkpoint).configurationInputRefs);
-    return { kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
+    return { subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
       scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
       sourceModel: object(row.checkpoint).sourceModel ? { id: object(object(row.checkpoint).sourceModel).id, version: object(object(row.checkpoint).sourceModel).version } : null,
       inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),
@@ -1405,7 +1407,7 @@ export class VcrJobs {
     const { tiers, models } = record ? await this.#usedModels(row) : { tiers: [], models: [] };
     const study = record ? await this.store.studyById(String(row.study_id)) : null;
     const detail = object(row.checkpoint);
-    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
     const leaseOwner = outcome.leaseOwner ?? null;
     const leaseAttempt = outcome.leaseAttempt ?? null;
@@ -1583,7 +1585,7 @@ export class VcrJobs {
     const { tiers, models } = await this.#usedModels(row);
     const study = await this.store.studyById(String(row.study_id));
     const detail = object(row.checkpoint);
-    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
     return this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [String(row.id)])).rows[0];

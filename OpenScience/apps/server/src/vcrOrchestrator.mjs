@@ -373,14 +373,14 @@ export function vcrStepClosure(step) {
  * created from the home page's action cards does not sit still.
  * @param {Record<string, { status: string, requested: boolean, held?: boolean }>} steps
  */
-export function vcrProgramSteps(steps) {
+export function vcrProgramSteps(steps, purpose = "programme") {
   /** @type {Record<string, { status: string, requested: boolean, held?: boolean }>} */
   const out = Object.fromEntries(VCR_STEPS.map((step) => {
     const entry = steps?.[step] ?? { status: "none", requested: false };
     return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
   }));
   if (VCR_STEPS.some((step) => out[step].requested)) return out;
-  if (FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
+  if (purpose !== "calculation" && FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
   return out;
 }
 
@@ -2123,6 +2123,7 @@ export class VcrOrchestrator {
     return this.#exclusive(studyId, async () => {
       let study = await this.store.studyById(studyId);
       if (!study || study.status !== "active") return { skipped: study ? "paused" : "gone" };
+      if (study.purpose === "calculation") return { skipped: "calculation" };
       await this.#detectChanges(study);
       await this.#refreshReviewExports(study);
       // Two passes, because what the programme wants depends on what is
@@ -2130,8 +2131,8 @@ export class VcrOrchestrator {
       // study that wants the whole programme, and reading the plan before
       // observing would leave it waiting a whole tick for something already
       // on disk.
-      study = await this.#observe(study, wantedVcrSteps(vcrProgramSteps(study.steps)));
-      const plan = wantedVcrSteps(vcrProgramSteps(study.steps));
+      study = await this.#observe(study, wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose)));
+      const plan = wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose));
       /** @type {{ dispatched: any, deferred: string | null, enqueued: string[] }} */
       const result = { dispatched: null, deferred: null, enqueued: [] };
       study = await this.#observe(study, plan);
@@ -2837,6 +2838,7 @@ export class VcrOrchestrator {
    * @param {any} study @param {any} job @param {any} result @param {string} node
    */
   async #landResult(study, job, result, node) {
+    if (job.kind === "population_quality") return;
     const parsed = parseLineageNode(node);
     if (!parsed) return;
     const table = { population: "populations", patient_set: "patient_sets", comparator_design: "comparator_designs", trial_scenario: "trial_scenarios" }[parsed.kind];
@@ -3318,7 +3320,7 @@ export class VcrOrchestrator {
     // nothing leaves its step where it was for a person to ask again. The run
     // is over by now, so a step it left nothing for no longer reads running
     // (`vcrIdleStepStatus`) — which is what lets a run that failed be said here.
-    const plan = wantedVcrSteps(vcrProgramSteps(study.steps));
+    const plan = wantedVcrSteps(vcrProgramSteps(study.steps, study.purpose));
     const observed = await this.#observe(study, plan);
     for (const entry of list(detail.scope)) {
       const step = String(object(entry).step ?? entry);

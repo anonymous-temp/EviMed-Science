@@ -61,7 +61,7 @@
 import {
   VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
+  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 
 import { createReadStream } from "node:fs";
 
@@ -73,7 +73,7 @@ import { LONGITUDINAL_TEMPLATES } from './vcrLongitudinal.mjs';
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
-import { resolveJobSubject } from "./vcrSubjects.mjs";
+import { prepareVcrMethodConfiguration, resolveJobSubject } from "./vcrSubjects.mjs";
 import { VCR_CARD_KINDS, createVcrCardEdits } from "./vcrCardEdits.mjs";
 import { zhTime } from "./vcrViewsKit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
@@ -180,6 +180,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
   "POST /studies/:id/jobs": ["run"],
+  "POST /studies/:id/method-configurations": ["run"],
+  "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
@@ -268,7 +270,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "cards"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -280,7 +282,7 @@ export function vcrRoutePattern(pathname) {
   }
   if (parts.length === 3) return `/api/vcr/studies/:id/${section}`;
   if (parts.length === 4) return `/api/vcr/studies/:id/${section}/:item`;
-  return `/api/vcr/studies/:id/${section}/:item/${["cancel", "contact", "transition", "use", "compare"].includes(parts[4]) ? parts[4] : ":action"}`;
+  return `/api/vcr/studies/:id/${section}/:item/${["cancel", "contact", "transition", "use", "compare", "result", "configuration"].includes(parts[4]) ? parts[4] : ":action"}`;
 }
 
 /** @param {any} req @param {number} limit @param {readonly string[]} allowed */
@@ -645,8 +647,9 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 1) {
       if (method === "GET") return reply(await service.listStudies(user));
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "action"]);
+        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "action", "purpose"]);
         const input = {
+          purpose: body.purpose == null ? undefined : word(body.purpose, ["programme", "calculation"], "vcr_payload_invalid", "purpose"),
           name: body.name == null ? undefined : vcrStudyName(body.name),
           question: body.question == null ? "" : String(body.question).slice(0, QUESTION_MAX),
           dataTier: body.dataTier == null ? undefined : word(body.dataTier, VCR_DATA_TIERS, "vcr_tier_invalid", "dataTier"),
@@ -1207,6 +1210,22 @@ export function createVcrRoutes(dependencies) {
       return reply(await service.modelSourcePreview(user, id, parts[3]));
     }
 
+    if (section === "method-configurations" && parts.length === 3 && method === "POST") {
+      const { study } = await authorize(id, "run");
+      const body = await bodyOf(req, maxJsonBytes, ["method", "name", "scenario", "subjectId", "modelId"]);
+      const name = vcrStudyName(body.name);
+      if (!name || typeof body.method !== "string" || !body.scenario || typeof body.scenario !== "object" || Array.isArray(body.scenario)) {
+        throw new HttpError(400, "vcr_job_scenario_invalid", "A method, name and scenario are required.");
+      }
+      for (const key of ["subjectId", "modelId"]) if (body[key] != null && (typeof body[key] !== "string" || !ID.test(body[key]))) {
+        throw new HttpError(400, "vcr_job_scenario_invalid", `${key} is an owned object id.`);
+      }
+      const kind = Object.entries(VCR_JOB_METHODS).find(([, value]) => value === body.method)?.[0];
+      const model = body.modelId ? await service.modelExecution(user, study, body.modelId, kind ?? "", body.scenario) : null;
+      return reply(await prepareVcrMethodConfiguration({ store: service.store, study, userId: String(user.id),
+        method: body.method, name, scenario: body.scenario, subjectId: body.subjectId, model }), 201);
+    }
+
     // --- jobs ------------------------------------------------------------------
     if (section === "jobs") {
       if (parts.length === 3 && method === "GET") {
@@ -1263,6 +1282,26 @@ export function createVcrRoutes(dependencies) {
         const job = await hooks.jobs.get(study.id, parts[3]);
         if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
         return reply(job);
+      }
+      if (parts.length === 5 && parts[4] === "result" && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!hooks.jobs?.get || !hooks.jobs?.resultOf) throw UNAVAILABLE();
+        const job = await hooks.jobs.get(study.id, parts[3]);
+        if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
+        const result = await hooks.jobs.resultOf(study.id, parts[3]);
+        if (!result) return reply({ jobId: parts[3], result: null, records: { available: false,
+          state: ["queued", "running", "awaiting_budget"].includes(job.state) ? "pending" : "unavailable" } });
+        const records_ = dependencies.records ?? service.packages?.records;
+        const described = records_?.describe ? await records_.describe(study, result.id, { structuredErrors: true })
+          : { available: false, state: "unavailable", code: "vcr_records_unavailable" };
+        const available = described && described.available !== false;
+        const prefix = `/api/vcr/studies/${encodeURIComponent(study.id)}`;
+        const { supersededBy: _supersededBy, ...historicalResult } = result;
+        return reply({ jobId: parts[3], result: service.forModel(historicalResult),
+          execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
+          records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
+            rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }
+            : described ?? { available: false, state: "unavailable" } });
       }
       if (parts.length === 5 && parts[4] === "configuration" && method === "GET") {
         const { study } = await authorize(id, "run");

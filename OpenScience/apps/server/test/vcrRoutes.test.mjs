@@ -491,6 +491,8 @@ const REQUESTS = {
   "POST /studies/:id/trial-search": ["POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }],
   "GET /studies/:id/jobs": ["GET", "/api/vcr/studies/std_1/jobs", undefined],
   "GET /studies/:id/jobs/:job": ["GET", "/api/vcr/studies/std_1/jobs/job_1", undefined],
+  "GET /studies/:id/jobs/:job/result": ["GET", "/api/vcr/studies/std_1/jobs/job_1/result", undefined],
+  "POST /studies/:id/method-configurations": ["POST", "/api/vcr/studies/std_1/method-configurations", { method: "profile.snapshot", name: "Profile", scenario: {} }],
   "POST /studies/:id/jobs": ["POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", scenario: {} }],
   "POST /studies/:id/jobs/:job/cancel": ["POST", "/api/vcr/studies/std_1/jobs/job_1/cancel", {}],
   "POST /studies/:id/budget": ["POST", "/api/vcr/studies/std_1/budget", { cpuSeconds: 600 }],
@@ -554,7 +556,7 @@ function composedHooks() {
     longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     orchestrator: { runStep: ok, recomputeAfterChange: ok, requestTrialSearch: async () => ({ sessionId: "ses_1", runId: "run_1", deferred: null }) },
-    jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
+    jobs: { resultOf: async () => null, enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
     // The generated records as a file: a header and a table to stream, and the audit line (`vcrRecords.mjs` has its own tests).
     records: { csv: async () => ({ filename: "synthetic-population", header: "# 合成数据，不是真实患者。\n", file: RECORDS_FILE, bytes: 4, method: "population.scenario", qualityFile: null }),
