@@ -307,8 +307,8 @@ function clock(start = '2026-09-28T01:00:00Z') {
     return { now: () => at, advance: (/** @type {number} */ ms) => { at = new Date(at.getTime() + ms); } };
 }
 const jobRow = async (kind) => (await db.query('SELECT status,attempts FROM evimed_product.jobs WHERE kind=$1', [kind])).rows;
-/** The job's own retry pause skipped: it is not what these tests are about. */
-const retryNow = (kind) => db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE kind=$1 AND status='queued'", [kind]);
+/** Skip the retry pause; stay safely due after timestamptz(3) rounds the database clock. */
+const retryNow = (kind) => db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE kind=$1 AND status='queued'", [kind]);
 async function queuedSafetyNotice() {
     await follow();
     const alert = await item();

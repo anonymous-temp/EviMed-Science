@@ -421,14 +421,14 @@ export class GeoMeasureStore {
 
   /** @param {string} roundId */
   async round(roundId) {
-    const result = await this.query("SELECT * FROM evimed_geo.rounds WHERE id = $1", [roundId]);
+    const result = await this.query("SELECT *, sample_date::text AS sample_date_text FROM evimed_geo.rounds WHERE id = $1", [roundId]);
     const row = result.rows[0];
     if (!row) return null;
     return {
       id: String(row.id), userId: String(row.user_id), geoProjectId: String(row.geo_project_id), kind: String(row.kind),
       setVersion: num(row.set_version), engines: list(row.engines).map(String), surface: row.surface ?? {}, status: String(row.status),
       planned: Number(row.planned), done: Number(row.done), failed: Number(row.failed),
-      sampleDate: row.sample_date ? (typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : iso(row.sample_date)?.slice(0, 10) ?? null) : null,
+      sampleDate: row.sample_date_text ?? null,
       ref: row.ref ?? null, createdAt: iso(row.created_at), startedAt: iso(row.started_at), finishedAt: iso(row.finished_at),
     };
   }
@@ -1169,7 +1169,7 @@ export class GeoMeasureStore {
    * @param {{ geoProjectId: string, setVersion: number | null, metricId: string, pool: string | null, variant?: string | null }} key
    */
   async armSeries({ geoProjectId, setVersion, metricId, pool, variant = null }) {
-    const result = await this.query(`SELECT m.arm, m.value, m.numerator, m.denominator, m.status, r.sample_date, r.id AS round_id,
+    const result = await this.query(`SELECT m.arm, m.value, m.numerator, m.denominator, m.status, r.sample_date::text AS sample_date, r.id AS round_id,
         r.ref -> 'balance' AS balance
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND m.scope = 'arm' AND m.metric_id = $2 AND m.pool IS NOT DISTINCT FROM $3
@@ -1182,7 +1182,7 @@ export class GeoMeasureStore {
       const arm = row.arm === "control" ? "control" : row.arm === "pilot" ? "pilot" : null;
       if (!arm) continue;
       const measurable = row.status === "ok" || (row.status === "insufficient" && num(row.denominator) !== null);
-      const date = typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10);
+      const date = row.sample_date;
       const engines = Array.isArray(row.balance?.engines) ? row.balance.engines.map(String).sort() : null;
       series[arm].push({ roundId: String(row.round_id), date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,
         denominator: measurable ? num(row.denominator) : null, engines });
@@ -1198,7 +1198,7 @@ export class GeoMeasureStore {
    * @returns {Promise<Array<{ roundId: string, date: string, engines: string[] | null, arms: { pilot: string[], control: string[] } | null }>>}
    */
   async armRounds({ geoProjectId, setVersion }) {
-    const result = await this.query(`SELECT r.id, r.sample_date, r.ref -> 'balance' AS balance FROM evimed_geo.rounds r
+    const result = await this.query(`SELECT r.id, r.sample_date::text AS sample_date, r.ref -> 'balance' AS balance FROM evimed_geo.rounds r
       WHERE r.geo_project_id = $1 AND r.kind IN ('baseline', 'weekly') AND r.set_version IS NOT DISTINCT FROM $2 AND r.sample_date IS NOT NULL
         AND EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id AND m.scope = 'arm')
       ORDER BY r.sample_date, r.created_at, r.id`, [geoProjectId, setVersion]);
@@ -1208,7 +1208,7 @@ export class GeoMeasureStore {
       const control = groups(row.balance?.arms?.control);
       return {
         roundId: String(row.id),
-        date: typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10),
+        date: row.sample_date,
         engines: Array.isArray(row.balance?.engines) ? row.balance.engines.map(String).sort() : null,
         arms: pilot && control ? { pilot, control } : null,
       };
@@ -1225,10 +1225,10 @@ export class GeoMeasureStore {
 
   /** The first baseline round's sample date. @param {string} geoProjectId @param {number | null} setVersion */
   async baselineDate(geoProjectId, setVersion) {
-    const result = await this.query(`SELECT sample_date FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline'
+    const result = await this.query(`SELECT sample_date::text AS sample_date FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline'
       AND status IN ('done', 'partial') AND set_version IS NOT DISTINCT FROM $2 AND sample_date IS NOT NULL ORDER BY sample_date LIMIT 1`, [geoProjectId, setVersion]);
     const value = result.rows[0]?.sample_date;
-    return value == null ? null : (typeof value === "string" ? value.slice(0, 10) : /** @type {string} */ (iso(value)).slice(0, 10));
+    return value ?? null;
   }
 
   /**
