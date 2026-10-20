@@ -85,6 +85,7 @@
     { "view": "evidence-matrix", "discovered": true, "pattern": "/app/runs/:runId/files/*", "family": "run-file", "template": "T5", "budget": "data", "rows": false }
   ],
   "unwalked": [
+    { "pattern": "/app/home", "template": "kernel", "why": "the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project" },
     { "pattern": "/app/chat/:sessionId?", "template": "kernel", "why": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it" },
     { "pattern": "/app/handoff", "template": "screen", "why": "opens only with a hand-off in the address; without one it returns to the conversation" },
     { "pattern": "/app/runs", "template": "screen", "why": "a redirect to the newest run's conversation, decided at run time" },

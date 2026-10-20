@@ -237,6 +237,7 @@ const WALK_TABLES = {
       {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
     ],
     "unwalked": [
+      {"pattern":"/app/home","template":"kernel","why":"the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project"},
       {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
@@ -1102,7 +1103,7 @@ export function measureStructure() {
   const side = {
     landmarks: sidebars.length,
     holdsDivider: sidebar ? [...sidebar.querySelectorAll("*")].some((el) => el.getAttribute("role") === "separator") : false,
-    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/chat") : false,
+    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/home") : false,
     closed: sidebar ? sidebar.getBoundingClientRect().width <= 1 : false,
     inert: sidebar ? hasAttribute(sidebar, "inert") || sidebar.inert === true : false,
   };
@@ -3237,7 +3238,7 @@ async function walkCleanupCover(context, base, waitMs) {
       headers: { "content-type": "application/json", "retry-after": "5" },
       body: JSON.stringify({ error: "The previous runtime is still being cleaned up.", code: "runtime_cleanup_required" }),
     }));
-    await probe.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await probe.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await probe.waitForTimeout(10_000);
     const early = await probe.evaluate(cleanupProbe);
     let late = null;
@@ -3249,7 +3250,8 @@ async function walkCleanupCover(context, base, waitMs) {
         if (late.alertButtons) break;
       }
     }
-    return { failures: cleanupFindings(early, late), notices: cleanupNotices(early), read: { early, late } };
+    const address = globalConversationAddress(probe);
+    return { failures: [...cleanupFindings(early, late), ...(address.valid ? [] : [`chat@desktop: the global entry did not open the default conversation (${address.loadedRoute})`])], notices: cleanupNotices(early), read: { early, late, loadedRoute: address.loadedRoute } };
   } finally {
     await probe.close().catch(() => {});
   }
@@ -3372,7 +3374,7 @@ async function main() {
         await probe.waitForTimeout(8_000);
         const state = await probe.evaluate(() => ({
           english: /Unexpected Application Error|dynamically imported module|Failed to fetch/.test(document.body.innerText),
-          sidebar: Boolean(document.querySelector("aside a[href='/app/chat']")),
+          sidebar: Boolean(document.querySelector("aside a[href='/app/home']")),
           text: document.body.innerText.replace(/\s+/g, " ").slice(0, 200),
         }));
         await probe.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
@@ -3562,7 +3564,7 @@ async function main() {
       });
       const chat = await walkChat(page, base).catch((error) => ({ loaded: false, error: String(error).slice(0, 160) }));
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
-      report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
+      report.pages[current] = { route: "/app/home", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
@@ -4302,6 +4304,12 @@ async function walkComposer(page, operator) {
   return { failures: [...a.failures, ...b.failures], notices: [...a.notices, ...b.notices], read: { desktop, phone } };
 }
 
+/** @param {any} page */
+function globalConversationAddress(page) {
+  const address = new URL(page.url());
+  return { loadedRoute: address.pathname + address.search, valid: /^\/app\/chat(?:\/[^/]+)?$/.test(address.pathname) && address.searchParams.get("project") === "default" };
+}
+
 /**
  * Open the conversation page and wait for the kernel frame's composer.
  *
@@ -4319,7 +4327,7 @@ async function walkChat(page, base) {
   const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };
   page.on?.("requestfailed", onFailed);
   try {
-    await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     let retried = false;
     let deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
@@ -4331,7 +4339,11 @@ async function walkChat(page, base) {
           // On screen: a researcher's statistics are in the document and hidden (R13 E-17), and are not what this records.
           stats: [...document.querySelectorAll("[data-composer-stats],[data-composer-stat]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
         })).catch(() => null);
-        if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        if (seen?.composer) {
+          const address = globalConversationAddress(page);
+          if (!address.valid) return { loaded: false, loadedRoute: address.loadedRoute, state: `the global entry did not open the default conversation (${address.loadedRoute})` };
+          return { loaded: true, loadedRoute: address.loadedRoute, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        }
       }
       const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
       if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) {

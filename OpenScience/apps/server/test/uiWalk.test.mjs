@@ -93,6 +93,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     .map((address) => `/app/${address}`))];
   assert.ok(pages.length >= 12 && ["/app/frontier", "/app/account", "/app/autopilot"].every((page) => pages.includes(page)), `read ${pages.length} fixed pages from the router; the scan did not walk`);
   const notWalked = {
+    "/app/home": "the global entry is covered by OPEN_SCIENCE_WALK_CHAT=1, which verifies the default conversation",
     "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
@@ -704,7 +705,7 @@ function context() {
     // FAKE_CHAT=broken: 重试 does not help either.
     const chatMode = process.env.FAKE_CHAT || "";
     let retried = false;
-    const chatFailing = () => chatMode && url.endsWith("/app/chat") && !(chatMode === "network-changed" && retried);
+    const chatFailing = () => chatMode && new URL(url).pathname === "/app/chat" && !(chatMode === "network-changed" && retried);
     const target = () => new URL(url);
     const locator = (role, name) => ({
       count: async () => (chatFailing() && role === "button" && name === "重试" ? 1 : 0),
@@ -741,7 +742,7 @@ function context() {
           poisoned = true;
           throw Error("page.goto: net::ERR_NETWORK_CHANGED");
         }
-        url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
+        url = target.endsWith("/app/home") ? new URL(process.env.FAKE_HOME_REDIRECT === "stuck" ? "/app/home" : "/app/chat" + (process.env.FAKE_HOME_SESSION ? "/ses_new" : "") + "?project=" + (process.env.FAKE_HOME_PROJECT || "default"), target).href : target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
           loadAttempts++;
           for (const handler of consoles) handler({ type: () => "error", text: () => "Failed to load resource: net::ERR_NETWORK_CHANGED" });
@@ -751,8 +752,8 @@ function context() {
         const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
         if (own) { log({ start, verdict: "fulfilled" }); await own[1]({ fulfill: async () => {} }); }
         else await fire(start);
-        if (process.env.FAKE_CHAT_CONSOLE && target.endsWith("/app/chat")) for (const handler of consoles) handler({ type: () => "error", text: () => "chat console attribution marker" });
-        if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ method: () => "GET", url: () => target, failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
+        if (process.env.FAKE_CHAT_CONSOLE && target.endsWith("/app/home")) for (const handler of consoles) handler({ type: () => "error", text: () => "chat console attribution marker" });
+        if (chatMode && target.endsWith("/app/home")) for (const handler of failed) handler({ method: () => "GET", url: () => target, failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
         if (typeof fn === "function" && fn.name === "routeLoadProbe") {
@@ -782,7 +783,7 @@ function context() {
           const own = target().pathname === "/app/files" ? [{ id: "color-contrast", impact: "serious", nodes: 4, target: ".text-text-3", help: "Elements must meet minimum color contrast" }] : [];
           return { version: "4.12.1", violations: [shell, ...own], incomplete: 2 };
         }
-        if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
+        if (new URL(url).pathname === "/app/chat" && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
           const [action] = arg;
@@ -1144,13 +1145,32 @@ test("every document the walk opens starts in the account's own project, so that
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {
-  const { code, stdout, stderr, log } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
-  const chatAt = log.findIndex((entry) => entry.goto?.endsWith("/app/chat"));
-  assert.ok(chatAt > 0, "the chat page was opened");
+  const chatAt = log.findIndex((entry) => entry.goto?.endsWith("/app/home"));
+  assert.ok(chatAt > 0, "the global home was opened");
+  assert.equal(log.filter((entry) => entry.goto?.endsWith("/app/home")).length, 2);
+  assert.equal(report.pages["chat@desktop"].loadedRoute, "/app/chat?project=default");
+  assert.equal(report.steps["chat-cleanup-cover"].loadedRoute, "/app/chat?project=default");
   assert.deepEqual([...new Set(log.slice(0, chatAt).filter((entry) => entry.start).map((entry) => entry.verdict))], ["aborted"]);
   // The conversation's own start is let through; the cleanup cover that follows it is answered by the walk itself, and never reaches the runtime.
   assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed", "fulfilled"]);
+});
+
+test("the global entry verifies its project and accepts a native session address", async () => {
+  const session = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_HOME_SESSION: "1" });
+  assert.equal(session.code, 0, session.stdout + session.stderr);
+  assert.equal(session.report.pages["chat@desktop"].loadedRoute, "/app/chat/ses_new?project=default");
+  for (const variant of [{ FAKE_HOME_PROJECT: "geo_1" }, { FAKE_HOME_REDIRECT: "stuck" }]) {
+    const bad = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", ...variant });
+    assert.equal(bad.code, 1);
+    assert.equal(bad.report.pages["chat@desktop"].loaded, false);
+    assert.match(bad.report.pages["chat@desktop"].state, /the global entry did not open the default conversation/);
+    assert.ok(bad.report.failures.some((line) => line.startsWith("chat@desktop: the global entry did not open the default conversation")));
+  }
+  const off = await walk();
+  assert.ok(!off.log.some((entry) => entry.goto?.endsWith("/app/home")));
+  assert.ok(!off.log.some((entry) => entry.start && entry.verdict === "allowed"));
 });
 
 test("a chat page that fails because the walk's own network changed is retried once, as a reader would, and noted", async () => {
@@ -1482,10 +1502,16 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
 });
 
 /** The sidebar a page of the shell has: one landmark named 侧栏, its divider and its link to the conversation. */
-const sidebar = (w = 240, attrs = {}) => node("aside", { attrs: { "aria-label": "侧栏", "data-sidebar": "", ...attrs }, w }, [
-  node("nav", {}, [node("a", { attrs: { href: "/app/chat" }, text: "对话", tabIndex: 0 })]),
+const sidebar = (w = 240, attrs = {}, href = "/app/home") => node("aside", { attrs: { "aria-label": "侧栏", "data-sidebar": "", ...attrs }, w }, [
+  node("nav", {}, [node("a", { attrs: { href }, text: "对话", tabIndex: 0 })]),
   node("div", { attrs: { role: "separator" }, w: 4 }),
 ]);
+
+test("the sidebar conversation link is the global home entry", () => {
+  for (const href of ["/app/chat", "/app/chat?project=geo_1"]) {
+    assert.equal(inPage(node("body", {}, [sidebar(240, {}, href)]), () => measureStructure()).sidebar.chatLink, false);
+  }
+});
 
 test("the structure measure reads the sidebar landmark, the regions that scroll sideways, the heading levels and the page's height", () => {
   const reachable = node("div", { attrs: { class: "scroller" }, w: 400, scrollW: 900, style: { overflowX: "auto" } }, [node("button", { text: "按钮", tabIndex: 0 })]);
