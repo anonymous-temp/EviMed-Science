@@ -718,7 +718,7 @@ function context() {
       on(event, handler) { if (event === "requestfailed") failed.push(handler); if (event === "console") consoles.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
       async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },
-      async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
+      async goBack() { dialogOpen = false; log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
       async waitForFunction() {
@@ -735,7 +735,9 @@ function context() {
           return { composer: !chatFailing(), stats: [] };
         },
       }],
-      getByRole: (role, { name }) => locator(role, name),
+      getByRole: (role, { name } = {}) => ({ ...locator(role, name), waitFor: async () => {} }),
+      locator: () => ({ allTextContents: async () => [] }),
+      reload: async () => {},
       async goto(target, options) {
         if (poisoned) throw Error("page.goto: navigation interrupted by chrome-error://chromewebdata/");
         if (process.env.FAKE_POISON_ROUTE && phone && target.endsWith("/app/account")) {
@@ -846,7 +848,7 @@ function context() {
         // FAKE_CLOSE=stuck: a drawer that stays open when its 关闭 is pressed.
         if (typeof fn === "function" && fn.name === "markRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "clickFirstMarkProbe") { dialogOpen = process.env.FAKE_ROWS !== "dead"; log({ markClick: new URL(url).pathname }); return true; }
-        if (typeof fn === "function" && fn.name === "drawerStateProbe") return { dialog: dialogOpen, address: dialogOpen };
+        if (typeof fn === "function" && fn.name === "drawerStateProbe") return { open: dialogOpen ? "record:first" : null, dialog: dialogOpen, address: dialogOpen };
         // 知识页's graph: a list of marks that open a file, the file's page and the way back.
         if (typeof fn === "function" && fn.name === "knowledgeMarkRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "firstKnowledgeMarkProbe") { previousUrl = url; url = new URL("/app/files/src_" + "a".repeat(32), url).href; log({ knowledgeMark: new URL(url).pathname }); return 1; }
@@ -864,6 +866,7 @@ function context() {
           const n = (addressCalls[kind] = (addressCalls[kind] ?? 0) + 1);
           const lost = process.env.FAKE_ADDRESS === "lost" && n > 1 && n < 4;
           if (kind === "inbox") return { path: "/app/inbox", search: lost ? "" : "?filter=unread", dialog: false, found: true, selected: lost ? "全部" : "未读 3" };
+          if (kind === "memory-map") return { path: "/app/memory/map", search: "?view=dims&q=" + encodeURIComponent("探针"), dialog: false, found: true, selected: "地图", query: "探针", view: "维度" };
           const search = "?tab=project&q=" + encodeURIComponent("探针");
           if (n === 4) return { path: "/app/memory", search: search + "&open=r1", dialog: true, found: true, selected: "项目 5", query: "探针" };
           if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "项目 5", query: "探针" };
@@ -2303,7 +2306,7 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["other"]), false);
   });
   assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
-  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
+  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory", "memory-map"]);
   assert.equal(addressStateHolds({ selected: "未读" }, { selected: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
   assert.equal(addressStateHolds({ selected: "未读" }, null), false);
@@ -2389,9 +2392,9 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
   // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
   assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
-    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"]]);
+    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"], ["chip", "地图的视图", "维度"], ["link", "/app/capabilities"]]);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
-  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-landing", "memory-row-coverage", "memory-open"]);
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-map", "memory-landing", "memory-row-coverage", "memory-open"]);
   assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
 
   // The address that does not come back, a row that stays open after Back.

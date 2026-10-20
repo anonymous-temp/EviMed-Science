@@ -1299,7 +1299,7 @@ export function measureComposition([options] = [{}]) {
     const total = Number(/(\d+)\s*\/\s*(\d+)/.exec(chip?.getAttribute("aria-label") ?? "")?.[2] ?? 0);
     stepRail = {
       ...box(railEl), folded, count: folded ? total : steps.length, inChrome: railEl.closest("[data-page-chrome]") !== null,
-      steps: steps.map((el) => ({ id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
+      steps: steps.map((el) => ({ current: Boolean(el.querySelector("[aria-current='step']")), href: el.querySelector("a[href]")?.getAttribute("href") ?? null, stateVisible: [...el.querySelectorAll("span")].some((span) => visible(span) && !span.classList.contains("sr-only") && span.classList.contains("text-caption") && Boolean(span.textContent?.trim())), id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
     };
   }
 
@@ -1438,6 +1438,10 @@ export function measureComposition([options] = [{}]) {
 
   const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    viewSelector: (() => {
+      const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
+      return { count: choices.length, top: choices[0] ? box(choices[0]).top : null };
+    })(),
     compactWorkflow: (() => {
       const progress = live("button[aria-label]").find((el) => /^进度，已完成 \d+\/(\d+) 步/.test(el.getAttribute("aria-label") ?? ""));
       const views = live("button[aria-label]").find((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
@@ -1466,6 +1470,149 @@ export async function verifyCompactWorkflowViews(page) {
     await page.keyboard.press("Escape");
     await page.getByRole("menu", { name: "筛选", exact: true }).waitFor({ state: "hidden" });
   }
+}
+
+/** Module controls can precede their lazy result; wait until content has stopped showing loading placeholders. */
+export function moduleReady() {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  const body = main?.querySelector("[data-page-body]");
+  return Boolean(body) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
+}
+
+/** Read the selected result, not its toolbar or the native conversation surface. A retry panel alone is a failed read;
+ * the same panel beside retained scientific results is a partial result, never a whole-page veto.
+ */
+export function moduleResultProbe() {
+  const body = document.querySelector("main [data-page-body]");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
+  const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
+  if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
+  const alerts = [...body.querySelectorAll("[role='alert']")].filter(visible);
+  const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
+  const warnings = alerts.filter((alert) => !retry.includes(alert)).map((alert) => alert.textContent?.trim().slice(0, 180));
+  const empty = [...body.querySelectorAll("[data-empty]")].filter(visible).map((el) => el.textContent?.trim().slice(0, 120));
+  const wholeFailure = [...body.querySelectorAll("[data-state-screen][role='alert']")].some(visible);
+  const retained = [...body.querySelectorAll("table tr:has(td), ul li, ol li, dl dd, [data-stat-band], [data-chart], canvas, [data-prose], article")]
+    .filter((el) => visible(el) && !el.closest("[role='alert'], [data-empty], [data-step-state], [data-state-screen], [data-study-pane]"));
+  const errors = retry.map((alert) => alert.textContent?.trim().slice(0, 180));
+  const status = wholeFailure || (retry.length > 0 && retained.length === 0) ? "error"
+    : retained.length > 0 ? (alerts.length > 0 ? "partial" : "content") : empty.length > 0 ? "empty" : "unobservable";
+  return { status, coverage: status === "content" || status === "partial", retained: retained.length, errors, warnings, empty };
+}
+
+/** Wait through a selected result's loading phase, then classify what actually arrived. */
+export async function readModuleResult(page, target) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const result = await page.evaluate(moduleResultProbe);
+  if (result.status === "error") throw new Error(`${target}: selected result could not be read: ${result.errors.join("; ") || "terminal page failure"}`);
+  return result;
+}
+
+/** Expected result choices, including the canonical conversation only where it exists. */
+export function moduleViewLabels(module, programme = true, canonical = false) {
+  if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
+  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"] : ["总览", "定义与证据", "人群", "匹配与招募"])];
+}
+
+/** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
+ * GeoBand.destination/useOpenGeoConversation. Result switches keep only the context those helpers own.
+ */
+export function moduleViewAddressHolds(module, label, initial, before, after, { programme = true } = {}) {
+  const start = new URL(initial);
+  const from = new URL(before);
+  const to = new URL(after);
+  if (to.origin !== start.origin) return false;
+  const match = start.pathname.match(module === "geo" ? /^\/app\/geo\/([^/]+)/u : programme ? /^\/app\/virtual-research\/([^/]+)/u : /^\/app\/capabilities\/calculations\/([^/]+)/u);
+  if (!match) return false;
+  const id = match[1];
+  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"];
+  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"];
+  const key = keys[labels.indexOf(label)];
+  const base = module === "geo" ? `/app/geo/${id}` : programme ? `/app/virtual-research/${id}` : `/app/capabilities/calculations/${id}`;
+  const path = to.pathname.replace(/\/$/u, "");
+  if (module === "vcr") {
+    if (label === "对话") return path === `/app/virtual-research/${id}/chat`;
+    return Boolean(key) && (path === `${base}/${key}` || (key === "overview" && path === base));
+  }
+  const part = from.pathname.slice(`/app/geo/${id}`.length).split("/")[1];
+  const previous = part === "chat" ? from.searchParams.get("result") ?? "overview" : part === "answers" ? "questions" : part || "overview";
+  const addressedSession = part === "chat" ? from.pathname.split("/")[5] : null;
+  const session = addressedSession ?? from.searchParams.get("session");
+  if (label === "对话") {
+    const chatBase = `${base}/chat`;
+    const chatSession = path.startsWith(`${chatBase}/`) ? path.slice(chatBase.length + 1) : null;
+    const chat = path === chatBase || (chatSession && /^[A-Za-z0-9_-]{1,160}$/u.test(chatSession));
+    if (!chat || (session && chatSession !== session) || to.searchParams.get("result") !== previous) return false;
+    return [...from.searchParams].every(([name, value]) => name === "result" || to.searchParams.get(name) === value);
+  }
+  if (!key || !(path === `${base}/${key}` || (key === "overview" && path === base))) return false;
+  if (session && to.searchParams.get("session") !== session) return false;
+  if (to.searchParams.get("step") !== from.searchParams.get("step")) return false;
+  return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
+}
+
+/** Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. */
+export async function verifyModuleNavigation(page, module, { programme = true, canonical = false } = {}) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await readModuleResult(page, `${module} initial view`);
+  const initial = page.url();
+  const expected = module === "geo" ? 8 : 7;
+  const rail = page.locator("[data-page-chrome] [data-step-rail]");
+  const steps = rail.locator("[data-rail-step]");
+  const ids = await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-rail-step")));
+  if (programme && (ids.length !== expected || new Set(ids).size !== expected)) throw new Error(`the ${module} rail must expose ${expected} distinct steps`);
+  const destinations = [];
+  const notices = [];
+  const recordCoverage = (target, result) => {
+    if (["empty", "unobservable"].includes(result.status)) notices.push(`not observable: ${target} reached ${result.status} content; navigation is not positive result coverage`);
+  };
+  for (const id of programme ? ids : []) {
+    const item = rail.locator(`[data-rail-step="${id}"]`);
+    const link = item.locator("a[href]");
+    if (await link.count() !== 1) throw new Error(`step ${id} has no unique destination`);
+    const href = await link.getAttribute("href");
+    const state = await item.getAttribute("data-rail-state");
+    if (!state) throw new Error(`step ${id} has no state`);
+    await link.scrollIntoViewIfNeeded();
+    await link.click();
+    await page.waitForFunction(({ id }) => Boolean(document.querySelector(`[data-rail-step="${id}"] [aria-current="step"]`)), { id }, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const target = new URL(href, initial);
+    const actual = new URL(page.url());
+    if (actual.pathname !== target.pathname || actual.search !== target.search || actual.hash !== target.hash) throw new Error(`step ${id} did not reach its destination`);
+    const result = await readModuleResult(page, `${module} step ${id}`);
+    recordCoverage(`step ${id}`, result);
+    destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
+  }
+  const labels = moduleViewLabels(module, programme, canonical);
+  const views = [];
+  for (const label of labels) {
+    const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^查看：/ });
+    if (await selector.count() !== 1) throw new Error("the module has no unique pinned result selector");
+    await selector.click();
+    const choices = page.getByRole("menuitemradio");
+    const shown = (await choices.allTextContents()).map((text) => text.trim());
+    if (shown.length !== labels.length || labels.some((choice) => !shown.includes(choice))) throw new Error(`the ${module} result selector omits or adds destinations: ${shown.join(", ")}`);
+    const before = page.url();
+    await page.getByRole("menuitemradio", { name: label, exact: true }).click();
+    await page.waitForFunction((label) => [...document.querySelectorAll("[data-page-chrome] button")].some((button) => button.getAttribute("aria-label") === `查看：${label}`), label, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if (!moduleViewAddressHolds(module, label, initial, before, page.url(), { programme })) throw new Error(`${module} view ${label}: selector label changed without reaching its canonical destination (${new URL(page.url()).pathname + new URL(page.url()).search})`);
+    if (programme && await rail.locator("[data-rail-step]").count() !== expected) throw new Error(`the rail disappeared in ${label}`);
+    const result = await readModuleResult(page, `${module} view ${label}`);
+    recordCoverage(`view ${label}`, result);
+    views.push({ label, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
+  }
+  await page.goto(initial, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  return { destinations, views, notices };
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
@@ -1530,6 +1677,12 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
+    if ((view?.module || view?.band) && c.viewSelector) {
+      const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
+      if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
+      if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
+      if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
+    }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
     if (template.stepRail === "every-tab") {
@@ -1611,7 +1764,7 @@ export function familyFindings(pages) {
     const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : c.compactWorkflow?.count ?? (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
     const counts = tabs.map((tab) => steps(tab.c));
     if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
-    const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const tops = tabs.map((tab) => tab.c.viewSelector ? tab.c.viewSelector.top ?? tab.c.stepRail?.top ?? null : tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
     const known = tops.filter((top) => top !== null);
     if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
       found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
@@ -3142,25 +3295,43 @@ export function clickFirstMarkProbe() {
 
 /** Whether a drawer is open, and whether the address says so (`open=`). */
 export function drawerStateProbe() {
-  return { dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
+  return { open: new URLSearchParams(location.search).get("open"), dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
 }
 
 /**
  * 记忆地图's mark and its drawer: the first mark of the list is pressed, the drawer is read as open and in the address, and its own 关闭
  * is pressed and read again. Pressing a mark opens a drawer and reads; nothing here writes.
  */
-async function walkMemoryMap(page, base, route) {
+export async function walkMemoryMap(page, base, route) {
   await openRoute(page, base, route);
+  await waitMemory(page, true, { selected: "地图" });
   const rows = await page.evaluate(markRowsProbe);
   if (rows === 0) return { ...memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null }), read: { rows } };
   await page.evaluate(clickFirstMarkProbe);
-  await page.waitForTimeout(1_500);
+  await page.waitForFunction(() => new URLSearchParams(location.search).has("open") && Boolean(document.querySelector("[role='dialog']")), undefined, { timeout: 15_000 });
   const opened = await page.evaluate(drawerStateProbe);
-  const pressed = opened.dialog ? await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]) : false;
-  await page.waitForTimeout(800);
+  if (!opened.dialog) return { ...memoryMapFindings("memory-map", { rows, opened, closed: null }), read: { rows, opened, closed: null } };
+  if (!opened.open) throw new Error("the first mark has no addressed identity");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reload = await page.evaluate(drawerStateProbe);
+  if (reload.open !== opened.open || !reload.dialog) throw new Error("reloading the mark lost its addressed identity or drawer");
+  // Reloading the document preserves the pushed entry; Back must still return to the unfiltered map.
+  await page.goBack();
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  const back = await page.evaluate(drawerStateProbe);
+  if (back.address || back.dialog) throw new Error("Back did not close the mark");
+  await page.evaluate(clickFirstMarkProbe);
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reopened = await page.evaluate(drawerStateProbe);
+  if (reopened.open !== opened.open) throw new Error("the first unfiltered mark changed identity");
+  const pressed = await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]);
+  if (pressed) await page.getByRole("dialog").waitFor({ state: "hidden" });
   const closed = pressed ? await page.evaluate(drawerStateProbe) : null;
   const judged = memoryMapFindings("memory-map", { rows, opened, closed });
-  return { ...judged, read: { rows, opened, closed } };
+  return { ...judged, read: { rows, opened, reload, back, reopened, closed } };
 }
 
 /**
@@ -3440,6 +3611,11 @@ async function main() {
           const composition = await page.evaluate(measureComposition, [{ hold: true }]);
           if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
+          }
+          if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
+            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr");
+            report.pages[current].navigation = navigation;
+            notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
           }
           report.pages[current].composition = composition;
           const arranged = compositionFindings(name, viewportName, composition);
@@ -3902,7 +4078,7 @@ export function addressAct([kind, first = "", second = ""]) {
 /**
  * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
- * @param {["inbox" | "memory"]} args
+ * @param {["inbox" | "memory" | "memory-map"]} args
  */
 export function addressProbe([kind]) {
   const visible = (el) => {
@@ -3917,13 +4093,14 @@ export function addressProbe([kind]) {
     const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
-  if (kind === "memory") {
+  if (kind === "memory" || kind === "memory-map") {
     // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
     const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
     const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
-    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
-    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
+    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === (kind === "memory-map" ? "搜索记忆地图" : "搜索记忆") && visible(el));
+    const views = [...document.querySelectorAll("[role='group'][aria-label='地图的视图'] button[aria-pressed='true']")].filter(visible);
+    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-map" ? { view: views[0] ? words(views[0]) : null } : {}) };
   }
   return null;
 }
@@ -3935,8 +4112,32 @@ export function addressProbe([kind]) {
  */
 export const ADDRESS_CASES = [
   { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
-  { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory", route: "/app/memory?tab=self", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory-map", route: "/app/memory/map", probe: "memory-map", act: [["chip", "地图的视图", "维度"]], fill: ["搜索记忆地图", "探针"], search: { view: "dims", q: "探针" }, state: { selected: "地图", view: "维度", query: "探针" } },
 ];
+
+/** Memory controls mount before data. An error is terminal but never empty or successful coverage.
+ * @param {{ map: boolean, selected?: string, query?: string }} wanted
+ */
+export function memoryReady(wanted) {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  if (!main || location.pathname !== (wanted.map ? "/app/memory/map" : "/app/memory")) return false;
+  const selected = [...main.querySelectorAll("[role='tablist'][aria-label='记忆'] [aria-selected='true']")].find(visible);
+  if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
+  const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === (wanted.map ? "搜索记忆地图" : "搜索记忆") && visible(el));
+  if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
+  if ([...main.querySelectorAll("[role='alert']")].some(visible)) return true;
+  if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
+  return Boolean(main.querySelector("[data-page-body]"));
+}
+
+/** Wait for memory data as well as its controls; fail an unreadable page instead of calling it empty. */
+export async function waitMemory(page, map, state = {}) {
+  await page.waitForFunction(memoryReady, { map, ...state }, { timeout: 30_000 });
+  const errors = await page.locator("main [role='alert']").allTextContents();
+  if (errors.length) throw new Error(`memory data could not be read: ${errors.join("; ").slice(0, 180)}`);
+}
 
 /**
  * Whether a page's state is what a case says. Strings match by prefix, except a search box's text, which is exact.
@@ -4020,6 +4221,7 @@ async function walkAddressState(page, base) {
   const failures = [];
   for (const c of ADDRESS_CASES) {
     await openRoute(page, base, c.route);
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.probe === "memory-map" ? "地图" : "关于你" });
     const pressed = [];
     for (const act of c.act) {
       pressed.push(Boolean(await page.evaluate(addressAct, act)));
@@ -4030,6 +4232,7 @@ async function walkAddressState(page, base) {
       await page.getByRole("searchbox", { name: c.fill[0] }).fill(c.fill[1], { timeout: 5_000 }).catch(() => null);
       await page.waitForTimeout(1_200);
     }
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
     const first = await page.evaluate(addressProbe, [c.probe]);
     let away = null;
     let back = null;
@@ -4041,10 +4244,12 @@ async function walkAddressState(page, base) {
         away = await page.evaluate(() => location.pathname);
         await page.goBack();
         await page.waitForTimeout(1_500);
+        if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
         back = await page.evaluate(addressProbe, [c.probe]);
       }
       // The address loaded again: a reload, a pasted link.
       await openRoute(page, base, `${first.path}${first.search}`);
+      if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
       reload = await page.evaluate(addressProbe, [c.probe]);
     }
     const read = { pressed, first, away, back, reload };
@@ -4060,10 +4265,11 @@ async function walkAddressState(page, base) {
     failures.push(...probeFindings("memory-landing", "desktop", "memoryTabs", landing).failures);
   }
   await openRoute(page, base, "/app/memory?tab=self");
+  await waitMemory(page, false, { selected: "关于你" });
   const self = await page.evaluate(pageProbe, ["memoryTabs"]);
   const composition = await page.evaluate(measureComposition, [{ hold: false }]);
   const coverage = memoryRowCoverage(self?.tabs, composition.empties?.[0]?.title);
-  if (coverage) await openRoute(page, base, coverage.route);
+  if (coverage) { await openRoute(page, base, coverage.route); await waitMemory(page, false); }
   reads["memory-row-coverage"] = coverage ?? { route: "/app/memory?tab=self" };
   const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
