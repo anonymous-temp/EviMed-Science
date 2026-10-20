@@ -251,7 +251,7 @@ describe("Toolbar", () => {
       const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
       const { rerender } = render(<Toolbar inBand filters={[{ kind: "select", label: "查看", pinned: true, value: "matching", options: [{ value: "matching", label: "匹配与招募" }], onChange: () => {} }]} summary={summary} actions={<button>选择方法</button>} />);
       const text = screen.getByText(summary);
-      expect(text).toHaveAttribute("title", summary);
+      expect(text).not.toHaveAttribute("title");
       expect(text).toHaveClass("min-w-0", "truncate", "max-sm:flex-1");
       expect(text.parentElement).toHaveClass("max-sm:flex-1");
       expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
@@ -268,4 +268,20 @@ it("keeps an opted-in View select explicit on a phone while ordinary filters fol
   render(<Toolbar filters={[{ kind: "select", label: "查看", value: "chat", options: [{ value: "chat", label: "对话" }], onChange: () => undefined, pinned: true }, { kind: "select", label: "状态", value: "running", options: [{ value: "running", label: "进行中" }], onChange: () => undefined }]} />);
   expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+});
+
+it("uses the shared tooltip for a clipped band summary and lets touch readers open its full text without a second row", async () => {
+  narrow();
+  const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 400 : 0; });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 40 : 0; });
+  render(<Toolbar inBand summary={summary} actions={<button>选择方法</button>} />);
+  const trigger = screen.getByRole("button", { name: summary });
+  expect(trigger).not.toHaveAttribute("title");
+  await userEvent.tab();
+  expect(trigger).toHaveFocus(); expect(screen.getByRole("tooltip")).toHaveTextContent(summary);
+  await userEvent.click(trigger);
+  expect(screen.getByRole("dialog", { name: "完整摘要" })).toHaveTextContent(summary);
+  expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}"); expect(screen.queryByRole("dialog", { name: "完整摘要" })).toBeNull();
 });

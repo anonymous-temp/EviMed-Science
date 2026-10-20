@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, validateScenario } from "@evimed/domain";
 vi.mock("./VcrModelAdoptDialog", () => ({ VcrModelAdoptDialog: ({ onSaved, onClose }: { onSaved: (saved: { id: string }) => void; onClose: () => void }) => <button onClick={() => { onSaved({ id: "mapped_source" }); onClose(); }}>Save mapped source fixture</button> }));
+import { methodExampleLabel } from "./vcrMethodChoiceText";
 import { methodKind, methodTask, schemaDefault, VcrMethodRunner } from "./VcrMethodRunner";
 const api = vi.hoisted(() => ({ queueVcrJob: vi.fn(), saveVcrMethodConfiguration: vi.fn(), getVcrHome: vi.fn(), getVcrData: vi.fn(), getVcrPopulation: vi.fn(), getVcrModels: vi.fn(), getVcrJob: vi.fn(), cancelVcrJob: vi.fn(), getVcrMethodHistory: vi.fn(), getVcrMethodConfiguration: vi.fn(), getVcrMethodResult: vi.fn(), createVcrStudy: vi.fn() }));
 vi.mock("@/lib/vcrClient", async load => ({ ...await load<object>(), ...api }));
@@ -11,7 +12,7 @@ const longitudinal = vi.hoisted(() => ({ getVcrLongitudinal: vi.fn() }));
 vi.mock("@/lib/vcrLongitudinalClient", () => longitudinal);
 const method = { id: "evalue", name: "E-value", method: "comparator.evalue" };
 const draw = (selected = method) => render(<MemoryRouter><VcrMethodRunner method={selected} onClose={vi.fn()} /></MemoryRouter>);
-function example(id: keyof typeof VCR_SCENARIO_EXAMPLES) { fireEvent.click(screen.getByText("载入可编辑示例")); fireEvent.click(screen.getByRole("button", { name: VCR_SCENARIO_EXAMPLES[id][0].label })); }
+function example(id: keyof typeof VCR_SCENARIO_EXAMPLES) { fireEvent.click(screen.getByText("载入可编辑示例")); fireEvent.click(screen.getByRole("button", { name: methodExampleLabel(id, VCR_SCENARIO_EXAMPLES[id][0].label) })); }
 async function chooseStudy() { await screen.findByRole("option", { name: "Existing study" }); fireEvent.change(screen.getByLabelText("保存到研究或独立计算"), { target: { value: "study_1" } }); await screen.findByRole("button", { name: "保存配置并运行" }); await waitFor(() => expect(screen.queryByText("正在读取此配置的可用输入。")).toBeNull()); }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -309,4 +310,19 @@ it("holds the originating scope while a saved literature version is being fetche
   expect(screen.getByLabelText("对照发生率")).toBeDisabled(); expect(screen.getByLabelText("模拟结局类型")).toBeDisabled(); expect(screen.getByLabelText("保存到研究或独立计算")).toBeDisabled(); await userEvent.type(screen.getByLabelText("对照发生率"), "9");
   await act(async () => finish({ methods: [binary], models: [{ id: "mapped_source", version: "3.0.0", executionSpec: { method: "patients.binary", scenario: { endpoint: { type: "binary" }, truth: { controlRate: 0.4, treatmentRate: 0.6 } } } }] }));
   await waitFor(() => expect(screen.getByLabelText("对照发生率")).not.toBeDisabled()); expect(screen.getByLabelText("对照发生率")).toHaveValue(0.4); expect(screen.getByLabelText("保存到研究或独立计算")).toHaveValue("study_1");
+});
+it("keeps authoritative provider-specific inputs outside browser persistence while restoring edited forecast fields", async () => {
+  const drafts = await import("@/lib/vcrMethodDraft"); drafts.clearMethodDrafts(); drafts.activateMethodDraftOwner("owner", "tenant");
+  longitudinal.getVcrLongitudinal.mockResolvedValue({ available: true, providers: [{ id: "provider_1", name: "Source provider", version: "1" }], records: [{ id: "history_1", kind: "history", createdAt: "2026-10-20", summary: {} }] });
+  const draftScope = { userId: "owner", tenantId: "tenant", projectId: "project_1", studyId: "study_1", method: "forecast.trajectories", launchId: "source_launch" };
+  const initialScenario = { historyId: "history_1", providerId: "provider_1", endpoint: { code: "outcome", unit: "cycles", type: "continuous" }, horizonsDays: [7], scenario: { treatment: "source_owned_marker" } };
+  const tree = () => <MemoryRouter><VcrMethodRunner method={{ id: "forecast.trajectories", method: "forecast.trajectories", name: "Forecast" }} studyId="study_1" initialScenario={initialScenario} draftScope={draftScope} /></MemoryRouter>;
+  const first = render(tree()); await screen.findByLabelText("预测终点"); await waitFor(() => expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled());
+  fireEvent.change(screen.getByLabelText("预测终点"), { target: { value: "edited_outcome" } }); first.unmount();
+  expect(window.sessionStorage.getItem(drafts.methodDraftKey(draftScope))).not.toContain("source_owned_marker");
+  render(tree()); await screen.findByLabelText("预测终点"); await waitFor(() => expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled());
+  expect(screen.getByLabelText("预测终点")).toHaveValue("edited_outcome");
+  fireEvent.click(screen.getByRole("button", { name: "保存配置并运行" }));
+  await waitFor(() => expect(api.saveVcrMethodConfiguration).toHaveBeenCalledWith("study_1", expect.objectContaining({ scenario: expect.objectContaining({ scenario: { treatment: "source_owned_marker" }, endpoint: expect.objectContaining({ code: "edited_outcome" }) }) })));
+  drafts.clearMethodDrafts();
 });

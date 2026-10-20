@@ -1,9 +1,11 @@
+import { useId } from "react";
 import { VCR_ROW_RULE_COMPARATORS, VCR_ROW_RULE_OPS, VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, whenHolds } from "@evimed/domain";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { methodFieldText } from "./vcrMethodFieldText";
-export type Schema = { t: string; fields?: Record<string, Schema>; items?: Schema; values?: string[] | Schema; variants?: Record<string, Record<string, Schema>>; on?: string; default?: unknown; req?: boolean; min?: number; max?: number; gt?: number; lt?: number; maxLength?: number; pattern?: string; when?: unknown; unit?: string };
+import { methodChoiceLabel, ruleChoiceLabel } from "./vcrMethodChoiceText";
+export type Schema = { t: string; fields?: Record<string, Schema>; items?: Schema; values?: string[] | Schema; valuesBy?: { path: string; map: Record<string, string[]> }; variants?: Record<string, Record<string, Schema>>; on?: string; default?: unknown; req?: boolean; min?: number; max?: number; gt?: number; lt?: number; maxLength?: number; pattern?: string; when?: unknown; unit?: string };
 export const schemas = VCR_SCENARIO_SCHEMAS as unknown as Record<string, Schema>;
 export const examples = VCR_SCENARIO_EXAMPLES as unknown as Record<string, Array<{ label: string; scenario: Record<string, unknown> }>>;
 const titles: Record<string, string> = { n: "样本量", population: "人群", variables: "变量", name: "名称", label: "显示名称", family: "分布", mean: "均值", sd: "标准差", min: "最小值", max: "最大值", prob: "概率", probs: "各类别概率", baselineTable: "基线表", variable: "变量", proportion: "比例", proportions: "各类别比例", levels: "类别", distribution: "分布", correlation: "相关矩阵", parameterDraws: "参数抽样次数", design: "试验设计", kind: "类型", endpoint: "终点", type: "类型", alpha: "参数 α", power: "把握度", allocation: "分配比例", truth: "效应假设", effect: "效应", analysis: "分析", method: "方法", columns: "列名", covariates: "协变量", treatment: "治疗列", outcome: "结局列", time: "时间列", event: "事件列", holdoutShare: "留出比例", m: "生成份数", tau: "参数 τ", ratio: "比值", lower: "下限", upper: "上限", confidence: "置信水平", targetPower: "目标把握度", dropoutAnnual: "年脱落率", timeUnit: "时间单位" };
@@ -23,6 +25,7 @@ export function schemaDefault(schema: Schema): unknown {
 
 /** The domain validates every value; this is only its typed editor, never an executor. */
 export function ScenarioField({ schema, value, change, title, root, method = "", path = "", customLabel = false, hiddenFields = [], columnOptions = [] }: { schema: Schema; value: unknown; change: (value: unknown) => void; title: string; root: Record<string, unknown>; method?: string; path?: string; customLabel?: boolean; hiddenFields?: readonly string[]; columnOptions?: readonly { value: string; label: string }[] }) {
+  const dependentHintId = useId();
   const commonOptional = (key: string) => method.startsWith("patients.") && ((path === "design" && key === "nControl") || (path === "truth" && ["treatmentRate", "effect", "sd"].includes(key)));
   const text = methodFieldText(method, path, schema, root, title, customLabel);
   const fieldTitle = text.label;
@@ -32,7 +35,7 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
     const variant = String(object[discriminator] ?? schema.default ?? Object.keys(schema.variants ?? {})[0]);
     const fields = schema.t === "variant" ? schema.variants?.[variant] ?? {} : schema.fields ?? {};
     return <fieldset className={path ? "flex min-w-0 flex-col gap-3 border-t border-border-hairline pt-3" : "flex min-w-0 flex-col gap-3"}><legend className="text-caption">{fieldTitle}</legend>
-      {schema.t === "variant" && <Select label="类型" value={variant} onChange={(event) => change({ [discriminator]: event.target.value })}>{Object.keys(schema.variants ?? {}).map((option) => <option key={option}>{option}</option>)}</Select>}
+      {schema.t === "variant" && <Select label="类型" value={variant} onChange={(event) => change({ [discriminator]: event.target.value })}>{Object.keys(schema.variants ?? {}).map((option) => <option key={option} value={option}>{methodChoiceLabel(method, path ? `${path}.${discriminator}` : discriminator, option)}</option>)}</Select>}
       {Object.entries(fields).filter(([key, field]) => key !== (schema.t === "variant" ? discriminator : "") && !hiddenFields.includes(path ? `${path}.${key}` : key) && (!field.when || whenHolds(field.when, root)) && (field.req || object[key] !== undefined || commonOptional(key))).map(([key, field]) => {
         const childPath = path ? `${path}.${key}` : key;
         const childTitle = methodFieldText(method, childPath, field, root, fieldLabel(key)).label;
@@ -58,9 +61,13 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
     const object = (value ?? {}) as Record<string, unknown>;
     return <fieldset className="flex flex-col gap-2"><legend>{fieldTitle}</legend>{Object.entries(object).map(([key, entry]) => <ScenarioField hiddenFields={hiddenFields} columnOptions={columnOptions} key={key} title={key} method={method} path={`${path}.${key}`} customLabel schema={schema.values as Schema} value={entry} root={root} change={(next) => change({ ...object, [key]: next })} />)}<Input label="添加列名" onKeyDown={(event) => { if (event.key === "Enter" && event.currentTarget.value.trim()) { event.preventDefault(); change({ ...object, [event.currentTarget.value.trim()]: schemaDefault(schema.values as Schema) }); event.currentTarget.value = ""; } }} hint="输入列名后按回车" /></fieldset>;
   }
-  if (Array.isArray(schema.values) || schema.t === "boolean") {
-    const options = schema.t === "boolean" ? ["true", "false"] : schema.values as string[];
-    return <Select label={fieldTitle} value={value === undefined ? "" : String(value)} onChange={(event) => change(schema.t === "boolean" ? event.target.value === "true" : event.target.value)}><option value="">请选择</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</Select>;
+  if (Array.isArray(schema.values) || schema.valuesBy || schema.t === "boolean") {
+    const controller = schema.valuesBy?.path.split(".").reduce<unknown>((at, key) => at && typeof at === "object" ? (at as Record<string, unknown>)[key] : undefined, root);
+    const missingController = Boolean(schema.valuesBy && !schema.valuesBy.map[String(controller)]);
+    const options = schema.t === "boolean" ? ["true", "false"] : schema.valuesBy ? schema.valuesBy.map[String(controller)] ?? [] : schema.values as string[];
+    const selected = value === undefined ? "" : String(value);
+    const incompatible = Boolean(schema.valuesBy && selected && !options.includes(selected));
+    return <div className="flex min-w-0 flex-col gap-2"><Select label={fieldTitle} value={selected} disabled={missingController} aria-describedby={missingController ? dependentHintId : undefined} error={incompatible ? "当前方法不适用于所选试验设计，请重新选择。" : undefined} onChange={(event) => change(schema.t === "boolean" ? event.target.value === "true" : event.target.value)}><option value="">请选择</option>{incompatible && <option value={selected} disabled>{methodChoiceLabel(method, path, selected)}（当前设计不可用）</option>}{options.map((option) => <option key={option} value={option}>{schema.t === "boolean" ? option === "true" ? "是" : "否" : methodChoiceLabel(method, path, option)}</option>)}</Select>{missingController && <p id={dependentHintId} className="text-caption text-text-3">请选择试验设计后再选择方法。</p>}</div>;
   }
   const columnField = /(?:Column|column|tstrOutcome)$/.test(path) || /(?:covariates|columns)\[\d+\]$/.test(path);
   if (columnOptions.length && columnField && schema.t === "string") return <Select label={fieldTitle} value={typeof value === "string" ? value : ""} onChange={event => change(event.target.value)}><option value="">选择数据列</option>{columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
@@ -72,11 +79,11 @@ function RowRule({ value, change, depth, columnOptions = [] }: { columnOptions?:
   const op = String(value.op ?? "compare");
   const numeric = (key: string, title: string) => <Input label={title} type="number" value={typeof value[key] === "number" ? value[key] : ""} onChange={(event) => change({ ...value, [key]: event.target.value === "" ? "" : Number(event.target.value) })} />;
   return <fieldset className="flex flex-col gap-2 rounded border border-border p-3"><legend>条件</legend>
-    <Select label="运算" value={op} onChange={(event) => change({ op: event.target.value })}>{VCR_ROW_RULE_OPS.map((item) => <option key={item}>{item}</option>)}</Select>
+    <Select label="运算" value={op} onChange={(event) => change({ op: event.target.value })}>{VCR_ROW_RULE_OPS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select>
     {["all", "any"].includes(op) ? <>{((value.operands ?? []) as Record<string, unknown>[]).map((rule, index, list) => <RowRule columnOptions={columnOptions} key={index} depth={depth + 1} value={rule} change={(next) => change({ ...value, operands: list.map((old, at) => at === index ? next : old) })} />)}<Button size="sm" variant="secondary" disabled={depth >= 7} onClick={() => change({ ...value, operands: [...(value.operands as unknown[] ?? []), { op: "present", column: "" }] })}>添加子条件</Button></>
       : op === "not" ? depth < 8 && <RowRule columnOptions={columnOptions} value={(value.operand ?? { op: "present" }) as Record<string, unknown>} change={(operand) => change({ ...value, operand })} depth={depth + 1} />
         : <>{columnOptions.length ? <Select label="数据列" value={String(value.column ?? "")} onChange={event => change({ ...value, column: event.target.value })}><option value="">选择数据列</option>{columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select> : <Input label="数据列" value={String(value.column ?? "")} onChange={(event) => change({ ...value, column: event.target.value })} />}
-          {op === "compare" && <><Select label="比较方式" value={String(value.comparator ?? "")} onChange={(event) => change({ ...value, comparator: event.target.value })}><option value="">请选择</option>{VCR_ROW_RULE_COMPARATORS.map((item) => <option key={item}>{item}</option>)}</Select><Select label="比较值类型" value={typeof value.value} onChange={(event) => change({ ...value, value: event.target.value === "number" ? 0 : event.target.value === "boolean" ? false : "" })}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField columnOptions={columnOptions} title="比较值" schema={{ t: typeof value.value === "number" ? "number" : typeof value.value === "boolean" ? "boolean" : "string" }} value={value.value} change={(next) => change({ ...value, value: next })} root={{}} /></>}
+          {op === "compare" && <><Select label="比较方式" value={String(value.comparator ?? "")} onChange={(event) => change({ ...value, comparator: event.target.value })}><option value="">请选择</option>{VCR_ROW_RULE_COMPARATORS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select><Select label="比较值类型" value={typeof value.value} onChange={(event) => change({ ...value, value: event.target.value === "number" ? 0 : event.target.value === "boolean" ? false : "" })}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField columnOptions={columnOptions} title="比较值" schema={{ t: typeof value.value === "number" ? "number" : typeof value.value === "boolean" ? "boolean" : "string" }} value={value.value} change={(next) => change({ ...value, value: next })} root={{}} /></>}
           {op === "between" && <>{numeric("low", "下限")}{numeric("high", "上限")}</>}
           {["in", "not_in"].includes(op) && <ScenarioField columnOptions={columnOptions} title="匹配值" schema={{ t: "array", items: { t: "string" } }} value={value.values ?? []} change={(values) => change({ ...value, values })} root={{}} />}
         </>}

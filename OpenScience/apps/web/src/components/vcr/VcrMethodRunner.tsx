@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { validateScenario, validateLongitudinalScenario } from "@evimed/domain";
 import { cancelVcrJob, createVcrStudy, getVcrData, getVcrHome, getVcrJob, getVcrMethodHistory, getVcrMethodConfiguration, getVcrPopulation, getVcrModels, saveVcrMethodConfiguration, queueVcrJob, type VcrJob, type VcrQualityBasis } from "@/lib/vcrClient";
@@ -17,6 +17,8 @@ import { VcrTabSkeleton } from "./VcrStates";
 import { ScenarioField, examples, schemas, fieldLabel } from "./VcrScenarioEditor";
 import { methodKind, methodPurpose, methodTitle, patientModes, methodNeedsSnapshot, stripMethodScopeRefs, unboundMethodScenario, initialMethodScenario, fixedMethodEndpoint, knownJobProgress, type VcrMethod } from "@/lib/vcrMethodDisplay";
 import { methodFieldText } from "./vcrMethodFieldText";
+import { methodExampleLabel } from "./vcrMethodChoiceText";
+import { methodDraftKey, readMethodDraft, writeMethodDraft, type MethodDraftScope, type MethodFormDraft } from "@/lib/vcrMethodDraft";
 import { VcrForecastMethodInputs, forecastPrerequisite } from "./VcrForecastMethodInputs";
 import { VcrModelAdoptDialog } from "./VcrModelAdoptDialog";
 import { VcrUseMethodInStudy } from "./VcrUseMethodInStudy";
@@ -39,6 +41,9 @@ export interface VcrMethodRunnerProps {
   sourceModel?: MethodSourceModel;
   studyId?: string;
   projectId?: string;
+  /** Supplied only after the addressed page has verified the current account. */
+  draftScope?: MethodDraftScope;
+  active?: boolean;
   onUse?: (configuration: { studyId: string; subjectId: string | null; scenario: Record<string, unknown> }) => void;
 }
 interface InputAdmission { scope: string; reason: string | null; loading: boolean }
@@ -47,7 +52,7 @@ const liveJob = (job: VcrJob | null) => Boolean(job && ["queued", "running", "aw
 
 /** Shared main-area workbench: domain form, existing queue, immutable job result. */
 export function VcrMethodRunner(props: VcrMethodRunnerProps) { return <MethodWorkbench key={props.studyId ?? "global"} {...props} />; }
-function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: embeddedStudy, onUse, initialJobId, initialStudyId, initialScenario, showTitle = true }: VcrMethodRunnerProps) {
+function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: embeddedStudy, onUse, initialJobId, initialStudyId, initialScenario, showTitle = true, draftScope, active = true }: VcrMethodRunnerProps) {
   const [selectedMethod, setSelectedMethod] = useState(method);
   const engineMethod = selectedMethod.method ?? selectedMethod.id;
   const schema = schemas[engineMethod];
@@ -72,7 +77,9 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
   const [usingLiterature, setUsingLiterature] = useState(false);
   const modeDrafts = useRef<Record<string, Frozen>>({});
   const [inputAdmission, setInputAdmission] = useState<InputAdmission>({ scope: "", reason: null, loading: true });
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const [historyReady, setHistoryReady] = useState(!initialJobId);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<"configuration" | "result">("configuration");
   const holding = useRef(false);
@@ -80,34 +87,77 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
   const mounted = useRef(true);
   const sourceRequest = useRef(0);
   const editEpoch = useRef(0);
+  const persistentScope = useMemo(() => draftScope ?? null, [draftScope]);
+  const persistentKey = persistentScope ? methodDraftKey(persistentScope) : null;
+  const operationScope = JSON.stringify([studyId, engineMethod, active, persistentKey]);
+  const operation = useRef({ scope: operationScope, generation: 0 });
+  if (operation.current.scope !== operationScope) operation.current = { scope: operationScope, generation: operation.current.generation + 1 };
   const currentScope = useRef({ studyId, method: engineMethod });
   currentScope.current = { studyId, method: engineMethod };
+  const draftLoading = Boolean(persistentKey && hydratedKey !== persistentKey);
+  const busy = working || draftLoading;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; sourceRequest.current += 1; }; }, []);
+  useEffect(() => { if (!active) { sourceRequest.current += 1; holding.current = false; setBusy(false); } }, [active]);
+  useEffect(() => {
+    if (!persistentScope || !historyReady || hydratedKey === persistentKey) return;
+    const cached = readMethodDraft(persistentScope);
+    if (cached) {
+      const selected = [method, ...methods].find(row => (row.method ?? row.id) === cached.active.method);
+      if (selected) {
+        setSelectedMethod(selected);
+        setStudyId(cached.active.studyId);
+        restore(cachedForm(cached.active), cached.active.studyId, cached.active.method);
+        for (const form of cached.modes) modeDrafts.current[`${cached.active.studyId}:${form.method}`] = cachedForm(form);
+      }
+    }
+    setHydratedKey(persistentKey);
+    // Hydrate once per owned address, after any authoritative historical configuration has arrived.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistentScope, persistentKey, historyReady, hydratedKey]);
+  useEffect(() => {
+    if (!persistentScope || hydratedKey !== persistentKey || !mounted.current) return;
+    const compatible = (entry: Frozen) => entry.studyId === studyId && (entry.method === persistentScope.method || persistentScope.method.startsWith("patients.") && entry.method.startsWith("patients."));
+    const record = { active: currentDraft(), modes: Object.values(modeDrafts.current).filter(compatible).slice(0, 4) };
+    writeMethodDraft(persistentScope, record);
+    if (!persistentScope.studyId && studyId) writeMethodDraft(studyDraftScope(studyId)!, record);
+    // Persist only editable values from the current render, never an unmount closure or an in-flight operation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistentScope, persistentKey, hydratedKey, scenario, seed, replicates, snapshots, subjectId, activeModel, reconstructionResultId, qualityBasis, engineMethod, studyId]);
   const live = liveJob(job);
   const jobId = job?.id;
   const modes = patientModes(methods);
   const isPatientEntry = patientModes([method]).length > 0;
   const description = methodPurpose(selectedMethod);
   useEffect(() => {
-    if (!live || !jobId || !jobStudy) return;
+    if (!active || !live || !jobId || !jobStudy) return;
     let disposed = false;
     const timer = window.setInterval(() => { void getVcrJob(jobStudy, jobId).then(next => { if (!disposed) { setJob(next); setError(null); } }).catch(failure => { if (!disposed) setError(webErrorMessage(failure, { fallback: "无法读取运行进度，请重试。" })); }); }, 2500);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [live, jobId, jobStudy]);
+  }, [live, jobId, jobStudy, active]);
   const boundReconstructionPending = engineMethod === "comparator.maic_time_to_event" && Boolean(reconstructionResultId) && reconstructionResultAvailable !== false;
   const problems = (forecast ? validateLongitudinalScenario(engineMethod, scenario) : schema ? validateScenario(engineMethod, scenario) : []).filter(problem => !(boundReconstructionPending && problem.code === "scenario_field_missing" && problem.field === "scenario.pseudoIpdInputId"));
   const validReplicates = replicates === "" || (/^\d+$/.test(replicates) && Number(replicates) > 0);
   const validSeed = /^\d+$/.test(seed) && Number(seed) <= 2147483647;
   const admissionMatches = inputAdmission.scope === `${studyId}:${engineMethod}`;
-  const runReason = usingLiterature ? "保存并应用文献参数后再运行。" : !studyId ? "先选择保存位置或新建独立计算。" : !admissionMatches || inputAdmission.loading ? "正在读取此配置的可用输入。" : inputAdmission.reason ?? (problems.length ? "请补齐或修正下方标记的参数。" : !validSeed || !validReplicates ? "请修正随机与重复设置。" : null);
+  const runReason = draftLoading ? "正在恢复此保存位置的参数。" : usingLiterature ? "保存并应用文献参数后再运行。" : !studyId ? "先选择保存位置或新建独立计算。" : !admissionMatches || inputAdmission.loading ? "正在读取此配置的可用输入。" : inputAdmission.reason ?? (problems.length ? "请补齐或修正下方标记的参数。" : !validSeed || !validReplicates ? "请修正随机与重复设置。" : null);
   function editScenario(next: Record<string, unknown>) {
-    if (holding.current || live) return;
+    if (holding.current || live || draftLoading) return;
     editEpoch.current += 1;
     setScenario(unboundMethodScenario(engineMethod, next));
     // Edited parameters are a user scenario, never a quotation from a model version.
     if (activeModel) setActiveModel(null);
   }
+  function cachedForm(form: MethodFormDraft): Frozen {
+    // Provider-specific input may contain data and is never copied into browser storage. Keep it from the exact source/server configuration.
+    const original = initialJobId ? frozen?.scenario.scenario : initialScenario?.scenario ?? sourceModel?.scenario.scenario;
+    const restored = form.method.startsWith("forecast.") && original !== undefined ? { ...form.scenario, scenario: structuredClone(original) } : form.scenario;
+    return { ...form, scenario: restored, reconstructionResultAvailable: null, qualityBasisAvailable: null };
+  }
   function currentDraft(): Frozen { return { reconstructionResultId, reconstructionResultAvailable, studyId, method: engineMethod, qualityBasis, qualityBasisAvailable, scenario: structuredClone(scenario), seed, snapshots: [...snapshots], replicates, model: activeModel, subjectId }; }
+  function operationGuard() {
+    const generation = operation.current.generation;
+    return () => mounted.current && active && operation.current.generation === generation;
+  }
   function restore(config: Frozen, targetStudy = studyId, targetMethod = engineMethod) {
     if (config.method !== targetMethod) { setError("此配置属于其他终点方法，请从对应方法的历史记录打开。"); return; }
     const sameStudy = config.studyId === targetStudy;
@@ -116,58 +166,79 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
     setReconstructionResultId(sameStudy ? config.reconstructionResultId : null); setReconstructionResultAvailable(sameStudy ? config.reconstructionResultAvailable : null);
     setSubjectId(sameStudy ? config.subjectId : null); setQualityBasis(sameStudy ? config.qualityBasis : null); setQualityBasisAvailable(sameStudy ? config.qualityBasisAvailable : null);
   }
+  function studyDraftScope(id: string) {
+    if (!persistentScope) return null;
+    const project = studies.state.kind === "ready" ? studies.state.data.studies.find(row => row.id === id)?.projectId : undefined;
+    return { ...persistentScope, studyId: id, projectId: project ?? persistentScope.projectId };
+  }
   function chooseStudy(next: string) {
     editEpoch.current += 1;
+    if (persistentScope && !persistentScope.studyId && studyId) {
+      writeMethodDraft(studyDraftScope(studyId)!, { active: currentDraft(), modes: Object.values(modeDrafts.current).filter(row => row.studyId === studyId).slice(0, 4) });
+    }
     modeDrafts.current[`${studyId}:${engineMethod}`] = currentDraft();
     const held = modeDrafts.current[`${next}:${engineMethod}`];
+    const cached = persistentScope && !persistentScope.studyId && next ? readMethodDraft(studyDraftScope(next)!) : null;
+    const selected = cached && [method, ...methods].find(row => (row.method ?? row.id) === cached.active.method);
     setStudyId(next);
-    if (held) restore(held, next); else restore(currentDraft(), next);
+    if (cached && selected) {
+      setSelectedMethod(selected);
+      restore(cachedForm(cached.active), next, cached.active.method);
+      for (const form of cached.modes) modeDrafts.current[`${next}:${form.method}`] = cachedForm(form);
+    } else if (held) restore(held, next); else restore(currentDraft(), next);
     setJob(null); setFrozen(null); setJobStudy("");
   }
   async function createCalculation() {
-    if (holding.current || live) return;
+    if (holding.current || live || draftLoading || !active) return;
+    const current = operationGuard();
     holding.current = true; setBusy(true); setError(null);
-    try { const created = await createVcrStudy({ name: "独立计算", purpose: "calculation" }); setExtraStudy({ id: created.id, name: "独立计算" }); chooseStudy(created.id); studies.reload(); }
-    catch (failure) { setError(webErrorMessage(failure, { fallback: "计算空间未能创建，请重试。" })); }
-    finally { holding.current = false; setBusy(false); }
+    try { const created = await createVcrStudy({ name: "独立计算", purpose: "calculation" }); if (!current()) return; setExtraStudy({ id: created.id, name: "独立计算" }); chooseStudy(created.id); studies.reload(); }
+    catch (failure) { if (current()) setError(webErrorMessage(failure, { fallback: "计算空间未能创建，请重试。" })); }
+    finally { if (current()) { holding.current = false; setBusy(false); } }
   }
   async function run() {
-    if (holding.current || live || !kind || runReason) return;
+    if (holding.current || live || !kind || runReason || !active) return;
+    const current = operationGuard();
     holding.current = true; setBusy(true); setError(null);
     try {
       const configuration = await saveVcrMethodConfiguration(studyId, { method: engineMethod, name: selectedMethod.name, scenario, ...(subjectId ? { subjectId } : {}), ...(activeModel ? { modelId: activeModel.id } : {}), ...(engineMethod === "comparator.maic_time_to_event" && reconstructionResultId ? { reconstructionResultId } : {}) });
+      if (!current()) return;
       if (reconstructionResultId && (configuration.reconstructionResultId !== reconstructionResultId || !configuration.scenario)) throw new Error("无法确认所选重建结果，当前参数已保留，请重新读取后再试。");
       const preparedScenario = configuration.scenario ?? scenario;
       setScenario(preparedScenario);
       setSubjectId(configuration.subjectId);
       const next = await queueVcrJob(studyId, { kind, scenario: preparedScenario, ...(engineMethod === "comparator.maic_time_to_event" && reconstructionResultId ? { reconstructionResultId } : {}), ...(configuration.subjectId ? { subjectId: configuration.subjectId } : {}), ...(activeModel ? { modelId: activeModel.id } : {}), seed: Number(seed), ...(replicates ? { replicates: Number(replicates) } : {}), ...(qualityBasis && engineMethod === "population.quality" ? { qualityBasis } : {}), inputs: snapshots.map(id => ({ kind: "snapshot" as const, id })) });
+      if (!current()) return;
       setJobStudy(studyId); setJob(next); setFrozen({ reconstructionResultId, reconstructionResultAvailable, studyId, method: engineMethod, qualityBasis, qualityBasisAvailable, scenario: structuredClone(preparedScenario), seed, snapshots: [...snapshots], replicates, model: activeModel, subjectId: configuration.subjectId }); setPanel("result");
-    } catch (failure) { setError(webErrorMessage(failure, { fallback: "运行未能开始，请检查输入后重试。" })); }
-    finally { holding.current = false; setBusy(false); }
+    } catch (failure) { if (current()) setError(webErrorMessage(failure, { fallback: "运行未能开始，请检查输入后重试。" })); }
+    finally { if (current()) { holding.current = false; setBusy(false); } }
   }
   async function openHistory(previous: VcrJob) {
-    if (holding.current || live) return;
+    if (holding.current || live || !active) return;
+    const current = operationGuard();
     holding.current = true; setBusy(true); setError(null);
     try {
       const config = await getVcrMethodConfiguration(studyId, previous.id);
+      if (!current()) return;
       if (config.kind !== kind) throw new Error("请选择此方法的历史运行。");
       const saved: Frozen = { reconstructionResultId: config.reconstructionResultId ?? null, reconstructionResultAvailable: config.reconstructionResultAvailable ?? null, studyId, method: engineMethod, qualityBasis: config.qualityBasis ?? null, qualityBasisAvailable: config.qualityBasisAvailable ?? null, scenario: structuredClone(config.scenario), seed: String(config.seed ?? 42), replicates: config.replicates == null ? "" : String(config.replicates), snapshots: config.inputRefs.map(input => input.id), model: config.sourceModel ?? null, subjectId: config.subjectId ?? null };
       restore(saved); setFrozen(saved); setJob(previous); setJobStudy(studyId); setPanel("result");
       if (config.reconstructionResultAvailable === false) setError("历史所用重建结果已不可复用。原结果保留，请明确选择重建版本后再运行。");
       if (config.qualityBasisAvailable === false) setError("历史人群生成依据已不可复用。原结果保留，请明确重新选择人群生成版本后再运行。");
       if (config.unavailableInputs > 0) setError("已打开原始结果；部分原始数据无法复用，请在配置中重新选择数据后运行。");
-    } catch (failure) { setError(webErrorMessage(failure, { fallback: "无法读取此运行，请重试。" })); }
-    finally { holding.current = false; setBusy(false); }
+    } catch (failure) { if (current()) setError(webErrorMessage(failure, { fallback: "无法读取此运行，请重试。" })); }
+    finally { if (current()) { holding.current = false; setBusy(false); } }
   }
   useEffect(() => {
-    if (!initialJobId || !studyId || studyId !== (initialStudyId ?? embeddedStudy) || openedHistory.current === `${studyId}:${initialJobId}`) return;
+    if (!active || !initialJobId || !studyId || studyId !== (initialStudyId ?? embeddedStudy) || openedHistory.current === `${studyId}:${initialJobId}`) return;
     openedHistory.current = `${studyId}:${initialJobId}`;
-    let active = true;
-    void getVcrJob(studyId, initialJobId).then(previous => { if (active) return openHistory(previous); }).catch(failure => { if (active) setError(webErrorMessage(failure, { fallback: "无法读取历史运行，请重试。" })); });
-    return () => { active = false; openedHistory.current = ""; };
+    setHistoryReady(false); setHydratedKey(null);
+    let pending = true;
+    void getVcrJob(studyId, initialJobId).then(previous => { if (pending) return openHistory(previous); }).catch(failure => { if (pending) setError(webErrorMessage(failure, { fallback: "无法读取历史运行，请重试。" })); }).finally(() => { if (pending) setHistoryReady(true); });
+    return () => { pending = false; openedHistory.current = ""; };
     // The addressed job is loaded once; editing its restored form must not reload it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialJobId, studyId, initialStudyId, embeddedStudy]);
+  }, [initialJobId, studyId, initialStudyId, embeddedStudy, active]);
   const applySavedLiterature = async (saved?: { id: string }) => {
     if (!saved || holding.current) return;
     const request = ++sourceRequest.current;
@@ -197,7 +268,7 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
     <Button size="sm" className="self-start" variant="text" disabled={live || busy} onClick={() => setUsingLiterature(true)}>使用文献参数</Button>
     {!kind || (!schema && !forecast) ? <Note action={null}>{description.purpose}{studyId && <Link className="ml-2 text-link hover:underline" to={`/app/virtual-research/${encodeURIComponent(studyId)}/${engineMethod === "matching.evaluate" ? "matching" : "data"}`}>{description.action}</Link>}{!studyId && <Link className="ml-2 text-link hover:underline" to="/app/virtual-research">选择或建立研究</Link>}</Note> : <>
       <form className="flex flex-col gap-4" onSubmit={event => event.preventDefault()}>
-        {examples[engineMethod]?.length > 0 && <Disclosure summary="载入可编辑示例"><Note action={<div className="flex flex-col items-start gap-2">{examples[engineMethod].map((example, index) => <Button key={index} type="button" variant="secondary" disabled={busy || live} onClick={() => editScenario(structuredClone(example.scenario))}>{example.label}</Button>)}</div>}>载入后可修改每项输入，点击运行才会计算。</Note></Disclosure>}
+        {examples[engineMethod]?.length > 0 && <Disclosure summary="载入可编辑示例"><Note action={<div className="flex flex-col items-start gap-2">{examples[engineMethod].map((example, index) => <Button key={index} type="button" variant="secondary" disabled={busy || live} onClick={() => editScenario(structuredClone(example.scenario))}>{methodExampleLabel(engineMethod, example.label)}</Button>)}</div>}>载入后可修改每项输入，点击运行才会计算。</Note></Disclosure>}
         {activeModel && <><Note action={null}>正在使用文献参数版本 {activeModel.version ?? "未记录"}。编辑数值后将保存为用户情景。</Note><VcrBoundSourceRecord modelId={activeModel.id} version={activeModel.version} /></>}
         {schema && engineMethod !== "population.quality" && <fieldset disabled={busy || live} className="min-w-0"><ScenarioField title="方法参数" method={engineMethod} schema={schema} hiddenFields={engineMethod === "comparator.maic_time_to_event" ? ["pseudoIpdInputId"] : fixedMethodEndpoint(engineMethod) && (scenario.endpoint as Record<string, unknown> | undefined)?.type === fixedMethodEndpoint(engineMethod) ? ["endpoint"] : []} value={scenario} root={scenario} change={next => editScenario(next as Record<string, unknown>)} /></fieldset>}
         {studyId && <MethodInputs key={`${studyId}:${engineMethod}`} studyId={studyId} method={engineMethod} scenario={scenario} change={editScenario} snapshots={snapshots} setSnapshots={setSnapshots} reconstructionResultId={reconstructionResultId} reconstructionResultAvailable={reconstructionResultAvailable} setReconstructionResultId={id => { setReconstructionResultId(id); setReconstructionResultAvailable(id ? true : null); }} qualityBasis={qualityBasis} qualityBasisAvailable={qualityBasisAvailable} setQualityBasis={basis => { setQualityBasis(basis); setQualityBasisAvailable(basis ? true : null); }} setSubjectId={setSubjectId} disabled={busy || live} onAdmissionChange={setInputAdmission} />}
@@ -212,7 +283,7 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
   </div>;
   const editedSinceRun = Boolean(job && frozen && (frozen.studyId !== studyId || frozen.method !== engineMethod || JSON.stringify(frozen.scenario) !== JSON.stringify(scenario) || frozen.seed !== seed || frozen.replicates !== replicates || JSON.stringify(frozen.snapshots) !== JSON.stringify(snapshots) || JSON.stringify(frozen.qualityBasis) !== JSON.stringify(qualityBasis) || frozen.reconstructionResultId !== reconstructionResultId));
   const progress = knownJobProgress(job?.progress);
-  const result = job ? <div className="flex min-w-0 flex-col gap-4">{editedSinceRun && <Note action={<Button size="sm" variant="secondary" disabled={busy || live} onClick={() => { if (frozen) restore(frozen); }}>恢复本次运行配置</Button>}>参数已修改，下方仍为上次运行结果。再次运行后会生成新的计算记录。</Note>}<div data-vcr-job-status="" className="flex flex-wrap items-center gap-3"><p role="status" className="text-ui">{job.label || selectedMethod.name} · {({ queued: "等待运行", running: "运行中", succeeded: "运行完成", failed: "运行失败", canceled: "已取消", awaiting_budget: "等待计算预算" })[job.state]}</p>{progress && <p className="text-caption tabular-nums">{progress.done} / {progress.total}</p>}{live && <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setBusy(true); void cancelVcrJob(jobStudy, job.id).then(setJob).catch(failure => setError(webErrorMessage(failure))).finally(() => setBusy(false)); }}>取消运行</Button>}</div>{job.error && job.state !== "canceled" && <p role="alert" className="text-error">{job.error.message ?? "计算未完成"}</p>}<VcrMethodResult studyId={jobStudy} job={job} />{frozen && <Button size="sm" variant="secondary" disabled={busy || live} onClick={() => { restore(frozen); setPanel("configuration"); }}>复用本次配置</Button>}</div> : <Note action={null}>配置并运行后，可在这里查看本次结果，也可打开下方历史运行。</Note>;
+  const result = job ? <div className="flex min-w-0 flex-col gap-4">{editedSinceRun && <Note action={<Button size="sm" variant="secondary" disabled={busy || live} onClick={() => { if (frozen) restore(frozen); }}>恢复本次运行配置</Button>}>参数已修改，下方仍为上次运行结果。再次运行后会生成新的计算记录。</Note>}<div data-vcr-job-status="" className="flex flex-wrap items-center gap-3"><p role="status" className="text-ui">{job.label || selectedMethod.name} · {({ queued: "等待运行", running: "运行中", succeeded: "运行完成", failed: "运行失败", canceled: "已取消", awaiting_budget: "等待计算预算" })[job.state]}</p>{progress && <p className="text-caption tabular-nums">{progress.done} / {progress.total}</p>}{live && <Button size="sm" variant="secondary" disabled={busy} onClick={() => { const current = operationGuard(); setBusy(true); void cancelVcrJob(jobStudy, job.id).then(next => { if (current()) setJob(next); }).catch(failure => { if (current()) setError(webErrorMessage(failure)); }).finally(() => { if (current()) setBusy(false); }); }}>取消运行</Button>}</div>{job.error && job.state !== "canceled" && <p role="alert" className="text-error">{job.error.message ?? "计算未完成"}</p>}<VcrMethodResult studyId={jobStudy} job={job} />{frozen && <Button size="sm" variant="secondary" disabled={busy || live} onClick={() => { restore(frozen); setPanel("configuration"); }}>复用本次配置</Button>}</div> : <Note action={null}>配置并运行后，可在这里查看本次结果，也可打开下方历史运行。</Note>;
   return <section className="min-w-0" aria-label={methodTitle(method)} data-vcr-method-workbench="">
     {showTitle && <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-section font-semibold">{methodTitle(method)}</h2>{onClose && <Button size="sm" variant="text" disabled={busy} onClick={onClose}>返回方法列表</Button>}</div>}
     <p className="mb-3 max-w-measure text-ui text-text-2">{description.purpose}</p>

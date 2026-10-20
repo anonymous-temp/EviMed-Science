@@ -5,6 +5,8 @@ import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/comp
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { Tooltip, isTruncated } from "@/components/ui/Tooltip";
+import * as Popover from "@radix-ui/react-popover";
 import { useNarrow } from "@/lib/useMediaQuery";
 
 /**
@@ -190,6 +192,29 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): bo
   return enabled && crowded;
 }
 
+/** A clipped count stays on one line; keyboard/hover and touch can read its complete text without changing the band's height. */
+function BandSummary({ text, className }: { text: string; className: string }) {
+  const line = useRef<HTMLSpanElement | HTMLButtonElement>(null);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const element = line.current;
+    if (!element) return undefined;
+    const check = () => setClipped(isTruncated(element));
+    check();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [text, clipped]);
+  if (!clipped) return <span ref={element => { line.current = element; }} className={className}>{text}</span>;
+  return <Popover.Root>
+    <Tooltip content={text} whenTruncated>
+      <Popover.Trigger asChild><button ref={element => { line.current = element; }} type="button" className={cn(className, "h-sm rounded px-0 text-left outline-none focus-visible:outline-focus")}>{text}</button></Popover.Trigger>
+    </Tooltip>
+    <Popover.Portal><Popover.Content aria-label="完整摘要" side="bottom" align="end" sideOffset={4} collisionPadding={8} className="z-popover max-w-xs break-words rounded-card border border-border bg-surface p-3 text-ui text-text shadow-e2 outline-none">{text}</Popover.Content></Popover.Portal>
+  </Popover.Root>;
+}
+
 export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className, inBand = false }: ToolbarProps) {
   const narrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
@@ -204,6 +229,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const active = folded + kept.filter(isActive).length;
   const searching = Boolean(search?.value);
   const shrinkSummary = inBand && summary != null;
+  const summaryClass = cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0");
   // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so the
   // text stands on the page's left edge. Without views the whole row does (below).
   const controls = (
@@ -238,7 +264,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         />
       )}
       {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
-      {summary != null && <span title={shrinkSummary && typeof summary === "string" ? summary : undefined} className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}>{summary}</span>}
+      {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
       {actions}
     </div>
   );
