@@ -883,6 +883,7 @@ it("lists the followed evidence zones as the first group of the feed, under the 
   // The filters and 「管理关注」 are in the row above, not in a row of their own below it.
   expect(within(panel).queryByRole("button", { name: "管理关注" })).not.toBeInTheDocument();
   expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toBeInTheDocument();
+  expect(within(controlRow()).getByRole("button", { name: "管理关注" })).toHaveClass("bg-transparent");
   expect(within(controlRow()).getByRole("button", { name: "全部栏目" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "全部关注" })).not.toBeInTheDocument();
 });
@@ -897,6 +898,7 @@ describe("关注 with nothing to show yet", () => {
     renderPage("/app/frontier?view=following");
     expect(await screen.findByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "添加关注" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "添加关注" })).toHaveClass("bg-accent");
     expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
     expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "关注的证据专区" })).not.toBeInTheDocument();

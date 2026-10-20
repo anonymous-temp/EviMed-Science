@@ -23,6 +23,20 @@ beforeEach(() => {
   api.queueVcrJob.mockResolvedValue({ id: "job_1", kind: "evalue", label: "敏感性分析", state: "succeeded", seed: 42 });
 });
 describe("shared method workbench", () => {
+  it.each([false, true])("keeps result headings one level below the method identity (embedded title: %s)", async showTitle => {
+    render(<MemoryRouter><h1>Method page</h1><VcrMethodRunner method={method} showTitle={showTitle} /></MemoryRouter>);
+    await screen.findByRole("option", { name: "Existing study" });
+    expect(screen.getByRole("heading", { name: "运行与结果", level: showTitle ? 3 : 2 })).toBeInTheDocument();
+    if (showTitle) expect(screen.getByRole("heading", { name: "E-value", level: 2 })).toBeInTheDocument();
+    const workbench = screen.getByRole("button", { name: "保存配置并运行" }).closest("[data-vcr-method-workbench]")!;
+    const bar = workbench.querySelector("[data-vcr-run-actions]")!;
+    expect(workbench.querySelectorAll("[data-vcr-run-actions]")).toHaveLength(1);
+    for (const selector of ["[data-vcr-method-configuration]", "[data-vcr-method-results]"]) {
+      const region = workbench.querySelector(selector);
+      expect(region).not.toBeNull();
+      expect(bar.compareDocumentPosition(region!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
   it("retains canonical kinds, separates matching, and never turns an empty number into zero", () => {
     expect(methodKind("comparator.evalue")).toBe("evalue");
     expect(methodKind("model_comparator")).toBeNull();

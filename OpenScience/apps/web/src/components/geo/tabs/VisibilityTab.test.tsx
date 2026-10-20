@@ -71,6 +71,24 @@ const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
+  it("keeps the risk rate in ordinary sentence flow with its sample, direction and answer link", async () => {
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, more: [...withEngines.more, { metricId: "M-15", name: "风险问句被推荐率", cell: cell(30, 36, 120, { snapshotIds: ["risk_answer"] }) }] });
+    renderTab();
+    const line = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>("[data-geo-risk-line]");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    const link = within(line).getByRole("link", { name: /风险问句被推荐率，看回答/ });
+    expect(link).toHaveAttribute("href", "/app/geo/geo_1/answers/risk_answer");
+    expect(link).toHaveTextContent("30%120 次里 36 次");
+    expect(line).toHaveTextContent("（越低越好）");
+    expect(line).not.toHaveClass("inline-flex");
+    expect(line).not.toHaveClass("flex");
+    expect(document.querySelector("[data-geo-pool='P4']")).toBeNull();
+    await userEvent.click(link);
+    expect(screen.queryByRole("table", { name: "按问句池的品牌提及率" })).toBeNull();
+  });
   it("is the trend, then the engines against the rates, then the groups against the engines, the pools, the rivals", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
