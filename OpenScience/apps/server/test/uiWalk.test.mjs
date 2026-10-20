@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -684,13 +684,14 @@ function context() {
       await handler({ abort: async () => log({ start: url, verdict: "aborted" }), continue: async () => log({ start: url, verdict: "allowed" }), fulfill: async () => {} });
     }
   };
+  let loadAttempts = 0;
   const newPage = async () => {
     let url = "";
+    let poisoned = false;
     let routeSettled = false;
     let dialogOpen = false;
     const failed = [];
     const consoles = [];
-    let loadAttempts = 0;
     const pageRoutes = [];
     let phone = false;
     // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
@@ -725,6 +726,7 @@ function context() {
         routeSettled = true;
       },
       url: () => url,
+      content: async () => "<main>Failed navigation</main>",
       frames: () => [{
         url: () => "https://evimed.example.org/__evimed/f/x",
         evaluate: async (fn, arg) => {
@@ -734,6 +736,11 @@ function context() {
       }],
       getByRole: (role, { name }) => locator(role, name),
       async goto(target, options) {
+        if (poisoned) throw Error("page.goto: navigation interrupted by chrome-error://chromewebdata/");
+        if (process.env.FAKE_POISON_ROUTE && phone && target.endsWith("/app/account")) {
+          poisoned = true;
+          throw Error("page.goto: net::ERR_NETWORK_CHANGED");
+        }
         url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
           loadAttempts++;
@@ -744,7 +751,8 @@ function context() {
         const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
         if (own) { log({ start, verdict: "fulfilled" }); await own[1]({ fulfill: async () => {} }); }
         else await fire(start);
-        if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
+        if (process.env.FAKE_CHAT_CONSOLE && target.endsWith("/app/chat")) for (const handler of consoles) handler({ type: () => "error", text: () => "chat console attribution marker" });
+        if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ method: () => "GET", url: () => target, failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
         if (typeof fn === "function" && fn.name === "routeLoadProbe") {
@@ -1156,6 +1164,15 @@ test("a chat page that fails because the walk's own network changed is retried o
   assert.deepEqual(report.failures, []);
 });
 
+test("the chat tab installs its own observers after address checks and attributes its console errors to chat", async () => {
+  const { code, stdout, stderr, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT_CONSOLE: "1" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.pages["chat@desktop"].consoleErrors, ["chat console attribution marker"]);
+  for (const [view, page] of Object.entries(report.pages)) {
+    if (view !== "chat@desktop") assert.ok(!page.consoleErrors?.includes("chat console attribution marker"), view);
+  }
+});
+
 test("a chat page that still fails after the one retry fails the walk", async () => {
   const { code, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT: "broken" });
   assert.equal(code, 1);
@@ -1196,6 +1213,24 @@ test("a slow route is measured after it settles, and an unresolved route or miss
   const missing = await walk({ FAKE_MISSING_TITLE: "1" });
   assert.equal(missing.code, 1);
   assert.ok(missing.report.failures.some(line => line.includes("the page has no title of its own")));
+});
+
+test("a navigation that poisons Chromium fails its view but cannot poison following views", async () => {
+  const result = await walk({ FAKE_POISON_ROUTE: "1" });
+  assert.equal(result.code, 1);
+  const failed = result.report.pages["account@phone"];
+  assert.equal(failed.navigationFailures.length, 1);
+  assert.match(failed.navigationFailures[0].error, /ERR_NETWORK_CHANGED/);
+  assert.equal(failed.diagnostic.phase, "navigation");
+  assert.match(failed.diagnostic.stack, /ERR_NETWORK_CHANGED/);
+  assert.ok(failed.diagnostic.files.dom);
+  assert.ok(failed.diagnostic.files.screenshot);
+  const pages = Object.keys(result.report.pages);
+  const later = pages.slice(pages.indexOf("account@phone") + 1);
+  assert.ok(later.length > 0);
+  assert.ok(later.some((name) => result.report.pages[name].composition));
+  assert.ok(!result.report.failures.some((failure) => /chrome-error/.test(failure)));
+  assert.equal(result.log.filter((entry) => entry.goto === "about:blank").length, 0);
 });
 
 test("the walk clicks the first row of each list on the pages R10 rebuilt, at the desktop width only, and reports what it clicked", async () => {
@@ -1357,19 +1392,51 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   assert.equal(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["502 /api/skills/x"])).failures.length, 1);
 });
 
-test("navigation resets Chromium's error page after a network change and retries only once", async () => {
+test("network-change navigation uses one clean authenticated-context tab and preserves the initial error", async () => {
   const visited = [];
-  let notices = 0;
-  const page = { goto: async (url) => { visited.push(url); if (visited.length === 1) throw new Error("page.goto: net::ERR_NETWORK_CHANGED"); return "loaded"; }, waitForTimeout: async () => {} };
-  assert.equal(await navigateForWalk(page, "https://example.org/app/files", () => notices++), "loaded");
-  assert.deepEqual(visited, ["https://example.org/app/files", "about:blank", "https://example.org/app/files"]);
-  assert.equal(notices, 1);
+  const context = { newPage: async () => ({ goto: async (url) => { visited.push(url); return "loaded"; } }) };
+  let closed = 0;
+  let installed = 0;
+  const poisoned = { close: async () => { closed++; }, goto: async () => { throw new Error("page.goto: net::ERR_NETWORK_CHANGED"); } };
+  const initialErrors = [];
+  assert.equal(await navigateForWalk(poisoned, "https://example.org/app/files", async (error) => {
+    initialErrors.push(String(error));
+    return replaceWalkPage(context, poisoned, () => installed++);
+  }), "loaded");
+  assert.deepEqual(visited, ["https://example.org/app/files"]);
+  assert.equal(closed, 1);
+  assert.equal(installed, 1);
+  assert.match(initialErrors[0], /ERR_NETWORK_CHANGED/);
+  // A second failed navigation is terminal, and the next view still gets its own healthy page.
   let attempts = 0;
-  page.goto = async (url) => { if (url !== "about:blank") { attempts++; throw new Error("net::ERR_NETWORK_CHANGED"); } };
-  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => {}), /ERR_NETWORK_CHANGED/);
+  const failing = { goto: async () => { attempts++; throw new Error("net::ERR_NETWORK_CHANGED"); } };
+  await assert.rejects(navigateForWalk(failing, "https://example.org/app/files", async () => failing), /ERR_NETWORK_CHANGED/);
   assert.equal(attempts, 2);
-  page.goto = async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); };
-  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => { throw new Error("unexpected retry"); }), /ERR_CONNECTION_REFUSED/);
+  const next = await replaceWalkPage(context, poisoned, () => installed++);
+  assert.equal(await next.goto("https://example.org/app/inbox"), "loaded");
+  failing.goto = async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); };
+  await assert.rejects(navigateForWalk(failing, "https://example.org/app/files", () => { throw new Error("unexpected retry"); }), /ERR_CONNECTION_REFUSED/);
+});
+
+test("failure diagnostics retain phase, full timeout stack, DOM, screenshot and failed requests", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "walk-failure-"));
+  try {
+    const error = new Error("Timeout exceeded: " + "x".repeat(400));
+    const page = { url: () => "https://example.org/app/files", content: async () => "<main>Still loading</main>",
+      screenshot: async ({ path: file }) => writeFile(file, "screenshot") };
+    const requests = [{ method: "GET", url: "https://example.org/api/files", error: "net::ERR_NETWORK_CHANGED" }];
+    const evidence = await walkFailureDiagnostics(page, dir, "files@desktop", "row-interactions", error, requests);
+    assert.equal(evidence.phase, "row-interactions");
+    assert.equal(evidence.stack, error.stack);
+    assert.equal(evidence.error, String(error));
+    assert.deepEqual(evidence.requestFailures, requests);
+    assert.equal(await readFile(path.join(dir, evidence.files.dom), "utf8"), "<main>Still loading</main>");
+    assert.equal(await readFile(path.join(dir, evidence.files.screenshot), "utf8"), "screenshot");
+    page.content = async () => { throw new Error("page closed"); };
+    assert.match((await walkFailureDiagnostics(page, dir, "files", "navigation", error)).captureErrors[0], /page closed/);
+    assert.throws(() => assertWalkAuthenticated("https://example.org/login?next=/app/files"), /walk_auth_redirect/);
+    assert.doesNotThrow(() => assertWalkAuthenticated("https://example.org/app/files"));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("the studies and ids the walk opens are read from the lists, and a missing id is a page not walked", () => {
@@ -2669,7 +2736,7 @@ test("scheduled pending daily preserves today's truth and separately names a rea
 test("a rendered load error retries exactly once only for this view's observed network change", async () => {
   const failed = { failed: true, message: "研究暂时无法读取。重试" }, ready = { failed: false, message: null };
   let states, visits;
-  const page = { evaluate: async () => states.shift(), goto: async (url) => { visits.push(url); }, waitForFunction: async () => {}, waitForTimeout: async () => {} };
+  const page = { url: () => "https://example.org/app/vcr", evaluate: async () => states.shift(), goto: async (url) => { visits.push(url); }, waitForFunction: async () => {}, waitForTimeout: async () => {} };
   states = [failed, ready]; visits = [];
   const recovered = await recoverWalkLoad(page, "https://example.org/app/virtual-research/a/comparator", ["net::ERR_NETWORK_CHANGED"], []);
   assert.equal(recovered.loaded, true); assert.equal(recovered.retried, true); assert.deepEqual(recovered.initial, failed); assert.equal(visits.length, 1);

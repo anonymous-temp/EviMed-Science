@@ -939,18 +939,43 @@ export function unexpectedRefusals(name, httpErrors) {
   return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
 }
 
-/** A Docker network change can leave Chromium retrying its error page. Reset it before one recorded retry. */
+/** Replace a tab, keeping its authenticated context and reinstalling its observers. */
+export async function replaceWalkPage(context, previous, install) {
+  if (previous) await previous.close().catch(() => {});
+  const page = await context.newPage();
+  install(page);
+  return page;
+}
+
+/** Retry one network-change navigation on a clean tab; the callback retains the first failure. */
 export async function navigateForWalk(page, url, onRetry) {
   const options = { waitUntil: "domcontentloaded", timeout: 60_000 };
   try {
     return await page.goto(url, options);
   } catch (error) {
     if (!/net::ERR_NETWORK_CHANGED\b/.test(String(error))) throw error;
-    onRetry();
-    await page.goto("about:blank", options);
-    await page.waitForTimeout(1_000);
-    return page.goto(url, options);
+    const replacement = await onRetry(error);
+    if (!replacement) throw error;
+    return replacement.goto(url, options);
   }
+}
+
+/** Preserve the full error and the failed tab before replacing it, including timeout DOM evidence. */
+export async function walkFailureDiagnostics(page, out, view, phase, error, requestFailures = []) {
+  const evidence = { phase, error: String(error), stack: error instanceof Error ? error.stack : null,
+    url: page?.url() ?? null, requestFailures: [...requestFailures], files: {}, captureErrors: [] };
+  for (const [kind, capture] of [
+    ["dom", async () => { const file = `${view}.${phase}.html`; await writeFile(path.join(out, file), await page.content()); return file; }],
+    ["screenshot", async () => { const file = `${view}.${phase}.jpg`; await page.screenshot({ path: path.join(out, file), type: "jpeg", quality: CAPTURE_QUALITY, timeout: 5_000 }); return file; }],
+  ]) {
+    try { evidence.files[kind] = await capture(); }
+    catch (captureError) { evidence.captureErrors.push(`${kind}: ${String(captureError)}`); }
+  }
+  return evidence;
+}
+
+export function assertWalkAuthenticated(url) {
+  if (/\/(?:login|auth)(?:[/?#]|$)/.test(new URL(url).pathname)) throw new Error(`walk_auth_redirect: ${new URL(url).pathname}`);
 }
 
 /** A visible failed read is not a successfully loaded module without its chrome. */
@@ -962,20 +987,22 @@ export function routeLoadProbe() {
 }
 
 /** Retry a rendered load error once only after this view's observed network change, never an HTTP failure. */
-export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false) {
+export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false, replacePage) {
   const initial = await page.evaluate(routeLoadProbe);
   const networkChanges = errors.filter((entry) => /net::ERR_NETWORK_CHANGED\b/.test(entry)).length;
   if (!initial?.failed) return { loaded: true, retried: false, networkChanges };
   if (navigationRetried || networkChanges === 0 || httpErrors.length > 0) return { loaded: false, retried: false, initial, networkChanges, httpErrors: [...httpErrors] };
-  // Same-address reload is the bounded equivalent of the visible user retry. Keep the original error in the report.
+  // Retry the same address once, with a clean tab when provided. Keep the original error in the report.
   try {
+    if (replacePage) page = await replacePage(initial);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    assertWalkAuthenticated(page.url());
     await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
     await page.waitForTimeout(3_000);
     const final = await page.evaluate(routeLoadProbe);
     return { loaded: !final?.failed, retried: true, initial, final, networkChanges, httpErrors: [...httpErrors] };
   } catch (error) {
-    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error).slice(0, 160), httpErrors: [...httpErrors] };
+    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error), retryStack: error instanceof Error ? error.stack : null, httpErrors: [...httpErrors] };
   }
 }
 
@@ -3306,15 +3333,23 @@ async function main() {
     }
     /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
-    const page = await context.newPage();
-    // A row that opens a link in a new tab has shown something: the tab is
-    // counted and closed.
+    let page;
     const popups = { count: 0 };
-    page.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
     const consoleErrors = {};
     const httpErrors = {};
-    page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
-    page.on("response", (response) => { if (response.status() >= 400) (httpErrors[current] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+    const requestFailures = {};
+    const installObservers = (tab) => {
+      const view = current;
+      tab.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
+      tab.on("console", (message) => { if (message.type() === "error") (consoleErrors[view] ||= []).push(message.text().slice(0, 160)); });
+      tab.on("response", (response) => { if (response.status() >= 400) (httpErrors[view] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+      tab.on("requestfailed", (request) => { (requestFailures[view] ||= []).push({ method: request.method(), url: request.url().split("?")[0], error: request.failure()?.errorText ?? "unknown" }); });
+    };
+    const freshPage = async (viewport) => {
+      page = await replaceWalkPage(context, page, installObservers);
+      await page.setViewportSize(viewport);
+      return page;
+    };
     // An open tab after a release asks for a page chunk the new image no
     // longer has (2026-09-23 plan §2.1). Played here by refusing the inbox's
     // chunk to a fresh page and navigating to it in place: the sidebar must
@@ -3351,25 +3386,40 @@ async function main() {
       }
     }
     for (const [viewportName, viewport] of VIEWPORTS) {
-      await page.setViewportSize(viewport);
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
+        let phase = "navigation";
+        const navigationFailures = [];
         try {
+          await freshPage(viewport);
           let navigationRetried = false;
-          await navigateForWalk(page, `${base}${route}`, () => { navigationRetried = true; report.info.push(`${current}: retried once after Chromium reported a host network change`); });
+          await navigateForWalk(page, `${base}${route}`, async (error) => {
+            navigationRetried = true;
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "navigation-initial", error, requestFailures[current]));
+            report.info.push(`${current}: retried once on a clean tab after Chromium reported a host network change; initial failure retained`);
+            return freshPage(viewport);
+          });
+          assertWalkAuthenticated(page.url());
+          phase = "route-ready";
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+          assertWalkAuthenticated(page.url());
           await page.waitForTimeout(3_000);
-          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried);
+          phase = "route-load";
+          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried, async (initial) => {
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "read-initial", new Error(initial.message ?? "failed read"), requestFailures[current]));
+            return freshPage(viewport);
+          });
           if (!routeLoad.loaded) {
-            report.pages[current] = { route, routeLoad, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
-            await page.screenshot({ path: path.join(out, `${current}.load-error.jpg`), type: "jpeg", quality: CAPTURE_QUALITY });
+            report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+            report.pages[current].diagnostic = await walkFailureDiagnostics(page, out, current, phase, new Error(routeLoad.retryError ?? routeLoad.initial?.message ?? "failed read"), requestFailures[current]);
             failures.push(`${current}: route load failed (${routeLoad.initial?.message ?? "failed read"}); composition was not judged`);
             continue;
           }
           if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
+          phase = "measurement";
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
-          report.pages[current] = { route, routeLoad, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
+          report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
           const verdict = pageFindings(name, viewportName, measured, refusals);
@@ -3436,6 +3486,7 @@ async function main() {
             const where = await page.evaluate(() => location.pathname);
             if (!clicked || where !== record.to) failures.push(`${current}: ${record.back} ${clicked ? `goes to ${where}` : "is not on the page"} (${record.to})`);
           }
+          phase = "row-interactions";
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
             // Read-only by construction: a row's title opens a drawer, a page or itself; the pages new to the walk in R13 also have
             // every request that is not a read refused in the browser while their row is clicked (`walkRowClicks`).
@@ -3469,12 +3520,19 @@ async function main() {
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
         } catch (error) {
-          failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
+          const diagnostic = await walkFailureDiagnostics(page, out, current, phase, error, requestFailures[current]);
+          report.pages[current] = { ...report.pages[current], route, navigationFailures, diagnostic,
+            consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+          failures.push(`${current}: did not load [${phase}] (${String(error).slice(0, 300)})`);
+        } finally {
+          await page?.close().catch(() => {});
+          page = undefined;
         }
       }
       if (found.matrix) {
         // A finished package's evidence matrix, read at this width (R11); it is a page of the run's own files, found from the run list.
         current = `evidence-matrix@${viewportName}`;
+        await freshPage(viewport);
         await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
       }
     }
@@ -3485,8 +3543,8 @@ async function main() {
     report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
-    await page.setViewportSize(VIEWPORTS[0][1]);
     current = "address@desktop";
+    await freshPage(VIEWPORTS[0][1]);
     if (!setting.only.length) await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
     const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
     if (setting.only.length) { /* a partial walk takes no step that is not about a page it was asked for */ }
@@ -3494,8 +3552,8 @@ async function main() {
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
+      await freshPage(VIEWPORTS[0][1]);
       allowRuntimeStart = true;
-      await page.setViewportSize(VIEWPORTS[0][1]);
       const kernelMisses = [];
       page.on("response", (response) => {
         if (response.status() >= 400 && /\/__evimed\/[ka]\//.test(new URL(response.url()).pathname)) {
