@@ -1,3 +1,4 @@
+2026-10-20 12:41 · Global home and addressed conversation project scope passed specification and independent TypeScript review, including Back/Forward and foreign-project checks; deployment and live navigation acceptance remain pending.
 2026-10-20 12:31 · Staging permission regression passed all six Linux root tests, including real service UIDs; VCR acceptance exposed a succeeded job with missing patient-page records and calibration, so result linkage remains open.
 2026-10-20 12:20 · Verified deferred frontier programme/decision and five daily notices; reclaimed 2,911,936,512 bytes from exact owned transport caches and two unused D612 Web images while preserving current data, backups and proofs.
 2026-10-20 10:10 · Reopened home/VCR/method/intake usability acceptance from the October 20 owner screenshots; consolidated a researched task-oriented backlog, preserved the 744 deployment evidence and explicitly retained unfinished live/release checks.
