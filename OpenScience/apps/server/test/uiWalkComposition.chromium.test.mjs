@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage, verifyCompactWorkflowViews, memoryReady, addressProbe, addressStateFindings, ADDRESS_CASES, moduleViewLabels, verifyModuleNavigation, walkMemoryMap, moduleReady, waitMemory, moduleResultProbe, readModuleResult, moduleViewAddressHolds } from "../../../scripts/ops/ui-walk.mjs";
+import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage, verifyCompactWorkflowViews, memoryReady, addressProbe, addressStateFindings, ADDRESS_CASES, moduleViewLabels, verifyModuleNavigation, walkMemoryMap, moduleReady, waitMemory, moduleResultProbe, readModuleResult, moduleViewAddressHolds, walkCalculationTaskFamily, rowClickShown, calculationFamilyMethodIds } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -527,4 +527,70 @@ test("the declared method workbench requires its Run bar and named primary even 
       assert.deepEqual(textOf(optional, "primary-action"), [], "ordinary pages retain optional primary actions");
     }
   }
+});
+
+
+function calculationTaskFixture(defect = "") {
+  const family = ["consolidated", "raw-patient-id"].includes(defect) ? "模拟患者结局" : "查看数据与构建人群";
+  const methodId = defect === "wrong-family" ? "mth_comparator" : defect === "unknown-method" ? "mth_unknown" : defect === "consolidated" ? "patient-outcomes" : defect === "raw-patient-id" ? "mth_binary" : "mth_fixture";
+  const list = `<div data-vcr-method-catalogue><ul aria-label="${defect === "wrong-list" ? "其他任务" : family}"><li><button data-vcr-method="${methodId}" onclick="openMethod()">方法一</button></li>${defect === "wrong-family-tail" ? '<li><button data-vcr-method="mth_comparator" onclick="openMethod()">Wrong-family method</button></li>' : ""}</ul></div>`;
+  return `<meta charset="utf-8"><main><div data-page-chrome><button aria-label="计算任务：全部">全部</button></div><ul aria-label="选择计算任务"><li><button data-row-title onclick="choose()">${family}</button></li></ul><div id="methods"></div><div id="pane"></div></main><script>
+    function choose(){${defect === "no-op" ? "return;" : ""}globalThis.document.querySelector('[data-page-chrome] button').setAttribute('aria-label',${JSON.stringify(`计算任务：${family}`)});globalThis.document.querySelector('ul[aria-label="选择计算任务"]').remove();globalThis.document.querySelector('#methods').innerHTML=${JSON.stringify(list)}}
+    function openMethod(){${defect === "dead-method" ? "return;" : ""}history.pushState({},'',${JSON.stringify(`/app/capabilities/methods/${defect === "wrong-method" ? "mth_wrong" : methodId}?study=${defect === "wrong-study" ? "study-foreign" : "study-a"}`)});globalThis.document.querySelector('#pane').innerHTML='<section data-vcr-method-workbench>Configuration and result</section>'}
+  </script>`;
+}
+
+const taskCatalogue = { methods: [
+  { id: "mth_fixture", method: "profile.snapshot", name: "Profile" },
+  { id: "mth_comparator", method: "comparator.evalue", name: "E-value" },
+  ...["binary", "continuous", "time_to_event", "longitudinal"].map(mode => ({ id: `mth_${mode}`, method: `patients.${mode}`, name: mode })),
+] };
+const taskRoute = (defect) => (route) => new URL(route.request().url()).pathname === "/api/vcr/models"
+  ? route.fulfill({ json: { data: taskCatalogue } }) : route.fulfill({ contentType: "text/html; charset=utf-8", body: calculationTaskFixture(defect) });
+
+test("calculation task rows must choose their matching methods and open the exact method in the same study", { skip }, async () => {
+  for (const defect of ["", "no-op", "wrong-list", "wrong-study", "wrong-method", "dead-method"]) {
+    await page.route("http://task.walk/**", taskRoute(defect));
+    await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+    if (!defect) {
+      const result = await walkCalculationTaskFamily(page, { timeout: 500 });
+      assert.equal(result.family, "查看数据与构建人群");
+      assert.deepEqual(result.methodIds, ["mth_fixture"]);
+      assert.equal(result.address, "/app/capabilities/methods/mth_fixture?study=study-a");
+    } else await assert.rejects(walkCalculationTaskFamily(page, { timeout: 200 }), /matching method list|exact method and study destination/);
+    await page.unroute("http://task.walk/**");
+  }
+  assert.equal(rowClickShown({ dialog: false, path: "/list", expanded: 0 }, { dialog: false, path: "/list", expanded: 0 }, 0), false, "generic inert record rows remain failures");
+});
+
+test("discovery and calculation workspaces have separate width families while genuine list siblings still align", { skip }, async () => {
+  const html = framed({ band: toolbar(), body: section(rows(2)) });
+  const narrow = html.replace("header{height:60px;padding:24px 296px 0}", "header{height:60px;padding:24px 376px 0}");
+  const discovery = (await compose(narrow, { name: "capabilities" })).facts;
+  const calculation = (await compose(html, { name: "calculation-history" })).facts;
+  assert.equal(discovery.title.left - calculation.title.left, 80);
+  assert.deepEqual(familyFindings({ "capabilities@desktop": { composition: discovery }, "calculation-history@desktop": { composition: calculation } }), []);
+  assert.ok(familyFindings({ "files@desktop": { composition: discovery }, "knowledge-pages@desktop": { composition: calculation } }).some(entry => entry.rule === "left-edge"));
+});
+
+
+test("correctly named task lists reject working methods from another semantic family, including a wrong second method", { skip }, async () => {
+  for (const defect of ["wrong-family", "wrong-family-tail", "unknown-method", "raw-patient-id", "consolidated"]) {
+    await page.route("http://task.walk/**", taskRoute(defect));
+    await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+    if (defect === "consolidated") {
+      const result = await walkCalculationTaskFamily(page, { timeout: 500 });
+      assert.deepEqual(result.methodIds, ["patient-outcomes"]);
+      assert.equal(result.address, "/app/capabilities/methods/patient-outcomes?study=study-a");
+    } else await assert.rejects(walkCalculationTaskFamily(page, { timeout: 200 }), /unknown or wrong-family catalogue methods/);
+    await page.unroute("http://task.walk/**");
+  }
+  await page.route("http://task.walk/**", route => new URL(route.request().url()).pathname === "/api/vcr/models"
+    ? route.fulfill({ status: 401, json: { error: "authentication required" } }) : route.fulfill({ contentType: "text/html; charset=utf-8", body: calculationTaskFixture() }));
+  await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+  await assert.rejects(walkCalculationTaskFamily(page), /catalogue could not be read \(HTTP 401\)/);
+  await page.unroute("http://task.walk/**");
+  assert.deepEqual(calculationFamilyMethodIds(taskCatalogue, "查看数据与构建人群"), ["mth_fixture"]);
+  assert.ok(calculationFamilyMethodIds(taskCatalogue, "稳健性分析").includes("mth_comparator"));
+  assert.deepEqual(calculationFamilyMethodIds(taskCatalogue, "模拟患者结局").filter(id => id.startsWith("patient")), ["patient-outcomes"]);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes the walk's two tables into scripts/ops/ui-walk.mjs (R19, plan §3 S9).
+ * Writes the walk's tables and canonical method-grouping helpers into scripts/ops/ui-walk.mjs (R19, plan §3 S9).
  *
  * `page-templates.json` (the pages the walk visits, their template and budgets) and `ui-walk-baseline.json` (what the walk accepts for
  * now, with an owner and a deadline) are the editable sources; the third table is generated from the domain: the sentences of the error
@@ -8,7 +8,7 @@
  * mounted, ui-walk.mjs, and `rewalk.sh` is given a candidate walk file the same way, so a table the walk reads at run time has to be in
  * that file. This script writes the copy between two marker lines, in the layout `formatTables` gives it (one view or entry per line, so a
  * change to a table is a change of lines and not of one long one), and `--check` says whether the copy is the sources. A test holds the two
- * equal (apps/server/test/uiWalkBaseline.test.mjs) and the walk's own unit tests read the sources, so editing only the copy cannot pass.
+ * equal, including the compiled frontend method-grouping source (apps/server/test/uiWalkBaseline.test.mjs) and the walk's own unit tests read the sources, so editing only the copy cannot pass.
  *
  *   node scripts/ops/embed-walk-tables.mjs           # write the copy
  *   node scripts/ops/embed-walk-tables.mjs --check   # exit 1 when the copy in the walk is not the sources
@@ -16,6 +16,9 @@
  * Build to delete: when the release switch mounts the directory (or both files) and `rewalk.sh` copies them, the markers and this script
  * go and the walk reads the files beside it.
  */
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { VCR_LONGITUDINAL_METHODS } from "../../packages/domain/src/vcrLongitudinal.mjs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,11 +65,34 @@ export function operatorSentences() {
 }
 
 /**
- * The text that goes between the markers.
+ * Compile the product's own grouping helpers only at build time; the standalone walk has no compiler or taxonomy fork.
+ */
+export function methodGroupingSource() {
+  const ts = createRequire(path.join(root, "apps/web/package.json"))("typescript");
+  const file = path.join(root, "apps/web/src/lib/vcrMethodDisplay.ts");
+  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const required = new Set(["METHOD_FAMILIES", "PATIENT_MODES", "ROBUSTNESS", "FORECAST_TITLES", "methodTask", "methodEntryId", "methodEntries", "completeMethodCatalogue"]);
+  const picked = [];
+  for (const statement of source.statements) {
+    const names = ts.isFunctionDeclaration(statement) ? [statement.name?.text]
+      : ts.isVariableStatement(statement) ? statement.declarationList.declarations.map(declaration => declaration.name.getText(source)) : [];
+    if (names.some(name => required.has(name))) {
+      picked.push(statement.getFullText(source));
+      for (const name of names) required.delete(name);
+    }
+  }
+  if (required.size) throw new Error(`the walk cannot derive canonical method grouping: ${[...required].join(", ")}`);
+  const compiled = ts.transpileModule(picked.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText.trim();
+  return ["// Canonical frontend grouping, compiled at build time from vcrMethodDisplay.ts; never a hand-maintained taxonomy.",
+    "const WALK_METHOD_GROUPING = (() => {", "const exports = {};", `const VCR_LONGITUDINAL_METHODS = ${JSON.stringify(VCR_LONGITUDINAL_METHODS)};`,
+    compiled, "return exports;", "})();"].join("\n");
+}
+
+/** The text between the markers, regenerated from every canonical source.
  * @param {unknown} pageTemplates @param {unknown} baseline @param {string[]} sentences
  */
 export function embeddedBlock(pageTemplates, baseline, sentences) {
-  return [BEGIN, `const WALK_TABLES = ${formatTables({ pageTemplates, baseline, operatorSentences: sentences })};`, END].join("\n");
+  return [BEGIN, `const WALK_TABLES = ${formatTables({ pageTemplates, baseline, operatorSentences: sentences })};`, methodGroupingSource(), END].join("\n");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

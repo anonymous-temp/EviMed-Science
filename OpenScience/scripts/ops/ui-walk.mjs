@@ -191,7 +191,7 @@ const WALK_TABLES = {
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
-      {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"capabilities","template":"T1","rows":true},
+      {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
@@ -401,6 +401,50 @@ const WALK_TABLES = {
     "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
   ]
 };
+// Canonical frontend grouping, compiled at build time from vcrMethodDisplay.ts; never a hand-maintained taxonomy.
+const WALK_METHOD_GROUPING = (() => {
+const exports = {};
+const VCR_LONGITUDINAL_METHODS = {"forecast.trajectories":{"version":"1.0.0","modelTier":null},"forecast.evaluate":{"version":"1.1.0","modelTier":null},"forecast.compare":{"version":"1.1.0","modelTier":null},"forecast.trial_benchmark":{"version":"1.0.0","modelTier":null}};
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.METHOD_FAMILIES = void 0;
+exports.methodTask = methodTask;
+exports.methodEntryId = methodEntryId;
+exports.methodEntries = methodEntries;
+exports.completeMethodCatalogue = completeMethodCatalogue;
+exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"];
+const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
+const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
+function methodTask(method) {
+    if (/^(profile|cohort|population)\./.test(method))
+        return exports.METHOD_FAMILIES[0];
+    if (method.startsWith("patients.") || method === "forecast.trajectories")
+        return exports.METHOD_FAMILIES[1];
+    if (method.startsWith("evidence."))
+        return exports.METHOD_FAMILIES[2];
+    if (/^(accrual|matching)\./.test(method))
+        return exports.METHOD_FAMILIES[6];
+    if (ROBUSTNESS.includes(method))
+        return exports.METHOD_FAMILIES[5];
+    if (method.startsWith("comparator."))
+        return exports.METHOD_FAMILIES[3];
+    if (method.startsWith("design."))
+        return exports.METHOD_FAMILIES[4];
+    return "其他方法";
+}
+function methodEntryId(method) { return PATIENT_MODES.includes(method.method ?? method.id) ? "patient-outcomes" : method.id; }
+function methodEntries(methods) {
+    const seen = new Set();
+    return methods.filter(method => { const id = methodEntryId(method); if (seen.has(id))
+        return false; seen.add(id); return true; });
+}
+const FORECAST_TITLES = { "forecast.trajectories": "预测后续轨迹", "forecast.evaluate": "验证预测与后续结局", "forecast.compare": "比较预测版本", "forecast.trial_benchmark": "验证试验效果预测" };
+/** The domain owns these four protocols; an older server catalogue can omit rows, never their identity. Availability is checked against each study's actual inputs. */
+function completeMethodCatalogue(methods) {
+    return [...methods, ...Object.entries(VCR_LONGITUDINAL_METHODS).filter(([id]) => !methods.some(row => (row.method ?? row.id) === id)).map(([id, protocol]) => ({ id, method: id, name: FORECAST_TITLES[id], version: protocol.version }))];
+}
+return exports;
+})();
 // END EMBEDDED WALK TABLES
 
 /** The page table: every view the walk visits with its template, budgets and the kinds of check it is held to. @type {any} */
@@ -3284,6 +3328,68 @@ export function knowledgeReturnFindings(title, read) {
   return { failures, notices };
 }
 
+/** The calculation catalogue first chooses a task family, then displays its methods. This is filtering, not a drawer.
+ * Kept separate from the generic row verdict so an unrelated state change cannot certify an inert record row.
+ */
+export function calculationTaskFamilyReady(family) {
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  const main = document.querySelector("main");
+  if (!main) return false;
+  const selected = [...main.querySelectorAll("[data-page-chrome] button[aria-label]")].some((el) => visible(el) && el.getAttribute("aria-label") === `计算任务：${family}`);
+  const chooser = [...main.querySelectorAll("ul[aria-label='选择计算任务']")].some(visible);
+  const lists = [...main.querySelectorAll("[data-vcr-method-catalogue] ul[aria-label]")].filter(visible);
+  return selected && !chooser && lists.length === 1 && lists[0].getAttribute("aria-label") === family
+    && [...lists[0].querySelectorAll("[data-vcr-method]")].some((el) => visible(el) && Boolean(el.getAttribute("data-vcr-method")));
+}
+
+/** Authenticated same-origin catalogue read, serialized independently like every browser probe. */
+export async function calculationMethodCatalogueProbe() {
+  const response = await fetch("/api/vcr/models", { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`calculation task catalogue could not be read (HTTP ${response.status})`);
+  return (await response.json())?.data;
+}
+
+/** Derive displayed identities from the authenticated catalogue using the product's embedded, source-checked grouping helpers. */
+export function calculationFamilyMethodIds(catalogue, family) {
+  if (!Array.isArray(catalogue?.methods)) throw new Error("calculation task catalogue has no readable methods");
+  const complete = WALK_METHOD_GROUPING.completeMethodCatalogue(catalogue.methods);
+  const entries = WALK_METHOD_GROUPING.methodEntries(complete);
+  return entries.filter(method => WALK_METHOD_GROUPING.methodTask(method.method ?? method.id) === family).map(WALK_METHOD_GROUPING.methodEntryId);
+}
+
+/** Actually select a task, read its matching method list, and open its first method in this calculation's scope. */
+export async function walkCalculationTaskFamily(page, { timeout = 15_000 } = {}) {
+  const initial = new URL(page.url());
+  const match = /^\/app\/capabilities\/calculations\/([^/]+)\/?$/u.exec(initial.pathname);
+  if (!match) throw new Error("calculation task selection has no calculation workspace identity");
+  const chooser = page.getByRole("list", { name: "选择计算任务", exact: true });
+  const control = chooser.locator("button[data-row-title]").first();
+  const family = (await control.innerText()).trim();
+  if (!family) throw new Error("calculation task selection has no named task");
+  const catalogue = await page.evaluate(calculationMethodCatalogueProbe);
+  const allowed = new Set(calculationFamilyMethodIds(catalogue, family));
+  if (allowed.size === 0) throw new Error(`calculation task ${family} has no declared catalogue methods`);
+  await control.click();
+  await page.waitForFunction(calculationTaskFamilyReady, family, { timeout }).catch((cause) => {
+    throw new Error(`calculation task ${family} did not produce its matching method list and selected filter`, { cause });
+  });
+  if (new URL(page.url()).pathname !== initial.pathname) throw new Error("calculation task selection left its calculation workspace");
+  const methods = page.getByRole("list", { name: family, exact: true }).locator("[data-vcr-method]");
+  const methodIds = await methods.evaluateAll((items) => items.map((item) => item.getAttribute("data-vcr-method")));
+  const method = methodIds[0];
+  if (!method || new Set(methodIds).size !== methodIds.length) throw new Error("calculation task methods have no distinct identities");
+  const unexpected = methodIds.filter(id => !allowed.has(id));
+  if (unexpected.length) throw new Error(`calculation task ${family} lists unknown or wrong-family catalogue methods: ${unexpected.join(", ")}`);
+  await methods.first().click();
+  const expected = `/app/capabilities/methods/${encodeURIComponent(method)}`;
+  await page.waitForFunction(({ origin, path, study }) => location.origin === origin && location.pathname === path && new URLSearchParams(location.search).get("study") === study,
+    { origin: initial.origin, path: expected, study: decodeURIComponent(match[1]) }, { timeout }).catch((cause) => {
+    throw new Error("calculation task method did not open its exact method and study destination", { cause });
+  });
+  await page.locator("[data-vcr-method-workbench]").waitFor({ state: "visible", timeout });
+  return { family, methodIds, method, studyId: decodeURIComponent(match[1]), address: new URL(page.url()).pathname + new URL(page.url()).search };
+}
+
 /**
  * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`. The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
  * behind a guard that refuses every request that is not a read, so the walk's clicks write nothing even where a row marks itself read on
@@ -3321,6 +3427,11 @@ async function walkRowClicks(page, base, route, name, popups) {
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
       await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
+      if (name === "calculation-history" && labels[index] === "选择计算任务") {
+        const task = await walkCalculationTaskFamily(page);
+        rows.push({ label: labels[index], shown: true, after: { kind: "calculation-task-family", ...task } });
+        continue;
+      }
       const external = await page.evaluate(rowProbe, ["external", labels[index]]);
       popups.count = 0;
       await page.evaluate(rowProbe, ["click", labels[index]]);
