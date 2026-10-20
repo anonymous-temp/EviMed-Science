@@ -3261,6 +3261,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // that one's private state.
   const preStopTranscripts = new PreStopTranscripts();
   const runtimeManager = runtimeManagerFactory(config, {
+    // The read fence releases its admission lock before a boot while keeping
+    // an enclosing plugin transaction and its owned connection intact.
+    runtimeCreationMutation: async operation => {
+      if (!maintenanceService) return operation();
+      const release = await maintenanceService.admitMutation();
+      try { return await operation(); } finally { release(); }
+    },
     agentRegistry,
     recordRuntimeEgressDispatch: (project, runId, at) => agentRuns?.recordRuntimeEgressDispatch(project, runId, at),
     readRuntimeEgressRun: async (project, runId) => {
