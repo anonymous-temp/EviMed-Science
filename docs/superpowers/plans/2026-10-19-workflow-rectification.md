@@ -307,6 +307,8 @@ The maintained production walk completed 132 views with one genuine control-styl
 
 A separate October 21 background evidence run retained a real, parseable 30-claim matrix but ended without its own submission receipt. Its files remain unverified and its programme outcome remains incomplete. This is distinct from the repaired oversized-review capture defect: do not invent a receipt or publish observed files as verified research. Daily/weekly feed production, admitted feeds and authored synthesis revisions remain separately observable.
 
+Release checkpoint (October 21, 11:45): full Linux push run `39529240424` for `d1b6d123124a` passed its Web and numerical jobs but failed the actual hosted runtime smoke with `Preset services require isolate realms: evimedNativeRoute`. The canonical agent preset and generated patch now isolate this service in the existing shared core realm. A same-class regression checks every agent plugin's provided service against its inherited isolation map. Fifteen focused socket tests, socket lint/checkJs and a real pinned-kernel registry probe pass; the probe reproduces the old refusal and resolves the repaired definition without leaked services. Generic, JavaScript and security reviews approve. Runs `39535734685` and `39535818702` for `2e63a231e756` were canceled because they contained the same known startup defect; neither canceled run qualifies a release. Serving `470a91cf00a7` remains unchanged. Fresh Web/runtime artifacts, complete runtime smoke and the remaining ordinary-account journeys are required before final acceptance.
+
 ### Acceptance order and preservation contract
 
 1. Validate the global-home/project/tool information architecture with concrete page states and one complete research-start journey.
