@@ -899,9 +899,9 @@ describe("匹配与招募 — the other three views", () => {
   });
 
   // UI-25: the band is named, and its level is the data's, never hard-coded.
-  it("names the forecast band with the level the data carries", async () => {
+  it.each([1, 90, 99.5])("names the forecast band with the level %s the data carries", async (level) => {
     const payload = fixture("ev201/matching-referral.json");
-    payload.forecast.rows[0].value.interval.level = 90;
+    payload.forecast.rows[0].value.interval.level = level;
     payload.forecast.median = [{ x: 0, y: 0 }, { x: 12, y: 60 }];
     payload.forecast.band = [{ x: 0, low: 0, high: 0 }, { x: 12, low: 50, high: 70 }];
     server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=referral&direction=trial_to_patient`]: payload });
@@ -909,7 +909,7 @@ describe("匹配与招募 — the other three views", () => {
     await screen.findByRole("heading", { name: "P-0201" });
     await userEvent.click(screen.getByRole("button", { name: "转诊" }));
     expect(await screen.findByText("入组预测与实际")).toBeInTheDocument();
-    expect(screen.getByText("预测中位与90% 预测区间")).toBeInTheDocument();
+    expect(screen.getByText(`预测中位与${level}% 预测区间`)).toBeInTheDocument();
     expect(screen.queryByText(/80% 预测区间/)).toBeNull();
     expect(screen.getByText(/预测中位与预测区间是模型输出/)).toBeInTheDocument();
   });

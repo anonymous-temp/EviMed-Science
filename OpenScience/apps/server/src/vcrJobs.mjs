@@ -677,9 +677,12 @@ export class VcrJobs {
     const row = await this.store.transaction(async (client) => {
       // A distinct request must reserve against the same locked study budget
       // as every other enqueue and confirmation, before its job becomes visible.
-      const study = (await client.query(`SELECT budget FROM ${VCR_SCHEMA}.studies
+      const study = (await client.query(`SELECT budget, status FROM ${VCR_SCHEMA}.studies
         WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [studyId])).rows[0];
       if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+      if (!["draft", "active"].includes(study.status)) {
+        throw new HttpError(409, "vcr_study_paused", "This study is paused or archived.");
+      }
       // A job needs a person only when it could not run even if nothing else were going on: its ceiling is more than
       // the study has not yet spent. What other queued jobs might cost is not spent, and is checked when each is handed to the engine.
       const standing = await this.#cpuStanding(client, studyId);
@@ -934,7 +937,8 @@ export class VcrJobs {
    * Take up to `limit` queued jobs, honouring the deployment's global
    * concurrency. `FOR UPDATE SKIP LOCKED`, so two control planes never take the
    * same row, and an advisory lock around the count-and-claim so two of them
-   * never *count* the same free slot either. A job of a paused study waits; a
+   * never *count* the same free slot either. Explicit jobs may run in an editable
+   * draft without activating its programme; paused and archived studies wait. A
    * job another worker held that has run out of attempts is failed by name
    * rather than run again.
    * @param {{ workerId?: string, leaseMs?: number, limit?: number }} [options]
@@ -963,7 +967,7 @@ export class VcrJobs {
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
       const picked = await client.query(`SELECT j.id FROM ${VCR_SCHEMA}.jobs j
-        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status = 'active'
+        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status IN ('draft', 'active')
         WHERE ($2::text IS NULL OR j.id=$2) AND ((j.state = 'queued' AND j.run_after <= now())
            OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts))
         ORDER BY CASE WHEN j.state='running' OR j.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,

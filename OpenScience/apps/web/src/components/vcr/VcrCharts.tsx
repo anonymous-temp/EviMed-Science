@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { Tag } from "@/components/ui/Tag";
 import type { VcrCurve, VcrIntervalKind, VcrSeries, VcrValueSource } from "@/lib/vcrClient";
 import { markKindOf, SeriesLegend, seriesColor } from "./VcrMarks";
-import { intervalLabel } from "./vcrText";
+import { intervalLabel, intervalLevelText } from "./vcrText";
 import { bandPath, linePath, posX, posY, scaleOf, spanRect, stepPath, type Point, type VcrScale } from "./vcrScale";
 
 /**
@@ -61,7 +61,7 @@ export function strokeOf(series: { source: VcrValueSource | null | undefined; da
 export function bandName(kind: VcrIntervalKind | null | undefined, level?: number | null): string {
   const name = intervalLabel(kind);
   if (!name) return "";
-  return typeof level === "number" && Number.isFinite(level) ? `${level}% ${name}` : name;
+  return `${intervalLevelText(level)}${name}`;
 }
 
 /** The server may say what level a band is; the page never assumes one. */

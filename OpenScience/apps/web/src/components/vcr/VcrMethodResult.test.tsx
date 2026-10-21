@@ -83,3 +83,16 @@ it("keeps entirely failed grid cells visible and never echoes an unknown refusal
   render(<VcrMethodResultCharts method="design.grid" result={{ id: "grid_failed", kind: "design_grid", diagnostics: { cellsPlanned: 2, cells: [{ designIndex: 1, truthIndex: 1, status: "failed", refusal: "/private/operator/source-secret.txt", measures: [] }] } }} />);
   const table = screen.getByRole("table", { name: "设计网格单元状态" }); expect(table).toHaveTextContent("未完成"); expect(table).toHaveTextContent("此单元未满足方法计算条件，请核对设计和输入后重试。"); expect(document.body.textContent).not.toContain("source-secret"); expect(screen.queryByRole("columnheader", { name: /I 类错误/ })).toBeNull();
 });
+
+it("displays retained engine MAIC intervals and labels without mutating the result", async () => {
+  const raw = { jobId: "maic", result: { id: "retained", kind: "comparator", measures: [{ name: "hazard_ratio_robust", label: "hazard_ratio_robust", value: 0.81, interval: { kind: "confidence", low: 0.61, high: 0.99, level: 0.95 } }, { name: "ph_test_p", value: 0.0123 }, { name: "custom", label: "β₁ (mg/L)", value: 2 }] }, records: { available: false } };
+  const snapshot = JSON.stringify(raw);
+  api.getVcrMethodResult.mockResolvedValue(raw);
+  render(<VcrMethodResult studyId="study_1" job={{ id: "maic", kind: "maic", state: "succeeded" }} />);
+  expect(await screen.findByRole("rowheader", { name: "风险比（稳健方差）" })).toBeVisible();
+  expect(screen.getByRole("rowheader", { name: "等比例风险检验 P 值" })).toBeVisible();
+  expect(screen.getByRole("rowheader", { name: "β₁ (mg/L)" })).toBeVisible();
+  expect(screen.getAllByText(/95% 置信区间/).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/1% 置信区间/)).not.toBeInTheDocument();
+  expect(JSON.stringify(raw)).toBe(snapshot);
+});
