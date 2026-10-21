@@ -96,3 +96,14 @@ it("displays retained engine MAIC intervals and labels without mutating the resu
   expect(screen.queryByText(/1% 置信区间/)).not.toBeInTheDocument();
   expect(JSON.stringify(raw)).toBe(snapshot);
 });
+
+
+it("names the engine E-value measures while preserving authored labels and retained numbers", async () => {
+  const measures = [{ name: "e_value", value: 2.61 }, { name: "e_value_confidence_limit", value: 1.8 }, { name: "evalue", label: "作者指定指标", value: 3.2 }];
+  const before = structuredClone(measures);
+  api.getVcrMethodResult.mockResolvedValue({ result: { id: "evalue_result", kind: "comparator", conclusion: "limited", measures }, execution: { method: "comparator.evalue" }, records: { available: false } });
+  render(<VcrMethodResult studyId="study_1" job={{ id: "evalue_job", kind: "evalue", state: "succeeded" }} />);
+  const table = await screen.findByRole("table", { name: "本次计算指标" });
+  expect(table).toHaveTextContent("E-value"); expect(table).toHaveTextContent("置信限 E-value"); expect(table).toHaveTextContent("作者指定指标");
+  expect(table).not.toHaveTextContent("e_value"); expect(table).toHaveTextContent("2.61"); expect(measures).toEqual(before);
+});
