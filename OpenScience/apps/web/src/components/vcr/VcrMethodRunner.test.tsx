@@ -326,3 +326,21 @@ it("keeps authoritative provider-specific inputs outside browser persistence whi
   await waitFor(() => expect(api.saveVcrMethodConfiguration).toHaveBeenCalledWith("study_1", expect.objectContaining({ scenario: expect.objectContaining({ scenario: { treatment: "source_owned_marker" }, endpoint: expect.objectContaining({ code: "edited_outcome" }) }) })));
   drafts.clearMethodDrafts();
 });
+
+it("edits the cohort age rule through shared controls and refuses incomplete conditions before any queue request", async () => {
+  const original = VCR_SCENARIO_EXAMPLES["cohort.build"][0].scenario;
+  const preserved = structuredClone(original);
+  render(<MemoryRouter><VcrMethodRunner method={{ id: "cohort", name: "队列筛选", method: "cohort.build" }} initialScenario={structuredClone(original)} initialStudyId="study_1" /></MemoryRouter>);
+  await screen.findByLabelText("Authorized snapshot · 120 行");
+  fireEvent.click(screen.getByLabelText("Authorized snapshot · 120 行"));
+  const age = screen.getAllByLabelText("比较值")[0];
+  expect(age).toHaveValue(18);
+  fireEvent.change(age, { target: { value: "60" } });
+  const run = screen.getByRole("button", { name: "保存配置并运行" });
+  await waitFor(() => expect(run).toBeEnabled());
+  fireEvent.change(age, { target: { value: "" } });
+  expect(run).toBeDisabled(); fireEvent.click(run);
+  expect(api.saveVcrMethodConfiguration).not.toHaveBeenCalled(); expect(api.queueVcrJob).not.toHaveBeenCalled();
+  fireEvent.change(age, { target: { value: "65" } });
+  expect(run).toBeEnabled(); expect(original).toEqual(preserved);
+});

@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { VCR_ROW_RULE_COMPARATORS, VCR_ROW_RULE_OPS, VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, whenHolds } from "@evimed/domain";
+import { VCR_ROW_RULE_COMPARATORS, VCR_ROW_RULE_OPS, VCR_ROW_RULE_LIMITS, validateRowRule, VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, whenHolds } from "@evimed/domain";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
@@ -18,6 +18,7 @@ export function schemaDefault(schema: Schema): unknown {
   if (schema.default !== undefined) return structuredClone(schema.default);
   if (schema.t === "object") return Object.fromEntries(Object.entries(schema.fields ?? {}).filter(([, field]) => field.req && !field.when).map(([key, field]) => [key, schemaDefault(field)]));
   if (schema.t === "array" || schema.t === "matrix" || schema.t === "rules") return [];
+  if (schema.t === "rule") return { op: "compare", column: "", comparator: "gte" };
   if (schema.t === "map") return {};
   if (schema.t === "boolean") return false;
   return "";
@@ -53,6 +54,7 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
     const item: Schema = schema.t === "matrix" ? { t: "array", items: { t: "number", min: schema.min, max: schema.max } } : schema.items ?? { t: "string" };
     return <fieldset className="flex flex-col gap-2 rounded border border-border p-3"><legend>{fieldTitle}</legend>{list.map((entry, index) => <div key={index} className="flex flex-col gap-1"><ScenarioField hiddenFields={hiddenFields} columnOptions={columnOptions} schema={item} value={entry} root={root} title={`${fieldTitle} ${index + 1}`} method={method} path={`${path}[${index}]`} change={(next) => change(list.map((old, at) => at === index ? next : old))} /><Button variant="ghost" size="sm" onClick={() => change(list.filter((_, at) => at !== index))}>移除此项</Button></div>)}<Button variant="secondary" size="sm" disabled={schema.t === "array" && schema.max !== undefined && list.length >= schema.max} onClick={() => change([...list, schemaDefault(item)])}>添加一项</Button></fieldset>;
   }
+  if (schema.t === "rule") return <RowRule columnOptions={columnOptions} value={value} depth={0} change={change} />;
   if (schema.t === "rules") {
     const rows = (Array.isArray(value) ? value : []) as Array<{ name: string; rule: Record<string, unknown> }>;
     return <fieldset className="flex flex-col gap-3"><legend>{fieldTitle}</legend>{rows.map((row, index) => <div className="flex flex-col gap-2" key={index}><Input label="规则名称" value={row.name} onChange={(event) => change(rows.map((old, at) => at === index ? { ...old, name: event.target.value } : old))} /><RowRule columnOptions={columnOptions} value={row.rule} depth={0} change={(rule) => change(rows.map((old, at) => at === index ? { ...old, rule } : old))} /><Button variant="ghost" size="sm" onClick={() => change(rows.filter((_, at) => at !== index))}>移除规则</Button></div>)}<Button variant="secondary" size="sm" onClick={() => change([...rows, { name: "", rule: { op: "compare", column: "", comparator: "gte", value: 0 } }])}>添加规则</Button></fieldset>;
@@ -75,17 +77,35 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
   return <Input label={text.unit ? `${fieldTitle}（${text.unit}）` : fieldTitle} hint={text.hint} value={typeof value === "string" || typeof value === "number" ? value : ""} type={numeric ? "number" : "text"} min={schema.min} max={schema.max} step={schema.t === "integer" ? 1 : "any"} maxLength={schema.maxLength} pattern={schema.pattern} onChange={(event) => change(numeric && event.target.value !== "" ? Number(event.target.value) : event.target.value)} />;
 }
 
-function RowRule({ value, change, depth, columnOptions = [] }: { columnOptions?: readonly { value: string; label: string }[]; value: Record<string, unknown>; change: (rule: Record<string, unknown>) => void; depth: number }) {
-  const op = String(value.op ?? "compare");
-  const numeric = (key: string, title: string) => <Input label={title} type="number" value={typeof value[key] === "number" ? value[key] : ""} onChange={(event) => change({ ...value, [key]: event.target.value === "" ? "" : Number(event.target.value) })} />;
-  return <fieldset className="flex flex-col gap-2 rounded border border-border p-3"><legend>条件</legend>
+/** Edits the domain grammar as data; reading an old rule never rewrites it. */
+function RowRule({ value, change, depth, columnOptions = [] }: { columnOptions?: readonly { value: string; label: string }[]; value: unknown; change: (rule: Record<string, unknown>) => void; depth: number }) {
+  const saved = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const rule: Record<string, unknown> = { op: "compare", ...saved };
+  const op = typeof rule.op === "string" ? rule.op : "compare";
+  const knownOp = VCR_ROW_RULE_OPS.includes(op);
+  const issues = validateRowRule(value);
+  const unsupported = (value !== undefined && (value === null || typeof value !== "object" || Array.isArray(value))) || !knownOp || (saved.op !== undefined && typeof saved.op !== "string")
+    || issues.some(issue => issue.code === "rule_expression_forbidden" || issue.code === "rule_op_unknown" || (issue.code === "rule_shape_invalid" && issue.detail.includes("does not take")))
+    || depth > VCR_ROW_RULE_LIMITS.maxDepth;
+  const reset = () => change({ op: "compare", column: "", comparator: "gte" });
+  if (unsupported) return <fieldset className="flex flex-col gap-2 rounded border border-border p-3"><legend>条件</legend><p role="alert" className="text-ui text-error">已保留原条件，当前无法编辑。请重新配置此条件后再运行。</p><Button size="sm" variant="secondary" onClick={reset}>重新配置条件</Button></fieldset>;
+  const operands = Array.isArray(rule.operands) ? rule.operands : [];
+  const numeric = (key: string, title: string) => <Input label={title} type="number" value={typeof rule[key] === "number" ? rule[key] : ""} onChange={(event) => change({ ...rule, [key]: event.target.value === "" ? "" : Number(event.target.value) })} />;
+  const column = typeof rule.column === "string" ? rule.column : "";
+  return <fieldset className="flex min-w-0 flex-col gap-2 rounded border border-border p-3"><legend>条件</legend>
     <Select label="运算" value={op} onChange={(event) => change({ op: event.target.value })}>{VCR_ROW_RULE_OPS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select>
-    {["all", "any"].includes(op) ? <>{((value.operands ?? []) as Record<string, unknown>[]).map((rule, index, list) => <RowRule columnOptions={columnOptions} key={index} depth={depth + 1} value={rule} change={(next) => change({ ...value, operands: list.map((old, at) => at === index ? next : old) })} />)}<Button size="sm" variant="secondary" disabled={depth >= 7} onClick={() => change({ ...value, operands: [...(value.operands as unknown[] ?? []), { op: "present", column: "" }] })}>添加子条件</Button></>
-      : op === "not" ? depth < 8 && <RowRule columnOptions={columnOptions} value={(value.operand ?? { op: "present" }) as Record<string, unknown>} change={(operand) => change({ ...value, operand })} depth={depth + 1} />
-        : <>{columnOptions.length ? <Select label="数据列" value={String(value.column ?? "")} onChange={event => change({ ...value, column: event.target.value })}><option value="">选择数据列</option>{columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select> : <Input label="数据列" value={String(value.column ?? "")} onChange={(event) => change({ ...value, column: event.target.value })} />}
-          {op === "compare" && <><Select label="比较方式" value={String(value.comparator ?? "")} onChange={(event) => change({ ...value, comparator: event.target.value })}><option value="">请选择</option>{VCR_ROW_RULE_COMPARATORS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select><Select label="比较值类型" value={typeof value.value} onChange={(event) => change({ ...value, value: event.target.value === "number" ? 0 : event.target.value === "boolean" ? false : "" })}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField columnOptions={columnOptions} title="比较值" schema={{ t: typeof value.value === "number" ? "number" : typeof value.value === "boolean" ? "boolean" : "string" }} value={value.value} change={(next) => change({ ...value, value: next })} root={{}} /></>}
+    {["all", "any"].includes(op) ? <>{operands.map((operand, index) => <div key={index} className="flex min-w-0 flex-col gap-2"><RowRule columnOptions={columnOptions} depth={depth + 1} value={operand} change={(next) => change({ ...rule, operands: operands.map((old, at) => at === index ? next : old) })} /><Button size="sm" variant="text" onClick={() => change({ ...rule, operands: operands.filter((_, at) => at !== index) })}>移除子条件</Button></div>)}<Button size="sm" variant="secondary" disabled={depth >= VCR_ROW_RULE_LIMITS.maxDepth || operands.length >= VCR_ROW_RULE_LIMITS.maxOperands} onClick={() => change({ ...rule, operands: [...operands, { op: "present", column: "" }] })}>添加子条件</Button></>
+      : op === "not" ? depth < VCR_ROW_RULE_LIMITS.maxDepth ? <RowRule columnOptions={columnOptions} value={rule.operand} change={(operand) => change({ ...rule, operand })} depth={depth + 1} /> : <p role="alert" className="text-ui text-error">条件嵌套过多，请减少层级后再运行。</p>
+        : <>{columnOptions.length ? <Select label="数据列" value={column} onChange={event => change({ ...rule, column: event.target.value })}><option value="">选择数据列</option>{column && !columnOptions.some(option => option.value === column) && <option value={column}>{column}（请核对数据列）</option>}{columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select> : <Input label="数据列" value={column} onChange={(event) => change({ ...rule, column: event.target.value })} />}
+          {op === "compare" && <><Select label="比较方式" value={String(rule.comparator ?? "")} onChange={(event) => change({ ...rule, comparator: event.target.value })}><option value="">请选择</option>{rule.comparator && !VCR_ROW_RULE_COMPARATORS.includes(String(rule.comparator)) ? <option value={String(rule.comparator)} disabled>原比较方式不可用，请重新选择</option> : null}{VCR_ROW_RULE_COMPARATORS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select><RuleValue title="比较值" value={rule.value} change={next => change({ ...rule, value: next })} /></>}
           {op === "between" && <>{numeric("low", "下限")}{numeric("high", "上限")}</>}
-          {["in", "not_in"].includes(op) && <ScenarioField columnOptions={columnOptions} title="匹配值" schema={{ t: "array", items: { t: "string" } }} value={value.values ?? []} change={(values) => change({ ...value, values })} root={{}} />}
+          {["in", "not_in"].includes(op) && <>{(Array.isArray(rule.values) ? rule.values : []).map((entry, index, list) => <div key={index} className="flex min-w-0 flex-col gap-2"><RuleValue title={`匹配值 ${index + 1}`} value={entry} change={next => change({ ...rule, values: list.map((old, at) => at === index ? next : old) })} /><Button size="sm" variant="text" onClick={() => change({ ...rule, values: list.filter((_, at) => at !== index) })}>移除匹配值</Button></div>)}<Button size="sm" variant="secondary" disabled={Array.isArray(rule.values) && rule.values.length >= VCR_ROW_RULE_LIMITS.maxValues} onClick={() => change({ ...rule, values: [...(Array.isArray(rule.values) ? rule.values : []), ""] })}>添加匹配值</Button></>}
         </>}
+    {depth === 0 && issues.length > 0 && <p role="alert" className="text-ui text-error">请补齐条件的数据列、比较方式与值；组合条件需至少一项有效子条件，再运行。</p>}
   </fieldset>;
+}
+
+function RuleValue({ title, value, change }: { title: string; value: unknown; change: (value: unknown) => void }) {
+  const type = value === undefined || typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string";
+  return <><Select label={`${title}类型`} value={type} onChange={event => change(event.target.value === "number" ? 0 : event.target.value === "boolean" ? false : "")}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField title={title} schema={{ t: type }} value={value} change={next => change(type === "number" && next === "" ? undefined : next)} root={{}} /></>;
 }
