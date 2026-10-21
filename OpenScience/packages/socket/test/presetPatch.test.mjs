@@ -97,3 +97,21 @@ test('every service provided by an agent plugin is isolated in its preset ancest
   }
   assert.ok(found.has('evimedNativeRoute') && found.has('evimedCapsuleMemory') && found.has('evimedCapabilities'), 'the scan covers literal and constant service names')
 })
+
+
+test('the resolved runtime composition retains every canonical preset isolation realm', async () => {
+  const customTags = [{ ...jsTag, tag: 'tag:yaml.org,2002:js' }]
+  const source = parse(await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8'), { customTags })
+  const baseline = parse(await readFile(new URL('../../../deploy/runtime-dsh/dump-config.baseline.json', import.meta.url), 'utf8'), { customTags })
+  const preset = baseline.find((/** @type {any} */ row) => row.id === PRESET_ROW_ID)
+  assert.equal(preset?.config?.id, PRESET_NAME, 'the pinned runtime baseline declares this preset')
+  /** @param {any[]} rows @param {string} [parent] @returns {Record<string,any>} */
+  const isolation = (rows, parent = '') => Object.fromEntries(rows.flatMap(row => {
+    const path = parent ? `${parent}/${row.id}` : row.id
+    return [[path, row.isolate ?? {}], ...Object.entries(Array.isArray(row.config) ? isolation(row.config, path) : {})]
+  }))
+  const canonical = isolation(source)
+  assert.ok(Object.values(canonical).some(realms => realms.evimedNativeRoute === true), 'the canonical service realm was read')
+  assert.deepEqual(isolation(preset.config.plugins), canonical,
+    're-record the complete pinned DSH dump after preset isolation changes, then regenerate runtime-inventory.json')
+})
