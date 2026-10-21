@@ -124,6 +124,9 @@ describe("the study page's header", () => {
     draw();
     const mark = await screen.findByRole("button", { name: "指定研究分析 → 研究设计支持" });
     expect(mark).not.toHaveAttribute("data-tag");
+    expect(mark).toHaveClass("h-sm", "text-ui", "text-warn-strong");
+    expect(mark).not.toHaveClass("text-caption");
+    expect(mark).toHaveAttribute("aria-haspopup", "dialog");
     await userEvent.click(mark);
     const drawer = await screen.findByRole("dialog", { name: "预期用途" });
     expect(within(drawer).getByText("所用模型的可信度层级最多支持“研究设计支持”")).toBeInTheDocument();

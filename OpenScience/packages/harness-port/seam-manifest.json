@@ -33,6 +33,7 @@
     "sessionStart": "agent/created",
     "preStep": "agent/pre-step",
     "promptAssemble": "system-prompt/assemble",
+    "inputClaimed": "agent/inbox/claimed",
     "turnStopping": "agent/turn-stopping",
     "domainChanged": "domain/changed",
     "sessionFlush": "session/flush",

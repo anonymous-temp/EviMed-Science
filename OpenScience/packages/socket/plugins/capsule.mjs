@@ -153,6 +153,14 @@ export async function apply(ctx, config) {
     })))
   }
 
+  // This service reads only the control-plane snapshot authenticated by the
+  // workload gateway. Capsule methods and their prose cannot supply a route.
+  if (config.recallUrl) ctx.provide('evimedNativeRoute', async (/** @type {string} */ sessionId, /** @type {{requestId:string,textDigest:string}[]} */ inputs) => {
+    const response = await callControlPlane(ctx, config, 'handbook-context', { sessionId, inputs })
+    if (!response.ok) throw new Error(response.message)
+    return Array.isArray(response.data?.routes) ? response.data.routes : []
+  }, true)
+
   // Native inputs bypass shell dispatch. Only messages removed from this step's
   // inbox are eligible; a queued future input is never selected from history.
   if (config.recallUrl) {

@@ -1,3 +1,4 @@
+import { normalizeVcrStudyName, vcrStudyNameError } from "@/lib/vcrStudyName";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
@@ -5,7 +6,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { readVcrStudy } from "@/lib/vcrClient";
 import { fixture } from "./__fixtures__/serverFixtures";
 import { WebApiError } from "@/lib/apiClient";
-import { studyBriefKey, readStudyBrief } from "@/lib/vcrStudyBrief";
+import { studyBriefKey, readStudyBrief, studyBriefName } from "@/lib/vcrStudyBrief";
 import { VcrStudyBrief } from "./VcrStudyBrief";
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 const me = vi.hoisted(() => ({ fetchWebMe: vi.fn() }));
@@ -258,4 +259,46 @@ it.each(["confirming", "accepted"])("retains corrupted %s submission identity th
   expect(after?.recovery).toEqual(before?.recovery); expect(after?.missingRemote).toBe(true);
   expect(after?.priorSubmission).toEqual(before?.priorSubmission); expect(after?.remote).toEqual(before?.remote);
   expect(screen.getByRole("button", { name: "开始研究" })).toBeDisabled(); expect(network.productRequest).not.toHaveBeenCalled();
+});
+
+it("derives a bounded default without changing a long question", async () => {
+  const question = "研究".repeat(30) + "🧪";
+  draw(); await userEvent.type(await screen.findByRole("textbox", { name: "研究问题" }), question);
+  await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+  await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies", "POST", { draft: true, name: [...question].slice(0, 40).join(""), question }));
+  expect(screen.getByRole("textbox", { name: "研究问题" })).toHaveValue(question);
+});
+it.each([false, true])("retains an overlong name and blocks mutations until corrected (recovery=%s)", async recovery => {
+  const name = "名".repeat(41);
+  window.localStorage.setItem(studyBriefKey("u1", "t1"), JSON.stringify({ fields: { question: "保留问题", name }, ...(recovery ? { missingRemote: true } : {}) }));
+  draw(); await screen.findByRole("textbox", { name: "研究问题" });
+  expect(screen.getByRole("alert")).toHaveTextContent("最多 40 个字符");
+  expect(screen.getByRole("button", { name: recovery ? "另存为新草稿" : "保存草稿" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "开始研究" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "添加参考材料" })).toBeDisabled();
+  expect(network.productRequest).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByText("补充人群、终点和已有材料（可选）"));
+  const input = screen.getByRole("textbox", { name: "研究名称" });
+  expect(input).toHaveValue(name);
+  await userEvent.clear(input); await userEvent.type(input, "🧪".repeat(40));
+  await userEvent.click(screen.getByRole("button", { name: recovery ? "另存为新草稿" : "保存草稿" }));
+  await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies", "POST", { draft: true, name: "🧪".repeat(40), question: "保留问题" }));
+});
+
+it("blocks data draft creation while retaining an overlong authored name", async () => {
+  const name = "名".repeat(41);
+  window.localStorage.setItem(studyBriefKey("u1", "t1"), JSON.stringify({ fields: { question: "", name } }));
+  const data = vi.fn(); render(<MemoryRouter><VcrStudyBrief onStarted={started} onDataRequested={data} /></MemoryRouter>);
+  const button = await screen.findByRole("button", { name: "保存草稿并接入研究数据" });
+  expect(button).toBeDisabled(); await userEvent.click(button);
+  expect(data).not.toHaveBeenCalled(); expect(network.productRequest).not.toHaveBeenCalled();
+});
+
+it("normalizes internal whitespace in study names while preserving literal backslash-s text", () => {
+  expect(normalizeVcrStudyName("  Study\n\t name   with  spaces ")).toBe("Study name with spaces");
+  const literal = String.raw`Study\ssname`;
+  expect(normalizeVcrStudyName(literal)).toBe(literal);
+  expect(studyBriefName({ question: "unchanged", name: "  Study\n\t name   with  spaces ", population: "", intervention: "", endpoint: "", materials: "", output: "" })).toBe("Study name with spaces");
+  expect(vcrStudyNameError("名".repeat(39) + "\n\t" + "名")).toBeDefined();
+  expect(vcrStudyNameError("名".repeat(38) + "\n\t" + "名")).toBeUndefined();
 });

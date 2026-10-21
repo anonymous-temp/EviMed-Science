@@ -3,9 +3,27 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { VcrMethodResult } from "./VcrMethodResult";
 import { VcrMethodResultCharts, readMethodResultSeries } from "./VcrMethodResultCharts";
+import { DistributionGrid } from "./patients/DistributionGrid";
+import type { VcrGeneratedRow } from "@/lib/vcrClient";
 const api = vi.hoisted(() => ({ getVcrMethodResult: vi.fn(), getVcrPatients: vi.fn(), getVcrTrial: vi.fn() }));
 vi.mock("@/lib/vcrClient", async load => ({ ...await load<object>(), ...api }));
 beforeEach(() => vi.clearAllMocks());
+it("labels generated counts and formats distribution percentages without altering retained values or suppressed levels", async () => {
+  const percent = 0.575 * 100;
+  const profile: VcrGeneratedRow = { key: "y", variable: "y", label: "结局", kind: "binary", histogram: null, mean: null, sd: null, missing: null, declared: null, declaredSpec: null,
+    result: null, n: 40, median: null, q1: null, q3: null, min: null, max: null, violations: null, outOfBounds: false,
+    levels: [{ level: "0", label: "未发生", n: 23, percent, suppressed: false }, { level: "1", label: "已发生", n: 17, percent: 42.5, suppressed: false }, { level: "unknown", label: "未知", n: null, percent: 1.2, suppressed: true }] };
+  api.getVcrMethodResult.mockResolvedValue({ jobId: "binary_job", result: { id: "binary_result", kind: "patient_set", measures: [{ name: "generated_records", value: 40, source: "synthetic" }], diagnostics: {} }, execution: { method: "patients.binary" }, records: { available: false, profile: [profile] } });
+  render(<VcrMethodResult studyId="study_1" job={{ id: "binary_job", kind: "generate_patients_binary", state: "succeeded" }} />);
+  expect(await screen.findByRole("table", { name: "本次计算指标" })).toHaveTextContent("生成记录");
+  expect(screen.queryByText("generated_records")).toBeNull();
+  const { container } = render(<DistributionGrid rows={[profile]} />);
+  expect(container).toHaveTextContent("57.5%");
+  expect(container).not.toHaveTextContent("57.499999");
+  expect(container).toHaveTextContent("小样本已隐藏");
+  expect(container).not.toHaveTextContent("1.2%");
+  expect(profile.levels?.[0].percent).toBe(percent);
+});
 it("reads only the addressed historical job and preserves a partial result with its source version", async () => {
   api.getVcrMethodResult.mockResolvedValue({ jobId: "old_job", result: { id: "old_result", kind: "comparator", conclusion: "limited", measures: [{ name: "risk_ratio", value: 1.5, source: "calculated" }], diagnostics: {} }, execution: { method: "comparator.evalue", methodVersion: "1.0.0", seed: 987, sourceModel: { id: "old_model", version: "2.1.0" } }, records: { available: false, state: "unavailable" } });
   render(<MemoryRouter><VcrMethodResult studyId="study_1" job={{ id: "old_job", kind: "evalue", state: "failed", error: { code: "budget", message: "Stopped", partial: true } }} /></MemoryRouter>);

@@ -133,13 +133,16 @@ export class NativeHandbookContext {
   /** Read only actual current-step input identities, within one combined context allowance. */
   async read(project, { sessionId, inputs }) {
     if (!validSession(sessionId) || !Array.isArray(inputs) || inputs.length > 16) throw new HttpError(400, "handbook_request_invalid", "Invalid current inputs.");
-    if (!await this.allowed(project, sessionId)) return { contexts: [] };
+    if (!await this.allowed(project, sessionId)) return { contexts: [], routes: [] };
     const contexts = [];
+    const routes = [];
     let bytes = 0;
     const allowance = Math.min(MAX_HANDBOOK_PROMPT_BYTES, Math.max(0, this.budget(project)));
     for (const input of inputs) {
       const envelope = await this.envelope(project, sessionId, input?.requestId);
-      if (!envelope || envelope.textDigest !== input.textDigest || !envelope.context || contexts.some(item => item.requestId === input.requestId)) continue;
+      if (!envelope || envelope.textDigest !== input.textDigest || routes.some(item => item.requestId === input.requestId)) continue;
+      routes.push({ requestId: input.requestId, textDigest: envelope.textDigest, digest: envelope.digest, route: envelope.route });
+      if (!envelope.context) continue;
       const size = Buffer.byteLength(envelope.context) + 1;
       if (bytes + size > allowance) continue;
       await withProjectStorageMutation(project, async () => {
@@ -151,7 +154,7 @@ export class NativeHandbookContext {
       contexts.push({ requestId: input.requestId, digest: envelope.digest, context: envelope.context });
       bytes += size;
     }
-    return { contexts };
+    return { contexts, routes };
   }
 
   /** An entering pre-step confirms actual injection. Preparing or reading alone never counts as attachment. */

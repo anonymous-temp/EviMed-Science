@@ -15,7 +15,7 @@ import { intervalText } from "./vcrText";
 import { PartialResultNote, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 
-const measureNames: Record<string, string> = { power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "周期（月）", effective_sample_size: "有效样本量", cost: "成本" };
+const measureNames: Record<string, string> = { power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", generated_records: "生成记录", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "周期（月）", effective_sample_size: "有效样本量", cost: "成本" };
 export function VcrMethodResult({ studyId, job }: { studyId: string; job: VcrJob }) {
   const { state, reload } = useVcrLoad(`method-result:${studyId}:${job.id}:${job.state}`, () => getVcrMethodResult(studyId, job.id));
   if (state.kind === "loading") return <VcrTabSkeleton rows={2} />;

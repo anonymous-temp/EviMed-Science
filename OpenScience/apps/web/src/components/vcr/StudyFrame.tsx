@@ -194,15 +194,16 @@ function StudyMeta({ study }: { study: Pick<VcrStudy, "tier" | "ceiling"> }) {
     <>
       <span>{tierLabel(study.tier)}</span>
       {downgraded && (
-        <button
-          type="button"
+        <Button
+          variant="text"
+          size="sm"
           data-vcr-ceiling="downgraded"
           aria-haspopup="dialog"
           onClick={() => setOpen(true)}
-          className="ml-3 rounded text-caption text-warn-strong hover:underline"
+          className="ml-3 text-warn-strong"
         >
           {`${intendedUseLabel(downgraded.requested)} → ${intendedUseLabel(downgraded.ceiling)}`}
-        </button>
+        </Button>
       )}
       {open && downgraded && (
         <Drawer title="预期用途" onClose={() => setOpen(false)} widthClassName="max-w-md">

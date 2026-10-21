@@ -8,6 +8,9 @@ import { buildAgentSkillsPack } from "./capsuleMethodPack.mjs";
 import { senderDisplayName, shareSignature } from "./capsuleShareLabel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
+import { nativeMemoryFile, PROJECT_MEMORY_TYPES } from "./openVikingSessions.mjs";
+import { nativeMemoryRoot } from "./openVikingLayout.mjs";
+import { LEGACY_KIND_OF_TYPE, versionOfHash } from "./nativeMemoryStore.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { boundedText } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
@@ -256,11 +259,13 @@ async function exportableMethods(client, userId, rows) {
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
+   *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null, memoryEngine?: ((userId: string) => Promise<string>) | null,
    *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null,
    *   maxLiveSnapshots?: number, now?: () => number, report?: (event: "rolled_back" | "cleanup_failed", details: { userId: string, code?: string }) => void}} options */
-  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
+  constructor({ documents, capsules, identities, dataDir, scanner = null, nativeMemory = null, memoryEngine = null, privateAccountCleanup = null, maxLiveSnapshots = MAX_LIVE_SNAPSHOTS, now = Date.now, report = () => {} }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
     this.scanner = scanner;
+    this.nativeMemory = nativeMemory; this.memoryEngine = memoryEngine;
     this.privateAccountCleanup = privateAccountCleanup;
     this.maxLiveSnapshots = maxLiveSnapshots;
     this.now = now;
@@ -290,11 +295,15 @@ export class CapsuleTransferService {
   }
 
   /**
-   * What a pack of this capsule would carry, read in one snapshot of the
-   * stores: the facts, learned methods and stated preferences `export` packs.
+   * What a pack carries: captured native file bytes, then a repeatable-read database snapshot of capsule facts,
+   * learned methods, selection policy and legacy preferences. No transaction spans the engine and database.
    * @param {string} userId @param {string} capsuleId @param {readonly string[]} kinds
    */
   async #assemble(userId, capsuleId, kinds) {
+    // Native bytes are hydrated before the database snapshot. These are two stores, not a cross-engine atomic read.
+    // Engine failures must remain failures: an account on native memory must never export stale legacy copies.
+    const native = await this.memoryEngine?.(userId) === "native";
+    const nativeFacts = native ? await this.#nativeSnapshot(userId, kinds) : null;
     await migrateResearchMemory(this.documents.database);
     return this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -334,7 +343,7 @@ export class CapsuleTransferService {
       // A method learned in a run that drew on a pack nobody had vouched for yet does not leave either: shared text would
       // otherwise be re-shared as this account's own once the loop had restated it (capsuleShareTrust.mjs).
       methods.rows = await exportableMethods(client, userId, methods.rows);
-      const stated = await client.query(`SELECT id,version,kind,value,summary FROM evimed_memory.records WHERE user_id=$1
+      const stated = native ? { rows: [] } : await client.query(`SELECT id,version,kind,value,summary FROM evimed_memory.records WHERE user_id=$1
         AND scope='user' AND status='active' AND NOT sensitive AND origin IN ('explicit','manual') AND kind=ANY($2::text[])
         ORDER BY updated_at DESC,id LIMIT 50`, [userId, kinds.filter((kind) => !KNOWLEDGE.includes(kind))]);
       // 「知识与项目事实」 (build spec §9.1), only when the sender ticked it:
@@ -347,11 +356,31 @@ export class CapsuleTransferService {
       // researcher paused memory for, and never a conversation's own notes.
       // Newest first, into whatever room the default layer leaves.
       const knowledgeKinds = kinds.filter((kind) => KNOWLEDGE.includes(kind));
-      const known = knowledgeKinds.length ? await client.query(`SELECT id,version,kind,value,summary,scope,scope_id FROM evimed_memory.records r
+      const known = !native && knowledgeKinds.length ? await client.query(`SELECT id,version,kind,value,summary,scope,scope_id FROM evimed_memory.records r
         WHERE user_id=$1 AND scope IN ('user','project') AND status='active' AND NOT sensitive AND origin IN ('explicit','manual')
           AND kind=ANY($2::text[]) AND NOT (scope='project' AND scope_id=ANY(COALESCE(
             (SELECT paused_projects FROM evimed_memory.settings s WHERE s.user_id=r.user_id), '{}'::text[])))
         ORDER BY updated_at DESC,id LIMIT $3`, [userId, knowledgeKinds, MAX_ENTRIES + 1]) : { rows: [] };
+      let selectedNative = [];
+      if (nativeFacts) {
+        const policy = await client.query("SELECT paused_projects FROM evimed_memory.settings WHERE user_id=$1", [userId]);
+        const paused = new Set(policy.rows[0]?.paused_projects ?? []);
+        const projects = await client.query("SELECT id FROM evimed_control.projects WHERE user_id=$1", [userId]);
+        const owned = new Set(projects.rows.map((row) => row.id));
+        // Migration replayed old records as user messages, including inferred records. That erases line provenance.
+        // Follow replay lineage and conservatively omit those files unless the person edited this exact body.
+        const migrated = await client.query(`WITH RECURSIVE migration AS (
+          SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND origin='migration'
+          UNION
+          SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN migration m ON c.archive_uri=m.replayed_as
+            WHERE c.user_id=$1
+        ) SELECT DISTINCT r.uri FROM evimed_memory.native_revisions r JOIN migration m ON r.archive_uri=m.archive_uri
+          WHERE r.user_id=$1 AND r.uri=ANY($2::text[])`, [userId, nativeFacts.map((row) => row.nativeUri)]);
+        const migrationFiles = new Set(migrated.rows.map((row) => row.uri));
+        selectedNative = nativeFacts.filter((row) => (!migrationFiles.has(row.nativeUri) || row.adoptedBody) && kinds.includes(row.payload.factKind)
+          && (row.scope === "user" || (KNOWLEDGE.includes(row.payload.factKind) && owned.has(row.scopeId)
+            && !paused.has(row.scopeId) && !isInternalProject(row.scopeId))));
+      }
       const recorded = (/** @type {any} */ row) => ({ id: row.id, revision: row.version, payload: {
         factKind: row.kind, origin: "explicit", content: boundedText(row.summary || row.value, 20_000) } });
       const workstyle = [
@@ -359,11 +388,53 @@ export class CapsuleTransferService {
         ...methods.rows.map((row) => ({ id: row.id, revision: row.revision, payload: {
           factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
         ...stated.rows.map(recorded),
+        ...selectedNative.filter((row) => !KNOWLEDGE.includes(row.payload.factKind)),
       ];
-      const knowledge = known.rows.filter((row) => row.scope === "user" || !isInternalProject(row.scope_id))
-        .slice(0, Math.max(0, MAX_ENTRIES - workstyle.length)).map(recorded);
+      const knowledge = [...selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)), ...known.rows.filter((row) => row.scope === "user" || !isInternalProject(row.scope_id))
+        .map(recorded)]
+        .slice(0, Math.max(0, MAX_ENTRIES + (native ? 1 : 0) - workstyle.length));
       return { revision: capsule.rows[0].revision, facts: [...workstyle, ...knowledge] };
     });
+  }
+
+  /**
+   * Snapshot the native engine's own explicitly stated memories, under the account identity alone.
+   * The extraction templates admit only the person's statements; this is file provenance, never inferred line adoption.
+   * Files in the derived capsule index are excluded by nativeMemoryFile. Preserve the exact body and source hash privately.
+   * @param {string} userId @param {readonly string[]} kinds
+   */
+  async #nativeSnapshot(userId, kinds) {
+    if (!this.nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+    const files = await this.nativeMemory.files(userId);
+    for (const file of files) {
+      const place = nativeMemoryFile(file.uri, nativeMemoryRoot(userId));
+      if (!place || place.type !== file.type || typeof file.body !== "string" || digest(file.body) !== file.hash)
+        throw new HttpError(503, "memory_engine_unavailable", "The memory snapshot could not be verified.");
+    }
+    const records = await this.nativeMemory.records(userId, { files });
+    const histories = await this.nativeMemory.overlay.revisionsOfMany(userId, files.map((file) => file.uri));
+    return records.filter((row) => (!PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
+      && kinds.includes(row.kind) && row.engine === "native" && row.status === "active" && !row.sensitive && !row.share
+      && ["explicit", "manual"].includes(row.origin) && ["user", "project"].includes(row.scope)
+      && row.kind === LEGACY_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash))
+      .map((row) => {
+        const file = files.find((item) => item.uri === row.uri);
+        if (!file || file.hash !== row.contentHash || (row.nativeType !== "profile" && row.value !== file.body))
+          throw new HttpError(503, "memory_engine_unavailable", "The memory snapshot could not be verified.");
+        // The capsule wire uses int32 revisions; retain the engine's full hash-derived token beside it.
+        // A profile edit changes one line; it cannot adopt the other migrated statements in that document.
+        // Undo/restore likewise is not an adoption of the restored text.
+        // revisionsOfMany orders by the unique revision id DESC (not changedAt, which may tie).
+        // Only the latest operation can attest this body; an older edit cannot adopt a later engine write or undo.
+        const latest = histories.get(file.uri)?.[0];
+        const adoptedBody = row.nativeType !== "profile" && latest?.actor === "user"
+          && latest.change === "updated" && latest.reason !== "undo" && !latest.undoneAt
+          && typeof latest.after === "string" && digest(latest.after) === file.hash;
+        return { id: row.id, revision: Number.parseInt(file.hash.slice(0, 7), 16) + 1, scope: row.scope, scopeId: row.scopeId,
+          nativeUri: file.uri, adoptedBody,
+          nativeSource: { engine: "native", sha256: file.hash, version: row.version },
+          payload: { factKind: row.kind, origin: "explicit", content: checkedText(row.value) } };
+      });
   }
 
   /**
@@ -539,7 +610,7 @@ export class CapsuleTransferService {
     try { [record] = await this.documents.createBatch(userId, [{ kind: "preferences", id: snapshotId, payload: {
       recordType: "capsule-snapshot", capsuleId, issuerId: identity.issuerId, status: "active", channel, scopes, supersedes: input.supersedes ?? null,
       archiveSha256: digest(archive), manifestSha256: digest(JSON.stringify(container.manifest)), capsuleRevision: source.revision,
-      entryCount: entries.length, sourceEntries: source.facts.map((fact, index) => ({ id: fact.id, revision: fact.revision, sha256: entries[index].sha256 })),
+      entryCount: entries.length, sourceEntries: source.facts.map((fact, index) => ({ id: fact.id, revision: fact.revision, sha256: entries[index].sha256, ...(fact.nativeSource ? { nativeSource: fact.nativeSource } : {}) })),
       ...(card ? { card } : {}), ...(recipients.length ? { recipients: recipients.map((recipient) => recipient.userId) } : {}),
     } }], { accountCreatedAt }); } catch (error) {
       await unlinkCapsuleFile(directory, filename);

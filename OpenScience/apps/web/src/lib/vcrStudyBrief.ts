@@ -1,3 +1,4 @@
+import { normalizeVcrStudyName, VCR_STUDY_NAME_MAX } from "./vcrStudyName";
 import type { VcrStartAnswer, VcrStartBody } from "./vcrClient";
 
 export const VCR_BRIEF_LIMIT = 2_000;
@@ -34,7 +35,7 @@ export function studyBriefText(fields: StudyBriefFields, attachments: StudyBrief
   return [fields.question, ...OPTIONAL.filter(([key]) => fields[key].trim()).map(([key, label]) => `${label}：${fields[key]}`), ...(attachments.length ? [`材料文件：${attachments.map(file => `${file.name}（${file.state === "uploaded" ? "已上传" : file.state === "failed" ? "上传未完成" : "待上传"}）`).join("、")}`] : [])].join("\n\n");
 }
 export function studyBriefName(fields: StudyBriefFields): string {
-  return fields.name.trim() || fields.question.trim().split(/\n/)[0].slice(0, 60) || "新研究";
+  return normalizeVcrStudyName(fields.name) || [...normalizeVcrStudyName(fields.question.trim().split(/\n/)[0])].slice(0, VCR_STUDY_NAME_MAX).join("") || "新研究";
 }
 export function studyBriefKey(userId: string, tenantId: string, studyId = "new"): string {
   return `evimed.study-brief.v1:${encodeURIComponent(tenantId)}:${encodeURIComponent(userId)}:${encodeURIComponent(studyId)}`;

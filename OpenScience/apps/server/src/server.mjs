@@ -1619,6 +1619,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({ config, store: researchMemory, capsules: capsuleService });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    nativeMemory: config.ovNativeMemoryEnabled ? nativeMemory : null, memoryEngine: (userId) => researchMemory.memoryEngine(userId),
     maxLiveSnapshots: config.capsuleMaxLiveSnapshots,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
     // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.

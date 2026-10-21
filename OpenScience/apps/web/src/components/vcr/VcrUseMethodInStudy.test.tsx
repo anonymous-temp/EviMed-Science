@@ -24,3 +24,19 @@ it("carries a no-subject method as an unrun draft instead of claiming it was sav
   await userEvent.click(screen.getByText("用于研究")); await userEvent.selectOptions(await screen.findByLabelText("选择目标研究"), "target_study"); await userEvent.click(screen.getByRole("button", { name: "将配置复制到研究" }));
   const destination = await screen.findByTestId("destination"); expect(destination).toHaveTextContent("未运行草稿"); expect(destination).toHaveTextContent('"estimate":0.3'); expect(screen.queryByText(/配置已保存/)).toBeNull(); expect(api.queueVcrJob).not.toHaveBeenCalled();
 });
+
+it("validates a new study name at 40 Unicode characters before creation", async () => {
+  vi.clearAllMocks(); api.getVcrHome.mockResolvedValue({ studies: [] });
+  api.createVcrStudy.mockResolvedValue({ id: "new_study" });
+  api.saveVcrMethodConfiguration.mockResolvedValue({ subjectId: "saved", objectKind: "analysis", version: 1 });
+  render(<MemoryRouter><VcrUseMethodInStudy method="evidence.pool" name="Evidence pooling" valid disabled={false} scenario={{}} /></MemoryRouter>);
+  await userEvent.click(screen.getByText("用于研究"));
+  const input = await screen.findByRole("textbox", { name: "新研究名称" });
+  await userEvent.type(input, "名".repeat(41));
+  const create = screen.getByRole("button", { name: "新建研究草稿并使用配置" });
+  expect(create).toBeDisabled(); expect(api.createVcrStudy).not.toHaveBeenCalled();
+  expect(input).toHaveValue("名".repeat(41));
+  await userEvent.clear(input); await userEvent.type(input, "🧪".repeat(40));
+  await userEvent.click(create);
+  await waitFor(() => expect(api.createVcrStudy).toHaveBeenCalledWith({ name: "🧪".repeat(40), purpose: "programme", draft: true }));
+});

@@ -1,3 +1,4 @@
+import { vcrStudyNameError } from "@/lib/vcrStudyName";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { fetchWebMe, webErrorMessage, WebApiError } from "@/lib/apiClient";
@@ -55,7 +56,8 @@ export function VcrStudyBrief({ study, onStarted, onDataRequested }: { study?: V
   const action = draft.action ?? (draft.request?.payload.action === "auto" ? "auto" : "definition");
   const canWrite = !study || study.abilities.includes("write");
   const canRun = !study || study.abilities.includes("run");
-  const valid = !!draft.fields.question.trim() && brief.length <= VCR_BRIEF_LIMIT;
+  const nameError = vcrStudyNameError(draft.fields.name);
+  const valid = !nameError && !!draft.fields.question.trim() && brief.length <= VCR_BRIEF_LIMIT;
   const uncertain = draft.request?.state === "confirming";
   const accepted = draft.request?.state === "accepted";
   const blocked = Boolean(draft.recovery);
@@ -65,6 +67,8 @@ export function VcrStudyBrief({ study, onStarted, onDataRequested }: { study?: V
     if (!key || scope.current.key !== key || !scope.current.mounted || held.current || moved) return;
     if (kind !== "recover" && (blocked || draft.missingRemote)) return;
     if (!canWrite || (kind === "start" && !canRun)) return;
+    // Preserve receipt replay and opening an accepted run; validate only new mutations.
+    if (nameError && !(kind === "start" && (uncertain || accepted))) return;
     if (kind !== "upload" && kind !== "recover" && kind !== "data" && !valid && !uncertain && !accepted) return;
     const originKey = key, generation = ++scope.current.generation;
     const isCurrent = () => scope.current.mounted && scope.current.key === originKey && scope.current.generation === generation;
@@ -197,22 +201,23 @@ export function VcrStudyBrief({ study, onStarted, onDataRequested }: { study?: V
     <Disclosure summary="补充人群、终点和已有材料（可选）">
       <div className="grid gap-3 md:grid-cols-2">
         {([["population", "目标人群"], ["intervention", "干预与对照"], ["endpoint", "主要终点"], ["materials", "已有材料"], ["output", "希望得到"]] as const).map(([field, label]) => <Input key={field} label={label} value={draft.fields[field]} disabled={disabled} onChange={event => change(field, event.target.value)} />)}
-        <Input label="研究名称" value={draft.fields.name} placeholder={studyBriefName(draft.fields)} disabled={disabled} maxLength={120} onChange={event => change("name", event.target.value)} />
+        <Input label="研究名称" value={draft.fields.name} placeholder={studyBriefName(draft.fields)} disabled={disabled} aria-invalid={!!nameError} onChange={event => change("name", event.target.value)} />
       </div>
     </Disclosure>
+    {nameError && <p role="alert" className="text-ui text-error">{nameError}</p>}
     <Note action={null}>{action === "auto" ? "开始后先梳理研究定义，再推进所需的七步研究流程；资料不足时会在研究对话里询问。" : "开始后先梳理研究定义，补问缺少的关键信息；后续步骤由你按需要发起。"}</Note>
     <div className="flex flex-wrap items-end gap-2">
       <Select label="本次开始" value={action} disabled={disabled} onChange={event => keep({ ...draft, action: event.target.value === "auto" ? "auto" : "definition" })}><option value="definition">先明确研究定义</option><option value="auto">推进完整研究流程</option></Select>
       <Button variant={draft.dataIntent ? "secondary" : "primary"} disabled={busy || moved || blocked || draft.missingRemote || (!accepted && (!canWrite || !canRun || (!valid && !uncertain)))} loading={busy} onClick={() => { void perform("start"); }}>{accepted ? "打开研究对话" : uncertain ? "核实提交" : "开始研究"}</Button>
       <Button variant="secondary" disabled={!valid || disabled || blocked || draft.missingRemote} onClick={() => { void perform("save"); }}>保存草稿</Button>
-      <Button variant="text" disabled={disabled || blocked || draft.missingRemote || draft.dataIntent} onClick={() => { void perform("upload"); }}>添加参考材料</Button>
-      {onDataRequested && <Button variant={draft.dataIntent ? "primary" : "secondary"} disabled={busy || moved || !canWrite || blocked || draft.missingRemote || brief.length > VCR_BRIEF_LIMIT} onClick={() => { void perform("data"); }}>保存草稿并接入研究数据</Button>}
+      <Button variant="text" disabled={!!nameError || disabled || blocked || draft.missingRemote || draft.dataIntent} onClick={() => { void perform("upload"); }}>添加参考材料</Button>
+      {onDataRequested && <Button variant={draft.dataIntent ? "primary" : "secondary"} disabled={!!nameError || busy || moved || !canWrite || blocked || draft.missingRemote || brief.length > VCR_BRIEF_LIMIT} onClick={() => { void perform("data"); }}>保存草稿并接入研究数据</Button>}
       {draft.remote && <Link to={vcrChatPath(draft.remote.id)} className="rounded text-ui text-link hover:underline">打开研究</Link>}
     </div>
     <Note action={null}>参考材料可添加公开文献、方案等文件；患者记录和研究数据请通过研究数据接入添加。</Note>
     {moved && draft.remote && <Note action={<Link to={vcrChatPath(draft.remote.id)} className="rounded text-ui text-link hover:underline">打开新草稿</Link>}>简述已另存为新的研究草稿，请打开新草稿继续编辑。</Note>}
     {blocked && <Note tone="warn" action={null}>本地提交记录不完整，尚不能确认是否已开始。简述可继续编辑；请先打开原研究核对，或明确另存新草稿。</Note>}
-    {(draft.missingRemote || blocked) && <Button variant="secondary" disabled={busy || !canWrite || brief.length > VCR_BRIEF_LIMIT || (!draft.fields.question.trim() && !draft.attachments?.length)} onClick={() => { void perform("recover"); }}>另存为新草稿</Button>}
+    {(draft.missingRemote || blocked) && <Button variant="secondary" disabled={!!nameError || busy || !canWrite || brief.length > VCR_BRIEF_LIMIT || (!draft.fields.question.trim() && !draft.attachments?.length)} onClick={() => { void perform("recover"); }}>另存为新草稿</Button>}
     {!draft.remote && draft.recovery?.studyId && <Link to={vcrChatPath(draft.recovery.studyId)} className="rounded text-ui text-link hover:underline">打开原研究</Link>}
     {draft.priorSubmission && <Note action={draft.priorSubmission.studyId ? <Link to={vcrChatPath(draft.priorSubmission.studyId)} className="rounded text-ui text-link hover:underline">核对原研究</Link> : null}>原提交记录已保留；另存草稿不会重发原请求。开始新的研究前请先核对原提交状态。</Note>}
     {!!draft.attachments?.length && <ul aria-label="研究材料" className="text-caption text-text-2">{draft.attachments.map((file, index) => <li key={`${index}:${file.name}`}>{file.name} · {file.state === "uploaded" ? "已上传" : file.state === "failed" ? "上传未完成，请重新添加" : "待上传"}</li>)}</ul>}

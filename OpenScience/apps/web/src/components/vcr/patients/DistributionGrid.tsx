@@ -1,6 +1,7 @@
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import type { VcrGeneratedRow } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
+import { formatPercent } from "@/lib/format";
 import { declaredCentre, declaredShare, expectedCounts, limitState } from "./distribution";
 import { numberText } from "../vcrText";
 
@@ -114,7 +115,7 @@ function Levels({ row }: { row: VcrGeneratedRow }) {
                   <span data-vcr-target="" className="absolute -inset-y-0.5 w-px bg-text-2" style={{ left: `${Math.min(100, share)}%` }} />
                 )}
               </span>
-              <span className="w-12 shrink-0 text-right tabular-nums text-text">{`${level.percent}%`}</span>
+              <span className="w-12 shrink-0 text-right tabular-nums text-text">{formatPercent(level.percent)}</span>
             </>
           )}
         </li>
