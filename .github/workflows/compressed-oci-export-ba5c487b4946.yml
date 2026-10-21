@@ -1,0 +1,701 @@
+name: One-purpose compressed OCI final Web and runtime re-export
+on:
+  push:
+    branches: [codex/compressed-oci-ba5c487b4946-20261021]
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: compressed-oci-export-ba5c487b4946
+  cancel-in-progress: false
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      # REQUIRED operator inputs: the FINAL reviewed application commit and successful original core artifact API identity.
+      APPLICATION_SOURCE: "ba5c487b4946f71aaed23657a7ac291c42545a59"
+      PARENT_RUN_ID: "39608925874"
+      PARENT_ATTEMPT: "1"
+      PARENT_ARTIFACT_ID: "12353414821"
+      PARENT_ZIP_BYTES: "1956775241"
+      PARENT_ZIP_SHA256: "6ff41430fcc2ac245192dc34ac571fb8c45c80e1bfeeda2660f788b63b148657"
+      PARENT_ARTIFACT_HOST: "productionresultssa16.blob.core.windows.net"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.APPLICATION_SOURCE }}
+          persist-credentials: false
+      - name: Assert immutable final application source
+        run: test "$(git rev-parse HEAD)" = "$APPLICATION_SOURCE"
+      - name: Install exact reviewed regctl binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --max-time 180 https://github.com/regclient/regclient/releases/download/v0.11.6/regctl-linux-amd64 -o "$RUNNER_TEMP/regctl"
+          echo "8e0e62a497fcdb8048d18aa927a139613176ba0531f412bc541044e28f9856bd  $RUNNER_TEMP/regctl" | sha256sum --check --status
+          chmod 700 "$RUNNER_TEMP/regctl"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Verify successful core CI artifact and re-export its actual images without building
+        id: export
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          python3 - <<'PYTHON'
+          """One-purpose public CI Web re-export. Never builds or modifies an image."""
+          import gzip
+          import tarfile
+          import hashlib
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import signal
+          import stat
+          import subprocess
+          import threading
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          import zipfile
+          
+          SOURCE = os.environ.get('APPLICATION_SOURCE', 'REQUIRED')
+          REPO = 'anonymous-temp/EviMed-Science'
+          FLOOR = 10 * 1024**3
+          MAX_ZIP = 4 * 1024**3
+          MAX_RUNTIME = 3 * 1024**3
+          PART_BYTES = 480 * 1024**2
+          MAX_EXPORT = 480 * 1024**2
+          MAX_METADATA = 4 * 1024**2
+          FILES = {'images.tar.gz', 'images.tar.gz.sha256', 'images.txt', 'manifest.json', 'release-manifest.json', 'prepared-export.json', 'image-qualification.json'}
+          
+          
+          def require(ok, code):
+              if not ok:
+                  raise ValueError(code)
+          
+          
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+          
+          
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *_args):
+                  return None
+          
+          
+          def zip_metadata(z):
+              entries = z.infolist()
+              require(len(entries) == len(FILES) and {x.filename for x in entries} == FILES, 'zip_exact_entries')
+              for item in entries:
+                  mode = item.external_attr >> 16
+                  require(not item.is_dir() and not item.flag_bits & 1 and item.compress_type in {0, 8}
+                          and stat.S_IFMT(mode) in {0, stat.S_IFREG}, 'zip_entry_type')
+                  require(0 <= item.file_size <= (MAX_ZIP if item.filename == 'images.tar.gz' else MAX_METADATA), 'zip_entry_bytes')
+              return {name: z.read(name) for name in FILES - {'images.tar.gz'}}
+          
+          
+          def selected_image(manifest, release, run, attempt, role='web'):
+              require(role in {'web', 'runtime'}, 'selected_role')
+              reference = f'open-science-{role}:ci-{run}-{attempt}'
+              release_id = f'evimed-{SOURCE[:12]}-{attempt}'
+              require(manifest['sourceRevision'] == SOURCE and str(manifest['workflowRun']) == str(run)
+                      and str(manifest['workflowAttempt']) == str(attempt) and manifest['releaseId'] == release_id,
+                      'parent_inventory_source')
+              require(release['source']['revision'] == SOURCE and release['app']['releaseId'] == release_id
+                      and release[role]['image'] == reference, 'parent_release_source')
+              images = [image for image in manifest['verifiedImages'] if reference in image['references']]
+              require(len(images) == 1, 'single_web_required')
+              image = images[0]
+              require(image['platform'] == 'linux/amd64' and image['configDigest'] == release[role]['imageId']
+                      and image['labels'].get('org.opencontainers.image.revision') == SOURCE
+                      and image['labels'].get('org.opencontainers.image.version') == release_id, 'web_source_config')
+              return reference, image
+          
+          
+          def monitor(command, root, *, source=None, output=None, max_output=None, consume=None):
+              """Own only this CLI process group; floor/deadline run independently of a blocked stdin write."""
+              faults, finished = [], threading.Event()
+              log = (root / ('cli-%d.log' % time.time_ns())).open('xb')
+              process = subprocess.Popen(command, stdin=subprocess.PIPE if source else subprocess.DEVNULL,
+                                         stdout=subprocess.PIPE if consume else (output if output else log), stderr=log, start_new_session=True)
+              def stop():
+                  try:
+                      os.killpg(process.pid, signal.SIGTERM)
+                  except ProcessLookupError:
+                      pass
+                  time.sleep(5)
+                  try:
+                      os.killpg(process.pid, signal.SIGKILL)
+                  except ProcessLookupError:
+                      pass
+              def watch():
+                  deadline = time.monotonic() + 900
+                  while not finished.wait(1):
+                      try:
+                          require(shutil.disk_usage(root).free >= FLOOR, 'ten_gib_floor')
+                          require(time.monotonic() < deadline, 'cli_deadline')
+                          require(not max_output or os.fstat(output.fileno()).st_size <= max_output, 'export_size_cap')
+                      except Exception:
+                          faults.append('cli_bound_failed')
+                          stop()
+                          return
+              watcher = threading.Thread(target=watch, daemon=True)
+              watcher.start()
+              try:
+                  if source:
+                      while data := source.read(1024**2):
+                          process.stdin.write(data)
+                      process.stdin.close()
+                  consumed = consume(process.stdout) if consume else None
+                  result = process.wait(timeout=910)
+                  require(result == 0 and not faults, 'cli_failed')
+              except BaseException:
+                  stop()
+                  raise ValueError('cli_failed_no_output_logged') from None
+              finally:
+                  finished.set()
+                  watcher.join(timeout=6)
+                  log.close()
+              require(shutil.disk_usage(root).free >= FLOOR, 'post_cli_floor')
+              return consumed
+          
+          
+          def write_parent_metadata(root, metadata):
+              target = root / 'parent-metadata'
+              target.mkdir(mode=0o700)
+              for original, name in [('manifest.json', 'parent-manifest.json'), ('release-manifest.json', 'parent-release-manifest.json')]:
+                  raw = metadata[original]
+                  require(isinstance(raw, bytes) and len(raw) <= MAX_METADATA, 'parent_metadata_bound')
+                  with (target / name).open('xb') as output:
+                      output.write(raw)
+          
+          
+          def split_stream(stream, root, part_size=PART_BYTES, max_bytes=MAX_RUNTIME, floor_guard=True):
+              rows, total, whole = [], 0, hashlib.sha256()
+              while True:
+                  first = stream.read(min(1024**2, part_size))
+                  if not first:
+                      break
+                  require(len(rows) < 7, 'runtime_part_count')
+                  folder = root / ('part-%02d' % (len(rows) + 1))
+                  folder.mkdir(mode=0o700)
+                  digest, size = hashlib.sha256(), 0
+                  with (folder / 'chunk.bin').open('xb') as output:
+                      data = first
+                      while data:
+                          size += len(data)
+                          require(total + size <= max_bytes, 'runtime_export_cap')
+                          require(not floor_guard or shutil.disk_usage(root).free >= FLOOR, 'runtime_floor')
+                          output.write(data)
+                          digest.update(data)
+                          whole.update(data)
+                          if size == part_size:
+                              break
+                          data = stream.read(min(1024**2, part_size - size))
+                  rows.append({'part': len(rows) + 1, 'offset': total, 'bytes': size, 'sha256': digest.hexdigest()})
+                  total += size
+              require(total > 0 and 1 <= len(rows) <= 7, 'runtime_nonempty')
+              return rows, whole.hexdigest(), total
+          
+          
+          class PartsReader:
+              """Read already-written bounded parts as the original gzip without reassembly."""
+              def __init__(self, root, rows):
+                  self.paths = iter(root / ('part-%02d' % row['part']) / 'chunk.bin' for row in rows)
+                  self.handle = None
+          
+              def read(self, size):
+                  require(0 <= size <= 8 * 1024**2, 'bounded_part_read')
+                  data = bytearray()
+                  while len(data) < size:
+                      if self.handle is None:
+                          target = next(self.paths, None)
+                          if target is None:
+                              break
+                          self.handle = target.open('rb')
+                      chunk = self.handle.read(size - len(data))
+                      if not chunk:
+                          self.handle.close()
+                          self.handle = None
+                      else:
+                          data.extend(chunk)
+                  return bytes(data)
+          
+              def __enter__(self):
+                  return self
+          
+              def __exit__(self, *_args):
+                  if self.handle:
+                      self.handle.close()
+          
+          
+          """Read-only OCI closure proof. No extraction, imports, registry writes or alias adaptation."""
+          import contextlib
+          import gzip
+          import hashlib
+          import json
+          import re
+          import tarfile
+
+          MANIFEST = 'application/vnd.oci.image.manifest.v1+json'
+          DOCKER_MANIFEST = 'application/vnd.docker.distribution.manifest.v2+json'
+          CONFIG = {'application/vnd.oci.image.config.v1+json', 'application/vnd.docker.container.image.v1+json'}
+          GZIP = {'application/vnd.oci.image.layer.v1.tar+gzip', 'application/vnd.docker.image.rootfs.diff.tar.gzip'}
+          MAX_METADATA = 4 * 1024**2
+          MAX_U = 8 * 1024**3
+
+
+          def need(ok, code):
+              if not ok:
+                  raise ValueError(code)
+
+
+          def strict_json(raw):
+              def pairs(items):
+                  result = {}
+                  for key, value in items:
+                      need(key not in result, 'duplicate_json_key')
+                      result[key] = value
+                  return result
+              def constant(_):
+                  raise ValueError('nonfinite_json')
+              return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
+
+
+          def prove(path, archive_sha, archive_bytes, expected, sizes):
+              """expected and sizes MUST come from original validated Q/L, never exporter claims."""
+              need(re.fullmatch('[a-f0-9]{64}', archive_sha or '') and type(archive_bytes) is int and archive_bytes > 0, 'actual_payload_identity_required')
+              diffs = expected['rootfs']['diff_ids']
+              need(expected['platform'] == 'linux/amd64' and diffs and len(diffs) <= 1024
+                   and set(sizes) == set(diffs) and all(type(n) is int and n > 0 for n in sizes.values())
+                   and sum(sizes.values()) <= MAX_U, 'qualified_unique_layers')
+              class HashedReader:
+                  def __init__(self, stream, limit, prefix=b''):
+                      self.stream,self.limit,self.prefix=stream,limit,prefix
+                      self.count=0; self.hash=hashlib.sha256()
+                  def read(self, amount=-1):
+                      if amount < 0: amount=1024**2
+                      amount=min(amount,self.limit-self.count+1)
+                      value=self.prefix[:amount]; self.prefix=self.prefix[len(value):]
+                      if len(value) < amount: value+=self.stream.read(amount-len(value))
+                      self.count+=len(value); need(self.count <= self.limit,'stored_stream_limit')
+                      self.hash.update(value); return value
+              class BoundedInfo(tarfile.TarInfo):
+                  @classmethod
+                  def frombuf(cls,buf,encoding,errors):
+                      member=super().frombuf(buf,encoding,errors)
+                      need(member.isfile() or member.isdir(),'tar_extension_not_allowed')
+                      return member
+              source_context=contextlib.nullcontext(path) if hasattr(path,'read') else open(path,'rb')
+              with source_context as source:
+                  transport=HashedReader(source,archive_bytes)
+                  with gzip.GzipFile(fileobj=transport) as outer, tarfile.open(fileobj=outer,mode='r|',tarinfo=BoundedInfo) as archive:
+                      files={}; retained={}; decoded={}; actual_sizes={}
+                      cumulative=0; decoded_total=0; members=0; retained_total=0
+                      # Each unique stored blob may occupy an ordered rootfs position. This
+                      # bound permits legal repeated positions without granting unbounded work.
+                      decoded_budget=sum(sizes[d] for d in diffs)
+                      for member in archive:
+                          members+=1; need(members <= 16384,'member_count_limit')
+                          name=member.name
+                          if member.isdir():
+                              need(name.rstrip('/') in ('blobs','blobs/sha256') and member.size == 0,'unexpected_directory'); continue
+                          need(member.isfile() and name not in files and not name.startswith('/')
+                               and '..' not in name.split('/') and member.size > 0,'unsafe_or_duplicate_member')
+                          need(name in ('oci-layout','index.json','manifest.json') or re.fullmatch('blobs/sha256/[a-f0-9]{64}',name),'unexpected_member')
+                          cumulative+=member.size
+                          need(cumulative <= archive_bytes * 1024 and cumulative <= 100 * 1024**3,'expanded_archive_limit')
+                          files[name]=member.size
+                          with archive.extractfile(member) as stored:
+                              prefix=stored.read(2)
+                              reader=HashedReader(stored,member.size,prefix)
+                              if prefix == b'\x1f\x8b':
+                                  uncompressed=hashlib.sha256(); count=0
+                                  with gzip.GzipFile(fileobj=reader) as decoder:
+                                      while True:
+                                          block=decoder.read(min(1024**2,max(sizes.values())-count+1))
+                                          if not block: break
+                                          count+=len(block); decoded_total+=len(block)
+                                          need(count <= max(sizes.values()) and decoded_total <= decoded_budget,'decompression_limit')
+                                          uncompressed.update(block)
+                                  decoded[name]=('sha256:'+uncompressed.hexdigest(),count)
+                              else:
+                                  need(member.size <= MAX_METADATA,'metadata_size_limit')
+                                  data=bytearray()
+                                  for block in iter(lambda:reader.read(1024**2),b''): data.extend(block)
+                                  retained_total+=len(data); need(retained_total <= 16 * 1024**2,'aggregate_metadata_limit')
+                                  retained[name]=bytes(data)
+                              # GzipFile must consume/validate the complete member (CRC/trailer).
+                              for _ in iter(lambda:reader.read(1024**2),b''): pass
+                              need(reader.count == member.size,'member_size_changed')
+                              actual_sizes[name]='sha256:'+reader.hash.hexdigest()
+                      # Validate outer gzip CRC and finite zero-only tar padding. Tar's
+                      # streaming reader may have read a small suffix ahead of its end marker.
+                      need(not any(archive.fileobj.buf),'nonzero_tar_trailer')
+                      trailing=0
+                      for block in iter(lambda:outer.read(1024**2),b''):
+                          trailing+=len(block)
+                          need(trailing <= 1024**2 and not any(block),'nonzero_or_excess_tar_trailer')
+                  for _ in iter(lambda:transport.read(1024**2),b''): pass
+                  need(transport.count == archive_bytes and transport.hash.hexdigest() == archive_sha,'actual_payload_mismatch')
+                  reached = {'oci-layout','index.json','manifest.json'}
+                  def raw(name, limit=MAX_METADATA):
+                      need(name in retained and files[name] <= limit, 'missing_or_oversize_member')
+                      value=retained[name]
+                      need(len(value) == files[name], 'member_size_changed')
+                      return value
+                  def blob(desc, allowed):
+                      need(isinstance(desc, dict) and desc.get('mediaType') in allowed
+                           and re.fullmatch('sha256:[a-f0-9]{64}', desc.get('digest',''))
+                           and type(desc.get('size')) is int and desc['size'] > 0
+                           and not any(k in desc for k in ('urls','data')), 'descriptor_required')
+                      name = 'blobs/sha256/' + desc['digest'][7:]
+                      need(name in files and files[name] == desc['size'], 'blob_descriptor_size')
+                      reached.add(name)
+                      return name
+                  def metadata(desc, allowed):
+                      value = raw(blob(desc, allowed))
+                      need('sha256:' + hashlib.sha256(value).hexdigest() == desc['digest'], 'metadata_digest')
+                      return strict_json(value)
+                  need(strict_json(raw('oci-layout')) == {'imageLayoutVersion':'1.0.0'}, 'oci_layout')
+                  index = strict_json(raw('index.json'))
+                  need(index.get('schemaVersion') == 2 and len(index.get('manifests',[])) == 1, 'single_image_index')
+                  desc = index['manifests'][0]
+                  platform = desc.get('platform')
+                  need(platform is None or platform == {'architecture':'amd64','os':'linux'}, 'index_platform')
+                  manifest = metadata(desc, {MANIFEST, DOCKER_MANIFEST})
+                  need(manifest.get('schemaVersion') == 2 and manifest.get('mediaType',desc['mediaType']) == desc['mediaType']
+                       and not any(k in manifest for k in ('subject','artifactType')), 'image_manifest')
+                  config_desc = manifest['config']
+                  config = metadata(config_desc, CONFIG)
+                  need(config_desc['digest'] == expected['configDigest'] and config.get('os') == 'linux'
+                       and config.get('architecture') == 'amd64' and config.get('rootfs') == expected['rootfs']
+                       and config.get('config',{}).get('Labels',{}) == expected['labels'], 'exact_ci_config')
+                  descriptors = manifest['layers']
+                  need(len(descriptors) == len(diffs), 'ordered_layer_count')
+                  rows, unique = [], {}
+                  for layer, diff in zip(descriptors, diffs):
+                      name = blob(layer, GZIP)
+                      digest = layer['digest']
+                      need(actual_sizes[name] == digest,'compressed_blob_digest')
+                      need(decoded.get(name) == (diff,sizes[diff]),'actual_diff_id_or_size')
+                      unique[digest] = layer['size']
+                      rows.append({'contentDigest':digest,'storedBytes':layer['size'],'mediaType':layer['mediaType'],
+                                   'diffId':diff,'uncompressedBytes':sizes[diff]})
+                  compat = strict_json(raw('manifest.json'))
+                  need(isinstance(compat,list) and len(compat) == 1, 'single_compat_image')
+                  ci = compat[0]
+                  need(ci.get('Config') == 'blobs/sha256/' + config_desc['digest'][7:]
+                       and ci.get('Layers') == ['blobs/sha256/' + d['digest'][7:] for d in descriptors]
+                       and ci.get('RepoTags') == ['docker.io/library/' + ref for ref in expected['references']], 'compatibility_manifest_disagreement')
+                  need(set(files) == reached, 'unreachable_blob_or_extra_image')
+              return {'scope':'compressed-oci-closure-v1','archiveSha256':archive_sha,'archiveBytes':archive_bytes,
+                      'manifestDigest':desc['digest'],'manifestBytes':desc['size'],'configDigest':config_desc['digest'],
+                      'rootfs':expected['rootfs'],'layers':rows,'Gunique':sum(unique.values()),
+                      'Gordered':sum(r['storedBytes'] for r in rows),'U':sum(sizes.values()),
+                      'archiveUnchanged':True,'nativeVerified':False,'importPerformed':False}
+
+          """CI-only adapter: sizes originate exclusively in hash-verified parent CI metadata."""
+
+          def qualified_layer_sizes(parent_inventory, selected):
+              diffs = selected['rootfs']['diff_ids']
+              rows = parent_inventory['archive']['layers']
+              require(isinstance(rows, list) and rows, 'parent_layers_required')
+              sizes = {}
+              for row in rows:
+                  require(isinstance(row, dict) and isinstance(row.get('path'), str)
+                          and type(row.get('storedBytes')) is int and row['storedBytes'] > 0
+                          and type(row.get('uncompressedBytes')) is int and row['uncompressedBytes'] > 0
+                          and re.fullmatch('sha256:[a-f0-9]{64}', row.get('diffId', '')), 'parent_layer_row')
+                  if row['diffId'] in diffs:
+                      value = (row['storedBytes'], row['uncompressedBytes'])
+                      require(row['diffId'] not in sizes or sizes[row['diffId']] == value, 'parent_layer_size_ambiguous')
+                      sizes[row['diffId']] = value
+              require(set(sizes) == set(diffs), 'parent_selected_layer_size_missing')
+              return {diff: value[1] for diff, value in sizes.items()}
+
+
+          def ci_export_proof(stream, archive_sha, archive_bytes, reference, selected, parent_inventory):
+              expected = {**selected, 'references': [reference]}
+              closure = prove(stream, archive_sha, archive_bytes, expected, qualified_layer_sizes(parent_inventory, selected))
+              return {'format': 'compressed-oci-v1', 'manifestDigest': closure['manifestDigest'],
+                      'configDigest': closure['configDigest'],
+                      'layers': [{'digest': row['contentDigest'], 'size': row['storedBytes'], 'mediaType': row['mediaType']}
+                                 for row in closure['layers']],
+                      'originalReference': reference, 'platform': 'linux/amd64',
+                      'bytes': closure['archiveBytes'], 'sha256': closure['archiveSha256']}
+
+          def main():
+              require(re.fullmatch('[a-f0-9]{40}', SOURCE), 'final_application_source_required')
+              run, attempt, artifact, size = (int(os.environ[key]) for key in ['PARENT_RUN_ID', 'PARENT_ATTEMPT', 'PARENT_ARTIFACT_ID', 'PARENT_ZIP_BYTES'])
+              digest, host = os.environ['PARENT_ZIP_SHA256'], os.environ['PARENT_ARTIFACT_HOST']
+              require(all(x > 0 for x in [run, attempt, artifact, size]) and size <= MAX_ZIP
+                      and re.fullmatch('[a-f0-9]{64}', digest) and re.fullmatch(r'productionresultssa[0-9]+\.blob\.core\.windows\.net', host), 'operator_identity_required')
+              root = Path(os.environ['RUNNER_TEMP']) / 'evimed-core-reexport'
+              root.mkdir(mode=0o700)
+              require(shutil.disk_usage(root).free >= size + FLOOR, 'download_admission')
+              opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+              prefix = f'https://api.github.com/repos/{REPO}'
+              def request_api(suffix):
+                  return opener.open(urllib.request.Request(prefix + suffix, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}), timeout=60)
+              def api(suffix):
+                  with request_api(suffix) as response:
+                      raw = response.read(MAX_METADATA + 1)
+                      require(len(raw) <= MAX_METADATA, 'api_size')
+                      return json.loads(raw)
+              parent, meta = api(f'/actions/runs/{run}'), api(f'/actions/artifacts/{artifact}')
+              require(parent['id'] == run and parent['head_sha'] == SOURCE and parent['run_attempt'] == attempt
+                      and parent['status'] == 'completed' and parent['conclusion'] == 'success'
+                      and parent['event'] == 'push' and parent['head_branch'].startswith('codex/release-')
+                      and parent['path'] == '.github/workflows/web.yml' and parent['repository']['full_name'] == REPO, 'parent_ci_identity')
+              require(meta['id'] == artifact and meta['name'] == 'evimed-core-release-' + SOURCE
+                      and meta['expired'] is False and meta['size_in_bytes'] == size and meta['digest'] == 'sha256:' + digest
+                      and meta['workflow_run']['id'] == run and meta['workflow_run']['head_sha'] == SOURCE, 'parent_artifact_identity')
+              try:
+                  with request_api(f'/actions/artifacts/{artifact}/zip'):
+                      raise ValueError('manual_302_required')
+              except urllib.error.HTTPError as error:
+                  require(error.code == 302, 'manual_302_required')
+                  location = error.headers['Location']
+              url = urllib.parse.urlsplit(location)
+              require(url.scheme == 'https' and url.hostname == host and url.port in {None, 443}
+                      and not url.username and not url.password and not url.fragment, 'signed_artifact_host')
+              zip_path = root / 'parent.zip'
+              hasher, count, deadline = hashlib.sha256(), 0, time.monotonic() + 900
+              try:
+                  # Fresh request: API Authorization is never forwarded to Azure or logged.
+                  with opener.open(urllib.request.Request(location, headers={'Accept-Encoding': 'identity'}), timeout=60) as response, zip_path.open('xb') as output:
+                      require(response.status == 200 and response.headers.get('Content-Length') == str(size)
+                              and response.headers.get('Content-Encoding', 'identity') == 'identity', 'zip_response')
+                      while data := response.read(1024**2):
+                          count += len(data)
+                          require(count <= size and time.monotonic() < deadline and shutil.disk_usage(root).free >= FLOOR, 'download_bound')
+                          hasher.update(data)
+                          output.write(data)
+                  require(count == size and hasher.hexdigest() == digest, 'whole_parent_zip_sha')
+              except Exception:
+                  raise ValueError('parent_download_failed_no_url_logged') from None
+              spec = importlib.util.spec_from_file_location('inventory', 'OpenScience/scripts/ops/image-archive-inventory.py')
+              inventory = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(inventory)
+              with zipfile.ZipFile(zip_path) as z:
+                  metadata = zip_metadata(z)
+                  parent_inventory = json.loads(metadata['manifest.json'])
+                  require(parent_inventory.get('scope') == 'candidate-core-image-subset', 'parent_core_scope')
+                  require(json.loads(metadata['prepared-export.json']).get('scope') == 'candidate-core-image-subset', 'parent_prepared_scope')
+                  release = json.loads(metadata['release-manifest.json'])
+                  reference, selected = selected_image(parent_inventory, release, run, attempt)
+                  runtime_reference, runtime_selected = selected_image(parent_inventory, release, run, attempt, 'runtime')
+                  refs = metadata['images.txt'].decode().splitlines()
+                  with z.open('images.tar.gz') as source:
+                      require(inventory.read_inventory(source, refs) == parent_inventory['verifiedImages'], 'actual_parent_inventory')
+                  # Verify exact inner gzip and ZIP CRC before Docker receives any bytes. No duplicate inner archive is written.
+                  inner, inner_bytes = hashlib.sha256(), 0
+                  with z.open('images.tar.gz') as source:
+                      while data := source.read(1024**2):
+                          inner.update(data)
+                          inner_bytes += len(data)
+                  require(metadata['images.tar.gz.sha256'].decode().strip() == inner.hexdigest() + '  images.tar.gz', 'parent_inner_sha')
+                  write_parent_metadata(root, metadata)
+                  # The full parent was admitted/built by CI. This independent disposable runner refuses a low-space load.
+                  expanded = parent_inventory['archive']['expandedArchiveMemberBytes']
+                  unique = parent_inventory['archive']['uniqueUncompressedLayerBytes']
+                  require(isinstance(expanded, int) and isinstance(unique, int) and 0 < unique <= expanded <= 8 * 1024**3, 'parent_measured_load_bound')
+                  require(parent_inventory['archive']['sha256'] == inner.hexdigest() and parent_inventory['archive']['compressedBytes'] == inner_bytes, 'parent_measured_archive_identity')
+                  require(shutil.disk_usage(root).free >= expanded + unique + FLOOR + MAX_RUNTIME + MAX_EXPORT, 'load_admission')
+                  for selected_reference in [reference, runtime_reference]:
+                      collision = subprocess.run(['docker', 'image', 'inspect', selected_reference], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                      require(collision.returncode != 0, 'fresh_reference_required')
+                  with z.open('images.tar.gz') as source:
+                      monitor(['docker', 'load'], root, source=source)
+              inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', reference], timeout=30))[0]
+              require(inspected['Os'] == 'linux' and inspected['Architecture'] == 'amd64'
+                      and inspected['RootFS']['Layers'] == selected['rootfs']['diff_ids']
+                      and inspected['Config']['Labels'] == selected['labels'], 'native_web_identity')
+              out = root / 'out'
+              out.mkdir(mode=0o700)
+              (out / 'images.txt').write_text(reference + '\n')
+              # Docker push natively compresses layers while retaining the original config blob.
+              registry_image = 'docker.io/library/registry@sha256:3d527cee870ddd0fc8a31f99b2fdfb6451801a8dd4f5a92c1ec36dae24c14274'
+              monitor(['docker', 'run', '--detach', '--name', 'evimed-compressed-oci', '--restart=no',
+                       '--publish', '127.0.0.1:35541:5000', registry_image], root)
+              monitor(['regctl', 'registry', 'set', 'localhost:35541', '--tls', 'disabled'], root)
+              def push_selected(original_reference, original_image, role):
+                  target = 'localhost:35541/evimed/' + role + ':qualified'
+                  monitor(['docker', 'tag', original_reference, target], root)
+                  monitor(['docker', 'push', target], root)
+                  raw = subprocess.check_output(['regctl', 'blob', 'get', target, original_image['configDigest']], timeout=60)
+                  require('sha256:' + sha(raw) == original_image['configDigest'], 'registry_original_raw_config_sha')
+                  return target
+              web_target = push_selected(reference, selected, 'web')
+              with (out / 'images.tar.gz').open('xb') as output:
+                  monitor(['regctl', 'image', 'export', '--compress', '--name', reference, web_target], root,
+                          output=output, max_output=MAX_EXPORT)
+              require(0 < (out / 'images.tar.gz').stat().st_size <= MAX_EXPORT, 'web_export_cap')
+              actual = [selected]
+              exported = hashlib.sha256()
+              with (out / 'images.tar.gz').open('rb') as source:
+                  while data := source.read(1024**2):
+                      exported.update(data)
+              web_proof = ci_export_proof(out / 'images.tar.gz', exported.hexdigest(), (out / 'images.tar.gz').stat().st_size, reference, selected, parent_inventory)
+              (out / 'images.tar.gz.sha256').write_text(exported.hexdigest() + '  images.tar.gz\n')
+              (out / 'manifest.json').write_text(json.dumps({'sourceRevision': SOURCE, 'releaseId': parent_inventory['releaseId'], 'workflowRun': str(run), 'workflowAttempt': str(attempt), 'images': actual}, indent=2) + '\n')
+              qualification = {'schemaVersion': 1, 'scope': 'qualified-parent-ci-web-reexport',
+                  'applicationSourceRevision': SOURCE, 'sourceRevision': SOURCE, 'workflowSourceRevision': os.environ['GITHUB_SHA'],
+                  'workflowRun': os.environ['GITHUB_RUN_ID'], 'workflowAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                  'parent': {'repository': REPO, 'runId': run, 'attempt': attempt, 'artifactId': artifact, 'zipBytes': size,
+                             'zipSha256': digest, 'innerBytes': inner_bytes, 'innerSha256': inner.hexdigest(),
+                             'inventorySha256': sha(metadata['manifest.json']), 'releaseManifestSha256': sha(metadata['release-manifest.json']),
+                             'ciStatus': parent['status'], 'ciConclusion': parent['conclusion'], 'selectedImage': selected},
+                  'image': {'reference': reference, 'nativeId': inspected['Id'], 'configDigest': selected['configDigest'],
+                            'rootfs': selected['rootfs'], 'platform': selected['platform'], 'labels': selected['labels']},
+                  'export': {**web_proof, 'bytes': (out / 'images.tar.gz').stat().st_size, 'sha256': exported.hexdigest()},
+                  'imageBuilt': False, 'hostImportAdmitted': False}
+              (out / 'qualification.json').write_text(json.dumps(qualification, indent=2) + '\n')
+              require(sum(x.stat().st_size for x in out.iterdir()) < 500 * 1024**2, 'artifact_zip_margin')
+              runtime_inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', runtime_reference], timeout=30))[0]
+              require(runtime_inspected['Os'] == 'linux' and runtime_inspected['Architecture'] == 'amd64'
+                      and runtime_inspected['RootFS']['Layers'] == runtime_selected['rootfs']['diff_ids']
+                      and runtime_inspected['Config']['Labels'] == runtime_selected['labels'], 'native_runtime_identity')
+              runtime_target = push_selected(runtime_reference, runtime_selected, 'runtime')
+              runtime_root = root / 'runtime'
+              runtime_root.mkdir(mode=0o700)
+              def split_runtime(stream):
+                  return split_stream(stream, runtime_root)
+              rows, runtime_sha, runtime_bytes = monitor(['regctl', 'image', 'export', '--compress', '--name', runtime_reference, runtime_target], root, consume=split_runtime)
+              with PartsReader(runtime_root, rows) as stream:
+                  runtime_proof = ci_export_proof(stream, runtime_sha, runtime_bytes, runtime_reference, runtime_selected, parent_inventory)
+              identity = {'schemaVersion': 1, 'scope': 'qualified-parent-ci-runtime-reexport', 'sourceRevision': SOURCE,
+                          'applicationSourceRevision': SOURCE, 'workflowSourceRevision': os.environ['GITHUB_SHA'],
+                          'workflowRun': os.environ['GITHUB_RUN_ID'], 'workflowAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                          'parent': {**qualification['parent'], 'selectedImage': runtime_selected},
+                          'image': {'reference': runtime_reference, 'nativeId': runtime_inspected['Id'],
+                                    'configDigest': runtime_selected['configDigest'], 'rootfs': runtime_selected['rootfs'],
+                                    'platform': runtime_selected['platform'], 'labels': runtime_selected['labels']},
+                          'export': {**runtime_proof, 'bytes': runtime_bytes, 'sha256': runtime_sha},
+                          'imageBuilt': False, 'hostImportAdmitted': False}
+              for row in rows:
+                  row['artifactName'] = 'evimed-runtime-image-' + SOURCE + '-part-%02d' % row['part']
+                  folder = runtime_root / ('part-%02d' % row['part'])
+                  actual_part = hashlib.sha256()
+                  with (folder / 'chunk.bin').open('rb') as part:
+                      while data := part.read(1024**2):
+                          actual_part.update(data)
+                  require(actual_part.hexdigest() == row['sha256'], 'actual_runtime_part_identity')
+                  part_metadata = json.dumps({**identity, **row}, sort_keys=True) + '\n'
+                  require(len(part_metadata.encode()) <= MAX_METADATA and row['bytes'] + len(part_metadata.encode()) < 500 * 1024**2, 'runtime_part_artifact_margin')
+                  (folder / 'part.json').write_text(part_metadata)
+              manifest_root = root / 'runtime-manifest'
+              manifest_root.mkdir(mode=0o700)
+              aggregate = json.dumps({**identity, 'parts': rows}, sort_keys=True) + '\n'
+              require(len(aggregate.encode()) <= MAX_METADATA, 'aggregate_metadata_bound')
+              (manifest_root / 'runtime-manifest.json').write_text(aggregate)
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('runtime_parts=%d\n' % len(rows))
+              print(json.dumps({'sourceRevision': SOURCE, 'parentRun': run, 'webBytes': (out / 'images.tar.gz').stat().st_size,
+                                'runtimeBytes': runtime_bytes, 'runtimeParts': len(rows)}))
+          
+          
+          if __name__ == '__main__':
+              try:
+                  main()
+              except Exception as error:
+                  # Never include request exceptions, SAS URLs, headers, or CLI output in public logs.
+                  print('Core re-export failed: ' + (str(error) if isinstance(error, ValueError) and re.fullmatch('[a-z0-9_]+', str(error)) else 'bounded_operation_failed'))
+                  raise SystemExit(1)
+          PYTHON
+      - name: Upload bounded Web image with parent CI provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-web-image-${{ env.APPLICATION_SOURCE }}
+          path: ${{ runner.temp }}/evimed-core-reexport/out/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload exact original parent CI metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-core-parent-metadata-${{ env.APPLICATION_SOURCE }}
+          path: ${{ runner.temp }}/evimed-core-reexport/parent-metadata/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload runtime aggregate manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-manifest
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime-manifest/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 01
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 1 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-01
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-01/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 02
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 2 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-02
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-02/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 03
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 3 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-03
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-03/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 04
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 4 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-04
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-04/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 05
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 5 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-05
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-05/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 06
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 6 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-06
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-06/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Upload bounded runtime compressed OCI part 07
+        if: ${{ fromJSON(steps.export.outputs.runtime_parts) >= 7 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-runtime-image-${{ env.APPLICATION_SOURCE }}-part-07
+          path: ${{ runner.temp }}/evimed-core-reexport/runtime/part-07/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
