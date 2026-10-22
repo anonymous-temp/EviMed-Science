@@ -401,3 +401,25 @@ async def test_a_rendered_page_that_passed_ruishu_is_not_a_challenge(plain_setti
                               {**found, RENDER_HEADER: "selector-missing"}, body, "https://www.cde.org.cn/main/xxgk/listpage/x")
     assert (flagged.value.outcome, flagged.value.detail) == ("challenge", "ruishu")
     await fetcher.aclose()
+
+
+async def test_robots_txt_through_a_failing_exit_is_not_a_refusal(plain_settings, upstream):
+    """A robots.txt request the relay or the budget could not send ends the page's poll under that name (neutral),
+    never as "robots-denied" (fr-sources, 2026-10-22: a ten-day relay outage read as 1,6xx refusals); a timeout of the
+    site itself stays "unreachable"."""
+    fetcher = make_fetcher(plain_settings, upstream)
+    try:
+        for raised, propagates in ((FetchError("blocked", "edge_proxy_unreachable"), True),
+                                   (FetchError("host-budget", "host_busy", retry_after_s=30), True),
+                                   (FetchError("timeout", "timeout"), False)):
+            async def failing(*_args, error=raised, **_kwargs):
+                raise error
+            fetcher._fetch = failing
+            if propagates:
+                with pytest.raises(FetchError) as declined:
+                    await fetcher._fetch_robots("https://www.example.org", "relay")
+                assert declined.value is raised
+            else:
+                assert await fetcher._fetch_robots("https://www.example.org", "relay") == (None, None)
+    finally:
+        await fetcher.aclose()

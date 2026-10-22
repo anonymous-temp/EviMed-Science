@@ -230,7 +230,8 @@ export class FrontierIngest {
     /** @type {Record<string, string[]>} a few of the unknown values seen, for whoever reads the status */
     this.unknownValues = {};
     this.counters = { pulls: 0, pullFailures: 0, pages: 0, received: 0, inserted: 0, duplicates: 0, dropped: 0, invalid: 0,
-      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0, pageShrinks: 0 };
+      placeholders: 0, mirrors: 0, mirrorFailures: 0, factKeysDropped: 0, cursorConflicts: 0, pageShrinks: 0,
+      screeningReports: 0, screeningReportFailures: 0 };
   }
 
   /** @param {string} vocabulary @param {unknown} value */
@@ -304,6 +305,7 @@ export class FrontierIngest {
       language: source.language,
       region: source.region,
       retired_at: source.retired_at,
+      plugin_enabled: source.enabled !== false,
       plugin_health: health,
       last_ok_at: source.last_ok_at,
       last_new_entry_at: source.last_new_entry_at,
@@ -313,9 +315,24 @@ export class FrontierIngest {
   }
 
   /**
-   * Mirror the registry. Every plugin field is replaced; the platform's own
-   * `enabled` and `selected_30d` are kept. Sources the plugin no longer lists
-   * are retired, never deleted — items still point at them.
+   * Mirror the registry. Every plugin field is replaced; `selected_30d` is the
+   * platform's. Sources the plugin no longer lists are retired, never deleted —
+   * items still point at them (a source the plugin retires keeps its items in
+   * the lists: retirement stops the collection, it does not withdraw content).
+   *
+   * `enabled` follows the plugin's own switch (fr-sources 2026-10-22): the
+   * mirror said 753 sources were on while the plugin polled 521 — the other 232
+   * are rows the plugin never reads (no selectors yet, an exit this build lacks,
+   * owner exclusions), and readers saw them listed. The plugin's switch as last
+   * mirrored is kept in `plugin_enabled`; when it changes, `enabled` takes it,
+   * and otherwise the platform's display switch (`setSourceEnabled`) stands.
+   * The first mirror after the column exists turns off what the plugin does not
+   * poll and keeps every display switch that was already off. Of the 232, four
+   * had ever been polled — CDE's and Fierce's, the owner's exclusions — and their
+   * old items leave the lists with them.
+   *
+   * After the mirror, the screen's verdicts per source go back to the plugin
+   * (`#reportScreening`).
    */
   async mirrorSources() {
     await this.ready();
@@ -338,15 +355,20 @@ export class FrontierIngest {
       if (rows.length) {
         await client.query(`INSERT INTO evimed_frontier.sources AS s (id, name, homepage, lane, source_type, access, egress, authority,
             safety_feed, owner_entity, launch_tier, language, region, retired_at, plugin_health, last_ok_at, last_new_entry_at,
-            entries_7d, registry_sha256, mirrored_at, platform_produced)
+            entries_7d, registry_sha256, mirrored_at, platform_produced, enabled, plugin_enabled)
           SELECT r.id, r.name, r.homepage, r.lane, r.source_type, r.access, r.egress, r.authority, r.safety_feed, r.owner_entity,
             r.launch_tier, r.language, r.region, r.retired_at, r.plugin_health, r.last_ok_at, r.last_new_entry_at, r.entries_7d,
-            r.registry_sha256, clock_timestamp(), coalesce(r.platform_produced, false)
+            r.registry_sha256, clock_timestamp(), coalesce(r.platform_produced, false), r.plugin_enabled, r.plugin_enabled
           FROM jsonb_to_recordset($1::jsonb) AS r(id text, name text, homepage text, lane text, source_type text, access text,
             egress text, authority smallint, safety_feed boolean, owner_entity text, launch_tier text, language text, region text,
             retired_at timestamptz, plugin_health text, last_ok_at timestamptz, last_new_entry_at timestamptz, entries_7d integer,
-            registry_sha256 text, platform_produced boolean)
-          ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, homepage=EXCLUDED.homepage, lane=EXCLUDED.lane,
+            registry_sha256 text, platform_produced boolean, plugin_enabled boolean)
+          ON CONFLICT (id) DO UPDATE SET
+            enabled = CASE WHEN s.plugin_enabled IS NULL THEN s.enabled AND EXCLUDED.plugin_enabled
+                           WHEN s.plugin_enabled IS DISTINCT FROM EXCLUDED.plugin_enabled THEN EXCLUDED.plugin_enabled
+                           ELSE s.enabled END,
+            plugin_enabled=EXCLUDED.plugin_enabled,
+            name=EXCLUDED.name, homepage=EXCLUDED.homepage, lane=EXCLUDED.lane,
             source_type=EXCLUDED.source_type, access=EXCLUDED.access, egress=EXCLUDED.egress, authority=EXCLUDED.authority,
             safety_feed=EXCLUDED.safety_feed, owner_entity=EXCLUDED.owner_entity, launch_tier=EXCLUDED.launch_tier,
             language=EXCLUDED.language, region=EXCLUDED.region, retired_at=EXCLUDED.retired_at,
@@ -365,7 +387,34 @@ export class FrontierIngest {
     });
     this.counters.mirrors += 1;
     this.lastMirrorAt = this.now().toISOString();
+    await this.#reportScreening();
     return { mirrored: rows.length, skipped: listing.skipped.length, retired: result.retired, complete };
+  }
+
+  /**
+   * The screen's verdicts per source over 14 days, back to the plugin
+   * (fr-sources 2026-10-22): how many of each source's entries the screen read
+   * (`promoted` or `screened-out`) and how many it judged not medical. The
+   * plugin makes no content judgement; its trials of new sources and its
+   * off-topic retirement read these. Best effort after the mirror: a plugin
+   * without the route, or down, costs this report and nothing else (counted).
+   */
+  async #reportScreening() {
+    if (typeof this.plugin.reportScreening !== "function") return null;
+    try {
+      const sources = (await this.database.query(`SELECT source_id AS id,
+          count(*) FILTER (WHERE state IN ('screened-out', 'promoted'))::integer AS screened,
+          count(*) FILTER (WHERE state = 'screened-out' AND state_reason = 'not-medical')::integer AS off_topic
+        FROM evimed_frontier.entries WHERE received_at > clock_timestamp() - interval '14 days'
+        GROUP BY source_id HAVING count(*) FILTER (WHERE state IN ('screened-out', 'promoted')) > 0 ORDER BY source_id`)).rows;
+      if (!sources.length) return { accepted: 0, unknown: 0 };
+      const result = await this.plugin.reportScreening({ windowDays: 14, sources });
+      this.counters.screeningReports += 1;
+      return result;
+    } catch {
+      this.counters.screeningReportFailures += 1;
+      return null;
+    }
   }
 
   /**

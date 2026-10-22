@@ -448,6 +448,14 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                                         if stats["last_ok_fetch_at"] else None)
             body["last_new_entry_at"] = stats["last_new_entry_at"].isoformat().replace("+00:00", "Z") if stats["last_new_entry_at"] else None
             body["latest_seq"] = int(stats["latest_seq"])
+            # Automatic source discovery (fr-sources 2026-10-22): today's counts, 14 days before, by line, on trial.
+            # A failure here costs this block only, never the rest of the answer.
+            try:
+                from .discovery import discovery_health
+                async with pool.connection() as conn:
+                    body["discovery"] = await discovery_health(conn, now)
+            except Exception as error:
+                log.warning("discovery health query failed: %s", type(error).__name__)
             body["backlog"] = {"due_sources": int(stats["due_sources"]), "pending_texts": int(stats["pending_texts"]),
                                "oldest_due_s": int((now - stats["oldest_due"]).total_seconds()) if stats["oldest_due"] else 0}
         except Exception as error:  # health must answer even when the database does not
@@ -546,6 +554,48 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
         if row is None:
             raise ApiError(404, "not_found", "no such source")
         return JSONResponse(serialize_source(row))
+
+    @app.post("/v1/sources/screening")
+    async def report_screening(request: Request):
+        """The platform's own screening verdicts per source (fr-sources 2026-10-22): over its window, how many of each
+        source's entries it screened and how many it judged not medical. The plugin judges no content itself; the
+        trial and off-topic rules of the source lifecycle read these. One report replaces the source's last one."""
+        gate.check(request)
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise ApiError(400, "invalid_params", "the body is not JSON", details={"field": "body"}) from None
+        window = payload.get("window_days") if isinstance(payload, dict) else None
+        rows = payload.get("sources") if isinstance(payload, dict) else None
+        if not isinstance(window, int) or isinstance(window, bool) or not 1 <= window <= 30:
+            raise ApiError(400, "invalid_params", "window_days must be 1-30", details={"field": "window_days"})
+        if not isinstance(rows, list) or len(rows) > SOURCES_PAGE_MAX * 4:
+            raise ApiError(400, "invalid_params", "sources must be a list of at most 4000", details={"field": "sources"})
+        clean = []
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ApiError(400, "invalid_params", "a sources row is not an object", details={"field": "sources"})
+            sid, screened, off_topic = row.get("id"), row.get("screened"), row.get("off_topic")
+            if (not isinstance(sid, str) or not 1 <= len(sid) <= 120 or not isinstance(screened, int)
+                    or not isinstance(off_topic, int) or isinstance(screened, bool) or isinstance(off_topic, bool)
+                    or not 0 <= off_topic <= screened):
+                raise ApiError(400, "invalid_params", "each row needs id, screened >= off_topic >= 0",
+                               details={"field": "sources"})
+            clean.append((sid, screened, off_topic))
+        now = clock()
+        async with pool_of().connection() as conn:
+            async with conn.transaction():
+                known = {r["id"] for r in await (await conn.execute(
+                    "SELECT id FROM evimed_knowledge.sources WHERE id = ANY(%s)", ([c[0] for c in clean],))).fetchall()}
+                accepted = [c for c in clean if c[0] in known]
+                async with conn.cursor() as cur:
+                    await cur.executemany(
+                        """INSERT INTO evimed_knowledge.source_screening (source_id, screened, off_topic, window_days, reported_at)
+                           VALUES (%s, %s, %s, %s, %s)
+                           ON CONFLICT (source_id) DO UPDATE SET screened = EXCLUDED.screened, off_topic = EXCLUDED.off_topic,
+                             window_days = EXCLUDED.window_days, reported_at = EXCLUDED.reported_at""",
+                        [(sid, screened, off_topic, window, now) for sid, screened, off_topic in accepted])
+        return JSONResponse({"accepted": len(accepted), "unknown": len(clean) - len(accepted)})
 
     # ---------------------------------------------------------------- stream
 

@@ -743,6 +743,19 @@ export class KnowledgePluginClient {
     };
   }
 
+  /**
+   * The platform's screening verdicts per source, back to the plugin
+   * (`POST /v1/sources/screening`, fr-sources 2026-10-22): over the window,
+   * how many of each source's entries the screen read and how many it judged
+   * not medical. The plugin judges no content itself; its trials and its
+   * off-topic retirement read these.
+   * @param {{ windowDays: number, sources: { id: string, screened: number, off_topic: number }[] }} report
+   */
+  async reportScreening({ windowDays, sources }) {
+    const body = await this.#request("POST", "/v1/sources/screening", { body: { window_days: windowDays, sources } });
+    return { accepted: integer(body?.accepted, 0, Number.MAX_SAFE_INTEGER) ?? 0, unknown: integer(body?.unknown, 0, Number.MAX_SAFE_INTEGER) ?? 0 };
+  }
+
   status() {
     return { configured: this.configured, minContract: this.minContract, lastError: this.lastError, counters: { ...this.counters } };
   }

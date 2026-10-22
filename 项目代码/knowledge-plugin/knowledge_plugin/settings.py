@@ -103,6 +103,11 @@ class Settings:
     edge_proxy_url: str | None = None                # relay egress: https://<Tokyo node> (http: for tests)
     browser_cdp_url: str | None = None               # browser egress: http://frontier-browser:9222
     crawl_enabled: bool = True
+    # Automatic source discovery (discovery.py): on/off, the daily validation caps by line (``line=n,…`` over the
+    # defaults), and how many article pages the outbound line reads a day.
+    discovery_enabled: bool = True
+    discovery_caps: str = ""
+    discovery_outbound_pages: int = 120
     host: str = "0.0.0.0"
     port: int = 8080
     registry_path: str = str(PROJECT_ROOT / "registry" / "sources.json")
@@ -151,6 +156,9 @@ class Settings:
             browser_cdp_url=_path(env, "KNOWLEDGE_PLUGIN_BROWSER_CDP_URL"),
             browser_timeout_s=_float(env, "KNOWLEDGE_PLUGIN_BROWSER_TIMEOUT_S", 60.0, 10.0, 300.0),
             crawl_enabled=_bool(env, "KNOWLEDGE_PLUGIN_CRAWL", True),
+            discovery_enabled=_bool(env, "KNOWLEDGE_PLUGIN_DISCOVERY", True),
+            discovery_caps=(env.get("KNOWLEDGE_PLUGIN_DISCOVERY_CAPS") or "").strip()[:500],
+            discovery_outbound_pages=_int(env, "KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES", 120, 0, 2000),
             host=(env.get("KNOWLEDGE_PLUGIN_HOST") or "0.0.0.0").strip(),
             port=_int(env, "KNOWLEDGE_PLUGIN_PORT", 8080, 1, 65535),
             registry_path=registry_path,
