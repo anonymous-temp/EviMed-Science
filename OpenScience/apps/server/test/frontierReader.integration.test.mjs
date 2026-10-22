@@ -370,3 +370,20 @@ test("the backfill script: last week's 精选 and near-line items owe one edit w
   assert.deepEqual([(await row(bare.id)).selected, (await row(pinned.id)).selected], [false, true], "an operator's pin stays");
   assert.deepEqual((await frontierReaderBackfill({ database, threshold: 80, apply: true, now: NOW })).reedit.count, 0, "a second run finds nothing");
 });
+
+test("fr-events' verdict holds in the later selections: the lane floor passes over an item standing beside its event's selected report", options, async () => {
+  const report = await insertItem(database, { title: "The selected report", selected: true, selectedRule: "threshold", timelineAt: "2026-10-21T02:00:00Z" });
+  const beside = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "A second report of it", timelineAt: "2026-10-22T02:00:00Z" });
+  const other = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "Another story", timelineAt: "2026-10-22T02:30:00Z" });
+  const trigger = await insertItem(database, { title: "Published this round", state: "scored", timelineAt: "2026-10-22T03:00:00Z" });
+  await set(report.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION });
+  await set(beside.id, { score_total: 78, editor_version: FRONTIER_EDITOR_VERSION, same_event_item_id: report.id });
+  await set(other.id, { score_total: 65, editor_version: FRONTIER_EDITOR_VERSION });
+  await set(trigger.id, { score_total: 20, editor_version: FRONTIER_EDITOR_VERSION });
+  const pipeline = pipelineFor(translatingEditor());
+  const summary = await pipeline.processBatch();
+  assert.equal(summary.published, 1);
+  const selected = async (/** @type {string} */ id) => (await database.query("SELECT selected, selected_rule FROM evimed_frontier.items WHERE id = $1", [id])).rows[0];
+  assert.deepEqual(await selected(beside.id), { selected: false, selected_rule: null }, "it adds nothing to the report that stands for the event");
+  assert.deepEqual(await selected(other.id), { selected: true, selected_rule: "lane-floor" }, "the lane's next best is taken instead");
+});

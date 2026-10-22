@@ -631,6 +631,18 @@ export function frontierReaderWorthy(item, threshold) {
     || (item?.score_total != null && Number.isFinite(Number(item.score_total)) && Number(item.score_total) >= threshold - FRONTIER_READER_MARGIN);
 }
 
+/**
+ * fr-events' verdict (cc/briefs/fr-contract.md, 2026-10-22): an item that joined an event whose selected report is another one
+ * and adds nothing to it names that report in `same_event_item_id`, and none of this module's later selections — the re-select
+ * after a re-edit, the lane floor, the preprint lane — takes it while the report it names is published and selected. Read
+ * through `to_jsonb`, so the predicate holds whether or not the column exists yet.
+ * @param {string} alias the items row's alias
+ */
+export function frontierBesideSelectedSql(alias) {
+  return `EXISTS (SELECT 1 FROM evimed_frontier.items beside WHERE beside.id = (to_jsonb(${alias})->>'same_event_item_id')::bigint
+    AND beside.state = 'published' AND beside.selected)`;
+}
+
 /** A title in the form near-duplicates are compared in without trigrams. @param {unknown} title */
 export function titleKey(title) {
   return String(title ?? "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -1946,8 +1958,9 @@ export class FrontierPipeline {
   async #reselect(itemId, context) {
     await this.database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const item = (await client.query("SELECT * FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [itemId])).rows[0];
-      if (!item || item.state !== "published" || item.selected) return;
+      const item = (await client.query(`SELECT i.*, ${frontierBesideSelectedSql("i")} AS beside_selected FROM evimed_frontier.items i
+        WHERE i.id = $1 FOR UPDATE OF i`, [itemId])).rows[0];
+      if (!item || item.state !== "published" || item.selected || item.beside_selected) return;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const decision = frontierSelectionDecision({
@@ -1979,7 +1992,7 @@ export class FrontierPipeline {
           FROM evimed_frontier.items i
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2 AND i.score_total >= $3
             AND i.verification IN ('passed', 'repaired') AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
-            AND NOT (i.source_type = 'journal' AND 'no-abstract' = ANY(i.flags))
+            AND NOT (i.source_type = 'journal' AND 'no-abstract' = ANY(i.flags)) AND NOT ${frontierBesideSelectedSql("i")}
             AND NOT EXISTS (SELECT 1 FROM evimed_frontier.items s WHERE s.state = 'published' AND s.selected AND s.lane = i.lane
               AND s.timeline_at >= $1 AND s.timeline_at < $2)) AS ranked
         LEFT JOIN evimed_frontier.item_texts t ON t.item_id = ranked.id
@@ -2031,7 +2044,7 @@ export class FrontierPipeline {
         LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.source_type = ANY($1) AND i.timeline_at >= $2 AND i.timeline_at < $3
           AND i.score_total >= $4 AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
-          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0
+          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0 AND NOT ${frontierBesideSelectedSql("i")}
         ORDER BY i.score_total DESC, i.id LIMIT $5`,
       [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end, this.preprintLaneMinScore, room + 5]);
       const chosen = candidates.rows
