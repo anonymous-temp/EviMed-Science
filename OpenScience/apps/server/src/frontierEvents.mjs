@@ -921,7 +921,7 @@ export class FrontierEvents {
    * candidates and how many candidate events a call would weigh, which is what it costs. Placement is serialised by the
    * clustering lock like every round's; the calls of `concurrency` items are made at once. A day's budget that runs out stops
    * the run (`stopped: "budget"`); a second run takes up where the first left off, because an item already placed with the
-   * events before it is asked again and answers the same.
+   * events before it is asked again and answers the same; `resumeFrom` says where to start it so nothing is asked twice.
    * @param {{ since: Date, until?: Date, apply?: boolean, concurrency?: number, limit?: number,
    *           onProgress?: ((summary: Record<string, unknown>) => void) | null }} options
    */
@@ -937,12 +937,16 @@ export class FrontierEvents {
         AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
       ORDER BY i.visible_at, i.id LIMIT $3`, [since, until, limit])).rows ?? [];
     const summary = { items: items.length, scanned: 0, withCandidates: 0, candidateEvents: 0, kept: 0, joined: 0, merged: 0,
-      skipped: 0, failed: 0, stopped: /** @type {string | null} */ (null), apply };
+      skipped: 0, failed: 0, stopped: /** @type {string | null} */ (null), resumeFrom: /** @type {string | null} */ (null), apply };
     const pool = { rows: /** @type {any[] | null} */ (null) };
     let next = 0;
+    /** The first item not placed when the budget stopped the run: where a run started tomorrow takes up (`since`). */
+    let resume = Infinity;
     const work = async () => {
       while (next < items.length && !summary.stopped) {
-        const item = items[next];
+        if (apply && !(await this.#modelAllowed())) { summary.stopped = "budget"; resume = Math.min(resume, next); break; }
+        const index = next;
+        const item = items[index];
         next += 1;
         try {
           const now = new Date(new Date(item.visible_at).getTime());
@@ -951,9 +955,8 @@ export class FrontierEvents {
               .filter((hit) => hit.eventId !== String(item.event_id)));
             if (candidates.length) { summary.withCandidates += 1; summary.candidateEvents += candidates.length; }
           } else {
-            if (!(await this.#modelAllowed())) { summary.stopped = "budget"; break; }
             const outcome = await this.#clusterOne(item, { now, modelKey, allowModel: true, pool, own: String(item.event_id) });
-            if (outcome === "deferred") { summary.stopped = "budget"; break; }
+            if (outcome === "deferred") { summary.stopped = "budget"; resume = Math.min(resume, index); break; }
             if (outcome === "kept" || outcome === "joined" || outcome === "merged" || outcome === "skipped") summary[outcome] += 1;
           }
         } catch (error) {
@@ -965,6 +968,7 @@ export class FrontierEvents {
       }
     };
     await Promise.all(Array.from({ length: apply ? concurrency : 1 }, () => work()));
+    if (Number.isFinite(resume) && items[resume]) summary.resumeFrom = new Date(items[resume].visible_at).toISOString();
     return summary;
   }
 
