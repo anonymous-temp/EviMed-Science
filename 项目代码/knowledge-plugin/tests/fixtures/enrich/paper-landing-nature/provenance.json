@@ -1,0 +1,304 @@
+{
+ "case": "enrich/paper-landing-nature",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:28:30+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "j-2041-1723:f9d8e359e781ad854da8523e138c2f6a",
+   "revision": 1,
+   "source_id": "j-2041-1723",
+   "external_key": "10.1038/s41467-026-78936-5",
+   "identity_key": "doi:10.1038/s41467-026-78936-5",
+   "url": "https://doi.org/10.1038/s41467-026-78936-5",
+   "canonical_url": "https://doi.org/10.1038/s41467-026-78936-5",
+   "doi": "10.1038/s41467-026-78936-5",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-22T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "2041-1723",
+    "issns": [
+     "2041-1723"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org",
+     "www.nature.com"
+    ]
+   },
+   "attempts": 0
+  },
+  {
+   "entry_id": "j-0028-0836:83cb4e63d6cd5d34c9adfbd64442cbf4",
+   "revision": 1,
+   "source_id": "j-0028-0836",
+   "external_key": "10.1038/d41586-026-03374-8",
+   "identity_key": "doi:10.1038/d41586-026-03374-8",
+   "url": "https://doi.org/10.1038/d41586-026-03374-8",
+   "canonical_url": "https://doi.org/10.1038/d41586-026-03374-8",
+   "doi": "10.1038/d41586-026-03374-8",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-22T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+    "issn": "0028-0836",
+    "issns": [
+     "0028-0836",
+     "1476-4687"
+    ],
+    "cursor_start": "*",
+    "page_size": 100,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "api.crossref.org",
+     "www.nature.com"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "landing",
+   "abstract_chars": 1993,
+   "body_chars": 0,
+   "notes": [
+    "openalex_not_found"
+   ]
+  },
+  {
+   "status": "available",
+   "text_kind": "excerpt",
+   "fetched_from": "landing",
+   "abstract_chars": 0,
+   "body_chars": 0,
+   "notes": [
+    "openalex_not_found"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1038%2Fd41586-026-03374-8%22%5Bdoi%5D%20OR%20%2210.1038%2Fs41467-026-78936-5%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.1038%2Fd41586-026-03374-8%22%5Bdoi%5D%20OR%20%2210.1038%2Fs41467-026-78936-5%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:30+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 407,
+   "sha256": "845aaaed052df807ea06612667e3cea92e44eff49953bbfab991ac11da2a2bbc"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1038%2Fd41586-026-03374-8%22%20OR%20DOI%3A%2210.1038%2Fs41467-026-78936-5%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.1038%2Fd41586-026-03374-8%22%20OR%20DOI%3A%2210.1038%2Fs41467-026-78936-5%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:31+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 235,
+   "sha256": "02b52355603ecf2058835764f51f8bb5d61aac9b37e9aca23e588652e9191696"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1038/s41467-026-78936-5",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1038/s41467-026-78936-5",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:33+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 4486,
+   "sha256": "5dc3728eaf8fe339fea88885cfc8a5080fec2dc307e3d1739c3d740d5ffce3e6"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1038/s41467-026-78936-5?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 404,
+   "final_url": "https://api.openalex.org/works/doi:10.1038/s41467-026-78936-5?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:28:34+00:00",
+   "file": "04.html",
+   "gzip": false,
+   "bytes": 207,
+   "sha256": "e9639e3c4681ce85f852fbac48e2eeee5ba51296dbfec57c200d59b76237ab80"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1038/s41467-026-78936-5?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1038/s41467-026-78936-5?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:36+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 227,
+   "sha256": "466d98857307134ba8a5e0712d9c36a68d5816cf7687b01e931e80a9bd813b0a"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.nature.com/articles/s41467-026-78936-5",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://www.nature.com/articles/s41467-026-78936-5",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:28:39+00:00",
+   "file": "06.html.gz",
+   "gzip": true,
+   "bytes": 209382,
+   "sha256": "031ee03b16ea721a57c3468b0f76080d4488f17638540cfe270598a986029b43",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "46cec05f96e3c380b90b143b1b036f8d832178f725396b6fda0853c6733f0a72"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.1038/d41586-026-03374-8",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.1038/d41586-026-03374-8",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:41+00:00",
+   "file": "07.json",
+   "gzip": false,
+   "bytes": 2456,
+   "sha256": "2277eafa31502139247ede1f74ea2e6475c39b7ce01eb4465bf33bf464fd5a8f"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.1038/d41586-026-03374-8?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 404,
+   "final_url": "https://api.openalex.org/works/doi:10.1038/d41586-026-03374-8?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:28:43+00:00",
+   "file": "08.html",
+   "gzip": false,
+   "bytes": 207,
+   "sha256": "e9639e3c4681ce85f852fbac48e2eeee5ba51296dbfec57c200d59b76237ab80"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.1038/d41586-026-03374-8?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.1038/d41586-026-03374-8?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:44+00:00",
+   "file": "09.json",
+   "gzip": false,
+   "bytes": 227,
+   "sha256": "afcaa25db116a72d9195bb788bc58ac0469fce0bca95dd304068144a3e74dec8"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.nature.com/articles/d41586-026-03374-8",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://www.nature.com/articles/d41586-026-03374-8",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-10-22T15:28:46+00:00",
+   "file": "10.html.gz",
+   "gzip": true,
+   "bytes": 175878,
+   "sha256": "7109cb095428ea4a544c6dd73aed69a80eddbd7634e79ff174d79723b77ddac7",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "5a744a31634bd8e76ad8d7b3a9c28152a7f0d8d2b35f8aa9f4bc0524b4b3185c"
+  }
+ ]
+}

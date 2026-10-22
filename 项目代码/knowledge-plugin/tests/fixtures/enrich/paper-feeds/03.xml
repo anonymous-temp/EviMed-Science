@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:admin="http://webns.net/mvcb/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:prism="http://purl.org/rss/1.0/modules/prism/" xmlns:syn="http://purl.org/rss/1.0/modules/syndication/" xmlns:taxo="http://purl.org/rss/1.0/modules/taxonomy/">
+
+<channel rdf:about="http://www.bmj.com">
+<title>Latest headlines from BMJ</title>
+<link>http://www.bmj.com</link>
+<description></description>
+<prism:eIssn>1756-1833</prism:eIssn>
+<prism:publicationName>BMJ</prism:publicationName>
+<items>
+ <rdf:Seq>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-101219.short?rss=1"/>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-101221.short?rss=1"/>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-101216.short?rss=1"/>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-100607.short?rss=1"/>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-100913.short?rss=1"/>
+  <rdf:li rdf:resource="http://www.bmj.com/content/395/bmj-2026-101158.short?rss=1"/>
+ </rdf:Seq>
+</items>
+<image rdf:resource="http://www.bmj.com/icons/site/logo.bmj.gif"/>
+<xhtml:meta content="noindex" name="robots" xmlns:xhtml="http://www.w3.org/1999/xhtml"/></channel>
+<image rdf:about="http://www.bmj.com/icons/site/logo.bmj.gif">
+<title>BMJ</title>
+<url>http://www.bmj.com/icons/site/logo.bmj.gif</url>
+<link>http://www.bmj.com</link>
+</image>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-101219.short?rss=1">
+<title><![CDATA[AD-Smart: Alzheimer&#x2019;s trial will test diabetes and ADHD drugs on patients]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-101219.short?rss=1</link>
+<description><![CDATA[A new clinical trial has been launched in the UK that researchers hope will cut years from the search for treatments for Alzheimer’s disease.The study will test multiple drugs simultaneously, starting with two repurposed medicines already used to treat type 2 diabetes and attention deficit/hyperactivity disorder (ADHD).It will examine whether the medicines can lessen symptoms such as memory and thinking problems and help people maintain their quality of life.Alzheimer’s is the most common type of dementia, affecting around 600 000 people in the UK. Data published today show that the NHS in England met its target to diagnose dementia in at least 66.7% of the patients over 65 who are estimated to have dementia for the first time since March 2020.1No current NHS treatments can slow or stop Alzheimer’s, although medicines can be used to manage its symptoms.2 The AD-Smart trial (Alzheimer’s disease Systematic Multi-arm Adaptive Randomised Trial) aims to...]]></description>
+<dc:creator><![CDATA[Gareth Iacobucci]]></dc:creator>
+<dc:date>2026-10-22T07:21:17-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-101219</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-101219</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:title><![CDATA[AD-Smart: Alzheimer&#x2019;s trial will test diabetes and ADHD drugs on patients]]></dc:title>
+<prism:publicationDate>2026-10-22</prism:publicationDate>
+<prism:section>News</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct22_14</prism:issueIdentifier>
+</item>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-101221.short?rss=1">
+<title><![CDATA[Shamonda: As first ever human case is recorded, what you need to know]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-101221.short?rss=1</link>
+<description><![CDATA[A person in France has become the first ever human reported to have been infected with Shamonda virus, health authorities have announced.1Until now, the virus had only ever been detected in non-human animals and was considered by officials to be non-transmissible to humans.What happened in France?Details are limited, but what has been announced is that the patient was already receiving treatment for a serious illness that made them susceptible to infection and complications before being infected with Shamonda and dying earlier this month.Investigations into whether the virus caused or contributed to the patient’s death, and how the patient acquired the infection, are ongoing, said the European Centre for Disease Prevention and Control (ECDC).2What is Shamonda?Shamonda virus is a member of a large group of viruses known as bunyaviruses.3Although it was first identified in Nigerian cattle in the 1960s, Shamonda virus was found in European farm animals for the first time...]]></description>
+<dc:creator><![CDATA[Rosa Furneaux]]></dc:creator>
+<dc:date>2026-10-22T07:11:17-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-101221</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-101221</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:subject><![CDATA[Infectious diseases]]></dc:subject>
+<dc:title><![CDATA[Shamonda: As first ever human case is recorded, what you need to know]]></dc:title>
+<prism:publicationDate>2026-10-22</prism:publicationDate>
+<prism:section>News</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct22_12</prism:issueIdentifier>
+</item>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-101216.short?rss=1">
+<title><![CDATA[Guinea-Bissau hepatitis B trial: controversial study cancelled after police raid researchers&#x2019; offices]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-101216.short?rss=1</link>
+<description><![CDATA[A controversial hepatitis B vaccine trial planned in Guinea-Bissau will not proceed, its principal investigator Frederik Schaltz-Buchholzer has confirmed, after the country’s government refused to authorise the study.Schaltz-Buchholzer told The BMJ that “the military government has announced that they do not authorize the trial,” and it “will therefore not happen.”This confirmation comes two days after Guinea-Bissau’s judicial police searched the facilities of the Bandim Health Project in the African nation’s capital, Bissau, seizing a batch of hepatitis B vaccines.1The Bandim Health Project is a Danish run research organisation that Schaltz-Buchholzer and co-principal trial investigator Christine Stabell Benn are affiliated with.In a statement, Guinea-Bissau’s judicial police said the raid was part of an investigative procedure to clarify the circumstances related to the hepatitis B vaccines, “which will be subject to applicable legal procedures in order to ascertain the facts and any potential liabilities.”The judicial police did not say whether the trial,...]]></description>
+<dc:creator><![CDATA[Leslie Liang]]></dc:creator>
+<dc:date>2026-10-22T06:41:12-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-101216</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-101216</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:title><![CDATA[Guinea-Bissau hepatitis B trial: controversial study cancelled after police raid researchers&#x2019; offices]]></dc:title>
+<prism:publicationDate>2026-10-22</prism:publicationDate>
+<prism:section>news</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct22_11</prism:issueIdentifier>
+</item>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-100607.short?rss=1">
+<title><![CDATA[Plaques and fissures on the lips]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-100607.short?rss=1</link>
+<description><![CDATA[A man in his 60s presented with a three month history of painless lesions on and around the lips which persisted despite treatment with antibiotics and antiviral drugs. He had a 20 year history of ulcerative colitis that had remained in remission for years. He did not report intestinal symptoms and was not taking immunomodulatory medication.Physical examination showed vegetative plaques with pustules and yellow crusts on the lips and perioral region, and multiple fissures on the inner side of the lips (fig 1). Laboratory tests showed eosinophilia (8.6%; reference range 0.4% to 8.0%) and mildy raised C reactive protein levels (10.30 mg/L; reference range 0.0 mg/L to 6.0 mg/L). Colonoscopy was declined.bmj;395/oct22_1/e100607/F1F1f1Fig 1Histopathological examination of the lesions combined with direct immunofluorescence tests indicated a diagnosis of pyodermatitis-pyostomatitis vegetans (PD-PSV).PD-PSV is a mucocutaneous disorder characterised by confluent pustules and erosions of the mouth and skin folds. It typically occurs in patients...]]></description>
+<dc:creator><![CDATA[Ming-Ming Zhou, Hong-Hui Xu]]></dc:creator>
+<dc:date>2026-10-22T02:21:07-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-100607</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-100607</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:title><![CDATA[Plaques and fissures on the lips]]></dc:title>
+<prism:publicationDate>2026-10-22</prism:publicationDate>
+<prism:section>Minerva</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct22_1</prism:issueIdentifier>
+</item>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-100913.short?rss=1">
+<title><![CDATA[Living with POTS during weather changes]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-100913.short?rss=1</link>
+<description><![CDATA[I have lived with postural orthostatic tachycardia syndrome (POTS) for over 12 years. It affects me every day and no single day is ever the same. Several things can trigger a flare, including changes in temperature and atmospheric pressure. The recent summer heatwaves were very challenging. I had to postpone going to hospital for scheduled treatment as I knew that the lack of ventilation or air conditioning there would make me feel unwell, and this would have a knock-on effect on my treatment response.Extreme weatherBecause of POTS, my body struggles to regulate its temperature, and this makes me prone to heat stroke. I experience sun sensitivity and altered sweating capacity, and changes in air temperature can make me light headed and dizzy. As a result, I tend to not socialise or stay out when it is very warm during the day, which can be isolating.I have found several ways to...]]></description>
+<dc:creator><![CDATA[Jennifer]]></dc:creator>
+<dc:date>2026-10-21T03:51:10-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-100913</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-100913</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:subject><![CDATA[What your patient is thinking]]></dc:subject>
+<dc:title><![CDATA[Living with POTS during weather changes]]></dc:title>
+<prism:publicationDate>2026-10-21</prism:publicationDate>
+<prism:section>Practice</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct21_3</prism:issueIdentifier>
+</item>
+<item rdf:about="http://www.bmj.com/content/395/bmj-2026-101158.short?rss=1">
+<title><![CDATA[Medical news in brief: Weekly insulin &#x0237;ab approved, doctors &#x201C;bullied and harassed&#x201D; at work, UK bans weight loss pill ads, and other stories]]></title>
+<link>http://www.bmj.com/content/395/bmj-2026-101158.short?rss=1</link>
+<description><![CDATA[Type 2 diabetesWeekly insulin jab is approved by MHRAThe UK Medicines and Healthcare Products Regulatory Agency approved the weekly insulin injection efsitora alfa, also known as Onswik and made by Eli Lilly, for adults with type 2 diabetes. The National Institute for Health and Care Excellence recommended the treatment in August, citing clinical trial evidence showing that the drug was as effective as long acting insulins already widely used to treat type 2 diabetes. Unlike current options, Onswik needs to be injected only once a week.Staff wellbeingNHS England staff are reluctant to raise concernsNHS England is a “challenging” environment to work in and staff are unwilling to raise concerns, a report found. The internal Freedom to Speak Up (FTSU) report said that staff who raised concerns faced bullying, harassment, and psychological abuse from seniors.1 In 2025-26 NHS England staff raised 235 FTSU cases, after 319 cases in 2024-25. Issues included...]]></description>
+<dc:creator/>
+<dc:date>2026-10-21T22:31:01-07:00</dc:date>
+<dc:identifier>info:doi/10.1136/bmj-2026-101158</dc:identifier>
+<dc:identifier>hwp:master-id:bmj;bmj-2026-101158</dc:identifier>
+<dc:publisher>BMJ Publishing Group Ltd</dc:publisher>
+<dc:title><![CDATA[Medical news in brief: Weekly insulin &#x0237;ab approved, doctors &#x201C;bullied and harassed&#x201D; at work, UK bans weight loss pill ads, and other stories]]></dc:title>
+<prism:publicationDate>2026-10-21</prism:publicationDate>
+<prism:section>News</prism:section>
+<prism:volume>395</prism:volume>
+<prism:issueIdentifier>oct21_10</prism:issueIdentifier>
+</item>
+</rdf:RDF>

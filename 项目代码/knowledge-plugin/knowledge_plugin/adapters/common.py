@@ -139,6 +139,9 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
 _HEADING_END = re.compile(r"</(?:jats:title|title|h[1-6])\s*>", re.I)
 _HEADING_MARK = "\u2063"   # invisible separator: where a heading ended, until its line is joined to the next
 _ABSTRACT_HEADINGS = frozenset({"abstract", "摘要", "summary"})
+# A run-in heading: a short bold run that opens a paragraph ("<p><strong>Background</strong>This trial…" — Frontiers'
+# citation_abstract; "<jats:p><jats:bold>Objective:</jats:bold> To assess…"), read as the paragraph's heading.
+_RUN_IN = re.compile(r"(<(?:jats:)?p\b[^>]*>)\s*<((?:jats:)?(?:bold|strong|b))\b[^>]*>([^<]{1,40}?)</\2\s*>", re.I)
 
 
 def structured_abstract(value: Any) -> str:
@@ -148,7 +151,8 @@ def structured_abstract(value: Any) -> str:
     if value is None:
         return ""
     # The mark, and a break after the heading: Europe PMC writes ``<h4>Background</h4>Text…``, read as "BackgroundText".
-    marked = _HEADING_END.sub(lambda match: _HEADING_MARK + match.group(0) + "<br>", str(value))
+    value = _RUN_IN.sub(lambda match: f"{match.group(1)}<h4>{match.group(3).strip()}</h4>", str(value))
+    marked = _HEADING_END.sub(lambda match: _HEADING_MARK + match.group(0) + "<br>", value)
     lines = clean_markup(marked, keep_paragraphs=True).split("\n")
     out: list[str] = []
     heading = ""

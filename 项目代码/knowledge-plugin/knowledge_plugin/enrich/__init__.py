@@ -89,6 +89,7 @@ from . import openalex as openalex_step
 from . import pubmed as pubmed_step
 from . import trials as trials_step
 from . import unpaywall as unpaywall_step
+from .article_html import same_text
 from .common import Endpoints, Trace
 from .page import clip_excerpt, page_excerpt, summary_is_full_text
 
@@ -187,6 +188,11 @@ class _Found:
         if text and not self.abstract:
             self.abstract, self.abstract_from, self.fetched_at = text, source, at
 
+    def take_structure(self, text: str | None, source: str) -> None:
+        """The same abstract with its sections (a feed's summary is stored as one line; the page keeps the headings)."""
+        if text and self.abstract and "\n" not in self.abstract and "\n" in text and same_text(self.abstract, text):
+            self.abstract, self.abstract_from = text, source
+
     def take_excerpt(self, text: str | None, source: str) -> None:
         if text and len(text) > len(self.excerpt or ""):
             self.excerpt, self.excerpt_from = text, source
@@ -263,8 +269,9 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
                 found.take_abstract(text, "publisher-feed")
             else:
                 found.take_excerpt(text, "publisher-feed")
-    open_work = enrichment.get("open_access") in ("gold", "green", "bronze") or found.cc
-    if found.pmcid and open_work and not preprint:
+    # Europe PMC answers fullTextXML for its open-access subset only (404 otherwise), so a PMC id is asked unless the
+    # work is known to be closed.
+    if found.pmcid and enrichment.get("open_access") != "closed" and not preprint:
         jats_abstract, body = await fulltext_step.europepmc_fulltext(fetcher, endpoints, found.pmcid, trace)
         found.take_abstract(jats_abstract, "europepmc-fulltext")
         if body:
@@ -282,6 +289,7 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
         page = read.page
         if page is not None:
             found.take_abstract(page.abstract, "landing")
+            found.take_structure(page.abstract, "landing")
             found.take_excerpt(page.excerpt, "landing")
             if page.license_url:
                 found.licenses.append(page.license_url)

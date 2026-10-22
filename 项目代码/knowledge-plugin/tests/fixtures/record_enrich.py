@@ -16,14 +16,15 @@ import asyncio
 import hashlib
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent))
 
-from record import UA, RecordingFetcher, _now  # noqa: E402
-from replay import load_case  # noqa: E402
+from record import UA, RecordingFetcher, _now, registry_row  # noqa: E402
+from replay import ReplayFetcher, load_case  # noqa: E402
 
 from knowledge_plugin.adapters import REGISTRY  # noqa: E402
 from knowledge_plugin.enrich import enrich_batch  # noqa: E402
@@ -228,10 +229,234 @@ async def record_evimed_case(name: str) -> dict:
     return provenance
 
 
+# ---------------------------------------------------------------------------------------------
+# rt-papers (2026-10-22): the paper text chain — OpenAlex, feeds, landing pages, Europe PMC full text
+# ---------------------------------------------------------------------------------------------
+
+RT_PAPERS = "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)"
+
+
+def paper_row(doi: str, source_id: str | None = None, *, first_seen: str = "2026-10-22T08:00:00+00:00",
+              attempts: int = 0) -> dict:
+    """A journal entry as the store hands it to enrichment, for a real DOI: the registry row's exit and config when
+    the journal is one of ours (its ``abstract_feed`` included), a Crossref ISSN reader's otherwise."""
+    source = registry_row(source_id) if source_id else None
+    return {
+        "entry_id": f"{source_id or 'paper'}:{hashlib.sha256(doi.encode()).hexdigest()[:32]}", "revision": 1,
+        "source_id": source_id, "external_key": doi, "identity_key": f"doi:{doi}", "url": f"https://doi.org/{doi}",
+        "canonical_url": f"https://doi.org/{doi}", "doi": doi, "pmid": None, "registry_ids": [], "title": None,
+        "summary": None, "lang": "en", "published_at": None, "facts": {}, "first_seen_at": first_seen,
+        "source_access": source["access"] if source else "crossref-issn",
+        "source_egress": source["egress"] if source else "direct",
+        "source_type": source["source_type"] if source else "journal",
+        "source_config": source["config"] if source else {}, "attempts": attempts,
+    }
+
+
+PAPER_CASES = {
+    # Only OpenAlex has the abstract (an Elsevier-hosted journal: Crossref and PubMed without it; the page refuses us).
+    "enrich/paper-openalex": lambda: [paper_row("10.1016/s1001-9294(22)00007-4")],
+    # A closed Springer article, structured abstract on its landing page through the direct exit.
+    "enrich/paper-landing-springer": lambda: [paper_row("10.1007/s00228-026-04200-w", "j-0031-6970")],
+    # Nature: a research article published that day (abstract on the page, the body not out yet) and a news piece
+    # (no abstract: its standfirst).
+    "enrich/paper-landing-nature": lambda: [paper_row("10.1038/s41467-026-78936-5", "j-2041-1723"),
+                                            paper_row("10.1038/d41586-026-03374-8", "j-0028-0836")],
+    # JAMA answers a Cloudflare challenge: an answer, never something to get round.
+    "enrich/paper-challenge": lambda: [paper_row("10.1001/jama.2026.20670", "j-0098-7484")],
+    # An open article in PMC: Europe PMC's JATS full text.
+    "enrich/paper-fulltext-epmc": lambda: [paper_row("10.1186/s12874-024-02160-2", "j-1471-2288",
+                                                     first_seen="2024-02-29T08:00:00+00:00")],
+    # An open, CC-BY article no index has a PMC id for yet: its whole text off the landing page.
+    "enrich/paper-oa-landing": lambda: [paper_row("10.3389/fpubh.2026.1975587")],
+}
+
+
+def fresh_chain_state() -> None:
+    """Each case starts with no host verdicts and no cached feeds, and runs its entries one at a time — the order a
+    replay (whose answers never wait) runs them in, so a verdict recorded for one entry is seen by the next."""
+    from knowledge_plugin import enrich as enrich_module
+    from knowledge_plugin.enrich import feeds as feeds_step
+    from knowledge_plugin.enrich import landing as landing_step
+
+    landing_step.VERDICTS.until.clear()
+    feeds_step.CACHE.entries.clear()
+    feeds_step.CACHE.locks.clear()
+    enrich_module.ENTRY_CONCURRENCY = 1
+
+
+class ExtendingFetcher:
+    """The recorded exchanges of a case first; what the code asks beyond them, recorded live (``extend_case``)."""
+
+    def __init__(self, case, recorder: RecordingFetcher) -> None:
+        self.replay = ReplayFetcher(case)
+        self.recorder = recorder
+        self.new: list[str] = []
+
+    async def fetch(self, spec, *, source_id=None, egress="direct", allowed_hosts=None, wait_for=None):
+        if ReplayFetcher._key(spec) in self.replay.table:
+            return await self.replay.fetch(spec, source_id=source_id, egress=egress, allowed_hosts=allowed_hosts)
+        self.new.append(spec.url)
+        return await self.recorder.fetch(spec, source_id=source_id, egress=egress, allowed_hosts=allowed_hosts)
+
+
+async def extend_case(name: str, reason: str) -> dict:
+    """Run today's chain on a recorded case: its recorded answers are served as they were, the requests the chain
+    makes beyond them are recorded live and appended (``extensions`` in the provenance names them)."""
+    case = load_case(name)
+    case_dir = HERE / name
+    provenance = json.loads((case_dir / "provenance.json").read_text(encoding="utf-8"))
+    recorder = RecordingFetcher(case_dir, credentials=False, contact=False, trim_html=True)
+    recorder.exchanges = list(provenance["exchanges"])
+    before = len(recorder.exchanges)
+    fetcher = ExtendingFetcher(case, recorder)
+    now = datetime.fromisoformat(provenance["recorded_at"])
+    fresh_chain_state()
+    try:
+        results = await enrich_batch(case.rows, fetcher, None, now=now)
+    finally:
+        await recorder.close()
+    provenance["exchanges"] = recorder.exchanges
+    provenance.setdefault("extensions", []).append({
+        "recorded_by": RT_PAPERS, "recorded_at": _now().isoformat(), "reason": reason,
+        "exchanges": list(range(before, len(recorder.exchanges))),
+        "results_at_recording": [{"status": r.status, "text_kind": r.text_kind, "fetched_from": r.fetched_from,
+                                  "notes": r.notes} for r in results]})
+    (case_dir / "provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=1, default=str) + "\n",
+                                              encoding="utf-8")
+    return provenance
+
+
+async def record_paper_case(name: str, rows: list[dict]) -> dict:
+    case_dir = HERE / name
+    case_dir.mkdir(parents=True, exist_ok=True)
+    for old in case_dir.iterdir():
+        old.unlink()
+    fetcher = RecordingFetcher(case_dir, credentials=False, contact=False, trim_html=True)
+    recorded_at = _now()
+    fresh_chain_state()
+    try:
+        results = await enrich_batch(rows, fetcher, None, now=recorded_at)
+    finally:
+        await fetcher.close()
+    provenance = {"case": name, "recorded_by": RT_PAPERS, "user_agent": UA, "recorded_at": recorded_at.isoformat(),
+                  "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+                  "rows": rows,
+                  "results_at_recording": [{"status": r.status, "text_kind": r.text_kind, "fetched_from": r.fetched_from,
+                                            "abstract_chars": len(r.abstract or ""), "body_chars": len(r.body_text or ""),
+                                            "notes": r.notes} for r in results],
+                  "exchanges": fetcher.exchanges}
+    (case_dir / "provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=1, default=str) + "\n",
+                                              encoding="utf-8")
+    return provenance
+
+
+# Publisher feeds as the feed step reads them (one exchange per feed), for ``feeds.parse_items`` and ``feed_text``.
+FEEDS = {
+    "oup-cid-advance": "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+    "oup-cid-current": "https://academic.oup.com/rss/site_5269/3135.xml",
+    "bmj-recent": "https://www.bmj.com/rss/recent.xml",
+    "jama-online-first": "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+    "jamanetworkopen-new": "https://jamanetwork.com/rss/site_214/187.xml",
+    "lancet-online": "https://www.thelancet.com/rssfeed/lancet_online.xml",
+    "gastro-current": "https://www.gastrojournal.org/current.rss",
+}
+
+
+async def record_feeds_case(name: str = "enrich/paper-feeds") -> dict:
+    from knowledge_plugin.enrich import feeds as feeds_step
+
+    case_dir = HERE / name
+    case_dir.mkdir(parents=True, exist_ok=True)
+    for old in case_dir.iterdir():
+        old.unlink()
+    fetcher = RecordingFetcher(case_dir, credentials=False, contact=False)
+    cache = feeds_step.FeedCache()
+    read: dict = {}
+    try:
+        for key, url in FEEDS.items():
+            trace = Trace()
+            items = await feeds_step.read_feed(fetcher, url, source_id=None, egress="direct", trace=trace, cache=cache)
+            read[key] = {"url": url, "items": None if items is None else len(items), "notes": trace.notes,
+                         "dois": sorted({d for item in items or [] for d in item.dois})[:5]}
+    finally:
+        await fetcher.close()
+    provenance = {"case": name, "recorded_by": RT_PAPERS, "user_agent": UA, "recorded_at": _now().isoformat(),
+                  "feeds": read, "exchanges": fetcher.exchanges}
+    (case_dir / "provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return provenance
+
+
+# Landing pages for the extractor alone (``article_html.read_article_page``): the DOI's handle record names the page,
+# which is read as the landing step reads it (text/html), through the exit named. The browser is a local Chromium at
+# ``--cdp`` (the plugin's own browser egress: robots.txt through it, its outcome rules); a page that challenges it is
+# recorded as it answered.
+PAGES = {
+    "nejm-original-article": ("10.1056/nejmoa2605659", "browser"),       # Atypon: section#abstract, h2 headings
+    "pnas-research-article": ("10.1073/pnas.2613776123", "browser"),     # Atypon "core": property=abstract, role=paragraph
+    "bmjopen-research": ("10.1136/bmjopen-2026-123573", "direct"),       # HighWire: citation_abstract with <h3> sections
+    "plos-medicine-research": ("10.1371/journal.pmed.1005265", "direct"),  # PLOS: #artText, CC BY
+    "mdpi-ijms-article": ("10.3390/ijms27209345", "direct"),             # MDPI: .html-body, CC BY
+}
+
+
+async def record_pages_case(name: str = "enrich/paper-pages", cdp: str = "http://127.0.0.1:55681") -> dict:
+    from knowledge_plugin.enrich import landing as landing_step
+    from knowledge_plugin.enrich.common import get
+    from knowledge_plugin.model import FetchError
+
+    case_dir = HERE / name
+    case_dir.mkdir(parents=True, exist_ok=True)
+    for old in case_dir.iterdir():
+        old.unlink()
+    fetcher = RecordingFetcher(case_dir, credentials=False, contact=False, trim_html=True, browser_cdp=cdp)
+    pages: dict = {}
+    try:
+        for key, (doi, egress) in PAGES.items():
+            trace = Trace()
+            url = await landing_step.resolve(fetcher, Endpoints(), doi, trace)
+            before = len(fetcher.exchanges)
+            attempt = await get(fetcher, url, api=False, egress=egress, headers={"Accept": landing_step.ACCEPT_HTML},
+                                allowed_hosts=landing_step.site_hosts(url) if egress == "browser" else None)
+            error: FetchError | None = attempt.error
+            pages[key] = {"doi": doi, "egress": egress, "url": url, "exchange": before if len(fetcher.exchanges) > before else None,
+                          "outcome": "ok" if error is None else f"{error.outcome}:{error.detail}"}
+    finally:
+        await fetcher.close()
+    provenance = {"case": name, "recorded_by": RT_PAPERS, "user_agent": UA, "recorded_at": _now().isoformat(),
+                  "pages": pages, "exchanges": fetcher.exchanges}
+    (case_dir / "provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return provenance
+
+
+EXTEND = {
+    "enrich/journal-batch": "the paper text chain (rt-papers): OpenAlex, the journal's feeds and the landing page for "
+                            "the entries without an abstract, and the open-access check of the others",
+    "enrich/crossref-abstract": "the paper text chain (rt-papers): the open-access check of an entry with an abstract",
+}
+
+
 def main(argv: list[str]) -> int:
     names = argv or [*CASES, "enrich/pubmed-doi-realign", "enrich/pubmed-doi-unquoted", "enrich/evimed-journal-facts",
                      "enrich/evimed-drug-label"]
     for name in names:
+        if name in PAPER_CASES:
+            provenance = asyncio.run(record_paper_case(name, PAPER_CASES[name]()))
+            print(name, [e.get("status") for e in provenance["exchanges"]], provenance["results_at_recording"], flush=True)
+            continue
+        if name == "enrich/paper-pages":
+            provenance = asyncio.run(record_pages_case())
+            print(name, json.dumps(provenance["pages"])[:1200], flush=True)
+            continue
+        if name == "enrich/paper-feeds":
+            provenance = asyncio.run(record_feeds_case())
+            print(name, json.dumps(provenance["feeds"])[:800], flush=True)
+            continue
+        if name.startswith("extend:"):
+            case = name.split(":", 1)[1]
+            provenance = asyncio.run(extend_case(case, EXTEND[case]))
+            print(name, provenance["extensions"][-1], flush=True)
+            continue
         if name in ("enrich/evimed-journal-facts", "enrich/evimed-drug-label"):
             provenance = asyncio.run(record_evimed_case(name))
             print(name, [e.get("status") for e in provenance["exchanges"]], provenance["notes_at_recording"],

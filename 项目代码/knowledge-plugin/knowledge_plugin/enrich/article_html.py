@@ -90,6 +90,8 @@ BACK_MATTER = frozenset({
     "similar content being viewed by others", "explore related subjects", "keywords", "footnotes", "notes",
     "statements", "generative ai statement", "author disclaimer", "orcid", "figures", "outline", "abbreviations",
     "glossary", "copyright", "license", "permissions", "related articles", "comments", "metrics",
+    "ethics statements", "patient consent for publication", "provenance and peer review", "supplemental material",
+    "artificial intelligence statement", "data sharing", "trial status", "competing interests statement",
 })
 _SKIP_SUBTREES = ("script", "style", "noscript", "template", "svg", "iframe", "nav", "aside", "button", "form", "select",
                   "math", "img", "picture", "video", "audio", "object",
@@ -97,7 +99,9 @@ _SKIP_SUBTREES = ("script", "style", "noscript", "template", "svg", "iframe", "n
                   "[data-test=reference-list]", ".c-article-recommendations", ".c-reading-companion", ".u-hide-print",
                   "[aria-hidden=true]", ".visually-hidden", ".sr-only", ".c-article-section__figure-link",
                   ".c-article__pill-button", ".MathJax", ".mjx-chtml", ".denial-block", "[role=doc-bibliography]",
-                  "[role=doc-acknowledgments]", "[role=doc-endnotes]", "[role=doc-footnote]", "#backmatter")
+                  "[role=doc-acknowledgments]", "[role=doc-endnotes]", "[role=doc-footnote]", "#backmatter",
+                  "[class*=download]", "[class*=Download]", ".figure-inline-download", ".caption_object",
+                  ".highwire-figure-links", ".fig-links", ".table-links", ".table-expand-inline")
 # Titles that open back matter whatever follows ("Acknowledgments and disclosures", "Conflict of interest statement");
 # "Conflict resolution and evidence management" (a methods subsection) is not one.
 _BACK_MATTER_PREFIXES = ("acknowledg", "conflict of interest", "conflicts of interest", "competing interest",
@@ -139,7 +143,7 @@ def read_article_page(html_text: str, url: str | None = None) -> ArticlePage:
             candidates.append((f"meta:{name}", structured_abstract(value)))
     for value in _jsonld_texts(tree):
         candidates.append(("jsonld", structured_abstract(value)))
-    sections = [structured_abstract(node.html or "") for node in _first_matches(tree, ABSTRACT_SECTIONS)]
+    sections = [structured_abstract(node.html or "") for node in abstract_sections(tree)]
     for name in _META_SHORT:
         for value in metas.get(name, []):
             candidates.append(("og", clean_markup(value, keep_paragraphs=True)))
@@ -240,6 +244,40 @@ def _jsonld_texts(tree: HTMLParser) -> list[str]:
     return found
 
 
+# Sections marked as abstracts that are not the abstract (PNAS's "Significance" is a ``doc-abstract`` beside the real one).
+NOT_THE_ABSTRACT = frozenset({"significance", "significance statement", "graphical abstract", "visual abstract",
+                              "highlights", "key points", "plain language summary", "lay summary", "author summary",
+                              "editors summary", "editor s summary", "teaser", "summary for patients", "video abstract",
+                              "research in context", "what is already known", "what this study adds"})
+
+
+def abstract_sections(tree: HTMLParser) -> list[Node]:
+    """The page's abstract sections in ``ABSTRACT_SECTIONS`` order, one titled "Abstract" (or "Summary") first and none
+    titled as something else (``NOT_THE_ABSTRACT``)."""
+    ranked: list[tuple[int, int, Node]] = []
+    seen: set[int] = set()
+    for selector in ABSTRACT_SECTIONS:
+        for node in tree.css(selector):
+            if node.mem_id in seen:
+                continue
+            seen.add(node.mem_id)
+            heading = node.css_first("h1, h2, h3, h4, h5")
+            key = heading_key(heading.text()) if heading is not None else ""
+            if key in NOT_THE_ABSTRACT:
+                continue
+            ranked.append((0 if key in ("abstract", "summary") else 1, len(ranked), node))
+    # A page that marks its abstract by its title alone (Frontiers: ``<div id="h1"><h2>Abstract</h2><p>…``): the block
+    # the title opens.
+    for heading in tree.css("h2, h3"):
+        parent = heading.parent
+        if parent is None or parent.mem_id in seen or heading_key(heading.text()) not in ("abstract", "summary"):
+            continue
+        seen.add(parent.mem_id)
+        if len(parent.text(strip=True)) <= ABSTRACT_MAX + 200:
+            ranked.append((2, len(ranked), parent))
+    return [node for _, _, node in sorted(ranked, key=lambda item: item[:2])]
+
+
 def _first_matches(tree: HTMLParser | Node, selectors: Iterable[str]) -> list[Node]:
     out: list[Node] = []
     for selector in selectors:
@@ -315,7 +353,7 @@ def body_paragraphs(container: Node) -> list[str]:
             stack.extend(reversed(list(node.iter())))
             continue
         text = clean_markup(node.html or "")
-        if not text:
+        if not text or _is_furniture(node, text):
             continue
         if tag in ("h2", "h3", "h4", "h5"):
             level = int(tag[1])
@@ -332,6 +370,20 @@ def body_paragraphs(container: Node) -> list[str]:
     while out and out[-1].startswith("## "):
         out.pop()
     return _drop_empty_sections(out)
+
+
+_BARE_URL = re.compile(r"^(?:https?://|doi:)\S+$", re.I)
+
+
+def _is_furniture(node: Node, text: str) -> bool:
+    """A list item that is only links ("Download figure", "Open in new tab", a keyword's subject page), or a paragraph
+    that is only an address (PLOS's figure DOI): the page's machinery, not the article."""
+    if _BARE_URL.match(text):
+        return True
+    if (node.tag or "").lower() != "li" or len(text) > 80:
+        return False
+    linked = "".join(clean_markup(a.html or "") for a in node.css("a"))
+    return bool(linked) and len(linked.replace(" ", "")) >= len(text.replace(" ", "")) - 2
 
 
 _FIGURE_LABEL = re.compile(r"^(?:fig\.?|figure|table|scheme|box|chart)\s*[a-z]?[0-9]+[a-z]?[.:]?$", re.I)
