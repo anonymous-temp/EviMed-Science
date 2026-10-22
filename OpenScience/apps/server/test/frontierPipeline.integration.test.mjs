@@ -1196,3 +1196,53 @@ test("a same-revision late abstract arriving during an edit fences its old sourc
   assert.equal((await database.query("SELECT model_input_sha256 FROM evimed_frontier.item_texts WHERE item_id=$1",[id])).rows[0].model_input_sha256,text.model_input_sha256);
   assert.equal(settled.lease_owner,null);
 });
+
+// fr-social 2026-10-22: contract 1.5.0 — a post through the same screen → item → text path, nothing social-only.
+test("a social post is screened with its author, counts and quote, and its item carries what the post carries and its full text", options, async () => {
+  await reset();
+  await database.query(`INSERT INTO evimed_frontier.sources (id, name, lane, source_type, access, egress, authority, safety_feed, owner_entity, launch_tier, region)
+    VALUES ('x-us_fda', 'U.S. FDA（X @US_FDA）', 'mixed', 'regulator', 'socialdata', 'api', 5, false, 'FDA', 'P1', 'US')`);
+  const clock = new Date("2026-10-22T12:00:00Z");
+  const editor = fakeEditor();
+  /** @type {any[]} */
+  const screened = [];
+  const screen = editor.screen.bind(editor);
+  editor.screen = async (/** @type {any[]} */ batch) => { screened.push(...batch); return screen(batch); };
+  const { pipeline, plugin } = pipelineWith({ now: () => clock, editor });
+  const photo = { id: "b".repeat(64), kind: "image", width: 800, height: 600, alt: "Approval letter", original_url: "https://pbs.twimg.com/media/a.jpg" };
+  const post = await deliver({ source_id: "x-us_fda", url: "https://x.com/US_FDA/status/1849", title: "FDA approves the first oral GLP-1 for obesity",
+    summary: "FDA approves the first oral GLP-1 for obesity in adults.", published_at: new Date("2026-10-22T10:00:00Z") });
+  const social = { channel: "x", platform: "x", author: { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation" },
+    media: [photo], quoted: { author: { name: "FDA Drug Info", handle: "FDA_Drug_Info" }, text: "Label and REMS details.", url: "https://x.com/FDA_Drug_Info/status/1" },
+    metrics: { likes: 12345, reposts: 300, replies: 20, views: null, observed_at: "2026-10-22T11:00:00.000Z" } };
+  await database.query("UPDATE evimed_frontier.entries SET channel=$2, platform=$3, author=$4::jsonb, media=$5::jsonb, quoted=$6::jsonb, metrics=$7::jsonb WHERE id=$1",
+    [post.id, social.channel, social.platform, JSON.stringify(social.author), JSON.stringify(social.media), JSON.stringify(social.quoted), JSON.stringify(social.metrics)]);
+  const body = "FDA approves the first oral GLP-1 for obesity in adults.\n\nThe approval follows two phase 3 trials.";
+  plugin.texts.set(post.pluginEntryId, { entry_id: post.pluginEntryId, revision: 1, status: "available", text_kind: "full", abstract: null,
+    body_excerpt: body, body_text: body, fetched_from: "x", enrichment: {} });
+  await pipeline.processBatch();
+  const input = screened.find((row) => row.key === String(post.id));
+  assert.equal(input.sourceName, "U.S. FDA（X @US_FDA）｜X｜U.S. FDA @US_FDA（机构账号）", "the screen knows an organisation's account wrote it");
+  assert.match(input.excerpt, /^【互动】赞 1\.2万 · 转发 300 · 回复 20 FDA approves/);
+  assert.match(input.excerpt, /【引用 @FDA_Drug_Info】Label and REMS details\.$/);
+  assert.ok(input.excerpt.length <= 300);
+  const made = await item(Number((await entry(post.id)).item_id));
+  assert.equal(made.channel, "x");
+  assert.equal(made.platform, "x");
+  assert.deepEqual(made.author, social.author);
+  assert.deepEqual(made.media, [photo]);
+  assert.equal(made.quoted.author.handle, "FDA_Drug_Info");
+  assert.equal(made.metrics.likes, 12345);
+  const texts = (await database.query("SELECT body_text, body_text_complete, body_excerpt FROM evimed_frontier.item_texts WHERE item_id=$1", [made.id])).rows[0];
+  assert.equal(texts.body_text, body);
+  assert.equal(texts.body_text_complete, true, "the plugin delivered the post whole");
+  const journal = await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMoa9999999", title: "A journal article [score:10]", summary: "An abstract of a trial." });
+  plugin.texts.set(journal.pluginEntryId, { entry_id: journal.pluginEntryId, revision: 1, status: "available", text_kind: "abstract",
+    abstract: "A".repeat(300), body_excerpt: null, enrichment: {} });
+  await pipeline.processBatch();
+  const plain = screened.find((row) => row.key === String(journal.id));
+  assert.deepEqual([plain.sourceName, plain.excerpt], ["NEJM", "An abstract of a trial."], "an entry that is not a post is screened exactly as before");
+  const journalItem = await item(Number((await entry(journal.id)).item_id));
+  assert.deepEqual([journalItem.channel, journalItem.author, journalItem.media], [null, null, []]);
+  assert.equal((await database.query("SELECT body_text_complete FROM evimed_frontier.item_texts WHERE item_id=$1", [journalItem.id])).rows[0].body_text_complete, null);
+});

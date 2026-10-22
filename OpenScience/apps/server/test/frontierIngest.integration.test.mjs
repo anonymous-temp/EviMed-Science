@@ -490,3 +490,29 @@ test("defects the vocabulary does not know are dropped and counted", options, as
   assert.deepEqual((await database.query("SELECT defects FROM evimed_frontier.entries")).rows[0].defects, ["no-date"]);
   assert.equal(ingest.status().unknownVocabulary.defect, 1);
 });
+
+// fr-social 2026-10-22: contract 1.5.0 — a social post's fields are stored on the entry; unknown vocabulary is null and counted.
+test("a post's channel, platform, author, media, quote and counts are stored on its entry; an unknown channel is counted, not dropped", options, async () => {
+  const photo = { id: "b".repeat(64), kind: "image", width: 800, height: 600, alt: null, original_url: "https://pbs.twimg.com/media/a.jpg" };
+  const plugin = memoryPlugin({ sources: [pluginSource("x-us_fda"), pluginSource("nejm")], entries: [
+    pluginEntry("x-us_fda", 1, { channel: "x", platform: "x", author: { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation" },
+      media: [photo], quoted: { author: { name: "FDA Drug Info", handle: "FDA_Drug_Info" }, text: "Label update.", url: "https://x.com/FDA_Drug_Info/status/1" },
+      metrics: { likes: 120, replies: 4, observed_at: "2026-10-22T06:00:00Z" } }),
+    pluginEntry("nejm", 2, { channel: "podcast", platform: "myspace" }),
+    pluginEntry("nejm", 3),
+  ] });
+  const ingest = ingestFor(plugin);
+  await ingest.mirrorSources();
+  await ingest.pull();
+  const rows = (await database.query("SELECT source_id, plugin_seq, channel, platform, author, media, quoted, metrics FROM evimed_frontier.entries ORDER BY plugin_seq")).rows;
+  assert.equal(rows[0].channel, "x");
+  assert.equal(rows[0].platform, "x");
+  assert.deepEqual(rows[0].author, { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation" });
+  assert.deepEqual(rows[0].media, [photo]);
+  assert.equal(rows[0].quoted.author.handle, "FDA_Drug_Info");
+  assert.deepEqual(rows[0].metrics, { likes: 120, reposts: null, replies: 4, views: null, observed_at: "2026-10-22T06:00:00.000Z" });
+  assert.deepEqual([rows[1].channel, rows[1].platform], [null, null], "a channel the domain does not know is stored as unknown");
+  assert.equal(ingest.status().unknownVocabulary.channel, 1);
+  assert.equal(ingest.status().unknownVocabulary.platform, 1);
+  assert.deepEqual([rows[2].channel, rows[2].author, rows[2].media, rows[2].metrics], [null, null, [], null], "an older entry has none of them");
+});

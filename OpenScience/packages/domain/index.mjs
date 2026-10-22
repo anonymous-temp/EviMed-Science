@@ -1231,8 +1231,9 @@ export {
 // memoryNeverKept — 1 export: what a memory never holds, the one text the native engine's type templates and the legacy
 // extraction's instruction both state.
 export { MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
-// frontierVocabulary — 61 exports: the frontier feed's closed vocabularies
-// (lane, source type, evidence type, specialty, flag, health, egress, access —
+// frontierVocabulary — 66 exports: the frontier feed's closed vocabularies
+// (lane, source type, evidence type, specialty, flag, health, egress, access, and since contract 1.5.0 channel, platform
+// and author role —
 // the enums of the knowledge-source plugin's contract), their Chinese labels,
 // the fallbacks for values a newer plugin sends, PubMed publication type →
 // evidence type, the authority score, the heat arithmetic the hot list states
@@ -1240,7 +1241,10 @@ export { MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
 export {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
+  FRONTIER_AUTHOR_ROLES,
   FRONTIER_AUTHORITY_MAX,
+  FRONTIER_CHANNELS,
+  FRONTIER_CHANNEL_LABELS_ZH,
   FRONTIER_BROAD_SAFETY_FLAGS,
   FRONTIER_DATE_PRECISIONS,
   FRONTIER_EGRESSES,
@@ -1277,6 +1281,8 @@ export {
   FRONTIER_MAX_SPECIALTIES,
   FRONTIER_MODEL_FLAGS,
   FRONTIER_OPEN_ACCESS_STATUSES,
+  FRONTIER_PLATFORMS,
+  FRONTIER_PLATFORM_LABELS_ZH,
   FRONTIER_PREPRINT_AUTHORITY_FACTOR,
   FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
   FRONTIER_SCORE_MAXIMA,

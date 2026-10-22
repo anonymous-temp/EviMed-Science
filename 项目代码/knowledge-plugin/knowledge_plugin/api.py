@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.4.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.5.0), served exactly.
 
 Rules the handlers keep:
 
@@ -18,6 +18,8 @@ Rules the handlers keep:
 - ``/text`` answers from the stored text, or schedules enrichment and says ``pending`` with
   ``next_attempt_at``; asking marks ``text_requested_at`` (retention 90 days instead of 30).
 - ``/v1/lookups`` lists nothing in batch 1 and every ``POST`` is ``501 capability_unavailable``.
+- ``/v1/media/{id}`` (1.5.0) serves a stored image's bytes with its content type; an id the store never held, or one it
+  has evicted, is ``404 not_found`` — the entry keeps naming it, with its original address.
 """
 
 from __future__ import annotations
@@ -32,18 +34,20 @@ from typing import Any, ClassVar, Literal
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .db import meta_get
 from .model import (
-    CONTRACT_VERSION, DATE_PRECISIONS, DEFECTS, EGRESSES, ENRICHMENT_TYPES, ENTRIES_PAGE_MAX, FACT_TYPES,
-    FETCHED_FROM, HEALTH_STATES, LANES, LAUNCH_TIERS, PLUGIN_NAME, SOURCES_PAGE_MAX, SUMMARY_MAX,
+    BODY_TEXT_MAX, CHANNELS, CONTRACT_VERSION, DATE_PRECISIONS, DEFECTS, EGRESSES, ENRICHMENT_TYPES, ENTRIES_PAGE_MAX,
+    FACT_TYPES, FETCHED_FROM, HEALTH_STATES, LANES, LAUNCH_TIERS, PLATFORMS, PLUGIN_NAME, SOURCES_PAGE_MAX, SUMMARY_MAX,
 )
-from .normalize import whitelist_facts
+from .normalize import clean_author, clean_media, clean_metrics, clean_quoted, whitelist_facts
 from .settings import Settings, read_secret_file
+from .social.media import MediaStore
+from .social.spend import ProviderLedger, caps_from
 from .store import ENTRY_COLUMNS, entry_row, schedule_text, text_row, whitelist_enrichment
 
 log = logging.getLogger("knowledge_plugin.api")
@@ -92,7 +96,9 @@ Lane = Literal["evidence", "guideline", "regulatory", "safety", "pipeline", "pub
 SourceTypeName = Literal["journal", "regulator", "evidence-body", "preprint", "company", "media"]
 EgressName = Literal["direct", "browser", "relay", "bridge", "api"]
 AccessName = Literal["crossref-issn", "eutils-query", "europepmc", "json-api", "rss", "atom", "html-list",
-                     "browser-list", "relay", "wechat-bridge", "evimed-api"]
+                     "browser-list", "relay", "wechat-bridge", "evimed-api", "socialdata", "dajiala", "social-crawl"]
+ChannelName = Literal["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]
+PlatformName = Literal["x", "wechat", "xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels", "web"]
 HealthName = Literal["new", "healthy", "degraded", "unreadable", "drifted", "disabled"]
 DefectName = Literal["no-date", "future-date", "truncated-summary", "short-summary", "no-summary", "encoding",
                      "link-derived", "oversize-truncated"]
@@ -127,8 +133,51 @@ class EntryFacts(ContractModel):
     is_masthead: bool | None = None
 
 
+class Author(ContractModel):
+    _omit_if_none = frozenset({"handle", "url", "role"})
+    name: str = Field(max_length=200)
+    handle: str | None = Field(default=None, max_length=100)
+    url: str | None = Field(default=None, max_length=2048)
+    role: Literal["organisation", "person"] | None = None
+
+
+class QuotedAuthor(ContractModel):
+    _omit_if_none = frozenset({"handle"})
+    name: str = Field(max_length=200)
+    handle: str | None = Field(default=None, max_length=100)
+
+
+class MediaItem(ContractModel):
+    _omit_if_none = frozenset({"width", "height", "alt"})
+    id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    kind: Literal["image", "video-poster"]
+    width: int | None = None
+    height: int | None = None
+    alt: str | None = None
+    original_url: str = Field(max_length=2048)
+
+
+class Quoted(ContractModel):
+    _omit_if_none = frozenset({"lang", "media"})
+    author: QuotedAuthor
+    text: str
+    url: str = Field(max_length=2048)
+    lang: str | None = None
+    media: list[MediaItem] | None = None
+
+
+class Metrics(ContractModel):
+    _omit_if_none = frozenset({"likes", "reposts", "replies", "views"})
+    likes: int | None = None
+    reposts: int | None = None
+    replies: int | None = None
+    views: int | None = None
+    observed_at: datetime
+
+
 class Entry(ContractModel):
-    _omit_if_none = frozenset({"external_key", "lane_hint", "text_status"})
+    _omit_if_none = frozenset({"external_key", "lane_hint", "text_status", "channel", "platform", "author", "media",
+                               "quoted", "metrics"})
     entry_id: str
     seq: int
     revision: int = Field(ge=1)
@@ -152,6 +201,12 @@ class Entry(ContractModel):
     defects: list[DefectName]
     text_status: Literal["none", "pending", "available"] | None = None
     facts: EntryFacts
+    channel: ChannelName | None = None
+    platform: PlatformName | None = None
+    author: Author | None = None
+    media: list[MediaItem] | None = None
+    quoted: Quoted | None = None
+    metrics: Metrics | None = None
 
 
 class EntryPage(ContractModel):
@@ -187,14 +242,16 @@ class Enrichment(ContractModel):
 
 
 class EntryText(ContractModel):
-    _omit_if_none = frozenset({"text_kind", "fetched_from", "enrichment"})
+    _omit_if_none = frozenset({"text_kind", "fetched_from", "enrichment", "body_text"})
     entry_id: str
     revision: int
     status: Literal["available", "pending", "unavailable"]
     text_kind: Literal["abstract", "excerpt", "full", "none"] | None = None
     abstract: str | None = None
     body_excerpt: str | None = Field(default=None, max_length=TEXT_MAX_CHARS)
-    fetched_from: Literal["pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat"] | None = None
+    body_text: str | None = Field(default=None, max_length=BODY_TEXT_MAX)
+    fetched_from: Literal["pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat", "x",
+                          "social"] | None = None
     fetched_at: datetime | None = None
     next_attempt_at: datetime | None = None
     enrichment: Enrichment | None = None
@@ -274,6 +331,30 @@ def _enum_param(request: Request, name: str, vocabulary) -> str | None:
     return raw
 
 
+def _social_fields(row: dict) -> dict:
+    """Contract 1.5.0's fields of a stored entry, cleaned again (rule 4: a bad row cannot leak a field); absent when the
+    row has none (an older entry, or a source that sets only its channel)."""
+    fields: dict[str, Any] = {}
+    if row.get("channel") in CHANNELS:
+        fields["channel"] = row["channel"]
+    if row.get("platform") in PLATFORMS:
+        fields["platform"] = row["platform"]
+    author = clean_author(row.get("author"))
+    if author:
+        fields["author"] = Author(**author)
+    media = clean_media(row.get("media"))
+    if media:
+        fields["media"] = [MediaItem(**item) for item in media]
+    quoted = clean_quoted(row.get("quoted"))
+    if quoted:
+        fields["quoted"] = Quoted(author=QuotedAuthor(**quoted["author"]), text=quoted["text"], url=quoted["url"],
+                                  lang=quoted.get("lang"), media=[MediaItem(**m) for m in quoted.get("media", [])] or None)
+    metrics = clean_metrics(row.get("metrics"))
+    if metrics:
+        fields["metrics"] = Metrics(**metrics)
+    return fields
+
+
 def serialize_entry(row: dict) -> dict:
     facts, _ = whitelist_facts(row.get("facts") or {})
     text_status = row.get("text_status") or "none"
@@ -288,6 +369,7 @@ def serialize_entry(row: dict) -> dict:
         defects=[d for d in (row["defects"] or []) if d in DEFECTS],
         text_status=text_status if text_status in ("none", "pending", "available") else "none",
         facts=EntryFacts(**facts),
+        **_social_fields(row),
     ).model_dump(mode="json")
 
 
@@ -314,6 +396,7 @@ def serialize_text(entry: dict, text: dict | None, status: str, next_attempt_at:
         text_kind=kind if kind in ("abstract", "excerpt", "full", "none") else ("none" if status != "pending" else None),
         abstract=(text or {}).get("abstract") if status == "available" else None,
         body_excerpt=(text or {}).get("body_excerpt") if status == "available" else None,
+        body_text=(text or {}).get("body_text") if status == "available" else None,
         fetched_from=source if source in FETCHED_FROM else None,
         fetched_at=(text or {}).get("fetched_at"),
         next_attempt_at=next_attempt_at,
@@ -443,6 +526,10 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
             body["egress"] = egress_health(state.get("fetcher"), egress_rows, now)
             if fetcher is not None:
                 body["host_budget"] = await fetcher.host_budget_usage()
+            caps = caps_from(settings)
+            providers = await ProviderLedger(pool, clock).health(caps, now)
+            if providers or caps:
+                body["providers"] = providers
             body["last_fetch_at"] = stats["last_fetch_at"].isoformat().replace("+00:00", "Z") if stats["last_fetch_at"] else None
             body["last_ok_fetch_at"] = (stats["last_ok_fetch_at"].isoformat().replace("+00:00", "Z")
                                         if stats["last_ok_fetch_at"] else None)
@@ -683,6 +770,21 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
             raise ApiError(404, "not_found", "no such entry")
         return JSONResponse(serialize_entry(row))
 
+    # ---------------------------------------------------------------- media (contract 1.5.0)
+
+    @app.get("/v1/media/{media_id}")
+    async def get_media(media_id: str, request: Request):
+        gate.check(request)
+        if not re.fullmatch(r"[a-f0-9]{64}", media_id):
+            raise ApiError(404, "not_found", "no such media")
+        stored = await MediaStore(settings, pool_of(), clock=clock).read(media_id)
+        if stored is None:
+            raise ApiError(404, "not_found", "no such media")
+        content, content_type = stored
+        return Response(content=content, media_type=content_type,
+                        headers={"ETag": f'"{media_id}"', "Cache-Control": "private, max-age=86400",
+                                 "X-Content-Type-Options": "nosniff"})
+
     # ---------------------------------------------------------------- lookups (batch 3)
 
     @app.get("/v1/lookups")
@@ -725,7 +827,10 @@ async def _populated_fields(conn, state: dict) -> dict:
     row = await (await conn.execute(
         """SELECT bool_or(doi IS NOT NULL) AS doi, bool_or(pmid IS NOT NULL) AS pmid,
                   bool_or(cardinality(registry_ids) > 0) AS registry_ids, bool_or(summary IS NOT NULL) AS summary,
-                  bool_or(lane_hint IS NOT NULL) AS lane_hint, bool_or(published_at IS NOT NULL) AS published_at
+                  bool_or(lane_hint IS NOT NULL) AS lane_hint, bool_or(published_at IS NOT NULL) AS published_at,
+                  bool_or(channel IS NOT NULL) AS channel, bool_or(platform IS NOT NULL) AS platform,
+                  bool_or(author IS NOT NULL) AS author, bool_or(media <> '[]'::jsonb) AS media,
+                  bool_or(quoted IS NOT NULL) AS quoted, bool_or(metrics IS NOT NULL) AS metrics
              FROM evimed_knowledge.entries""",
     )).fetchone()
     fact_rows = await (await conn.execute(
@@ -735,7 +840,8 @@ async def _populated_fields(conn, state: dict) -> dict:
         "SELECT DISTINCT jsonb_object_keys(enrichment) AS key FROM evimed_knowledge.entry_texts",
     )).fetchall()
     entry_fields = ["external_key", "date_precision", "defects", "text_status", "facts"]
-    entry_fields += [name for name in ("doi", "pmid", "registry_ids", "summary", "lane_hint", "published_at") if row and row[name]]
+    entry_fields += [name for name in ("doi", "pmid", "registry_ids", "summary", "lane_hint", "published_at", "channel",
+                                       "platform", "author", "media", "quoted", "metrics") if row and row[name]]
     fields = {
         "entry": sorted(entry_fields),
         "facts": sorted({r["key"] for r in fact_rows if r["key"] in FACT_TYPES} | {"is_masthead", "is_correction_notice"}),

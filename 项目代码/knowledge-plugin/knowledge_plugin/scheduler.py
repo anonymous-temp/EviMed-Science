@@ -51,7 +51,7 @@ from psycopg.types.json import Jsonb
 from . import policy
 from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
-from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState, RequestSpec
+from .model import NEUTRAL_DETAILS, SOCIAL_ACCESSES, EntryTextResult, FetchError, SourceState, RequestSpec
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
@@ -69,6 +69,7 @@ PURGE_BATCH = 5000
 ADAPTER_MISSING_RETRY_S = 3600
 LEASE_RENEW_EVERY = 20
 TEXT_BATCH = 20
+SOCIAL_EVERY_S = 60.0
 
 
 def _utcnow() -> datetime:
@@ -118,6 +119,7 @@ class Crawler:
         self.last_error: str | None = None
         self.last_error_at: datetime | None = None
         self.polls_total: Counter = Counter()
+        self._social = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -136,6 +138,8 @@ class Crawler:
             asyncio.create_task(self._loop("medical-discovery", self.discover_medical_sources, 3600.0, initial_delay=180.0)),
             asyncio.create_task(self._loop("source-discovery", self.discover_sources, 3600.0, initial_delay=300.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
+            # fr-social 2026-10-22: X, WeChat and the six platforms (contract 1.5.0), read by their own collector.
+            asyncio.create_task(self._loop("social", self.collect_social, SOCIAL_EVERY_S, initial_delay=30.0)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
                  self._settings.concurrency, self._settings.text_concurrency, sorted(self._adapters) or "none")
@@ -206,6 +210,7 @@ class Crawler:
                            FROM evimed_knowledge.sources candidate
                           WHERE enabled AND operator_enabled IS DISTINCT FROM false
                             AND retired_at IS NULL AND next_poll_at <= %(now)s
+                            AND NOT (access = ANY(%(social)s))
                             AND (NOT (config ? 'medical_parent') OR EXISTS (
                               SELECT 1 FROM evimed_knowledge.sources parent
                                WHERE parent.id = candidate.config->>'medical_parent'
@@ -216,7 +221,7 @@ class Crawler:
                           ORDER BY coalesce(host, id), priority, next_poll_at),
                        picked AS (
                          SELECT s.id FROM evimed_knowledge.sources s JOIN candidates c ON c.id = s.id
-                          WHERE s.enabled AND s.operator_enabled IS DISTINCT FROM false
+                          WHERE s.enabled AND s.operator_enabled IS DISTINCT FROM false AND NOT (s.access = ANY(%(social)s))
                             AND s.retired_at IS NULL AND s.next_poll_at <= %(now)s
                             AND (NOT (s.config ? 'medical_parent') OR EXISTS (
                               SELECT 1 FROM evimed_knowledge.sources parent
@@ -233,7 +238,7 @@ class Crawler:
                        RETURNING s.*""",
                     {"now": self._clock(), "limit": limit, "worker": self._settings.worker_id,
                      "until": self._clock() + timedelta(seconds=self._settings.lease_s),
-                     "busy": list(busy_hosts or [])},
+                     "busy": list(busy_hosts or []), "social": sorted(SOCIAL_ACCESSES)},
                 )).fetchall()
 
     async def _poll_guarded(self, row: dict) -> None:
@@ -752,6 +757,13 @@ class Crawler:
                     log.info("health %s: %s -> %s (24 h: %s ok, %s failure episodes)",
                              row["id"], row["health"], health, successes, episodes)
         return changed
+
+    async def collect_social(self) -> dict:
+        """One tick of the social collector (``knowledge_plugin.social``): the social read methods are never claimed above."""
+        if self._social is None:
+            from .social.collector import SocialCollector
+            self._social = SocialCollector(self._settings, self._pool, self._fetcher, clock=self._clock)
+        return await self._social.tick()
 
     async def discover_medical_sources(self) -> dict:
         from .medical_discovery import run_daily_discovery

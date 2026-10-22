@@ -12,7 +12,8 @@ while local runs point at a file (``KNOWLEDGE_PLUGIN_CONTACT_EMAIL_FILE``); the 
 are set. Either way it is held outside ``repr`` and never logged.
 
 Container facts this module respects (deployment, 2026-09-22): the image runs as uid 10002 with a
-read-only root filesystem and a tmpfs ``/tmp``, so nothing here writes to disk.
+read-only root filesystem and a tmpfs ``/tmp``, so nothing here writes to disk. The one exception is the media store
+(contract 1.5.0): ``KNOWLEDGE_PLUGIN_MEDIA_DIR`` names a writable volume; unset, no image is stored.
 """
 
 from __future__ import annotations
@@ -89,6 +90,18 @@ def _path(env: dict, name: str) -> str | None:
     return raw or None
 
 
+def _crawl_url(env: dict) -> str | None:
+    """The GEO crawler's origin: an http(s) URL without credentials, path, query or fragment; empty means off."""
+    raw = (env.get("KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL") or "").strip().rstrip("/")
+    if not raw:
+        return None
+    parts = urlsplit(raw)
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password \
+            or parts.path not in ("", "/") or parts.query or parts.fragment:
+        raise SettingsError("KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL must be an http(s) origin")
+    return raw
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -102,6 +115,17 @@ class Settings:
     edge_proxy_credentials_file: str | None = None   # relay egress: "user:password", by path
     edge_proxy_url: str | None = None                # relay egress: https://<Tokyo node> (http: for tests)
     browser_cdp_url: str | None = None               # browser egress: http://frontier-browser:9222
+    # Contract 1.5.0, the social adapters (``knowledge_plugin.social``). Keys by path; each adapter is off without its key.
+    socialdata_key_file: str | None = None           # X through SocialData (Authorization: Bearer)
+    dajiala_key_file: str | None = None              # WeChat through Dajiala (极致了)
+    socialdata_daily_usd: float = 5.0                # the day's cap (Asia/Shanghai day), objects × US$0.0002
+    dajiala_daily_cny: float = 30.0                  # the day's cap, Dajiala's own cost_money
+    social_crawl_url: str | None = None              # GEO's six-platform crawler (OPEN_SCIENCE_GEO_SOCIAL_URL); unset = off
+    social_crawl_daily: int = 120                    # requests a day, spread over the day
+    social_crawl_timeout_s: float = 150.0
+    social_registry_path: str | None = None          # default: social-sources.json beside the registry file
+    media_dir: str | None = None                     # the media store's volume; unset = no media stored
+    media_cap_mb: int = 3072
     crawl_enabled: bool = True
     # Automatic source discovery (discovery.py): on/off, the daily validation caps by line (``line=n,…`` over the
     # defaults), and how many article pages the outbound line reads a day.
@@ -155,6 +179,16 @@ class Settings:
             edge_proxy_url=_path(env, "KNOWLEDGE_PLUGIN_EDGE_PROXY_URL"),
             browser_cdp_url=_path(env, "KNOWLEDGE_PLUGIN_BROWSER_CDP_URL"),
             browser_timeout_s=_float(env, "KNOWLEDGE_PLUGIN_BROWSER_TIMEOUT_S", 60.0, 10.0, 300.0),
+            socialdata_key_file=_path(env, "KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE"),
+            dajiala_key_file=_path(env, "KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE"),
+            socialdata_daily_usd=_float(env, "KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD", 5.0, 0.0, 1000.0),
+            dajiala_daily_cny=_float(env, "KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY", 30.0, 0.0, 10000.0),
+            social_crawl_url=_crawl_url(env),
+            social_crawl_daily=_int(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY", 120, 0, 5000),
+            social_crawl_timeout_s=_float(env, "KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S", 150.0, 10.0, 600.0),
+            social_registry_path=_path(env, "KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY"),
+            media_dir=_path(env, "KNOWLEDGE_PLUGIN_MEDIA_DIR"),
+            media_cap_mb=_int(env, "KNOWLEDGE_PLUGIN_MEDIA_CAP_MB", 3072, 16, 1_000_000),
             crawl_enabled=_bool(env, "KNOWLEDGE_PLUGIN_CRAWL", True),
             discovery_enabled=_bool(env, "KNOWLEDGE_PLUGIN_DISCOVERY", True),
             discovery_caps=(env.get("KNOWLEDGE_PLUGIN_DISCOVERY_CAPS") or "").strip()[:500],
@@ -185,6 +219,8 @@ class Settings:
             "openfda_key": self.openfda_key_file,
             "evimed_api_key": self.evimed_api_key_file,
             "edge_proxy_credentials": self.edge_proxy_credentials_file,
+            "socialdata_key": self.socialdata_key_file,
+            "dajiala_key": self.dajiala_key_file,
         }[name]
         return read_secret_file(path)
 
@@ -197,6 +233,10 @@ class Settings:
         a URL with credentials, a path or a query, or a credentials file that is not ``user:password``)."""
         return edge_proxy_from(self.edge_proxy_url, self.secret("edge_proxy_credentials"),
                                connect_timeout_s=self.edge_proxy_connect_timeout_s)
+
+    def social_registry(self) -> str:
+        """The social accounts' registry file (``registry/social-sources.json`` beside the main registry by default)."""
+        return self.social_registry_path or str(Path(self.registry_path).with_name("social-sources.json"))
 
     def has_ncbi_key(self) -> bool:
         return bool(self.secret("ncbi_key"))

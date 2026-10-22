@@ -47,7 +47,7 @@
  *   node packages/contracts/knowledge-plugin/fixtures/record.mjs [--url http://127.0.0.1:18080]
  *
  * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
- * does the same for 1.4.0 (`recordHostBudget`).
+ * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -397,6 +397,96 @@ export async function recordHostBudget({ baseUrl, token, outDir = here, serverRo
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * Re-record what contract 1.5.0 changes, off a live plugin speaking it, and leave every other recording as it was made.
+ *
+ * Hidden knowledge: 1.5.0 added social posts — `Entry.channel`, `platform`, `author`, `media`, `quoted`, `metrics`,
+ * `EntryText.body_text`, `GET /v1/media/{id}` — and `Health.providers` (with `Health.discovery`, which this recording's
+ * plugin may not report). The posts are real: an instance of 项目代码/knowledge-plugin whose social collector read X
+ * (SocialData) and WeChat (Dajiala) once (`tools/social_live_check.py`), then served with the crawler off. Recorded: the
+ * health answer (its `providers` are that instance's own ledger), the manifest, one X post that carries a quoted post (and
+ * media when one does), its text, one WeChat article whose text was bought, its text, and the bytes of an X post's first
+ * image. The stream
+ * pages, the registry pages and the earlier entries stay valid, since a minor only adds; the six-platform monitor's entries
+ * are recorded only when the instance holds one (`socialPlatform` says).
+ *
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string }} options
+ */
+export async function recordSocial({ baseUrl, token, outDir = here,
+  serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off), serving posts its social collector read live once" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  /** @type {Record<string, any>[]} */
+  const stream = [];
+  for (let after = 0, page = 0; ; page += 1) {
+    if (page >= MAX_PAGES) throw new Error("the stream did not end within the scan bound");
+    const response = await fetch(`${base}/v1/entries?after=${after}&limit=${SCAN_PAGE}&include_backfill=true`, {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) throw new Error(`scanning the stream failed with HTTP ${response.status}`);
+    const body = await response.json();
+    stream.push(...body.entries);
+    if (!body.has_more) break;
+    after = body.next_after;
+  }
+  const xPost = stream.find((entry) => entry.channel === "x" && entry.quoted && entry.media?.length && entry.text_status === "available")
+    ?? stream.find((entry) => entry.channel === "x" && entry.quoted && entry.text_status === "available")
+    ?? stream.find((entry) => entry.channel === "x" && entry.media?.length && entry.text_status === "available");
+  const withImage = xPost?.media?.length ? xPost : stream.find((entry) => entry.channel === "x" && entry.media?.length);
+  const wechatPost = stream.find((entry) => entry.channel === "wechat" && entry.text_status === "available" && !entry.backfill);
+  const socialPost = stream.find((entry) => entry.channel === "social");
+  if (!xPost || !withImage || !wechatPost) throw new Error("the instance holds no X post with media or no WeChat article with its text: run the live check first");
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    await exchange(base, { name: "entry-x.json", path: `/v1/entries/${encodeURIComponent(xPost.entry_id)}`, ...signed }),
+    await exchange(base, { name: "text-x.json", path: `/v1/entries/${encodeURIComponent(xPost.entry_id)}/text`, ...signed }),
+    await exchange(base, { name: "entry-wechat.json", path: `/v1/entries/${encodeURIComponent(wechatPost.entry_id)}`, ...signed }),
+    await exchange(base, { name: "text-wechat.json", path: `/v1/entries/${encodeURIComponent(wechatPost.entry_id)}/text`, ...signed }),
+    ...(socialPost ? [await exchange(base, { name: "entry-social.json", path: `/v1/entries/${encodeURIComponent(socialPost.entry_id)}`, ...signed })] : []),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const media = await mediaExchange(base, withImage.media[0].id, token);
+  expectStatus(media, 200);
+  recordings.push(media);
+  const [health, manifest] = recordings.map((recorded) => (recorded.name.endsWith(".json") ? json(recorded) : null));
+  if (manifest.contract?.version !== "1.5.0") throw new Error(`the plugin serves contract ${manifest.contract?.version}, not 1.5.0`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  if (!Array.isArray(health.providers)) throw new Error("the health answer has no providers: this is not a plugin of contract 1.5.0");
+  if (!String(media.headers["content-type"] ?? "").startsWith("image/")) throw new Error("the media answer is not an image");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.5.0 adds social posts (Entry.channel, platform, author, media, quoted, metrics; EntryText.body_text; GET /v1/media/{id}) and Health.providers: the health answer, the manifest, one X post with media and a quote, one WeChat article with its text, their texts and one stored image were recorded. The stream's recordings, the registry pages and the source row are the earlier plugins', still valid, since a minor only adds.",
+    socialPlatform: socialPost ? "recorded" : "not recorded: the instance held no six-platform entry (the GEO crawler answered 500 during the live check, its own database down)",
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
+/** One image off `GET /v1/media/{id}`, recorded like any exchange but asking for an image. @param {string} base @param {string} id @param {string} token */
+async function mediaExchange(base, id, token) {
+  const recordedHeaders = { accept: "image/*" };
+  const response = await fetch(`${base}/v1/media/${id}`, { headers: { ...recordedHeaders, authorization: `Bearer ${token}` },
+    redirect: "error", signal: AbortSignal.timeout(60_000) });
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { name: "media-x.jpg", request: { method: "GET", path: `/v1/media/${id}`, headers: recordedHeaders, credential: "the deployment token" },
+    status: response.status, headers: Object.fromEntries([...response.headers].sort(([left], [right]) => left.localeCompare(right))),
+    bytes, recordedAt: new Date().toISOString() };
+}
+
 function argument(/** @type {string} */ name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -413,6 +503,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const serverRole = argument("server-role");
     const recorded = process.argv.includes("--platform-source")
       ? await recordPlatformSource({ baseUrl, token: loaded.value })
+      : process.argv.includes("--social")
+        ? await recordSocial({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
       : process.argv.includes("--host-budget")
         ? await recordHostBudget({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })
         : await recordKnowledgePluginContract({ baseUrl, token: loaded.value });

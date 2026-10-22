@@ -66,7 +66,8 @@ const TOKEN = "replay-token-for-the-contract-test";
 const REPLAYED = ["health.json", "manifest.json", "sources-page-1.json", "sources-page-2.json", "entries-page-1.json",
   "entries-page-2.json", "entries-tail.json", "identity-doi-pmid-registry.json", "identity-doi.json", "identity-pmid.json",
   "identity-reg.json", "identity-fda.json", "identity-url.json", "text-available.json", "text-pending.json", "lookups.json",
-  "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json"];
+  "lookup-unavailable.json", "error-unauthorized.json", "error-not-found.json", "error-invalid-cursor.json",
+  "entry-x.json", "text-x.json", "entry-wechat.json", "text-wechat.json", "media-x.jpg"];
 
 /** A recorded answer as the plugin gave it: its status, its content type and the body bytes. @param {string} name */
 async function recorded(name) {
@@ -161,10 +162,14 @@ test("a contract minor is recorded again only where it changed, and provenance s
   // live plugin of that contract, and the stream's recordings are the 1.2.0 plugin's, still valid because a minor only adds.
   // 1.4.0 added `Health.host_budget`: the manifest and the health answer (the two that name the contract, one of them the field's
   // home) were recorded again off a live plugin of 1.4.0; the source row and the stream stand as they were.
+  // 1.5.0 added social posts and `Health.providers`: the manifest, the health answer, one X post, one WeChat article, their
+  // texts and one stored image were recorded off a plugin that read them live; the stream stands as it was.
   const partials = provenance.partialRecordings ?? [];
-  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0"], "every minor since the stream was recorded names its partial recording, in order");
-  const [platformProduced, hostBudget] = partials;
-  assert.equal(hostBudget.contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0"], "every minor since the stream was recorded names its partial recording, in order");
+  const [platformProduced, hostBudget, social] = partials;
+  assert.equal(social.contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.deepEqual(social.fixtures.slice().sort(), ["entry-wechat.json", "entry-x.json", "health.json", "manifest.json", "media-x.jpg", "text-wechat.json", "text-x.json"]);
+  assert.ok(Date.parse(social.recordedAt) >= Date.parse(hostBudget.recordedAt));
   assert.equal(provenance.contractVersion, pin.version);
   assert.deepEqual(platformProduced.fixtures.slice().sort(), ["health.json", "manifest.json", "source-platform-produced.json"]);
   assert.deepEqual(hostBudget.fixtures.slice().sort(), ["health.json", "manifest.json"]);
@@ -174,8 +179,9 @@ test("a contract minor is recorded again only where it changed, and provenance s
     for (const name of partial.fixtures) assert.ok(provenance.fixtures[name], `${name} is a listed recording`);
   }
   assert.ok(Date.parse(hostBudget.recordedAt) >= Date.parse(platformProduced.recordedAt));
-  // The files the later recording replaced were recorded at its time, not the earlier one's.
-  for (const name of hostBudget.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(hostBudget.recordedAt) - 60_000, `${name} is the 1.4.0 recording`);
+  // The files the later recordings replaced were recorded at their time, not the earlier one's.
+  for (const name of hostBudget.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(hostBudget.recordedAt) - 60_000, `${name} is the 1.4.0 recording or later`);
+  for (const name of social.fixtures) assert.ok(Date.parse(provenance.fixtures[name].recordedAt) >= Date.parse(social.recordedAt) - 60_000, `${name} is the 1.5.0 recording`);
   // The recorded source row, read the way the platform reads one: the attribute is on the wire and survives validation.
   const recorded = await fixture("source-platform-produced.json");
   assert.equal(recorded.id, "evimed-evidence");
@@ -192,7 +198,7 @@ test("a contract minor is recorded again only where it changed, and provenance s
 
 test("health carries today's use against each host's daily cap, the contract names the field, and the platform reads it as recorded", async () => {
   // A spent cap is the plugin's own refusal until 00:00 UTC and counts against no source's health, so this table is the only
-  // place the spend shows (review 2026-10-10, D-10). The recording is a 1.4.0 plugin's own answer.
+  // place the spend shows (review 2026-10-10, D-10). The recording is the plugin's own answer (1.4.0's, recorded again by 1.5.0).
   const body = await fixture("health.json");
   assert.ok(body.host_budget && typeof body.host_budget === "object", "the recorded health answer has the table");
   const hosts = Object.keys(body.host_budget);
@@ -453,4 +459,61 @@ test("the identity ladder: every recorded sample stands on its highest rung, and
   assert.ok(["doi", "pmid", "reg", "fda", "url"].every((rung) => rungs.has(rung)), "the batch-1 rungs are all recorded");
   assert.ok(identitySamples.samples.some(({ inputs }) => inputs.doi && inputs.pmid && inputs.registry_ids.length),
     "one sample holds several rungs at once, where the ladder's order is visible");
+});
+
+test("contract 1.5.0: a recorded X post, a WeChat article, their texts, one image and the providers, read the way the platform reads them", async () => {
+  const xEntry = await fixture("entry-x.json");
+  const wechatEntry = await fixture("entry-wechat.json");
+  const xText = await fixture("text-x.json");
+  const wechatText = await fixture("text-wechat.json");
+  const image = await fixtureBytes("media-x.jpg");
+  const mediaId = recordedPath("media-x.jpg").split("/").pop();
+  const routes = {
+    [`GET ${recordedPath("entry-x.json")}`]: await recorded("entry-x.json"),
+    [`GET ${recordedPath("text-x.json")}`]: await recorded("text-x.json"),
+    [`GET ${recordedPath("entry-wechat.json")}`]: await recorded("entry-wechat.json"),
+    [`GET ${recordedPath("text-wechat.json")}`]: await recorded("text-wechat.json"),
+    [`GET ${recordedPath("media-x.jpg")}`]: { status: 200, headers: { "content-type": provenance.fixtures["media-x.jpg"].headers["content-type"] }, body: image },
+    "GET /v1/health": await recorded("health.json"),
+  };
+  await withPlugin(routes, async ({ client }) => {
+    const post = await client.entry(xEntry.entry_id);
+    assert.equal(post.channel, "x");
+    assert.equal(post.platform, "x");
+    assert.equal(post.author.handle, xEntry.author.handle);
+    assert.ok(["organisation", "person"].includes(post.author.role), "the registry says whose account it is");
+    assert.ok(post.quoted && post.quoted.text && post.quoted.url.startsWith("https://x.com/"), "the recorded post quotes another");
+    assert.ok(Number.isFinite(Date.parse(post.metrics.observed_at)), "the counts say when they were read");
+    assert.match(post.url, /^https:\/\/x\.com\/[A-Za-z0-9_]{1,15}\/status\/\d+$/);
+    const text = await client.text(xEntry.entry_id);
+    assert.equal(text.status, "available");
+    assert.equal(text.text_kind, "full");
+    assert.equal(text.fetched_from, "x");
+    assert.equal(text.body_text, xText.body_text);
+    assert.ok(text.body_text.length > 0 && text.body_text.length <= 40_000);
+    const article = await client.entry(wechatEntry.entry_id);
+    assert.equal(article.channel, "wechat");
+    assert.match(article.identity_key, /^wx:[^:]+:\d+:\d+$/, "a WeChat article stands on the wx rung of the ladder");
+    assert.ok(article.media.length >= 1 && article.media[0].original_url.startsWith("https://"));
+    const articleText = await client.text(wechatEntry.entry_id);
+    assert.equal(articleText.fetched_from, "wechat");
+    assert.equal(articleText.body_text, wechatText.body_text);
+    const media = await client.media(mediaId);
+    assert.equal(media.contentType, "image/jpeg");
+    assert.ok(media.body.equals(image) && image.subarray(0, 2).equals(Buffer.from([0xff, 0xd8])), "the image is the recorded JPEG");
+    assert.equal(createHash("sha256").update(image).digest("hex"), mediaId, "the id is the sha256 of the stored bytes");
+    const health = await client.health();
+    assert.ok(Array.isArray(health.providers) && health.providers.length >= 2, "the recorded health answer names its providers");
+    assert.ok(health.providers.some((row) => row.name === "socialdata" && row.calls_24h > 0), "the live calls are on the recording's ledger");
+    assert.ok(health.providers.some((row) => row.name === "dajiala" && row.remaining?.currency === "CNY"), "Dajiala's own balance");
+  });
+  const yaml = YAML.parse(await readFile(new URL(pin.contractFile, root), "utf8"));
+  const entryProperties = Object.keys(yaml.components.schemas.Entry.properties);
+  for (const field of ["channel", "platform", "author", "media", "quoted", "metrics"]) assert.ok(entryProperties.includes(field), `Entry.${field}`);
+  assert.ok(yaml.components.schemas.EntryText.properties.body_text, "EntryText.body_text");
+  assert.ok(yaml.paths["/v1/media/{mediaId}"]?.get, "GET /v1/media/{mediaId}");
+  assert.deepEqual(yaml.components.schemas.Health.properties.discovery.required, ["today", "history", "by_line", "in_trial"]);
+  assert.ok(yaml.paths["/v1/sources/screening"]?.post, "POST /v1/sources/screening (fr-sources)");
+  const manifest = await fixture("manifest.json");
+  for (const field of ["channel", "platform", "author", "media", "metrics"]) assert.ok(manifest.fields.entry.includes(field), `the recorded manifest says it populates ${field}`);
 });

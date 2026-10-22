@@ -196,6 +196,9 @@ export const FRONTIER_ACCESSES = Object.freeze([
   'relay',
   'wechat-bridge',
   'evimed-api',
+  'socialdata',
+  'dajiala',
+  'social-crawl',
 ])
 
 export const FRONTIER_ACCESS_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
@@ -210,7 +213,56 @@ export const FRONTIER_ACCESS_LABELS_ZH = /** @type {Readonly<Record<string, stri
   relay: '海外中继',
   'wechat-bridge': '公众号桥接',
   'evimed-api': 'EviMed 接口',
+  socialdata: 'X 账号（SocialData）',
+  dajiala: '公众号（极致了）',
+  'social-crawl': '社媒监测',
 }))
+
+/** What kind of publication an entry is (contract 1.5.0, `Entry.channel`):
+ *  decided by the plugin's registry row and adapter, never by a model. */
+export const FRONTIER_CHANNELS = Object.freeze([
+  'journal',
+  'preprint',
+  'news',
+  'regulator',
+  'registry',
+  'guideline',
+  'blog',
+  'x',
+  'wechat',
+  'social',
+])
+
+export const FRONTIER_CHANNEL_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
+  journal: '期刊',
+  preprint: '预印本',
+  news: '资讯',
+  regulator: '监管',
+  registry: '注册库',
+  guideline: '指南',
+  blog: '博客',
+  x: 'X',
+  wechat: '公众号',
+  social: '社媒',
+}))
+
+/** The platform a social post was made on (contract 1.5.0, `Entry.platform`). */
+export const FRONTIER_PLATFORMS = Object.freeze(['x', 'wechat', 'xiaohongshu', 'douyin', 'zhihu', 'weibo', 'bilibili', 'channels', 'web'])
+
+export const FRONTIER_PLATFORM_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
+  x: 'X',
+  wechat: '微信公众号',
+  xiaohongshu: '小红书',
+  douyin: '抖音',
+  zhihu: '知乎',
+  weibo: '微博',
+  bilibili: '哔哩哔哩',
+  channels: '微信视频号',
+  web: '网页',
+}))
+
+/** Who wrote a post, as the registry knows it (contract 1.5.0, `Entry.author.role`). */
+export const FRONTIER_AUTHOR_ROLES = Object.freeze(['organisation', 'person'])
 
 /** The registry's launch tiers. */
 export const FRONTIER_LAUNCH_TIERS = Object.freeze(['P0', 'P1', 'P2'])
@@ -403,6 +455,8 @@ const VOCABULARIES = Object.freeze({
   health: { values: FRONTIER_HEALTH_STATES, labels: FRONTIER_HEALTH_LABELS_ZH },
   egress: { values: FRONTIER_EGRESSES, labels: FRONTIER_EGRESS_LABELS_ZH },
   access: { values: FRONTIER_ACCESSES, labels: FRONTIER_ACCESS_LABELS_ZH },
+  channel: { values: FRONTIER_CHANNELS, labels: FRONTIER_CHANNEL_LABELS_ZH },
+  platform: { values: FRONTIER_PLATFORMS, labels: FRONTIER_PLATFORM_LABELS_ZH },
   launchTier: { values: FRONTIER_LAUNCH_TIERS, labels: null },
   datePrecision: { values: FRONTIER_DATE_PRECISIONS, labels: null },
   defect: { values: FRONTIER_ENTRY_DEFECTS, labels: null },

@@ -1,7 +1,7 @@
 """The shared vocabulary and the reader interfaces of the knowledge-source plugin.
 
 Everything another module needs to agree on lives here, once: the closed vocabularies of the HTTP
-contract (``contract/knowledge-plugin-openapi.yaml`` v1.4.0, whose enums these tuples copy value
+contract (``contract/knowledge-plugin-openapi.yaml`` v1.5.0, whose enums these tuples copy value
 for value), the whitelists that decide which adapter facts and enrichment fields exist past the
 adapter (contract rule 4), and the dataclasses that pass between the scheduler, the protected
 fetch, the adapters (package P2) and the store.
@@ -32,10 +32,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.4.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+CONTRACT_VERSION = "1.5.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
                              # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h;
                              # 1.3.0 (2026-10-05): Source.platform_produced (flywheel F09);
-                             # 1.4.0 (2026-10-10): Health.host_budget (today's use against each host's daily cap)
+                             # 1.4.0 (2026-10-10): Health.host_budget (today's use against each host's daily cap);
+                             # 1.5.0 (2026-10-22): social posts — Entry.channel/platform/author/media/quoted/metrics,
+                             #   EntryText.body_text, GET /v1/media/{id}, Health.providers and Health.discovery,
+                             #   the read methods socialdata / dajiala / social-crawl
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------
@@ -47,7 +50,7 @@ SOURCE_TYPES = ("journal", "regulator", "evidence-body", "preprint", "company", 
 EGRESSES = ("direct", "browser", "relay", "bridge", "api")
 ACCESSES = (
     "crossref-issn", "eutils-query", "europepmc", "json-api", "rss", "atom", "html-list",
-    "browser-list", "relay", "wechat-bridge", "evimed-api",
+    "browser-list", "relay", "wechat-bridge", "evimed-api", "socialdata", "dajiala", "social-crawl",
 )
 LAUNCH_TIERS = ("P0", "P1", "P2")
 HEALTH_STATES = ("new", "healthy", "degraded", "unreadable", "drifted", "disabled")
@@ -61,7 +64,13 @@ DEFECTS = (
 ENTRY_TEXT_STATUSES = ("none", "pending", "available")
 TEXT_STATUSES = ("available", "pending", "unavailable")          # EntryText.status
 TEXT_KINDS = ("abstract", "excerpt", "full", "none")
-FETCHED_FROM = ("pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat")
+FETCHED_FROM = ("pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat", "x", "social")
+# Contract 1.5.0: what kind of publication an entry is (decided by the registry and the adapter, never by a model), the
+# platform a social post was made on, who wrote it, and the kinds of stored media.
+CHANNELS = ("journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social")
+PLATFORMS = ("x", "wechat", "xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels", "web")
+AUTHOR_ROLES = ("organisation", "person")
+MEDIA_KINDS = ("image", "video-poster")
 OPEN_ACCESS = ("gold", "green", "bronze", "closed", "unknown")
 TRIAL_EVENTS = ("registered", "results-posted", "terminated", "suspended", "updated")
 ERROR_CODES = (
@@ -101,7 +110,12 @@ BATCH1_EGRESSES = frozenset({"direct", "api"})
 # What this build implements (batch 2 adds the Tokyo relay, the headless browser and the team's
 # EviMed API scans). An enabled source outside these sets fails the registry load test; a source an
 # operator enables anyway is refused by name (egress_unavailable / adapter_unavailable), never guessed.
-IMPLEMENTED_ACCESSES = BATCH1_ACCESSES | {"browser-list", "evimed-api"}
+IMPLEMENTED_ACCESSES = BATCH1_ACCESSES | {"browser-list", "evimed-api", "socialdata", "dajiala", "social-crawl"}
+# The social read methods (contract 1.5.0) are not polled by the scheduler's per-source loop: a paid search packs two dozen
+# X accounts into one request, a WeChat account is read twice a day in priority order, and the six-platform monitor spreads
+# its requests over the day. ``knowledge_plugin.social`` runs them, writes their entries through the same store and their
+# polls into the same fetch log, so health, the stream and retention treat them like any other source.
+SOCIAL_ACCESSES = frozenset({"socialdata", "dajiala", "social-crawl"})
 IMPLEMENTED_EGRESSES = BATCH1_EGRESSES | {"relay", "browser"}
 # Refusals that are about this deployment, not about the source: the scheduler reschedules them
 # without counting a failure (a missing exit or key must not turn 60 sources "unreadable").
@@ -180,6 +194,13 @@ SUMMARY_MAX = 20_000
 URL_MAX = 2048
 EXTERNAL_KEY_MAX = 512
 BODY_EXCERPT_MAX = 20_000
+BODY_TEXT_MAX = 40_000           # EntryText.body_text (contract 1.5.0): the full text, paragraphs separated by blank lines
+MEDIA_MAX = 8                    # Entry.media items
+QUOTED_MEDIA_MAX = 4             # Entry.quoted.media items
+QUOTED_TEXT_MAX = 10_000
+AUTHOR_NAME_MAX = 200
+AUTHOR_HANDLE_MAX = 100
+MEDIA_ALT_MAX = 1000
 SOURCE_ID_MAX = 120
 SHORT_SUMMARY_MIN = 80
 ENTRIES_PAGE_MAX = 500
@@ -297,6 +318,19 @@ class NormalizedEntry:
     facts: dict = field(default_factory=dict)
     defects: list[str] = field(default_factory=list)
     identity_hint: str | None = None
+    # Contract 1.5.0, set by the social adapters (and ``channel`` by normalisation for every other source). ``author``
+    # ``{name, handle?, url?, role?}``; ``media`` items ``{id, kind, width?, height?, alt?, original_url}`` whose bytes the
+    # media store already holds; ``quoted`` ``{author: {name, handle?}, text, url, lang?, media?}``; ``metrics``
+    # ``{likes?, reposts?, replies?, views?, observed_at}``; ``body_text`` the full post or article, served by ``/text``.
+    channel: str | None = None
+    platform: str | None = None
+    author: dict | None = None
+    media: list = field(default_factory=list)
+    quoted: dict | None = None
+    metrics: dict | None = None
+    body_text: str | None = None
+    body_from: str | None = None     # EntryText.fetched_from of ``body_text`` (``x``, ``wechat``, ``social``)
+    body_kind: str = "full"          # ``full``: served as body_text (and its head as body_excerpt); ``excerpt``: a part only
 
 
 @dataclass
@@ -334,6 +368,7 @@ class EntryTextResult:
     enrichment: dict = field(default_factory=dict)
     retry_after_s: int | None = None
     notes: list[str] = field(default_factory=list)
+    body_text: str | None = None     # contract 1.5.0: the readable full text, at most BODY_TEXT_MAX characters
 
 
 class FetchError(Exception):

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.4.0"
+  version: "1.5.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -41,7 +41,15 @@ info:
        health for ever. What the platform published, the platform snapshots itself.
     8. **Money and models.** The plugin makes no content-generating model call. Its only model
        use is proposing new list selectors when a page drifts (10.2.8); calls are counted in
-       `/v1/health`.
+       `/v1/health`. Calls to paid data providers (1.5.0: SocialData for X, Dajiala for WeChat) and
+       to the GEO module's social crawler each count against a configured daily cap; a reached cap
+       stops that provider until the next day and nothing else (`Health.providers`).
+    9. **Social posts (1.5.0).** An entry may carry what a post carries: `channel` (every entry
+       delivered from 1.5.0 on), `platform`, `author`, `media`, `quoted`, `metrics`, and in `/text`
+       its full `body_text`. Each is absent when unknown, never guessed. Images are served by the
+       plugin itself (`GET /v1/media/{mediaId}`), re-encoded, so a reader never hot-links a platform;
+       a post from the six Chinese platforms carries an excerpt and the platform's counts, never its
+       author (a member of the public).
   contact:
     name: EviMed knowledge plugin team
   license:
@@ -129,6 +137,50 @@ paths:
               schema: { $ref: "#/components/schemas/Source" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/sources/screening:
+    post:
+      tags: [sources]
+      operationId: reportScreening
+      summary: The platform's screening verdicts per source, for the plugin's trials and off-topic retirement
+      description: |
+        Added in 1.5.0. The platform reports, per source, how many of its entries it screened over
+        the last `window_days` and how many of those it judged off-topic (not medical). The plugin
+        reads these when it decides whether a source on trial is admitted or a source is retired as
+        off-topic; it stores the counts and nothing else. Ids the plugin does not know are named in
+        `unknown`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [window_days, sources]
+              properties:
+                window_days: { type: integer, minimum: 1, maximum: 30 }
+                sources:
+                  type: array
+                  maxItems: 4000
+                  items:
+                    type: object
+                    required: [id, screened, off_topic]
+                    properties:
+                      id: { type: string, maxLength: 120 }
+                      screened: { type: integer, minimum: 0 }
+                      off_topic: { type: integer, minimum: 0, description: "At most `screened`." }
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, unknown]
+                properties:
+                  accepted: { type: integer, minimum: 0 }
+                  unknown: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /v1/entries:
     get:
       tags: [stream]
@@ -211,6 +263,30 @@ paths:
                   not_before: { type: string, format: date-time }
         "404": { $ref: "#/components/responses/NotFound" }
         "501": { $ref: "#/components/responses/CapabilityUnavailable" }
+
+  /v1/media/{mediaId}:
+    get:
+      tags: [stream]
+      operationId: getMedia
+      summary: The bytes of one stored image an entry names
+      description: |
+        Added in 1.5.0. `mediaId` is the sha256 of the stored bytes (an entry's `media[].id`). The
+        answer is the image itself with its content type (`image/jpeg`, `image/png`, `image/webp` or
+        `image/gif`, at most 1.5 MB), `ETag` the id, cacheable privately for a day. The store has a
+        cap; past it the least recently served images are evicted, and an evicted id answers 404
+        while the entry keeps naming it with its `original_url`.
+      parameters:
+        - { name: mediaId, in: path, required: true, schema: { type: string, pattern: "^[a-f0-9]{64}$" } }
+      responses:
+        "200":
+          description: The image
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/lookups:
     get:
@@ -312,8 +388,8 @@ components:
       enum: [direct, browser, relay, bridge, api]
     Access:
       type: string
-      description: The read method (one adapter each). `evimed-api` is the team's own evidence API used as a scheduled scan.
-      enum: [crossref-issn, eutils-query, europepmc, json-api, rss, atom, html-list, browser-list, relay, wechat-bridge, evimed-api]
+      description: "The read method (one adapter each). `evimed-api` is the team's own evidence API used as a scheduled scan. Added in 1.5.0: `socialdata` (X accounts through SocialData), `dajiala` (WeChat official accounts through Dajiala), `social-crawl` (searches of six Chinese platforms through the GEO module's crawler)."
+      enum: [crossref-issn, eutils-query, europepmc, json-api, rss, atom, html-list, browser-list, relay, wechat-bridge, evimed-api, socialdata, dajiala, social-crawl]
     LaunchTier:
       type: string
       enum: [P0, P1, P2]
@@ -323,6 +399,70 @@ components:
     DatePrecision:
       type: string
       enum: [instant, day, inferred]
+    Channel:
+      type: string
+      description: "What kind of publication an entry is, decided by the registry row and the adapter, never by a model. Added in 1.5.0; every entry delivered from then on carries one when its source has one."
+      enum: [journal, preprint, news, regulator, registry, guideline, blog, x, wechat, social]
+    Platform:
+      type: string
+      description: "The platform a social post was made on. Added in 1.5.0."
+      enum: [x, wechat, xiaohongshu, douyin, zhihu, weibo, bilibili, channels, web]
+    Author:
+      type: object
+      description: "Who wrote a post. `role` is the registry's: an organisation's account or a person's. Added in 1.5.0."
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        handle: { type: string, maxLength: 100, description: "The account name on its platform, without '@'." }
+        url: { type: string, format: uri, maxLength: 2048 }
+        role: { type: string, enum: [organisation, person] }
+      additionalProperties: false
+    MediaItem:
+      type: object
+      description: "An image a post carries, stored by the plugin (GET /v1/media/{id}). Added in 1.5.0."
+      required: [id, kind, original_url]
+      properties:
+        id: { type: string, pattern: "^[a-f0-9]{64}$", description: "sha256 of the stored (re-encoded) bytes." }
+        kind: { type: string, enum: [image, video-poster] }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        alt: { type: string, maxLength: 1000 }
+        original_url: { type: string, format: uri, maxLength: 2048, description: "Where the image was fetched from; still named after the store evicted the bytes." }
+      additionalProperties: false
+    QuotedPost:
+      type: object
+      description: "The post an X post quotes, or the source a WeChat repost names. Added in 1.5.0."
+      required: [author, text, url]
+      properties:
+        author:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string, maxLength: 200 }
+            handle: { type: string, maxLength: 100 }
+          additionalProperties: false
+        text: { type: string, maxLength: 10000 }
+        url: { type: string, format: uri, maxLength: 2048 }
+        lang: { type: string }
+        media: { type: array, maxItems: 4, items: { $ref: "#/components/schemas/MediaItem" } }
+      additionalProperties: false
+    PostMetrics:
+      type: object
+      description: "The platform's own counts when the plugin read the post. A count the platform did not state is absent, never zero. Added in 1.5.0."
+      required: [observed_at]
+      properties:
+        likes: { type: integer, minimum: 0 }
+        reposts: { type: integer, minimum: 0 }
+        replies: { type: integer, minimum: 0 }
+        views: { type: integer, minimum: 0 }
+        observed_at: { type: string, format: date-time }
+      additionalProperties: false
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: number, minimum: 0 }
+        currency: { type: string, description: "ISO 4217 (USD, CNY), or `requests` for a capacity counted in requests." }
 
     Manifest:
       type: object
@@ -427,6 +567,52 @@ components:
               used: { type: integer, minimum: 0 }
               cap: { type: integer, minimum: 1 }
         latest_seq: { type: integer, format: int64 }
+        providers:
+          type: array
+          description: "Per paid provider (and the GEO social crawler, whose capacity is counted in requests): the calls and spend of the last 24 h, the day's spend against the day's cap (Asia/Shanghai calendar day; a reached cap stops that provider until the next day), what the provider says is left, and the last error. Added in 1.5.0; absent when the deployment configured none."
+          items:
+            type: object
+            required: [name, calls_24h, spend_24h]
+            properties:
+              name: { type: string, examples: [socialdata, dajiala, geo-social-crawl] }
+              calls_24h: { type: integer, minimum: 0 }
+              spend_24h: { $ref: "#/components/schemas/Money" }
+              spend_today: { $ref: "#/components/schemas/Money" }
+              daily_cap: { $ref: "#/components/schemas/Money" }
+              remaining: { $ref: "#/components/schemas/Money" }
+              last_error: { type: string, maxLength: 200 }
+        discovery:
+          type: object
+          description: "Source discovery's counts (Asia/Shanghai days): today, the last 14 days newest first, today's counts by candidate line, and how many sources are on trial now. Added in 1.5.0; absent when this build reports none."
+          required: [today, history, by_line, in_trial]
+          properties:
+            today: { $ref: "#/components/schemas/DiscoveryDay" }
+            history: { type: array, maxItems: 14, items: { $ref: "#/components/schemas/DiscoveryDay" } }
+            by_line:
+              type: object
+              additionalProperties:
+                type: object
+                required: [candidates, validated, trial, admitted, retired, failed]
+                properties:
+                  candidates: { type: integer, minimum: 0 }
+                  validated: { type: integer, minimum: 0 }
+                  trial: { type: integer, minimum: 0 }
+                  admitted: { type: integer, minimum: 0 }
+                  retired: { type: integer, minimum: 0 }
+                  failed: { type: integer, minimum: 0 }
+            in_trial: { type: integer, minimum: 0 }
+
+    DiscoveryDay:
+      type: object
+      required: [day, candidates, validated, trial, admitted, retired, failed]
+      properties:
+        day: { type: string, format: date, description: "An Asia/Shanghai calendar day." }
+        candidates: { type: integer, minimum: 0 }
+        validated: { type: integer, minimum: 0 }
+        trial: { type: integer, minimum: 0 }
+        admitted: { type: integer, minimum: 0 }
+        retired: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
 
     Source:
       type: object
@@ -515,6 +701,12 @@ components:
             is_correction_notice: { type: boolean }
             is_masthead: { type: boolean, description: "Editorial board / table of contents / issue information: the fixed masthead pages, matched by an exact-title list." }
           additionalProperties: false
+        channel: { $ref: "#/components/schemas/Channel" }
+        platform: { $ref: "#/components/schemas/Platform" }
+        author: { $ref: "#/components/schemas/Author" }
+        media: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/MediaItem" } }
+        quoted: { $ref: "#/components/schemas/QuotedPost" }
+        metrics: { $ref: "#/components/schemas/PostMetrics" }
     EntryPage:
       type: object
       required: [entries, next_after, has_more, server_time]
@@ -534,7 +726,8 @@ components:
         text_kind: { type: string, enum: [abstract, excerpt, full, none] }
         abstract: { type: [string, "null"] }
         body_excerpt: { type: [string, "null"], maxLength: 20000 }
-        fetched_from: { type: string, enum: [pubmed, europepmc, crossref, page, browser, relay, evimed-api, wechat] }
+        body_text: { type: [string, "null"], maxLength: 40000, description: "The full text, plain, paragraphs separated by blank lines: a post or an article as it arrived (X, WeChat), or the readable text of a web or news page. Added in 1.5.0; absent when there is none." }
+        fetched_from: { type: string, enum: [pubmed, europepmc, crossref, page, browser, relay, evimed-api, wechat, x, social], description: "`x` and `social` added in 1.5.0." }
         fetched_at: { type: [string, "null"], format: date-time }
         next_attempt_at: { type: [string, "null"], format: date-time }
         enrichment:

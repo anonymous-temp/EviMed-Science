@@ -1,0 +1,1350 @@
+{
+ "_doc": "The WeChat seed list (fr-social, 2026-10-22), from the 2026-09-21 research list (100 accounts). Only accounts with an article verified to be their own are kept: each is re-resolved by Dajiala from that link before its first read, and kept only if the nickname it answers is one of expected_names (the page nickname at verification, and the name the list gave). The saved gh ids are not used (gh_1e80bb81a1d2, saved for both 丁香园 and 雷峰网, answered as a test account on 2026-10-22). priority 1 (regulators, journals, societies; read twice a day) is spent first, then 2 (clinical news portals), 3 (industry and research media), 4 (AI and tech media, and accounts whose verified article is older than 2021).",
+ "source": "docs/superpowers/specs/2026-09-21-medical-frontier-feed-assets/research/wechat-accounts-100.jsonl",
+ "counts": {
+  "listed": 100,
+  "kept": 69,
+  "dropped": 31,
+  "by_priority": {
+   "1": 15,
+   "2": 19,
+   "3": 19,
+   "4": 16
+  }
+ },
+ "accounts": [
+  {
+   "id": "wx-caca",
+   "name": "中国抗癌协会",
+   "expected_names": [
+    "中国抗癌协会"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004662&ver=6980&signature=K065AUVFnI6DWp2LIUczzDsb151d*VqCxR7Eql8aDGixS*dvOt7jtUmHF9ZGaxmh3Wc8W197mHIQYHPe9hWcLIVnWdGvs-U3z3o7-3BTvyjmqohWim8fnjnrAkR4JOq0&new=1",
+   "verified_article_published_at": "2024-01-10T15:09:57Z",
+   "biz": "MzAxMDAxMjcwOA==",
+   "category": "cancer-society",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国抗癌协会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_76cece4d1e69"
+  },
+  {
+   "id": "wx-chinacdc",
+   "name": "中国疾控中心",
+   "expected_names": [
+    "中国疾控中心",
+    "中国疾控动态"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005559&ver=6980&signature=MT4LxmDfxNj*5A2h9HJvYtIZ1NLZYwKHxKoZnJMoDTB2EPFk8qxJYE-wLp-yS0DNv9q-1dIhhWJE*aseHO6l77ykVM6lK5VbkJ19iI-oVNbbc5PT94rsHN7MJzfrYF2k&new=1",
+   "verified_article_published_at": "2023-12-31T12:00:00Z",
+   "biz": "MzA3MzU2MzIwMg==",
+   "category": "china-cdc-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "中国疾病预防控制中心",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_f1bac907abe3"
+  },
+  {
+   "id": "wx-cjim",
+   "name": "中华内科杂志",
+   "expected_names": [
+    "中华内科杂志"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004434&ver=6980&signature=78kviQTR7TotMKnU-gva3bcZIkvvj5uOc3BwURaUom4YDXTFjxVA3vnZNwHo9QLUzMADsUsslV25QNws7YZH1f*WCUpbh8KtAQT6yT7os-qqLcFq48rI32qL7c3BTqFs&new=1",
+   "verified_article_published_at": "2026-03-18T10:00:00Z",
+   "biz": "MzAxMjUyNzQzNA==",
+   "category": "journal-cma",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_121b88e4e11a"
+  },
+  {
+   "id": "wx-cmda",
+   "name": "中国医师协会",
+   "expected_names": [
+    "中国医师协会"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004547&ver=6980&signature=U3*RqxBJ*cXC*PTTun8LsFbEeSlj9eppx3U-a5BVgt5naUK5N6Xi3cfanW7dpfdNsMfdpZChjC8Ak*wxhrqpcQU5qFl4VMPVBWfeJXzAxlvDC9*KNkigC7Xom-iIGApk&new=1",
+   "verified_article_published_at": "2019-08-27T13:38:46Z",
+   "biz": "MjM5NTE4NTc3NA==",
+   "category": "physician-association",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中国医师协会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_361c119933a0"
+  },
+  {
+   "id": "wx-cmi",
+   "name": "中国医疗保险",
+   "expected_names": [
+    "中国医疗保险"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005253&ver=6980&signature=pKZXmFYt7R67JsFZH1JO1Skm2kFIEdGGJ5nZ4R8D43w8-g0p1yjJ*Kjuhf8qeYHofTnepLp7IrqfGprAAwDTXFmXNewAzBiKpW9LdFzwtSLvJp-FOydGpm0aghb-nZpY&new=1",
+   "verified_article_published_at": "2026-09-21T09:35:26Z",
+   "biz": "MjM5ODQ4MjU4MQ==",
+   "category": "medical-insurance-policy",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "《中国医疗保险》杂志社",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_002f50c912e3"
+  },
+  {
+   "id": "wx-csc",
+   "name": "中华医学会心血管病学分会",
+   "expected_names": [
+    "中华医学会心血管病学分会"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004774&ver=6980&signature=erIprwjfubthqMI5bUeO8WAw54IClxAH8N*Dv0aWZktlCqVTXXeR1uxbUwObJWSicEDAt30SPKH1-NBOMHEUjD3Y*8l-ZBL-wQcZoOHawl*7MnvuLq1Q*LbnnaB1BOET&new=1",
+   "verified_article_published_at": "2022-04-22T14:00:00Z",
+   "biz": "MjM5NDE0NTUxNg==",
+   "category": "cardiology-society",
+   "source_type": "evidence-body",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_8b19646afecf"
+  },
+  {
+   "id": "wx-lancet",
+   "name": "柳叶刀TheLancet",
+   "expected_names": [
+    "柳叶刀TheLancet"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003985&ver=6980&signature=-T4S0RwAegZZ3A4iL9FzDfiwSoSz*d*Mo7rFr0LamrsmhFClqlLcr0QlKtRM3pJYxdKKgP2KWEBOtb4hVfLf00-xJ2hVuWfr2u-Oejb3XJ1zZfZrblXQQg2v6r1tG537&new=1",
+   "verified_article_published_at": "2021-05-25T02:46:37Z",
+   "biz": "MzU0Njk0ODk4Mg==",
+   "category": "journal-chinese-edition",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Elsevier",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_786c354139b8"
+  },
+  {
+   "id": "wx-nejm",
+   "name": "NEJM医学前沿",
+   "expected_names": [
+    "NEJM医学前沿"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzIxNTc4NzU0MQ==&mid=2247562533&idx=1&sn=bb65229f68df3bea7dacff60b14fc132&chksm=9677a76079906d3f21409b7ba58b8f333d74d4cfff3f58e1eefef660b180530e6abb1d58eefe",
+   "verified_article_published_at": "2026-09-15T03:25:00Z",
+   "biz": "MzIxNTc4NzU0MQ==",
+   "category": "journal-chinese-edition",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "Massachusetts Medical Society",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_01b89674235e"
+  },
+  {
+   "id": "wx-nifdc",
+   "name": "中国药检",
+   "expected_names": [
+    "中国药检"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005145&ver=6980&signature=g9L1R1DURSChPOO7ik2EOuf9r-S*8ZV0f6R*zLtNYix27tf78z3-TZPgYRHibZDma1uD80FcJMLbcWk5P-1ptQChFrFihJa9IdYbe48rChFeQJTw2rN7l91OOtT1kTdj&new=1",
+   "verified_article_published_at": "2017-06-14T09:44:49Z",
+   "biz": "MzU3NzA0OTIxMg==",
+   "category": "nifdc-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "中国食品药品检定研究院 NIFDC",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_f5e7a8d4c5e5"
+  },
+  {
+   "id": "wx-nmjc",
+   "name": "中华医学杂志",
+   "expected_names": [
+    "中华医学杂志"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004142&ver=6980&signature=woMgQmW9Fd0dA-p8DV6zaaGoqVbSy9p7VUzxnxqGH9Nz1u21rvBFBCy8SaH1FlB3ZkdbU7ULBefaiGE6wPw2n5ZsPuOr9Hn*DD6JJMaLUHfTjcCZkPXGjKYg7-Teo2pc&new=1",
+   "verified_article_published_at": "2026-03-31T13:10:04Z",
+   "biz": "MjM5NTQ5NjMxMg==",
+   "category": "journal-cma",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中华医学会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_d97cb91b210e"
+  },
+  {
+   "id": "wx-nmpa",
+   "name": "国家药监局",
+   "expected_names": [
+    "国家药监局"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004854&ver=6980&signature=2bSCznmeI1FPXD8gmQEaSm4Yg2yqQVol9oitojTw1-E6s94NPVr*qzmKivIGyyoGJhxYwa2uQHsD7cGuiF5YLX4B4w*w9-Ng4UBLc57Pr1vnPnabCvdsIIbv5Ei6QD1U&new=1",
+   "verified_article_published_at": "2022-11-21T10:40:00Z",
+   "biz": "MzA3Mzg0MTY1Nw==",
+   "category": "nmpa-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家药品监督管理局",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_be9781dfc193"
+  },
+  {
+   "id": "wx-nsfc",
+   "name": "国家自然科学基金委员会",
+   "expected_names": [
+    "国家自然科学基金委员会"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006350&ver=6980&signature=GO9MabhCCSu5bikWn6rjaJ1JvX9D*oaonVRQ9UcUaj8eO3EE2F3W8d26xx0FLmI8gUORGKppogrhPBHrO8P8LCzjvEIoebUI87mQdsx0qYeyi*Ud3Dtr8O05YxU5Jwgz&new=1",
+   "verified_article_published_at": "2024-05-21T09:27:15Z",
+   "biz": "MzI5NDU2MDc0OA==",
+   "category": "funding-agency",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "国家自然科学基金委员会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_c1f2e5989666"
+  },
+  {
+   "id": "wx-nsfc-journal",
+   "name": "中国科学基金",
+   "expected_names": [
+    "中国科学基金"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s/9jkBYr7mpX9NTKEX-VskfA",
+   "verified_article_published_at": "2026-04-21T08:32:49Z",
+   "biz": "Mzg5MTY5Mjg4Nw==",
+   "category": "funding-journal",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "国家自然科学基金委员会",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_bf6e2203d319"
+  },
+  {
+   "id": "wx-pumch-journal",
+   "name": "协和医学杂志",
+   "expected_names": [
+    "协和医学杂志"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI3MzYzNTAwOA==&mid=2247580506&idx=1&sn=2b215aaaa0ca3b2b416cbd1d02df8697&chksm=ea0c82807e1b22018bb23a878a589282b3ebb03538ec902fef8a64b17b40bbc01bd2a34accf3",
+   "verified_article_published_at": "2026-09-18T03:36:27Z",
+   "biz": "MzI3MzYzNTAwOA==",
+   "category": "journal-official",
+   "source_type": "journal",
+   "authority": 4,
+   "owner_entity": "中国医学科学院 / 北京协和医院",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_a9ca638648f1"
+  },
+  {
+   "id": "wx-who",
+   "name": "世界卫生组织",
+   "expected_names": [
+    "世界卫生组织"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005685&ver=6980&signature=EdZg5dcBTZWngn8z1vz8QUWQkxFEHhxAW3ixpd0lq678lzLUxf4Ekfz9KkdyGHGhOFiitADE0JrJA3uYujhvtR9wj0k7OeObesC5W9y4YCrFlIh0XGZ34EWtr*YYqUSt&new=1",
+   "verified_article_published_at": "2020-01-31T04:52:57Z",
+   "biz": "MzA3ODU5NDY2NA==",
+   "category": "who-official",
+   "source_type": "regulator",
+   "authority": 5,
+   "owner_entity": "World Health Organization",
+   "priority": 1,
+   "polls_per_day": 2,
+   "saved_gh_id_not_used": "gh_600dad0c9608"
+  },
+  {
+   "id": "wx-cmainfo",
+   "name": "中华医学信息导报",
+   "expected_names": [
+    "中华医学信息导报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA4Mzg4ODE3NA==&mid=2247588487&idx=2&sn=df081c560c65bec5e2d2e322b4f72689&chksm=9eb2ec8b8870c4c07656e1b3a7967c74006746143cb10985691542b1cd4daa43fb2efd6a83ca",
+   "verified_article_published_at": "2025-09-09T09:06:20Z",
+   "biz": "MzA4Mzg4ODE3NA==",
+   "category": "medical-society-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中华医学会",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_da833898e884"
+  },
+  {
+   "id": "wx-cmt",
+   "name": "中国医学论坛报",
+   "expected_names": [
+    "中国医学论坛报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5OTEzOTUxOQ==&mid=2654394226&idx=2&sn=2c7a131c96a3ec274de30e6dbffb1874&chksm=bc8a979983608bf25b8187e50e658a304d36c1e53861b588f6f04670baad84918c3540f988ce",
+   "verified_article_published_at": "2026-01-23T13:00:00Z",
+   "biz": "MjM5OTEzOTUxOQ==",
+   "category": "clinical-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国医学论坛报社",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_45b944d9b515"
+  },
+  {
+   "id": "wx-cn-healthcare",
+   "name": "健康界",
+   "expected_names": [
+    "健康界"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzUzODczMg==&mid=2650015996&idx=2&sn=d6a8437419b4c74b50667e9c9703fb20&chksm=bf090d24fbdb37f07541f982edb19a1cdff37c99154907ab3d5d5567235a53597d135185cbce",
+   "verified_article_published_at": "2026-07-29T12:44:43Z",
+   "biz": "MjM5NzUzODczMg==",
+   "category": "healthcare-industry-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "健康界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_5515b6300853"
+  },
+  {
+   "id": "wx-cnpharm",
+   "name": "中国医药报",
+   "expected_names": [
+    "中国医药报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MzAxMzIzNA==&mid=2650210953&idx=1&sn=946d0a708269f8cf54e30b996ddeef7f&chksm=bf24e433d876abffa05ae28514f37c1bf6df8f1077a214958934a1c93ae9a49f29e70ff046b2",
+   "verified_article_published_at": "2025-03-22T03:00:00Z",
+   "biz": "MjM5MzAxMzIzNA==",
+   "category": "pharma-regulatory-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国健康传媒集团",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_bc0a53f6856e"
+  },
+  {
+   "id": "wx-cntcm",
+   "name": "中国中医药报官方号",
+   "expected_names": [
+    "中国中医药报官方号"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUyMjUzMjU2Mg==&mid=2247714992&idx=3&sn=26fb0852364b4d872b118b8211dfa3a3&chksm=f847def3bc763d2e781e67a69d1f8695c814adcd5e47383ec0fb8bd9e52afeb329a923a85b85",
+   "verified_article_published_at": "2026-09-19T05:30:00Z",
+   "biz": "MzUyMjUzMjU2Mg==",
+   "category": "tcm-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "中国中医药报社",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_5a6eb4fd5f3e"
+  },
+  {
+   "id": "wx-dxy",
+   "name": "丁香园",
+   "expected_names": [
+    "丁香园"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MTg0MzMwODA0MQ==&mid=2653587995&idx=2&sn=ad0acea0a9b5dbcf620dfa3a0dd8f449&chksm=5f93cf43224d3d0d5f5a4dc29eee4d720bfbf409969f93def3d03de158d55ba48dc0392a8b91",
+   "verified_article_published_at": "2024-11-06T01:00:00Z",
+   "biz": "MTg0MzMwODA0MQ==",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_1e80bb81a1d2"
+  },
+  {
+   "id": "wx-dxy-heart",
+   "name": "丁香园心血管时间",
+   "expected_names": [
+    "丁香园心血管时间"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA5MjE3MzUxNA==&mid=2651578464&idx=2&sn=71a77ace9d81ea98f628074d5c2c099e&chksm=8ac5930cdcc954018b536447487d8b5fb64e1073c76da8ecc1dafae62402aee00e2e55002dab",
+   "verified_article_published_at": "2026-09-17T12:00:00Z",
+   "biz": "MzA5MjE3MzUxNA==",
+   "category": "cardiology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_764cfb0ae97a"
+  },
+  {
+   "id": "wx-dxy-onco",
+   "name": "丁香园肿瘤时间",
+   "expected_names": [
+    "丁香园肿瘤时间"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MzAwMjcyMA==&mid=2653549875&idx=3&sn=af442a93f5affceab79681767db1e313&chksm=bc8e233269c390cee774b6f32880a526bdd336db6db223689dc63433bcf8196393a992efd822",
+   "verified_article_published_at": "2026-09-14T12:20:00Z",
+   "biz": "MjM5MzAwMjcyMA==",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "丁香园",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_d5ed4fb60c23"
+  },
+  {
+   "id": "wx-jkb",
+   "name": "健康报",
+   "expected_names": [
+    "健康报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NDg4OTEwMQ==&mid=2668799376&idx=1&sn=2cff5bd3caf881640df581ce4de2f4f9&chksm=bd27bb10129bfb0060a661e71c6711f1edaf747faadaa4f389865b54b9d33e3a3dc34a325aa7",
+   "verified_article_published_at": "2022-11-02T10:30:00Z",
+   "biz": "MjM5NDg4OTEwMQ==",
+   "category": "health-policy-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "健康报社",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_bd53347d7b85"
+  },
+  {
+   "id": "wx-mdweekly",
+   "name": "医师报",
+   "expected_names": [
+    "医师报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA3NjA1MDkxMA==&mid=2651485438&idx=2&sn=f6c2cc631dc0dce1e2eae02ee4ea653c&chksm=85e0f4dd1d35738a051cfd498d77df0eff8af40ccc9c6c649a4ab6135b319eb7ed4c24c05d09",
+   "verified_article_published_at": "2025-10-09T10:41:06Z",
+   "biz": "MzA3NjA1MDkxMA==",
+   "category": "physician-newspaper",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医师报社",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_82409c75d526"
+  },
+  {
+   "id": "wx-medlive",
+   "name": "医脉通",
+   "expected_names": [
+    "医脉通"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790002613&ver=6980&signature=oVRlLKRqBlQIlNIxjKHZuxWzxXVKXdmiMVjJHIGHwh4*Lt1apCVq0Xs*aVO-yOT6aPCj8PtMKb08rmoHYhqd*zGRclmoQo-L4Ulab0CWxK5FyuJMYILHXfczQSMdi0g*&new=1",
+   "verified_article_published_at": "2023-01-01T09:30:00Z",
+   "biz": "MjM5OTA4MzA4MA==",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京医脉互通科技",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_78349b647302"
+  },
+  {
+   "id": "wx-medlive-onco",
+   "name": "医脉通肿瘤科",
+   "expected_names": [
+    "医脉通肿瘤科"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MTAzNjUyMA==&mid=2652365073&idx=1&sn=7d7b825827e1445fd460947ec0d3701f&chksm=bc42041ce053bab9ca61df9bf747329f894d37ada2f076f4696dd8ac2c6944ab5c980ae6af9d",
+   "verified_article_published_at": "2026-07-18T07:20:17Z",
+   "biz": "MjM5MTAzNjUyMA==",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "北京医脉互通科技",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_0b78c40a65e7"
+  },
+  {
+   "id": "wx-medsci",
+   "name": "梅斯医学",
+   "expected_names": [
+    "梅斯医学"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI0Njc5ODM4MQ==&mid=2247720580&idx=5&sn=1b97744667acacd3948e8a5a52253fc4&chksm=e8791f43968e3bc20cc2131d8e36456e8efd6517feeb069329ed4e9adfd75501b3bbcb55d35a",
+   "verified_article_published_at": "2026-09-13T23:50:00Z",
+   "biz": "MzI0Njc5ODM4MQ==",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "梅斯医学",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_a91d426b0045"
+  },
+  {
+   "id": "wx-yxj",
+   "name": "医学界",
+   "expected_names": [
+    "医学界"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MDc3NjQwMA==&mid=2926906939&idx=1&sn=69212f871b65d0882889d9c25780c939&chksm=8c74daea81b00a6a9c15be58e96c51a6e9274503d6c8585a9a8b1dfbccd00257ebf664864b1d",
+   "verified_article_published_at": "2024-12-31T09:06:30Z",
+   "biz": "MjM5MDc3NjQwMA==",
+   "category": "clinical-news-portal",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_9352cb95ad49"
+  },
+  {
+   "id": "wx-yxj-cardio",
+   "name": "医学界心血管频道",
+   "expected_names": [
+    "医学界心血管频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790002688&ver=6980&signature=T90U7qaA06FKA3H89mIaTGhNGjcNxh7bzPTPvJaUewLXL-wiud8yKeFP2xp0AM5Mqf5nenswuiCzhL-fs5a8p85UctbG3SZHJxiS7zuV7vyWz1ac9wva2E3VufkFQQQY&new=1",
+   "verified_article_published_at": "2026-09-18T11:30:00Z",
+   "biz": "MzkyODU4OTIxOQ==",
+   "category": "cardiology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_a0883b8ab608"
+  },
+  {
+   "id": "wx-yxj-endo",
+   "name": "医学界内分泌频道",
+   "expected_names": [
+    "医学界内分泌频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUxNzY3MDg4NQ==&mid=2247837581&idx=1&sn=3a4bde1d89003c89f944f6e16df12c49&chksm=f8010ed3b7618d4531273fe0a0d96b897803b21f8188d3c5d66bc5a8e8caf4e3ec9dc76a3713",
+   "verified_article_published_at": "2026-01-16T03:00:04Z",
+   "biz": "MzUxNzY3MDg4NQ==",
+   "category": "endocrinology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_ef3185554db7"
+  },
+  {
+   "id": "wx-yxj-neuro",
+   "name": "医学界神经病学频道",
+   "expected_names": [
+    "医学界神经病学频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790002767&ver=6980&signature=Y9NAk6sluodSsZQwkaRhpjOnkoBhmL0pXhYTK72ZYUmOertHRkfuFYzhKS*4ILVtw3ZoXiBpma*qIMxCUJtNPicTeSB8XsEUjWbN*X7nwGlKNme7miLzjyqKfaHzm1Vx&new=1",
+   "verified_article_published_at": "2026-09-19T10:58:00Z",
+   "biz": "Mzk0ODYwMjgyMA==",
+   "category": "neurology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_67b0e80b4ed6"
+  },
+  {
+   "id": "wx-yxj-onco",
+   "name": "医学界肿瘤频道",
+   "expected_names": [
+    "医学界肿瘤频道"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzU4MjQzNjAzMA==&mid=2247911776&idx=6&sn=a2df49fa531ca82db3bdeb7ec959c5fc&chksm=fc500bbbcade69f746f8f04a7ae0de8d00506fdf33ba2b992ac864bb087c3de498d3d92f5ff2",
+   "verified_article_published_at": "2026-09-16T12:10:00Z",
+   "biz": "MzU4MjQzNjAzMA==",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_5fc56a0b2d64"
+  },
+  {
+   "id": "wx-yxj-think",
+   "name": "医学界智库",
+   "expected_names": [
+    "医学界智库"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5MDQyNDE3Mg==&mid=2650445929&idx=2&sn=4491f7a645719a65a06b033fc8f6b1fc&chksm=bfa7060a2532f66e7ab51a8fba1765ff3a686866f3b26cbc999452ce1bf403f914796964eee7",
+   "verified_article_published_at": "2026-09-21T10:39:31Z",
+   "biz": "MjM5MDQyNDE3Mg==",
+   "category": "health-policy",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医学界传媒",
+   "priority": 2,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_20727b5ef868"
+  },
+  {
+   "id": "wx-anjiguancha",
+   "name": "氨基观察",
+   "expected_names": [
+    "氨基观察"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003202&ver=6980&signature=E1ER7onNuCU4GvmE1FKTxSiNmezClM1C5zDBBaqHZTuRJoaOTIzcL3gvuPvLUmPN9KlHTQH3wAYvLJBzDnOEWEFyyhf28zvzCDRNgzupUXNjjZR5ZLMtSEwKSryP5eE8&new=1",
+   "verified_article_published_at": "2024-01-19T11:55:58Z",
+   "biz": "MzIwMjU5Njk5NA==",
+   "category": "biotech-analysis",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "氨基观察",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_6aa8a6ea6208"
+  },
+  {
+   "id": "wx-bioart",
+   "name": "BioArt",
+   "expected_names": [
+    "BioArt"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005861&ver=6980&signature=nOor0j23aZFNn0hwF1fijmMbjy8ImNfnu58gWSqsSPSwCXZQDOGJMJJvCeBqqe0H-I7DbXDBBHCRnbKKjRCt5HDm2amdZTetlsCsWxrEiwPrOyIdmDSE1BLLmLoeZ7JU&new=1",
+   "verified_article_published_at": "2024-04-04T01:14:44Z",
+   "biz": "MzA3MzQyNjY1MQ==",
+   "category": "paper-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "BioArt",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_a0a6a4dc7236"
+  },
+  {
+   "id": "wx-bioartmed",
+   "name": "BioArtMED",
+   "expected_names": [
+    "BioArtMED"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006432&ver=6980&signature=FRhndJggMLa9VJilpLdfi5qhE5XlFmNWWfUnxcWyGXasJDqbg2a*pWi4sQyqVqV1E6-5ccYR8O6Xz1DQoWazWY9F*doLkp2hPUjFITRQHQEzwegDJTBSay56h4-dCR7J&new=1",
+   "verified_article_published_at": "2022-04-19T09:08:00Z",
+   "biz": "MzU4OTY0NzE1NQ==",
+   "category": "paper-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "BioArt",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_1b7c476d3933"
+  },
+  {
+   "id": "wx-bioon",
+   "name": "生物谷",
+   "expected_names": [
+    "生物谷"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI2NjY1NjA5Mw==&mid=2247654807&idx=1&sn=15fe6e8337d7374df7f0f6d75935ec1d&chksm=eb5394f592082f639a299f8c80438a04194e03302c93f4ba813f4d0fb4c052fa76fdaebf5b84",
+   "verified_article_published_at": "2026-09-11T12:05:00Z",
+   "biz": "MzI2NjY1NjA5Mw==",
+   "category": "bio-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "生物谷",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_b503a63deea8"
+  },
+  {
+   "id": "wx-eyjlr",
+   "name": "E药经理人",
+   "expected_names": [
+    "E药经理人"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NzY2MDQwMg==&mid=2650436897&idx=1&sn=0ad2967cd12fb0b199684be9233eab55&chksm=bf6cc7fbadfdd946a0fcd3c5c9e0138d5b6015ff88192971335f51d078aad4e5dba9df4f4612",
+   "verified_article_published_at": "2026-09-19T03:49:07Z",
+   "biz": "MjM5NzY2MDQwMg==",
+   "category": "pharma-business-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "E药经理人",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_21fb9fa2f500"
+  },
+  {
+   "id": "wx-healthai",
+   "name": "医健AI掘金志",
+   "expected_names": [
+    "医健AI掘金志"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006934&ver=6980&signature=0T1yAVJmafTq8vV9fdDvxgws0L6sgc2rzDY6AwZFOHsIQF5*gCTyzZz6841i5L0lW-bFcNXa-Y9PjyFl*p8AzmId6Fz6LFVfWq3ZHE0P8ajX5J13ffHhAfTrCGerRPL1&new=1",
+   "verified_article_published_at": "2023-06-08T08:00:00Z",
+   "biz": "MzIxMTY1ODE1MA==",
+   "category": "medical-ai-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医健AI掘金志",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_3b4159197d43"
+  },
+  {
+   "id": "wx-jianshiju",
+   "name": "健识局",
+   "expected_names": [
+    "健识局"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003337&ver=6980&signature=Ak-wQhgeriPvIOFq5zByW7XKHunNE2JGKMFk6sWImfoaLM9XiVPCA0eIhvKZ1rAASs6AURJH87boaGAUAEPLPCRCfVaqZfi*IsBoRbdRjNRuIDA*qT06touMk8wN24Q7&new=1",
+   "verified_article_published_at": "2026-01-23T12:11:56Z",
+   "biz": "MzIxMjYwMDI5Nw==",
+   "category": "health-policy-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "健识局",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_ad8e49d5ffe4"
+  },
+  {
+   "id": "wx-pharmcube",
+   "name": "医药魔方",
+   "expected_names": [
+    "医药魔方"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003112&ver=6980&signature=tMDXjYv3sZbe7-lC0w8HjApwlkg*jxZfPl6bwvHX3CkmFb3-Zq4tAOAOkDwDvQlVzmhF6HvM0OsaIxPp2LdKUyxZa0AMY1JUqKUnQvRbvSypVSraEjOG8a7ybRLK0jbX&new=1",
+   "verified_article_published_at": "2023-07-26T23:54:44Z",
+   "biz": "Mzg2OTY4MTEzMA==",
+   "category": "pharma-data-insight",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药魔方",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_64290a74a362"
+  },
+  {
+   "id": "wx-saibailan",
+   "name": "赛柏蓝",
+   "expected_names": [
+    "赛柏蓝"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MjM5NTA4Mzc2Mg==&mid=2653427659&idx=7&sn=c6ab35828c265edfe95f6dad7e2fc2c1&chksm=bc53123fdc5e8bb6c451fccd483facb234f8ff628e0759f4bbcd41bb8ac23c768a27f31d56ce",
+   "verified_article_published_at": "2022-02-24T11:06:52Z",
+   "biz": "MjM5NTA4Mzc2Mg==",
+   "category": "pharma-policy-market",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "北京赛柏蓝企业管理",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_b5f2be66b5e7"
+  },
+  {
+   "id": "wx-sciencenet",
+   "name": "科学网",
+   "expected_names": [
+    "科学网"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006150&ver=6980&signature=DYsoJViCE1*PIyipRuDH1*O4B24MhpFvpkATTDuXe9yST4e-gT07qza8nhJCuCVDwRaQYlHK*2PkUYRQCUkOhPmcD0UGVn1K1W7FWJr6*XzsPXDsY5RrqAm9cFjl-kC8&new=1",
+   "verified_article_published_at": "2023-02-13T12:15:14Z",
+   "biz": "MzA5OTMxMTUzMw==",
+   "category": "science-news-portal",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "中国科学报社",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_ae7b9139bca3"
+  },
+  {
+   "id": "wx-siyumedtech",
+   "name": "思宇MedTech",
+   "expected_names": [
+    "思宇MedTech"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003908&ver=6980&signature=64aPJ-XYZipY*jjyfQiIy-xBC8KMU4OUgwkCZNUfhxJZYyA0cez*NdbclJu8xRMhFcxJ*-04pYFtxPzESb0WzBz28ePwRs*MNgY8kETdg51K5jJRkUhiLZi3f14Br*mA&new=1",
+   "verified_article_published_at": "2024-03-24T16:01:00Z",
+   "biz": "MzIyMTczMzk5OA==",
+   "category": "medtech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "思宇MedTech",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_2e30ada60429"
+  },
+  {
+   "id": "wx-wuxiapptec",
+   "name": "药明康德",
+   "expected_names": [
+    "药明康德"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003004&ver=6980&signature=Vb2QRME9hFmbIE0fI-O6QIcJaBz6xQfhver8RXWXh5TyV26LQz4XMjawQoeVrzqnkHdF9YoDifwMASK5fBoWUCioE3Y0XKO2uhKXswUh2Xj*ZRkd4a6dQXAvyTopWtJ-&new=1",
+   "verified_article_published_at": "2023-12-28T23:30:00Z",
+   "biz": "MzAwMDA5NTIxNQ==",
+   "category": "pharma-rd-news",
+   "source_type": "company",
+   "authority": 2,
+   "owner_entity": "药明康德 WuXi AppTec",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_361c3666d061"
+  },
+  {
+   "id": "wx-xieheba",
+   "name": "协和八",
+   "expected_names": [
+    "协和八"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzAxMDA4NjU3OA==&mid=2652601038&idx=1&sn=07dd37cc33f54f3de70e4822a7c5c3b1&chksm=81e8475bdc0b3fa4e5d28c27ed9ba192dcace06d6471d8b23110efd383f9b508faaaf6bb02d3",
+   "verified_article_published_at": "2026-09-14T13:53:57Z",
+   "biz": "MzAxMDA4NjU3OA==",
+   "category": "medical-education",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "协和八",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_6441f79fd66c"
+  },
+  {
+   "id": "wx-xueshujingwei",
+   "name": "学术经纬",
+   "expected_names": [
+    "学术经纬"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005788&ver=6980&signature=LLmaQR1xjKCztNSamILTDyL*PRnbC1kytSSvTrUc1CjGxtcupilRFr9ToVhoM9y5kxqJKN1HcVovYk-y7AENnbp6fRzUG*KE7udOndHM69U5Lq9R0rnVEJU2djlDfmvX&new=1",
+   "verified_article_published_at": "2021-02-27T01:42:19Z",
+   "biz": "MzI5MDQzNjY2OA==",
+   "category": "paper-digest",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药明康德内容团队",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_afd87f0d3ef2"
+  },
+  {
+   "id": "wx-yanfake",
+   "name": "研发客",
+   "expected_names": [
+    "研发客"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003775&ver=6980&signature=7HX2t1255knl4jjkRSHF6OdusGezpw0B2K0X9QH38O7GlLh0fY6qmSwx72LBo685bdGr1CReQTo6NcljplWvhH9xMbQrwl9VOqemeWYGEQxVhTQ7QQEUUgy6Jsne7CIv&new=1",
+   "verified_article_published_at": "2024-04-19T21:00:00Z",
+   "biz": "MzAwNzMyNzQzNg==",
+   "category": "pharma-rd-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "研发客",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_1a60136637ac"
+  },
+  {
+   "id": "wx-yaoshidai",
+   "name": "药时代",
+   "expected_names": [
+    "药时代"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzI5NzY0NDQyNQ==&mid=2247904030&idx=1&sn=2f9d6cc963b7d560de7d29f9fa0989f4&chksm=edbccb003f088bc2e8274cff50474f466aee7fd3f3c498f44bb2a0bb9d99a3e86f315d1075ad",
+   "verified_article_published_at": "2022-03-31T07:46:49Z",
+   "biz": "MzI5NzY0NDQyNQ==",
+   "category": "pharma-rd-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "药时代",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_fd5844f00788"
+  },
+  {
+   "id": "wx-yiyaoguanlan",
+   "name": "医药观澜",
+   "expected_names": [
+    "医药观澜"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?__biz=MzUxMTY5MzM5OQ==&mid=2247579311&idx=2&sn=1e312ab55892e9c20ef2096a7b205e97&chksm=f8e0f53030976fa4546bf784ae51716cde3c690a952e288aaac345c2bc85a8ab455e3ed8f8da",
+   "verified_article_published_at": "2025-08-25T03:05:28Z",
+   "biz": "MzUxMTY5MzM5OQ==",
+   "category": "drug-approval-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药观澜",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_8aa7ada348d1"
+  },
+  {
+   "id": "wx-yyjjb",
+   "name": "医药经济报",
+   "expected_names": [
+    "医药经济报"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003564&ver=6980&signature=1rUs8HkEt1HptiQkuFnPaBD06p4WMYWqjJrVi47Ok*YDHxHgqDE4taEpV8Ojw4*Bdu7t6b5*k7lZTc0OJPe3ZiKb3EIVyvnaH*qG-JWf4GlHoONRTxknBqaKRTi5QVRr&new=1",
+   "verified_article_published_at": "2026-09-15T04:30:00Z",
+   "biz": "MjM5MTcyMjYxMw==",
+   "category": "pharma-economics-newspaper",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "医药经济报社",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_bd96fc35bc18"
+  },
+  {
+   "id": "wx-zhiyaoju",
+   "name": "智药局",
+   "expected_names": [
+    "智药局"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003269&ver=6980&signature=DzIWdFkqCAntr0rICQKPPzUDviKocy2KsMbmTew9137G58L4JWDJSwtcbeNZOmTBpquajE83m3Efy9pbfVCaH*gD6KgqXAzUIbXdLNpJO-napzhHBwRHz0BCKBWug1GU&new=1",
+   "verified_article_published_at": "2024-04-12T11:14:47Z",
+   "biz": "MzkzMDQyNTY0Mw==",
+   "category": "ai-drug-discovery-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "智药局",
+   "priority": 3,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_0904f57a7070"
+  },
+  {
+   "id": "wx-aiera",
+   "name": "新智元",
+   "expected_names": [
+    "新智元"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006695&ver=6980&signature=i6A1ZwlqjhzceDqg*l5sKINLHBdfo2J17wcjWrAqMngIiTjboxmpTNhj8U90M4WsBJEoRkwyupRhnZtQglmZTErjt*6W1juOy9OF9M*3RQC4uwQ21*b0apRQYBoLwOuR&new=1",
+   "verified_article_published_at": "2022-03-24T05:10:03Z",
+   "biz": "MzI3MTA0MTk1MA==",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "新智元",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_108f2a2a27f4"
+  },
+  {
+   "id": "wx-inature",
+   "name": "iNature",
+   "expected_names": [
+    "iNature"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790005935&ver=6980&signature=RYg8HE4C9IpUTPodFGyEGtr*5l4NP7rT8boFVxGkD*gdNQvcH1cPw1QWZtK4OBX*WHTHpy33siopqmxP8MrN9h-PBnR1QHzEpvWzwYEgq2-Zh1GXvX6WQwxIclTOCqqe&new=1",
+   "verified_article_published_at": "2019-01-27T17:13:51Z",
+   "biz": "MzU3MTE3MjUyOA==",
+   "category": "paper-digest",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "iNature",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_9eb61f4ead74"
+  },
+  {
+   "id": "wx-jieluoxuan",
+   "name": "解螺旋",
+   "expected_names": [
+    "解螺旋"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006000&ver=6980&signature=6Xw3XAoLFrNjWjv3XvshERaBqE071XAB7UhG3c45ACuKL649xkuYpL6lm4Xh-OFcmz4gqsb8rXxmKg8NCjcsjYRJz0dFNa0-GquDpqz3-YKACgSn3YBybjVxUB0OV5yB&new=1",
+   "verified_article_published_at": "2019-08-10T06:10:52Z",
+   "biz": "MzA5ODQ1NDIyMQ==",
+   "category": "research-methods",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "解螺旋",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_6a55ef86d2bb"
+  },
+  {
+   "id": "wx-jiqizhixin",
+   "name": "机器之心",
+   "expected_names": [
+    "机器之心"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006508&ver=6980&signature=iLPEPdnqlDQILFM8m7FveCkcqXfqDLgR8OnY*IAKrq6NHVhiDQ2bWDelyFFJIS82QbZOB*08ouNX6FipLeUDDvaKLR*TNTYiqHfzVpD-0GsTOCQvIG-XMFABy0UVoQIf&new=1",
+   "verified_article_published_at": "2019-08-18T04:27:12Z",
+   "biz": "MzA3MzI4MjgzMw==",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "北京机器之心科技",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_dbc0a5474692"
+  },
+  {
+   "id": "wx-keyanquan",
+   "name": "环球科学科研圈",
+   "expected_names": [
+    "环球科学科研圈",
+    "科研圈"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006078&ver=6980&signature=Q8nhHy576ZK36gm5T4T5RvqCS6qK7BZu3i6-aggcWPQep51PBYabHSQtXR4ybuK-lFJkuWdPjhPfubAYCU3wz9K2vIhjLArV5geH7Mo3-tZ8AJr-CSxWCDBRID-yw85n&new=1",
+   "verified_article_published_at": "2017-06-19T10:13:13Z",
+   "biz": "MzA5NDkzNjIwMg==",
+   "category": "science-news-translation",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "《环球科学》/ 科研圈",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_add4ea144281"
+  },
+  {
+   "id": "wx-leiphone",
+   "name": "雷峰网",
+   "expected_names": [
+    "雷峰网"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006852&ver=6980&signature=pIPOM-ltm4OcenO49K9czubw3ESXMuuALJIo3w-*QYlwRihlpCLR6y4KHbF2W4a9LnyfTBS5wZVX5RsL1o0SmuDGTLhy3rGmQ3GRQZBLm2W8lbo3SmdRUI1xYwITXKK0&new=1",
+   "verified_article_published_at": "2022-11-07T11:12:32Z",
+   "biz": "MTM2ODM0ODYyMQ==",
+   "category": "tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "雷峰网",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_1e80bb81a1d2"
+  },
+  {
+   "id": "wx-menet",
+   "name": "米内网",
+   "expected_names": [
+    "米内网"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003635&ver=6980&signature=ipQhYXzsPNYCnu7v57*kRlgXqj8SSOWmGNG4F9nq4RTOrh0zDxBGxHX0TB3--cfDNhpCowpXj2xmvtwdjQMVB6SfQoGxQWsvaO4YhEWAn-8c5pMzUUpkPp5l0YqSQ8II&new=1",
+   "verified_article_published_at": "2020-11-26T08:05:06Z",
+   "biz": "MjM5NzQ4MTg2MQ==",
+   "category": "pharma-market-data",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "米内网",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_fb635cc15749"
+  },
+  {
+   "id": "wx-oncologynews",
+   "name": "良医汇肿瘤资讯",
+   "expected_names": [
+    "良医汇肿瘤资讯",
+    "肿瘤资讯"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790002894&ver=6980&signature=dh5O77HZu4WZOc3GYWDvgU9u9KWo07cSFeh*LRE*Og28uYYBcycKdDI7KVWOglD74D4lvRBBEFwkm9yibCQt4L7dGWfR00admdHNrVMaLCOIRQFlU*E8viknFh4EouS6&new=1",
+   "verified_article_published_at": "2017-09-15T12:05:00Z",
+   "biz": "MjM5Nzc4MDk2MA==",
+   "category": "oncology-news",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "良医汇",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_e6c911d7da7b"
+  },
+  {
+   "id": "wx-qbitai",
+   "name": "量子位",
+   "expected_names": [
+    "量子位"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006583&ver=6980&signature=N1ySbMeO1OEFwH1Cr3EWQq*CFVQklkXJIpbW3jpLtiNQ88W9-79Wx*8e9NiTaha8rLkq8Z*XNQVurSc-83su*WIKVSrnm3xAS6fRJSf0w1ZaEXDqW8Gbzgt4YtGuiuXZ&new=1",
+   "verified_article_published_at": "2026-09-21T07:03:00Z",
+   "biz": "MzIzNjc1NzUzMw==",
+   "category": "ai-tech-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "量子位",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_114e76fd6e5d"
+  },
+  {
+   "id": "wx-saixiansheng",
+   "name": "赛先生",
+   "expected_names": [
+    "赛先生"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006275&ver=6980&signature=9oDEuBeiLJij6UeGL6RdniIn2jobg2OM54OdaIU0FcaUDxlQ0Itl8FH1SxzXNmKaEM6W9jNLzLW6L-ntOi9idxSV0a2UWVmVbGpQxse*XpnNKII1qQTtCLGtD2MMXTHd&new=1",
+   "verified_article_published_at": "2018-12-06T04:01:28Z",
+   "biz": "MzAwMzc2MTA4Ng==",
+   "category": "science-commentary",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "赛先生",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_a19c02e8bc8e"
+  },
+  {
+   "id": "wx-sinamed",
+   "name": "新浪医药",
+   "expected_names": [
+    "新浪医药"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003405&ver=6980&signature=E3xKZkipLiVWohO-yUvJr*ji8wyM1DZKuKcAuy8V2jQfP3iIO5WeySWtjxbGEwpRwo2lWPa391iC7YMIdvA-AATG5faPmsl7P1nSSc-CkHDKmNSxraQo5A66ApwBrtu5&new=1",
+   "verified_article_published_at": "2020-11-23T10:05:16Z",
+   "biz": "MzAxNjI5NzI4MA==",
+   "category": "pharma-news",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "新浪医药",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_3675b3bc7097"
+  },
+  {
+   "id": "wx-tongxieyi",
+   "name": "同写意",
+   "expected_names": [
+    "同写意"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003486&ver=6980&signature=5BHM4HjeoRbma7I0qrq*yDK-TifSvik4gHmBalMGtwD-7WkjiIug3c-jds4irnTOYr59nFGozWpDxUXsP4TP0hU5jpN1QNrQeEahM0MhtSFBcN5M9JxFXqaw7pnBHKQH&new=1",
+   "verified_article_published_at": "2019-12-09T11:04:19Z",
+   "biz": "MzA4MzgzMDM5Mg==",
+   "category": "pharma-rd-community",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "同写意",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_76b37a5ca3e7"
+  },
+  {
+   "id": "wx-vcbeat",
+   "name": "动脉网",
+   "expected_names": [
+    "动脉网"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790003706&ver=6980&signature=oCGjxP8xSV0gcAjz67CwpgIMX7GtmvPTHB05hwjF-7abounnmJykVkzP5aHpXoi-9qnR4OCJQkYpVwLDe-BfI7WMCKRSG7QqPzthCqGgzdVZaFkAV4CfJ5t2PkTBdgDZ&new=1",
+   "verified_article_published_at": "2017-12-16T03:35:29Z",
+   "biz": "MjM5MTMyMDg0Ng==",
+   "category": "digital-health-venture",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "动脉网",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_f8aa9a7fdb3a"
+  },
+  {
+   "id": "wx-yaopingzhongxin",
+   "name": "药评中心",
+   "expected_names": [
+    "药评中心"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=3&timestamp=1790005394&ver=1&signature=K-TjHVZWZt-JXUbL4xhEG6ziX4gEeWXpuotwMh*pp36oNucPIeE-vfWc8EkAA7c6YlkTCS4AGQ4h*Y1RMk1hLi8liyv6B*lpnmtsT88Y9dj6WpR0*fljZ56aPLxgHYhDi9MX5A*A8W-dBtpB9onTHFQj0Hkjz8UsZMF7f3O-yYs=",
+   "verified_article_published_at": "2016-08-19T12:06:54Z",
+   "biz": "MzAwNDQwODY5Mw==",
+   "category": "hospital-pharmacy",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "药评中心",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_53f35038ac5a"
+  },
+  {
+   "id": "wx-yikahui",
+   "name": "医咖会",
+   "expected_names": [
+    "医咖会"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790004266&ver=6980&signature=nAMdskiEEmE4Na-Vkyq2p8xoHjpLjZd81kR3mCgHG*u8aPT1owODmwiuNiw1g18HDfnSOhJH-NjqnyMVzUqp75t9UfjtvKuqJacCHlZLqfiNiojfrGsfgkpTerKT6U-V&new=1",
+   "verified_article_published_at": "2020-08-08T11:00:00Z",
+   "biz": "MzI2OTQyMzc5MA==",
+   "category": "clinical-research-methods",
+   "source_type": "media",
+   "authority": 3,
+   "owner_entity": "医咖会",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_c6b5c2febae6"
+  },
+  {
+   "id": "wx-zhidx",
+   "name": "智东西",
+   "expected_names": [
+    "智东西"
+   ],
+   "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1790006769&ver=6980&signature=q26BW2BUeoENsvIkWw5oHxwDoq4p*f1xKEpzxqSoQvEUWJYeElS1wEwY4DF9VTwkMRbltac8mzBZz5Fg45lAe3v8S-r*B8q0u55DEu-0V8oauhNqvnLQwCwdbPIis7A8&new=1",
+   "verified_article_published_at": "2020-12-31T14:01:13Z",
+   "biz": "MzA4MTQ4NjQzMw==",
+   "category": "ai-industry-media",
+   "source_type": "media",
+   "authority": 2,
+   "owner_entity": "智东西",
+   "priority": 4,
+   "polls_per_day": 1,
+   "saved_gh_id_not_used": "gh_06a331376c81"
+  }
+ ],
+ "dropped": [
+  {
+   "id": "wx-yixuecankao",
+   "name": "医学参考报",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-bajianwen",
+   "name": "八点健闻",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-shenlanguan",
+   "name": "深蓝观",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-insight",
+   "name": "Insight数据库",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-jama",
+   "name": "JAMA",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-bmj",
+   "name": "BMJ",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cjebm",
+   "name": "中国循证医学杂志",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cgp",
+   "name": "中国全科医学",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cochrane",
+   "name": "Cochrane中国",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-grade",
+   "name": "GRADE中国中心",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cmj-en",
+   "name": "CMJ中华医学杂志英文版",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cma",
+   "name": "中华医学会",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-csco",
+   "name": "CSCO",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-medlive-guide",
+   "name": "医脉通指南",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-nhsa",
+   "name": "国家医保局",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-jiankangzhongguo",
+   "name": "健康中国",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cde",
+   "name": "中国药审",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cmde",
+   "name": "中国器审",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-natcm",
+   "name": "国家中医药管理局",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-chp",
+   "name": "国家药典委员会",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-nmpa",
+   "name": "国家药监局",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-adr",
+   "name": "药物警戒",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cpa",
+   "name": "中国药学会",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-clinpharm",
+   "name": "临床药师",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-ndcpa",
+   "name": "国家疾控局",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-cpma",
+   "name": "中华预防医学会",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-fanpu",
+   "name": "返朴",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-sciencenews",
+   "name": "中国科学报",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-zhishifenzi",
+   "name": "知识分子",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-vbdata",
+   "name": "蛋壳研究院",
+   "reason": "no_verified_link"
+  },
+  {
+   "id": "wx-hit180",
+   "name": "HIT专家网",
+   "reason": "no_verified_link"
+  }
+ ]
+}

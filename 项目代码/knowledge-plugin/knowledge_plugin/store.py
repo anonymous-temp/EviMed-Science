@@ -15,6 +15,10 @@ lock (``db.lock_seq``) so that commit order is seq order:
 
 A revision re-arms text enrichment when the platform had asked for the text: content changed, so
 the abstract may have too.
+
+An entry that arrives with its own full text (contract 1.5.0: an X post, a WeChat article the paid API returned) has it
+written into ``entry_texts`` in the same transaction and is ``available`` at once: nothing is left to enrich, so ``/text``
+answers the post without a round trip and the enrichment worker never fetches its page.
 """
 
 from __future__ import annotations
@@ -30,13 +34,25 @@ from . import policy
 from .db import lock_seq
 from .model import (ENRICHMENT_TYPES, FETCHED_FROM, NEUTRAL_DETAILS, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES,
                     EntryTextResult)
-from .normalize import Prepared, clean_text, cut, is_backfill, resolve_dates
+from .normalize import Prepared, clean_body, clean_text, cut, is_backfill, resolve_dates
 
 ENTRY_COLUMNS = (
     "seq, entry_id, source_id, external_key, identity_key, url, canonical_url, doi, pmid, registry_ids, title, "
     "summary, lang, lane_hint, published_at, date_precision, first_seen_at, content_sha256, revision, backfill, "
-    "defects, facts, text_status, text_requested_at, delivered_at"
+    "defects, facts, text_status, text_requested_at, delivered_at, channel, platform, author, media, quoted, metrics"
 )
+
+
+def _json(value):
+    return Jsonb(value) if value is not None else None
+
+
+def _body_columns(item: Prepared) -> tuple[str, str | None, str | None]:
+    """(text_kind, body_text, body_excerpt) of the text an entry arrived with: a full text is also its own excerpt (its
+    head, at most 20,000 characters), so a reader of the excerpt alone sees the post; a part is an excerpt only."""
+    if item.body_kind == "excerpt":
+        return "excerpt", None, cut(item.body_text, 20_000)
+    return "full", item.body_text, cut(item.body_text, 20_000)
 
 
 @dataclass
@@ -94,18 +110,24 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                     seen_rows.append((source_id, item.key_sha256, item.content_sha256, current["first_seen_at"], now, current["revision"]))
                     continue
                 published, precision, date_defects = resolve_dates(item, current["first_seen_at"])
-                rearm = current["text_requested_at"] is not None and current["text_status"] in ("available", "unavailable", "pending")
+                rearm = (not item.body_text and current["text_requested_at"] is not None
+                         and current["text_status"] in ("available", "unavailable", "pending"))
                 await conn.execute(
                     """UPDATE evimed_knowledge.entries SET seq = DEFAULT, revision = revision + 1, identity_key = %s,
                               url = %s, canonical_url = %s, doi = %s, pmid = %s, registry_ids = %s, title = %s,
                               summary = %s, lang = %s, lane_hint = %s, published_at = %s, date_precision = %s,
                               content_sha256 = %s, defects = %s, facts = %s, delivered_at = %s,
-                              text_status = CASE WHEN %s THEN 'pending' ELSE text_status END
+                              text_status = CASE WHEN %s THEN 'available' WHEN %s THEN 'pending' ELSE text_status END,
+                              channel = %s, platform = %s, author = %s, media = %s, quoted = %s, metrics = %s
                         WHERE source_id = %s AND external_key = %s""",
                     (item.identity_key, item.url, item.canonical_url, item.doi, item.pmid, item.registry_ids, item.title,
                      item.summary, item.language, item.lane_hint, published, precision, item.content_sha256,
-                     item.defects + date_defects, Jsonb(item.facts), now, rearm, source_id, item.external_key),
+                     item.defects + date_defects, Jsonb(item.facts), now, bool(item.body_text), rearm, item.channel,
+                     item.platform, _json(item.author), Jsonb(item.media), _json(item.quoted), _json(item.metrics),
+                     source_id, item.external_key),
                 )
+                if item.body_text:
+                    await _store_body(conn, item, current["revision"] + 1, now)
                 if rearm:
                     await conn.execute(
                         """INSERT INTO evimed_knowledge.entry_texts (entry_id, revision, next_attempt_at)
@@ -129,13 +151,18 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                 """INSERT INTO evimed_knowledge.entries
                      (entry_id, source_id, external_key, identity_key, url, canonical_url, doi, pmid, registry_ids,
                       title, summary, lang, lane_hint, published_at, date_precision, first_seen_at, content_sha256,
-                      revision, backfill, defects, facts, delivered_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                      revision, backfill, defects, facts, delivered_at, text_status, channel, platform, author, media,
+                      quoted, metrics)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                           %s, %s, %s, %s, %s, %s)""",
                 (item.entry_id, source_id, item.external_key, item.identity_key, item.url, item.canonical_url, item.doi,
                  item.pmid, item.registry_ids, item.title, item.summary, item.language, item.lane_hint, published,
                  precision, first_seen, item.content_sha256, revision, backfill, item.defects + date_defects,
-                 Jsonb(item.facts), now),
+                 Jsonb(item.facts), now, "available" if item.body_text else "none", item.channel, item.platform,
+                 _json(item.author), Jsonb(item.media), _json(item.quoted), _json(item.metrics)),
             )
+            if item.body_text:
+                await _store_body(conn, item, revision, now)
             if remembered is not None:
                 result.resurrected += 1
             elif backfill:
@@ -153,6 +180,19 @@ async def store_entries(conn: AsyncConnection, source_id: str, batch: list[Prepa
                 seen_rows,
             )
     return result
+
+
+async def _store_body(conn: AsyncConnection, item: Prepared, revision: int, now: datetime) -> None:
+    """The full text an entry arrived with, as its text (module docstring)."""
+    await conn.execute(
+        """INSERT INTO evimed_knowledge.entry_texts
+             (entry_id, revision, text_kind, body_text, body_excerpt, fetched_from, fetched_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (entry_id) DO UPDATE SET revision = EXCLUDED.revision, text_kind = EXCLUDED.text_kind,
+             body_text = EXCLUDED.body_text, body_excerpt = EXCLUDED.body_excerpt, fetched_from = EXCLUDED.fetched_from,
+             fetched_at = EXCLUDED.fetched_at, next_attempt_at = NULL, last_error = NULL""",
+        (item.entry_id, revision, *_body_columns(item), item.body_from, now),
+    )
 
 
 # ------------------------------------------------------------------------------------ fetch log
@@ -224,7 +264,7 @@ async def entry_row(conn: AsyncConnection, entry_id: str) -> dict | None:
 
 async def text_row(conn: AsyncConnection, entry_id: str) -> dict | None:
     return await (await conn.execute(
-        """SELECT entry_id, revision, text_kind, abstract, body_excerpt, fetched_from, fetched_at, attempts,
+        """SELECT entry_id, revision, text_kind, abstract, body_excerpt, body_text, fetched_from, fetched_at, attempts,
                   next_attempt_at, enrichment, last_error FROM evimed_knowledge.entry_texts WHERE entry_id = %s""",
         (entry_id,),
     )).fetchone()
@@ -324,6 +364,7 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
     enrichment = whitelist_enrichment(result.enrichment)
     abstract = cut(clean_text(result.abstract), 20_000) if result.abstract else None
     excerpt = cut(clean_text(result.body_excerpt), 20_000) if result.body_excerpt else None
+    body = clean_body(result.body_text)
     kind = result.text_kind if result.text_kind in TEXT_KINDS else "none"
     source = result.fetched_from if result.fetched_from in FETCHED_FROM else None
     if status == "pending":
@@ -336,10 +377,11 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
             """UPDATE evimed_knowledge.entry_texts SET revision = %s, attempts = %s, next_attempt_at = %s,
                       text_kind = CASE WHEN %s THEN %s ELSE text_kind END,
                       abstract = coalesce(%s, abstract), body_excerpt = coalesce(%s, body_excerpt),
+                      body_text = coalesce(%s, body_text),
                       fetched_from = coalesce(%s, fetched_from), fetched_at = coalesce(%s, fetched_at),
                       enrichment = enrichment || %s, last_error = %s
                 WHERE entry_id = %s""",
-            (job["revision"], min(attempts, 32767), next_attempt, kind != "none", kind, abstract, excerpt, source,
+            (job["revision"], min(attempts, 32767), next_attempt, kind != "none", kind, abstract, excerpt, body, source,
              result.fetched_at or (now if status == "available" else None), Jsonb(enrichment),
              ",".join(result.notes)[:200] or None, job["entry_id"]),
         )

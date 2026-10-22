@@ -9,6 +9,7 @@ from __future__ import annotations
 from .db import meta_get
 from .medical_discovery import MEDICAL_META, medical_rows
 from .registry import RegistryError, parse_registry, sync_registry
+from .social.registry import load_social_registry
 from .source_requests import admitted_requests
 
 REGISTRY_LOCK = "evimed-knowledge-registry"
@@ -57,6 +58,9 @@ async def sync_dynamic_registry(conn, base, now) -> dict:
         medical_document = await meta_get(conn, MEDICAL_META) or {"sources": []}
         medical = medical_rows(medical_document, [*base, *ai_rows], await disabled_sources(conn))
         composed = [*base, *ai_rows, *medical]
+        # fr-social 2026-10-22: the social accounts' file (contract 1.5.0), composed with the rest.
+        known = {row.source.id for row in composed}
+        composed += [row for row in load_social_registry() if row.source.id not in known]
         composed += await discovered_rows(conn, {row.source.id for row in composed})
         retired = {row["source_id"] for row in await (await conn.execute(
             "SELECT source_id FROM evimed_knowledge.source_lifecycle")).fetchall()}

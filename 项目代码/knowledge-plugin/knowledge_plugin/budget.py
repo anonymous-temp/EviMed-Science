@@ -79,6 +79,11 @@ def host_rules(*, ncbi_key: bool, openfda_key: bool) -> dict[str, HostRule]:
         "www.ema.europa.eu": HostRule(1.5, 300),
         "www.gov.uk": HostRule(1.5, 300),
         "api.unpaywall.org": HostRule(1.0, 2000),
+        # Contract 1.5.0, the paid providers: their money caps are the social ledger's; these are pacing and deadlines.
+        # A deep page of a two-dozen-account search can take well over 20 s (AIHOT providers/socialdata.ts: 60 s).
+        "api.socialdata.tools": HostRule(1.0, None, timeout_s=60.0),
+        # Dajiala allows 5 requests a second (its code -1 above that).
+        "www.dajiala.com": HostRule(0.5, None, timeout_s=30.0),
     }
 
 

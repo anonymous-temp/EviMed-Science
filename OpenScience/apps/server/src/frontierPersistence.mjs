@@ -153,6 +153,15 @@ CREATE INDEX IF NOT EXISTS frontier_entries_queue_idx
 CREATE INDEX IF NOT EXISTS frontier_entries_identity_idx ON evimed_frontier.entries (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_entries_retention_idx
   ON evimed_frontier.entries (received_at) WHERE state IN ('screened-out', 'dropped', 'backfill', 'failed');
+-- fr-social 2026-10-22
+-- Knowledge plugin contract 1.5.0: what a social post carries (an X post, a WeChat article, a post on one of six Chinese
+-- platforms), and every entry's channel. As the plugin delivered it, whitelisted again by the ingest; NULL when absent.
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS metrics jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -233,19 +242,19 @@ CREATE INDEX IF NOT EXISTS frontier_items_published_idx
 -- each of those is a scan of every item ever published.
 CREATE INDEX IF NOT EXISTS frontier_items_visible_idx
   ON evimed_frontier.items (visible_at DESC) WHERE state = 'published';
--- fr-edit 2026-10-22
--- The editor's tags (at most seven; the reader adds the evidence type), and the contract 1.4.0 columns the reader serves. The six
--- below tags are fr-social's (copied from the primary entry by the ingest); they are written here too, identically, so this
--- package's reader and its tests stand on their own; ADD COLUMN IF NOT EXISTS makes the second copy a no-op.
-ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
+-- fr-social 2026-10-22
+-- The six contract 1.5.0 fields, copied from the item's primary entry when the item is made and when that entry is revised.
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS channel text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS platform text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS author jsonb;
-ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS quoted jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
+-- fr-edit 2026-10-22
+-- The editor's tags (at most seven; the reader adds the evidence type).
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
 -- The media proxy serves an id only while a published item names it: one containment lookup per picture.
-CREATE INDEX IF NOT EXISTS frontier_items_media_idx ON evimed_frontier.items USING gin (media jsonb_path_ops) WHERE media IS NOT NULL;
+CREATE INDEX IF NOT EXISTS frontier_items_media_idx ON evimed_frontier.items USING gin (media jsonb_path_ops) WHERE media <> '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,
@@ -270,14 +279,16 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   open_access        text,
   enrichment         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
--- fr-edit 2026-10-22
--- The reader's full text (contract 1.4.0): body_text is the plugin's, stored by fr-social's ingest (written here too, identically, a
--- no-op for whichever copy runs second); the Chinese reading of it is the edit stage's — a translation whose paragraphs all came
--- back (body_complete), or the source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text);
--- which text it was read from (body_zh_source: the full text, the abstract or the page excerpt, best first); and the
--- translation of a quoted post.
+-- fr-social 2026-10-22
+-- The full text (the plugin text answer's body_text, contract 1.5.0): a post or article as it arrived, or a page's readable
+-- text, and whether the plugin delivered it whole (body_text_complete).
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
-ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_complete boolean;
+-- fr-edit 2026-10-22
+-- The Chinese reading of it is the edit stage's: a translation whose paragraphs all came back (body_complete), or the
+-- source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text); which text it was read from
+-- (body_zh_source: the full text, the abstract or the page excerpt, best first); and the translation of a quoted post.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text CHECK (char_length(body_zh) <= 60000);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;

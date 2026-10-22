@@ -1,4 +1,7 @@
-import { FRONTIER_DATE_PRECISIONS, FRONTIER_ENTRY_DEFECTS, FRONTIER_VOCABULARY_FALLBACKS } from "@evimed/domain";
+import {
+  FRONTIER_CHANNELS, FRONTIER_DATE_PRECISIONS, FRONTIER_ENTRY_DEFECTS, FRONTIER_PLATFORM_LABELS_ZH, FRONTIER_PLATFORMS,
+  FRONTIER_VOCABULARY_FALLBACKS,
+} from "@evimed/domain";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
 
 /**
@@ -60,6 +63,15 @@ import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } 
  * - The plugin being down costs the feed its freshness and nothing else. The
  *   pull backs off exponentially by the code the client named, up to fifteen
  *   minutes, and resumes from the stored cursor — nothing lost, nothing twice.
+ * - Contract 1.5.0 (social posts): an entry may carry its channel, platform,
+ *   author, stored media, the post it quotes and the platform's counts. They
+ *   are stored on the entry as the client checked them; a channel or platform
+ *   the domain does not know is stored as null and counted (rule 1: unknown
+ *   vocabulary never rejects an entry). The pipeline copies them onto the item
+ *   made from the entry. What the screening model is shown of a post — who wrote
+ *   it (an organisation's account or a person's), its counts and the post it
+ *   quotes — is `frontierScreenSource` / `frontierScreenExcerpt`, built from the
+ *   same stored entry, inside the excerpt length the screen already has.
  *
  * @module frontierIngest
  */
@@ -76,6 +88,8 @@ const DATE_PRECISIONS = new Set(FRONTIER_DATE_PRECISIONS);
 /** A defect this build does not know is dropped, not stored: defects have no
  *  fallback (the domain vocabulary says so) and the pipeline branches on them. */
 const DEFECTS = new Set(FRONTIER_ENTRY_DEFECTS);
+const CHANNELS = new Set(FRONTIER_CHANNELS);
+const PLATFORMS = new Set(FRONTIER_PLATFORMS);
 /** The identity ladder of contract rule 3; a key outside it cannot be looked up. */
 const IDENTITY_KEY = /^(doi|pmid|wx|reg|fda|url):\S/;
 const MAX_BACKOFF_MS = 15 * 60_000;
@@ -156,6 +170,49 @@ function httpLink(value) {
   } catch { return false; }
 }
 
+/** @param {unknown} value @param {number} max */
+const clipped = (value, max) => {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+};
+/** A count as the screen reads it: 12345 → 1.2万. @param {number} value */
+const readableCount = (value) => (value >= 10_000 ? `${(value / 10_000).toFixed(1).replace(/\.0$/, "")}万` : String(value));
+
+/**
+ * The source line the screening model reads for an entry: the source's name and, for a post, its platform and who wrote
+ * it — an organisation's account or a person's, as the plugin's registry says (contract 1.5.0). At most 120 characters,
+ * the screen's own bound.
+ * @param {Record<string, any>} entry a stored `evimed_frontier.entries` row @param {string} sourceName
+ */
+export function frontierScreenSource(entry, sourceName) {
+  const author = entry?.author && typeof entry.author === "object" ? entry.author : null;
+  if (!author?.name) return clipped(sourceName, 120);
+  const platform = FRONTIER_PLATFORM_LABELS_ZH[entry.platform] ?? null;
+  const role = author.role === "organisation" ? "机构账号" : author.role === "person" ? "个人账号" : null;
+  const who = `${author.name}${author.handle ? ` @${author.handle}` : ""}${role ? `（${role}）` : ""}`;
+  return clipped([sourceName, platform, who].filter(Boolean).join("｜"), 120);
+}
+
+/**
+ * The excerpt the screening model reads for an entry. An entry that is not a post reads exactly as before (its summary,
+ * cut to `max`); a post reads its counts first (short, and the reach of a post is part of judging it), then its text,
+ * then the post it quotes, all within `max` — the quoted text gets what the post's own text leaves, at least a short line.
+ * @param {Record<string, any>} entry a stored `evimed_frontier.entries` row @param {number} max
+ */
+export function frontierScreenExcerpt(entry, max) {
+  const summary = String(entry?.summary_raw ?? "");
+  const metrics = entry?.metrics && typeof entry.metrics === "object" ? entry.metrics : null;
+  const quoted = entry?.quoted && typeof entry.quoted === "object" && entry.quoted.text ? entry.quoted : null;
+  if (!metrics && !quoted) return summary.slice(0, max);
+  const counts = metrics ? [["赞", metrics.likes], ["转发", metrics.reposts], ["回复", metrics.replies], ["浏览", metrics.views]]
+    .filter(([, value]) => Number.isSafeInteger(value)).map(([label, value]) => `${label} ${readableCount(Number(value))}`).join(" · ") : "";
+  const head = counts ? `【互动】${counts} ` : "";
+  const quote = quoted ? ` 【引用 ${quoted.author?.handle ? `@${quoted.author.handle}` : clipped(quoted.author?.name, 40)}】` : "";
+  const quoteRoom = quoted ? Math.min(clipped(quoted.text, 1000).length, Math.max(40, Math.floor((max - head.length - quote.length) / 3))) : 0;
+  const own = clipped(summary, Math.max(20, max - head.length - quote.length - quoteRoom));
+  return `${head}${own}${quoted ? `${quote}${clipped(quoted.text, quoteRoom)}` : ""}`.slice(0, max);
+}
+
 /**
  * The key → label maps (or key lists) of the frontier vocabulary this module
  * reads: the lanes (with `mixed`), source types, health states, read methods,
@@ -210,7 +267,7 @@ export class FrontierIngest {
     this.latestSeq = null;
     /** @type {string | null} */
     this.pluginHealth = null;
-    /** @type {{ egress: Record<string, string>, backlog: any, lastOkFetchAt: string | null, lastNewEntryAt: string | null, rateLimited: { max: number, host: string | null } | null, modelCalls24h: number | null, hostBudget: Record<string, { used: number, cap: number }> | null, at: string } | null} */
+    /** @type {{ egress: Record<string, string>, backlog: any, lastOkFetchAt: string | null, lastNewEntryAt: string | null, rateLimited: { max: number, host: string | null } | null, modelCalls24h: number | null, hostBudget: Record<string, { used: number, cap: number }> | null, providers?: any[] | null, discovery?: any | null, at: string } | null} */
     this.pluginHealthDetail = null;
     this.lastPullAt = null;
     this.lastPullOkAt = null;
@@ -441,6 +498,11 @@ export class FrontierIngest {
     let reason = null;
     if (!httpLink(entry.url) || !httpLink(entry.canonical_url)) reason = "url_scheme_invalid";
     else if (!IDENTITY_KEY.test(entry.identity_key)) reason = "identity_key_invalid";
+    // Contract 1.5.0: an unknown channel or platform is stored as null and counted, never a reason to drop the entry.
+    let channel = entry.channel ?? null;
+    if (channel && !CHANNELS.has(channel)) { this.#unknown("channel", channel); channel = null; }
+    let platform = entry.platform ?? null;
+    if (platform && !PLATFORMS.has(platform)) { this.#unknown("platform", platform); platform = null; }
     return {
       plugin_entry_id: entry.entry_id,
       plugin_seq: entry.seq,
@@ -465,6 +527,12 @@ export class FrontierIngest {
       defects,
       state: reason ? "dropped" : entry.backfill ? "backfill" : "received",
       state_reason: reason,
+      channel,
+      platform,
+      author: entry.author ?? null,
+      media: Array.isArray(entry.media) ? entry.media : [],
+      quoted: entry.quoted ?? null,
+      metrics: entry.metrics ?? null,
     };
   }
 
@@ -497,15 +565,17 @@ export class FrontierIngest {
       if (rows.length) {
         const result = await client.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, revision, source_id,
             identity_key, url, canonical_url, doi, pmid, registry_ids, title_raw, summary_raw, facts, lang, lane_hint, published_at,
-            date_precision, first_seen_at, content_sha256, backfill, defects, state, state_reason)
+            date_precision, first_seen_at, content_sha256, backfill, defects, state, state_reason, channel, platform, author, media,
+            quoted, metrics)
           SELECT r.plugin_entry_id, r.plugin_seq, r.revision, r.source_id, r.identity_key, r.url, r.canonical_url, r.doi, r.pmid,
             coalesce(r.registry_ids, '{}'), r.title_raw, r.summary_raw, coalesce(r.facts, '{}'::jsonb), r.lang, r.lane_hint,
             r.published_at, r.date_precision, r.first_seen_at, r.content_sha256, r.backfill, coalesce(r.defects, '{}'), r.state,
-            r.state_reason
+            r.state_reason, r.channel, r.platform, r.author, coalesce(r.media, '[]'::jsonb), r.quoted, r.metrics
           FROM jsonb_to_recordset($1::jsonb) AS r(plugin_entry_id text, plugin_seq bigint, revision integer, source_id text,
             identity_key text, url text, canonical_url text, doi text, pmid text, registry_ids text[], title_raw text,
             summary_raw text, facts jsonb, lang text, lane_hint text, published_at timestamptz, date_precision text,
-            first_seen_at timestamptz, content_sha256 text, backfill boolean, defects text[], state text, state_reason text)
+            first_seen_at timestamptz, content_sha256 text, backfill boolean, defects text[], state text, state_reason text,
+            channel text, platform text, author jsonb, media jsonb, quoted jsonb, metrics jsonb)
           ON CONFLICT (plugin_entry_id, revision) DO NOTHING`, [JSON.stringify(rows)]);
         inserted = result.rowCount ?? 0;
       }
@@ -630,7 +700,8 @@ export class FrontierIngest {
         this.pluginHealth = health.status;
         this.pluginHealthDetail = { egress: health.egress, backlog: health.backlog, lastOkFetchAt: health.last_ok_fetch_at,
           lastNewEntryAt: health.last_new_entry_at, rateLimited: health.rate_limited_1h, modelCalls24h: health.model_calls_24h ?? null,
-          hostBudget: health.host_budget ?? null, at: this.now().toISOString() };
+          hostBudget: health.host_budget ?? null, providers: health.providers ?? null, discovery: health.discovery ?? null,
+          at: this.now().toISOString() };
         if (!health.compatible) {
           // Upgraded under us: the manifest is the authority, read it now.
           await this.mirrorManifest();

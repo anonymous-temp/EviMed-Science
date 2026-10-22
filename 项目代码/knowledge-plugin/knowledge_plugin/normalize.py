@@ -26,6 +26,13 @@ sources key the *event*, not the object: "results posted" is news again years af
 Mastheads (editorial board, table of contents …) and correction notices are FLAGGED in ``facts``,
 never dropped here: dropping is the platform's decision (``is_masthead``, ``is_correction_notice``).
 Both are exact closed-list matches on the title — a format check, not language judgement.
+
+Contract 1.5.0 adds what a social post carries (``author``, ``media``, ``quoted``, ``metrics``, ``body_text``) and, for
+every entry, its ``channel``: the social adapters name theirs, every other source's comes from its registry row
+(``channel_for``). Each is cleaned and bounded here like any other field. The content hash takes ``author``, the media
+ids and ``quoted`` only when an entry has them, so every entry of an older source hashes exactly as it did before 1.5.0
+(a changed hash would re-deliver the whole retained stream as revisions); ``channel``, ``platform`` and ``metrics`` are
+never hashed — the first two follow from the source, and a like count that moves is not new content.
 """
 
 from __future__ import annotations
@@ -39,8 +46,10 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
 
 from .model import (
-    DEFECTS, EXTERNAL_KEY_MAX, FACT_TYPES, LANES, SHORT_SUMMARY_MIN, SUMMARY_MAX, TITLE_MAX,
-    TRIAL_EVENTS, UPDATE_TO_KEYS, URL_MAX, NormalizedEntry, SourceConfig, update_to_notice_kind,
+    AUTHOR_HANDLE_MAX, AUTHOR_NAME_MAX, AUTHOR_ROLES, BODY_TEXT_MAX, CHANNELS, DEFECTS, EXTERNAL_KEY_MAX, FACT_TYPES,
+    FETCHED_FROM, LANES, MEDIA_ALT_MAX, MEDIA_KINDS, MEDIA_MAX, PLATFORMS, QUOTED_MEDIA_MAX, QUOTED_TEXT_MAX,
+    SHORT_SUMMARY_MIN, SUMMARY_MAX, TITLE_MAX, TRIAL_EVENTS, UPDATE_TO_KEYS, URL_MAX, NormalizedEntry, SourceConfig,
+    update_to_notice_kind,
 )
 
 # ------------------------------------------------------------------------------------ text
@@ -272,6 +281,133 @@ def whitelist_facts(facts: dict | None) -> tuple[dict, list[str]]:
     return kept, dropped
 
 
+# ------------------------------------------------------------------------------------ social fields (contract 1.5.0)
+
+_SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_NEWLINES = re.compile(r"\r\n?|[\u2028\u2029]")
+
+
+def clean_body(text: str | None, limit: int = BODY_TEXT_MAX) -> str | None:
+    """Plain full text: every line cleaned, empty lines dropped, paragraphs separated by one blank line, at most
+    ``limit`` characters (cut at a paragraph boundary when one is close, with an ellipsis)."""
+    if not text:
+        return None
+    paragraphs = [clean_text(line) for line in _NEWLINES.sub("\n", unicodedata.normalize("NFC", str(text))).split("\n")]
+    body = "\n\n".join(p for p in paragraphs if p)
+    if not body:
+        return None
+    if len(body) <= limit:
+        return body
+    cut_at = body.rfind("\n\n", 0, limit - 1)
+    head = body[:cut_at] if cut_at > limit * 0.8 else body[: limit - 1].rstrip()
+    return head + "…"
+
+
+def _bounded_int(value, high: int = 10**12) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= high else None
+
+
+def clean_author(value) -> dict | None:
+    """``{name, handle?, url?, role?}``; no name, no author."""
+    if not isinstance(value, dict):
+        return None
+    name = cut(clean_text(value.get("name") if isinstance(value.get("name"), str) else ""), AUTHOR_NAME_MAX)
+    if not name:
+        return None
+    author: dict = {"name": name}
+    handle = clean_text(value.get("handle")) if isinstance(value.get("handle"), str) else ""
+    if handle and len(handle) <= AUTHOR_HANDLE_MAX:
+        author["handle"] = handle.lstrip("@")
+    url = value.get("url")
+    if isinstance(url, str) and _valid_http_url(url.strip()) and len(url.strip()) <= URL_MAX:
+        author["url"] = url.strip()
+    if value.get("role") in AUTHOR_ROLES:
+        author["role"] = value["role"]
+    return author
+
+
+def clean_media(items, limit: int = MEDIA_MAX) -> list[dict]:
+    """Stored media items only: a sha256 id, a known kind and an http(s) original; duplicates and the rest dropped."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict) or len(out) >= limit:
+            continue
+        media_id, original = item.get("id"), item.get("original_url")
+        if not (isinstance(media_id, str) and _SHA256.match(media_id)) or media_id in seen:
+            continue
+        if item.get("kind") not in MEDIA_KINDS or not isinstance(original, str):
+            continue
+        original = original.strip()
+        if not _valid_http_url(original) or len(original) > URL_MAX:
+            continue
+        clean: dict = {"id": media_id, "kind": item["kind"]}
+        for key in ("width", "height"):
+            size = _bounded_int(item.get(key), 100_000)
+            if size:
+                clean[key] = size
+        alt = cut(clean_text(item.get("alt")), MEDIA_ALT_MAX) if isinstance(item.get("alt"), str) else ""
+        if alt:
+            clean["alt"] = alt
+        clean["original_url"] = original
+        seen.add(media_id)
+        out.append(clean)
+    return out
+
+
+def clean_quoted(value) -> dict | None:
+    """``{author: {name, handle?}, text, url, lang?, media?}``: the post a post quotes, or the source a repost names."""
+    if not isinstance(value, dict):
+        return None
+    author = clean_author(value.get("author"))
+    text = clean_body(value.get("text"), QUOTED_TEXT_MAX) if isinstance(value.get("text"), str) else None
+    url = value.get("url").strip() if isinstance(value.get("url"), str) else ""
+    if not author or not text or not _valid_http_url(url) or len(url) > URL_MAX:
+        return None
+    quoted: dict = {"author": {k: author[k] for k in ("name", "handle") if k in author}, "text": text, "url": url}
+    lang = value.get("lang")
+    if isinstance(lang, str) and _LANGUAGE.match(lang.strip()):
+        quoted["lang"] = lang.strip()
+    media = clean_media(value.get("media"), QUOTED_MEDIA_MAX)
+    if media:
+        quoted["media"] = media
+    return quoted
+
+
+def clean_metrics(value) -> dict | None:
+    """The platform's own counts at ``observed_at``; a count the platform did not state is absent, never zero."""
+    if not isinstance(value, dict):
+        return None
+    observed = value.get("observed_at")
+    if isinstance(observed, datetime):
+        observed = _as_utc(observed).isoformat().replace("+00:00", "Z")
+    if not isinstance(observed, str) or not observed:
+        return None
+    metrics = {key: _bounded_int(value.get(key)) for key in ("likes", "reposts", "replies", "views")}
+    metrics = {key: count for key, count in metrics.items() if count is not None}
+    if not metrics:
+        return None
+    return {**metrics, "observed_at": observed}
+
+
+def channel_for(source: SourceConfig, facts: dict) -> str | None:
+    """The channel of an entry from a non-social source, decided by its registry row: ``config.channel`` when the row
+    names one, a registry event for a trial registry's entry, else by source type (an evidence body's guideline lane is
+    ``guideline``, its other lanes and companies and media are ``news``)."""
+    named = (source.config or {}).get("channel")
+    if named in CHANNELS:
+        return named
+    if facts.get("trial_event"):
+        return "registry"
+    if source.source_type in ("journal", "preprint", "regulator"):
+        return source.source_type
+    if source.source_type == "evidence-body":
+        return "guideline" if source.lane == "guideline" else "news"
+    if source.source_type in ("media", "company"):
+        return "news"
+    return None
+
+
 # ------------------------------------------------------------------------------------ prepare
 
 @dataclass
@@ -298,6 +434,15 @@ class Prepared:
     defects: list[str]
     content_sha256: str
     notes: list[str] = field(default_factory=list)
+    channel: str | None = None
+    platform: str | None = None
+    author: dict | None = None
+    media: list = field(default_factory=list)
+    quoted: dict | None = None
+    metrics: dict | None = None
+    body_text: str | None = None
+    body_from: str | None = None
+    body_kind: str = "full"
 
 
 BOILERPLATE_SUMMARY_REPEATS = 3
@@ -439,6 +584,16 @@ def prepare(entry: NormalizedEntry, source: SourceConfig) -> Prepared:
     raw_published = _as_utc(entry.published_at)
     defects = list(dict.fromkeys(defects))
 
+    channel = entry.channel if entry.channel in CHANNELS else channel_for(source, facts)
+    if entry.channel and entry.channel not in CHANNELS:
+        notes.append("invalid_channel")
+    platform = entry.platform if entry.platform in PLATFORMS else None
+    author = clean_author(entry.author)
+    media = clean_media(entry.media)
+    quoted = clean_quoted(entry.quoted)
+    metrics = clean_metrics(entry.metrics)
+    body_text = clean_body(entry.body_text)
+
     hashed = {
         "canonical_url": canonical,
         "identity_key": identity,
@@ -454,6 +609,13 @@ def prepare(entry: NormalizedEntry, source: SourceConfig) -> Prepared:
         "facts": facts,
         "defects": sorted(defects),
     }
+    # Only what a social post adds, and only when it has it: an older source's entries hash as they always did.
+    if author:
+        hashed["author"] = author
+    if media:
+        hashed["media"] = [item["id"] for item in media]
+    if quoted:
+        hashed["quoted"] = {**quoted, "media": [item["id"] for item in quoted.get("media", [])]}
     content = hashlib.sha256(json.dumps(hashed, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
     return Prepared(
         source_id=source.id,
@@ -476,6 +638,15 @@ def prepare(entry: NormalizedEntry, source: SourceConfig) -> Prepared:
         defects=defects,
         content_sha256=content,
         notes=notes,
+        channel=channel,
+        platform=platform,
+        author=author,
+        media=media,
+        quoted=quoted,
+        metrics=metrics,
+        body_text=body_text,
+        body_from=entry.body_from if body_text and entry.body_from in FETCHED_FROM else None,
+        body_kind="excerpt" if entry.body_kind == "excerpt" else "full",
     )
 
 
