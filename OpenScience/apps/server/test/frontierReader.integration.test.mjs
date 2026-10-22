@@ -343,3 +343,30 @@ test("a provider outage records nothing and waits; a refused paragraph keeps its
   // Recorded for that text: not asked again until a better one arrives.
   assert.equal((await partial.processBatch()).translated, 0);
 });
+
+test("the backfill script: last week's 精选 and near-line items owe one edit with the shipped prompts; a journal item without its abstract leaves 精选", options, async () => {
+  const { frontierReaderBackfill, parseArguments } = await import("../../../scripts/ops/frontier-reader-backfill.mjs");
+  assert.deepEqual(parseArguments(["--apply", "--days", "3"]), { apply: true, days: 3 });
+  assert.throws(() => parseArguments(["--days", "9"]), /1 to 7/);
+  const old = await insertItem(database, { title: "Old prompt, selected", selected: true, selectedRule: "threshold", visibleAt: "2026-10-21T00:00:00Z" });
+  const near = await insertItem(database, { title: "Old prompt, near the line", visibleAt: "2026-10-21T00:00:00Z" });
+  const low = await insertItem(database, { title: "Old prompt, far below", visibleAt: "2026-10-21T00:00:00Z" });
+  const shipped = await insertItem(database, { title: "Shipped prompt", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const stale = await insertItem(database, { title: "A month ago", selected: true, visibleAt: "2026-09-01T00:00:00Z" });
+  const bare = await insertItem(database, { title: "Journal, no abstract", selected: true, selectedRule: "threshold", flags: ["no-abstract"], visibleAt: "2026-10-21T00:00:00Z" });
+  const pinned = await insertItem(database, { title: "Pinned, no abstract", selected: true, selectedRule: "operator-pin", flags: ["no-abstract"], visibleAt: "2026-10-21T00:00:00Z" });
+  for (const [row, version, score] of [[old, "frontier-editor-1.old", 90], [near, "frontier-editor-1.old", 72], [low, "frontier-editor-1.old", 50],
+    [shipped, FRONTIER_EDITOR_VERSION, 90], [stale, "frontier-editor-1.old", 90], [bare, FRONTIER_EDITOR_VERSION, 85], [pinned, FRONTIER_EDITOR_VERSION, 85]]) {
+    await set(row.id, { editor_version: version, score_total: score });
+  }
+  const report = await frontierReaderBackfill({ database, threshold: 80, now: NOW });
+  assert.deepEqual([report.applied, report.reedit.ids.sort(), report.unselect.ids], [false, [old.publicId, near.publicId].sort(), [bare.publicId]]);
+  assert.equal((await database.query("SELECT editor_version FROM evimed_frontier.items WHERE id = $1", [old.id])).rows[0].editor_version, "frontier-editor-1.old", "a report changes nothing");
+  const applied = await frontierReaderBackfill({ database, threshold: 80, apply: true, now: NOW });
+  assert.equal(applied.reedit.count, 2);
+  const row = async (/** @type {string} */ id) => (await database.query("SELECT editor_version, selected, selected_rule FROM evimed_frontier.items WHERE id = $1", [id])).rows[0];
+  assert.equal((await row(old.id)).editor_version, null, "owed one edit");
+  assert.equal((await row(low.id)).editor_version, "frontier-editor-1.old");
+  assert.deepEqual([(await row(bare.id)).selected, (await row(pinned.id)).selected], [false, true], "an operator's pin stays");
+  assert.deepEqual((await frontierReaderBackfill({ database, threshold: 80, apply: true, now: NOW })).reedit.count, 0, "a second run finds nothing");
+});
