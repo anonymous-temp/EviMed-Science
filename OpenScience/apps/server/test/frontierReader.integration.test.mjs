@@ -143,28 +143,29 @@ test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text
   assert.deepEqual((await service.getItem(reader, refused.publicId)).body.item.body, { zh: null, original: "Results were mixed.", zhKind: null, complete: false });
 });
 
-test("sameEvent names the selected item fr-events' verdict points at; follow-ups are the event's other published members, newest first", options, async () => {
+test("sameEvent names the selected item fr-events' verdict points at; follow-ups are the event's other published reports, one per institution, newest first", options, async () => {
   const selected = await insertItem(database, { title: "NEJM paper", titleZh: "NEJM 论文", selected: true, timelineAt: "2026-10-21T01:00:00Z" });
   const second = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "STAT story", timelineAt: "2026-10-21T05:00:00Z" });
-  const others = [];
-  for (let index = 0; index < 9; index += 1) {
-    others.push(await insertItem(database, { sourceId: "stat", sourceType: "media", title: `Report ${index}`, timelineAt: `2026-10-21T0${index}:30:00Z` }));
-  }
+  const olderStat = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "STAT earlier", timelineAt: "2026-10-21T02:00:00Z" });
+  const newerStat = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "STAT later", timelineAt: "2026-10-21T08:00:00Z" });
+  const fda = await insertItem(database, { sourceId: "fda", sourceType: "regulator", lane: "regulatory", title: "FDA notice", timelineAt: "2026-10-21T06:00:00Z" });
+  const ctgov = await insertItem(database, { sourceId: "ctgov", sourceType: "evidence-body", title: "Trial update", timelineAt: "2026-10-21T07:00:00Z" });
   const withdrawn = await insertItem(database, { title: "Withdrawn report", state: "withdrawn", timelineAt: "2026-10-21T09:59:00Z" });
   await set(second.id, { same_event_item_id: selected.id });
   const event = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at)
     VALUES ('evtreader0001', '一件事', 'evidence', $1, $1) RETURNING id`, [NOW])).rows[0].id;
-  for (const member of [selected, second, ...others, withdrawn]) {
+  for (const member of [selected, second, olderStat, newerStat, fda, ctgov, withdrawn]) {
     await database.query("INSERT INTO evimed_frontier.event_items (event_id, item_id, role, joined_by) VALUES ($1, $2, 'report', 'vector')", [event, member.id]);
+    await database.query("UPDATE evimed_frontier.items SET event_id = $2 WHERE id = $1", [member.id, event]);
   }
   const service = serviceFor();
   const detail = (await service.getItem(reader, second.publicId)).body.item;
   assert.deepEqual(detail.sameEvent, { itemId: selected.publicId, title: "NEJM 论文" });
   assert.equal(detail.followups.eventId, "evtreader0001");
-  assert.equal(detail.followups.rows.length, 8);
-  assert.equal(detail.followups.more, true, "ten other published members: eight shown, more");
-  assert.ok(detail.followups.rows.every((row) => row.relation === "same-event" && row.itemId !== second.publicId && row.itemId !== withdrawn.publicId));
-  assert.deepEqual(detail.followups.rows.map((row) => row.at), [...detail.followups.rows.map((row) => row.at)].sort().reverse(), "newest first");
+  // fr-events' frontierItemFollowups: one row per institution (its newest report), the item itself and unpublished reports never.
+  assert.deepEqual(detail.followups.rows.map((row) => row.itemId), [newerStat.publicId, ctgov.publicId, fda.publicId, selected.publicId]);
+  assert.equal(detail.followups.more, false);
+  assert.ok(detail.followups.rows.every((row) => row.relation === "same-event"));
   assert.equal(detail.followups.rows[0].sourceName, "STAT");
   // The selected item itself points at nothing; a verdict naming an unpublished item is no pointer.
   assert.equal((await service.getItem(reader, selected.publicId)).body.item.sameEvent, null);
