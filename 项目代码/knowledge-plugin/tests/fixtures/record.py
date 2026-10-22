@@ -132,6 +132,17 @@ def _redact(body: bytes, content_type: str, scrub_emails: bool = False) -> tuple
     return json.dumps(redacted, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), sorted(set(hits))
 
 
+_SCRIPT_OR_STYLE = re.compile(rb"<(script|style)\b([^>]*)>.*?</\1\s*>", re.I | re.S)
+
+
+def trim_page(body: bytes) -> bytes:
+    """An HTML page without its scripts and styles, JSON-LD kept (what the landing page reader reads is the markup, the
+    meta tags and the JSON-LD; the rest is the page's machinery)."""
+    def keep(match: re.Match) -> bytes:
+        return match.group(0) if b"ld+json" in match.group(2).lower() else b""
+    return _SCRIPT_OR_STYLE.sub(keep, body)
+
+
 class RecordingBrowser(BrowserFetcher):
     """The plugin's browser egress, keeping every raw render (the page, or robots.txt as text)."""
 
@@ -174,9 +185,15 @@ class RecordingFetcher:
     production ones.
     """
 
-    def __init__(self, case_dir: Path, *, credentials: bool = True, browser_cdp: str = BROWSER_CDP) -> None:
+    def __init__(self, case_dir: Path, *, credentials: bool = True, browser_cdp: str = BROWSER_CDP,
+                 contact: bool = True, trim_html: bool = False) -> None:
         self.case_dir = case_dir
         self.credentials = credentials
+        # ``contact=False``: Unpaywall is asked without the contact address (no secret file is read; it answers 422),
+        # ``trim_html``: a stored HTML page keeps its markup, metadata and JSON-LD but not its other scripts and styles
+        # (``trim_page``), the original's sha256 beside it — rt-papers' landing pages run to 300–800 KB.
+        self.contact = contact
+        self.trim_html = trim_html
         self.scrub_emails = False
         self.browser_cdp = browser_cdp
         self._protected: ProtectedFetcher | None = None
@@ -253,7 +270,7 @@ class RecordingFetcher:
             raise FetchError("robots-denied", "robots_disallow")
         wire_url = spec.url
         host = (urlsplit(spec.url).hostname or "").lower()
-        if host == "api.unpaywall.org":
+        if host == "api.unpaywall.org" and self.contact:
             contact = CONTACT_FILE.read_text(encoding="utf-8").strip()
             wire_url += ("&" if "?" in wire_url else "?") + "email=" + contact
         wire_headers = dict(spec.headers or {})
@@ -303,6 +320,9 @@ class RecordingFetcher:
     def _store(self, meta: dict, body: bytes, content_type: str) -> None:
         original_sha = hashlib.sha256(body).hexdigest()
         body, redacted = _redact(body, content_type, self.scrub_emails)
+        if self.trim_html and "html" in content_type.lower() and len(body) > GZIP_OVER:
+            body = trim_page(body)
+            redacted = redacted + ["scripts-and-styles-trimmed"]
         name = f"{len(self.exchanges) + 1:02d}.{_ext(content_type, meta['url'])}"
         packed = len(body) > GZIP_OVER
         if packed:

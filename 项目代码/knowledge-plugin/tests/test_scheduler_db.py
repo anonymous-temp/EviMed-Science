@@ -673,7 +673,10 @@ async def test_text_worker_pending_then_available_then_horizon(settings, pool):
     clock.advance(minutes=20)                                   # a asked to come back after 60 s (floor: 15 min)
     await crawler._text_tick()
     assert (await _text_statuses(pool))["a"] == "available"
-    clock.advance(days=5, hours=1)                              # b is past the 5-day horizon
+    clock.advance(days=5, hours=1)                              # five days on: b is still asked (horizon 14 days)
+    await crawler._text_tick()
+    assert (await _text_statuses(pool))["b"] == "pending"
+    clock.advance(days=9)                                       # b is past the 14-day horizon
     await crawler._text_tick()
     assert (await _text_statuses(pool))["b"] == "unavailable"
 

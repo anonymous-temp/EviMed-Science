@@ -45,10 +45,13 @@ def assert_contract_shape(result):
 async def test_journal_batch_shares_one_pubmed_round_trip():
     case, fetcher, results = await run("enrich/journal-batch")
     assert [kind_of(row) for row in case.rows] == ["article"] * 5
-    assert len(fetcher.calls) == len(case.exchanges) == 11  # nothing asked that was not asked when recorded
+    # 11 recorded on 2026-09-22, 8 more by the paper text chain on 2026-10-22 (the case's ``extensions``)
+    assert len(fetcher.calls) == len(case.exchanges) == 19  # nothing asked that was not asked when recorded
     urls = [url for _, url, _ in fetcher.calls]
     assert sum("esearch.fcgi" in u for u in urls) == 1 and sum("efetch.fcgi" in u for u in urls) == 1
-    assert all(source_id is None for _, _, source_id in fetcher.calls)  # API calls carry no source allowed_hosts
+    api_calls = [(url, source_id) for _, url, source_id in fetcher.calls
+                 if not url.startswith(("http://www.nejm.org", "https://www.frontiersin.org"))]
+    assert all(source_id is None for _, source_id in api_calls)  # API calls carry no source allowed_hosts
     for result in results.values():
         assert_contract_shape(result)
 
@@ -64,13 +67,29 @@ async def test_journal_batch_shares_one_pubmed_round_trip():
 
     image = results["10.1056/nejmicm2609443"]  # an NEJM Clinical Image: in PubMed, no abstract (yet)
     assert (image.status, image.text_kind) == ("pending", "none")  # the text rule: no abstract -> pending
-    assert image.retry_after_s == 12 * 3600 and image.notes == ["indexed_without_abstract"]
+    # Its landing page answered a challenge: an answer, recorded for the host, so the Perspective after it does not ask.
+    assert image.retry_after_s == 12 * 3600
+    assert image.notes == ["landing_challenge:direct", "landing_challenge", "indexed_without_abstract"]
+    assert results["10.1056/nejmp2605442"].notes == ["landing_challenge_cached", "indexed_without_abstract"]
     assert image.enrichment["publication_types"] == ["Case Reports", "Journal Article"]
     assert image.enrichment["affiliation_countries"] == ["PH"]
 
-    frontiers = results["10.3389/fphar.2026.1852584"]  # registered today: the entry's Crossref abstract is the text
-    assert (frontiers.status, frontiers.text_kind, frontiers.fetched_from) == ("available", "abstract", "crossref")
-    assert frontiers.enrichment == {"open_access": "unknown"}  # Unpaywall 404: not tracked yet
+    # Registered that day: its Crossref abstract, and — no index knowing it yet (Unpaywall 404, OpenAlex 404) — its
+    # landing page, which states CC BY and carries the article: the whole text.
+    frontiers = results["10.3389/fphar.2026.1852584"]
+    assert (frontiers.status, frontiers.text_kind, frontiers.fetched_from) == ("available", "full", "landing")
+    # Crossref's abstract was stored as one line (the entry's summary); the page says the same with its sections.
+    assert frontiers.abstract.startswith("Background: This randomized controlled trial")
+    assert "\nMethods: In this prospective randomized controlled trial" in frontiers.abstract
+    # The page's abstract leads the whole text, its run-in headings read as sections (Frontiers writes them glued in
+    # citation_abstract, "BackgroundThis …", and as <strong> runs in the page).
+    assert frontiers.body_text.startswith("## Abstract\n\nBackground: This randomized controlled trial")
+    assert "\n\n## 1 Introduction\n\n" in frontiers.body_text and "\n\n## 4.6 Conclusions\n\n" in frontiers.body_text
+    assert "## References" not in frontiers.body_text
+    assert frontiers.body_excerpt == frontiers.body_text[:len(frontiers.body_excerpt)] and len(frontiers.body_excerpt) <= 12_000
+    # Unpaywall 404 (not tracked yet); OpenAlex: gold, and its PDF.
+    assert frontiers.enrichment == {"open_access": "gold", "oa_pdf_url":
+                                    "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2026.1852584/pdf"}
 
     trial = results["10.1056/nejmoa2604166"]
     assert trial.enrichment["trial_facts"]["status"]  # NCT03643276 from the record's DataBank, looked up
@@ -86,13 +105,19 @@ async def test_crossref_abstract_for_a_feed_entry_with_a_doi():
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",        # PubMed: not indexed yet (no efetch)
         "https://www.ebi.ac.uk/europepmc/webservices/rest/search",           # Europe PMC: not there either
         "https://api.crossref.org/works/10.3389/fphar.2026.1747506",         # the publisher's JATS abstract
-        "https://api.unpaywall.org/v2/10.3389/fphar.2026.1747506"]           # 404: not tracked yet
-    assert (result.status, result.text_kind, result.fetched_from) == ("available", "abstract", "crossref")
+        "https://api.unpaywall.org/v2/10.3389/fphar.2026.1747506",           # 404: not tracked yet
+        "https://api.openalex.org/works/doi:10.3389/fphar.2026.1747506",     # may be open, no PMC id: ask OpenAlex
+        "https://doi.org/api/handles/10.3389/fphar.2026.1747506",            # where the landing page is
+        "https://www.frontiersin.org/articles/10.3389/fphar.2026.1747506/full"]   # the page the handle names
+    # The landing page states CC BY and carries the article: the whole text; the Crossref abstract stays the abstract.
+    assert (result.status, result.text_kind, result.fetched_from) == ("available", "full", "landing")
     # JATS sections are paragraphs "Title: text" (structured_abstract), not one run-on line.
     assert result.abstract.startswith("Background: Current guidelines advise against routine use of parenteral")
     assert "\n\nMethods: " in result.abstract or "\nMethods: " in result.abstract
     assert "<jats" not in result.abstract and "jats:" not in result.abstract
-    assert result.enrichment == {"journal": "Frontiers in Pharmacology", "open_access": "unknown"}
+    # Unpaywall did not track it yet (404); OpenAlex did: gold, and its PDF.
+    assert result.enrichment == {"journal": "Frontiers in Pharmacology", "open_access": "gold",
+                                 "oa_pdf_url": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2026.1747506/pdf"}
     assert result.fetched_at == datetime(2026, 9, 22, 9, 33, 54, tzinfo=timezone.utc)
 
 

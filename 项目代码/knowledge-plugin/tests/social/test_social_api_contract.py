@@ -115,7 +115,7 @@ async def test_manifest_names_the_new_fields_and_read_methods(app_client):
     client, _ = app_client
     body = (await client.get("/v1/manifest")).json()
     assert_schema(body, "Manifest")
-    assert body["contract"]["version"] == SPEC["info"]["version"] == "1.5.0"
+    assert body["contract"]["version"] == SPEC["info"]["version"] == "1.5.1"   # 1.5.1: the paper text chain's sources
     assert {"channel", "platform", "author", "media", "quoted", "metrics"} <= set(body["fields"]["entry"])
     assert "socialdata" in body["vocabularies"]["access"]
 

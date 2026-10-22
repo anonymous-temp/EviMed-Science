@@ -119,6 +119,87 @@
    "gzip": false,
    "bytes": 207,
    "sha256": "e9639e3c4681ce85f852fbac48e2eeee5ba51296dbfec57c200d59b76237ab80"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.3389/fphar.2026.1747506?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.3389/fphar.2026.1747506?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:28:04+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 4767,
+   "sha256": "bc0e3757c1daf55522ef6ac91a849c212e137b2e69bb9a0169d21389de5d03da"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.3389/fphar.2026.1747506?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.3389/fphar.2026.1747506?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:28:05+00:00",
+   "file": "06.json",
+   "gzip": false,
+   "bytes": 245,
+   "sha256": "c587b9df9a6741b96ae3a71bd04eeb78453f59e7a419e7d77d75e56c1671efea"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.frontiersin.org/articles/10.3389/fphar.2026.1747506/full",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2026.1747506/full",
+   "headers": {
+    "content-type": "text/html;charset=utf-8",
+    "etag": "\"3\""
+   },
+   "fetched_at": "2026-10-22T15:28:08+00:00",
+   "file": "07.html.gz",
+   "gzip": true,
+   "bytes": 358574,
+   "sha256": "1752c421cdc4c035c12c4299957f24bf8a45c6a1eab615fcdb40ac898319da0f",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "a12458039ff65530c3d776d33c27295e148b3e63f3f541cf5c0620120cf4f5f4"
+  }
+ ],
+ "extensions": [
+  {
+   "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+   "recorded_at": "2026-10-22T15:28:09+00:00",
+   "reason": "the paper text chain (rt-papers): the open-access check of an entry with an abstract",
+   "exchanges": [
+    4,
+    5,
+    6
+   ],
+   "results_at_recording": [
+    {
+     "status": "available",
+     "text_kind": "full",
+     "fetched_from": "landing",
+     "notes": []
+    }
+   ]
   }
  ]
 }

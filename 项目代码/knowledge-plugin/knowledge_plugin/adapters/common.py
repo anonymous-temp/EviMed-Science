@@ -139,6 +139,9 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
 _HEADING_END = re.compile(r"</(?:jats:title|title|h[1-6])\s*>", re.I)
 _HEADING_MARK = "\u2063"   # invisible separator: where a heading ended, until its line is joined to the next
 _ABSTRACT_HEADINGS = frozenset({"abstract", "摘要", "summary"})
+# A run-in heading: a short bold run that opens a paragraph ("<p><strong>Background</strong>This trial…" — Frontiers'
+# citation_abstract; "<jats:p><jats:bold>Objective:</jats:bold> To assess…"), read as the paragraph's heading.
+_RUN_IN = re.compile(r"(<(?:jats:)?p\b[^>]*>)\s*<((?:jats:)?(?:bold|strong|b))\b[^>]*>([^<]{1,40}?)</\2\s*>", re.I)
 
 
 def structured_abstract(value: Any) -> str:
@@ -148,7 +151,8 @@ def structured_abstract(value: Any) -> str:
     if value is None:
         return ""
     # The mark, and a break after the heading: Europe PMC writes ``<h4>Background</h4>Text…``, read as "BackgroundText".
-    marked = _HEADING_END.sub(lambda match: _HEADING_MARK + match.group(0) + "<br>", str(value))
+    value = _RUN_IN.sub(lambda match: f"{match.group(1)}<h4>{match.group(3).strip()}</h4>", str(value))
+    marked = _HEADING_END.sub(lambda match: _HEADING_MARK + match.group(0) + "<br>", value)
     lines = clean_markup(marked, keep_paragraphs=True).split("\n")
     out: list[str] = []
     heading = ""
@@ -190,10 +194,13 @@ TRUNCATION_MARKS = ("…", "...", "[...]", "[…]", "(...)", "read more", "conti
 
 
 def looks_truncated(summary: str) -> bool:
+    """Whether a text ends the way a cut one does. A mark is matched as written, and without the punctuation that may
+    follow it ("Read more »"); "..." itself has nothing left once stripped, and until 2026-10-22 that dropped it from the
+    test altogether, so NEJM's ``dc.Description`` cut at 200 characters ("…two patients in the mava...") read as uncut."""
     low = summary.strip().lower()
     stripped = low.rstrip(" .»›>)]").strip()
-    return any(low.endswith(mark) or stripped.endswith(mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS
-               if mark.rstrip(" .»›>)]"))
+    return any(low.endswith(mark) or (bare and stripped.endswith(bare))
+               for mark, bare in ((mark, mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS))
 
 
 def summary_and_defects(summary: str | None, *, feed: bool = False) -> tuple[str | None, list[str]]:

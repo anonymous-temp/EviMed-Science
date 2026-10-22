@@ -162,6 +162,15 @@ def validate_row(row: dict) -> list[str]:
     url_env = config.get("url_env")
     if url_env is not None and not (isinstance(url_env, str) and _URL_ENV.match(url_env)):
         problems.append(f"{sid}: config.url_env must be the name of an environment variable")
+    feeds = config.get("abstract_feed")
+    if feeds is not None:
+        # The publisher feeds the paper text chain reads for this journal's abstracts (``enrich.feeds``, rt-papers).
+        listed = [feeds] if isinstance(feeds, str) else feeds
+        if not (isinstance(listed, list) and 1 <= len(listed) <= 4
+                and all(isinstance(u, str) and u.startswith("https://") for u in listed)):
+            problems.append(f"{sid}: config.abstract_feed must be one to four https URLs")
+        elif row["source_type"] not in ("journal", "preprint"):
+            problems.append(f"{sid}: config.abstract_feed is read for journal entries only")
     if row["enabled"]:
         # An address read from the environment is resolved before the row is loaded (``resolve_env_url``); in the file
         # the row only names the variable.

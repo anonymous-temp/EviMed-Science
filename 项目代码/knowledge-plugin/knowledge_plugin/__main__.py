@@ -18,7 +18,8 @@ report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`
 
 ``retext`` prints, by kind and source, the stored texts the 2026-10-22 reader-text fixes would read again (WeChat bodies,
 page texts, Crossref abstracts with an entity escaped twice) and what the WeChat part costs; ``retext --apply`` reads them
-again and delivers each entry whose text changed as its next revision (``retext``).
+again and delivers each entry whose text changed as its next revision (``retext``). ``--kinds journal`` (named only) reads
+the journal entries the platform asked for that have no text at all through the paper text chain again.
 """
 
 from __future__ import annotations

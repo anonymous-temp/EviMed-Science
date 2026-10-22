@@ -32,13 +32,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.5.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+CONTRACT_VERSION = "1.5.1"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
                              # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h;
                              # 1.3.0 (2026-10-05): Source.platform_produced (flywheel F09);
                              # 1.4.0 (2026-10-10): Health.host_budget (today's use against each host's daily cap);
                              # 1.5.0 (2026-10-22): social posts — Entry.channel/platform/author/media/quoted/metrics,
                              #   EntryText.body_text, GET /v1/media/{id}, Health.providers and Health.discovery,
-                             #   the read methods socialdata / dajiala / social-crawl
+                             #   the read methods socialdata / dajiala / social-crawl;
+                             # 1.5.1 (2026-10-22): EntryText.fetched_from openalex / landing / publisher-feed /
+                             #   europepmc-fulltext / elsevier, and body_text's section titles ("## Title")
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------
@@ -64,7 +66,8 @@ DEFECTS = (
 ENTRY_TEXT_STATUSES = ("none", "pending", "available")
 TEXT_STATUSES = ("available", "pending", "unavailable")          # EntryText.status
 TEXT_KINDS = ("abstract", "excerpt", "full", "none")
-FETCHED_FROM = ("pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat", "x", "social")
+FETCHED_FROM = ("pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat", "x", "social",
+                "openalex", "landing", "publisher-feed", "europepmc-fulltext", "elsevier")
 # Contract 1.5.0: what kind of publication an entry is (decided by the registry and the adapter, never by a model), the
 # platform a social post was made on, who wrote it, and the kinds of stored media.
 CHANNELS = ("journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social")
@@ -355,7 +358,7 @@ class EntryTextResult:
     ``status``: ``available`` (something to show: an abstract, an excerpt or enrichment facts),
     ``pending`` (try again later: PubMed has not indexed it yet, a page was temporarily
     unreadable) or ``unavailable`` (nothing will come). ``retry_after_s`` lets a pending result
-    suggest its own retry delay; the text worker bounds it (12 h cadence, 5-day horizon).
+    suggest its own retry delay; the text worker bounds it (12 h cadence, 14-day horizon).
     ``enrichment`` may only carry ``ENRICHMENT_TYPES`` keys.
     """
 

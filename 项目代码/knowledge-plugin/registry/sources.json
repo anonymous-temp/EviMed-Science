@@ -338,6 +338,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+     "https://jamanetwork.com/rss/site_3/67.xml"
     ]
    }
   },
@@ -375,6 +379,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_214/187.xml"
     ]
    }
   },
@@ -413,6 +420,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "archinte.ama-assn.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_15/onlineFirst_71.xml",
+     "https://jamanetwork.com/rss/site_15/71.xml"
     ]
    }
   },
@@ -450,6 +461,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_193/185.xml"
     ]
    }
   },
@@ -487,6 +501,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.bmj.com/rss/recent.xml"
     ]
    }
   },
@@ -524,6 +541,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "bmjmedicine.bmj.com"
+    ],
+    "abstract_feed": [
+     "https://bmjmedicine.bmj.com/rss/recent.xml"
     ]
    }
   },
@@ -561,6 +581,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "bmjopen.bmj.com"
+    ],
+    "abstract_feed": [
+     "https://bmjopen.bmj.com/rss/recent.xml"
     ]
    }
   },
@@ -791,6 +814,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/cell/inpress.rss",
+     "https://www.cell.com/cell/current.rss"
     ]
    }
   },
@@ -828,6 +855,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.journals.elsevier.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/cell-reports-medicine/inpress.rss",
+     "https://www.cell.com/cell-reports-medicine/current.rss"
     ]
    }
   },
@@ -865,6 +896,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/med/inpress.rss",
+     "https://www.cell.com/med/current.rss"
     ]
    }
   },
@@ -979,6 +1014,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "onlinelibrary.wiley.com"
+    ],
+    "abstract_feed": [
+     "https://onlinelibrary.wiley.com/feed/13265377/most-recent"
     ]
    }
   },
@@ -1054,6 +1092,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.pnas.org"
+    ],
+    "abstract_feed": [
+     "https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas"
     ]
    }
   },
@@ -1129,6 +1170,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.jci.org"
+    ],
+    "abstract_feed": [
+     "https://www.jci.org/rss/recent.xml"
     ]
    }
   },
@@ -1167,6 +1211,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.mayoclinicproceedings.org/inpress.rss",
+     "https://www.mayoclinicproceedings.org/current.rss"
     ]
    }
   },
@@ -1319,6 +1367,10 @@
     "allowed_hosts": [
      "academic.oup.com",
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5332/advanceAccess_3198.xml",
+     "https://academic.oup.com/rss/site_5332/3198.xml"
     ]
    }
   },
@@ -1431,6 +1483,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.journals.elsevier.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/the-innovation/inpress.rss",
+     "https://www.cell.com/the-innovation/current.rss"
     ]
    }
   },
@@ -1731,6 +1787,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.jamia.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5396/advanceAccess_3257.xml",
+     "https://academic.oup.com/rss/site_5396/3257.xml"
     ]
    }
   },
@@ -1769,6 +1829,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.jmir.org"
+    ],
+    "abstract_feed": [
+     "https://www.jmir.org/feed/atom"
     ]
    }
   },
@@ -1806,6 +1869,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "medinform.jmir.org"
+    ],
+    "abstract_feed": [
+     "https://medinform.jmir.org/feed/atom"
     ]
    }
   },
@@ -1842,6 +1908,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://ai.jmir.org/feed/atom"
     ]
    }
   },
@@ -1953,6 +2022,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "informatics.bmj.com"
+    ],
+    "abstract_feed": [
+     "https://informatics.bmj.com/rss/recent.xml"
     ]
    }
   },
@@ -2066,6 +2138,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.journals.elsevier.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/patterns/inpress.rss",
+     "https://www.cell.com/patterns/current.rss"
     ]
    }
   },
@@ -2255,6 +2331,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_159/onlineFirst_174.xml",
+     "https://jamanetwork.com/rss/site_159/174.xml"
     ]
    }
   },
@@ -2293,6 +2373,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.annalsofoncology.org/inpress.rss",
+     "https://www.annalsofoncology.org/current.rss"
     ]
    }
   },
@@ -2331,6 +2415,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "onlinelibrary.wiley.com"
+    ],
+    "abstract_feed": [
+     "https://acsjournals.onlinelibrary.wiley.com/feed/15424863/most-recent"
     ]
    }
   },
@@ -2369,6 +2456,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/cancer-cell/inpress.rss",
+     "https://www.cell.com/cancer-cell/current.rss"
     ]
    }
   },
@@ -2445,6 +2536,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "cancerdiscovery.aacrjournals.org"
+    ],
+    "abstract_feed": [
+     "https://aacrjournals.org/rss/site_1000003/1000004.xml"
     ]
    }
   },
@@ -2559,6 +2653,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "eurheartj.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5375/advanceAccess_3236.xml",
+     "https://academic.oup.com/rss/site_5375/3236.xml"
     ]
    }
   },
@@ -2597,6 +2695,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_192/onlineFirst_184.xml",
+     "https://jamanetwork.com/rss/site_192/184.xml"
     ]
    }
   },
@@ -2711,6 +2813,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "care.diabetesjournals.org"
+    ],
+    "abstract_feed": [
+     "https://diabetesjournals.org/rss/site_1000003/advanceAccess_1000004.xml",
+     "https://diabetesjournals.org/rss/site_1000003/1000004.xml"
     ]
    }
   },
@@ -2749,6 +2855,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.cell.com/cell-metabolism/inpress.rss",
+     "https://www.cell.com/cell-metabolism/current.rss"
     ]
    }
   },
@@ -2863,6 +2973,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "archneur.jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_16/onlineFirst_72.xml",
+     "https://jamanetwork.com/rss/site_16/72.xml"
     ]
    }
   },
@@ -2939,6 +3053,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "brain.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5367/advanceAccess_3228.xml",
+     "https://academic.oup.com/rss/site_5367/3228.xml"
     ]
    }
   },
@@ -3053,6 +3171,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "archpsyc.jamanetwork.com"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_14/onlineFirst_70.xml",
+     "https://jamanetwork.com/rss/site_14/70.xml"
     ]
    }
   },
@@ -3091,6 +3213,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "onlinelibrary.wiley.com"
+    ],
+    "abstract_feed": [
+     "https://onlinelibrary.wiley.com/feed/20515545/most-recent"
     ]
    }
   },
@@ -3167,6 +3292,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+     "https://academic.oup.com/rss/site_5269/3135.xml"
     ]
    }
   },
@@ -3318,6 +3447,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.atsjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_6755/advanceAccess_4230.xml",
+     "https://academic.oup.com/rss/site_6755/4230.xml"
     ]
    }
   },
@@ -3355,6 +3488,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://journal.chestnet.org/inpress.rss",
+     "https://journal.chestnet.org/current.rss"
     ]
    }
   },
@@ -3471,6 +3608,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.gastrojournal.org/inpress.rss",
+     "https://www.gastrojournal.org/current.rss"
     ]
    }
   },
@@ -3509,6 +3650,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "gut.bmj.com"
+    ],
+    "abstract_feed": [
+     "https://gut.bmj.com/rss/ahead.xml",
+     "https://gut.bmj.com/rss/current.xml"
     ]
    }
   },
@@ -3584,6 +3729,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.journals.elsevier.com"
+    ],
+    "abstract_feed": [
+     "https://www.journal-of-hepatology.eu/inpress.rss",
+     "https://www.journal-of-hepatology.eu/current.rss"
     ]
    }
   },
@@ -3698,6 +3847,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.sciencedirect.com"
+    ],
+    "abstract_feed": [
+     "https://www.kidney-international.org/inpress.rss",
+     "https://www.kidney-international.org/current.rss"
     ]
    }
   },
@@ -3882,6 +4035,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_19/onlineFirst_75.xml",
+     "https://jamanetwork.com/rss/site_19/75.xml"
     ]
    }
   },
@@ -3919,6 +4076,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://publications.aap.org/rss/site_1000005/advanceAccess_1000005.xml",
+     "https://publications.aap.org/rss/site_1000005/1000005.xml"
     ]
    }
   },
@@ -3955,6 +4116,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.ajog.org/inpress.rss",
+     "https://www.ajog.org/current.rss"
     ]
    }
   },
@@ -4027,6 +4192,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_20/onlineFirst_76.xml",
+     "https://jamanetwork.com/rss/site_20/76.xml"
     ]
    }
   },
@@ -4174,6 +4343,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_12/onlineFirst_68.xml",
+     "https://jamanetwork.com/rss/site_12/68.xml"
     ]
    }
   },
@@ -4211,6 +4384,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.aaojournal.org/inpress.rss",
+     "https://www.aaojournal.org/current.rss"
     ]
    }
   },
@@ -4248,6 +4425,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://jamanetwork.com/rss/site_17/onlineFirst_73.xml",
+     "https://jamanetwork.com/rss/site_17/73.xml"
     ]
    }
   },
@@ -4285,6 +4466,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5299/advanceAccess_3165.xml",
+     "https://academic.oup.com/rss/site_5299/3165.xml"
     ]
    }
   },
@@ -4322,6 +4507,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5257/advanceAccess_3123.xml",
+     "https://academic.oup.com/rss/site_5257/3123.xml"
     ]
    }
   },
@@ -4395,6 +4584,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.jclinepi.com/inpress.rss",
+     "https://www.jclinepi.com/current.rss"
     ]
    }
   },
@@ -4541,6 +4734,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://onlinelibrary.wiley.com/feed/10970258/most-recent"
     ]
    }
   },
@@ -4651,6 +4847,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://onlinelibrary.wiley.com/feed/17565391/most-recent"
     ]
    }
   },
@@ -5161,6 +5360,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://bpspubs.onlinelibrary.wiley.com/feed/13652125/most-recent"
     ]
    }
   },
@@ -5235,6 +5437,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://onlinelibrary.wiley.com/feed/10991557/most-recent"
     ]
    }
   },
@@ -5346,6 +5551,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_6198/advanceAccess_4022.xml",
+     "https://academic.oup.com/rss/site_6198/4022.xml"
     ]
    }
   },
@@ -5568,6 +5777,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://www.valueinhealthjournal.com/inpress.rss",
+     "https://www.valueinhealthjournal.com/current.rss"
     ]
    }
   },

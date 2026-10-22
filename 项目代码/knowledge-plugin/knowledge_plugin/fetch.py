@@ -36,10 +36,12 @@ mailto:<contact>)``. FDA, CDC and Health Canada refuse a browser string from a d
 but answer this honest one (measured 2026-09-22), so the crawler never pretends to be a browser.
 
 Credentials are the transport's business, per host: NCBI ``tool``/``email``/``api_key``, openFDA
-``api_key``, Unpaywall ``email``, OpenAlex ``mailto`` are added to the query here and stripped from
+``api_key``, Unpaywall ``email`` are added to the query here and stripped from
 ``FetchResult.final_url``; the team's EviMed evidence API gets ``Authorization: Bearer <key>`` on its
 API path only; SocialData (X, contract 1.5.0) gets ``Authorization: Bearer <key>``, Dajiala (WeChat) its ``key``
-query parameter; adapters, logs and the fetch log never see any of them, and an ``Authorization``,
+query parameter, Elsevier's API (when a key is configured) ``X-ELS-APIKey``; OpenAlex gets nothing (2026-10-22: it
+meters by API key and credit, a contact address buys nothing, and a work by its id is free); adapters, logs and the
+fetch log never see any of them, and an ``Authorization``,
 ``Cookie`` or ``Host`` header an adapter sets is dropped. Log lines carry URLs without their query
 string (``redact_url``).
 """
@@ -232,6 +234,7 @@ def retry_after_seconds(value: str | None, now: datetime) -> float | None:
 
 CREDENTIAL_KEYS = frozenset({"api_key", "email", "tool", "mailto"})
 SOCIALDATA_HOST = "api.socialdata.tools"     # X through SocialData (contract 1.5.0): Authorization: Bearer
+ELSEVIER_API_HOST = "api.elsevier.com"       # Elsevier's Article Retrieval API (rt-papers 2026-10-22): X-ELS-APIKey
 DAJIALA_HOST = "www.dajiala.com"             # WeChat through Dajiala: the `key` query parameter
 
 
@@ -251,8 +254,6 @@ def _credential_params(host: str, settings: Settings) -> list[tuple[str, str]]:
             params.append(("api_key", key))
     elif host == "api.unpaywall.org" and contact:
         params.append(("email", contact))
-    elif host == "api.openalex.org" and contact:
-        params.append(("mailto", contact))
     elif host == DAJIALA_HOST:
         key = settings.secret("dajiala_key")
         if key:
@@ -293,7 +294,8 @@ def _utcnow() -> datetime:
 EVIMED_API_HOST = "www.evimed.com"
 EVIMED_API_PREFIX = "/api-evimed/medicine-api/ai-api/"
 # Headers an adapter never sets: identity, credentials and cookies are the transport's business.
-HEADERS_NEVER_FROM_ADAPTERS = frozenset({"host", "user-agent", "authorization", "proxy-authorization", "cookie"})
+HEADERS_NEVER_FROM_ADAPTERS = frozenset({"host", "user-agent", "authorization", "proxy-authorization", "cookie",
+                                         "x-els-apikey"})
 # Outcomes that say the EXIT failed (the request never reached, or never came back from, the
 # upstream) — what the per-egress health in /v1/health counts.
 TRANSPORT_FAILURES = frozenset({"connect_failed", "dns_failed", "tls_failed", "timeout", "navigation_timeout",
@@ -583,6 +585,11 @@ class ProtectedFetcher:
             return {"Authorization": f"Bearer {key}"}
         if host == DAJIALA_HOST and not self._settings.secret("dajiala_key"):
             raise FetchError("blocked", "dajiala_key_unconfigured")
+        if host == ELSEVIER_API_HOST:
+            key = self._settings.secret("elsevier_key")
+            if not key:
+                raise FetchError("blocked", "elsevier_key_unconfigured")
+            return {"X-ELS-APIKey": key}
         return {}
 
     # ---------------------------------------------------------------- one hop, direct

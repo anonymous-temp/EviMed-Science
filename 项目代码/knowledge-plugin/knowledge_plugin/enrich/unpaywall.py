@@ -40,16 +40,37 @@ def parse_unpaywall(payload: Any) -> dict[str, Any]:
     return values
 
 
+def oa_location(payload: Any) -> dict[str, str]:
+    """The open copy's licence (``cc-by`` …) and landing page, for the full-text step; not contract enrichment."""
+    best = payload.get("best_oa_location") if isinstance(payload, dict) else None
+    if not isinstance(best, dict):
+        return {}
+    out = {}
+    if isinstance(best.get("license"), str) and best["license"]:
+        out["license"] = best["license"]
+    landing = best.get("url_for_landing_page")
+    if isinstance(landing, str) and landing.startswith(("https://", "http://")):
+        out["landing_url"] = landing
+    return out
+
+
 async def open_access(fetcher: Any, endpoints: Endpoints, doi: str, trace: Trace) -> dict[str, Any]:
+    enrichment, _ = await open_access_details(fetcher, endpoints, doi, trace)
+    return enrichment
+
+
+async def open_access_details(fetcher: Any, endpoints: Endpoints, doi: str,
+                              trace: Trace) -> tuple[dict[str, Any], dict[str, str]]:
+    """``(enrichment, oa_location)`` of one DOI (``parse_unpaywall``, ``oa_location``)."""
     attempt = await get(fetcher, doi_url(endpoints, doi))
     if attempt.result is None:
         trace.record(attempt, "unpaywall")
-        return {}
+        return {}, {}
     if attempt.result.status == 404:
-        return {"open_access": "unknown"}
+        return {"open_access": "unknown"}, {}
     try:
         payload = json.loads(attempt.result.body.decode("utf-8", errors="replace"))
     except ValueError:
         trace.notes.append("unpaywall_unreadable")
-        return {}
-    return parse_unpaywall(payload)
+        return {}, {}
+    return parse_unpaywall(payload), oa_location(payload)

@@ -1,0 +1,159 @@
+{
+ "case": "enrich/paper-oa-landing",
+ "recorded_by": "tests/fixtures/record_enrich.py (rt-papers, 2026-10-22)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-22T15:29:02+00:00",
+ "note": "Unpaywall asked without a contact address (no secret read): its 422 is recorded as it came",
+ "rows": [
+  {
+   "entry_id": "paper:719ebc6d98fe8fe1df76001ac4aafb6d",
+   "revision": 1,
+   "source_id": null,
+   "external_key": "10.3389/fpubh.2026.1975587",
+   "identity_key": "doi:10.3389/fpubh.2026.1975587",
+   "url": "https://doi.org/10.3389/fpubh.2026.1975587",
+   "canonical_url": "https://doi.org/10.3389/fpubh.2026.1975587",
+   "doi": "10.3389/fpubh.2026.1975587",
+   "pmid": null,
+   "registry_ids": [],
+   "title": null,
+   "summary": null,
+   "lang": "en",
+   "published_at": null,
+   "facts": {},
+   "first_seen_at": "2026-10-22T08:00:00+00:00",
+   "source_access": "crossref-issn",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {},
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "full",
+   "fetched_from": "landing",
+   "abstract_chars": 8467,
+   "body_chars": 8764,
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.3389%2Ffpubh.2026.1975587%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.3389%2Ffpubh.2026.1975587%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:29:02+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 330,
+   "sha256": "02eb5cf0fb0eb30cfdd7b403c7b41a6729c3482d7690bd02735bb73b932aa5dc"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.3389%2Ffpubh.2026.1975587%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.3389%2Ffpubh.2026.1975587%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:29:04+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 197,
+   "sha256": "e08272eedaa506fd344f555f9921a948963a278dc5e188c6d912c84f3c155aca"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.3389/fpubh.2026.1975587",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.3389/fpubh.2026.1975587",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:29:05+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 7759,
+   "sha256": "dc5c82d039da825516b664deb82c84b49f930b863e30e0478709a07b4e94ec6c"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.openalex.org/works/doi:10.3389/fpubh.2026.1975587?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.openalex.org/works/doi:10.3389/fpubh.2026.1975587?select=id,doi,type,ids,open_access,best_oa_location,primary_location,abstract_inverted_index",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-10-22T15:29:07+00:00",
+   "file": "04.json",
+   "gzip": false,
+   "bytes": 15773,
+   "sha256": "a3c960a02ba6f73b54383bc609494dbad26f37b6b68210090d8973c1ebeb8fc9"
+  },
+  {
+   "method": "GET",
+   "url": "https://doi.org/api/handles/10.3389/fpubh.2026.1975587?type=URL",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://doi.org/api/handles/10.3389/fpubh.2026.1975587?type=URL",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-10-22T15:29:08+00:00",
+   "file": "05.json",
+   "gzip": false,
+   "bytes": 245,
+   "sha256": "3aa0a4731e09dc3ce70a7d319b108d5760d75f5d749f055b88acf2193333f2be"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.frontiersin.org/articles/10.3389/fpubh.2026.1975587/full",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": {
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+   },
+   "status": 200,
+   "final_url": "https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2026.1975587/full",
+   "headers": {
+    "content-type": "text/html;charset=utf-8",
+    "etag": "\"2\""
+   },
+   "fetched_at": "2026-10-22T15:29:11+00:00",
+   "file": "06.html.gz",
+   "gzip": true,
+   "bytes": 194017,
+   "sha256": "e2d915163bef07f7cb9da7e86bd323b35726000fe9187babb81bf85e7f2296f7",
+   "redacted_keys": [
+    "scripts-and-styles-trimmed"
+   ],
+   "original_sha256": "69abc143cbc4bf90452f280529a960fc3904fb04a57893cf701dbaf6b2622e48"
+  }
+ ]
+}
