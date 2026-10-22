@@ -148,8 +148,9 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       const answer = await service.event(user, parts[1], url.searchParams);
       if (answer.redirect) {
         // A merged event's old id, permanently: relative, so it resolves under
-        // whatever prefix this API is served at, and `fetch` follows it (with the order asked for).
-        res.writeHead(308, { Location: `${encodeURIComponent(answer.redirect)}${url.search}`, "Cache-Control": "private, no-cache", "Content-Type": "application/json; charset=utf-8" });
+        // whatever prefix this API is served at, and `fetch` follows it — with the order asked for, which the service checked.
+        const order = url.searchParams.get("order");
+        res.writeHead(308, { Location: `${encodeURIComponent(answer.redirect)}${order ? `?order=${encodeURIComponent(order)}` : ""}`, "Cache-Control": "private, no-cache", "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ data: { redirect: answer.redirect } }));
         return true;
       }
