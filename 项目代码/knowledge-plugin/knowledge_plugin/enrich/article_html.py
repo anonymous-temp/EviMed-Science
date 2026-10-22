@@ -45,7 +45,7 @@ FULL_TEXT_MIN = 2_000       # main text (abstract and back matter aside) a page 
 
 _META_ABSTRACT = ("citation_abstract", "dc.description", "dcterms.abstract", "dcterms.description", "eprints.abstract",
                   "bepress_citation_abstract")
-_META_SHORT = ("og:description", "og-description", "description")
+_META_SHORT = ("og:description", "og-description", "description", "prism.teaser")
 _ARTICLE_TYPES = frozenset({"scholarlyarticle", "medicalscholarlyarticle", "article", "newsarticle", "report",
                             "techarticle", "review", "medicalwebpage"})
 ABSTRACT_SECTIONS = (
@@ -59,6 +59,8 @@ ABSTRACT_SECTIONS = (
     ".JournalAbstract",                                     # Frontiers
     "div.abstract", "#abstract", "#Abstract", ".html-abstract", ".article-abstract", ".abstract-content",
 )
+# Not ``[class*=abstract]``: PNAS shows the abstracts of related articles in ``.card__abstract`` cards, and a commentary
+# with no abstract of its own would take one of theirs.
 STANDFIRST = (".c-article-teaser-text", ".article__teaser", ".c-article-standfirst", ".standfirst", "p.lead")
 BODY_CONTAINERS = (
     ".c-article-body",                                      # Springer Nature, BMC
