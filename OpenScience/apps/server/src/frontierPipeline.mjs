@@ -771,14 +771,14 @@ export class FrontierPipeline {
     /** Observable counters (principle 15). */
     this.counters = {
       batches: 0, claimedEntries: 0, claimedItems: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0,
-      failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0, translated: 0, translateIncomplete: 0,
+      failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0, translated: 0, translateIncomplete: 0, translateStoreRefused: 0,
       // The reader's text (frontierReaderTidy.mjs): texts settled, paragraphs taken out, model answers refused by code, and
       // translations made from a text that has since changed, cleared to be made again.
       tidied: 0, tidyDropped: 0, tidyRefused: 0, translationsCleared: 0,
       // The reader's 导读 and 「AI 解读」: written, left empty (the source supports none), dropped by their checks, and insights asked.
       leads: 0, leadsEmpty: 0, leadsDropped: 0, insights: 0, insightsEmpty: 0, insightsAsked: 0,
       // Open-access PDFs read for a full text (`#fullText`): read and kept, read and too short or unreadable.
-      fullTexts: 0, fullTextsMissed: 0,
+      fullTexts: 0, fullTextsMissed: 0, fullTextsRefused: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
@@ -2310,19 +2310,28 @@ export class FrontierPipeline {
       } catch {
         read = null;
       }
-      return this.#writeUnderLease(item, async (client) => {
+      const write = (/** @type {{ body: string, complete: boolean } | null} */ found) => this.#writeUnderLease(item, async (client) => {
         const row = (await client.query("SELECT body_text FROM evimed_frontier.item_texts WHERE item_id = $1 FOR UPDATE", [item.id])).rows[0];
         // The plugin's own full text may have arrived meanwhile: it is kept.
-        const keep = read && !String(row?.body_text ?? "").trim();
+        const keep = found && !String(row?.body_text ?? "").trim();
         await client.query(`UPDATE evimed_frontier.item_texts SET oa_pdf_tried_at = $2${keep
           ? ", body_text = $3, body_text_complete = $4, body_text_origin = 'oa-pdf', reader_tidy = NULL" : ""} WHERE item_id = $1`,
-        keep ? [item.id, now, read.body, read.complete] : [item.id, now]);
+        keep ? [item.id, now, found.body, found.complete] : [item.id, now]);
         await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
         if (keep) {
           this.counters.fullTexts += 1;
           await bumpFrontierVersion(client);
         } else this.counters.fullTextsMissed += 1;
       });
+      try {
+        return await write(read);
+      } catch (error) {
+        // A text the store refuses is a try all the same, recorded without it, so the queue moves on (2026-10-22: a length check
+        // left from contract 1.5.0 refused every paper over 40,000 characters, and the first of them headed the queue each round).
+        this.lastError = codeOf(error);
+        this.counters.fullTextsRefused += 1;
+        return write(null);
+      }
     })));
   }
 
@@ -2569,12 +2578,15 @@ export class FrontierPipeline {
     let written = 0;
     for (const item of claimed) {
       let release = true;
+      /** @type {"body" | "abstract" | "excerpt" | null} */
+      let translatedFrom = null;
       try {
         // A provider outage earlier in this round: the rest wait for the next one.
         if (this.#providerPause(now)) continue;
         const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
         const reader = frontierReaderText(texts);
         if (!reader) continue;
+        translatedFrom = reader.source;
         const paragraphs = frontierParagraphs(reader.text);
         const post = item.platform === "x";
         const quotedText = item.quoted && typeof item.quoted === "object" && typeof item.quoted.text === "string" ? item.quoted.text : "";
@@ -2624,6 +2636,14 @@ export class FrontierPipeline {
         }
       } catch (error) {
         this.lastError = codeOf(error);
+        // A translation the store refuses (a check on its length or shape) was paid for once: it is recorded as made with no
+        // Chinese text, so the next round does not pay for it again; the reader keeps the original.
+        const refused = /** @type {any} */ (error)?.code === "23514" || /** @type {any} */ (error)?.code === "22001";
+        if (refused && translatedFrom) {
+          this.counters.translateStoreRefused += 1;
+          await this.database.query(`UPDATE evimed_frontier.item_texts SET body_zh = NULL, body_zh_kind = 'translation', body_zh_source = $2,
+              body_zh_at = $3, body_complete = false WHERE item_id = $1`, [item.id, translatedFrom, now]).catch(() => {});
+        }
       } finally {
         if (release) {
           await this.database.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1 AND lease_owner = $2 AND lease_until = $3",

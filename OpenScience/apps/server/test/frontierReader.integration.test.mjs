@@ -479,6 +479,28 @@ test("an open-access PDF the plugin could not read becomes the item's full text,
   assert.equal(read.length, 1, "tried once");
 });
 
+test("a paper over 40,000 characters is stored whole, on a database migrated before the columns were widened (production, 2026-10-22)", options, async () => {
+  // The shape production had: the full-text column as contract 1.5.0 first declared it.
+  await database.query(`ALTER TABLE evimed_frontier.item_texts DROP CONSTRAINT item_texts_body_text_check,
+    ADD CONSTRAINT item_texts_body_text_check CHECK (char_length(body_text) <= 40000)`);
+  const again = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try { await migrateFrontier(again, { dimension: 1024 }); } finally { await again.close(); }
+  const checks = (await database.query(`SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+    WHERE conrelid = 'evimed_frontier.item_texts'::regclass AND conname IN ('item_texts_body_text_check', 'item_texts_body_zh_check') ORDER BY conname`)).rows;
+  assert.deepEqual(checks.map((row) => row.def), ["CHECK ((char_length(body_text) <= 100000))", "CHECK ((char_length(body_zh) <= 150000))"]);
+  const paper = await insertItem(database, { title: "A long open paper", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  await set(paper.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
+    { abstract_raw: "An abstract.", enrichment: { oa_pdf_url: "https://journals.example.org/long.pdf" } });
+  const results = Array.from({ length: 60 }, (_, index) => `Paragraph ${index} reports the cohort's outcomes at length. ${"Patients improved steadily over follow-up. ".repeat(24)}`);
+  const webReader = { async read() { return { text: ["# A long open paper", "", ...results.flatMap((paragraph) => [paragraph, ""]), "References", "", "1. Ref."].join("\n"),
+    receipt: { contentType: "document" } }; } };
+  await pipelineFor(translatingEditor(), webReader).processBatch();
+  const texts = (await database.query("SELECT length(body_text) AS chars, body_text_complete, oa_pdf_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [paper.id])).rows[0];
+  assert.ok(texts.chars > 40_000, `stored ${texts.chars} characters`);
+  assert.equal(texts.body_text_complete, true);
+  assert.ok(texts.oa_pdf_tried_at);
+});
+
 test("an item with nothing a reader could use is not published, and is published when its text arrives", options, async () => {
   const waiting = await insertItem(database, { title: "A paper with no text yet", state: "scored", visibleAt: "2026-10-21T00:00:00Z" });
   await set(waiting.id, { score_total: 70, editor_version: FRONTIER_EDITOR_VERSION }, {});

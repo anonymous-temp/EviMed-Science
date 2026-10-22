@@ -288,13 +288,13 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
 -- fr-social 2026-10-22
 -- The full text (the plugin text answer's body_text, contract 1.5.0): a post or article as it arrived, or a page's readable
 -- text, and whether the plugin delivered it whole (body_text_complete).
-ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 100000);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_complete boolean;
 -- fr-edit 2026-10-22
 -- The Chinese reading of it is the edit stage's: a translation whose paragraphs all came back (body_complete), or the
 -- source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text); which text it was read from
 -- (body_zh_source: the full text, the abstract or the page excerpt, best first); and the translation of a quoted post.
-ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text CHECK (char_length(body_zh) <= 60000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text CHECK (char_length(body_zh) <= 150000);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
@@ -321,6 +321,22 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_at timestampt
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS text_arrived_at timestamptz(3);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_origin text CHECK (body_text_origin IN ('oa-pdf'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at timestamptz(3);
+-- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
+-- translation with it — the lengths the two columns were first declared with (40,000 and 60,000, contract 1.5.0) are widened on a
+-- database that already has them (ADD COLUMN IF NOT EXISTS changes nothing there); a constraint already as declared is left.
+-- Found on production: the 40,000 check refused every longer paper, which stayed first in the full-text queue.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.item_texts'::regclass AND conname = 'item_texts_body_text_check'
+      AND pg_get_constraintdef(oid) = 'CHECK ((char_length(body_text) <= 100000))') THEN
+    ALTER TABLE evimed_frontier.item_texts DROP CONSTRAINT IF EXISTS item_texts_body_text_check;
+    ALTER TABLE evimed_frontier.item_texts ADD CONSTRAINT item_texts_body_text_check CHECK (char_length(body_text) <= 100000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.item_texts'::regclass AND conname = 'item_texts_body_zh_check'
+      AND pg_get_constraintdef(oid) = 'CHECK ((char_length(body_zh) <= 150000))') THEN
+    ALTER TABLE evimed_frontier.item_texts DROP CONSTRAINT IF EXISTS item_texts_body_zh_check;
+    ALTER TABLE evimed_frontier.item_texts ADD CONSTRAINT item_texts_body_zh_check CHECK (char_length(body_zh) <= 150000);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
