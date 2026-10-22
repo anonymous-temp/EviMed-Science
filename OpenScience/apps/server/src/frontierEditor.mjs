@@ -372,20 +372,41 @@ export function frontierParagraphs(text) {
     .filter(Boolean).flatMap(cut);
 }
 
+/** Digit groups split by a space of any width (13 403, 223 000 — Lancet, BMJ, WHO): joined, on both sides alike. @param {string} text */
+const joinDigitGroups = (text) => text.replace(/(\d)[ \u00a0\u2009\u202f](?=\d{3}(?!\d))/g, "$1");
+
+/** The digit runs of a text as numbers are written (separators gone, the decimal point kept). @param {string} text @returns {string[]} */
+function digitRuns(text) {
+  return (joinDigitGroups(text).match(/\d+(?:[.,]\d+)*/g) ?? []).map((run) => run.replace(/,(?=\d{3}(?!\d))/g, ""));
+}
+
 /**
- * One translated paragraph, checked against its own original: present; Chinese unless the original has no Latin words to
- * translate; every number the translation writes is one the original states, and every number the original states is in the
- * translation (the brief's "numbers byte-identical", by the number check's notation rules). Null when it fails.
+ * One translated paragraph, checked against its own original. Null when it fails any of:
+ * - present, and not far longer than its original;
+ * - Chinese: once every Latin word the original also has is set aside — names, trial and registry identifiers, which a
+ *   translation keeps as written (AIHOT's translate-body rule) — what is left is Chinese prose; a paragraph with no Latin words
+ *   to translate needs none;
+ * - every number written in digits is one the original states (`frontierNumbers.mjs`, after joining digit groups a space splits
+ *   on both sides); a Chinese numeral word (两个 for "both") is a translation of a word, not a figure, and is not held to one;
+ * - every digit run of the original is in the translation, as written or followed only by zeros (1 million → 100万), so a
+ *   translation cannot drop a figure.
+ * The live check of 2026-10-22 (20 real items) is where the last three readings come from: the first version refused 「资助：Eli
+ * Lilly and Company。」, 「13 403 个变异」 against a thin space, and 「这两个术语」 for "Both terms".
  * @param {unknown} translation @param {string} original @returns {string | null}
  */
 export function verifyParagraph(translation, original) {
   const text = typeof translation === "string" ? translation.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n") : "";
   if (!text) return null;
-  const words = (original.match(/[A-Za-z]{3,}/g) ?? []).length;
-  if (words >= 2 && !isChineseProse(text)) return null;
   if (codePoints(text) > Math.max(200, codePoints(original) * 3)) return null;
-  if (checkNumbers({ translation: text }, original).missing.length) return null;
-  if (checkNumbers({ original }, text).missing.length) return null;
+  if ((original.match(/[A-Za-z]{3,}/g) ?? []).length >= 2) {
+    const kept = new Set((original.match(/[A-Za-z][A-Za-z0-9.\-/]*/g) ?? []).map((word) => word.replace(/[.\-/]+$/, "").toLowerCase()));
+    const rest = text.replace(/[A-Za-z][A-Za-z0-9.\-/]*/g, (word) => (kept.has(word.replace(/[.\-/]+$/, "").toLowerCase()) ? " " : word));
+    if (!isChineseProse(rest)) return null;
+  }
+  const [claims, source] = [joinDigitGroups(text), joinDigitGroups(original)];
+  if (checkNumbers({ translation: claims }, source).missing.some(({ raw }) => /\d/.test(raw))) return null;
+  const written = digitRuns(text);
+  if (!digitRuns(original).every((run) => written.some((candidate) => candidate === run || (candidate.startsWith(run) && /^0+$/.test(candidate.slice(run.length)))))) return null;
   return text;
 }
 

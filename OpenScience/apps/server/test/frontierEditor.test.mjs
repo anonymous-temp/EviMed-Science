@@ -1061,6 +1061,26 @@ test("a translated paragraph is held to its own original: Chinese, bounded, no n
   assert.equal(verifyParagraph("NCT01234567", "NCT01234567"), "NCT01234567", "nothing to translate comes back as it was");
 });
 
+test("the live check of 2026-10-22: names kept as written, digit groups split by a thin space, 两个 for both, and 100万 for 1 million pass", () => {
+  // Each of these is a paragraph of a real item the first version refused (fr-edit live run, 20 items).
+  const pass = /** @type {Array<[string, string]>} */ ([
+    ["资助：Eli Lilly and Company。", "FUNDING: Eli Lilly and Company."],
+    ["试验注册：ClinicalTrials.gov标识符：NCT02473536。", "TRIAL REGISTRATION: ClinicalTrials.gov Identifier: NCT02473536."],
+    ["试验注册：Open Science Framework 10.17605/OSF.IO/C4YQZ。", "TRIAL REGISTRATION: Open Science Framework 10.17605/OSF.IO/C4YQZ."],
+    ["方法：我们针对KCNQ1生成了包含13 403个蛋白编码变异的文库。采用4项混合检测。",
+      "METHODS: We generated a nearly comprehensive variant library of 13\u2009403 protein-coding variants in KCNQ1. Using 4 pooled assays."],
+    ["这两个术语均描述癌细胞在复制DNA时纠正错误的方式存在缺陷。", "Both terms describe a defect in the way cancer cells correct errors when copying their DNA."],
+    ["从2006年逾223 000例的峰值降至零。", "reducing cases from a peak of more than 223\u2009000 clinically diagnosed cases in 2006 to zero"],
+    ["背景：约有100万感染HIV的人未实现病毒抑制。", "BACKGROUND: approximately 1 million people living with HIV do not have viral suppression."],
+  ]);
+  for (const [zh, en] of pass) assert.equal(verifyParagraph(zh, en), zh, zh);
+  // …and what the checks are for still fails: an English paragraph handed back, a name added, a figure dropped or changed.
+  assert.equal(verifyParagraph("FUNDING: Eli Lilly and Company.", "FUNDING: Eli Lilly and Company."), null, "not translated at all");
+  assert.equal(verifyParagraph("资助：Novo Nordisk 公司。", "FUNDING: Eli Lilly and Company."), null, "a name the original does not have is untranslated Latin");
+  assert.equal(verifyParagraph("方法：我们生成了变异文库。", "METHODS: a library of 13\u2009403 variants."), null, "a figure dropped");
+  assert.equal(verifyParagraph("约有200万人。", "approximately 1 million people"), null, "a figure changed");
+});
+
 test("translateBody: one translation per paragraph or none trusted; refused paragraphs asked once more; complete only when all came back", async () => {
   const paragraphs = ["Semaglutide reduced events by 20%.", "Adverse events occurred in 12% of patients.", "The trial enrolled adults with obesity."];
   const good = ["司美格鲁肽使事件减少 20%。", "12% 的患者发生不良事件。", "该试验纳入了肥胖成人。"];
