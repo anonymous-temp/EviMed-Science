@@ -95,12 +95,17 @@ async def test_transient_failures_leave_the_entry_pending():
         assert (await enrich(row, FailingFetcher(outcome, detail), None, now=NOW)).status == "unavailable", outcome
 
 
-async def test_full_feed_text_needs_no_request():
+async def test_full_feed_text_is_the_answer_when_the_page_gives_none():
+    # The summary is the whole text but folded to one line, so the page (which has the paragraphs) is read first; a page
+    # that cannot be read leaves the feed's text as the answer, at once, transient failure or not.
     row = entry_row("rss/harrell-stale-oversize", 2)
     assert len(row["summary"]) > EXCERPT_MAX and kind_of(row) == "page"
-    result = await enrich(row, RefusingFetcher(), None, now=NOW)
-    assert result.status == "available" and result.text_kind == "excerpt"
-    assert len(result.body_excerpt) <= EXCERPT_MAX and row["summary"].startswith(result.body_excerpt[:200])
+    for outcome, detail in (("http-error", "http_404"), ("timeout", "read_timeout")):
+        fetcher = FailingFetcher(outcome, detail)
+        result = await enrich(row, fetcher, None, now=NOW)
+        assert len(fetcher.calls) == 1 and fetcher.calls[0][0].url == row["url"]
+        assert result.status == "available" and result.text_kind == "excerpt" and "feed_text" in result.notes
+        assert len(result.body_excerpt) <= EXCERPT_MAX and row["summary"].startswith(result.body_excerpt[:200])
 
 
 async def test_record_entries_fetch_nothing():

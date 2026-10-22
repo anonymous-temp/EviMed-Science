@@ -88,7 +88,9 @@ async def test_crossref_abstract_for_a_feed_entry_with_a_doi():
         "https://api.crossref.org/works/10.3389/fphar.2026.1747506",         # the publisher's JATS abstract
         "https://api.unpaywall.org/v2/10.3389/fphar.2026.1747506"]           # 404: not tracked yet
     assert (result.status, result.text_kind, result.fetched_from) == ("available", "abstract", "crossref")
-    assert result.abstract.startswith("Background Current guidelines advise against routine use of parenteral")
+    # JATS sections are paragraphs "Title: text" (structured_abstract), not one run-on line.
+    assert result.abstract.startswith("Background: Current guidelines advise against routine use of parenteral")
+    assert "\n\nMethods: " in result.abstract or "\nMethods: " in result.abstract
     assert "<jats" not in result.abstract and "jats:" not in result.abstract
     assert result.enrichment == {"journal": "Frontiers in Pharmacology", "open_access": "unknown"}
     assert result.fetched_at == datetime(2026, 9, 22, 9, 33, 54, tzinfo=timezone.utc)

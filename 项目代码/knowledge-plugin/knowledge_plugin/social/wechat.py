@@ -22,6 +22,11 @@ After AIHOT's ``providers/dajiala.ts`` and ``sources/mp.ts`` (MIT, engine at 475
   provider hiccup was never recovered. A call that fails for a reason that passes is tried again later, at most
   ``BODY_CALLS`` times per entry with a doubling wait (``body_retry_after``); five such failures in a row pause every
   body purchase for an hour (``BODY_STREAK``, ``BODY_PAUSE``), so a key-level problem costs a handful of calls an hour.
+- **The text is the article's own markup.** ``article_detail`` answers two texts: ``content`` (mode 1, "light HTML") puts
+  every styled run of a paragraph in a ``<p>`` of its own — 「反义寡核苷酸</p><p>（ASO）</p><p>创新药」 — so a stored body
+  read as a column of fragments (222 of 256 bodies on 2026-10-22); ``content_multi_text`` is the article's HTML as
+  published, one ``<p>`` per paragraph with its runs as ``<span>``s. The body is read from the second, and from the
+  first only when the second is missing.
 - **Identity.** ``wx:<__biz>:<mid>:<idx>`` from the post's link (contract rule 3); a link without them keys by URL.
 """
 
@@ -118,11 +123,16 @@ def resolution(detail: dict, row: dict, now: datetime) -> dict | None:
 
 
 def body_of(detail: dict) -> str | None:
-    """The plain text of an ``article_detail`` answer (mode 1: light HTML, paragraphs and image markers)."""
-    content = detail.get("content")
-    if not isinstance(content, str) or not content.strip():
-        return None
-    return clean_markup(content, keep_paragraphs=True) or None
+    """The plain text of an ``article_detail`` answer, paragraph by paragraph: from the article's own HTML
+    (``content_multi_text``), else from the light HTML (``content``, mode 1), whose paragraphs are split at every
+    styled run (module docstring)."""
+    for field in ("content_multi_text", "content"):
+        content = detail.get(field)
+        if isinstance(content, str) and content.strip():
+            text = clean_markup(content, keep_paragraphs=True)
+            if text:
+                return text
+    return None
 
 
 def build_entry(post: dict, row: dict, nickname: str, *, now: datetime, cover: dict | None,

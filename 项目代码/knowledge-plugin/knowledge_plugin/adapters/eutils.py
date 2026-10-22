@@ -195,7 +195,7 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
             "pmid": pmid,
             "doi": doi,
             "title": _text(art.find("ArticleTitle")) or _text(art.find("VernacularTitle")),
-            "abstract": " ".join(parts) or None,
+            "abstract": "\n".join(parts) or None,      # one section a line; the summary folds it, /text keeps it
             "publication_types": [t for t in (_text(n) for n in art.iter("PublicationType")) if t],
             "mesh": [t for t in (_text(n) for n in citation.iter("DescriptorName")) if t],
             "journal": _text(journal.find("Title")) if journal is not None else None,

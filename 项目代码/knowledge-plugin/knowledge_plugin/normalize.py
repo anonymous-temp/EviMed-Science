@@ -54,7 +54,7 @@ from .model import (
 
 # ------------------------------------------------------------------------------------ text
 
-_CONTROL = re.compile(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b\u2060\ufeff]")
+_CONTROL = re.compile(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u00ad\u200b\u2060\ufeff]")
 _SPACE = re.compile(r"\s+")
 
 
@@ -287,13 +287,31 @@ _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _NEWLINES = re.compile(r"\r\n?|[\u2028\u2029]")
 
 
+# A line that is only a list marker ("•", "1.", "（2）"): editors put the bullet in a block of its own (WeChat's
+# ``<section>•</section><section>医学博士…</section>``), and it belongs to the line it marks.
+_LIST_MARKER = re.compile(r"^(?:[•·▪▫●○◆◇■□★☆▶►\-–—*]|[0-9]{1,2}[.、)）]|[（(][0-9]{1,2}[)）])$")
+
+
 def clean_body(text: str | None, limit: int = BODY_TEXT_MAX) -> str | None:
-    """Plain full text: every line cleaned, empty lines dropped, paragraphs separated by one blank line, at most
-    ``limit`` characters (cut at a paragraph boundary when one is close, with an ellipsis)."""
+    """Plain full text: every line cleaned, empty lines dropped, a line that is only a list marker joined to the next,
+    paragraphs separated by one blank line, at most ``limit`` characters (cut at a paragraph boundary when one is close,
+    with an ellipsis)."""
     if not text:
         return None
-    paragraphs = [clean_text(line) for line in _NEWLINES.sub("\n", unicodedata.normalize("NFC", str(text))).split("\n")]
-    body = "\n\n".join(p for p in paragraphs if p)
+    lines = [clean_text(line) for line in _NEWLINES.sub("\n", unicodedata.normalize("NFC", str(text))).split("\n")]
+    paragraphs: list[str] = []
+    marker = ""
+    for line in lines:
+        if not line:
+            continue
+        if _LIST_MARKER.match(line):
+            marker = f"{marker}{line} " if marker else f"{line} "
+            continue
+        paragraphs.append(marker + line)
+        marker = ""
+    if marker:
+        paragraphs.append(marker.strip())
+    body = "\n\n".join(paragraphs)
     if not body:
         return None
     if len(body) <= limit:

@@ -386,8 +386,10 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
     if status == "pending" and now >= text_deadline(job, now):
         status = "unavailable"
     enrichment = whitelist_enrichment(result.enrichment)
-    abstract = cut(clean_text(result.abstract), 20_000) if result.abstract else None
-    excerpt = cut(clean_text(result.body_excerpt), 20_000) if result.body_excerpt else None
+    # Paragraphs kept (2026-10-22): ``clean_text`` folded every newline, so 5,408 of 7,968 page excerpts and every
+    # abstract's sections reached the reader as one block.
+    abstract = clean_body(result.abstract, 20_000) if result.abstract else None
+    excerpt = clean_body(result.body_excerpt, 20_000) if result.body_excerpt else None
     body = clean_body(result.body_text)
     kind = result.text_kind if result.text_kind in TEXT_KINDS else "none"
     source = result.fetched_from if result.fetched_from in FETCHED_FROM else None

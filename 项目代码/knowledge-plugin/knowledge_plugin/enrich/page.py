@@ -5,7 +5,18 @@ pages nobody will see (plan 10.3.4). The request is a page request (``api=False`
 applies and the core's fetcher classifies challenge and empty-shell pages (Ruishu, Cloudflare,
 WAF markers, < 300 visible characters) as ``challenge`` before this code sees a body.
 
-Extraction is deterministic and small: drop scripts, styles, navigation, headers, footers, asides
+Extraction (2026-10-22) is trafilatura's (Apache-2.0; the best single tool of Bevendorff et al. 2023, "An Empirical
+Comparison of Web Content Extraction Algorithms", and of the ScrapingHub article benchmark), with its recall setting, the
+text as paragraphs, tables kept, comments, links and images left out. Measured on 307 pages of the feed's 172 page
+sources, our container reading below took the page's furniture with the article — bylines, author biographies, "Editors'
+notes / The GIST / Add as preferred source", 「选择字号：小 中 大」, comment-widget templates, a whole navigation menu on
+cnpharm.com — 272 such paragraphs to trafilatura's 82, for 90 % of the characters. Trafilatura misses the article on
+some pages: on gov.cn it returns the page's language switch (78 characters), on leiphone.com 609 of an article's 3,974.
+So the container reading stays the fallback: its text is used when trafilatura's is under ``MIN_EXCERPT``, or when it is
+at least ``FALLBACK_RATIO`` times longer — the furniture it carries is what the platform's paragraph check removes,
+while an article trafilatura dropped is lost for good.
+
+The container reading is deterministic and small: drop scripts, styles, navigation, headers, footers, asides
 and forms; then take the longest *body* container a CMS marks as such (the Chinese government TRS
 ``#UCAP-CONTENT``/``.pages_content``/``.trs_editor_view``, Sitefinity's ``.sf-detail-body-wrapper``
 on who.int, GOV.UK's ``.govspeak``, ``[itemprop=articleBody]`` …); only when none holds 200
@@ -23,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import trafilatura
 from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
@@ -33,6 +45,7 @@ from .common import Attempt, Trace, get
 EXCERPT_MAX = 12_000
 FULL_SUMMARY_MIN = 1_500          # a feed summary this long and uncut is the text; no page request
 MIN_EXCERPT = 200                 # less than this is navigation, not an article
+FALLBACK_RATIO = 3                # the container reading this many times longer: trafilatura missed the article
 
 _REMOVE = ("script", "style", "noscript", "template", "svg", "iframe", "nav", "header", "footer", "aside", "form",
            "button", "select", "[role=navigation]", "[role=banner]", "[role=contentinfo]", "[aria-hidden=true]")
@@ -49,8 +62,30 @@ def extract_main_text(html_text: str) -> str:
     return clip_excerpt(main_text(html_text))
 
 
-def main_text(html_text: str) -> str:
-    """The main text of a page as paragraphs, ≤ ``BODY_TEXT_MAX`` characters (cut at a paragraph end)."""
+def main_text(html_text: str, url: str | None = None) -> str:
+    """The main text of a page as paragraphs, ≤ ``BODY_TEXT_MAX`` characters (cut at a paragraph end): trafilatura's,
+    or the container reading's when trafilatura's is short or a fraction of it (module docstring)."""
+    extracted = extracted_text(html_text, url)
+    fallback = container_text(html_text)
+    if len(extracted) >= MIN_EXCERPT and len(fallback) < FALLBACK_RATIO * len(extracted):
+        return clip_excerpt(extracted, BODY_TEXT_MAX)
+    return clip_excerpt(fallback if len(fallback) >= len(extracted) else extracted, BODY_TEXT_MAX)
+
+
+def extracted_text(html_text: str, url: str | None = None) -> str:
+    """Trafilatura's main text, one paragraph a line; empty when it finds none (or cannot parse the page)."""
+    try:
+        text = trafilatura.extract(html_text, url=url, output_format="txt", favor_recall=True, include_comments=False,
+                                   include_tables=True, include_images=False, include_links=False, deduplicate=False)
+    except Exception:  # noqa: BLE001 - a page the library cannot parse is a page without its text, never a failed job
+        return ""
+    # Already plain text with its entities decoded: read as markup again, "a<b … c>d" would lose its middle as a "tag".
+    return "\n".join(line.strip() for line in (text or "").splitlines() if line.strip())
+
+
+def container_text(html_text: str) -> str:
+    """The longest CMS body container's text, else the longest generic wrapper's, else the body's, one paragraph a
+    line."""
     tree = HTMLParser(html_text)
     for selector in _REMOVE:
         for node in tree.css(selector):
@@ -68,7 +103,7 @@ def main_text(html_text: str) -> str:
         body = clean_markup(tree.body.html or "", keep_paragraphs=True)
         if len(body) > len(best):
             best = body
-    return clip_excerpt(best, BODY_TEXT_MAX)
+    return best
 
 
 def clip_excerpt(text: str, limit: int = EXCERPT_MAX) -> str:
@@ -111,7 +146,7 @@ async def page_excerpt(fetcher: Any, url: str, *, source_id: str | None, egress:
     if content_type and not any(kind in content_type for kind in ("html", "xml", "text/plain")):
         trace.notes.append("page_not_html")
         return None, attempt
-    text = main_text(decode_body(result))
+    text = main_text(decode_body(result), url)
     if len(text) < MIN_EXCERPT:
         trace.notes.append("page_no_main_text")
         return None, attempt

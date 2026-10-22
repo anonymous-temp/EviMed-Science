@@ -1,4 +1,4 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|wechat-bodies]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|wechat-bodies|retext]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
@@ -15,6 +15,10 @@ report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`
 ``--days`` (default 7) and a last line with the count and what buying them would cost; it writes nothing and calls nobody.
 ``wechat-bodies --apply`` buys them through Dajiala within the day's cap and delivers each recovered entry again
 (``social.lost_bodies``).
+
+``retext`` prints, by kind and source, the stored texts the 2026-10-22 reader-text fixes would read again (WeChat bodies,
+page texts, Crossref abstracts with an entity escaped twice) and what the WeChat part costs; ``retext --apply`` reads them
+again and delivers each entry whose text changed as its next revision (``retext``).
 """
 
 from __future__ import annotations
@@ -192,6 +196,46 @@ async def _wechat_bodies(settings: Settings, days: int, apply: bool) -> int:
         await pool.close()
 
 
+async def _retext(settings: Settings, args: list[str], apply: bool) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from . import retext
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .social.collector import SocialCollector
+
+    def clock():
+        return datetime.now(timezone.utc)
+
+    flags = retext.window(args, clock())
+    if isinstance(flags, str):
+        print(flags, file=sys.stderr)
+        return 2
+    kinds, since, before, limit = flags
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        collector = SocialCollector(settings, pool, fetcher, clock=clock)
+        if apply:
+            def emit(line: dict) -> None:
+                print(json.dumps(line, ensure_ascii=False, default=str), flush=True)
+            outcome = await retext.apply(collector, pool, fetcher, settings, clock, kinds, since=since, before=before,
+                                         limit=limit, emit=emit)
+        else:
+            outcome = await retext.report(collector, pool, clock(), kinds, since=since, before=before, limit=limit)
+            for line in outcome["entries"]:
+                print(json.dumps(line, ensure_ascii=False, default=str))
+        print(json.dumps(outcome["summary"], ensure_ascii=False, default=str), flush=True)
+        return 0
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
 def check_registry(path: str) -> int:
     from .registry import RegistryError, load_registry
 
@@ -260,7 +304,9 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 days = int(value)
         return asyncio.run(_wechat_bodies(settings, days, apply="--apply" in argv[1:]))
-    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover or wechat-bodies",
+    if command == "retext":
+        return asyncio.run(_retext(settings, argv[1:], apply="--apply" in argv[1:]))
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, wechat-bodies or retext",
           file=sys.stderr)
     return 2
 

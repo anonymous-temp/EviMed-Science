@@ -198,19 +198,27 @@ async def _page(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResul
     enrichment: dict[str, Any] = {}
     await _trial_facts(row, fetcher, endpoints, trace, enrichment)
     summary = row.get("summary")
-    if summary_is_full_text(summary):
+
+    def feed_text() -> EntryTextResult:
+        # The entry's summary is the whole text, but stored as one line (its paragraphs are folded before hashing), so
+        # it is the answer only when the page itself gives none (2026-10-22: it used to be read before the page).
         excerpt = clip_excerpt(summary)
         return EntryTextResult(status="available", text_kind="full" if excerpt == summary else "excerpt",
                                body_excerpt=excerpt, body_text=summary, enrichment=enrichment,
                                notes=trace.notes + ["feed_text"])
+
     url = row.get("url")
     if not url:
+        if summary_is_full_text(summary):
+            return feed_text()
         return EntryTextResult(status="unavailable", enrichment=enrichment, notes=trace.notes + ["no_url"])
     if is_wechat_article(url):
         return EntryTextResult(status="available" if enrichment else "unavailable", enrichment=enrichment,
                                notes=trace.notes + ["wechat_page_not_read"])
     text, attempt = await page_excerpt(fetcher, url, source_id=row.get("source_id"),
                                        egress=row.get("source_egress") or "direct", trace=trace)
+    if not text and summary_is_full_text(summary):
+        return feed_text()
     if text:
         return EntryTextResult(status="available", text_kind="excerpt", body_excerpt=clip_excerpt(text), body_text=text,
                                fetched_from="page",

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from ..adapters.common import clean_markup, normalize_doi
+from ..adapters.common import clean_markup, structured_abstract, normalize_doi
 from ..adapters.europepmc import europepmc_journal, europepmc_results
 from ..adapters.eutils import affiliation_country, authors_short
 from ..model import FetchError
@@ -91,7 +91,7 @@ def preprint_links(result: dict) -> list[tuple[str, str, str]]:
 
 def result_enrichment(result: dict) -> tuple[str | None, dict[str, Any]]:
     """``(abstract, enrichment)`` from one core result."""
-    abstract = clean_markup(result.get("abstractText")) or None
+    abstract = structured_abstract(result.get("abstractText")) or None
     types = (result.get("pubTypeList") or {}).get("pubType") or []
     mesh = [clean_markup(h.get("descriptorName")) for h in ((result.get("meshHeadingList") or {}).get("meshHeading") or [])
             if isinstance(h, dict) and h.get("descriptorName")]

@@ -19,6 +19,7 @@ dependencies = [
   "pydantic>=2.7",
   "feedparser>=6.0",
   "selectolax>=0.3",
+  "trafilatura>=2.3,<3",
   "python-dateutil>=2.9",
   "playwright>=1.58,<1.59",
 ]
