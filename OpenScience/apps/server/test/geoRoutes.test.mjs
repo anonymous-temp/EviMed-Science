@@ -177,12 +177,23 @@ test("the evimed-geo alerts read series the module exports", async () => {
   const group = rules.groups.find((entry) => entry.name === "evimed-geo");
   assert.ok(group, "an evimed-geo rule group exists");
   const alerts = new Map(group.rules.map((rule) => [rule.alert, rule]));
-  assert.deepEqual([...alerts.keys()].sort(), ["GeoProbeEnginesPaused", "GeoProbeLoopStalled", "GeoUrgentFindingsOpen"]);
+  assert.deepEqual([...alerts.keys()].sort(),
+    ["GeoProbeEnginesPaused", "GeoProbeHostDown", "GeoProbeLoopStalled", "GeoSocialCrawlerDown", "GeoUrgentFindingsOpen"]);
+  // The two external services are read by Prometheus's own blackbox jobs, not by a series this module exports.
+  const prometheus = JSON.parse(await readFile(new URL("../../../deploy/web/monitoring/prometheus.json", import.meta.url), "utf8"));
+  const jobs = new Set((prometheus.scrape_configs ?? []).map((config) => config.job_name));
+  const blackbox = new Map([["GeoProbeHostDown", "geo-probe-host"], ["GeoSocialCrawlerDown", "geo-social-crawler"]]);
   const exported = new Set(geoMetricFamilies(true, {
     tables: { projects: 1, active: 1, openErrors: 1, urgentErrors: 1, safetyStops: 0, openRounds: 0 }, service: {}, social: null,
     worker: { loops: { probe: { wired: true, stalled: false, lastOkAt: null, last: { paused: 0 } } } },
   }).map((family) => family.name));
   for (const rule of group.rules) {
+    if (blackbox.has(rule.alert)) {
+      const job = blackbox.get(rule.alert);
+      assert.match(String(rule.expr), new RegExp(`probe_success\\{job="${job}"\\}`), `${rule.alert} reads its blackbox job`);
+      assert.ok(jobs.has(job), `${rule.alert} reads ${job}, which prometheus.json does not scrape`);
+      continue;
+    }
     const names = [...String(rule.expr).matchAll(/\b(open_science_geo_[a-z_]+)/g)].map((match) => match[1]);
     assert.ok(names.length > 0, `${rule.alert} reads no GEO series`);
     for (const name of names) assert.ok(exported.has(name), `${rule.alert} reads ${name}, which geoMetricFamilies does not export`);
