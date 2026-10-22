@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { verifyParagraph } from "../src/frontierEditor.mjs";
-import { FRONTIER_INSIGHT_LIMITS, buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight, verifyInsight } from "../src/frontierInsight.mjs";
+import { buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight, verifyInsight } from "../src/frontierInsight.mjs";
 import { FRONTIER_LEAD_LIMITS, buildLeadInput, frontierWriteLead, verifyLead } from "../src/frontierLead.mjs";
 import { frontierFullTextParagraphs } from "../src/frontierReaderTidy.mjs";
 
@@ -79,7 +79,7 @@ test("the 解读's checks: every mark names a report it was shown, numbers in th
 test("when a 解读 is asked for, and the basis it is kept with", async () => {
   assert.equal(frontierInsightWorthAsking({ text: "短。", refs }), true, "related reports are material");
   assert.equal(frontierInsightWorthAsking({ text: "短。", refs: [] }), false, "no related report and a short text: nothing to put in context");
-  assert.equal(frontierInsightWorthAsking({ text: "字".repeat(FRONTIER_INSIGHT_LIMITS.aloneMinChars), refs: [] }), true);
+  assert.equal(frontierInsightWorthAsking({ text: "字".repeat(5_000), refs: [] }), false, "alone, a long text is restated, not put in context");
   assert.equal(frontierInsightBasis("sha", refs), frontierInsightBasis("sha", [...refs].reverse()), "the related reports' order does not matter");
   assert.notEqual(frontierInsightBasis("sha", refs), frontierInsightBasis("sha", refs.slice(0, 1)), "a new or gone report does");
   assert.notEqual(frontierInsightBasis("sha", refs), frontierInsightBasis("other", refs), "and so does the text");

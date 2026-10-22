@@ -431,7 +431,8 @@ test("the 「AI 解读」 of a 精选 item cites the related reports it was show
   const approval = await insertItem(database, { title: "FDA approves bepirovirsen", summaryZh: "FDA 批准。", selected: true, visibleAt: "2026-10-21T00:00:00Z",
     timelineAt: "2026-10-21T00:00:00Z" });
   const alone = await insertItem(database, { title: "A short selected note", summaryZh: "短讯。", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
-  await set(earlier.id, { entity_keys: ["drug:bepirovirsen", "trial:b-well 1"] }, {});
+  // Related by a drug and a disease both (a shared drug alone is not enough).
+  await set(earlier.id, { entity_keys: ["drug:bepirovirsen", "disease:chb", "trial:b-well 1"] }, {});
   await set(approval.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION, entity_keys: ["drug:bepirovirsen", "disease:chb"] },
     { abstract_raw: "The FDA approved bepirovirsen with nucleos(t)ide analogues for chronic hepatitis B; functional cure was 19% in the trials." });
   await set(alone.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "A short note." });

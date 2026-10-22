@@ -2451,18 +2451,26 @@ export class FrontierPipeline {
 
   /**
    * The related reports an insight may cite, numbered from 1: the item's event's other reports and follow-ups
-   * (`frontierItemFollowups`, newest first), then earlier published items of the last year naming one of its drugs or trials,
-   * most shared keys first — at most `FRONTIER_INSIGHT_LIMITS.refs`, each with its date, source, title and 导读.
+   * (`frontierItemFollowups`, newest first), then earlier published items of the last year that share a trial, two drugs, or a
+   * drug and a disease with it, the most shared first — at most `FRONTIER_INSIGHT_LIMITS.refs`, each with its date, source, title and 导读.
    * @param {any} item @returns {Promise<import("./frontierInsight.mjs").FrontierInsightRef[]>}
    */
   async #insightRefs(item) {
     const followups = await frontierItemFollowups(this.database, item.id, { limit: 8 }).catch(() => null);
-    const keys = (Array.isArray(item.entity_keys) ? item.entity_keys : []).filter((key) => /^(?:drug|trial):/.test(String(key)));
-    const byEntity = keys.length ? (await this.database.query(`SELECT i.public_id FROM evimed_frontier.items i
+    // Related by what it is about, not by a word it shares (measured 2026-10-22: a glucose-meter recall drew four diabetes-drug
+    // items through one shared key): the same trial, two of the same drugs, or a drug and a disease both.
+    const keys = (Array.isArray(item.entity_keys) ? item.entity_keys : []).filter((key) => /^(?:drug|trial|disease):/.test(String(key)));
+    const byEntity = keys.some((key) => /^(?:drug|trial):/.test(String(key))) ? (await this.database.query(`SELECT i.public_id FROM (
+        SELECT i.public_id, i.timeline_at,
+          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'trial:%') AS trials,
+          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'drug:%') AS drugs,
+          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'disease:%') AS diseases
+        FROM evimed_frontier.items i
         WHERE i.state = 'published' AND i.id <> $1 AND i.entity_keys && $2::text[] AND i.visible_at > $3
-          AND ($4::bigint IS NULL OR i.event_id IS DISTINCT FROM $4::bigint) AND i.timeline_at <= (SELECT timeline_at FROM evimed_frontier.items WHERE id = $1)
-        ORDER BY (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[])) DESC, i.timeline_at DESC
-        LIMIT $5`, [item.id, keys, new Date(Date.now() - FRONTIER_INSIGHT_LIMITS.entityLookbackDays * DAY), item.event_id ?? null,
+          AND ($4::bigint IS NULL OR i.event_id IS DISTINCT FROM $4::bigint) AND i.timeline_at <= (SELECT timeline_at FROM evimed_frontier.items WHERE id = $1)) i
+      WHERE i.trials > 0 OR i.drugs >= 2 OR (i.drugs > 0 AND i.diseases > 0)
+      ORDER BY i.trials DESC, i.drugs + i.diseases DESC, i.timeline_at DESC
+      LIMIT $5`, [item.id, keys, new Date(Date.now() - FRONTIER_INSIGHT_LIMITS.entityLookbackDays * DAY), item.event_id ?? null,
       FRONTIER_INSIGHT_LIMITS.refs])).rows.map((row) => String(row.public_id)) : [];
     /** @type {Array<{ publicId: string, relation: "same-event" | "follows" | "entity" }>} */
     const wanted = [];
