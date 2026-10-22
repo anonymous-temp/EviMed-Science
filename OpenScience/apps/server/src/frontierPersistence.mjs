@@ -240,6 +240,8 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS author jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS quoted jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
+-- The media proxy serves an id only while a published item names it: one containment lookup per picture.
+CREATE INDEX IF NOT EXISTS frontier_items_media_idx ON evimed_frontier.items USING gin (media jsonb_path_ops) WHERE media IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,
@@ -268,12 +270,14 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
 -- The reader's full text (contract 1.4.0): body_text is the plugin's, stored by fr-social's ingest (written here too, identically, a
 -- no-op for whichever copy runs second); the Chinese reading of it is the edit stage's — a translation whose paragraphs all came
 -- back (body_complete), or the source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text);
--- and the translation of a quoted post.
+-- which text it was read from (body_zh_source: the full text, the abstract or the page excerpt, best first); and the
+-- translation of a quoted post.
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text;
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_source text CHECK (body_zh_source IN ('body', 'abstract', 'excerpt'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS quoted_zh text;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (

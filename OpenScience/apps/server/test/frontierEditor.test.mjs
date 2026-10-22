@@ -11,6 +11,9 @@ import {
   FRONTIER_PROSE_ISSUE_KINDS,
   FRONTIER_SCREEN_INSTRUCTIONS,
   FRONTIER_TEXT_LIMITS,
+  FRONTIER_TRANSLATE_BODY_INSTRUCTIONS,
+  FRONTIER_TRANSLATE_POST_INSTRUCTIONS,
+  FRONTIER_TRANSLATION_LIMITS,
   FrontierEditor,
   abstractNumberSource,
   aiMinuteNumberSource,
@@ -21,6 +24,7 @@ import {
   frontierEditorDiagnostics,
   digestNumberSource,
   editNumberSource,
+  frontierParagraphs,
   isChineseProse,
   isChineseTitle,
   parseModelJson,
@@ -29,6 +33,7 @@ import {
   validateScreen,
   verifyAbstract,
   verifyEdit,
+  verifyParagraph,
 } from "../src/frontierEditor.mjs";
 
 const config = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierModel: "deepseek-flash" };
@@ -1033,4 +1038,70 @@ test("diagnostic provenance uses the resolved policy and actual bounded calls", 
   assert.equal(result.editorVersion,"policy:v2");
   assert.equal(result.attempts,1);
   assert.equal(result.modelInputSha256,sha256(result.modelInput));
+});
+
+test("the full text is split into the paragraphs a reader sees, losslessly: blank lines, then line breaks, then sentence ends, then the limit", () => {
+  assert.deepEqual(frontierParagraphs("A para.\n\nB line1\nB line2\n\n\n  C  x "), ["A para.", "B line1\nB line2", "C x"]);
+  const long = "HR 0.80 (95% CI 0.70-0.92). Results were consistent. 结果一致。".repeat(60);
+  const pieces = frontierParagraphs(long);
+  assert.ok(pieces.length > 1 && pieces.every((piece) => piece.length <= FRONTIER_TRANSLATION_LIMITS.paragraphChars));
+  assert.equal(pieces.join("").replace(/\s/g, ""), long.replace(/\s/g, ""), "nothing is lost at a cut");
+  assert.deepEqual(frontierParagraphs(""), []);
+  assert.deepEqual(frontierParagraphs(null), []);
+});
+
+test("a translated paragraph is held to its own original: Chinese, bounded, no number added and none dropped", () => {
+  const original = "In 17,604 patients, semaglutide reduced events by 20% (hazard ratio 0.80).";
+  assert.equal(verifyParagraph("在 17,604 例患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。", original), "在 17,604 例患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。");
+  assert.equal(verifyParagraph("在 17,604 例患者中，司美格鲁肽使事件减少 25%（风险比 0.80）。", original), null, "a number the original lacks");
+  assert.equal(verifyParagraph("在患者中，司美格鲁肽使事件减少 20%（风险比 0.80）。", original), null, "a number the original states is gone");
+  assert.equal(verifyParagraph("In 17,604 patients, semaglutide reduced events by 20% (hazard ratio 0.80).", original), null, "not translated");
+  assert.equal(verifyParagraph("", original), null);
+  assert.equal(verifyParagraph("译".repeat(400), "Short text here."), null, "far longer than its original");
+  assert.equal(verifyParagraph("NCT01234567", "NCT01234567"), "NCT01234567", "nothing to translate comes back as it was");
+});
+
+test("translateBody: one translation per paragraph or none trusted; refused paragraphs asked once more; complete only when all came back", async () => {
+  const paragraphs = ["Semaglutide reduced events by 20%.", "Adverse events occurred in 12% of patients.", "The trial enrolled adults with obesity."];
+  const good = ["司美格鲁肽使事件减少 20%。", "12% 的患者发生不良事件。", "该试验纳入了肥胖成人。"];
+  // First answer: the second paragraph adds a number; the retry asks for it alone and gets it right.
+  const { calls, callModel } = stubModel([() => ({ t: [good[0], "15% 的患者发生不良事件。", good[2]] }), () => ({ t: [good[1]] })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.translateBody({ paragraphs, glossary: [{ kind: "drug", termEn: "semaglutide", termZh: "司美格鲁肽", keepOriginal: false, origin: "hand" }] });
+  assert.deepEqual(result, { paragraphs: good, complete: true, calls: 2, error: null });
+  assert.equal(calls[0].purpose, "frontier");
+  assert.equal(calls[0].body.messages[0].content, FRONTIER_TRANSLATE_BODY_INSTRUCTIONS);
+  const asked = JSON.parse(calls[0].body.messages[1].content);
+  assert.deepEqual(asked.p, paragraphs);
+  assert.ok(asked.glossary.some((line) => line.includes("semaglutide → 司美格鲁肽")));
+  assert.deepEqual(JSON.parse(calls[1].body.messages[1].content).p, [paragraphs[1]], "only the refused paragraph is asked again");
+  assert.deepEqual(editor.counters.translatedParagraphs, 3);
+
+  // A count that does not match trusts nothing; a paragraph refused twice stays untranslated, and the result is not complete.
+  const shifted = stubModel([() => ({ t: [good[0], good[1]] }), () => ({ t: [...good, "死亡率为 99%。"] })]);
+  const partial = await new FrontierEditor(config, { owner, callModel: shifted.callModel }).translateBody({ paragraphs: [...paragraphs, "Mortality was 3%."] });
+  assert.equal(shifted.calls.length, 2, "the whole answer was refused, so every paragraph was asked once more");
+  assert.equal(partial.complete, false);
+  assert.deepEqual(partial.paragraphs, [...good, null]);
+
+  // A call that cannot be made stops the item with its code, keeping what was verified.
+  const refused = await new FrontierEditor(config, { owner, callModel: stubModel([refuse("usage_budget_exceeded")]).callModel }).translateBody({ paragraphs });
+  assert.deepEqual([refused.complete, refused.error, refused.paragraphs], [false, "usage_budget_exceeded", [null, null, null]]);
+});
+
+test("translateBody stops asking past the item's limit, in calls of bounded size, and an X post takes the post shape", async () => {
+  const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(30)}`.trim();
+  const paragraphs = Array.from({ length: 10 }, () => paragraph);
+  const { calls, callModel } = stubModel(Array.from({ length: 20 }, () => (/** @type {any} */ call) => ({ t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") })));
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  const asked = calls.flatMap((call) => JSON.parse(call.body.messages[1].content).p);
+  assert.ok(asked.length * paragraph.length <= FRONTIER_TRANSLATION_LIMITS.itemChars, "never past the item's limit");
+  assert.ok(calls.every((call) => JSON.parse(call.body.messages[1].content).p.join("").length <= FRONTIER_TRANSLATION_LIMITS.callChars + paragraph.length));
+  assert.equal(result.complete, false, "the paragraphs past the limit are not translated");
+  assert.equal(result.paragraphs.filter(Boolean).length, asked.length);
+
+  const post = stubModel([() => ({ t: ["@nejm 新试验：司美格鲁肽使事件减少 20%。#obesity"] })]);
+  const translated = await new FrontierEditor(config, { owner, callModel: post.callModel }).translateBody({ paragraphs: ["@nejm New trial: semaglutide cut events by 20%. #obesity"], post: true });
+  assert.equal(post.calls[0].body.messages[0].content, FRONTIER_TRANSLATE_POST_INSTRUCTIONS);
+  assert.equal(translated.complete, true);
 });
