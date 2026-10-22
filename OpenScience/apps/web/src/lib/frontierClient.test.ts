@@ -512,7 +512,7 @@ describe("the reader's blocks (contract B)", () => {
     expect(item.lead).toBe("Arena 宣布模型登顶开源榜首。");
     expect(item.reason).toBe("可据此权衡 Agent 场景的性价比。");
     expect(item.score).toBe(74);
-    expect(item.body).toEqual({ zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false });
+    expect(item.body).toEqual({ zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false, source: null });
     expect(item.quoted).toEqual({ author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: null });
     expect(item.metrics).toEqual({ likes: 12, reposts: null, replies: null, views: 9000 });
     expect(item.topics).toEqual([{ slug: "cardiology", name: "心血管", group: "specialty" }, { slug: "x", name: "未知组", group: "genre" }]);
@@ -536,14 +536,48 @@ describe("the reader's blocks (contract B)", () => {
   it("leaves out what the server did not fill, and makes nothing up in its place", () => {
     const item = parseFrontierItemDetail(rawItem({ summary: "列表里的导读" }))!;
     expect(item).toMatchObject({
-      lead: "列表里的导读", body: null, media: [], quoted: null, metrics: null, topics: null, tags: null, sameEvent: null, followups: null,
+      lead: "列表里的导读", insight: null, body: null, media: [], quoted: null, metrics: null, topics: null, tags: null, sameEvent: null, followups: null,
       channel: null, platform: null, author: null, thumb: null,
     });
     // A body the server did not call incomplete is complete; a Chinese text with no kind is not called a translation.
-    expect(parseFrontierItemDetail(rawItem({ body: { zh: "中文", original: null } }))!.body).toEqual({ zh: "中文", original: null, zhKind: null, complete: true });
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: "中文", original: null } }))!.body).toEqual({ zh: "中文", original: null, zhKind: null, complete: true, source: null });
     expect(parseFrontierItemDetail(rawItem({ body: { zh: " ", original: "" } }))!.body).toBeNull();
     // An outlet or a platform this build does not know is not shown under a made-up name.
     expect(parseFrontierItem(rawItem({ channel: "podcast", platform: "myspace", author: { handle: "nobody" } }))).toMatchObject({ channel: null, platform: null, author: null });
+  });
+
+  it("reads which text a body is, and nothing it does not name", () => {
+    const source = (value: unknown) => parseFrontierItemDetail(rawItem({ body: { zh: "## 方法\n\n正文", original: null, zhKind: "original-zh", source: value } }))!.body!.source;
+    expect(["body", "abstract", "excerpt"].map(source)).toEqual(["body", "abstract", "excerpt"]);
+    expect([undefined, null, "full", "ABSTRACT", 3].map(source)).toEqual([null, null, null, null, null]);
+    // The heading marker is the text's own: the client keeps it for the reader to set, and never strips or adds one.
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: "## 方法\n\n正文", source: "body" } }))!.body!.zh).toBe("## 方法\n\n正文");
+  });
+
+  it("reads 「AI 解读」 and the reports it cites, each field by field", () => {
+    const insight = (value: unknown) => parseFrontierItemDetail(rawItem({ insight: value }))!.insight;
+    expect(insight({
+      text: "  三项试验结果一致[2]，但随访仍短[1]，另见[7]。 ",
+      refs: [
+        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
+        { n: 1, publicId: "item-a", title: "第一篇", source: "  ", at: "not a time" },
+        { n: 2, publicId: "item-c", title: "同号的第二个", source: "Lancet", at: "2026-10-20T02:00:00Z" },
+        { n: 0, publicId: "item-d", title: "从零", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 1.5, publicId: "item-e", title: "小数", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 3, publicId: "", title: "没有文章", source: "", at: "2026-10-20T02:00:00Z" },
+        { n: 4, publicId: "item-f", title: " ", source: "", at: "2026-10-20T02:00:00Z" },
+        "not a ref",
+      ],
+    })).toEqual({
+      text: "三项试验结果一致[2]，但随访仍短[1]，另见[7]。",
+      refs: [
+        { n: 1, publicId: "item-a", title: "第一篇", source: "", at: null },
+        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
+      ],
+    });
+    // Most items have none; a 解读 without its words is none, and one without refs is still one.
+    for (const value of [undefined, null, "一段话", { text: " " }, { refs: [] }]) expect(insight(value)).toBeNull();
+    expect(insight({ text: "没有引用的解读。" })).toEqual({ text: "没有引用的解读。", refs: [] });
   });
 
   it("does not point an item at itself as the one the occurrence selected", () => {
