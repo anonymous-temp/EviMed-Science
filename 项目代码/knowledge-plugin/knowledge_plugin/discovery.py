@@ -40,10 +40,11 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
+from itertools import zip_longest
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -56,10 +57,16 @@ from .registry import RegistryError, parse_registry, source_from_row
 log = logging.getLogger("knowledge_plugin.discovery")
 
 LINES = ("outbound", "journal", "directory", "hot-origin", "social", "request", "parent-feed", "readmit")
-# Validations a line may spend a day. Sized from the yields measured on 2026-10-22 (handoff fr-sources): the pipeline
-# needs ~60–150 candidates validated a day for ten admissions.
-DEFAULT_CAPS = {"outbound": 40, "journal": 50, "directory": 30, "hot-origin": 15, "social": 20, "request": 25,
+# Validations a line may spend a day, sized from the yields measured on 2026-10-22 over a day of production entries
+# (handoff fr-sources): journals 41 of 60 validated (MEDLINE, ≥ 8 articles in 30 days), directories 10 of 60, outbound
+# sites 8 of 60 (about a third of them medical by the screen). At these caps ~110–200 candidates are validated a day and
+# about 15 admitted, two thirds of them journals.
+DEFAULT_CAPS = {"outbound": 60, "journal": 20, "directory": 30, "hot-origin": 15, "social": 20, "request": 25,
                 "readmit": 30}
+# Discovered journals are read through Crossref, whose daily allowance the registry's journals share (budget.py): the
+# journal line waits for tomorrow while today's use is past this share of the cap.
+CROSSREF_HOST = "api.crossref.org"
+CROSSREF_SHARE = 0.8
 DEFAULT_OUTBOUND_PAGES = 120          # article pages the outbound line reads a day to find the sites they link to
 STATUS_KEY = "source_discovery"
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -67,7 +74,7 @@ FRESH_DAYS = 30
 FAILED_RETRY_AFTER = timedelta(days=30)
 DEFERRED_RETRY_AFTER = timedelta(days=7)
 RUN_DEADLINE_S = 900.0
-VALIDATION_CONCURRENCY = 4
+VALIDATION_CONCURRENCY = 6
 TRIAL_FLOOR_S = 21600
 TRIAL_CEILING_S = 86400
 JOURNAL_FLOOR_S = 43200
@@ -305,12 +312,15 @@ async def upsert_candidates(conn, candidates: list[Candidate], now: datetime, da
     return added
 
 
-async def known_urls_and_hosts(conn) -> tuple[set[str], set[str], set[str]]:
+async def known_urls_and_hosts(conn, base=()) -> tuple[set[str], set[str], set[str]]:
     """Every URL and host the registry already reads (any state, retired included: a retired source comes back by its
-    re-check, not as a new candidate), the ISSNs of its journals, and the hosts of owner-excluded rows."""
-    rows = await (await conn.execute(
+    re-check, not as a new candidate) — the source table and the registry file's rows (``base``) —, the ISSNs of its
+    journals, and the hosts of owner-excluded rows."""
+    rows = [dict(r) for r in await (await conn.execute(
         "SELECT id, homepage, config, disabled_reason FROM evimed_knowledge.sources",
-    )).fetchall()
+    )).fetchall()]
+    rows += [{"id": row.source.id, "homepage": row.source.homepage, "config": row.source.config,
+              "disabled_reason": row.disabled_reason} for row in base]
     urls: set[str] = set()
     issns: set[str] = set()
     excluded: set[str] = set()
@@ -482,6 +492,10 @@ class Validator:
             if error.outcome == "host-budget":
                 return Verdict("deferred", "host_budget")
             return Verdict("failed", f"{error.outcome}:{error.detail}")
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            # An answer that is not what the provider documents (an HTML error page for JSON): this candidate's
+            # failure, named, never the run's.
+            return Verdict("failed", f"answer_invalid:{type(error).__name__}")
         return Verdict("failed", "unknown_kind")
 
     async def validate_site(self, candidate: dict, kind: str, hint: dict) -> Verdict:
@@ -554,9 +568,9 @@ class Validator:
             return Verdict("failed", "known")
         basis = candidate.get("medical_basis")
         if basis != "medline":
-            term = " OR ".join(f'"{i}"[ISSN]' for i in issns[:2])
-            listing = await self.fetch(f"{EUTILS}/esearch.fcgi?db=nlmcatalog&retmode=json&retmax=1"
-                                       f"&term=({term}) AND currentlyindexed[All]", egress="api", api=True)
+            term = quote("(" + " OR ".join(f'"{i}"[ISSN]' for i in issns[:2]) + ") AND currentlyindexed[All]")
+            listing = await self.fetch(f"{EUTILS}/esearch.fcgi?db=nlmcatalog&retmode=json&retmax=1&term={term}",
+                                       egress="api", api=True)
             found = int((json.loads(listing.body).get("esearchresult") or {}).get("count") or 0)
             if not found:
                 return Verdict("failed", "not_medline")
@@ -761,6 +775,16 @@ async def record_verdict(conn, candidate: dict, verdict: Verdict, now: datetime,
     return "trial"
 
 
+async def crossref_spent(fetcher) -> bool:
+    """Whether today's Crossref use is past ``CROSSREF_SHARE`` of its cap (unknown counts as not)."""
+    try:
+        usage = (await fetcher.host_budget_usage()).get(CROSSREF_HOST) or {}
+    except Exception:
+        return False
+    cap = int(usage.get("cap") or 0)
+    return bool(cap) and int(usage.get("used") or 0) >= CROSSREF_SHARE * cap
+
+
 async def validate_readmission(validator: Validator, conn, candidate: dict) -> Verdict:
     """A retired source is back when it is permitted, readable and has an item newer than its retirement."""
     source_id = candidate["key"].split(":", 1)[1]
@@ -819,7 +843,7 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
                 changed = changed or bool(report["decided"])
         if status.get("gatheredDay") != day:
             async with pool.connection() as conn:
-                known_urls, known_issns, excluded = await known_urls_and_hosts(conn)
+                known_urls, known_issns, excluded = await known_urls_and_hosts(conn, base)
                 found, cursors = await gather_all(conn, fetcher, clock(), data=data, known_urls=known_urls,
                                                   known_issns=known_issns, excluded_hosts=excluded,
                                                   cursors=status.get("cursors", {}), outbound_pages=outbound_pages,
@@ -829,22 +853,28 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
             status["cursors"] = cursors
             status["gatheredDay"] = day
         async with pool.connection() as conn:
-            known_urls, known_issns, excluded = await known_urls_and_hosts(conn)
+            known_urls, known_issns, excluded = await known_urls_and_hosts(conn, base)
             excluded |= {h for h in data.get("exclude_hosts", [])}
             validator = Validator(fetcher, settings, clock(), known_urls=known_urls, known_issns=known_issns,
                                   excluded_hosts=excluded)
             attempts = status.setdefault("attempts", {})
-            pending: list[dict] = []
+            crossref_tight = await crossref_spent(fetcher)
+            report["crossrefTight"] = crossref_tight
+            by_line: list[list[dict]] = []
             for line in LINES:
                 room = caps.get(line, 0) - int(attempts.get(line, 0))
+                if line == "journal" and crossref_tight:
+                    room = 0
                 if room <= 0:
                     continue
-                pending += await (await conn.execute(
+                by_line.append(await (await conn.execute(
                     """SELECT id, line, key, medical_basis, evidence FROM evimed_knowledge.source_candidates
                         WHERE state = 'candidate' AND line = %s AND (next_check_at IS NULL OR next_check_at <= %s)
                         ORDER BY sightings DESC, first_seen_at, id LIMIT %s""",
                     (line, clock(), room),
-                )).fetchall()
+                )).fetchall())
+            # Interleaved, so one slow line (sites that time out) never starves the others within a run's budget.
+            pending = [row for group in zip_longest(*by_line) for row in group if row is not None]
         gate = asyncio.Semaphore(VALIDATION_CONCURRENCY)
 
         async def one(candidate: dict) -> None:
@@ -855,10 +885,16 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
                 if asyncio.get_running_loop().time() > deadline:
                     return
                 async with pool.connection() as conn:
-                    if candidate["line"] == "readmit":
-                        verdict = await validate_readmission(validator, conn, candidate)
-                    else:
-                        verdict = await validator.validate(candidate)
+                    try:
+                        if candidate["line"] == "readmit":
+                            verdict = await validate_readmission(validator, conn, candidate)
+                        else:
+                            verdict = await validator.validate(candidate)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as error:  # one candidate's surprise never ends the run; it is tried again later
+                        log.exception("validation of %s failed", candidate["key"][:200])
+                        verdict = Verdict("deferred", f"internal:{type(error).__name__}")
                     async with conn.transaction():
                         outcome = await record_verdict(conn, candidate, verdict, clock(), day)
                 attempts[candidate["line"]] = int(attempts.get(candidate["line"], 0)) + 1

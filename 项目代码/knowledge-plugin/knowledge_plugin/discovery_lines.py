@@ -35,19 +35,36 @@ def families_of(urls: set[str]) -> set[str]:
     return {site_family(host_of(url)) for url in urls if host_of(url)}
 
 
+CHROME_TAGS = frozenset({"nav", "header", "footer", "aside", "form"})
+
+
+def _in_chrome(node) -> bool:
+    parent, depth = node.parent, 0
+    while parent is not None and depth < 25:
+        if (parent.tag or "").lower() in CHROME_TAGS:
+            return True
+        parent, depth = parent.parent, depth + 1
+    return False
+
+
 def links_in_page(body: bytes, page_url: str) -> list[str]:
-    """Absolute http(s) targets of a page's ``<a href>``."""
+    """Absolute http(s) targets of the links in a page's text: inside ``<article>``/``<main>`` when the page marks its
+    body, else every link outside its navigation, header, footer, sidebars and forms (where the partner sites, ads and
+    share buttons are). The page's structure decides, not its words."""
     from selectolax.parser import HTMLParser
 
     try:
         tree = HTMLParser(body[:MAX_PAGE_BYTES].decode("utf-8", errors="replace"))
     except Exception:
         return []
+    bodies = tree.css("article, main, [role=main]")
+    anchors = [a for container in bodies for a in container.css("a[href]")] if bodies else \
+        [a for a in tree.css("a[href]") if not _in_chrome(a)]
     links = []
-    for node in tree.css("a[href]"):
+    for node in anchors:
         href = (node.attributes.get("href") or "").strip()
         if href.startswith(("http://", "https://", "//")):
-            if clean := canonical_url(urljoin(page_url, href)):
+            if (clean := canonical_url(urljoin(page_url, href))) and clean not in links:
                 links.append(clean)
     return links
 
@@ -296,7 +313,7 @@ async def gather_all(conn, fetcher, now: datetime, *, data: dict, known_urls: se
                      excluded_hosts: set[str], cursors: dict, outbound_pages: int, caps: dict, lines=None
                      ) -> tuple[list[Candidate], dict]:
     """Every enabled line's proposals for today, and the lines' rotation cursors."""
-    lines = set(lines or LINES)
+    lines = set(LINES if lines is None else lines)
     excluded = set(excluded_hosts) | {h.lower() for h in data.get("exclude_hosts", [])}
     known_families = families_of(known_urls)
     cursors = dict(cursors or {})

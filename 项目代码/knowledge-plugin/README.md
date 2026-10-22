@@ -66,6 +66,9 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `EVIMED_EVIDENCE_FEED_URL` | unset (the EviMed compose overlay defaults it to `$OPEN_SCIENCE_PUBLIC_URL` + the evidence base path + `/feed.json`) | the platform's own evidence feed (`https://<platform>/evidence/feed.json`), read as the source `evimed-evidence` (`platform_produced`, contract 1.3.0); unset = the source loads disabled (`feed_url_unset`) and nothing is polled. It must be the address the platform links its cards on, a public one: only the cards on the host the feed was read from are handed on, and the fetcher reaches global addresses only, so a compose-internal service name does not work. A platform whose public evidence pages are off answers the feed 404 `evidence_public_not_enabled`, which reads as an empty feed, not a failure |
 | `EVIMED_SOURCE_REQUESTS_URL` | unset | optional public HTTPS JSON source wish list, pulled daily through protected fetching; only supported AI discovery readers on plugin-approved scholarly hosts are admitted, existing exclusions preserved |
 | `KNOWLEDGE_PLUGIN_CRAWL` | `1` | `0` serves the stored stream without crawling |
+| `KNOWLEDGE_PLUGIN_DISCOVERY` | `1` | `0` stops automatic source discovery and the source lifecycle (`discovery.py`, `lifecycle.py`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=20,directory=30,hot-origin=15,social=20,request=25,readmit=30`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |
@@ -78,7 +81,38 @@ The existing crawler checks a bounded rotation of enabled medical publishers onc
 
 Validated feeds are stored under the existing `medical_sources_admitted` metadata key and enter the ordinary polling queue. Startup, file reload, AI source-request admission and medical discovery compose both dynamic channels together under one registry transaction lock. Parent removal/disable and current operator exclusions are checked again on composition. The source table owns the first successful fetch and entry count; a successful probe is not a published article.
 
-`medical_source_discovery` retains the cursor, current lease and the last thirty measured runs: attempted publishers, validated candidates, admitted feeds, deferrals and zero-growth days. `newInstitutions` is zero by construction: this mechanism expands subscription coverage within trusted institutions, not the set of trusted institutions. It never invents a new-source quota or bypasses robots/challenges. The hourly discovery loop skips a day it has already completed; bounded interrupted attempts can resume on a later tick.
+`medical_source_discovery` retains the cursor, current lease and the last thirty measured runs: attempted publishers, validated candidates, admitted feeds, deferrals and zero-growth days. `newInstitutions` is zero by construction: this mechanism expands subscription coverage within trusted institutions, not the set of trusted institutions — new institutions are the automatic source discovery's (below), whose `parent-feed` line counts these admissions. It never invents a new-source quota or bypasses robots/challenges. The hourly discovery loop skips a day it has already completed; bounded interrupted attempts can resume on a later tick.
+
+## Automatic source discovery and the source lifecycle
+
+The target (owner, 2026-10-22) is at least ten net new working sources a day: admitted minus retired, where working
+means the source produced a new entry during a seven-day trial. `discovery.py` runs hourly and does each step once a
+Shanghai day:
+
+1. **Retire** by rule (`lifecycle.py`), any source: two robots refusals in a row; 401/403 for seven days; silent past its
+   own rhythm (AIHOT's rule: quiet longer than four times its median gap over 90 days; while the rhythm cannot be
+   measured, 14 quiet days for a discovered source, 60 for a row of the registry file); off-topic by the platform's own
+   screen (more than half not medical and fewer than three medical entries in its window). A retired source is left
+   out of the registry composition (`sources.retired_at`), keeps its row and history, and is re-checked (robots 30
+   days, 401/403 7, silence 14; off-topic only by an operator).
+2. **Decide trials** that ended: admitted with a new entry after the first poll and no more than half of what the
+   platform screened judged not medical; with no verdict from the platform, admitted on its own fetch results when its
+   medical basis is in data (a MEDLINE journal, a listed organisation, a request), else it waits up to seven more days.
+3. **Gather** candidates by line — `outbound` (sites linked from recent entries' pages), `journal` (MEDLINE journals
+   from the literature streams, then the NLM catalogue in rotation), `directory` (`registry/discovery.json`),
+   `hot-origin` (the journals and sites of entries several publishers carried), `social` (quoted accounts, when the
+   social adapters store them), `request` (the source-request manifest, any lane but `ai`), `parent-feed`
+   (`medical_discovery.py`), `readmit` (retired sources due for a re-check).
+4. **Validate** within each line's daily cap: reachable (direct, then the relay), robots allows it, an existing adapter
+   reads it, an item dated within 30 days, MEDLINE for a journal (and at least eight Crossref articles in 30 days). A
+   valid candidate becomes an ordinary registry row on trial (`mixed` lane, every 6–24 hours; journals every 12–24).
+   The journal line waits while Crossref's allowance is past 80 % used.
+
+The plugin makes no content judgement: whether a source is medical is the platform's screen of what the source
+delivered, reported back by the platform after each mirror (`POST /v1/sources/screening`). Counts by line and day are
+in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days, `by_line`, `in_trial`).
+`python -m knowledge_plugin lifecycle` prints what the rules would retire now (writes nothing; `--apply` retires);
+`python -m knowledge_plugin discover [--lines a,b] [--caps line=n,…]` runs one cycle in the foreground.
 
 ## Add or change a source
 
