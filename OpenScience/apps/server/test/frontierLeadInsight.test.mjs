@@ -76,6 +76,19 @@ test("the 解读's checks: every mark names a report it was shown, numbers in th
   assert.equal(verifyInsight({ insight_zh: "  " }, insightInput, refs).issues.length, 0);
 });
 
+test("the 解读 names the reports it judged related, cites only those, and at least one (production, 2026-10-22)", () => {
+  const good = "这次获批的依据与 2025 年公布的 B-Well 两项 III 期试验一致，功能性治愈率同为 19% [2]。GSK 的公告与这篇报道给出的适应证相同 [1]。国内仍在审评，正大天晴持有中国商业化权益，上市时间尚无消息，长期停药后的持久性也还要更长随访来回答。";
+  assert.deepEqual(verifyInsight({ related: [1, 2], insight_zh: good }, insightInput, refs).issues, []);
+  // A report judged unrelated and then written about ("[2] 与本条不是同一试验"): the sentence that should not be there.
+  const aboutUnrelated = verifyInsight({ related: [1], insight_zh: good }, insightInput, refs);
+  assert.ok(aboutUnrelated.issues.some((issue) => issue.includes("不相关的报道 [2]")));
+  // A text that cites no report is the item restated, not its place among the reports.
+  const restated = "这条消息把旅客携带自用药品的豁免边界与执法数据放在同一份答复里，豁免以合理数量为限，涉及危险药物或抗生素时须持医生处方，数量是否合理由海关按个别情况综合评估，必要时咨询卫生署。";
+  assert.ok(verifyInsight({ related: [1], insight_zh: restated }, insightInput, refs).issues.some((issue) => issue.includes("没有标注任何相关报道")));
+  // Nothing related is no 解读, whatever text came with it.
+  assert.deepEqual(verifyInsight({ related: [], insight_zh: good }, insightInput, refs).output, { insight_zh: null });
+});
+
 test("when a 解读 is asked for, and the basis it is kept with", async () => {
   assert.equal(frontierInsightWorthAsking({ text: "短。", refs }), true, "related reports are material");
   assert.equal(frontierInsightWorthAsking({ text: "短。", refs: [] }), false, "no related report and a short text: nothing to put in context");
