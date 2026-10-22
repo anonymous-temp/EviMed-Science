@@ -56,6 +56,7 @@ class SocialCollector:
         self.crawler = CrawlClient(self.ledger, settings, clock, transport=crawl_transport)
         self.watch = crawl_mod.load_watch_list(settings.social_registry())
         self.paused: dict[str, datetime] = {}
+        self.wechat_bodies_per_read = wechat_mod.MAX_BODIES_PER_READ
         self._last_upkeep: datetime | None = None
         self.counters: Counter = Counter()
         self.last_error: str | None = None
@@ -133,8 +134,9 @@ class SocialCollector:
                 if neutral:
                     await conn.execute(
                         """UPDATE evimed_knowledge.sources SET next_poll_at = %s, last_attempt_at = %s, last_error_code = %s,
-                                  updated_at = %s WHERE id = %s""",
-                        (next_at, now, (detail or "")[:100] or None, now, row["id"]))
+                                  cursor = coalesce(%s, cursor), updated_at = %s WHERE id = %s""",
+                        (next_at, now, (detail or "")[:100] or None, Jsonb(cursor) if cursor is not None else None, now,
+                         row["id"]))
                     return
                 failures = 0 if ok else int(row["consecutive_failures"] or 0) + 1
                 failing_since = None if ok else (row["failing_since"] or now)
@@ -257,33 +259,25 @@ class SocialCollector:
 
     async def _wechat_account(self, row: dict, now: datetime) -> str:
         cursor = dict(row["cursor"] or {})
-        config = row["config"] or {}
         resolved = cursor.get("resolved") if isinstance(cursor.get("resolved"), dict) else None
+        if not resolved:
+            outcome, resolved = await self.wechat_resolve(row, now)
+            if resolved is None:
+                return outcome
+            cursor = {**cursor, "resolved": resolved}
+            cursor.pop("mismatch", None)
         try:
-            if resolved and resolved.get("ghid"):
+            if resolved.get("ghid"):
                 history = await self.dajiala.post_history(ghid=resolved["ghid"])
             else:
-                verified = config.get("verified_url")
-                if not verified:
-                    await self._finish(row, now, outcome="blocked", detail="wechat_unverified", host=DAJIALA_HOST,
-                                       next_at=now + wechat_mod.MISMATCH_PARK)
-                    return "unverified"
-                history = await self.dajiala.post_history(url=verified)
+                history = await self.dajiala.post_history(url=(row["config"] or {}).get("verified_url"))
         except SpendCapReached as capped:
-            await self._finish(row, now, outcome="host-budget", detail="daily_cap", next_at=capped.retry_at, host=DAJIALA_HOST)
+            await self._finish(row, now, outcome="host-budget", detail="daily_cap", next_at=capped.retry_at, host=DAJIALA_HOST,
+                               cursor=cursor)
             return "capped"
         except ProviderError as error:
-            return await self._wechat_failed(row, now, error)
-        nickname = history.nickname or (resolved or {}).get("nickname")
-        if not resolved or not resolved.get("ghid"):
-            if not wechat_mod.nickname_matches(history.nickname, row):
-                cursor["mismatch"] = {"nickname": (history.nickname or "")[:100], "at": now.isoformat()}
-                await self._finish(row, now, outcome="blocked", detail="wechat_nickname_mismatch", cursor=cursor,
-                                   next_at=now + wechat_mod.MISMATCH_PARK, host=DAJIALA_HOST)
-                log.warning("wechat %s: the verified link names another account; parked", row["id"])
-                return "mismatch"
-            cursor.pop("mismatch", None)
-            cursor["resolved"] = {"ghid": history.ghid, "nickname": history.nickname, "at": now.isoformat()}
+            return await self._wechat_failed(row, now, error, cursor=cursor)
+        nickname = resolved.get("nickname") or history.nickname
         posts = sorted(history.posts, key=lambda post: -(wechat_mod.post_time(post) or now).timestamp())
         known = await self._known(row["id"], [wechat_mod.external_key(post) for post in posts])
         first_contact = row["first_contact_at"] is None
@@ -296,7 +290,7 @@ class SocialCollector:
             if isinstance(post.get("cover_url"), str) and post["cover_url"].startswith(("http://", "https://")):
                 cover = await self.media.ensure(post["cover_url"].replace("http://", "https://", 1))
             detail = None
-            if buying and bodies < wechat_mod.MAX_BODIES_PER_READ and (not first_contact or wechat_mod.is_recent(post, now)):
+            if buying and bodies < self.wechat_bodies_per_read and (not first_contact or wechat_mod.is_recent(post, now)):
                 link, _ = wechat_mod.article_link(post.get("url"))
                 try:
                     detail = await self.dajiala.article_detail(link) if link else None
@@ -308,31 +302,57 @@ class SocialCollector:
                         buying = False
                         if error.kind == "balance":
                             self.paused[DAJIALA] = day_window(now)[1]
-            entries.append(wechat_mod.build_entry(post, row, nickname or row["name"], now=now, cover=cover, detail=detail))
+            entries.append(wechat_mod.build_entry(post, row, nickname or row["name"], now=now, cover=cover, detail=detail,
+                                                  alias=resolved.get("alias")))
         result = await self._store(row, entries, now)
         await self._finish(row, now, outcome="ok" if posts else "empty", result=result, cursor=cursor, host=DAJIALA_HOST,
                            detail=f"bodies={bodies}", requests=1 + bodies,
                            next_at=now + timedelta(days=1) / wechat_mod.polls_per_day(row))
         return "ok"
 
-    async def _wechat_failed(self, row: dict, now: datetime, error: ProviderError) -> str:
+    async def wechat_resolve(self, row: dict, now: datetime) -> tuple[str, dict | None]:
+        """Re-resolve an account from its verified article link (``wechat`` module docstring): ``("ok", resolution)``, or
+        the outcome and ``None`` (the read is then finished here: parked, capped, failed)."""
+        verified = (row["config"] or {}).get("verified_url")
+        if not verified:
+            await self._finish(row, now, outcome="blocked", detail="wechat_unverified", host=DAJIALA_HOST,
+                               next_at=now + wechat_mod.MISMATCH_PARK)
+            return "unverified", None
+        try:
+            detail = await self.dajiala.article_detail(verified)
+        except SpendCapReached as capped:
+            await self._finish(row, now, outcome="host-budget", detail="daily_cap", next_at=capped.retry_at, host=DAJIALA_HOST)
+            return "capped", None
+        except ProviderError as error:
+            return await self._wechat_failed(row, now, error), None
+        resolved = wechat_mod.resolution(detail, row, now)
+        if resolved is None:
+            cursor = {**(row["cursor"] or {}),
+                      "mismatch": {"nickname": str(detail.get("nick_name") or "")[:100], "at": now.isoformat()}}
+            await self._finish(row, now, outcome="blocked", detail="wechat_nickname_mismatch", cursor=cursor,
+                               next_at=now + wechat_mod.MISMATCH_PARK, host=DAJIALA_HOST)
+            log.warning("wechat %s: the verified link names another account; parked", row["id"])
+            return "mismatch", None
+        return "ok", resolved
+
+    async def _wechat_failed(self, row: dict, now: datetime, error: ProviderError, *, cursor: dict | None = None) -> str:
         if error.kind == "balance":
             self.paused[DAJIALA] = day_window(now)[1]
             await self._finish(row, now, outcome="host-budget", detail="dajiala_balance", next_at=self.paused[DAJIALA],
-                               host=DAJIALA_HOST)
+                               host=DAJIALA_HOST, cursor=cursor)
             return "balance"
         if error.kind == "refused":
             self.paused[DAJIALA] = now + REFUSED_PAUSE
             await self._finish(row, now, outcome="host-budget", detail="dajiala_key_refused", next_at=self.paused[DAJIALA],
-                               host=DAJIALA_HOST)
+                               host=DAJIALA_HOST, cursor=cursor)
             return "refused"
         if error.kind == "rate-limited":
             await self._finish(row, now, outcome="host-budget", detail="dajiala_rate_limited", next_at=now + RATE_LIMITED_WAIT,
-                               host=DAJIALA_HOST)
+                               host=DAJIALA_HOST, cursor=cursor)
             return "rate-limited"
         next_at = now + wechat_mod.GONE_RETRY if error.kind == "gone" else await self._failure_next(row, now, error)
         await self._finish(row, now, outcome="http-error", detail=f"dajiala_{error.kind}:{error.detail}"[:100],
-                           next_at=next_at, host=DAJIALA_HOST)
+                           next_at=next_at, host=DAJIALA_HOST, cursor=cursor)
         return "failed"
 
     # ------------------------------------------------------------------ the six platforms

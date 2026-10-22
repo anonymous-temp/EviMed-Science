@@ -3,13 +3,14 @@
 After AIHOT's ``providers/dajiala.ts`` and ``sources/mp.ts`` (MIT, engine at 47531fa), with one rule of our own:
 
 - **A saved id is not trusted.** On 2026-10-22 the id saved for 丁香园 (``gh_1e80bb81a1d2``) answered as a test account
-  (「快乐测试123」), and the same id is saved for 雷峰网. So every account is re-resolved before its first poll, from the
-  link of an article verified to be its own (``config.verified_url``): ``post_history`` by that link names the account
-  that published it — nickname and original id — and returns its latest posts in the same call (¥0.14, the price of a
-  poll). The account is kept only when the nickname is one of the names the registry expects (``config.expected_names``:
-  the account's name and the nickname its verified article page showed); otherwise it is parked for 30 days with the
-  reason ``wechat_nickname_mismatch`` and nothing it returned is stored. A resolved account is read by its original id
-  afterwards; the resolution lives in the source's cursor and starts again when the registry row changes.
+  (「快乐测试123」), and the same id is saved for 雷峰网. So every account is re-resolved before its first read, from the
+  link of an article verified to be its own (``config.verified_url``): ``article_detail`` on that link (¥0.03) names the
+  account that published it — ``nick_name``, its original id ``user_name``, its WeChat id ``alias`` and ``biz``
+  (measured 2026-10-22 on NEJM医学前沿's link). The account is kept only when the nickname is one of the names the
+  registry expects (``config.expected_names``: the nickname its verified article page showed, and the name the list
+  gave); otherwise it is parked for 30 days with the reason ``wechat_nickname_mismatch`` — a mismatch costs ¥0.03, not
+  a read. A resolved account is read by its original id (``post_history``, ¥0.14); an answer without ``user_name`` is
+  read by the link instead. The resolution lives in the source's cursor and starts again when the registry row changes.
 - **Pace and priority.** At most ``config.polls_per_day`` reads a day (two for the first priority tier, one for the rest),
   due accounts highest priority first, every call within the day's cap — with the balance at about ¥30 on 2026-10-22,
   the regulators, journals and societies are read before the portals and the trade press.
@@ -82,6 +83,19 @@ def external_key(post: dict) -> str | None:
     return post.get("sn") or url
 
 
+def resolution(detail: dict, row: dict, now: datetime) -> dict | None:
+    """The account an ``article_detail`` answer names, when it is the one the registry expects; ``None`` otherwise."""
+    nickname = detail.get("nick_name") if isinstance(detail.get("nick_name"), str) else None
+    if not nickname_matches(nickname, row):
+        return None
+    resolved = {"nickname": nickname.strip(), "at": now.isoformat()}
+    for key, field in (("ghid", "user_name"), ("alias", "alias"), ("biz", "biz")):
+        value = detail.get(field)
+        if isinstance(value, str) and value.strip():
+            resolved[key] = value.strip()
+    return resolved
+
+
 def body_of(detail: dict) -> str | None:
     """The plain text of an ``article_detail`` answer (mode 1: light HTML, paragraphs and image markers)."""
     content = detail.get("content")
@@ -91,7 +105,7 @@ def body_of(detail: dict) -> str | None:
 
 
 def build_entry(post: dict, row: dict, nickname: str, *, now: datetime, cover: dict | None,
-                detail: dict | None) -> NormalizedEntry | None:
+                detail: dict | None, alias: str | None = None) -> NormalizedEntry | None:
     """One post as an entry; ``None`` without a link or a title."""
     url, keys = article_link(post.get("url"))
     title = post.get("title") if isinstance(post.get("title"), str) else None
@@ -110,12 +124,16 @@ def build_entry(post: dict, row: dict, nickname: str, *, now: datetime, cover: d
     elif post.get("original") in (2, "2"):
         facts["wx_original"] = False
     hint = f"wx:{keys['__biz']}:{keys['mid']}:{keys['idx']}" if all(keys.get(k) for k in ("__biz", "mid", "idx")) else None
-    metrics = {"views": _count(post.get("read")), "likes": _count(post.get("zan")), "observed_at": now}
+    # The article's own counts when its text was bought (reads, likes, shares, comments), else the list's (reads, likes).
+    counted = detail or {}
+    metrics = {"views": _count(counted.get("read", post.get("read"))), "likes": _count(counted.get("zan", post.get("zan"))),
+               "reposts": _count(counted.get("share_count")), "replies": _count(counted.get("comment_count")),
+               "observed_at": now}
     return NormalizedEntry(
         external_key=key, url=url, title=title, summary=digest or (body[:500] if body else None),
         published_at=post_time(post), date_precision="instant", language="zh", identity_hint=hint, facts=facts,
         registry_ids=registry_ids(title, digest, body), channel="wechat", platform="wechat",
-        author={"name": nickname, "role": (row.get("config") or {}).get("role") or "organisation"},
+        author={"name": nickname, "handle": alias, "role": (row.get("config") or {}).get("role") or "organisation"},
         media=[cover] if cover else [], metrics=metrics, body_text=body, body_from="wechat" if body else None,
     )
 

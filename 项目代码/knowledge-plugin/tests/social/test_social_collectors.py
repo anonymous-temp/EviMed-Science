@@ -183,7 +183,7 @@ def wx_post(mid, idx=1, *, hours=2, original=1):
 
 async def test_wechat_resolves_from_the_verified_link_then_reads_by_id_and_buys_each_body_once(social_settings, pool):
     await sync(pool, [wx_row()])
-    history_calls = []
+    history_calls, details = [], []
 
     def history(spec):
         payload = json.loads(spec.body)
@@ -192,8 +192,10 @@ async def test_wechat_resolves_from_the_verified_link_then_reads_by_id_and_buys_
                      "data": [wx_post(7, 1), wx_post(7, 2), wx_post(3, 1, hours=24 * 30)]}
 
     def detail(spec):
+        details.append(parse_qs(urlsplit(spec.url).query)["url"][0])
         return 200, {"code": 0, "title": "文章", "content": "<p>第一段。</p><p>第二段 NCT01234567。</p>", "author": "张三",
-                     "cost_money": 0.03, "remain_money": 29.80}
+                     "nick_name": "丁香园心血管时间", "user_name": "gh_real", "alias": "dxy_heart_today", "biz": "MzA5",
+                     "read": 1500, "zan": 40, "share_count": 12, "comment_count": 3, "cost_money": 0.03, "remain_money": 29.80}
 
     cover = png_bytes((60, 40))
     fetcher = FakeFetcher({("POST", "https://www.dajiala.com/fbmain/monitor/v3/post_history"): history,
@@ -201,37 +203,40 @@ async def test_wechat_resolves_from_the_verified_link_then_reads_by_id_and_buys_
                            ("GET", "https://mmbiz.qpic.cn/"): lambda spec: (200, cover, {"content-type": "image/png"})})
     collector = SocialCollector(social_settings, pool, fetcher, clock=lambda: NOW)
     assert (await collector.tick())["wechat"] == {"ok": 1}
-    assert history_calls[0] == {"url": "https://mp.weixin.qq.com/s?__biz=MzA5&mid=1&idx=2&sn=a", "verifycode": ""}
+    assert details[0] == "https://mp.weixin.qq.com/s?__biz=MzA5&mid=1&idx=2&sn=a", "the verified link names the account"
+    assert history_calls == [{"ghid": "gh_real", "verifycode": ""}], "then the account is read by the id it named"
     rows = await entries(pool, "wx-dxy-heart")
     assert [row["external_key"] for row in rows] == ["MzA5:3:1", "MzA5:7:1", "MzA5:7:2"]
     new = next(row for row in rows if row["external_key"] == "MzA5:7:1")
     assert new["identity_key"] == "wx:MzA5:7:1" and new["channel"] == "wechat" and new["url"].startswith("https://")
-    assert new["author"] == {"name": "丁香园心血管时间", "role": "organisation"} and new["media"][0]["kind"] == "image"
+    assert new["author"] == {"name": "丁香园心血管时间", "handle": "dxy_heart_today", "role": "organisation"}
+    assert new["media"][0]["kind"] == "image"
     assert new["body_text"] == "第一段。\n\n第二段 NCT01234567。" and new["facts"] == {"wx_biz": "MzA5", "wx_author": "张三", "wx_original": True}
-    assert new["metrics"]["views"] == 1200 and new["metrics"]["likes"] == 30 and new["registry_ids"] == ["NCT01234567"]
+    assert new["metrics"] == {"views": 1500, "likes": 40, "reposts": 12, "replies": 3, "observed_at": "2026-10-22T06:00:00Z"}
+    assert new["registry_ids"] == ["NCT01234567"]
     old = next(row for row in rows if row["external_key"] == "MzA5:3:1")
     assert old["backfill"] and old["body_text"] is None, "an old post on first contact is history: no body bought"
-    assert fetcher.count("https://www.dajiala.com/fbmain/monitor/v3/article_detail") == 2
+    assert len(details) == 3, "the resolution and two bodies"
     state = await source(pool, "wx-dxy-heart")
     assert state["cursor"]["resolved"]["ghid"] == "gh_real" and state["next_poll_at"] == NOW + timedelta(hours=12)
 
     later = NOW + timedelta(hours=12, minutes=1)
     collector._clock = lambda: later
     await collector.tick()
-    assert history_calls[1] == {"ghid": "gh_real", "verifycode": ""}, "a resolved account is read by its id"
-    assert fetcher.count("https://www.dajiala.com/fbmain/monitor/v3/article_detail") == 2, "a stored post's body is not bought again"
+    assert history_calls[1] == {"ghid": "gh_real", "verifycode": ""} and len(details) == 3, "no resolution, no body bought again"
     async with pool.connection() as conn:
         spent = await (await conn.execute(
             "SELECT round(sum(amount), 2) AS cny, count(*) AS calls FROM evimed_knowledge.provider_calls WHERE provider = 'dajiala'")).fetchone()
-    assert float(spent["cny"]) == 0.34 and spent["calls"] == 4
+    assert float(spent["cny"]) == 0.37 and spent["calls"] == 5
 
 
-async def test_wechat_a_link_that_names_another_account_parks_it_and_keeps_nothing(social_settings, pool):
+async def test_wechat_a_link_that_names_another_account_parks_it_at_the_cost_of_the_check(social_settings, pool):
     await sync(pool, [wx_row("wx-dxy", "丁香园")])
-    fetcher = FakeFetcher({("POST", "https://www.dajiala.com/"): lambda spec: (
-        200, {"code": 0, "nickname": "快乐测试123", "ghid": "gh_1e80bb81a1d2", "cost_money": 0.14, "data": [wx_post(9)]})})
+    fetcher = FakeFetcher({("GET", "https://www.dajiala.com/fbmain/monitor/v3/article_detail"): lambda spec: (
+        200, {"code": 0, "nick_name": "快乐测试123", "user_name": "gh_1e80bb81a1d2", "cost_money": 0.03})})
     collector = SocialCollector(social_settings, pool, fetcher, clock=lambda: NOW)
     assert (await collector.tick())["wechat"] == {"mismatch": 1}
+    assert fetcher.count("https://www.dajiala.com/fbmain/monitor/v3/post_history") == 0, "a mismatch is never read"
     assert await entries(pool, "wx-dxy") == []
     row = await source(pool, "wx-dxy")
     assert row["last_error_code"] == "wechat_nickname_mismatch" and row["next_poll_at"] == NOW + timedelta(days=30)
@@ -242,11 +247,11 @@ async def test_wechat_balance_stops_wechat_for_the_day_and_priority_goes_first(s
     await sync(pool, [wx_row("wx-a", "A号", priority=3), wx_row("wx-b", "B号", priority=1)])
     asked = []
 
-    def history(spec):
+    def balance(spec):
         asked.append(spec)
         return 200, {"code": 20001, "msg": "余额不足"}
 
-    fetcher = FakeFetcher({("POST", "https://www.dajiala.com/"): history})
+    fetcher = FakeFetcher({("GET", "https://www.dajiala.com/"): balance, ("POST", "https://www.dajiala.com/"): balance})
     collector = SocialCollector(social_settings, pool, fetcher, clock=lambda: NOW)
     assert (await collector.tick())["wechat"] == {"balance": 1}
     assert len(asked) == 1, "the first answer about the balance stops every other account"
