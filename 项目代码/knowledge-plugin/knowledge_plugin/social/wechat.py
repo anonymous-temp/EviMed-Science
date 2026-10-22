@@ -126,9 +126,13 @@ def build_entry(post: dict, row: dict, nickname: str, *, now: datetime, cover: d
     hint = f"wx:{keys['__biz']}:{keys['mid']}:{keys['idx']}" if all(keys.get(k) for k in ("__biz", "mid", "idx")) else None
     # The article's own counts when its text was bought (reads, likes, shares, comments), else the list's (reads, likes).
     counted = detail or {}
-    metrics = {"views": _count(counted.get("read", post.get("read"))), "likes": _count(counted.get("zan", post.get("zan"))),
-               "reposts": _count(counted.get("share_count")), "replies": _count(counted.get("comment_count")),
-               "observed_at": now}
+
+    def stated(field: str):
+        value = _count(counted.get(field))
+        return value if value is not None else _count(post.get(field))
+
+    metrics = {"views": stated("read"), "likes": stated("zan"), "reposts": stated("share_count"),
+               "replies": stated("comment_count"), "observed_at": now}
     return NormalizedEntry(
         external_key=key, url=url, title=title, summary=digest or (body[:500] if body else None),
         published_at=post_time(post), date_precision="instant", language="zh", identity_hint=hint, facts=facts,

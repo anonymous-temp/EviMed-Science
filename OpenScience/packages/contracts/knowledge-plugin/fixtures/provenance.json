@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1062",
+        "content-length": "1842",
         "content-type": "application/json",
-        "date": "Sat, 10 Oct 2026 11:53:23 GMT"
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
       },
-      "recordedAt": "2026-10-10T11:53:23.548Z"
+      "recordedAt": "2026-10-22T06:43:40.179Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1205",
+        "content-length": "1353",
         "content-type": "application/json",
-        "date": "Sat, 10 Oct 2026 11:53:23 GMT"
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
       },
-      "recordedAt": "2026-10-10T11:53:23.605Z"
+      "recordedAt": "2026-10-22T06:43:40.184Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -380,6 +380,94 @@
         "date": "Mon, 05 Oct 2026 16:31:01 GMT"
       },
       "recordedAt": "2026-10-05T16:31:02.200Z"
+    },
+    "entry-x.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/x-who%3A1cb9e42ff82371e5756f9aec62d6bbf6",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1752",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+      },
+      "recordedAt": "2026-10-22T06:43:40.188Z"
+    },
+    "text-x.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/x-who%3A1cb9e42ff82371e5756f9aec62d6bbf6/text",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "400",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+      },
+      "recordedAt": "2026-10-22T06:43:40.193Z"
+    },
+    "entry-wechat.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/wx-nejm%3Abcb544b703a0671f79ca412950135563",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1662",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+      },
+      "recordedAt": "2026-10-22T06:43:40.197Z"
+    },
+    "text-wechat.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/wx-nejm%3Abcb544b703a0671f79ca412950135563/text",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "41831",
+        "content-type": "application/json",
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+      },
+      "recordedAt": "2026-10-22T06:43:40.202Z"
+    },
+    "media-x.jpg": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/media/e7291975dc526792cecf3984374c5b0ffa45b00549d923bc898fc21b95462e64",
+        "headers": {
+          "accept": "image/*"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "cache-control": "private, max-age=86400",
+        "content-length": "169697",
+        "content-type": "image/jpeg",
+        "date": "Thu, 22 Oct 2026 06:43:40 GMT",
+        "etag": "\"e7291975dc526792cecf3984374c5b0ffa45b00549d923bc898fc21b95462e64\"",
+        "x-content-type-options": "nosniff"
+      },
+      "recordedAt": "2026-10-22T06:43:40.207Z"
     }
   },
   "partialRecordings": [
@@ -417,6 +505,29 @@
       ],
       "reason": "Contract 1.4.0 adds Health.host_budget (today's use against each host's daily cap): the health answer carries the table and, with the manifest, names the new contract. The stream's recordings and the source row are the earlier plugins', still valid, since a minor only adds.",
       "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off: nothing was fetched from anyone; the whole registry synced), against a scratch database whose host_counters for the day were seeded with api.crossref.org 1850, eutils.ncbi.nlm.nih.gov 420 and api.fda.gov 300 (a spent cap) so the table shows use; not a production plugin and not real traffic"
+    },
+    {
+      "recordedAt": "2026-10-22T06:43:40.208Z",
+      "server": "http://127.0.0.1:49100",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "fr-social-20261022",
+        "started_at": "2026-10-22T06:42:52.709490Z"
+      },
+      "contractVersion": "1.5.0",
+      "fixtures": [
+        "health.json",
+        "manifest.json",
+        "entry-x.json",
+        "text-x.json",
+        "entry-wechat.json",
+        "text-wechat.json",
+        "media-x.jpg"
+      ],
+      "reason": "Contract 1.5.0 adds social posts (Entry.channel, platform, author, media, quoted, metrics; EntryText.body_text; GET /v1/media/{id}) and Health.providers: the health answer, the manifest, one X post with media and a quote, one WeChat article with its text, their texts and one stored image were recorded. The stream's recordings, the registry pages and the source row are the earlier plugins', still valid, since a minor only adds.",
+      "socialPlatform": "not recorded: the instance held no six-platform entry (the GEO crawler answered 500 during the live check, its own database down)",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (wp/fr-social), crawler off, against a scratch database holding what its social collector read live once on 2026-10-22 (tools/social_live_check.py: five X accounts in two shard searches, three WeChat accounts re-resolved and one read, one GEO crawler search that answered 500); today's host_counters for api.crossref.org 1850, eutils.ncbi.nlm.nih.gov 420 and api.fda.gov 300 were seeded so the 1.4.0 table shows use; not a production plugin"
     }
   ]
 }
