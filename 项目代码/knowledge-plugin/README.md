@@ -9,7 +9,7 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.5.0, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.5.1, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
 `/v1/health` (no token), `/v1/sources[/{id}]`, `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),
@@ -62,6 +62,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_CONTACT_EMAIL_FILE` / `KNOWLEDGE_PLUGIN_CONTACT_EMAIL` | unset | the `mailto:` in the `EviMedBot/1.0` User-Agent (file wins); never logged |
 | `KNOWLEDGE_PLUGIN_NCBI_KEY_FILE`, `KNOWLEDGE_PLUGIN_OPENFDA_KEY_FILE` | unset | optional keys; absent or empty = anonymous rate (NCBI 0.4 s, openFDA 300/day) |
 | `KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE` | unset | the team's EviMed evidence API key, sent as `Authorization: Bearer` on its API path only (the `evimed-api` scans); unset = those sources wait |
+| `KNOWLEDGE_PLUGIN_ELSEVIER_KEY_FILE` | unset | an Elsevier API key, sent as `X-ELS-APIKey` to `api.elsevier.com` only; the paper text chain then asks Elsevier's Article Retrieval API for the abstracts of its DOIs (`enrich/elsevier.py`); unset = never asked |
 | `KNOWLEDGE_PLUGIN_EDGE_PROXY_URL` / `KNOWLEDGE_PLUGIN_EDGE_PROXY_CREDENTIALS_FILE` | unset | the `relay` exit: the Tokyo TLS forward proxy (`https://<node>`) and its `user:password` file; unset = relay sources wait |
 | `KNOWLEDGE_PLUGIN_BROWSER_CDP_URL` / `KNOWLEDGE_PLUGIN_BROWSER_TIMEOUT_S` | unset / `60` | the `browser` exit: `http://frontier-browser:9222` (resolved to an IP: Chromium refuses a non-IP Host); unset = browser sources wait |
 | `EVIMED_EVIDENCE_FEED_URL` | unset (the EviMed compose overlay defaults it to `$OPEN_SCIENCE_PUBLIC_URL` + the evidence base path + `/feed.json`) | the platform's own evidence feed (`https://<platform>/evidence/feed.json`), read as the source `evimed-evidence` (`platform_produced`, contract 1.3.0); unset = the source loads disabled (`feed_url_unset`) and nothing is polled. It must be the address the platform links its cards on, a public one: only the cards on the host the feed was read from are handed on, and the fetcher reaches global addresses only, so a compose-internal service name does not work. A platform whose public evidence pages are off answers the feed 404 `evidence_public_not_enabled`, which reads as an empty feed, not a failure |
@@ -122,6 +123,25 @@ delivered, reported back by the platform after each mirror (`POST /v1/sources/sc
 in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days, `by_line`, `in_trial`).
 `python -m knowledge_plugin lifecycle` prints what the rules would retire now (writes nothing; `--apply` retires);
 `python -m knowledge_plugin discover [--lines a,b] [--caps line=n,…]` runs one cycle in the foreground.
+
+## The paper text chain (contract 1.5.1)
+
+`/text` for a journal entry (`knowledge_plugin/enrich/`, rt-papers 2026-10-22): the indexes first — PubMed, Europe PMC,
+Crossref, Elsevier's API (only with a key), Unpaywall, OpenAlex (`enrich/openalex.py`: an abstract rebuilt from its
+inverted index, the PMC id, the open copy's licence) — then the publisher: the journal's own feeds (`config.abstract_feed`
+on its registry row, read at most every two hours, `enrich/feeds.py`) and its landing page (`enrich/landing.py`: the DOI's
+handle record names it, it is asked as `text/html` — doi.org answers the fetcher's JSON-first `Accept` with Crossref's
+record — through the source's exit, then the relay, then the browser; a challenge or a 403 is the answer, remembered per
+host for a day, never got round). An open article's whole text comes from Europe PMC's `fullTextXML` (a PMC id) or from a
+Creative-Commons page, as `body_text` with `## ` section titles and `text_kind` `full` (`enrich/jats.py`,
+`enrich/article_html.py`); else its PDF stays `enrichment.oa_pdf_url`. A journal entry without text is asked again every
+12 hours for 14 days; a feed's teaser or a page's standfirst answers at once and is replaced (the entry delivered again)
+when an index gives the abstract.
+
+`python tools/text_probe.py <doi-file>` runs the chain on DOIs (`doi` or `doi|source_id` a line) and prints which step
+answered each, writing nothing; `python tools/measure_abstract_feeds.py` measures the configured feeds (text share, median
+length, matchability). `python -m knowledge_plugin retext --kinds journal [--apply]` reads the journal entries the
+platform asked for that have no text at all through the chain again.
 
 ## Social posts (contract 1.5.0)
 
