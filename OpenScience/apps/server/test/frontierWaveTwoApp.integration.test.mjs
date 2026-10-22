@@ -118,7 +118,14 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   // now only a candidate, so provide the explicit semantic verdict here.
   const previousEditor = events.editor;
   const previousBudget = events.budgetReader;
-  events.editor = { available: true, judgeSameEvent: async ({ candidates }) => ({ verdicts: candidates.map(() => "yes"), error: null }) };
+  // The report and its coverage are one occurrence; whatever else the words recall from the tests before is another.
+  const trial = (/** @type {string} */ block) => block.includes("注册号 NCT55555555");
+  events.editor = { available: true, callJson: async (messages) => {
+    const [report, ...others] = messages[1].content.split("\n\n").filter((block) => block.startsWith("【"));
+    const relation = (/** @type {string} */ block) => (trial(report) && trial(block) ? "SAME_OCCURRENCE" : "UNRELATED");
+    return report.startsWith("【报道 A】") ? { relation: relation(others[0]), confidence: 1 }
+      : { decisions: others.map((block, index) => ({ id: `C${index + 1}`, relation: relation(block), confidence: 1 })), selection: null };
+  } };
   events.budgetReader = null;
   try { await events.clusterPending(); }
   finally { events.editor = previousEditor; events.budgetReader = previousBudget; }
@@ -149,6 +156,13 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   assert.deepEqual([page.hasPrimary, page.primary], [true, "paper"]);
   assert.ok(Number.isInteger(page.heat) && page.heat > 0);
   assert.equal(page.trend, null, "five hours of history: 「暂无走势」");
+  assert.deepEqual(page.developments, [], "no story beyond this event");
+  const ascending = (await (await fetch(`${base}/api/frontier/events/${event.public_id}?order=asc`, { headers: sessions.reader })).json()).data.event;
+  assert.deepEqual(ascending.items.map((item) => item.id), [paper.publicId, coverage.publicId], "oldest first");
+  const descending = (await (await fetch(`${base}/api/frontier/events/${event.public_id}?order=desc`, { headers: sessions.reader })).json()).data.event;
+  assert.deepEqual(descending.items.map((item) => item.id), [coverage.publicId, paper.publicId], "newest first, whatever the role");
+  const wrong = await fetch(`${base}/api/frontier/events/${event.public_id}?order=sideways`, { headers: sessions.reader });
+  assert.deepEqual([wrong.status, (await wrong.json()).code], [400, "frontier_query_invalid"]);
 
   // Fold this event into an older one by hand, as a bridge would.
   const older = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
@@ -159,6 +173,8 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   assert.equal(redirect.status, 308);
   assert.equal(redirect.headers.get("location"), "0123456789abcdef", "relative: it resolves under whatever prefix serves the API");
   assert.deepEqual((await redirect.json()).data, { redirect: "0123456789abcdef" });
+  const ordered = await fetch(`${base}/api/frontier/events/${event.public_id}?order=asc`, { headers: sessions.reader, redirect: "manual" });
+  assert.equal(ordered.headers.get("location"), "0123456789abcdef?order=asc", "the order asked for goes with the redirect");
   const followed = await fetch(`${base}/api/frontier/events/${event.public_id}`, { headers: sessions.reader });
   assert.equal(followed.status, 200);
   assert.equal((await followed.json()).data.event.id, "0123456789abcdef");

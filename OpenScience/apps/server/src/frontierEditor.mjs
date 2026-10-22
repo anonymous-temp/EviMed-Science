@@ -1728,6 +1728,25 @@ export class FrontierEditor {
     return { ...result, abstractZh: result.output?.abstract_zh ?? null };
   }
 
+  /**
+   * One metered call with another module's instructions — the event layer's grouping judgement and its second look keep their
+   * prompts in `frontierEventGrouping.mjs` (fr-events, 2026-10-22): the parsed JSON answer, or null; throws with a named code.
+   * @param {Array<{ role: string, content: string }>} messages @param {{ maxTokens: number, timeoutMs: number }} limits
+   */
+  async callJson(messages, { maxTokens, timeoutMs }) {
+    return this.#call(messages, maxTokens, timeoutMs);
+  }
+
+  /**
+   * `#write` — one call, its checks, one rewrite with the issues named — with another module's instructions and checks (the
+   * event overview, `frontierEventGrouping.mjs`).
+   * @param {string} instructions @param {string} input @param {number} maxTokens
+   * @param {{ verify: (answer: any) => { output: Record<string, string | null>, issues: string[], numbers: any }, timeoutMs?: number }} options
+   */
+  async writeJson(instructions, input, maxTokens, { verify, timeoutMs = WRITING_TIMEOUT_MS }) {
+    return this.#write(instructions, input, {}, maxTokens, { verify, timeoutMs });
+  }
+
   status() {
     return { available: this.available, model: this.model, editorVersion: FRONTIER_EDITOR_VERSION, lastError: this.lastError,
       counters: structuredClone(this.counters) };

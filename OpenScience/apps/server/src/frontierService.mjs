@@ -1268,12 +1268,15 @@ export class FrontierService {
 
   /**
    * One event page, or where a merged event went (`{ redirect }`, answered
-   * 308 by the route), or a 404.
-   * @param {{ id: string }} user @param {string} publicId
+   * 308 by the route), or a 404. `?order=desc|asc` puts the reports and the
+   * developments in time order (fr-events 2026-10-22).
+   * @param {{ id: string }} user @param {string} publicId @param {URLSearchParams} [params]
    */
-  async event(user, publicId) {
+  async event(user, publicId, params = new URLSearchParams()) {
     if (!this.events) throw failure(404, "not_found", "Frontier route not found.");
-    const read = await this.events.read(publicId);
+    const order = params.get("order") || null;
+    if (order !== null && order !== "asc" && order !== "desc") throw failure(400, "frontier_query_invalid", "The order parameter is invalid.");
+    const read = await this.events.read(publicId, { order });
     if (!read) throw failure(404, "frontier_event_not_found", "No such event.");
     if ("redirect" in read) return { redirect: read.redirect };
     const items = await this.hydrate(user, { rowIds: read.members.map((member) => member.rowId) });
@@ -1309,6 +1312,9 @@ export class FrontierService {
         trend: read.trend,
         items: read.members.flatMap((member) => (items.has(member.rowId) ? [{ ...items.get(member.rowId), role: member.role }] : [])),
         related: read.related,
+        // The other events of its story, each by its representative report (`follows` links): `position` says whether it came
+        // before this event or after.
+        developments: read.developments ?? [],
       },
     };
   }
@@ -1806,7 +1812,10 @@ export function frontierMetricFamilies(enabled, snapshot) {
     const events = composer.events?.counters ?? {};
     add("events_total", "What clustering, the hot list and the digests did since this process started.", "counter",
       ["clustered", "created", "joined", "merged", "relatedLinks", "identifierLinks", "adjudicated", "adjudicationSkipped", "adjudicationFailures",
-        "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
+        "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped",
+        // fr-events 2026-10-22: the grouping calls, their second looks, the relations they found, the links and the gate.
+        "groupCalls", "secondLooks", "secondLooksAgreed", "sameOccurrence", "sameStory", "followsLinks", "sameEventUnselected", "lexicalRecalls",
+        "regrouped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
     const profiles = composer.profiles ?? null;
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));

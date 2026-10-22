@@ -203,6 +203,12 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   updated_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS editor_diagnostics jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- fr-events 2026-10-22: one selected item per event. The grouping call judges whether a report tells a reader anything the
+-- event's selected report did not; an item that does not names that report here (its 「同一事件」 link) and is published
+-- unselected. event_selection is the verdict as given, for operators: {addsValue, reason, decidedAt}.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS same_event_item_id bigint REFERENCES evimed_frontier.items(id) ON DELETE SET NULL;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS event_selection jsonb;
+CREATE INDEX IF NOT EXISTS frontier_items_same_event_idx ON evimed_frontier.items (same_event_item_id) WHERE same_event_item_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_doi_key ON evimed_frontier.items (lower(doi)) WHERE doi IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_identity_key ON evimed_frontier.items (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_items_url_idx ON evimed_frontier.items (md5(canonical_url));
@@ -313,6 +319,9 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.events (
 );
 CREATE INDEX IF NOT EXISTS frontier_events_recent_idx ON evimed_frontier.events (last_at DESC) WHERE merged_into IS NULL;
 CREATE INDEX IF NOT EXISTS frontier_events_hot_idx ON evimed_frontier.events (heat DESC) WHERE merged_into IS NULL AND status = 'developing';
+-- fr-events 2026-10-22: the overview's own title (AIHOT story-digest: it names the whole event, never only its latest
+-- report); the event is called by it once written, else by its first primary source's title.
+ALTER TABLE evimed_frontier.events ADD COLUMN IF NOT EXISTS digest_title_zh text CHECK (char_length(digest_title_zh) <= 60);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.event_aliases (
   public_id text PRIMARY KEY,
