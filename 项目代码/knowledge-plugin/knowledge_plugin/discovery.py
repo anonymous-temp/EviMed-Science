@@ -59,9 +59,9 @@ log = logging.getLogger("knowledge_plugin.discovery")
 LINES = ("outbound", "journal", "directory", "hot-origin", "social", "request", "parent-feed", "readmit")
 # Validations a line may spend a day, sized from the yields measured on 2026-10-22 over a day of production entries
 # (handoff fr-sources): journals 41 of 60 validated (MEDLINE, ≥ 8 articles in 30 days), directories 10 of 60, outbound
-# sites 8 of 60 (about a third of them medical by the screen). At these caps ~110–200 candidates are validated a day and
-# about 15 admitted, two thirds of them journals.
-DEFAULT_CAPS = {"outbound": 60, "journal": 20, "directory": 30, "hot-origin": 15, "social": 20, "request": 25,
+# sites 2–8 of 60 (a third or fewer of them medical by the screen). At these caps ~115–205 candidates are validated a
+# day and about 15–20 admitted, most of them journals.
+DEFAULT_CAPS = {"outbound": 60, "journal": 25, "directory": 30, "hot-origin": 15, "social": 20, "request": 25,
                 "readmit": 30}
 # Discovered journals are read through Crossref, whose daily allowance the registry's journals share (budget.py): the
 # journal line waits for tomorrow while today's use is past this share of the cap.

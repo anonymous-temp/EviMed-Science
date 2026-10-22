@@ -67,7 +67,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `EVIMED_SOURCE_REQUESTS_URL` | unset | optional public HTTPS JSON source wish list, pulled daily through protected fetching; only supported AI discovery readers on plugin-approved scholarly hosts are admitted, existing exclusions preserved |
 | `KNOWLEDGE_PLUGIN_CRAWL` | `1` | `0` serves the stored stream without crawling |
 | `KNOWLEDGE_PLUGIN_DISCOVERY` | `1` | `0` stops automatic source discovery and the source lifecycle (`discovery.py`, `lifecycle.py`) |
-| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=20,directory=30,hot-origin=15,social=20,request=25,readmit=30`) |
+| `KNOWLEDGE_PLUGIN_DISCOVERY_CAPS` | unset | the daily validations per candidate line, `line=n,…` over the defaults (`outbound=60,journal=25,directory=30,hot-origin=15,social=20,request=25,readmit=30`) |
 | `KNOWLEDGE_PLUGIN_DISCOVERY_OUTBOUND_PAGES` | `120` | article pages the outbound line reads a day to find the sites they link to |
 | `KNOWLEDGE_PLUGIN_PORT` / `KNOWLEDGE_PLUGIN_HOST` | `8080` / `0.0.0.0` | listen address |
 | `KNOWLEDGE_PLUGIN_REGISTRY` | `registry/sources.json` | the runtime registry file (watched; re-synced on change) |
