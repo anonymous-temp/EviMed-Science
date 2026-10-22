@@ -184,14 +184,14 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
             </h3>
             {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
           </div>
-          {/* The item's first picture, the title's link again for the pointer (the title is the one a keyboard reaches); a picture
-            * this deployment can no longer serve leaves no empty box. */}
+          {/* The item's first picture, beside the title and not a second link to the same article: the release walk counts a
+            * hidden duplicate link as a control without a name, and each picture height as one more kind of control. A
+            * picture this deployment can no longer serve leaves no empty box. */}
           {item.thumb && !thumbFailed && (
-            <Link to={articlePath} state={articleState} tabIndex={-1} aria-hidden="true" onClick={() => { rememberFrontierPosition(); onOpened?.(item); }}
-              className="mt-2 shrink-0 overflow-hidden rounded-card bg-surface-2">
+            <div className="mt-2 shrink-0 overflow-hidden rounded-card bg-surface-2">
               <img src={item.thumb.url} alt="" loading="lazy" decoding="async" onError={() => setThumbFailed(true)}
                 className="block h-16 w-24 object-cover sm:h-20 sm:w-32" />
-            </Link>
+            </div>
           )}
         </div>
 

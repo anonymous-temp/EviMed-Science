@@ -315,13 +315,12 @@ describe("a social post's card", () => {
     expect(screen.getByRole("article")).not.toHaveTextContent("X 精选账号");
   });
 
-  it("shows its first picture beside the title, from this deployment's proxy, opening the same article", async () => {
+  it("shows its first picture beside the title, from this deployment's proxy, and the title stays the card's one link to the article", async () => {
     renderCard(post({ thumb: { id: "c".repeat(64), width: 400, height: 300, alt: "图" } }));
     const picture = document.querySelector("article img") as HTMLImageElement;
     expect(picture).toHaveAttribute("src", `/api/frontier/media/${"c".repeat(64)}`);
-    const link = picture.closest("a")!;
-    expect(link).toHaveAttribute("href", screen.getByRole("link", { name: frontierItem().title }).getAttribute("href"));
-    expect(link).toHaveAttribute("tabindex", "-1");
+    expect(picture.closest("a")).toBeNull();
+    expect(document.querySelectorAll('article a[aria-hidden="true"]')).toHaveLength(0);
   });
 
   it("draws no picture where there is none, or where it cannot be served", () => {
