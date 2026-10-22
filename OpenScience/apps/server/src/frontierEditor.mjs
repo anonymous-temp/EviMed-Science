@@ -335,6 +335,7 @@ export const FRONTIER_TRANSLATE_BODY_INSTRUCTIONS = [
   "3. 药物名称以原文实际实体范围为准：手工术语仅在范围一致时使用；自动生成术语只是译名候选，不能补入原文没有的盐、酯或剂型。试验名称缩写、基因和蛋白符号、网址、代码、人名保留原文。",
   "4. 不增删信息，不加解释、评论或译注。",
   "5. 某一段已经是中文，或只有符号和数字时，原样返回这一段。",
+  "6. 以「## 」开头的段落是全文的小标题：保留开头的「## 」，只翻译其后的标题文字。",
 ].join("\n");
 
 /** An X post (and the post it quotes), after AIHOT's `industry/prompts/translate-post.md` (MIT, KKKKhazix/AIHOT 47531fa). */
@@ -349,10 +350,11 @@ export const FRONTIER_TRANSLATE_POST_INSTRUCTIONS = [
 /**
  * What one item's translation may cost: at most `itemChars` of source text, in calls of at most `callChars`, paragraphs of at
  * most `paragraphChars` (a longer one is cut at sentence ends, then at the limit). Past `itemChars` the rest stays untranslated
- * and the translation is not complete. Twelve thousand characters is a long article's first screens, or a whole abstract and
- * its discussion; at the 2026-09-10 reference price that is at most about ¥0.04 an item (3,000 input and 4,000 output tokens).
+ * and the translation is not complete. Forty thousand characters is the whole of any full text the plugin delivers (its
+ * `body_text` bound): an open-access paper is translated whole (owner, 2026-10-22: 「是的，不用担心钱，把事情做好」), at the
+ * 2026-09-10 reference price at most about ¥0.15 an item; it was twelve thousand before.
  */
-export const FRONTIER_TRANSLATION_LIMITS = Object.freeze({ itemChars: 12_000, callChars: 3_000, paragraphChars: 2_000, postChars: 4_000 });
+export const FRONTIER_TRANSLATION_LIMITS = Object.freeze({ itemChars: 40_000, callChars: 3_000, paragraphChars: 2_000, postChars: 4_000 });
 const TRANSLATE_MAX_TOKENS = 6_000;
 const TRANSLATE_TIMEOUT_MS = 120_000;
 
@@ -410,7 +412,12 @@ function digitRuns(text) {
  * @param {unknown} translation @param {string} original @returns {string | null}
  */
 export function verifyParagraph(translation, original) {
-  const text = typeof translation === "string" ? translation.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n") : "";
+  const lines = typeof translation === "string" ? translation.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n") : "";
+  // A full text's section heading is a paragraph written `## Heading` (knowledge-plugin contract): its translation is one too,
+  // whether or not the answer kept the mark, and a paragraph that is not one never becomes one.
+  const heading = original.startsWith("## ");
+  const bare = lines.replace(/^#{1,6}\s*/, "");
+  const text = bare ? (heading ? `## ${bare}` : bare) : "";
   if (!text) return null;
   if (codePoints(text) > Math.max(200, codePoints(original) * 3)) return null;
   if ((original.match(/[A-Za-z]{3,}/g) ?? []).length >= 2) {

@@ -1112,8 +1112,9 @@ test("translateBody: one translation per paragraph or none trusted; refused para
 
 test("translateBody stops asking past the item's limit, in calls of bounded size, and an X post takes the post shape", async () => {
   const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(30)}`.trim();
-  const paragraphs = Array.from({ length: 10 }, () => paragraph);
-  const { calls, callModel } = stubModel(Array.from({ length: 20 }, () => (/** @type {any} */ call) => ({ t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") })));
+  // Past the item's limit (40,000 characters since 2026-10-22: a whole open-access paper).
+  const paragraphs = Array.from({ length: Math.ceil(FRONTIER_TRANSLATION_LIMITS.itemChars / paragraph.length) + 5 }, () => paragraph);
+  const { calls, callModel } = stubModel(Array.from({ length: 80 }, () => (/** @type {any} */ call) => ({ t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") })));
   const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
   const asked = calls.flatMap((call) => JSON.parse(call.body.messages[1].content).p);
   assert.ok(asked.length * paragraph.length <= FRONTIER_TRANSLATION_LIMITS.itemChars, "never past the item's limit");

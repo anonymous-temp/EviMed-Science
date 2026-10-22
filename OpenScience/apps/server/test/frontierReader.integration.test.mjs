@@ -15,6 +15,7 @@ import { createFrontierRoutes } from "../src/frontierRoutes.mjs";
 import { FRONTIER_CHANNEL_FILTERS, FrontierService, frontierItemChannel, frontierVocabularyView } from "../src/frontierService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
+import { frontierTextless } from "../../../scripts/ops/frontier-textless.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -98,7 +99,8 @@ test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text
   assert.equal(item.summary, item.lead, "the 导读 is the summary, under its reader name");
   assert.match(item.reason, /^肥胖但无糖尿病/);
   assert.equal(item.score, 86);
-  assert.deepEqual(item.body, { zh: "背景一。\n\n结果：事件减少 20%。", original: "Background one.\n\nResults: 20% fewer events.", zhKind: "translation", complete: true });
+  assert.deepEqual(item.body, { zh: "背景一。\n\n结果：事件减少 20%。", original: "Background one.\n\nResults: 20% fewer events.", zhKind: "translation", complete: true,
+    source: "abstract" });
   assert.deepEqual(item.tags, ["GLP-1 受体激动剂", "心血管预防", "RCT"]);
   assert.deepEqual(item.topics.map((topic) => topic.slug), ["cardiology", "obesity", "glp1", "rct"]);
   assert.equal(item.channel, "journal", "an item before contract 1.4.0 has its source type's channel");
@@ -126,21 +128,21 @@ test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text
   assert.deepEqual(detail.thumb, detail.media[0]);
   assert.deepEqual(detail.quoted, { author: { name: "NEJM", handle: "NEJM" }, text: "Trial results in 3 lines.", translation: "试验结果，共 3 行。", url: "https://x.com/NEJM/status/1" });
   assert.deepEqual(detail.metrics, { likes: 12, reposts: 3, replies: null, views: 900 });
-  assert.deepEqual(detail.body, { zh: "FDA 批准药物 X。\n第二行。", original: "FDA approves drug X.\nLine two.", zhKind: "translation", complete: true });
+  assert.deepEqual(detail.body, { zh: "FDA 批准药物 X。\n第二行。", original: "FDA approves drug X.\nLine two.", zhKind: "translation", complete: true, source: "body" });
   assert.deepEqual([detail.channel, detail.platform], ["x", "x"]);
   assert.ok(detail.topics.some((topic) => topic.slug === "approvals"));
 
   const chinese = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "国家药监局批准一款新药" });
   await set(chinese.id, {}, { body_excerpt: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。" });
   assert.deepEqual((await service.getItem(reader, chinese.publicId)).body.item.body,
-    { zh: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。", original: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。", zhKind: "original-zh", complete: true });
+    { zh: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。", original: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。", zhKind: "original-zh", complete: true, source: "excerpt" });
   // No text at all: no body to show.
   const bare = await insertItem(database, { title: "Title only" });
-  assert.deepEqual((await service.getItem(reader, bare.publicId)).body.item.body, { zh: null, original: null, zhKind: null, complete: false });
+  assert.deepEqual((await service.getItem(reader, bare.publicId)).body.item.body, { zh: null, original: null, zhKind: null, complete: false, source: null });
   // A translation refused by its checks is no Chinese: the original stands alone.
   const refused = await insertItem(database, { title: "Refused" });
   await set(refused.id, {}, { abstract_raw: "Results were mixed.", body_zh: null, body_zh_kind: "translation", body_zh_source: "abstract", body_complete: false });
-  assert.deepEqual((await service.getItem(reader, refused.publicId)).body.item.body, { zh: null, original: "Results were mixed.", zhKind: null, complete: false });
+  assert.deepEqual((await service.getItem(reader, refused.publicId)).body.item.body, { zh: null, original: "Results were mixed.", zhKind: null, complete: false, source: "abstract" });
 });
 
 test("sameEvent names the selected item fr-events' verdict points at; follow-ups are the event's other published reports, one per institution, newest first", options, async () => {
@@ -270,6 +272,19 @@ function translatingEditor(behaviour = {}) {
   const tidied = [];
   return {
     owner, available: true, asked, tidied, timeZone: "Asia/Shanghai", model: "deepseek-flash",
+    // The 导读 and the 解读 (frontierLead.mjs, frontierInsight.mjs): `behaviour.lead(input)` / `behaviour.insight(input)` answer, checked
+    // by the caller's own verify as the editor's #write does; nothing given, the answer is empty.
+    leads: /** @type {string[]} */ ([]), insights: /** @type {string[]} */ ([]),
+    async writeJson(/** @type {string} */ instructions, /** @type {string} */ input, /** @type {number} */ _maxTokens, /** @type {any} */ options) {
+      const kind = instructions.includes("「AI 导读」") ? "lead" : instructions.includes("「AI 解读」") ? "insight" : "other";
+      if (kind === "lead") this.leads.push(input);
+      if (kind === "insight") this.insights.push(input);
+      if (behaviour.writeFail) return { verification: "pending", output: null, error: behaviour.writeFail };
+      const answer = kind === "lead" ? (behaviour.lead ? behaviour.lead(input) : { lead_zh: "" })
+        : kind === "insight" ? (behaviour.insight ? behaviour.insight(input) : { insight_zh: "" }) : {};
+      const checked = options.verify(answer);
+      return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
+    },
     // The reader-text verdict (frontierReaderTidy.mjs): `behaviour.drop(input)` names the paragraphs to take out.
     async callJson(/** @type {any[]} */ messages) {
       const input = JSON.parse(messages[1].content);
@@ -288,9 +303,9 @@ function translatingEditor(behaviour = {}) {
   };
 }
 
-/** @param {any} editor */
-function pipelineFor(editor) {
-  return new FrontierPipeline({ database, editor, plugin: { text: async () => ({ status: "pending" }) }, embedder: null, now: () => NOW,
+/** @param {any} editor @param {any} [webReader] */
+function pipelineFor(editor, webReader = null) {
+  return new FrontierPipeline({ database, editor, plugin: { text: async () => ({ status: "pending" }) }, embedder: null, now: () => NOW, webReader,
     workerId: `test-${randomUUID()}`, glossary: new FrontierGlossary([{ kind: "drug", termEn: "semaglutide", termZh: "司美格鲁肽", keepOriginal: false }]),
     config: { kbEmbeddingDimension: 1024, frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 300, frontierSelectThreshold: 80 } });
 }
@@ -384,6 +399,119 @@ test("the reader's text is settled before it is shown or translated: furniture o
   assert.equal(redone.body_zh.split("\n\n").length, 2, "the stale translation was cleared and made again of the settled text");
 });
 
+test("the 导读 is one paragraph written from the settled reader text, served as the reader's lead, and written again when the text changes", options, async () => {
+  const paper = await insertItem(database, { title: "Semaglutide in obesity", summaryZh: "卡片摘要。", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const quiet = await insertItem(database, { title: "A quiet note", summaryZh: "另一条卡片摘要。", visibleAt: "2026-10-21T00:00:00Z" });
+  const abstract = "Background: Obesity raises cardiovascular risk. Methods: 17,604 adults were randomised. Results: Events fell by 20% (HR 0.80). Conclusions: Semaglutide reduced events.";
+  await set(paper.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: abstract });
+  await set(quiet.id, { score_total: 40, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "A note with nothing to say." });
+  const lead = "司美格鲁肽在 17,604 名肥胖成人中使心血管事件减少 20%（HR 0.80）。";
+  const editor = translatingEditor({ lead: (/** @type {string} */ input) => ({ lead_zh: input.includes("Semaglutide in obesity") ? lead : "" }) });
+  const summary = await pipelineFor(editor).processBatch();
+  assert.equal(summary.leads, 1, "one written; the quiet note's source supported none");
+  assert.match(editor.leads.find((input) => input.includes("Semaglutide in obesity")) ?? "", /正文（摘要）：\nBackground: Obesity raises cardiovascular risk\.\n\nMethods: 17,604/,
+    "written from the settled text: the abstract by section");
+  const row = (await database.query("SELECT i.lead_zh, i.lead_basis, t.reader_tidy FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id WHERE i.id = $1", [paper.id])).rows[0];
+  assert.deepEqual([row.lead_zh, row.lead_basis], [lead, row.reader_tidy.sha]);
+  assert.equal((await serviceFor().getItem(reader, paper.publicId)).body.item.lead, lead);
+  assert.equal((await serviceFor().getItem(reader, quiet.publicId)).body.item.lead, "另一条卡片摘要。", "no 导读: the card's summary");
+  assert.equal((await database.query("SELECT lead_basis FROM evimed_frontier.items WHERE id = $1", [quiet.id])).rows[0].lead_basis !== null, true, "not asked again for that text");
+  // Nothing changed: nothing is asked again. The text changes (ingest settles it again): written again.
+  const again = translatingEditor({ lead: () => ({ lead_zh: lead }) });
+  await pipelineFor(again).processBatch();
+  assert.equal(again.leads.length, 0);
+  await set(paper.id, {}, { abstract_raw: `${abstract} Funding: Novo Nordisk.`, reader_tidy: null });
+  await pipelineFor(again).processBatch();
+  assert.equal(again.leads.length, 1);
+});
+
+test("the 「AI 解读」 of a 精选 item cites the related reports it was shown; without material it is not asked", options, async () => {
+  const earlier = await insertItem(database, { title: "B-Well trials report functional cure", titleZh: "B-Well 试验报告功能性治愈", summaryZh: "两项 III 期试验功能性治愈率 19%。",
+    visibleAt: "2026-09-01T00:00:00Z", timelineAt: "2026-09-01T00:00:00Z" });
+  const approval = await insertItem(database, { title: "FDA approves bepirovirsen", summaryZh: "FDA 批准。", selected: true, visibleAt: "2026-10-21T00:00:00Z",
+    timelineAt: "2026-10-21T00:00:00Z" });
+  const alone = await insertItem(database, { title: "A short selected note", summaryZh: "短讯。", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  await set(earlier.id, { entity_keys: ["drug:bepirovirsen", "trial:b-well 1"] }, {});
+  await set(approval.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION, entity_keys: ["drug:bepirovirsen", "disease:chb"] },
+    { abstract_raw: "The FDA approved bepirovirsen with nucleos(t)ide analogues for chronic hepatitis B; functional cure was 19% in the trials." });
+  await set(alone.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "A short note." });
+  const insight = "这次获批所依据的正是此前报道的 B-Well 两项 III 期试验，功能性治愈率同为 19% [1]。两者口径一致，国内仍在审评，上市时间尚无消息，长期停药后的持久性还要更长随访来回答。";
+  const editor = translatingEditor({ lead: () => ({ lead_zh: "FDA 批准 bepirovirsen 联合核苷（酸）类似物治疗慢性乙肝，试验中功能性治愈率 19%。" }), insight: () => ({ insight_zh: insight }) });
+  const pipeline = pipelineFor(editor);
+  await pipeline.processBatch();
+  assert.equal(pipeline.status().lastError, null);
+  assert.equal(editor.insights.length, 1, "asked once: the approval has a related report; the short note alone has no material");
+  assert.match(editor.insights[0], /\[1\] 同一药物或试验｜2026-09-01｜.*｜B-Well 试验报告功能性治愈\n {4}导读：两项 III 期试验功能性治愈率 19%。/);
+  const { item } = (await serviceFor().getItem(reader, approval.publicId)).body;
+  assert.deepEqual(item.insight, { text: insight, refs: [{ n: 1, publicId: earlier.publicId, title: "B-Well 试验报告功能性治愈", source: item.insight.refs[0].source,
+    at: "2026-09-01T00:00:00.000Z" }] });
+  assert.equal((await serviceFor().getItem(reader, alone.publicId)).body.item.insight, null);
+  const looked = (await database.query("SELECT insight_basis, insight_at FROM evimed_frontier.items WHERE id = $1", [alone.id])).rows[0];
+  assert.ok(looked.insight_basis && looked.insight_at, "recorded as none for this basis, without a call");
+  // The cited report is withdrawn: the reader keeps the text and drops the ref (its mark reads as plain text).
+  await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn' WHERE id = $1", [earlier.id]);
+  assert.deepEqual((await serviceFor().getItem(reader, approval.publicId)).body.item.insight.refs, []);
+});
+
+test("an open-access PDF the plugin could not read becomes the item's full text, once, and the reader text is settled again", options, async () => {
+  const paper = await insertItem(database, { title: "An open paper", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const closed = await insertItem(database, { title: "A closed paper", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  await set(paper.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
+    { abstract_raw: "An abstract.", enrichment: { oa_pdf_url: "https://journals.example.org/open.pdf" } });
+  await set(closed.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "Another abstract." });
+  /** @type {string[]} */
+  const read = [];
+  const webReader = { async read(/** @type {string} */ url) {
+    read.push(url);
+    return { text: ["# An open paper", "", "## Methods", "", "We enrolled 1,220 adults. ".repeat(100), "", "## References", "", "1. Ref."].join("\n"),
+      receipt: { contentType: "document" } };
+  } };
+  await pipelineFor(translatingEditor(), webReader).processBatch();
+  assert.deepEqual(read, ["https://journals.example.org/open.pdf"], "only the item with an open-access PDF, once");
+  const texts = (await database.query("SELECT body_text, body_text_origin, oa_pdf_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [paper.id])).rows[0];
+  assert.equal(texts.body_text_origin, "oa-pdf");
+  assert.match(texts.body_text, /^## An open paper\n\n## Methods\n\nWe enrolled 1,220 adults\./);
+  assert.ok(!texts.body_text.includes("1. Ref."));
+  assert.equal((await serviceFor().getItem(reader, paper.publicId)).body.item.body.source, "body");
+  await pipelineFor(translatingEditor(), webReader).processBatch();
+  assert.equal(read.length, 1, "tried once");
+});
+
+test("an item with nothing a reader could use is not published, and is published when its text arrives", options, async () => {
+  const waiting = await insertItem(database, { title: "A paper with no text yet", state: "scored", visibleAt: "2026-10-21T00:00:00Z" });
+  await set(waiting.id, { score_total: 70, editor_version: FRONTIER_EDITOR_VERSION }, {});
+  await database.query(`INSERT INTO evimed_frontier.entries (plugin_entry_id, plugin_seq, source_id, identity_key, url, canonical_url, title_raw,
+      first_seen_at, content_sha256, state, item_id, defects)
+    VALUES ('j-x:1', 1, 'nejm', 'url:x', 'https://x.example.org/1', 'https://x.example.org/1', 'A paper with no text yet', '2026-10-20T00:00:00Z', $2, 'promoted', $1, '{no-summary}')`,
+  [waiting.id, createHash("sha256").update("waiting").digest("hex")]);
+  await pipelineFor(translatingEditor()).processBatch();
+  assert.equal((await database.query("SELECT state FROM evimed_frontier.items WHERE id = $1", [waiting.id])).rows[0].state, "scored", "not shown");
+  await set(waiting.id, { lease_until: null }, { abstract_raw: "Background: it arrived." });
+  await pipelineFor(translatingEditor()).processBatch();
+  assert.equal((await database.query("SELECT state FROM evimed_frontier.items WHERE id = $1", [waiting.id])).rows[0].state, "published");
+});
+
+test("the one-off take-back: published items with nothing to read are unpublished (reported first), records and safety alerts stay", options, async () => {
+  await insertSource(database, "ctgov-api", { name: "ClinicalTrials.gov", lane: "pipeline", source_type: "evidence-body", access: "json-api" });
+  const empty = await insertItem(database, { title: "A paper with nothing to read", visibleAt: "2026-10-21T00:00:00Z" });
+  const withAbstract = await insertItem(database, { title: "A paper with its abstract", abstract: "Background: x.", visibleAt: "2026-10-21T00:00:00Z" });
+  const record = await insertItem(database, { sourceId: "ctgov-api", title: "A trial registration", visibleAt: "2026-10-21T00:00:00Z" });
+  const alert = await insertItem(database, { sourceId: "fda", title: "A recall", safetyAlert: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const before = Number((await database.query("SELECT value FROM evimed_frontier.meta WHERE key='content_version'")).rows[0].value);
+  const report = await frontierTextless({ database });
+  assert.deepEqual([report.applied, report.count, report.ids], [false, 1, [empty.publicId]]);
+  assert.equal((await database.query("SELECT state FROM evimed_frontier.items WHERE id = $1", [empty.id])).rows[0].state, "published", "the report writes nothing");
+  const applied = await frontierTextless({ database, apply: true });
+  assert.deepEqual([applied.applied, applied.count, applied.bySourceType], [true, 1, { journal: 1 }]);
+  const states = (await database.query("SELECT id, state FROM evimed_frontier.items WHERE id = ANY($1::bigint[])", [[empty.id, withAbstract.id, record.id, alert.id]])).rows;
+  assert.deepEqual(Object.fromEntries(states.map((row) => [String(row.id), row.state])),
+    { [empty.id]: "scored", [withAbstract.id]: "published", [record.id]: "published", [alert.id]: "published" });
+  assert.deepEqual((await database.query("SELECT op, reason FROM evimed_frontier.item_changes WHERE item_id = $1", [empty.id])).rows, [{ op: "remove", reason: "textless" }]);
+  assert.ok(Number((await database.query("SELECT value FROM evimed_frontier.meta WHERE key='content_version'")).rows[0].value) > before);
+  await assert.rejects(serviceFor().getItem(reader, empty.publicId), /No such item/);
+  assert.equal((await frontierTextless({ database })).count, 0, "idempotent");
+});
+
 test("a provider outage while judging records nothing and pauses; the translation waits for the verdict", options, async () => {
   const page = await insertItem(database, { sourceId: "stat", title: "A page", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
   await set(page.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
@@ -450,7 +578,8 @@ test("fr-events' verdict holds in the later selections: the lane floor passes ov
   await set(report.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION });
   await set(beside.id, { score_total: 78, editor_version: FRONTIER_EDITOR_VERSION, same_event_item_id: report.id });
   await set(other.id, { score_total: 65, editor_version: FRONTIER_EDITOR_VERSION });
-  await set(trigger.id, { score_total: 20, editor_version: FRONTIER_EDITOR_VERSION });
+  // (A text to read: an item with none is not published, 2026-10-22.)
+  await set(trigger.id, { score_total: 20, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "An abstract of the trigger." });
   const pipeline = pipelineFor(translatingEditor());
   const summary = await pipeline.processBatch();
   assert.equal(summary.published, 1);

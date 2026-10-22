@@ -906,6 +906,7 @@ export class FrontierService {
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
           t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
+          i.lead_zh, i.insight_zh, i.insight_refs,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");
@@ -939,6 +940,29 @@ export class FrontierService {
   }
 
   /**
+   * The 「AI 解读」 (frontierInsight.mjs): its text and the reports it cites, each still published; null when there is none. A
+   * cited report that is no longer published drops out of `refs`, and the reader shows its mark as plain text.
+   * @param {any} client @param {Record<string, any>} row
+   */
+  async #insight(client, row) {
+    const text = typeof row.insight_zh === "string" && row.insight_zh.trim() ? row.insight_zh : null;
+    if (!text) return null;
+    const cited = Array.isArray(row.insight_refs) ? row.insight_refs.filter((ref) => Number.isSafeInteger(ref?.n) && /^\d{1,19}$/.test(String(ref?.item_id ?? ""))) : [];
+    const found = cited.length ? (await client.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, i.timeline_at,
+        i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+      WHERE i.id = ANY($1::bigint[]) AND i.state = 'published'`, [cited.map((ref) => String(ref.item_id))])).rows : [];
+    const byId = new Map(found.map((/** @type {any} */ item) => [String(item.id), item]));
+    const refs = cited.flatMap((ref) => {
+      const item = byId.get(String(ref.item_id));
+      return item ? [{ n: ref.n, publicId: String(item.public_id), title: String(item.title),
+        source: frontierSourceDisplayName({ id: item.primary_source_id, name: item.source_name, ownerEntity: item.source_owner }),
+        at: new Date(item.timeline_at).toISOString() }] : [];
+    });
+    return { text, refs };
+  }
+
+  /**
    * What the reader adds to a card (contract B, 2026-10-22): the 导读, the full text and its Chinese, the post's pictures, the post
    * it quotes and its counts, the topics and tags, the item it stands beside in its event, and the event's follow-ups. Every
    * field is what was stored; one the server cannot fill is null (or empty), and the reader omits its block.
@@ -961,12 +985,15 @@ export class FrontierService {
     const same = sameEventId ? (await client.query(`SELECT public_id, coalesce(title_zh, title_raw) AS title FROM evimed_frontier.items
       WHERE id = $1 AND state = 'published' AND id <> $2`, [sameEventId, row.id])).rows[0] ?? null : null;
     return {
-      lead: row.summary_zh ?? null,
+      // The reader's 导读 paragraph (frontierLead.mjs), else the card's summary.
+      lead: row.lead_zh ?? row.summary_zh ?? null,
+      insight: await this.#insight(client, row),
       body: {
         zh: translated ?? (chinese ? original : null),
         original,
         zhKind: translated ? "translation" : chinese ? "original-zh" : null,
         complete: translated ? row.body_complete === true : chinese,
+        source: text?.source ?? null,
       },
       media: frontierMediaList(row.media),
       quoted: quoted ? {

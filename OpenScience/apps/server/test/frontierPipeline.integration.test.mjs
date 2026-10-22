@@ -302,28 +302,20 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   const waiting = await entry(stream.id);
   assert.deepEqual([waiting.state, waiting.state_reason, waiting.item_id], ["received", "in-flight-duplicate", null]);
   assert.ok(new Date(waiting.hold_until) > clock);
-  // NEJM never waits for its abstract: published now, and asked again just
-  // after the plugin's own try — which it schedules the moment it is asked.
+  // NEJM's paper has no text yet and nothing else a reader could use (its feed summary is a fragment): it waits for its text,
+  // unpublished, and is asked again just after the plugin's own try (2026-10-22: an item with nothing to read is not shown).
   const nejmEntry = await entry(nejm.id);
   assert.equal(nejmEntry.state, "held");
   assert.equal(new Date(nejmEntry.hold_until).getTime(), clock.getTime() + FRONTIER_TEXT_AFTER_ATTEMPT_MS);
   const paper = await item(Number(nejmEntry.item_id));
-  assert.equal(paper.state, "published");
-  assert.equal(paper.verification, "passed");
-  assert.deepEqual([paper.evidence_type, paper.evidence_basis, paper.score_authority], ["observational", "model", 24],
-    "the model's evidence type until PubMed's types arrive: 30 × 5/5 × 0.8");
-  // A journal's item without its abstract is published and not selected (2026-10-22): 精选 carries a 导读.
-  assert.deepEqual([paper.selected, paper.selected_rule], [false, null]);
-  assert.deepEqual(paper.flags, ["no-abstract", "corrected"], "the notice that came first is attached at publication");
-  assert.equal(paper.timeline_at.toISOString(), clock.toISOString(), "published 15 hours after its date: today");
-  assert.deepEqual(await changes(Number(paper.id)), ["published"]);
+  assert.notEqual(paper.state, "published");
+  assert.deepEqual(await changes(Number(paper.id)), [], "nothing a reader sees");
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0].n, 0);
   const link = (await database.query("SELECT * FROM evimed_frontier.item_links")).rows[0];
-  assert.deepEqual([link.kind, link.from_doi, link.to_doi, Number(link.to_item_id), link.asserted_by], ["correction", "10.1056/nejmx2", "10.1056/nejmoa2307563", Number(paper.id), "crossref"]);
+  assert.deepEqual([link.kind, link.from_doi, link.to_doi, link.to_item_id, link.asserted_by], ["correction", "10.1056/nejmx2", "10.1056/nejmoa2307563", null, "crossref"],
+    "the notice is kept, and attached when the paper is published");
   const keys = (await database.query("SELECT key FROM evimed_frontier.item_keys WHERE item_id=$1 ORDER BY key", [paper.id])).rows.map((row) => row.key);
   assert.ok(keys.includes("doi:10.1056/nejmoa2307563") && keys.includes("pmid:37952131") && keys.includes("reg:NCT03574597"));
-  const texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
-  assert.equal(texts.model_input_sha256, createHash("sha256").update(texts.model_input).digest("hex"));
-  assert.match(texts.model_input, /- semaglutide → 司美格鲁肽/, "only the glossary entries the text names");
   // The safety feed is selected whatever its score; the registry's two events are two items.
   const safetyItem = await item(Number((await entry(safety.id)).item_id));
   assert.deepEqual([safetyItem.state, safetyItem.selected, safetyItem.selected_rule, safetyItem.safety_alert, safetyItem.evidence_type],
@@ -343,43 +335,45 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.ok(version >= 6, `content version ${version}`);
   assert.equal(editor.calls.screen.length, 1, "one screening call for the batch");
 
-  // Eleven minutes later the PubMed sighting finds the published paper: another road.
+  // Eleven minutes later the PubMed sighting finds the paper still waiting for its text: it waits with it.
   clock = new Date(clock.getTime() + 11 * 60_000);
   const second = await pipeline.processBatch();
-  assert.equal(second.merged, 1);
+  assert.equal(second.merged, 0);
+  assert.deepEqual([(await entry(stream.id)).state, (await entry(stream.id)).state_reason], ["received", "in-flight-duplicate"]);
+
+  // Twelve hours on, the abstract and PubMed's types arrive: the paper is published with them — edited once, with the evidence
+  // type code decides, the correction attached, and selected over the line.
+  clock = new Date(clock.getTime() + 12 * HOUR);
+  plugin.texts.set(nejm.pluginEntryId, { entry_id: nejm.pluginEntryId, revision: 1, status: "available", abstract: "In 17,604 patients, events fell by 20%.",
+    body_excerpt: null, enrichment: { publication_types: ["Randomized Controlled Trial", "Journal Article"], journal: "N Engl J Med" } });
+  const editsBefore = editor.calls.edit.length;
+  const third = await pipeline.processBatch();
+  assert.deepEqual([third.published, third.edited], [1, 1]);
+  assert.equal((await entry(nejm.id)).state, "promoted");
+  const edited = await item(Number(paper.id));
+  assert.equal(edited.state, "published");
+  assert.deepEqual([edited.evidence_type, edited.evidence_basis, edited.score_authority], ["rct", "pubmed-types", 30]);
+  assert.deepEqual(edited.flags, ["corrected"], "the notice that came first is attached at publication");
+  assert.equal(edited.editor_version, FRONTIER_EDITOR_VERSION);
+  assert.equal(edited.summary_zh, "导读：有摘要。");
+  assert.equal(editor.calls.edit.length, editsBefore + 1, "one edit, with its abstract");
+  assert.deepEqual([edited.selected, edited.selected_rule], [true, "threshold"]);
+  assert.deepEqual(await changes(Number(paper.id)), ["published"]);
+  assert.equal(Number((await database.query("SELECT to_item_id FROM evimed_frontier.item_links")).rows[0].to_item_id), Number(paper.id));
+  const texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
+  assert.equal(texts.model_input_sha256, createHash("sha256").update(texts.model_input).digest("hex"));
+  assert.match(texts.model_input, /摘要：In 17,604 patients/);
+  assert.match(texts.model_input, /- semaglutide → 司美格鲁肽/, "only the glossary entries the text names");
+
+  // When its own wait ends, the PubMed sighting finds the published paper: another road.
+  clock = new Date((await entry(stream.id)).hold_until.getTime() + 60_000);
+  const fifth = await pipeline.processBatch();
+  assert.equal(fifth.merged, 1);
   const merged = await entry(stream.id);
   assert.deepEqual([merged.state, Number(merged.item_id)], ["merged", Number(paper.id)]);
   const mentions = (await database.query("SELECT source_id FROM evimed_frontier.item_mentions WHERE item_id=$1", [paper.id])).rows;
   assert.deepEqual(mentions.map((row) => row.source_id), ["q-pubmed"]);
   assert.ok(await contentVersion() > version, "「还有谁在说」 is a change a reader sees");
-
-  // Twelve hours on, the abstract and PubMed's types arrive: the evidence type is
-  // corrected by code, the no-abstract flag goes, and the item is edited again once.
-  clock = new Date(clock.getTime() + 12 * HOUR);
-  plugin.texts.set(nejm.pluginEntryId, { entry_id: nejm.pluginEntryId, revision: 1, status: "available", abstract: "In 17,604 patients, events fell by 20%.",
-    body_excerpt: null, enrichment: { publication_types: ["Randomized Controlled Trial", "Journal Article"], journal: "N Engl J Med" } });
-  const editsBefore = editor.calls.edit.length;
-  editor.available = false;
-  await pipeline.processBatch();
-  assert.deepEqual((await item(Number(paper.id))).editor_diagnostics, {}, "late source text invalidates previous field diagnoses");
-  editor.available = true;
-  const third = await pipeline.processBatch();
-  assert.equal(third.rescored, 1);
-  assert.equal((await entry(nejm.id)).state, "promoted");
-  const edited = await item(Number(paper.id));
-  assert.deepEqual([edited.evidence_type, edited.evidence_basis, edited.score_authority], ["rct", "pubmed-types", 30]);
-  assert.deepEqual(edited.flags, ["corrected"]);
-  assert.ok(edited.rescored_at, "re-scored once");
-  assert.equal(edited.editor_version, FRONTIER_EDITOR_VERSION);
-  assert.equal(edited.summary_zh, "导读：有摘要。");
-  assert.equal(editor.calls.edit.length, editsBefore + 1);
-  // With its abstract and a total over the line, it is selected now.
-  assert.deepEqual([edited.selected, edited.selected_rule], [true, "threshold"]);
-  assert.deepEqual(await changes(Number(paper.id)), ["published", "rescored", "selected"]);
-  assert.equal(edited.timeline_at.toISOString(), paper.timeline_at.toISOString(), "timeline_at never moves after publication");
-  // The item text the re-edit used is the one stored.
-  const retexts = (await database.query("SELECT model_input FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
-  assert.match(retexts.model_input, /摘要：In 17,604 patients/);
 });
 
 test("a relation is classified by its type: each notice is its own state, and a new version is an item, never a 更正", options, async () => {
@@ -1167,7 +1161,9 @@ test("a same-revision late abstract arriving during an edit fences its old sourc
   await reset();
   let clock = new Date("2026-09-22T12:00:00Z");
   const first = pipelineWith({ now: () => clock });
-  const delivered = await deliver({ source_id: "j-nejm", title: "Kidney paper awaiting abstract", summary: "Short.", defects: ["short-summary"] });
+  // A whole feed summary to go on with (an item with nothing to read is not published, 2026-10-22): published, then edited.
+  const delivered = await deliver({ source_id: "j-nejm", title: "Kidney paper awaiting abstract",
+    summary: "A kidney paper whose feed carries a whole summary of the trial, its population and its primary endpoint." });
   await first.pipeline.processBatch();
   const storedEntry = await entry(delivered.id);
   assert.equal(storedEntry.state,"held");

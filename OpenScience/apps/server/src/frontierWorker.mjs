@@ -53,7 +53,7 @@ const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "e
 /** What one `processBatch()` reports (package E's pipeline), summed per worker
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
-  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "translated", "tidied", "tidyDropped"]);
+  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "translated", "tidied", "tidyDropped", "leads", "insights"]);
 
 /**
  * The internal project the feed's model calls are billed to, under the first

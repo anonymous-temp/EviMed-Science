@@ -7,7 +7,6 @@ import {
   FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
   FRONTIER_SELECT_THRESHOLD_DEFAULT,
   FRONTIER_TEXT_GIVE_UP_MS,
-  FRONTIER_JOURNAL_TEXT_WAIT_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
   FRONTIER_TEXT_RETRY_MS,
@@ -27,6 +26,7 @@ import {
   frontierSelectionDecision,
   frontierJournalWithoutAbstract,
   frontierTextDecision,
+  frontierItemReadable,
   frontierTextPendingHold,
   frontierTimelineAt,
   frontierNoticeKind,
@@ -179,35 +179,49 @@ test("a relation is classified by its type: four notice states, and everything e
   assert.deepEqual(frontierUpdateLinks({}), []);
 });
 
-test("the text step: take it when it is there, wait for it when it is worth waiting, never more than five days", () => {
-  const now = new Date("2026-09-22T12:00:00Z");
+test("the text step: take it when it is there, wait for it while it may come, and never show an item with nothing to read", () => {
+  const now = new Date("2026-10-22T12:00:00Z");
   const fresh = { first_seen_at: new Date(now.getTime() - HOUR).toISOString(), summary_raw: "short", defects: ["short-summary"] };
   const old = { ...fresh, first_seen_at: new Date(now.getTime() - FRONTIER_TEXT_GIVE_UP_MS).toISOString() };
   const withSummary = { ...fresh, summary_raw: "s".repeat(200), defects: [] };
   const decide = (/** @type {any} */ status, /** @type {any} */ entry, /** @type {any} */ source, promoted = false) =>
     frontierTextDecision({ status, entry, source, promoted, now });
+  assert.equal(FRONTIER_TEXT_GIVE_UP_MS, 14 * 24 * HOUR, "the knowledge plugin's own horizon for a journal's text");
   assert.deepEqual(decide("available", fresh, smallJournal), { action: "promote", holdMs: 0 });
-  assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "promote", holdMs: 0 });
   assert.deepEqual(decide("pending", fresh, smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("error", fresh, smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_RETRY_MS }, "a plugin that did not answer is asked again sooner");
-  assert.deepEqual(decide("pending", old, smallJournal), { action: "promote", holdMs: 0 }, "after five days it goes on without");
-  assert.deepEqual(decide("pending", fresh, journal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal never waits");
+  // Nothing a reader could use, and nothing more will come: not shown.
+  assert.deepEqual(decide("unavailable", fresh, smallJournal), { action: "drop", holdMs: 0 });
+  assert.deepEqual(decide("pending", old, smallJournal), { action: "drop", holdMs: 0 }, "after fourteen days it is not waited for");
+  assert.deepEqual(decide("pending", fresh, journal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a top journal's paper waits for its text too");
+  assert.deepEqual(decide("pending", old, journal), { action: "drop", holdMs: 0 });
+  // A safety feed's notice goes out on its title; a whole feed summary is enough to go on; a published item keeps asking.
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
-  assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a whole feed summary is enough to go on");
-  assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a published item keeps asking");
+  assert.deepEqual(decide("unavailable", fresh, safety), { action: "promote", holdMs: 0 });
+  assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
+  assert.deepEqual(decide("unavailable", withSummary, smallJournal), { action: "promote", holdMs: 0 });
+  assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
+  assert.deepEqual(decide("pending", old, smallJournal, true), { action: "promote", holdMs: 0 }, "an item already shown is never taken back by the text step");
 });
 
-test("2026-10-22 backlog: a journal's entry still without its abstract after 48 hours is published with what it has, and keeps asking", () => {
-  const now = new Date("2026-10-22T04:00:00Z");
-  const entryAged = (/** @type {number} */ ms) => ({ first_seen_at: new Date(now.getTime() - ms).toISOString(), summary_raw: null, defects: ["no-summary"] });
-  const decide = (/** @type {any} */ entry, /** @type {any} */ source) => frontierTextDecision({ status: "pending", entry, source, promoted: false, now });
-  assert.equal(FRONTIER_JOURNAL_TEXT_WAIT_MS, 48 * HOUR);
-  assert.deepEqual(decide(entryAged(47 * HOUR), smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "within two days it waits");
-  assert.deepEqual(decide(entryAged(48 * HOUR), smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS },
-    "Annals of Oncology on 2026-10-20: published into 全部, asked again for its abstract");
+test("an item may be shown with a reader text, a usable feed summary, or a safety feed's notice — and not otherwise", () => {
+  const entry = { summary_raw: null, defects: ["no-summary"] };
+  assert.equal(frontierItemReadable({ texts: { abstract_raw: "Background: x." }, entry, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: { body_excerpt: "A page's text." }, entry, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry: { summary_raw: "s".repeat(120), defects: [] }, source: smallJournal }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry, source: safety }), true);
+  assert.equal(frontierItemReadable({ texts: { abstract_raw: "  " }, entry, source: journal }), false);
+  assert.equal(frontierItemReadable({ texts: null, entry: null, source: null }), false);
+  // A record is its own text: a registry's or openFDA's entry; an article delivered by an API still needs its text.
+  const registry = { source_type: "evidence-body", access: "json-api" };
+  assert.equal(frontierItemReadable({ texts: {}, entry, source: registry }), true);
+  assert.equal(frontierItemReadable({ texts: {}, entry: { ...entry, doi: "10.1101/x" }, source: registry }), false);
+  assert.deepEqual(frontierTextDecision({ status: "unavailable", entry: { first_seen_at: new Date().toISOString() }, source: registry, promoted: false, now: new Date() }),
+    { action: "promote", holdMs: 0 }, "the plugin answers a record unavailable on purpose: record_is_the_text");
+});
+
+test("a journal's paper without its abstract is never selected", () => {
   const media = { source_type: "media", authority: 2, safety_feed: false };
-  assert.deepEqual(decide(entryAged(48 * HOUR), media), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "the rule is a journal's");
-  assert.deepEqual(decide(entryAged(FRONTIER_TEXT_GIVE_UP_MS), smallJournal), { action: "promote", holdMs: 0 }, "and the five days still end the asking");
   // …and an item a journal published without its abstract is never selected, by the line or by the lane floor's query.
   const base = { safetyAlert: false, verification: "passed", scoreTotal: 90, demoted: false, source: smallJournal, selectedToday: 0, threshold: 70 };
   assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"] }), { selected: false, rule: null });
@@ -224,7 +238,7 @@ test("a pending text is asked for again just after the plugin's own next try, ba
   // The first ask: the plugin schedules the fetch now and answers pending.
   assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
     { action: "hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "not twelve hours: the abstract is minutes away");
-  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: journal, promoted: false, now, nextAttemptAt: at(0) }),
+  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: journal, promoted: true, now, nextAttemptAt: at(0) }),
     { action: "promote-hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "a published item gets its abstract as soon");
   assert.deepEqual(frontierTextDecision({ status: "error", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
     { action: "hold", holdMs: FRONTIER_TEXT_RETRY_MS }, "an unanswered ask keeps its own retry");

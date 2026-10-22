@@ -2086,7 +2086,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { judgeService, usageLedger, policies:evolutionModulePolicies, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.loops.observe(event)},
-      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-") });
+      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-"),
+      // An open-access PDF the plugin could not read (2026-10-22): read through the platform's own web reader, when it runs.
+      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) } });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     // The second wave (build spec D): events and the hot list, the daily and

@@ -209,3 +209,31 @@ export function frontierAbstractLayout(text) {
   });
   return parts.join("\n\n");
 }
+
+/** Section headings after which a full text holds no more of the article: its references and back matter. */
+const BACK_MATTER = /^(?:references?|bibliography|literature cited|works cited|参考文献|参考资料)$/i;
+
+/**
+ * A full text read from an open-access PDF (the document parser's text, Markdown headings and all) as the plugin's contract writes
+ * a full text: paragraphs separated by blank lines, a section heading a paragraph of its own `## Heading`, the references and what
+ * follows them cut, runs of spaces folded, at most `limit` characters (cut at a paragraph end). Null when what is left is too short
+ * to be the article (`minChars`).
+ * @param {string} text @param {{ limit?: number, minChars?: number }} [options]
+ */
+export function frontierFullTextParagraphs(text, { limit = 40_000, minChars = 2_000 } = {}) {
+  const out = [];
+  let size = 0;
+  for (const block of String(text ?? "").replace(/\r\n?/g, "\n").split(/\n\s*\n/)) {
+    const lines = block.split("\n").map((line) => line.replace(/[ \t\f\v\u00a0]+/g, " ").trim()).filter(Boolean);
+    if (!lines.length) continue;
+    const headingMatch = lines.length === 1 ? /^#{1,6}\s+(.{1,160})$/.exec(lines[0]) : null;
+    const heading = headingMatch ? headingMatch[1].replace(/[*_`]+/g, "").trim() : null;
+    if (heading && BACK_MATTER.test(heading.replace(/^[\d.\s]+/, ""))) break;
+    const paragraph = heading ? `## ${heading}` : lines.join(" ");
+    if (size + paragraph.length > limit) break;
+    out.push(paragraph);
+    size += paragraph.length + 2;
+  }
+  const body = out.join("\n\n");
+  return body.replace(/^## .*$/gm, "").replace(/\s+/g, "").length >= minChars ? body : null;
+}
