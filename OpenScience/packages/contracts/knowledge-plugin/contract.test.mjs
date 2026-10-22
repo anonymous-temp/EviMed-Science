@@ -165,9 +165,12 @@ test("a contract minor is recorded again only where it changed, and provenance s
   // 1.5.0 added social posts and `Health.providers`: the manifest, the health answer, one X post, one WeChat article, their
   // texts and one stored image were recorded off a plugin that read them live; the stream stands as it was.
   const partials = provenance.partialRecordings ?? [];
-  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0"], "every minor since the stream was recorded names its partial recording, in order");
-  const [platformProduced, hostBudget, social] = partials;
-  assert.equal(social.contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.deepEqual(partials.map((entry) => entry.contractVersion), ["1.3.0", "1.4.0", "1.5.0", "1.5.1"], "every minor since the stream was recorded names its partial recording, in order");
+  // 1.5.1 widened EntryText.fetched_from and named the `## ` heading rule: the manifest and the health answer only.
+  const [platformProduced, hostBudget, social, patch] = partials;
+  assert.equal(partials.at(-1).contractVersion, pin.version, "the last partial recording is the pin's");
+  assert.equal(social.contractVersion, "1.5.0");
+  assert.deepEqual(patch.fixtures, ["health.json", "manifest.json"], "a patch records again only what names the contract");
   assert.deepEqual(social.fixtures.slice().sort(), ["entry-wechat.json", "entry-x.json", "health.json", "manifest.json", "media-x.jpg", "text-wechat.json", "text-x.json"]);
   assert.ok(Date.parse(social.recordedAt) >= Date.parse(hostBudget.recordedAt));
   assert.equal(provenance.contractVersion, pin.version);

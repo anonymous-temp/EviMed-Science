@@ -47,7 +47,8 @@
  *   node packages/contracts/knowledge-plugin/fixtures/record.mjs [--url http://127.0.0.1:18080]
  *
  * `--platform-source` records only what contract 1.3.0 changed (`recordPlatformSource` below) and keeps the rest; `--host-budget`
- * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`).
+ * does the same for 1.4.0 (`recordHostBudget`), `--social` for 1.5.0 (`recordSocial`), `--patch` for 1.5.1 (`recordPatch`: the health
+ * answer and the manifest only).
  */
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -476,6 +477,45 @@ export async function recordSocial({ baseUrl, token, outDir = here,
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * A contract patch (1.5.1, 2026-10-22, rt-papers): `EntryText.fetched_from` gains `openalex`, `landing`, `publisher-feed`,
+ * `europepmc-fulltext` and `elsevier`, and `body_text` writes a full text's section headings as `## ` paragraphs. Nothing a
+ * recording holds changes shape, so only what names the contract — the health answer and the manifest — is recorded again off
+ * a live plugin of the new version; every other recording stays as it was made.
+ * @param {{ baseUrl: string, token: string, outDir?: string, serverRole?: string, version?: string }} options
+ */
+export async function recordPatch({ baseUrl, token, outDir = here, serverRole = "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off)", version = "1.5.1" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest] = recordings.map(json);
+  if (manifest.contract?.version !== version) throw new Error(`the plugin serves contract ${manifest.contract?.version}, not ${version}`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: `Contract ${version} widens EntryText.fetched_from (openalex, landing, publisher-feed, europepmc-fulltext, elsevier) and says a full text's section headings are '## ' paragraphs: the health answer and the manifest name the new contract. Every other recording is the earlier plugins', still valid.`,
+    serverRole,
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
 /** One image off `GET /v1/media/{id}`, recorded like any exchange but asking for an image. @param {string} base @param {string} id @param {string} token */
 async function mediaExchange(base, id, token) {
   const recordedHeaders = { accept: "image/*" };
@@ -501,7 +541,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   } else {
     const serverRole = argument("server-role");
-    const recorded = process.argv.includes("--platform-source")
+    const recorded = process.argv.includes("--patch")
+      ? await recordPatch({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}), ...(argument("version") ? { version: argument("version") } : {}) })
+      : process.argv.includes("--platform-source")
       ? await recordPlatformSource({ baseUrl, token: loaded.value })
       : process.argv.includes("--social")
         ? await recordSocial({ baseUrl, token: loaded.value, ...(serverRole ? { serverRole } : {}) })

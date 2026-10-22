@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.5.0",
+  "contractVersion": "1.5.1",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1842",
+        "content-length": "3162",
         "content-type": "application/json",
-        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
       },
-      "recordedAt": "2026-10-22T06:43:40.179Z"
+      "recordedAt": "2026-10-22T16:53:28.434Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1353",
+        "content-length": "1329",
         "content-type": "application/json",
-        "date": "Thu, 22 Oct 2026 06:43:40 GMT"
+        "date": "Thu, 22 Oct 2026 16:53:27 GMT"
       },
-      "recordedAt": "2026-10-22T06:43:40.184Z"
+      "recordedAt": "2026-10-22T16:53:28.442Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -528,6 +528,23 @@
       "reason": "Contract 1.5.0 adds social posts (Entry.channel, platform, author, media, quoted, metrics; EntryText.body_text; GET /v1/media/{id}) and Health.providers: the health answer, the manifest, one X post with media and a quote, one WeChat article with its text, their texts and one stored image were recorded. The stream's recordings, the registry pages and the source row are the earlier plugins', still valid, since a minor only adds.",
       "socialPlatform": "not recorded: the instance held no six-platform entry (the GEO crawler answered 500 during the live check, its own database down)",
       "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (wp/fr-social), crawler off, against a scratch database holding what its social collector read live once on 2026-10-22 (tools/social_live_check.py: five X accounts in two shard searches, three WeChat accounts re-resolved and one read, one GEO crawler search that answered 500); today's host_counters for api.crossref.org 1850, eutils.ncbi.nlm.nih.gov 420 and api.fda.gov 300 were seeded so the 1.4.0 table shows use; not a production plugin"
+    },
+    {
+      "recordedAt": "2026-10-22T16:53:28.443Z",
+      "server": "http://127.0.0.1:49231",
+      "plugin": {
+        "name": "evimed-knowledge-plugin",
+        "version": "0.1.0",
+        "build": "dev",
+        "started_at": "2026-10-22T16:53:27.504919Z"
+      },
+      "contractVersion": "1.5.1",
+      "fixtures": [
+        "health.json",
+        "manifest.json"
+      ],
+      "reason": "Contract 1.5.1 widens EntryText.fetched_from (openalex, landing, publisher-feed, europepmc-fulltext, elsevier) and says a full text's section headings are '## ' paragraphs: the health answer and the manifest name the new contract. Every other recording is the earlier plugins', still valid.",
+      "serverRole": "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off) over a scratch database that tools/social_live_check.py filled once, live (one X account, NEJM: 12 posts; one WeChat account, NEJM医学前沿: 13 articles, 1 body), and one real OpenAlex request through its own fetcher"
     }
   ]
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.5.0"
+  version: "1.5.1"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -230,7 +230,8 @@ paths:
         Fetched on demand: the platform asks only for entries that passed its screening (about
         30% of them), so the plugin does not read a web page for the 70% nobody will see.
         `status: pending` means the plugin has scheduled the fetch (PubMed not yet indexed, a
-        page temporarily unreadable) and will retry on its own schedule for up to 5 days; the
+        page temporarily unreadable) and will retry on its own schedule for up to 14 days (5 until
+        1.5.1: PubMed indexes most new articles within two weeks); the
         platform re-asks when it sees a new `revision` of the entry in the stream, or on its own
         12-hour hold cycle.
       parameters:
@@ -727,8 +728,8 @@ components:
         text_kind: { type: string, enum: [abstract, excerpt, full, none] }
         abstract: { type: [string, "null"] }
         body_excerpt: { type: [string, "null"], maxLength: 20000 }
-        body_text: { type: [string, "null"], maxLength: 40000, description: "The full text, plain, paragraphs separated by blank lines: a post or an article as it arrived (X, WeChat), or the readable text of a web or news page. Added in 1.5.0; absent when there is none." }
-        fetched_from: { type: string, enum: [pubmed, europepmc, crossref, page, browser, relay, evimed-api, wechat, x, social], description: "`x` and `social` added in 1.5.0." }
+        body_text: { type: [string, "null"], maxLength: 40000, description: "The full text, plain, paragraphs separated by blank lines: a post or an article as it arrived (X, WeChat), the readable text of a web or news page, or (1.5.1) the whole text of an open-access article (`text_kind` full). A section title of a full text is a paragraph of its own written `## Title` (from JATS `<sec><title>`, or an `h2`/`h3` of the article body); nothing else starts with `## `. References, author lists, funding, acknowledgement and conflict statements and figure files are not part of it; a figure or table caption may be a paragraph. Added in 1.5.0; absent when there is none." }
+        fetched_from: { type: string, enum: [pubmed, europepmc, crossref, page, browser, relay, evimed-api, wechat, x, social, openalex, landing, publisher-feed, europepmc-fulltext, elsevier], description: "`x` and `social` added in 1.5.0. 1.5.1: `openalex` (an abstract rebuilt from OpenAlex), `landing` (the article's landing page: its abstract, standfirst or open full text), `publisher-feed` (the journal's own RSS), `europepmc-fulltext` (Europe PMC's open-access JATS full text), `elsevier` (Elsevier's API, when the deployment has a key). For `text_kind` full it names where `body_text` came from." }
         fetched_at: { type: [string, "null"], format: date-time }
         next_attempt_at: { type: [string, "null"], format: date-time }
         enrichment:
