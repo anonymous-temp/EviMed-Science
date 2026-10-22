@@ -7,6 +7,7 @@ import {
   fetchFrontierDaily,
   fetchFrontierWeekly,
   fetchFrontierEvent,
+  fetchFrontierItem,
   fetchFrontierForYou,
   fetchFrontierHot,
   fetchFrontierHotBoard,
@@ -24,6 +25,7 @@ import {
   operateFrontierItem,
   parseFacts,
   parseFrontierItem,
+  parseFrontierItemDetail,
   parseFrontierEditorDiagnostics,
   saveFrontierItemToLibrary,
   setFrontierDigestSwitch,
@@ -471,4 +473,100 @@ it("parses bounded editor diagnostics without arbitrary model or error content",
     inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z", reason: null,
     fields: { title_zh: ["language"], summary_zh: ["number"] } });
   expect(JSON.stringify(parsed?.editorDiagnostics)).not.toContain("private");
+});
+
+describe("the reader's blocks (contract B)", () => {
+  const full = () => rawItem({
+    id: "x-post-1",
+    channel: "x", platform: "x",
+    author: { name: "Arena.ai", handle: "@arena", url: "https://x.com/arena", role: "organisation" },
+    thumb: { id: "a".repeat(64), url: "https://tracker.example/a.png", width: 1200, height: 675, alt: "排行榜" },
+    lead: "Arena 宣布模型登顶开源榜首。",
+    reason: "可据此权衡 Agent 场景的性价比。",
+    score: 74, scoreBand: "high",
+    body: { zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false },
+    media: [
+      { id: "a".repeat(64), url: "/api/frontier/media/aaa", width: 1200, height: 675, alt: "排行榜" },
+      { id: "a".repeat(64), url: "/api/frontier/media/aaa" },
+      { id: "../../etc/passwd" },
+      { id: "b".repeat(64), width: -3, height: "x" },
+    ],
+    quoted: { author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: "javascript:alert(1)" },
+    metrics: { likes: 12, reposts: null, replies: -1, views: 9000.4 },
+    topics: [{ slug: "cardiology", name: "心血管", group: "specialty" }, { slug: "cardiology", name: "重复", group: "specialty" }, { slug: "x", name: "未知组", group: "planet" }, { name: "无 slug" }],
+    tags: ["#评测", "评测", "Agent", "", 3],
+    sameEvent: { itemId: "selected-1", title: "精选收录的那一篇" },
+    followups: { eventId: "ev1", more: true, rows: [
+      { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
+      { itemId: "x-post-1", title: "自己", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "same-event" },
+      { itemId: "f2", title: "没有时间", sourceName: "Arena", at: "not a time" },
+      { itemId: "f3", title: "同事件", sourceName: "", at: "2026-10-19T02:00:00Z", relation: "planet" },
+    ] },
+  });
+
+  it("reads every block of a full item, each field by field", () => {
+    const item = parseFrontierItemDetail(full())!;
+    expect(item.channel).toBe("x");
+    expect(item.platform).toBe("x");
+    expect(item.author).toEqual({ name: "Arena.ai", handle: "arena", url: "https://x.com/arena", role: "organisation" });
+    expect(item.lead).toBe("Arena 宣布模型登顶开源榜首。");
+    expect(item.reason).toBe("可据此权衡 Agent 场景的性价比。");
+    expect(item.score).toBe(74);
+    expect(item.body).toEqual({ zh: "第一段\n\n第二段", original: "First\n\nSecond", zhKind: "translation", complete: false });
+    expect(item.quoted).toEqual({ author: { name: "DeepSeek", handle: "deepseek_ai" }, text: "Big news", translation: "重大消息", url: null });
+    expect(item.metrics).toEqual({ likes: 12, reposts: null, replies: null, views: 9000 });
+    expect(item.topics).toEqual([{ slug: "cardiology", name: "心血管", group: "specialty" }, { slug: "x", name: "未知组", group: "genre" }]);
+    expect(item.tags).toEqual(["评测", "Agent"]);
+    expect(item.sameEvent).toEqual({ itemId: "selected-1", title: "精选收录的那一篇" });
+    expect(item.followups).toEqual({ eventId: "ev1", more: true, rows: [
+      { itemId: "f1", title: "后续报道", sourceName: "Arena", at: "2026-10-20T02:00:00Z", relation: "follows" },
+      { itemId: "f3", title: "同事件", sourceName: "", at: "2026-10-19T02:00:00Z", relation: "same-event" },
+    ] });
+  });
+
+  it("serves every image from this deployment's own proxy, by id, once — never from an address the response named", () => {
+    const item = parseFrontierItemDetail(full())!;
+    expect(item.media).toEqual([
+      { id: "a".repeat(64), url: `/api/frontier/media/${"a".repeat(64)}`, width: 1200, height: 675, alt: "排行榜" },
+      { id: "b".repeat(64), url: `/api/frontier/media/${"b".repeat(64)}`, width: null, height: null, alt: null },
+    ]);
+    expect(item.thumb?.url).toBe(`/api/frontier/media/${"a".repeat(64)}`);
+  });
+
+  it("leaves out what the server did not fill, and makes nothing up in its place", () => {
+    const item = parseFrontierItemDetail(rawItem({ summary: "列表里的导读" }))!;
+    expect(item).toMatchObject({
+      lead: "列表里的导读", body: null, media: [], quoted: null, metrics: null, topics: null, tags: null, sameEvent: null, followups: null,
+      channel: null, platform: null, author: null, thumb: null,
+    });
+    // A body the server did not call incomplete is complete; a Chinese text with no kind is not called a translation.
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: "中文", original: null } }))!.body).toEqual({ zh: "中文", original: null, zhKind: null, complete: true });
+    expect(parseFrontierItemDetail(rawItem({ body: { zh: " ", original: "" } }))!.body).toBeNull();
+    // An outlet or a platform this build does not know is not shown under a made-up name.
+    expect(parseFrontierItem(rawItem({ channel: "podcast", platform: "myspace", author: { handle: "nobody" } }))).toMatchObject({ channel: null, platform: null, author: null });
+  });
+
+  it("does not point an item at itself as the one the occurrence selected", () => {
+    expect(parseFrontierItemDetail(rawItem({ id: "self-1", sameEvent: { itemId: "self-1", title: "自己" } }))!.sameEvent).toBeNull();
+  });
+
+  it("reads the detail route through the same parser", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { item: full() } }));
+    const item = await fetchFrontierItem("x-post-1");
+    expect(requested()[0].url).toBe("/api/frontier/items/x-post-1");
+    expect(item.followups?.rows).toHaveLength(2);
+  });
+
+  it("names a channel group in the list's query, and an event's order in the event's", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { data: { items: [], nextCursor: null } }));
+    await listFrontierItems({ view: "all", channel: "social" });
+    expect(new URL(requested()[0].url, "http://localhost").searchParams.get("channel")).toBe("social");
+    await listFrontierItems({ view: "all" });
+    expect(new URL(requested()[1].url, "http://localhost").searchParams.has("channel")).toBe(false);
+    fetchMock.mockImplementation(async () => reply(200, { data: { event: { id: "ev1", title: "事件", items: [], related: [] } } }));
+    await fetchFrontierEvent("ev1", "asc");
+    expect(requested()[2].url).toBe("/api/frontier/events/ev1?order=asc");
+    await fetchFrontierEvent("ev1");
+    expect(requested()[3].url).toBe("/api/frontier/events/ev1");
+  });
 });
