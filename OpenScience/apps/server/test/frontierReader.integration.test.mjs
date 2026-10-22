@@ -352,7 +352,7 @@ test("the reader's text is settled before it is shown or translated: furniture o
   await set(structured.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
     { abstract_raw: "Background: Hearing loss is common. Methods: We analyzed NHANES 2017-2020. Results: CKM stage tracked thresholds. Conclusions: Screen hearing." });
   await set(greedy.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { body_text: body });
-  const editor = translatingEditor({ drop: (/** @type {any} */ input) => (input.title === "A page the model would empty" ? { drop: [0, 1, 2, 4] } : { drop: [0, 1, 3] }) });
+  const editor = translatingEditor({ drop: (/** @type {any} */ input) => (input.title === "A page the model would empty" ? { drop: [1, 2, 3, 5] } : { drop: [1, 2, 4] }) });
   const pipeline = pipelineFor(editor);
   const summary = await pipeline.processBatch();
   assert.equal(summary.tidied, 3);
@@ -378,7 +378,7 @@ test("the reader's text is settled before it is shown or translated: furniture o
   // A text that changes (the plugin read it again) is settled again, and the translation made from the old text is cleared
   // by ingest; here, as ingest leaves it: the verdict gone, the old translation in place but made of five paragraphs.
   await set(page.id, {}, { reader_tidy: null, body_zh: "译1\n\n译2\n\n译3\n\n译4\n\n译5", body_zh_kind: "translation", body_zh_source: "body", body_complete: true });
-  const again = await pipelineFor(translatingEditor({ drop: () => ({ drop: [0, 1, 3] }) })).processBatch();
+  const again = await pipelineFor(translatingEditor({ drop: () => ({ drop: [1, 2, 4] }) })).processBatch();
   assert.equal(again.tidied, 1);
   const redone = await texts(page.id);
   assert.equal(redone.body_zh.split("\n\n").length, 2, "the stale translation was cleared and made again of the settled text");

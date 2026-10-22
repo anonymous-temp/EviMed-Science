@@ -35,16 +35,23 @@ test("prose that only mentions a heading word, and a text already in paragraphs,
   ]) assert.equal(frontierAbstractLayout(text), text);
 });
 
-test("the model's answer is checked by code: numbers it was shown, and enough of the text kept", () => {
-  const paragraphs = ["By Tara Bannow", "Tara covers health care.", "The premium rose 9% to $7,471.".repeat(4), "Advertisement", "Small firms rose more.".repeat(3)];
-  assert.deepEqual(readTidyAnswer({ drop: [3, 0, 1, 1] }, paragraphs, 5), { drop: [0, 1, 3], refused: null });
-  assert.deepEqual(readTidyAnswer({ drop: [] }, paragraphs, 5), { drop: [], refused: null });
-  assert.deepEqual(readTidyAnswer({ drop: [5] }, paragraphs, 5), { drop: [], refused: "answer_invalid" }, "a paragraph it was not shown");
-  assert.deepEqual(readTidyAnswer({ drop: [4] }, paragraphs, 4), { drop: [], refused: "answer_invalid" }, "beyond the paragraphs judged");
-  assert.deepEqual(readTidyAnswer({ drop: ["1"] }, paragraphs, 5), { drop: [], refused: "answer_invalid" });
-  assert.deepEqual(readTidyAnswer(null, paragraphs, 5), { drop: [], refused: "answer_invalid" });
-  assert.deepEqual(readTidyAnswer({ drop: [0, 1, 2, 3, 4] }, paragraphs, 5), { drop: [], refused: "too_much" });
-  assert.deepEqual(readTidyAnswer({ drop: [2, 4] }, paragraphs, 5), { drop: [], refused: "too_much" }, `less than ${FRONTIER_TIDY_LIMITS.keepShare} of the text kept`);
+test("the model's answer is checked by code: labels it was shown, furniture only at the edges or short, enough of the text kept", () => {
+  const article = "The premium rose 9% to $7,471 on average, the survey of 1,800 employers found this year.".repeat(2);
+  const paragraphs = ["By Tara Bannow", "Tara covers health care.", article, "Advertisement", article, "Small firms rose more.".repeat(3), "Newsletter"];
+  // Labels are 1-based, as the call shows them: [1] … [7].
+  assert.deepEqual(readTidyAnswer({ drop: [4, 1, 2, 2, 7] }, paragraphs, 7), { drop: [0, 1, 3, 6], refused: null });
+  assert.deepEqual(readTidyAnswer({ drop: [] }, paragraphs, 7), { drop: [], refused: null });
+  // A long paragraph in the middle is the article's, whatever the answer says; at an edge run it may go.
+  assert.deepEqual(readTidyAnswer({ drop: [1, 2, 5] }, paragraphs, 7), { drop: [0, 1], refused: null });
+  assert.deepEqual(readTidyAnswer({ drop: [6, 7] }, paragraphs, 7), { drop: [5, 6], refused: null }, "a long one in the trailing run");
+  assert.deepEqual(readTidyAnswer({ drop: [0] }, paragraphs, 7), { drop: [], refused: "answer_invalid" }, "no label 0");
+  assert.deepEqual(readTidyAnswer({ drop: [8] }, paragraphs, 7), { drop: [], refused: "answer_invalid" }, "a label it was not shown");
+  assert.deepEqual(readTidyAnswer({ drop: [7] }, paragraphs, 6), { drop: [], refused: "answer_invalid" }, "beyond the paragraphs judged");
+  assert.deepEqual(readTidyAnswer({ drop: ["1"] }, paragraphs, 7), { drop: [], refused: "answer_invalid" });
+  assert.deepEqual(readTidyAnswer(null, paragraphs, 7), { drop: [], refused: "answer_invalid" });
+  assert.deepEqual(readTidyAnswer({ drop: [1, 2, 3, 4, 5, 6, 7] }, paragraphs, 7), { drop: [], refused: "too_much" });
+  assert.deepEqual(readTidyAnswer({ drop: [1, 2, 3, 4, 5, 6] }, paragraphs, 7), { drop: [], refused: "too_much" },
+    `less than ${FRONTIER_TIDY_LIMITS.keepShare} of the text kept`);
 });
 
 test("what one call is shown: title, source, the paragraphs, a long one by its head and tail; a short text is not worth a call", () => {
@@ -53,7 +60,8 @@ test("what one call is shown: title, source, the paragraphs, a long one by its h
   assert.ok(built);
   const input = JSON.parse(built.content);
   assert.deepEqual([input.title, input.source, input.p.length, built.judged], ["标题", "来源", 3, 3]);
-  assert.equal(input.p[1], `${"头".repeat(FRONTIER_TIDY_LIMITS.headChars)} … ${"尾".repeat(FRONTIER_TIDY_LIMITS.tailChars)}`);
+  assert.equal(input.p[0], `[1] ${"第一段文字。".repeat(10)}`, "each paragraph shown with the label an answer names it by");
+  assert.equal(input.p[1], `[2] ${"头".repeat(FRONTIER_TIDY_LIMITS.headChars)} … ${"尾".repeat(FRONTIER_TIDY_LIMITS.tailChars)}`);
   assert.equal(buildTidyInput({ paragraphs: ["短。", "也短。"] }), null);
   assert.equal(buildTidyInput({ paragraphs: ["一段很长的文字。".repeat(40)] }), null, "one paragraph: nothing to tell apart");
   const many = buildTidyInput({ paragraphs: Array.from({ length: 300 }, (_, index) => `Paragraph ${index} of a very long page.`) });
@@ -78,7 +86,7 @@ test("a verdict applies only to the text it was made for; an abstract is laid ou
 test("one text's verdict: the model is asked through the editor's metered call, and a text too short to judge is not", async () => {
   /** @type {any[]} */
   const calls = [];
-  const editor = { async callJson(/** @type {any[]} */ messages, /** @type {any} */ limits) { calls.push({ messages, limits }); return { drop: [0] }; } };
+  const editor = { async callJson(/** @type {any[]} */ messages, /** @type {any} */ limits) { calls.push({ messages, limits }); return { drop: [1] }; } };
   const paragraphs = ["Skip to content", "A paragraph of the article that is long enough to be read as prose by the editor.".repeat(3)];
   assert.deepEqual(await frontierTidyVerdict(editor, { title: "T", source: "S", paragraphs }), { drop: [0], refused: null, called: true });
   assert.equal(calls[0].messages[0].content, FRONTIER_TIDY_INSTRUCTIONS);
