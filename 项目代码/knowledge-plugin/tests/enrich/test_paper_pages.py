@@ -121,6 +121,8 @@ def test_og_description_counts_only_when_long_and_uncut():
     assert article.abstract == LONG.strip() and article.abstract_from == "og"
     short = read_article_page(html(meta='<meta property="og:description" content="A short teaser of the piece.">'))
     assert short.abstract is None
+    site = read_article_page(f'<html><head><meta property="og:description" content="{LONG.strip()}"></head></html>')
+    assert site.abstract is None and site.excerpt == LONG.strip()       # a page naming no article: not its abstract
 
 
 def test_the_meta_abstract_takes_the_page_section_s_headings():

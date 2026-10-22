@@ -160,7 +160,8 @@ def read_article_page(html_text: str, url: str | None = None) -> ArticlePage:
             abstract, how = section, how + "+section"
     elif section:
         abstract, how = section, "section"
-    else:
+    elif is_article:
+        # Last, and only on a page that names its article: a site's own description is no article's abstract.
         og = next((text for h, text in candidates if h == "og" and is_abstract(text)), None)
         if og:
             abstract, how = og, "og"
