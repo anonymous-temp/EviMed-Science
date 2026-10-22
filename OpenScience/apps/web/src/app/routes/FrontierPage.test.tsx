@@ -899,7 +899,7 @@ describe("关注 with nothing to show yet", () => {
     expect(await screen.findByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "添加关注" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "添加关注" })).toHaveClass("bg-accent");
-    expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+    expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier?view=zones");
     expect(screen.queryByText("没有结果")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "关注的证据专区" })).not.toBeInTheDocument();
     const row = within(controlRow());
@@ -1080,9 +1080,11 @@ describe("the feed's composition", () => {
   });
 });
 
-it("opens the existing evidence-zone directory from its peer tab", async () => {
+it("opens the evidence-zone directory in place, as a view of the page (owner, 2026-10-22)", async () => {
   renderPage();
   await screen.findByText("今天的一条 RCT");
   await userEvent.click(screen.getByRole("tab", { name: "证据专区" }));
-  expect(location()).toBe("/app/frontier/zones");
+  expect(location()).toBe("/app/frontier?view=zones");
+  expect(await screen.findByRole("link", { name: "房颤抗凝" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
+  expect(screen.getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
 });

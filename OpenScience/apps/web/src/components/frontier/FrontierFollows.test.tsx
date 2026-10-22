@@ -98,7 +98,7 @@ it("names the kind of each follow, and says where the followed zones are managed
   const row = (await screen.findByRole("button", { name: "司美格鲁肽" })).closest("tr")!;
   expect(within(row).getByText("药物")).toBeInTheDocument();
   expect(within((screen.getByRole("button", { name: "FDA" })).closest("tr")!).getByText("来源")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "已关注的证据专区在“证据专区”里管理 ›" })).toHaveAttribute("href", "/app/frontier/zones?scope=following");
+  expect(screen.getByRole("link", { name: "已关注的证据专区在“证据专区”里管理 ›" })).toHaveAttribute("href", "/app/frontier?view=zones&scope=following");
 });
 
 it("says 「还没有关注。」 when nothing is followed, whatever kind is missing", async () => {

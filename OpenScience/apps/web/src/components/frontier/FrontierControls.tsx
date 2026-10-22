@@ -31,14 +31,15 @@ const VIEWS: readonly TabItem<PageView>[] = [
  *  - 简报: 日报 · 周报, and the issue's own 分类, 往期 and 复制 (`issue`);
  *  - 关注: the same filters and 「管理关注」 (with 「全部关注」 while one follow narrows the feed) — the filters only while a topic is
  *    followed, 「管理关注」 while anything is, and nothing while the reader follows nothing (`follow`);
+ *  - 证据专区: 全部专区 · 我创建的 · 我关注的, the count of a search's matches and, for a reader who may make one, 「新建专区」 (`zones`);
  *  - 与我相关: nothing.
  *
- * The search is the feed's, in every view. The row is in the shell's sticky band, so it stays at the top while a feed of six thousand
+ * The search is the feed's, in every view; in 证据专区 it searches the zones. The row is in the shell's sticky band, so it stays at the top while a feed of six thousand
  * pixels scrolls under it — it used to scroll away, and a reader at the bottom of the 精选 feed had to go back up to change the
  * view. Below 640 px the controls drop under the tabs and the filters fold into one chip, which is the only second row there is.
  */
 export function frontierToolbar({
-  view, onView, filters, onFilters, showWindow, searching, search, hot, follow, narrowedFollow, onAllFollows, onManageFollows, issue, onClear,
+  view, onView, filters, onFilters, showWindow, searching, search, hot, follow, narrowedFollow, onAllFollows, onManageFollows, issue, zones, onClear,
 }: {
   view: PageView;
   onView: (view: PageView) => void;
@@ -64,12 +65,15 @@ export function frontierToolbar({
   onManageFollows: () => void;
   /** The issue on screen's own controls (`dailyControls`), for the 简报 tab. */
   issue: { filters: ToolbarFilter[]; actions: ReactNode };
+  /** The directory's own controls (`zoneDirectoryControls`) and 「新建专区」, for the 证据专区 tab. */
+  zones: { filters: ToolbarFilter[]; summary: string | undefined; onCreate: (() => void) | null };
   /** Lets go of the feed's filters and the search. */
   onClear: () => void;
 }): ToolbarProps {
   const feed = feedFilters({ value: filters, showWindow, searching, onChange: onFilters });
   let controls: ToolbarFilter[] = [];
   let actions: ReactNode;
+  let summary: string | undefined;
   let clearable = false;
   switch (view) {
     case "selected":
@@ -97,6 +101,11 @@ export function frontierToolbar({
         actions = <Button variant="text" size="sm" onClick={onManageFollows}>管理关注</Button>;
       }
       break;
+    case "zones":
+      controls = zones.filters;
+      summary = zones.summary;
+      if (zones.onCreate) actions = <Button variant="text" size="sm" onClick={zones.onCreate}>新建专区</Button>;
+      break;
     default:
       break;
   }
@@ -113,6 +122,7 @@ export function frontierToolbar({
     filters: controls,
     onClear: clearable ? onClear : undefined,
     search,
+    summary,
     actions,
   };
 }

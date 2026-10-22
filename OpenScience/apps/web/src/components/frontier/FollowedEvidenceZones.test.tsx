@@ -12,7 +12,7 @@ it("keeps followed evidence preview to three zones and three latest cards with f
   expect(screen.getByRole("heading", { name: "最近证据更新" })).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: /^专区 / })).toHaveLength(3);
   expect(screen.getAllByRole("link", { name: /^证据 / })).toHaveLength(3);
-  expect(screen.getByRole("link", { name: "查看全部关注专区" })).toHaveAttribute("href", "/app/frontier/zones?scope=following");
+  expect(screen.getByRole("link", { name: "查看全部关注专区" })).toHaveAttribute("href", "/app/frontier?view=zones&scope=following");
   expect(screen.queryByRole("button", { name: "加载更多专区" })).not.toBeInTheDocument();
 });
 

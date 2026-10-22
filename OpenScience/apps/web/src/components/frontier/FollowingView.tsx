@@ -107,7 +107,7 @@ export function FollowingView({ state, feed, onAdd }: {
         action={(
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button onClick={onAdd}>添加关注</Button>
-            <Link to="/app/frontier/zones" className={buttonClasses({ variant: "text" })}>浏览证据专区</Link>
+            <Link to="/app/frontier?view=zones" className={buttonClasses({ variant: "text" })}>浏览证据专区</Link>
           </div>
         )}
       />

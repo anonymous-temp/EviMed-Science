@@ -42,7 +42,7 @@ describe("a zone's page", () => {
     mount();
     expect(await screen.findByRole("heading", { level: 1, name: "卒中研究" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "返回" });
-    expect(within(nav).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["前沿动态", "/app/frontier"], ["证据专区", "/app/frontier/zones"]]);
+    expect(within(nav).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["前沿动态", "/app/frontier"], ["证据专区", "/app/frontier?view=zones"]]);
     expect(screen.queryByRole("navigation", { name: "前沿动态" })).toBeNull();
     expect(screen.queryByRole("link", { name: "返回证据专区" })).toBeNull();
     expect(screen.getAllByRole("heading", { name: "卒中研究" })).toHaveLength(1);
@@ -190,7 +190,7 @@ describe("a zone with no evidence yet", () => {
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: empty, feedback: [] });
     const official = mount();
     const link = await screen.findByRole("link", { name: /申请这个主题的选题/ });
-    expect(link).toHaveAttribute("href", `/app/frontier/zones?request=${encodeURIComponent("卒中研究")}`);
+    expect(link).toHaveAttribute("href", `/app/frontier?view=zones&request=${encodeURIComponent("卒中研究")}`);
     official.unmount();
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...empty, kind: "user" }, feedback: [] });
     mount();
