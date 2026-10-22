@@ -2536,6 +2536,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "cancerdiscovery.aacrjournals.org"
+    ],
+    "abstract_feed": [
+     "https://aacrjournals.org/rss/site_1000003/1000004.xml"
     ]
    }
   },
@@ -2810,6 +2813,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "care.diabetesjournals.org"
+    ],
+    "abstract_feed": [
+     "https://diabetesjournals.org/rss/site_1000003/advanceAccess_1000004.xml",
+     "https://diabetesjournals.org/rss/site_1000003/1000004.xml"
     ]
    }
   },
@@ -3440,6 +3447,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.atsjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_6755/advanceAccess_4230.xml",
+     "https://academic.oup.com/rss/site_6755/4230.xml"
     ]
    }
   },
@@ -4065,6 +4076,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://publications.aap.org/rss/site_1000005/advanceAccess_1000005.xml",
+     "https://publications.aap.org/rss/site_1000005/1000005.xml"
     ]
    }
   },

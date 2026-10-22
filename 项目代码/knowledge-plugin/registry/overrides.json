@@ -176,7 +176,14 @@
  },
  "j-0031-4005": {
   "owner_entity": "American Academy of Pediatrics",
-  "_why": "publisher missing in the probe registry"
+  "_why": "publisher missing in the probe registry",
+  "config": {
+   "abstract_feed": [
+    "https://publications.aap.org/rss/site_1000005/advanceAccess_1000005.xml",
+    "https://publications.aap.org/rss/site_1000005/1000005.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, AAP's Silverchair feeds (ids from archived pages), measured through the plugin's fetcher: advanceAccess_1000005.xml: 4/6 with text, median 1552; 1000005.xml: 18/20 with text, median 1671"
+  }
  },
  "j-0003-3022": {
   "owner_entity": "Wolters Kluwer",
@@ -3793,6 +3800,32 @@
     "https://ai.jmir.org/feed/atom"
    ],
    "_abstract_feed": "rt-papers 2026-10-22, JMIR's Atom feed (its latest ten articles, the whole abstract each): measured through the plugin's fetcher 8/10 with text, median 2748; its article pages answer a script challenge"
+  }
+ },
+ "j-0149-5992": {
+  "config": {
+   "abstract_feed": [
+    "https://diabetesjournals.org/rss/site_1000003/advanceAccess_1000004.xml",
+    "https://diabetesjournals.org/rss/site_1000003/1000004.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, ADA's Silverchair feeds (ids from archived pages), measured through the plugin's fetcher: advanceAccess_1000004.xml: 2/4 with text, median 1422; 1000004.xml: 17/20 with text, median 673"
+  }
+ },
+ "j-2159-8274": {
+  "config": {
+   "abstract_feed": [
+    "https://aacrjournals.org/rss/site_1000003/1000004.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, AACR's Silverchair current-issue feed (no online-first feed is offered) (ids from archived pages), measured through the plugin's fetcher: 1000004.xml: 16/20 with text, median 436"
+  }
+ },
+ "j-1073-449x": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_6755/advanceAccess_4230.xml",
+    "https://academic.oup.com/rss/site_6755/4230.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, AJRCCM is on Oxford Academic since 2026-01: OUP's feeds (ids from archived pages), measured through the plugin's fetcher: advanceAccess_4230.xml: 1/5 with text, median 2038; 4230.xml: 9/20 with text, median 752"
   }
  }
 }
