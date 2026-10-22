@@ -1,0 +1,14 @@
+[
+  {
+    "targets": [],
+    "labels": {
+      "probe": "geo-probe"
+    }
+  },
+  {
+    "targets": [],
+    "labels": {
+      "probe": "geo-social"
+    }
+  }
+]

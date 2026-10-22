@@ -1257,6 +1257,20 @@ test("monitoring configs scrape protected metrics, probe health/readiness, alert
     "http://open-science-web:8787/api/ready",
   ]);
   assert.equal(blackbox.modules.http_2xx.http.follow_redirects, false);
+  // The GEO module's two external services (2026-10-22), from targets/external.json: the probe host is up when it answers
+  // at all — 409 while it measures, 401/403 when it verifies a signature the check does not carry — and the crawler on 2xx.
+  for (const [name, module, probe] of [["geo-probe-host", "geo_probe_answers", "geo-probe"], ["geo-social-crawler", "http_2xx", "geo-social"]]) {
+    const job = jobs.get(name);
+    assert.deepEqual(job?.params.module, [module], `${name} probes with ${module}`);
+    assert.deepEqual(job.file_sd_configs[0].files, ["/etc/prometheus/targets/external.json"]);
+    assert.ok(job.relabel_configs.some((rule) => rule.action === "keep" && rule.regex === probe), `${name} keeps only its own target`);
+    assert.ok(Number.parseInt(job.scrape_timeout, 10) > Number.parseInt(blackbox.modules[module].timeout, 10));
+  }
+  assert.deepEqual(blackbox.modules.geo_probe_answers.http.valid_status_codes, [200, 401, 403, 409]);
+  assert.equal(blackbox.modules.geo_probe_answers.http.follow_redirects, false);
+  const committedTargets = JSON.parse(await readFile(path.join(monitoringDir, "targets/external.json"), "utf8"));
+  assert.deepEqual(committedTargets.map((group) => [group.labels.probe, group.targets]), [["geo-probe", []], ["geo-social", []]],
+    "the committed list is empty: a missing file-SD file is an error Prometheus reports every refresh");
 
   const alerts = rules.groups.flatMap((group) => group.rules);
   const names = alerts.map((rule) => rule.alert);
@@ -1272,6 +1286,15 @@ test("monitoring configs scrape protected metrics, probe health/readiness, alert
     assert.equal(names.includes(required), true, `missing alert ${required}`);
   }
   assert.equal(alerts.every((rule) => rule.for && rule.labels?.severity && rule.annotations?.summary), true);
+  for (const [alert, job] of [["GeoProbeHostDown", "geo-probe-host"], ["GeoSocialCrawlerDown", "geo-social-crawler"]]) {
+    const rule = alerts.find((candidate) => candidate.alert === alert);
+    assert.ok(rule, `missing alert ${alert}`);
+    assert.equal(rule.for, "15m");
+    assert.match(rule.expr, new RegExp(`probe_success\\{job="${job}"\\}\\) == 0`));
+    assert.match(rule.annotations.summary, /[\u3400-\u9fff]/, `${alert} says in Chinese which service and what stops`);
+  }
+  assert.match(alerts.find((rule) => rule.alert === "GeoProbeHostDown").annotations.summary, /GEO 测量/);
+  assert.match(alerts.find((rule) => rule.alert === "GeoSocialCrawlerDown").annotations.description, /社媒监测.*六平台监测/);
 
   assert.equal(datasource.datasources[0].uid, "prometheus");
   assert.equal(datasource.datasources[0].editable, false);

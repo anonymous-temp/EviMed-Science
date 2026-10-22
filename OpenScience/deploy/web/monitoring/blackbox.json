@@ -31,6 +31,21 @@
           "insecure_skip_verify": false
         }
       }
+    },
+    "geo_probe_answers": {
+      "prober": "http",
+      "timeout": "15s",
+      "http": {
+        "method": "GET",
+        "preferred_ip_protocol": "ip4",
+        "follow_redirects": false,
+        "valid_status_codes": [
+          200,
+          401,
+          403,
+          409
+        ]
+      }
     }
   }
 }
