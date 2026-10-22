@@ -3319,7 +3319,9 @@
   "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
  },
  "yxj-news": {
-  "enabled": true,
+  "enabled": false,
+  "disabled_reason": "article_text_behind_login",
+  "_why_disabled_20261022": "Every article page (www.yxj.org.cn/detailPage?articleId=…) carries only the site's shell for an anonymous reader: read directly or rendered by the browser exit, the DOM holds the sidebar, the QR login prompt and the ICP footer, and trafilatura finds 125 characters (articleId 510908, 2026-10-22). Its two published items of the month showed that shell as their 正文. 医学界's articles reach the feed through its WeChat accounts (wx-yxj-*), read whole.",
   "access": "html-list",
   "egress": "direct",
   "config": {

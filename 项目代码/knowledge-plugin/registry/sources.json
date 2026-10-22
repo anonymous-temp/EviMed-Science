@@ -18361,8 +18361,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": true,
-   "disabled_reason": null,
+   "enabled": false,
+   "disabled_reason": "article_text_behind_login",
    "category": "cn-media-clinical",
    "config": {
     "url": "https://www.yxj.org.cn/",

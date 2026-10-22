@@ -17,12 +17,17 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = json.loads((ROOT / 'registry/research/source-expansion-2026-09-30.json').read_text())
 ROWS = {row.source.id: row for row in load_registry(ROOT / 'registry/sources.json')}
 ADMITTED = [row for row in MANIFEST['rows'] if row['decision'] == 'enabled']
+# A source admitted here and turned off later by an override that says when and why (``_why_disabled_<yyyymmdd>``, after this
+# manifest): its capture still parses, it need not be on. yxj-news, 2026-10-22: its article pages hold only the site's shell.
+LATER_DISABLED = {source_id for source_id, override in json.loads((ROOT / 'registry/overrides.json').read_text()).items()
+                  if isinstance(override, dict) and override.get('enabled') is False and override.get('disabled_reason')
+                  and any(key.startswith('_why_disabled_') and key.removeprefix('_why_disabled_') > '20260930' for key in override)}
 
 
 @pytest.mark.parametrize('record', ADMITTED, ids=lambda record: record['id'])
 def test_admitted_source_replays_real_entries_from_its_protected_capture(record):
     row = ROWS[record['id']]
-    assert row.enabled
+    assert row.enabled or record['id'] in LATER_DISABLED
     assert not REGISTRY[row.source.access].validate_config(row.source)
     evidence = next(item for item in record['evidence'] if item['group'] == record['captureGroup'])
     entries = []
