@@ -146,6 +146,7 @@ export function ListHeader({
 export function ListRow({
   title,
   to,
+  state,
   href,
   onOpen,
   expanded,
@@ -165,6 +166,8 @@ export function ListRow({
   title: ReactNode;
   /** An in-app route the row opens. */
   to?: string;
+  /** Router state handed to the page `to` opens: where it was opened from, so its way back returns here (`FrontierBack`). */
+  state?: unknown;
   /** An outside address the row opens in a new tab. */
   href?: string;
   /**
@@ -223,7 +226,7 @@ export function ListRow({
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</Link>
+    <Link to={to} state={state} onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</Link>
   ) : href ? (
     <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)} {...current} {...titleProps}>{title}</a>
   ) : onOpen ? (

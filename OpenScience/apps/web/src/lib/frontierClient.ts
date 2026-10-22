@@ -42,7 +42,7 @@ import {
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
   FRONTIER_SPECIALTY_LABELS_ZH,
 } from "@evimed/domain";
-import { WebApiError, webErrorMessage } from "./apiClient";
+import { WebApiError, webApiBase, webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -194,12 +194,118 @@ export interface FrontierItem {
   event: { id: string; title: string } | null;
   /** The reader's own marks; `read` is what greys a card's title. */
   state: FrontierItemState;
+  /** What kind of outlet published it (contract 1.4.0); null from a server or an entry that does not say. */
+  channel: FrontierChannel | null;
+  /** Where a post was published (X, 微信, 小红书 …); `web` for an ordinary page; null where unknown. */
+  platform: FrontierPlatform | null;
+  /** Who wrote or posted it, where the source names someone: a social post's account, an article's byline. */
+  author: FrontierAuthor | null;
+  /** The card's picture: the item's first image, or null. */
+  thumb: FrontierMedia | null;
 }
 
-/** `GET /api/frontier/items/:id` adds the stored texts: the original abstract and, once written, the shared Chinese one. */
+/** The outlets the knowledge plugin names (contract 1.4.0 `channel`). */
+export const FRONTIER_CHANNELS = ["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"] as const;
+export type FrontierChannel = typeof FRONTIER_CHANNELS[number];
+/** The platforms a post can come from (contract 1.4.0 `platform`). */
+export const FRONTIER_PLATFORMS = ["x", "wechat", "xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels", "web"] as const;
+export type FrontierPlatform = typeof FRONTIER_PLATFORMS[number];
+
+/**
+ * The feed's channel filter (`?channel=`): 文献, 资讯, 社媒, 官方. Which outlets each one holds is the server's mapping (literature is
+ * journal + preprint + registry + guideline, …); the page only names the group.
+ */
+export const FRONTIER_CHANNEL_FILTERS = ["literature", "news", "social", "official"] as const;
+export type FrontierChannelFilter = typeof FRONTIER_CHANNEL_FILTERS[number];
+
+export interface FrontierAuthor {
+  name: string;
+  /** The account's handle, without the 「@」. */
+  handle: string | null;
+  url: string | null;
+  role: "organisation" | "person" | null;
+}
+
+/** One stored image: served by the control plane at `/api/frontier/media/<id>`, signed in and cached a day. */
+export interface FrontierMedia {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+  alt: string | null;
+}
+
+/**
+ * The full text the plugin kept (contract B `body`): the Chinese — an AI translation, or the original where it is Chinese already —
+ * and the original. `complete` is false while the translation covers only part of the original.
+ */
+export interface FrontierBody {
+  zh: string | null;
+  original: string | null;
+  zhKind: "translation" | "original-zh" | null;
+  complete: boolean;
+}
+
+/** The post an X post quotes, or the source a WeChat repost names. */
+export interface FrontierQuoted {
+  author: { name: string; handle: string | null };
+  text: string;
+  translation: string | null;
+  url: string | null;
+}
+
+export interface FrontierMetrics {
+  likes: number | null;
+  reposts: number | null;
+  replies: number | null;
+  views: number | null;
+}
+
+export type FrontierTopicGroup = "specialty" | "disease" | "drug" | "organisation" | "genre";
+export interface FrontierTopic {
+  slug: string;
+  name: string;
+  group: FrontierTopicGroup;
+}
+
+/** One development of the event an item belongs to (「事件后续」): its own article, newest first, the item itself excluded. */
+export interface FrontierFollowup {
+  itemId: string;
+  title: string;
+  sourceName: string;
+  at: string;
+  /** `same-event`: another report of the same occurrence; `follows`: what happened next. */
+  relation: "same-event" | "follows";
+}
+
+export interface FrontierFollowups {
+  eventId: string;
+  rows: FrontierFollowup[];
+  /** The event has more developments than these. */
+  more: boolean;
+}
+
+/**
+ * `GET /api/frontier/items/:id` (contract B): the stored texts — the original abstract and, once written, the shared Chinese one —
+ * and the reader's blocks. A field the server cannot fill is null (or, for a list, empty) and the reader leaves its block out:
+ * nothing here is ever made up on this side.
+ */
 export interface FrontierItemDetail extends FrontierItem {
   abstract: string | null;
   abstractZh: string | null;
+  /** 「AI 导读」: two or three sentences, answer first. The list's `summary` where the server sends no `lead`. */
+  lead: string | null;
+  body: FrontierBody | null;
+  media: FrontierMedia[];
+  quoted: FrontierQuoted | null;
+  metrics: FrontierMetrics | null;
+  /** Null from a server that does not send topics yet (the reader then shows the item's specialties). */
+  topics: FrontierTopic[] | null;
+  /** At most eight, shown as #tag; null from a server that does not send tags yet. */
+  tags: string[] | null;
+  /** This item reports an occurrence whose selected report is another item. */
+  sameEvent: { itemId: string; title: string } | null;
+  followups: FrontierFollowups | null;
 }
 
 export interface FrontierItemsQuery {
@@ -214,6 +320,8 @@ export interface FrontierItemsQuery {
   starred?: boolean;
   /** Official safety alerts only, from every lane (the rail's 安全警示). */
   safety?: boolean;
+  /** One group of outlets (文献, 资讯, 社媒, 官方); every outlet when absent. */
+  channel?: FrontierChannelFilter | null;
   /** A search's order; relevance unless `time` (the words' matches, newest first). */
   sort?: FrontierSearchSort;
   cursor?: string | null;
@@ -384,6 +492,8 @@ export interface FrontierHotBoard {
 }
 
 export type FrontierEventRole = "primary" | "report" | "background";
+/** The order of an event's reports: newest first (the default) or oldest first. */
+export type FrontierEventOrder = "desc" | "asc";
 
 /** `GET /api/frontier/events/:id` (a merged id answers 308, which `fetch` follows). */
 export interface FrontierEvent {
@@ -560,6 +670,38 @@ function labelled(value: unknown, fallback: Readonly<Record<string, string>>, ma
   return out;
 }
 
+/** A stored image's id: the hash of its bytes, as the plugin names it. Anything else addresses nothing. */
+const MEDIA_ID = /^[A-Za-z0-9_-]{8,128}$/;
+
+/**
+ * Where the browser reads a stored image: this deployment's own signed-in proxy (`GET /api/frontier/media/:id`), built from the id —
+ * never an address a response named, so an image is always this origin's and never a tracker's.
+ */
+export function frontierMediaUrl(mediaId: string): string {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  return `${root}/frontier/media/${encodeURIComponent(mediaId)}`;
+}
+
+/** A pixel size the server measured, or null. */
+const pixels = (value: unknown): number | null => (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 20_000 ? value : null);
+
+function parseMedia(value: unknown): FrontierMedia | null {
+  const raw = record(value);
+  const mediaId = text(raw?.id)?.trim();
+  if (!raw || !mediaId || !MEDIA_ID.test(mediaId)) return null;
+  return { id: mediaId, url: frontierMediaUrl(mediaId), width: pixels(raw.width), height: pixels(raw.height), alt: text(raw.alt)?.trim().slice(0, 300) ?? null };
+}
+
+/** A handle as people write it after the 「@」: the plugin may or may not send the sign. */
+const handleOf = (value: unknown): string | null => text(value)?.trim().replace(/^@+/, "").slice(0, 80) || null;
+
+function parseAuthor(value: unknown): FrontierAuthor | null {
+  const raw = record(value);
+  const name = text(raw?.name)?.trim();
+  if (!raw || !name) return null;
+  return { name: name.slice(0, 120), handle: handleOf(raw.handle), url: safeLink(raw.url), role: orNull(raw.role, ["organisation", "person"] as const) };
+}
+
 const LEVELS = ["high", "medium", "low"] as const;
 
 const FACT_KEY = /^[a-z][a-z0-9_]{1,39}$/;
@@ -682,6 +824,83 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     alsoReportedCount: Math.max(count(raw.alsoReportedCount), alsoReportedBy.length),
     event: event && text(event.id) && text(event.title) ? { id: text(event.id)!, title: text(event.title)! } : null,
     state: { starred: state?.starred === true, hidden: state?.hidden === true, read: state?.read === true },
+    channel: orNull(raw.channel, FRONTIER_CHANNELS),
+    platform: orNull(raw.platform, FRONTIER_PLATFORMS),
+    author: parseAuthor(raw.author),
+    thumb: parseMedia(raw.thumb),
+  };
+}
+
+/** The longest body the plugin sends (contract A: ≤ 40 000 characters). */
+const BODY_MAX = 40_000;
+const TOPIC_GROUPS = ["specialty", "disease", "drug", "organisation", "genre"] as const;
+
+/** A count the source showed, or null where it showed none. */
+const tally = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null);
+
+/**
+ * One item as its reader reads it (contract B): the list's fields, the stored abstract, and the reader's blocks, each parsed field by
+ * field. What is missing or malformed is null (or empty) — the block it would fill is left out, and nothing is guessed in its place.
+ */
+export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | null {
+  const item = parseFrontierItem(value);
+  const raw = record(value);
+  if (!item || !raw) return null;
+  const body = record(raw.body);
+  const zh = text(body?.zh)?.slice(0, BODY_MAX) ?? null;
+  const original = text(body?.original)?.slice(0, BODY_MAX) ?? null;
+  const quoted = record(raw.quoted);
+  const quotedAuthor = record(quoted?.author);
+  const quotedName = text(quotedAuthor?.name)?.trim() || handleOf(quotedAuthor?.handle);
+  const quotedText = text(quoted?.text);
+  const metrics = record(raw.metrics);
+  const counted = metrics ? { likes: tally(metrics.likes), reposts: tally(metrics.reposts), replies: tally(metrics.replies), views: tally(metrics.views) } : null;
+  const same = record(raw.sameEvent);
+  const followups = record(raw.followups);
+  const seenTopics = new Set<string>();
+  return {
+    ...item,
+    abstract: text(raw.abstract),
+    abstractZh: text(raw.abstractZh),
+    lead: text(raw.lead) ?? item.summary,
+    body: zh || original ? {
+      zh,
+      original,
+      zhKind: zh ? orNull(body?.zhKind, ["translation", "original-zh"] as const) : null,
+      // Incomplete only where the server says so: a translation is never called partial on a guess.
+      complete: body?.complete !== false,
+    } : null,
+    media: (Array.isArray(raw.media) ? raw.media : []).map(parseMedia).filter((media): media is FrontierMedia => media !== null)
+      .filter((media, index, all) => all.findIndex((other) => other.id === media.id) === index).slice(0, 8),
+    quoted: quotedName && quotedText ? {
+      author: { name: quotedName, handle: handleOf(quotedAuthor?.handle) },
+      text: quotedText.slice(0, BODY_MAX),
+      translation: text(quoted?.translation)?.slice(0, BODY_MAX) ?? null,
+      url: safeLink(quoted?.url),
+    } : null,
+    metrics: counted && Object.values(counted).some((entry) => entry !== null) ? counted : null,
+    topics: Array.isArray(raw.topics) ? raw.topics.flatMap((entry) => {
+      const topic = record(entry);
+      const slug = text(topic?.slug)?.trim();
+      const name = text(topic?.name)?.trim();
+      if (!slug || !name || seenTopics.has(slug)) return [];
+      seenTopics.add(slug);
+      return [{ slug, name: name.slice(0, 40), group: oneOf(topic?.group, TOPIC_GROUPS, "genre") }];
+    }).slice(0, 12) : null,
+    tags: Array.isArray(raw.tags) ? [...new Set(strings(raw.tags, 20).map((tag) => tag.trim().replace(/^#+/, "").slice(0, 40)).filter(Boolean))].slice(0, 8) : null,
+    sameEvent: same && text(same.itemId) && text(same.title) && text(same.itemId) !== item.id ? { itemId: text(same.itemId)!, title: text(same.title)! } : null,
+    followups: followups && text(followups.eventId) ? {
+      eventId: text(followups.eventId)!,
+      rows: (Array.isArray(followups.rows) ? followups.rows : []).flatMap((entry) => {
+        const row = record(entry);
+        const rowId = text(row?.itemId);
+        const title = text(row?.title);
+        const at = moment(row?.at);
+        if (!rowId || !title || !at || rowId === item.id) return [];
+        return [{ itemId: rowId, title, sourceName: text(row?.sourceName) ?? "", at, relation: oneOf(row?.relation, ["same-event", "follows"] as const, "same-event") }];
+      }).slice(0, 8),
+      more: followups.more === true,
+    } : null,
   };
 }
 
@@ -987,6 +1206,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   if (q && query.sort === "time") params.set("sort", "time");
   if (query.starred) params.set("starred", "1");
   if (query.safety) params.set("safety", "1");
+  if (query.channel) params.set("channel", query.channel);
   if (query.cursor) params.set("cursor", query.cursor);
   params.set("limit", String(Math.min(50, Math.max(1, Math.floor(query.limit ?? 30)))));
   return params.toString();
@@ -1011,10 +1231,9 @@ export async function listFrontierItems(query: FrontierItemsQuery = {}): Promise
 }
 
 export async function fetchFrontierItem(itemId: string): Promise<FrontierItemDetail> {
-  const raw = record(await productRequest<unknown>(`/frontier/items/${id(itemId)}`));
-  const item = parseFrontierItem(raw?.item);
+  const item = parseFrontierItemDetail(record(await productRequest<unknown>(`/frontier/items/${id(itemId)}`))?.item);
   if (!item) throw new WebApiError("The frontier item was malformed.", { status: 502 });
-  return { ...item, abstract: text(record(raw?.item)?.abstract), abstractZh: text(record(raw?.item)?.abstractZh) };
+  return item;
 }
 
 export async function fetchFrontierSources(): Promise<FrontierSources> {
@@ -1120,8 +1339,8 @@ export async function fetchFrontierHot(): Promise<FrontierHotEvent[] | null> {
  * A merged event's old id answers 308, which `fetch` follows; the event that
  * comes back carries the surviving id.
  */
-export async function fetchFrontierEvent(eventId: string): Promise<FrontierEvent> {
-  const event = parseEvent(record(await productRequest<unknown>(`/frontier/events/${id(eventId)}`))?.event);
+export async function fetchFrontierEvent(eventId: string, order?: FrontierEventOrder): Promise<FrontierEvent> {
+  const event = parseEvent(record(await productRequest<unknown>(`/frontier/events/${id(eventId)}${order ? `?order=${order}` : ""}`))?.event);
   if (!event) throw new WebApiError("The frontier event was malformed.", { status: 502 });
   return event;
 }

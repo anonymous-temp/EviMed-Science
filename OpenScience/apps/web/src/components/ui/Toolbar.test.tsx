@@ -196,6 +196,34 @@ describe("Toolbar", () => {
       expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
     });
 
+    it("folds the filters beside the page's views when the views no longer all show, and keeps every view on the row", () => {
+      const widths = { current: 1000 };
+      vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+        // The tab list holds 600 px of tabs; it is given what the row leaves beside the filters (500 px of them) or the folded chip (300).
+        return this.getAttribute("role") === "tablist" ? 600 : 0;
+      });
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        if (this.getAttribute("role") === "tablist") return widths.current - (this.closest("[data-toolbar]")?.querySelector("[aria-label='时间范围']") ? 500 : 300);
+        return this.hasAttribute("data-toolbar") ? widths.current : 0;
+      });
+      const observers: Array<() => void> = [];
+      vi.stubGlobal("ResizeObserver", class {
+        constructor(private callback: () => void) {}
+        observe() { observers.push(this.callback); }
+        unobserve() {}
+        disconnect() {}
+      });
+      const views = { label: "动态视图", items: [{ value: "a", label: "精选" }, { value: "b", label: "简报" }], value: "a", onChange: () => {} };
+      render(<Toolbar inBand views={views} filters={filters} />);
+      expect(screen.queryByRole("button", { name: "本周" })).toBeNull();
+      expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "简报" })).toBeInTheDocument();
+      // Wider than where they did not fit: they are tried on the row again.
+      widths.current = 1400;
+      act(() => observers.forEach((notify) => notify()));
+      expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
+    });
+
     it("leaves a toolbar outside the band alone, wrapping or not", () => {
       layout({ current: 900 });
       render(<Toolbar filters={filters} />);

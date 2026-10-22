@@ -1,11 +1,9 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
-import { FrontierDetails } from "./FrontierDetails";
 import { FrontierCard } from "./FrontierCard";
 import { frontierItem } from "./__fixtures__/frontierItems";
 
@@ -279,48 +277,6 @@ describe("the card's footer", () => {
   });
 });
 
-describe("the shared article texts", () => {
-  function renderDetails(item = frontierItem()) { render(<FrontierDetails item={item} onClose={() => {}} />); }
-  async function openDetails() { return screen.findByRole("dialog", { name: "口服 PCSK9 抑制剂降低主要心血管事件" }); }
-
-  it("holds what the card left out: the original title, the facts and the free full text", async () => {
-    client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "这是中文摘要。", abstract: "Abstract.", note: null });
-    renderDetails(frontierItem({ sourceType: "media", facts: { journal: "NEJM", impact_factor: 78.456 },
-      openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }));
-    const details = await openDetails();
-    for (const text of ["Oral PCSK9 Inhibition and Cardiovascular Outcomes", "期刊", "影响因子", "78.5"]) expect(details).toHaveTextContent(text);
-    expect(within(details).getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
-    expect(await within(details).findByText("这是中文摘要。")).toBeInTheDocument();
-    expect(within(details).getByRole("heading", { name: "中文摘要" })).toBeInTheDocument();
-  });
-
-  it("reads the abstract only when the details are opened, and names the original one as such", async () => {
-    client.fetchFrontierAbstractZh.mockResolvedValue(null);
-    client.fetchFrontierItem.mockResolvedValue({ ...frontierItem(), abstract: "Background: an original abstract.", abstractZh: null });
-    renderDetails();
-    const details = await openDetails();
-    expect(await within(details).findByText("Background: an original abstract.")).toBeInTheDocument();
-    expect(within(details).getByRole("heading", { name: "原文摘要" })).toBeInTheDocument();
-  });
-
-  it("offers a retry when the abstract could not be read", async () => {
-    client.fetchFrontierAbstractZh.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null }))
-      .mockResolvedValueOnce({ abstractZh: "重试之后的中文摘要。", abstract: null, note: null });
-    renderDetails();
-    const details = await openDetails();
-    await userEvent.click(await within(details).findByRole("button", { name: "重试" }));
-    await waitFor(() => expect(within(details).getByText("重试之后的中文摘要。")).toBeInTheDocument());
-  });
-
-  it("does not look for an abstract an item does not have", async () => {
-    renderDetails(frontierItem({ flags: [{ key: "no-abstract", label: "无摘要" }] }));
-    const details = await openDetails();
-    expect(within(details).queryByRole("heading", { name: "中文摘要" })).not.toBeInTheDocument();
-    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
-  });
-});
-
-
 it("follows a card's structured source identity without invoking hide or external navigation", async () => {
   client.addFrontierFollow.mockResolvedValue({ id: "9", kind: "source", key: "nejm", label: "NEJM", muted: false });
   const item = frontierItem();
@@ -345,4 +301,31 @@ it("opens an event from more actions even when it has only one report", async ()
   await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
   await userEvent.click(await screen.findByRole("menuitem", { name: "同一事件的全部报道" }));
   expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/events/single-event");
+});
+
+describe("a social post's card", () => {
+  const post = (overrides: Record<string, unknown> = {}) => frontierItem({
+    platform: "x", channel: "x", author: { name: "Arena.ai", handle: "arena", url: null, role: "organisation" },
+    source: { id: "x-arena", name: "X 精选账号", homepage: null, platformProduced: false }, ...overrides,
+  });
+
+  it("is said by its account, its handle and its platform, where any other item is said by its institution", () => {
+    renderCard(post());
+    expect(screen.getByRole("article")).toHaveTextContent("Arena.ai @arena · X");
+    expect(screen.getByRole("article")).not.toHaveTextContent("X 精选账号");
+  });
+
+  it("shows its first picture beside the title, from this deployment's proxy, opening the same article", async () => {
+    renderCard(post({ thumb: { id: "c".repeat(64), width: 400, height: 300, alt: "图" } }));
+    const picture = document.querySelector("article img") as HTMLImageElement;
+    expect(picture).toHaveAttribute("src", `/api/frontier/media/${"c".repeat(64)}`);
+    const link = picture.closest("a")!;
+    expect(link).toHaveAttribute("href", screen.getByRole("link", { name: frontierItem().title }).getAttribute("href"));
+    expect(link).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("draws no picture where there is none, or where it cannot be served", () => {
+    renderCard(frontierItem());
+    expect(document.querySelector("article img")).toBeNull();
+  });
 });

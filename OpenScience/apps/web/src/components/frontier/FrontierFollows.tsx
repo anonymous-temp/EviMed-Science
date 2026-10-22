@@ -95,6 +95,6 @@ export function FrontierFollows({ selected, onSelect, onChanged }: {
             onClick={() => void act(() => removeFrontierFollow(row.id), row.id)}>移除</Button>
         </div> },
       ]} />
-    <p><Link to="/app/frontier/zones?scope=following" className="text-caption text-text-3 hover:text-accent">已关注的证据专区在“证据专区”里管理 ›</Link></p>
+    <p><Link to="/app/frontier?view=zones&scope=following" className="text-caption text-text-3 hover:text-accent">已关注的证据专区在“证据专区”里管理 ›</Link></p>
   </div>;
 }

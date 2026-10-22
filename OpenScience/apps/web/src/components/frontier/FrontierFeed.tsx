@@ -78,7 +78,7 @@ export function FeedList({
           : filtered ? <EmptyState icon={Filter} title="没有结果" action={<Button variant="secondary" onClick={onClear}>清除筛选</Button>} />
             : empty ? <EmptyState icon={Newspaper} title={empty} action={<Button variant="secondary" onClick={onAll}>看全部动态</Button>} />
               : firstRun || view === "all"
-                ? <EmptyState icon={Newspaper} title="暂无内容" action={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "secondary" })}>看证据专区</Link>} />
+                ? <EmptyState icon={Newspaper} title="暂无内容" action={<Link to="/app/frontier?view=zones" className={buttonClasses({ variant: "secondary" })}>看证据专区</Link>} />
                 : <EmptyState icon={Newspaper} title="暂无精选" action={<Button variant="secondary" onClick={onAll}>看全部</Button>} />
       ) : q ? (
         <section aria-label="搜索结果">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useEvidenceScope,
   useEvidenceRequestId,
@@ -19,7 +19,7 @@ import { ZoneSubscription } from "@/components/capsule/ZoneSubscription";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { DEFAULT_PUBLIC_BASE_PATH } from "@/lib/evidenceUpkeepClient";
 import { PageShell } from "@/components/layout/PageShell";
-import { FrontierBack } from "@/components/frontier/FrontierBack";
+import { FrontierBack, evidenceFromState } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -50,6 +50,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const features = useEvidenceFeatures();
   const [params] = useSearchParams();
   const fromItem = params.get("fromItem");
+  const from = evidenceFromState(useLocation().state);
   const [sourceItem, setSourceItem] = useState<FrontierItem | null>(null);
   const navigate = useNavigate();
   const [suggestions, setSuggestions] = useState<
@@ -213,14 +214,18 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
       title={zone?.title ?? "证据专区"}
       meta={metaParts.length > 0 ? metaParts.join(" · ") : undefined}
       back={
-        <FrontierBack
-          trail={[
-            {
-              label: "证据专区",
-              to: `/app/frontier/zones${fromItem ? `?fromItem=${encodeURIComponent(fromItem)}` : ""}`,
-            },
-          ]}
-        />
+        // Opened from the feed's 证据专区 view, the way back is that view as the reader left it (its scope, its search, its scroll);
+        // opened from anywhere else, it is the trail up to the view.
+        from && !fromItem ? <FrontierBack historyBack to={from.to} label={from.label} /> : (
+          <FrontierBack
+            trail={[
+              {
+                label: "证据专区",
+                to: fromItem ? `/app/frontier/zones?fromItem=${encodeURIComponent(fromItem)}` : "/app/frontier?view=zones",
+              },
+            ]}
+          />
+        )
       }
       actions={
         zone && (
@@ -341,7 +346,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                   features.publicPages && zone.kind === "official" ? (
                     <Link
                       className="text-ui text-accent"
-                      to={`/app/frontier/zones?request=${encodeURIComponent(zone.title)}`}
+                      to={`/app/frontier?view=zones&request=${encodeURIComponent(zone.title)}`}
                     >
                       申请这个主题的选题 ›
                     </Link>

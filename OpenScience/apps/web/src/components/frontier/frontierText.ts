@@ -15,6 +15,7 @@ import type {
   FrontierHotEvent,
   FrontierHotWindow,
   FrontierItem,
+  FrontierPlatform,
   FrontierPrimaryKind,
   FrontierScoreBand,
   FrontierTrendPoint,
@@ -95,6 +96,25 @@ export function itemMarkdown(item: Pick<FrontierItem, "title" | "url" | "summary
   return [`**[${title}](${item.url})**`, ...(item.summary ? ["", item.summary] : []), "", who].join("\n");
 }
 
+/* ---------------------------------------------------------------- platforms */
+
+/** Where a post was published, as a reader names it; an ordinary web page names no platform. */
+export const PLATFORM_LABELS: Readonly<Record<FrontierPlatform, string | null>> = Object.freeze({
+  x: "X", wechat: "微信公众号", xiaohongshu: "小红书", douyin: "抖音", zhihu: "知乎", weibo: "微博", bilibili: "哔哩哔哩", channels: "视频号", web: null,
+});
+
+/** A post on a social platform: its account is who said it, and the publication it came through is that platform. */
+export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
+  return item.platform !== null && item.platform !== "web";
+}
+
+/** The header's way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「查看原文」. */
+export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
+  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "查看原文";
+  const platform = PLATFORM_LABELS[item.platform];
+  return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
+}
+
 /* -------------------------------------------------------------------- times */
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -140,6 +160,22 @@ export function ago(value: string | null, now = Date.now()): string {
   if (!value) return "";
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? "" : relativeTime(ms, now);
+}
+
+/**
+ * 「刚刚」「5 分钟前」「3 小时前」「2 天前」: how long ago, beside a line that already names the moment (the reader's byline, a follow-up's
+ * row). Empty past thirty days, where the date says it better, and for a time that cannot be read or is ahead of the clock.
+ */
+export function sinceText(value: string | null, now = Date.now()): string {
+  if (!value) return "";
+  const at = Date.parse(value);
+  if (Number.isNaN(at) || at > now + 60_000) return "";
+  const minutes = Math.floor(Math.max(0, now - at) / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 小时前`;
+  const days = Math.floor(minutes / (24 * 60));
+  return days <= 30 ? `${days} 天前` : "";
 }
 
 /**

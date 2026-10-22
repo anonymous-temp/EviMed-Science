@@ -39,7 +39,7 @@ describe("the view", () => {
     expect(screen.getByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "添加关注" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier/zones");
+    expect(screen.getByRole("link", { name: "浏览证据专区" })).toHaveAttribute("href", "/app/frontier?view=zones");
     expect(screen.queryByText("关注的动态")).not.toBeInTheDocument();
   });
 
