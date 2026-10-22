@@ -14,7 +14,8 @@ article pages answer this crawler with a challenge (OUP, JAMA) or a 403 (the Els
   the last segment of the item's link (The BMJ links ``/content/395/bmj-2026-101102``; Gut's ``…/gutjnl-2026-340844v1``,
   its version mark aside), the HighWire master id in ``dc:identifier`` (``hwp:master-id:bmjopen;bmjopen-2025-111942``
   — BMJ Open's links carry only ``e111942``), or the link's number when the suffix is letters and that number (JCI's
-  ``/articles/view/205800`` for ``10.1172/JCI205800``).
+  ``/articles/view/205800`` for ``10.1172/JCI205800``) or the link's e-locator is the suffix (JMIR's ``/2026/1/e101329``
+  for ``10.2196/101329``).
 - Atypon's feeds open every description with the issue's citation ("Proceedings of the National Academy of Sciences,
   Volume 123, Issue 42, October 2026.") — a bibliographic line, taken off; Science's descriptions are nothing else.
 - The item's description (or content) is the text, its markup read with section titles kept (OUP's ``boxTitle``
@@ -138,9 +139,11 @@ def match(items: list[FeedItem], doi: str) -> FeedItem | None:
         for item in items:
             if suffix in item.ids or (item.tail and item.tail == suffix):
                 return item
-        for item in items:     # the link's number, the suffix being letters and that number (JCI)
+        for item in items:     # the link's number and the suffix: letters and that number (JCI), or its e-locator (JMIR)
             tail = item.tail or ""
             if len(tail) >= 5 and tail.isdigit() and suffix.endswith(tail) and suffix[: -len(tail)].isalpha():
+                return item
+            if len(tail) >= 6 and tail[0] == "e" and tail[1:].isdigit() and tail[1:] == suffix:
                 return item
     return None
 

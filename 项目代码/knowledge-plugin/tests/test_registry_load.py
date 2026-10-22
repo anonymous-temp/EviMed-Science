@@ -240,7 +240,7 @@ def test_the_journal_feeds_the_paper_text_chain_reads(document):
     each measured (``tools/measure_abstract_feeds.py``); The Lancet's, NEJM's, the AHA's, ACP's, JACC's and RSNA's feeds
     are disallowed by their robots.txt and named nowhere."""
     rows = {s["id"]: s for s in document["sources"] if (s.get("config") or {}).get("abstract_feed")}
-    assert len(rows) == 51 and all(r["source_type"] == "journal" and r["enabled"] for r in rows.values())
+    assert len(rows) == 54 and all(r["source_type"] == "journal" and r["enabled"] for r in rows.values())
     assert rows["j-0098-7484"]["config"]["abstract_feed"][0] == "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml"
     assert rows["j-0016-5085"]["config"]["abstract_feed"] == ["https://www.gastrojournal.org/inpress.rss",
                                                               "https://www.gastrojournal.org/current.rss"]

@@ -1829,6 +1829,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.jmir.org"
+    ],
+    "abstract_feed": [
+     "https://www.jmir.org/feed/atom"
     ]
    }
   },
@@ -1866,6 +1869,9 @@
     "allowed_hosts": [
      "api.crossref.org",
      "medinform.jmir.org"
+    ],
+    "abstract_feed": [
+     "https://medinform.jmir.org/feed/atom"
     ]
    }
   },
@@ -1902,6 +1908,9 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://ai.jmir.org/feed/atom"
     ]
    }
   },

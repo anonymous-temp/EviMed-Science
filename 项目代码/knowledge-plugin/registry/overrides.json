@@ -3770,5 +3770,29 @@
    ],
    "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3257.xml: 2/2 with text, median 2187; 3257.xml: 19/20 with text, median 1836"
   }
+ },
+ "j-1438-8871": {
+  "config": {
+   "abstract_feed": [
+    "https://www.jmir.org/feed/atom"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, JMIR's Atom feed (its latest ten articles, the whole abstract each): measured through the plugin's fetcher 8/10 with text, median 2788; its article pages answer a script challenge"
+  }
+ },
+ "j-2291-9694": {
+  "config": {
+   "abstract_feed": [
+    "https://medinform.jmir.org/feed/atom"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, JMIR's Atom feed (its latest ten articles, the whole abstract each): measured through the plugin's fetcher 9/10 with text, median 3094; its article pages answer a script challenge"
+  }
+ },
+ "j-2817-1705": {
+  "config": {
+   "abstract_feed": [
+    "https://ai.jmir.org/feed/atom"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, JMIR's Atom feed (its latest ten articles, the whole abstract each): measured through the plugin's fetcher 8/10 with text, median 2748; its article pages answer a script challenge"
+  }
  }
 }

@@ -119,6 +119,14 @@ async def test_an_item_without_a_description_is_nothing():
     assert found is None and trace.notes == ["feed_item_without_text"]
 
 
+def test_a_doi_suffix_in_a_link_s_number_or_e_locator():
+    items = [feeds.FeedItem(dois=frozenset(), tail="205800", text="x"), feeds.FeedItem(dois=frozenset(), tail="e101329", text="y"),
+             feeds.FeedItem(dois=frozenset(), tail="e111942", text="z")]
+    assert feeds.match(items, "10.1172/JCI205800").text == "x"                 # JCI: /articles/view/205800
+    assert feeds.match(items, "10.2196/101329").text == "y"                    # JMIR: /2026/1/e101329
+    assert feeds.match(items, "10.1136/bmjopen-2025-111942") is None           # BMJ Open's link number is not its suffix
+
+
 def test_feed_urls_of_a_row():
     assert feeds.feed_urls({"abstract_feed": "https://a.example/rss"}) == ["https://a.example/rss"]
     assert feeds.feed_urls({"abstract_feed": ["https://a.example/1", "ftp://x", 3, "https://a.example/2"]}) == [
