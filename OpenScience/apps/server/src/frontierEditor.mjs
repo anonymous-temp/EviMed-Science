@@ -7,12 +7,20 @@ import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
  *
  * - `screen(batch)` — up to twenty entries in one call: is it medical (or
  *   medical AI), is it news, which lane, which specialties, which language.
- * - `edit(item)` — one call per item: the Chinese title, a summary of at most
- *   three lines whose last sentence says what the item means for practice or
- *   research, lane, specialties, evidence type, entities, three scores. The
- *   separate 「为什么值得看」 (`reason_zh`) is no longer asked for (2026-09-24,
- *   plan 2026-09-23 §6.3): the card lost the green box it filled, and its
- *   sentence moved into the summary. Rows written before keep theirs.
+ * - `edit(item)` — one call per item: the Chinese title, the 导读 (`summary_zh`,
+ *   two or three sentences, the answer first), the 推荐理由 (`reason_zh`, one
+ *   sentence: what a clinician or researcher can do with it), up to six tags,
+ *   lane, specialties, evidence type, entities, three scores.
+ *   The reason was retired on 2026-09-24 (plan 2026-09-23 §6.3) because it sat
+ *   in a green box on every card under the heading 「为什么值得看」 — a line
+ *   about the feed's own choice, on a page the owner found over-explained. It
+ *   came back on 2026-10-22 for the reader (owner, AIHOT's detail page): it is
+ *   served for selected and near-line items only (`frontierService.mjs`), the
+ *   card does not draw it, and the prompt asks for what a reader can do with
+ *   the item, never why it was picked. It is optional and checked on its own:
+ *   an answer whose reason fails is not sent back for it, the reason is
+ *   dropped (AIHOT's `editorialJudgment` rule: rather none than an invented
+ *   value).
  * - the verification of what `edit` wrote — numbers (`frontierNumbers.mjs`),
  *   vocabularies, lengths, links, Chinese prose, entity caps — is code. A
  *   failed verification is sent back once with the specific issues; a second
@@ -70,6 +78,7 @@ import {
   agendaLocalDate,
 } from "@evimed/domain";
 import { checkNumbers } from "./frontierNumbers.mjs";
+import { frontierTopicTagNames } from "./frontierTopics.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
 /** Entries per screening call (plan §10.3.5). */
@@ -81,22 +90,30 @@ export const FRONTIER_MODEL_INPUT_CHARS = 6_000;
 
 /**
  * What a verified field may be, in code points. The prompt asks for less
- * (title 40, summary 120 — three lines of forty on the card) so an answer
- * near the request passes; the card clamps anything past three lines behind
- * 「展开」, and the database allows more (200 / 600).
+ * (title 40, 导读 200, 推荐理由 45-70) so an answer near the request passes;
+ * the card clamps the 导读 behind 「展开」, the reader shows it whole, and the
+ * database allows more (200 / 600 / 200). A reason under `reasonMin` says
+ * nothing a reader can act on and is dropped like a failed one. Tags: at most
+ * `tags` of at most `tagChars` each (the reader adds the evidence type as the
+ * eighth).
+ * The 导读 grew from 140 to 220 on 2026-10-22 (contract B: AIHOT's answer-first
+ * summary of two or three sentences, which the reader shows whole).
  */
-export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 140, entitiesPerKind: 5, entityChars: 60 });
+export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 220, reason: 90, reasonMin: 20, tags: 7, tagChars: 16,
+  entitiesPerKind: 5, entityChars: 60 });
 
 const SCREEN_TIMEOUT_MS = 60_000;
 const EDIT_TIMEOUT_MS = 45_000;
 // Twenty verdicts of about sixty tokens each, with room for a fence or a
 // stray sentence; one edit answer is about 350 tokens.
 const SCREEN_MAX_TOKENS = 3_000;
-const EDIT_MAX_TOKENS = 1_500;
+const EDIT_MAX_TOKENS = 1_800;
 
 const LANE_LINE = FRONTIER_LANES.map((lane) => `${lane} ${FRONTIER_LANE_LABELS_ZH[lane]}`).join("；");
 const SPECIALTY_LINE = FRONTIER_SPECIALTIES.map((key) => `${key} ${FRONTIER_SPECIALTY_LABELS_ZH[key]}`).join("；");
 const EVIDENCE_LINE = FRONTIER_EVIDENCE_TYPES.map((key) => `${key} ${FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key]}`).join("；");
+// The tag names the reader's topics are matched by (frontierTopics.json): offered, never required.
+const TOPIC_TAG_LINE = frontierTopicTagNames().join("、");
 
 /** The screening instructions: the stable prefix of every screening call. */
 export const FRONTIER_SCREEN_INSTRUCTIONS = [
@@ -135,7 +152,11 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "",
   "字段要求：",
   "- title_zh：中文标题，不超过 40 个字，陈述事实，不用问句。条目注明「中文信源：是」时，原样照抄标题。",
-  "- summary_zh：两三句导读，不超过 120 个字，只写标题之外的内容：先说这是什么、结果如何，最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。",
+  // The answer-first 导读 follows AIHOT's rules-answer-first-summary.md (MIT, KKKKhazix/AIHOT 47531fa).
+  "- summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心——谁做了什么、主要结果或决定是什么，不先铺背景，不用「研究显示」「本文介绍」之类的转述套话开头；后面只补一到两个最重要的事实或数字及其不确定性；只写原文有的内容，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。",
+  // The reason follows AIHOT's editorialJudgment rule in content-understanding.md (MIT, KKKKhazix/AIHOT 47531fa), for clinicians.
+  "- reason_zh：推荐理由，一句话，45 到 70 个字，写给临床医生、药师或研究者：读了这条可以拿它做什么——调整哪类处方、用药监测或患者沟通，借鉴哪种研究设计或方法，关注哪个人群或安全问题。只写原文支持的一层阅读价值（背景、比较、影响、可借鉴的方法四选一），不重复导读里的事实。不写为什么入选、为什么推荐或值不值得读，不评价本平台，不用命令语气，不用「必读」「重磅」「颠覆」「首次」「这意味着」「值得注意的是」这类词，不用冒号和破折号。原文只有标题、宣传口号，或支持不了具体的阅读价值时给空字符串。",
+  "- tags：0 到 6 个中文标签，每个 2 到 12 个字，是这条消息涉及的疾病、药物或药物类别、治疗手段、研究方法、人群或技术；主题词表里有对应名称时用词表里的写法；不写专科、机构和证据类型；没有就给空数组。",
   "- lane：从条目的「允许的栏目」里选一个。",
   "- specialties：0 到 3 个专科键，按相关程度排列。",
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
@@ -147,9 +168,10 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "栏目说明：safety 药物安全只收药品、疫苗、生物制品、医疗器械和膳食补充剂的安全信息（不良反应、警示、召回、说明书安全性修订）；普通食品的召回和过敏原未标注属于 public-health 公共卫生。",
   `证据类型词表：${EVIDENCE_LINE}。`,
   `专科词表：${SPECIALTY_LINE}。`,
+  `主题词表：${TOPIC_TAG_LINE}。`,
   "",
   "输出格式（键名固定）：",
-  "{\"title_zh\":\"\",\"summary_zh\":\"\",\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
+  "{\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"tags\":[],\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
 ].join("\n");
 
 /** The event digest's instructions (plan §6.4: 「先了解这件事」 and 「最新进展」). */
@@ -394,6 +416,8 @@ function clip(value, max) {
  * @property {string | null} [abstract]
  * @property {string | null} [summary]    the feed's own summary when there is no abstract
  * @property {string | null} [bodyExcerpt]
+ * @property {{ name: string, role?: "organisation" | "person" | null } | null} [author]  a post's or an article's own author (contract 1.4.0)
+ * @property {{ authorName: string, text: string } | null} [quoted]  the post an X post quotes, or the source a repost names
  * @property {string | null} [journal]
  * @property {string[]} [publicationTypes]
  * @property {{ phase?: string, status?: string, enrollment?: number, sponsor?: string } | null} [trialFacts]
@@ -451,7 +475,14 @@ export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
     ].filter(Boolean);
     if (facts.length) lines.push(`试验信息：${facts.join("；")}`);
   }
+  // A post's author and what it quotes are what a reader of a post needs to know whose words these are (contract 1.4.0);
+  // absent on every other item, so their inputs are byte-for-byte what they were.
+  if (item.author?.name) {
+    const role = item.author.role === "organisation" ? "（机构）" : item.author.role === "person" ? "（个人）" : "";
+    lines.push(`作者：${clip(item.author.name, 120)}${role}`);
+  }
   lines.push(`标题：${clip(item.titleRaw, 1000)}`);
+  if (item.quoted?.text) lines.push(`引用：${clip(item.quoted.authorName, 80)}｜${clip(item.quoted.text, 1_200)}`);
   const head = lines.join("\n");
   let room = Math.max(0, FRONTIER_MODEL_INPUT_CHARS - head.length);
   const body = [];
@@ -488,7 +519,7 @@ function labelledLines(input, labels) {
 
 /** The lines of an edit's input that state the source. @param {string} modelInput what `buildModelInput` wrote */
 export function editNumberSource(modelInput) {
-  return labelledLines(modelInput, ["标题：", "试验信息：", "摘要：", "原文摘要：", "正文节选："]).join("\n");
+  return labelledLines(modelInput, ["标题：", "引用：", "试验信息：", "摘要：", "原文摘要：", "正文节选："]).join("\n");
 }
 
 /**
@@ -571,7 +602,7 @@ export function trimToWholeSentences(text, limit) {
 }
 
 /**
- * @typedef {{ titleZh: string | null, summaryZh: string | null, lane: string | null,
+ * @typedef {{ titleZh: string | null, summaryZh: string | null, reasonZh: string | null, tags: string[], lane: string | null,
  *             specialties: string[], evidenceType: string | null,
  *             entities: { drugs: string[], trials: string[], orgs: string[], diseases: string[] },
  *             scores: { impact: number, novelty: number, relevance: number } | null, flags: string[] }} FrontierEditOutput
@@ -584,10 +615,19 @@ export function trimToWholeSentences(text, limit) {
  * says why each Chinese text (title, summary) failed, from the closed set
  * `FRONTIER_PROSE_ISSUE_KINDS` — what the counters count, so an alert can say
  * why and not only which field.
+ *
+ * The 推荐理由 is checked on its own (`reasonIssues`, `reasonKinds`): it gets
+ * the prose checks and the number check, and a reason that fails any is
+ * dropped (`reasonZh` null) without failing the answer — a rewrite is never
+ * paid for a reason alone; when the answer is sent back for something else,
+ * the reason's issues go with it. A tag that is not a short name, carries a
+ * link or a number the source does not state is dropped alone, like a stray
+ * specialty key.
  * @param {any} answer the model's parsed JSON (or null)
  * @param {FrontierEditItem} item
  * @param {string} modelInput
  * @returns {{ output: FrontierEditOutput, issues: string[], failed: Set<string>, kinds: FrontierProseIssue[],
+ *             reasonIssues: string[], reasonKinds: FrontierProseIssueKind[],
  *             numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } }}
  */
 export function verifyEdit(answer, item, modelInput) {
@@ -604,8 +644,6 @@ export function verifyEdit(answer, item, modelInput) {
   const value = answer && typeof answer === "object" ? answer : {};
   if (!answer) fail("answer", "没有读到 JSON 对象，请只输出一个 JSON 对象。");
 
-  // A `reason_zh` an answer still carries (the field was retired on
-  // 2026-09-24) is neither checked nor kept: it is not what was asked for.
   /** @param {"title_zh" | "summary_zh"} field @param {number} limit @param {boolean} [optional] */
   const prose = (field, limit, optional = false) => {
     const text = typeof value[field] === "string" ? value[field].replace(/\s+/g, " ").trim() : "";
@@ -634,6 +672,41 @@ export function verifyEdit(answer, item, modelInput) {
     failProse(/** @type {"title_zh" | "summary_zh"} */ (field), "number",
       `${field} 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
   }
+
+  // The 推荐理由: optional (empty is an answer: the source supports no specific value), and checked apart from the answer.
+  /** @type {string[]} */
+  const reasonIssues = [];
+  /** @type {FrontierProseIssueKind[]} */
+  const reasonKinds = [];
+  const reasonText = typeof value.reason_zh === "string" ? value.reason_zh.replace(/\s+/g, " ").trim() : "";
+  let reasonZh = reasonText || null;
+  if (reasonText) {
+    const length = codePoints(reasonText);
+    if (length > FRONTIER_TEXT_LIMITS.reason) {
+      reasonKinds.push("length");
+      reasonIssues.push(lengthIssue("reason_zh", length, FRONTIER_TEXT_LIMITS.reason));
+    } else if (length < FRONTIER_TEXT_LIMITS.reasonMin) {
+      reasonKinds.push("length");
+      reasonIssues.push(`reason_zh 太短：现在 ${length} 个字，要写 45 到 70 个字；原文支持不了具体的阅读价值时给空字符串。`);
+    }
+    if (LINK.test(reasonText)) { reasonKinds.push("link"); reasonIssues.push("reason_zh 里不能出现链接或网址。"); }
+    if (!isChineseProse(reasonText)) { reasonKinds.push("language"); reasonIssues.push("reason_zh 要用中文写。"); }
+    const reasonNumbers = checkNumbers({ reason_zh: reasonText }, editNumberSource(modelInput));
+    numbers.checked += reasonNumbers.checked;
+    for (const { raw } of reasonNumbers.missing) {
+      reasonKinds.push("number");
+      reasonIssues.push(`reason_zh 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
+    }
+    if (reasonIssues.length) reasonZh = null;
+  }
+
+  // Tags: short names, each kept or dropped alone (a format slip is not a claim), the first seven in the model's order.
+  const numberSource = editNumberSource(modelInput);
+  const tags = [...new Set((Array.isArray(value.tags) ? value.tags : [])
+    .map((/** @type {unknown} */ tag) => (typeof tag === "string" ? tag.replace(/\s+/g, " ").trim().replace(/^#+/, "") : ""))
+    .filter((/** @type {string} */ tag) => codePoints(tag) >= 2 && codePoints(tag) <= FRONTIER_TEXT_LIMITS.tagChars && !LINK.test(tag)
+      && !/[，。；：！？,;:!?]/u.test(tag) && !checkNumbers({ tag }, numberSource).missing.length))]
+    .slice(0, FRONTIER_TEXT_LIMITS.tags);
 
   const allowed = item.allowedLanes?.length ? item.allowedLanes : [...FRONTIER_LANES];
   const lane = typeof value.lane === "string" && allowed.includes(value.lane) ? value.lane : null;
@@ -701,10 +774,12 @@ export function verifyEdit(answer, item, modelInput) {
   }
 
   return {
-    output: { titleZh, summaryZh, lane, specialties, evidenceType, entities, scores, flags },
+    output: { titleZh, summaryZh, reasonZh, tags, lane, specialties, evidenceType, entities, scores, flags },
     issues,
     failed,
     kinds,
+    reasonIssues,
+    reasonKinds,
     numbers,
   };
 }
@@ -1110,6 +1185,8 @@ export class FrontierEditor {
       // limit, because its length was the only thing wrong with the answer (a subset
       // of `verification.repaired`).
       summaryTrimmed: 0,
+      // Published edits whose 推荐理由 was dropped by its own checks (by why), and those whose answer left it empty.
+      reasonDropped: /** @type {Record<string, number>} */ ({}), reasonEmpty: 0,
       numbersChecked: 0, numberFailures: 0, unitMismatches: 0, numberCheck: { first: 0, firstFailed: 0 },
       // The wave-two calls: clustering's adjudication, profiles, abstracts.
       sameEventCalls: 0, sameEventFailures: 0, profileCalls: 0, profileFailures: 0, profilePhrasesDropped: 0, abstractCalls: 0,
@@ -1436,6 +1513,7 @@ export class FrontierEditor {
       result.output = first.output;
       result.numbers = first.numbers;
       this.counters.verification.passed += 1;
+      this.#countReason(first);
       return result;
     }
     if (!singleAttempt) this.counters.rewrites += 1;
@@ -1450,7 +1528,7 @@ export class FrontierEditor {
         { role: "assistant", content: JSON.stringify(answer ?? {}) },
         { role: "user", content: [
           "你上面的输出没有通过复核，问题如下：",
-          ...first.issues.map((issue) => `- ${issue}`),
+          ...[...first.issues, ...first.reasonIssues].map((issue) => `- ${issue}`),
           "请修正这些问题，重新输出完整的 JSON 对象，键名不变。数字只能使用原文里出现过的；找不到对应数字时，删去这个数字，不要改写成别的数字。",
         ].join("\n") },
       ]);
@@ -1468,6 +1546,7 @@ export class FrontierEditor {
       result.output = second.output;
       result.numbers = second.numbers;
       this.counters.verification.repaired += 1;
+      this.#countReason(second);
       return result;
     }
     const last = second ?? first;
@@ -1483,6 +1562,7 @@ export class FrontierEditor {
       result.issues = last.issues;
       this.counters.verification.repaired += 1;
       this.counters.summaryTrimmed += 1;
+      this.#countReason(trimmed);
       return result;
     }
     // Title-only: the summary is dropped; what passed its own checks is kept —
@@ -1503,6 +1583,9 @@ export class FrontierEditor {
     result.output = {
       titleZh,
       summaryZh: null,
+      // The reason says what the summary's facts are good for: with no verified summary there is none.
+      reasonZh: null,
+      tags: keep("tags") ? last.output.tags : [],
       lane: keep("lane") ? last.output.lane : (defaults.lane ?? null),
       specialties: keep("specialties") ? last.output.specialties : [...(defaults.specialties ?? [])],
       evidenceType: item.evidenceFixed?.type ?? (keep("evidence_type") ? last.output.evidenceType : null),
@@ -1520,6 +1603,13 @@ export class FrontierEditor {
     Object.assign(result,providerFailureMetadata(error));
     this.counters.verification.pending += 1;
     return result;
+  }
+
+  /** @param {{ output: FrontierEditOutput, reasonKinds: FrontierProseIssueKind[] }} verified a published answer */
+  #countReason(verified) {
+    if (verified.reasonKinds.length) {
+      for (const kind of new Set(verified.reasonKinds)) this.counters.reasonDropped[kind] = (this.counters.reasonDropped[kind] ?? 0) + 1;
+    } else if (!verified.output.reasonZh) this.counters.reasonEmpty += 1;
   }
 
   /** @param {Record<string, Record<string, number>>} table @param {FrontierProseIssue[]} kinds */

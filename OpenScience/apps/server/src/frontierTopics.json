@@ -1,0 +1,1395 @@
+{
+ "version": "2026-10-22",
+ "note": "Medical topics of the frontier reader (fr-edit, 2026-10-22). Shape after AIHOT's industry/topics.json (MIT, KKKKhazix/AIHOT 47531fa). An item is in a topic when one of its specialties, entity names, tags, evidence type, lane or flags equals one of the topic's tags or aliases, or its name (frontierTopics.mjs).",
+ "groups": [
+  {
+   "key": "specialty",
+   "name": "专科"
+  },
+  {
+   "key": "disease",
+   "name": "疾病"
+  },
+  {
+   "key": "drug",
+   "name": "药物"
+  },
+  {
+   "key": "organisation",
+   "name": "机构"
+  },
+  {
+   "key": "genre",
+   "name": "类型"
+  }
+ ],
+ "topics": [
+  {
+   "slug": "cardiology",
+   "name": "心血管",
+   "group": "specialty",
+   "tags": [
+    "specialty:cardiology"
+   ],
+   "aliases": [],
+   "definition": "心脏和血管疾病的研究、指南与用药：冠心病、心衰、心律失常、高血压。"
+  },
+  {
+   "slug": "oncology",
+   "name": "肿瘤",
+   "group": "specialty",
+   "tags": [
+    "specialty:oncology"
+   ],
+   "aliases": [],
+   "definition": "各类实体瘤与血液肿瘤的诊断、治疗、筛查与新药研发。"
+  },
+  {
+   "slug": "endocrinology",
+   "name": "内分泌代谢",
+   "group": "specialty",
+   "tags": [
+    "specialty:endocrinology"
+   ],
+   "aliases": [],
+   "definition": "糖尿病、肥胖、甲状腺与代谢性疾病的研究和治疗。"
+  },
+  {
+   "slug": "neurology",
+   "name": "神经",
+   "group": "specialty",
+   "tags": [
+    "specialty:neurology"
+   ],
+   "aliases": [],
+   "definition": "卒中、痴呆、帕金森病、癫痫等神经系统疾病。"
+  },
+  {
+   "slug": "psychiatry",
+   "name": "精神",
+   "group": "specialty",
+   "tags": [
+    "specialty:psychiatry"
+   ],
+   "aliases": [],
+   "definition": "抑郁、焦虑、精神分裂症等精神障碍与心理健康。"
+  },
+  {
+   "slug": "infectious-disease",
+   "name": "感染",
+   "group": "specialty",
+   "tags": [
+    "specialty:infectious-disease"
+   ],
+   "aliases": [],
+   "definition": "细菌、病毒、真菌感染与传染病防控、抗感染治疗。"
+  },
+  {
+   "slug": "respiratory",
+   "name": "呼吸",
+   "group": "specialty",
+   "tags": [
+    "specialty:respiratory"
+   ],
+   "aliases": [],
+   "definition": "慢阻肺、哮喘、肺部感染与间质性肺病。"
+  },
+  {
+   "slug": "critical-care",
+   "name": "重症",
+   "group": "specialty",
+   "tags": [
+    "specialty:critical-care"
+   ],
+   "aliases": [],
+   "definition": "重症监护、脓毒症、休克与器官支持。"
+  },
+  {
+   "slug": "gastroenterology",
+   "name": "消化与肝病",
+   "group": "specialty",
+   "tags": [
+    "specialty:gastroenterology"
+   ],
+   "aliases": [],
+   "definition": "消化道疾病、肝病、胰腺与胆道疾病。"
+  },
+  {
+   "slug": "nephrology",
+   "name": "肾脏",
+   "group": "specialty",
+   "tags": [
+    "specialty:nephrology"
+   ],
+   "aliases": [],
+   "definition": "慢性肾脏病、急性肾损伤、透析与肾移植。"
+  },
+  {
+   "slug": "rheumatology",
+   "name": "风湿免疫",
+   "group": "specialty",
+   "tags": [
+    "specialty:rheumatology"
+   ],
+   "aliases": [],
+   "definition": "类风湿关节炎、红斑狼疮等自身免疫与风湿病。"
+  },
+  {
+   "slug": "hematology",
+   "name": "血液",
+   "group": "specialty",
+   "tags": [
+    "specialty:hematology"
+   ],
+   "aliases": [],
+   "definition": "贫血、出凝血疾病与血液系统肿瘤。"
+  },
+  {
+   "slug": "pediatrics",
+   "name": "儿科",
+   "group": "specialty",
+   "tags": [
+    "specialty:pediatrics"
+   ],
+   "aliases": [],
+   "definition": "儿童与新生儿的疾病、用药与生长发育。"
+  },
+  {
+   "slug": "obstetrics-gynecology",
+   "name": "妇产",
+   "group": "specialty",
+   "tags": [
+    "specialty:obstetrics-gynecology"
+   ],
+   "aliases": [],
+   "definition": "妊娠、分娩、妇科疾病与生殖健康。"
+  },
+  {
+   "slug": "geriatrics",
+   "name": "老年",
+   "group": "specialty",
+   "tags": [
+    "specialty:geriatrics"
+   ],
+   "aliases": [],
+   "definition": "老年综合征、多病共存与老年用药。"
+  },
+  {
+   "slug": "surgery-anesthesia",
+   "name": "外科与麻醉",
+   "group": "specialty",
+   "tags": [
+    "specialty:surgery-anesthesia"
+   ],
+   "aliases": [],
+   "definition": "手术治疗、围手术期管理与麻醉。"
+  },
+  {
+   "slug": "radiology",
+   "name": "影像",
+   "group": "specialty",
+   "tags": [
+    "specialty:radiology"
+   ],
+   "aliases": [],
+   "definition": "医学影像检查、影像诊断与介入。"
+  },
+  {
+   "slug": "pharmacy",
+   "name": "药学",
+   "group": "specialty",
+   "tags": [
+    "specialty:pharmacy"
+   ],
+   "aliases": [],
+   "definition": "药物治疗管理、药物警戒、合理用药与药事政策。"
+  },
+  {
+   "slug": "tcm",
+   "name": "中医药",
+   "group": "specialty",
+   "tags": [
+    "specialty:tcm"
+   ],
+   "aliases": [],
+   "definition": "中医诊疗、中药与中西医结合研究。"
+  },
+  {
+   "slug": "public-health",
+   "name": "公共卫生",
+   "group": "specialty",
+   "tags": [
+    "specialty:public-health"
+   ],
+   "aliases": [],
+   "definition": "疾病监测、预防接种、健康政策与人群健康。"
+  },
+  {
+   "slug": "general-practice",
+   "name": "全科",
+   "group": "specialty",
+   "tags": [
+    "specialty:general-practice"
+   ],
+   "aliases": [],
+   "definition": "基层医疗、慢病管理与全科诊疗。"
+  },
+  {
+   "slug": "diabetes",
+   "name": "糖尿病",
+   "group": "disease",
+   "tags": [
+    "糖尿病",
+    "2型糖尿病",
+    "1型糖尿病"
+   ],
+   "aliases": [
+    "type 2 diabetes",
+    "type 1 diabetes",
+    "diabetes",
+    "diabetes mellitus",
+    "T2DM",
+    "T1DM"
+   ],
+   "definition": "1 型和 2 型糖尿病的降糖治疗、并发症与筛查。"
+  },
+  {
+   "slug": "obesity",
+   "name": "肥胖",
+   "group": "disease",
+   "tags": [
+    "肥胖",
+    "超重"
+   ],
+   "aliases": [
+    "肥胖症",
+    "obesity",
+    "overweight"
+   ],
+   "definition": "肥胖与超重的减重治疗、代谢手术和相关疾病风险。"
+  },
+  {
+   "slug": "hypertension",
+   "name": "高血压",
+   "group": "disease",
+   "tags": [
+    "高血压"
+   ],
+   "aliases": [
+    "高血压病",
+    "hypertension"
+   ],
+   "definition": "高血压的诊断阈值、降压目标与药物治疗。"
+  },
+  {
+   "slug": "heart-failure",
+   "name": "心力衰竭",
+   "group": "disease",
+   "tags": [
+    "心力衰竭",
+    "心衰"
+   ],
+   "aliases": [
+    "heart failure",
+    "HFrEF",
+    "HFpEF",
+    "射血分数降低的心力衰竭",
+    "射血分数保留的心力衰竭"
+   ],
+   "definition": "各类心力衰竭的药物、器械治疗与预后。"
+  },
+  {
+   "slug": "atrial-fibrillation",
+   "name": "心房颤动",
+   "group": "disease",
+   "tags": [
+    "心房颤动",
+    "房颤"
+   ],
+   "aliases": [
+    "atrial fibrillation"
+   ],
+   "definition": "房颤的抗凝、节律控制与消融治疗。"
+  },
+  {
+   "slug": "coronary-disease",
+   "name": "冠心病",
+   "group": "disease",
+   "tags": [
+    "冠心病",
+    "心肌梗死",
+    "急性冠脉综合征"
+   ],
+   "aliases": [
+    "冠状动脉疾病",
+    "coronary artery disease",
+    "myocardial infarction",
+    "acute coronary syndrome"
+   ],
+   "definition": "冠心病与心肌梗死的介入、药物与二级预防。"
+  },
+  {
+   "slug": "stroke",
+   "name": "卒中",
+   "group": "disease",
+   "tags": [
+    "卒中",
+    "脑卒中",
+    "缺血性卒中"
+   ],
+   "aliases": [
+    "中风",
+    "stroke",
+    "ischemic stroke",
+    "ischaemic stroke"
+   ],
+   "definition": "卒中的急性期救治、溶栓取栓与二级预防。"
+  },
+  {
+   "slug": "lung-cancer",
+   "name": "肺癌",
+   "group": "disease",
+   "tags": [
+    "肺癌",
+    "非小细胞肺癌",
+    "小细胞肺癌"
+   ],
+   "aliases": [
+    "NSCLC",
+    "SCLC",
+    "lung cancer",
+    "non-small cell lung cancer"
+   ],
+   "definition": "肺癌的筛查、靶向、免疫与综合治疗。"
+  },
+  {
+   "slug": "breast-cancer",
+   "name": "乳腺癌",
+   "group": "disease",
+   "tags": [
+    "乳腺癌"
+   ],
+   "aliases": [
+    "breast cancer",
+    "HER2阳性乳腺癌",
+    "三阴性乳腺癌"
+   ],
+   "definition": "乳腺癌的分型治疗、内分泌与靶向治疗和筛查。"
+  },
+  {
+   "slug": "colorectal-cancer",
+   "name": "结直肠癌",
+   "group": "disease",
+   "tags": [
+    "结直肠癌",
+    "结肠癌",
+    "直肠癌"
+   ],
+   "aliases": [
+    "colorectal cancer",
+    "colon cancer",
+    "rectal cancer"
+   ],
+   "definition": "结直肠癌的筛查、手术与系统治疗。"
+  },
+  {
+   "slug": "liver-cancer",
+   "name": "肝癌",
+   "group": "disease",
+   "tags": [
+    "肝癌",
+    "肝细胞癌"
+   ],
+   "aliases": [
+    "hepatocellular carcinoma",
+    "HCC",
+    "liver cancer"
+   ],
+   "definition": "肝癌的早筛、局部治疗与系统治疗。"
+  },
+  {
+   "slug": "gastric-cancer",
+   "name": "胃癌",
+   "group": "disease",
+   "tags": [
+    "胃癌",
+    "食管癌"
+   ],
+   "aliases": [
+    "gastric cancer",
+    "esophageal cancer",
+    "oesophageal cancer"
+   ],
+   "definition": "胃癌与食管癌的筛查和综合治疗。"
+  },
+  {
+   "slug": "prostate-cancer",
+   "name": "前列腺癌",
+   "group": "disease",
+   "tags": [
+    "前列腺癌"
+   ],
+   "aliases": [
+    "prostate cancer"
+   ],
+   "definition": "前列腺癌的筛查、内分泌治疗与新药。"
+  },
+  {
+   "slug": "hematologic-malignancy",
+   "name": "血液肿瘤",
+   "group": "disease",
+   "tags": [
+    "白血病",
+    "淋巴瘤",
+    "多发性骨髓瘤"
+   ],
+   "aliases": [
+    "leukemia",
+    "leukaemia",
+    "lymphoma",
+    "multiple myeloma"
+   ],
+   "definition": "白血病、淋巴瘤、骨髓瘤的治疗与细胞疗法。"
+  },
+  {
+   "slug": "alzheimers",
+   "name": "阿尔茨海默病",
+   "group": "disease",
+   "tags": [
+    "阿尔茨海默病",
+    "痴呆",
+    "认知障碍"
+   ],
+   "aliases": [
+    "Alzheimer's disease",
+    "Alzheimer disease",
+    "dementia",
+    "认知功能障碍"
+   ],
+   "definition": "阿尔茨海默病和其他痴呆的诊断、药物与照护。"
+  },
+  {
+   "slug": "parkinsons",
+   "name": "帕金森病",
+   "group": "disease",
+   "tags": [
+    "帕金森病"
+   ],
+   "aliases": [
+    "Parkinson's disease",
+    "Parkinson disease"
+   ],
+   "definition": "帕金森病的药物、手术与早期诊断。"
+  },
+  {
+   "slug": "depression",
+   "name": "抑郁症",
+   "group": "disease",
+   "tags": [
+    "抑郁症",
+    "抑郁"
+   ],
+   "aliases": [
+    "depression",
+    "major depressive disorder",
+    "焦虑症",
+    "anxiety"
+   ],
+   "definition": "抑郁与焦虑障碍的药物、心理与神经调控治疗。"
+  },
+  {
+   "slug": "copd-asthma",
+   "name": "慢阻肺与哮喘",
+   "group": "disease",
+   "tags": [
+    "慢阻肺",
+    "哮喘"
+   ],
+   "aliases": [
+    "慢性阻塞性肺疾病",
+    "COPD",
+    "asthma"
+   ],
+   "definition": "慢阻肺和哮喘的吸入治疗、生物制剂与急性加重。"
+  },
+  {
+   "slug": "ckd",
+   "name": "慢性肾脏病",
+   "group": "disease",
+   "tags": [
+    "慢性肾脏病",
+    "慢性肾病"
+   ],
+   "aliases": [
+    "chronic kidney disease",
+    "CKD",
+    "肾衰竭",
+    "kidney failure"
+   ],
+   "definition": "慢性肾脏病的延缓进展、透析与心肾保护。"
+  },
+  {
+   "slug": "fatty-liver",
+   "name": "脂肪性肝病",
+   "group": "disease",
+   "tags": [
+    "脂肪性肝病",
+    "脂肪肝"
+   ],
+   "aliases": [
+    "代谢相关脂肪性肝病",
+    "MASLD",
+    "MASH",
+    "NAFLD",
+    "NASH"
+   ],
+   "definition": "代谢相关脂肪性肝病的诊断与新药。"
+  },
+  {
+   "slug": "viral-hepatitis",
+   "name": "病毒性肝炎",
+   "group": "disease",
+   "tags": [
+    "乙肝",
+    "丙肝"
+   ],
+   "aliases": [
+    "乙型肝炎",
+    "丙型肝炎",
+    "hepatitis B",
+    "hepatitis C",
+    "病毒性肝炎"
+   ],
+   "definition": "乙肝、丙肝的抗病毒治疗、筛查与消除目标。"
+  },
+  {
+   "slug": "hiv",
+   "name": "艾滋病",
+   "group": "disease",
+   "tags": [
+    "艾滋病",
+    "HIV感染"
+   ],
+   "aliases": [
+    "HIV",
+    "AIDS",
+    "HIV infection"
+   ],
+   "definition": "HIV 的预防、抗病毒治疗与长效制剂。"
+  },
+  {
+   "slug": "tuberculosis",
+   "name": "结核病",
+   "group": "disease",
+   "tags": [
+    "结核病",
+    "肺结核"
+   ],
+   "aliases": [
+    "tuberculosis",
+    "TB"
+   ],
+   "definition": "结核病的诊断、短程方案与耐药结核。"
+  },
+  {
+   "slug": "respiratory-infections",
+   "name": "呼吸道传染病",
+   "group": "disease",
+   "tags": [
+    "流感",
+    "新冠"
+   ],
+   "aliases": [
+    "流行性感冒",
+    "influenza",
+    "COVID-19",
+    "新型冠状病毒感染",
+    "RSV",
+    "呼吸道合胞病毒",
+    "禽流感",
+    "avian influenza"
+   ],
+   "definition": "流感、新冠、RSV 等呼吸道传染病的流行、疫苗与治疗。"
+  },
+  {
+   "slug": "antimicrobial-resistance",
+   "name": "细菌耐药",
+   "group": "disease",
+   "tags": [
+    "细菌耐药",
+    "抗菌药物耐药"
+   ],
+   "aliases": [
+    "antimicrobial resistance",
+    "AMR",
+    "超级细菌",
+    "耐药菌"
+   ],
+   "definition": "抗菌药物耐药的监测、管理与新抗菌药。"
+  },
+  {
+   "slug": "autoimmune",
+   "name": "自身免疫病",
+   "group": "disease",
+   "tags": [
+    "类风湿关节炎",
+    "系统性红斑狼疮",
+    "银屑病",
+    "炎症性肠病"
+   ],
+   "aliases": [
+    "rheumatoid arthritis",
+    "lupus",
+    "psoriasis",
+    "inflammatory bowel disease",
+    "IBD",
+    "克罗恩病",
+    "溃疡性结肠炎"
+   ],
+   "definition": "自身免疫与炎症性疾病的生物制剂和靶向治疗。"
+  },
+  {
+   "slug": "rare-disease",
+   "name": "罕见病",
+   "group": "disease",
+   "tags": [
+    "罕见病"
+   ],
+   "aliases": [
+    "rare disease",
+    "orphan disease"
+   ],
+   "definition": "罕见病的诊断、孤儿药与政策保障。"
+  },
+  {
+   "slug": "sepsis",
+   "name": "脓毒症",
+   "group": "disease",
+   "tags": [
+    "脓毒症"
+   ],
+   "aliases": [
+    "sepsis",
+    "败血症",
+    "septic shock",
+    "脓毒性休克"
+   ],
+   "definition": "脓毒症与脓毒性休克的早期识别和救治。"
+  },
+  {
+   "slug": "osteoporosis",
+   "name": "骨质疏松",
+   "group": "disease",
+   "tags": [
+    "骨质疏松"
+   ],
+   "aliases": [
+    "osteoporosis",
+    "骨质疏松症",
+    "骨折"
+   ],
+   "definition": "骨质疏松与脆性骨折的预防和药物治疗。"
+  },
+  {
+   "slug": "glp1",
+   "name": "GLP-1 受体激动剂",
+   "group": "drug",
+   "tags": [
+    "GLP-1 受体激动剂"
+   ],
+   "aliases": [
+    "GLP-1",
+    "GLP-1RA",
+    "司美格鲁肽",
+    "替尔泊肽",
+    "利拉鲁肽",
+    "度拉糖肽",
+    "semaglutide",
+    "tirzepatide",
+    "liraglutide",
+    "dulaglutide",
+    "retatrutide",
+    "orforglipron"
+   ],
+   "definition": "司美格鲁肽、替尔泊肽等 GLP-1 类药物在降糖、减重与心肾保护中的证据。"
+  },
+  {
+   "slug": "sglt2",
+   "name": "SGLT2 抑制剂",
+   "group": "drug",
+   "tags": [
+    "SGLT2 抑制剂"
+   ],
+   "aliases": [
+    "SGLT2",
+    "恩格列净",
+    "达格列净",
+    "卡格列净",
+    "empagliflozin",
+    "dapagliflozin",
+    "canagliflozin"
+   ],
+   "definition": "SGLT2 抑制剂在糖尿病、心衰和慢性肾病中的应用。"
+  },
+  {
+   "slug": "checkpoint-inhibitors",
+   "name": "免疫检查点抑制剂",
+   "group": "drug",
+   "tags": [
+    "免疫检查点抑制剂",
+    "PD-1 抑制剂",
+    "PD-L1 抑制剂",
+    "免疫治疗"
+   ],
+   "aliases": [
+    "帕博利珠单抗",
+    "纳武利尤单抗",
+    "信迪利单抗",
+    "卡瑞利珠单抗",
+    "替雷利珠单抗",
+    "特瑞普利单抗",
+    "阿替利珠单抗",
+    "度伐利尤单抗",
+    "pembrolizumab",
+    "nivolumab",
+    "atezolizumab",
+    "durvalumab",
+    "PD-1",
+    "PD-L1"
+   ],
+   "definition": "PD-1/PD-L1 等免疫检查点抑制剂的新适应证、联合方案与免疫相关不良反应。"
+  },
+  {
+   "slug": "adc",
+   "name": "抗体偶联药物",
+   "group": "drug",
+   "tags": [
+    "抗体偶联药物",
+    "ADC"
+   ],
+   "aliases": [
+    "抗体药物偶联物",
+    "德曲妥珠单抗",
+    "戈沙妥珠单抗",
+    "维迪西妥单抗",
+    "trastuzumab deruxtecan",
+    "T-DXd",
+    "sacituzumab govitecan",
+    "antibody-drug conjugate"
+   ],
+   "definition": "抗体偶联药物的临床试验、获批与安全性。"
+  },
+  {
+   "slug": "cell-therapy",
+   "name": "细胞治疗",
+   "group": "drug",
+   "tags": [
+    "细胞治疗",
+    "CAR-T"
+   ],
+   "aliases": [
+    "CAR-T 细胞疗法",
+    "嵌合抗原受体T细胞",
+    "CAR T-cell therapy",
+    "CAR-T cell therapy",
+    "TCR-T",
+    "TIL"
+   ],
+   "definition": "CAR-T 等细胞疗法在血液肿瘤、实体瘤和自身免疫病中的进展。"
+  },
+  {
+   "slug": "gene-therapy",
+   "name": "基因治疗",
+   "group": "drug",
+   "tags": [
+    "基因治疗",
+    "基因编辑"
+   ],
+   "aliases": [
+    "gene therapy",
+    "CRISPR",
+    "基因疗法",
+    "碱基编辑",
+    "base editing",
+    "siRNA",
+    "反义寡核苷酸"
+   ],
+   "definition": "基因治疗、基因编辑和核酸药物的研发与获批。"
+  },
+  {
+   "slug": "targeted-therapy",
+   "name": "靶向药物",
+   "group": "drug",
+   "tags": [
+    "靶向治疗",
+    "酪氨酸激酶抑制剂"
+   ],
+   "aliases": [
+    "TKI",
+    "EGFR-TKI",
+    "奥希替尼",
+    "osimertinib",
+    "KRAS 抑制剂",
+    "ALK 抑制剂",
+    "targeted therapy"
+   ],
+   "definition": "按基因或分子靶点选择的抗肿瘤靶向药物。"
+  },
+  {
+   "slug": "anticoagulants",
+   "name": "抗凝与抗血小板药物",
+   "group": "drug",
+   "tags": [
+    "抗凝治疗",
+    "抗血小板治疗"
+   ],
+   "aliases": [
+    "华法林",
+    "利伐沙班",
+    "阿哌沙班",
+    "达比加群",
+    "艾多沙班",
+    "warfarin",
+    "rivaroxaban",
+    "apixaban",
+    "dabigatran",
+    "edoxaban",
+    "DOAC",
+    "阿司匹林",
+    "aspirin",
+    "氯吡格雷",
+    "clopidogrel",
+    "替格瑞洛",
+    "ticagrelor"
+   ],
+   "definition": "抗凝和抗血小板药物的获益、出血风险与疗程。"
+  },
+  {
+   "slug": "lipid-lowering",
+   "name": "降脂药物",
+   "group": "drug",
+   "tags": [
+    "降脂治疗",
+    "他汀"
+   ],
+   "aliases": [
+    "他汀类药物",
+    "阿托伐他汀",
+    "瑞舒伐他汀",
+    "PCSK9 抑制剂",
+    "依洛尤单抗",
+    "英克司兰",
+    "statin",
+    "atorvastatin",
+    "rosuvastatin",
+    "evolocumab",
+    "inclisiran",
+    "依折麦布",
+    "ezetimibe"
+   ],
+   "definition": "他汀、PCSK9 抑制剂等降脂药物与心血管预防。"
+  },
+  {
+   "slug": "antibiotics",
+   "name": "抗菌药物",
+   "group": "drug",
+   "tags": [
+    "抗菌药物",
+    "抗生素"
+   ],
+   "aliases": [
+    "antibiotic",
+    "antibiotics",
+    "抗菌药"
+   ],
+   "definition": "抗菌药物的合理使用、新药与疗程研究。"
+  },
+  {
+   "slug": "vaccines",
+   "name": "疫苗",
+   "group": "drug",
+   "tags": [
+    "疫苗",
+    "疫苗接种"
+   ],
+   "aliases": [
+    "vaccine",
+    "vaccination",
+    "mRNA 疫苗",
+    "HPV 疫苗",
+    "流感疫苗",
+    "immunization"
+   ],
+   "definition": "各类疫苗的有效性、安全性与接种策略。"
+  },
+  {
+   "slug": "antivirals",
+   "name": "抗病毒药物",
+   "group": "drug",
+   "tags": [
+    "抗病毒药物"
+   ],
+   "aliases": [
+    "antiviral",
+    "奈玛特韦",
+    "nirmatrelvir",
+    "玛巴洛沙韦",
+    "baloxavir",
+    "来那卡帕韦",
+    "lenacapavir"
+   ],
+   "definition": "流感、新冠、HIV 等抗病毒药物的证据。"
+  },
+  {
+   "slug": "psychiatric-drugs",
+   "name": "精神科药物",
+   "group": "drug",
+   "tags": [
+    "抗抑郁药",
+    "抗精神病药"
+   ],
+   "aliases": [
+    "antidepressant",
+    "antipsychotic",
+    "SSRI",
+    "艾司氯胺酮",
+    "esketamine",
+    "氯胺酮",
+    "ketamine"
+   ],
+   "definition": "抗抑郁、抗精神病等精神科药物的疗效与安全性。"
+  },
+  {
+   "slug": "anti-amyloid",
+   "name": "抗淀粉样蛋白抗体",
+   "group": "drug",
+   "tags": [
+    "抗淀粉样蛋白抗体"
+   ],
+   "aliases": [
+    "仑卡奈单抗",
+    "多奈单抗",
+    "lecanemab",
+    "donanemab",
+    "aducanumab",
+    "anti-amyloid"
+   ],
+   "definition": "阿尔茨海默病抗淀粉样蛋白抗体的获益、ARIA 风险与适用人群。"
+  },
+  {
+   "slug": "immunology-biologics",
+   "name": "免疫生物制剂",
+   "group": "drug",
+   "tags": [
+    "生物制剂",
+    "JAK 抑制剂"
+   ],
+   "aliases": [
+    "单克隆抗体",
+    "monoclonal antibody",
+    "IL-17 抑制剂",
+    "IL-23 抑制剂",
+    "TNF 抑制剂",
+    "JAK inhibitor",
+    "度普利尤单抗",
+    "dupilumab"
+   ],
+   "definition": "自身免疫和过敏性疾病的生物制剂与小分子靶向药。"
+  },
+  {
+   "slug": "opioids-analgesia",
+   "name": "镇痛与阿片类药物",
+   "group": "drug",
+   "tags": [
+    "阿片类药物",
+    "镇痛"
+   ],
+   "aliases": [
+    "opioid",
+    "opioids",
+    "芬太尼",
+    "fentanyl",
+    "镇痛药",
+    "analgesic"
+   ],
+   "definition": "阿片类药物的镇痛、滥用风险与替代方案。"
+  },
+  {
+   "slug": "generics-procurement",
+   "name": "仿制药与集采",
+   "group": "drug",
+   "tags": [
+    "仿制药",
+    "生物类似药",
+    "集采"
+   ],
+   "aliases": [
+    "generic drug",
+    "biosimilar",
+    "一致性评价",
+    "集中带量采购",
+    "国家集采"
+   ],
+   "definition": "仿制药一致性评价、生物类似药和药品集中带量采购。"
+  },
+  {
+   "slug": "tcm-drugs",
+   "name": "中成药",
+   "group": "drug",
+   "tags": [
+    "中成药",
+    "中药"
+   ],
+   "aliases": [
+    "中药制剂",
+    "中药注射剂",
+    "traditional Chinese medicine",
+    "TCM"
+   ],
+   "definition": "中成药和中药注射剂的临床证据与安全性。"
+  },
+  {
+   "slug": "fda",
+   "name": "美国 FDA",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "FDA",
+    "美国食品药品监督管理局",
+    "美国食品药品管理局",
+    "U.S. Food and Drug Administration",
+    "Food and Drug Administration",
+    "US FDA"
+   ],
+   "definition": "美国 FDA 的审批、安全通告、说明书修订与监管政策。"
+  },
+  {
+   "slug": "nmpa",
+   "name": "国家药监局",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "NMPA",
+    "国家药品监督管理局",
+    "药监局",
+    "CDE",
+    "国家药监局药品审评中心",
+    "药品审评中心",
+    "国家药品监督管理局药品审评中心"
+   ],
+   "definition": "国家药监局与药品审评中心的审批、受理、通告与指导原则。"
+  },
+  {
+   "slug": "ema",
+   "name": "欧洲药品管理局",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "EMA",
+    "European Medicines Agency",
+    "CHMP",
+    "欧盟药品管理局"
+   ],
+   "definition": "EMA 与 CHMP 的审评意见、批准与安全性评估。"
+  },
+  {
+   "slug": "who",
+   "name": "世界卫生组织",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "WHO",
+    "World Health Organization",
+    "世卫组织"
+   ],
+   "definition": "世卫组织的指南、预认证、疫情通报与全球卫生政策。"
+  },
+  {
+   "slug": "nhc",
+   "name": "国家卫健委",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "国家卫生健康委员会",
+    "国家卫生健康委",
+    "卫健委",
+    "NHC"
+   ],
+   "definition": "国家卫健委的诊疗规范、医疗政策与卫生统计。"
+  },
+  {
+   "slug": "china-cdc",
+   "name": "中国疾控",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "中国疾控中心",
+    "中国疾病预防控制中心",
+    "China CDC",
+    "国家疾控局",
+    "国家疾病预防控制局"
+   ],
+   "definition": "中国疾控中心与国家疾控局的监测、通报和防控指南。"
+  },
+  {
+   "slug": "us-cdc",
+   "name": "美国 CDC",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "CDC",
+    "美国疾病控制与预防中心",
+    "Centers for Disease Control and Prevention",
+    "US CDC",
+    "ACIP"
+   ],
+   "definition": "美国 CDC 与 ACIP 的监测报告和接种建议。"
+  },
+  {
+   "slug": "nih",
+   "name": "美国 NIH",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "NIH",
+    "美国国立卫生研究院",
+    "National Institutes of Health"
+   ],
+   "definition": "NIH 的科研资助、政策与资助研究成果。"
+  },
+  {
+   "slug": "nice",
+   "name": "英国 NICE",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "NICE",
+    "National Institute for Health and Care Excellence",
+    "英国国家卫生与临床优化研究所"
+   ],
+   "definition": "NICE 的临床指南与卫生技术评估。"
+  },
+  {
+   "slug": "mhra",
+   "name": "英国 MHRA",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "MHRA",
+    "英国药品和保健品监管局",
+    "Medicines and Healthcare products Regulatory Agency"
+   ],
+   "definition": "英国 MHRA 的审批与药物安全警示。"
+  },
+  {
+   "slug": "pmda",
+   "name": "日本 PMDA",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "PMDA",
+    "日本药品医疗器械综合机构",
+    "Pharmaceuticals and Medical Devices Agency"
+   ],
+   "definition": "日本 PMDA 的审批与安全信息。"
+  },
+  {
+   "slug": "nhsa",
+   "name": "国家医保局",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "国家医疗保障局",
+    "医保局",
+    "NHSA",
+    "国家医保药品目录",
+    "医保目录"
+   ],
+   "definition": "国家医保局的目录调整、谈判与支付政策。"
+  },
+  {
+   "slug": "nsfc",
+   "name": "国家自然科学基金委",
+   "group": "organisation",
+   "tags": [],
+   "aliases": [
+    "国家自然科学基金委员会",
+    "国家自然科学基金",
+    "NSFC",
+    "自然科学基金"
+   ],
+   "definition": "国家自然科学基金的指南、申报与资助政策。"
+  },
+  {
+   "slug": "rct",
+   "name": "随机对照试验",
+   "group": "genre",
+   "tags": [
+    "evidence:rct"
+   ],
+   "aliases": [
+    "RCT",
+    "随机对照试验",
+    "randomized controlled trial"
+   ],
+   "definition": "随机对照试验的结果与解读。"
+  },
+  {
+   "slug": "systematic-reviews",
+   "name": "系统评价与 Meta 分析",
+   "group": "genre",
+   "tags": [
+    "evidence:systematic-review"
+   ],
+   "aliases": [
+    "Meta 分析",
+    "meta-analysis",
+    "系统评价",
+    "systematic review"
+   ],
+   "definition": "汇总多项研究的系统评价与 Meta 分析。"
+  },
+  {
+   "slug": "real-world",
+   "name": "观察性与真实世界研究",
+   "group": "genre",
+   "tags": [
+    "evidence:real-world",
+    "evidence:observational"
+   ],
+   "aliases": [
+    "真实世界研究",
+    "real-world evidence",
+    "队列研究",
+    "cohort study"
+   ],
+   "definition": "队列、病例对照与真实世界数据研究。"
+  },
+  {
+   "slug": "guidelines",
+   "name": "指南与共识",
+   "group": "genre",
+   "tags": [
+    "evidence:guideline",
+    "lane:guideline"
+   ],
+   "aliases": [
+    "指南",
+    "专家共识",
+    "guideline",
+    "consensus"
+   ],
+   "definition": "国内外临床指南、专家共识与诊疗规范的发布和更新。"
+  },
+  {
+   "slug": "approvals",
+   "name": "审批与监管",
+   "group": "genre",
+   "tags": [
+    "evidence:regulatory-decision",
+    "lane:regulatory"
+   ],
+   "aliases": [
+    "药品审批",
+    "新药获批",
+    "approval"
+   ],
+   "definition": "新药、新适应证的审批与监管决定。"
+  },
+  {
+   "slug": "drug-safety",
+   "name": "药物安全",
+   "group": "genre",
+   "tags": [
+    "evidence:safety-notice",
+    "lane:safety",
+    "flag:boxed-warning",
+    "flag:class-i-recall"
+   ],
+   "aliases": [
+    "药物警戒",
+    "不良反应",
+    "pharmacovigilance",
+    "adverse event",
+    "召回",
+    "recall"
+   ],
+   "definition": "药品与器械的安全通告、不良反应、警示与召回。"
+  },
+  {
+   "slug": "preprints",
+   "name": "预印本",
+   "group": "genre",
+   "tags": [
+    "flag:preprint"
+   ],
+   "aliases": [
+    "预印本",
+    "preprint"
+   ],
+   "definition": "尚未经同行评议的预印本研究。"
+  },
+  {
+   "slug": "industry",
+   "name": "研发与产业",
+   "group": "genre",
+   "tags": [
+    "lane:pipeline",
+    "evidence:press-release"
+   ],
+   "aliases": [
+    "新药研发",
+    "临床试验进展",
+    "融资",
+    "并购"
+   ],
+   "definition": "新药研发管线、企业临床试验进展与产业动态。"
+  },
+  {
+   "slug": "research-funding",
+   "name": "科研与基金",
+   "group": "genre",
+   "tags": [
+    "lane:research"
+   ],
+   "aliases": [
+    "科研基金",
+    "科研政策",
+    "research funding"
+   ],
+   "definition": "科研资助、科研政策与科研诚信。"
+  },
+  {
+   "slug": "medical-ai",
+   "name": "医学 AI",
+   "group": "genre",
+   "tags": [
+    "lane:ai"
+   ],
+   "aliases": [
+    "人工智能",
+    "AI",
+    "大语言模型",
+    "大模型",
+    "机器学习",
+    "深度学习",
+    "artificial intelligence",
+    "large language model"
+   ],
+   "definition": "人工智能在诊断、科研与医疗服务中的应用和评测。"
+  },
+  {
+   "slug": "china-studies",
+   "name": "涉华研究",
+   "group": "genre",
+   "tags": [
+    "flag:china"
+   ],
+   "aliases": [
+    "中国研究",
+    "中国人群"
+   ],
+   "definition": "中国机构参与或在中国人群中开展的研究。"
+  }
+ ]
+}

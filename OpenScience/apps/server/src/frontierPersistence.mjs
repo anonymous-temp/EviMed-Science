@@ -229,6 +229,17 @@ CREATE INDEX IF NOT EXISTS frontier_items_published_idx
 -- each of those is a scan of every item ever published.
 CREATE INDEX IF NOT EXISTS frontier_items_visible_idx
   ON evimed_frontier.items (visible_at DESC) WHERE state = 'published';
+-- fr-edit 2026-10-22
+-- The editor's tags (at most seven; the reader adds the evidence type), and the contract 1.4.0 columns the reader serves. The six
+-- below tags are fr-social's (copied from the primary entry by the ingest); they are written here too, identically, so this
+-- package's reader and its tests stand on their own; ADD COLUMN IF NOT EXISTS makes the second copy a no-op.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,
@@ -253,6 +264,17 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   open_access        text,
   enrichment         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+-- fr-edit 2026-10-22
+-- The reader's full text (contract 1.4.0): body_text is the plugin's, stored by fr-social's ingest (written here too, identically, a
+-- no-op for whichever copy runs second); the Chinese reading of it is the edit stage's — a translation whose paragraphs all came
+-- back (body_complete), or the source's own Chinese (original-zh, with body_zh left null: the original is the Chinese text);
+-- and the translation of a quoted post.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS quoted_zh text;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,

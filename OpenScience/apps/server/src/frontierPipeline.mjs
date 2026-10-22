@@ -1470,7 +1470,12 @@ export class FrontierPipeline {
     const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts?.publication_types });
     const abstract = texts?.abstract_raw ?? null;
     const summary = abstract ? null : (entry?.summary_raw ?? null);
-    const bodyExcerpt = texts?.body_excerpt ?? null;
+    // The full text (contract 1.4.0) stands in for the excerpt a post or a page has none of: the edit is bounded anyway.
+    const bodyExcerpt = texts?.body_excerpt ?? (typeof texts?.body_text === "string" && texts.body_text.trim() ? texts.body_text.slice(0, 12_000) : null);
+    const author = item.author && typeof item.author === "object" && typeof item.author.name === "string" && item.author.name.trim()
+      ? { name: item.author.name, role: ["organisation", "person"].includes(item.author.role) ? item.author.role : null } : null;
+    const quoted = item.quoted && typeof item.quoted === "object" && typeof item.quoted.text === "string" && item.quoted.text.trim()
+      ? { authorName: String(item.quoted.author?.name ?? ""), text: item.quoted.text } : null;
     return {
       titleRaw: item.title_raw,
       // The institution, not the feed: the summary is prose a reader reads, and
@@ -1485,6 +1490,8 @@ export class FrontierPipeline {
       abstract,
       summary,
       bodyExcerpt,
+      author,
+      quoted,
       journal: texts?.journal ?? null,
       publicationTypes: texts?.publication_types ?? [],
       trialFacts: texts?.enrichment?.trial_facts ?? null,
@@ -1771,9 +1778,9 @@ export class FrontierPipeline {
     const fields = {
       titleZh: output ? output.titleZh : (isChinese ? String(item.title_raw).slice(0, 200) : item.title_zh ?? null),
       summaryZh: output ? output.summaryZh : item.summary_zh ?? null,
-      // Retired 2026-09-24: an edit writes none, and a re-edit clears the one
-      // an older edit wrote beside the summary it replaces.
-      reasonZh: output ? null : item.reason_zh ?? null,
+      // The 推荐理由 (back on 2026-10-22, frontierEditor.mjs): an edit writes its own or none, never keeps an older edit's.
+      reasonZh: output ? output.reasonZh ?? null : item.reason_zh ?? null,
+      tags: output ? output.tags ?? [] : item.tags ?? [],
       lane: output?.lane ?? item.lane,
       specialties: output?.specialties ?? item.specialties ?? [],
       entities,
@@ -1788,7 +1795,7 @@ export class FrontierPipeline {
       await client.query(`UPDATE evimed_frontier.items SET title_zh = $2, summary_zh = $3, reason_zh = $4, lane = $5, specialties = $6,
           evidence_type = $7, evidence_basis = $8, entities = $9::jsonb, entity_keys = $10, flags = $11,
           score_authority = $12, score_impact = $13, score_novelty = $14, score_relevance = $15, score_total = $16,
-          safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20,
+          safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20, tags = $22,
           state = CASE WHEN state = 'screened' THEN 'scored' ELSE state END,
           rescored_at = CASE WHEN state = 'published' AND $19::text IS NOT NULL THEN $21::timestamptz ELSE rescored_at END,
           lease_owner = CASE WHEN state = 'published' THEN NULL ELSE lease_owner END,
@@ -1800,14 +1807,14 @@ export class FrontierPipeline {
         scoreAuthority, scores?.impact ?? null, scores?.novelty ?? null, scores?.relevance ?? null,
         scores ? scoreAuthority + scores.impact + scores.novelty + scores.relevance : null,
         safetyAlert, fields.verification, fields.editorVersion,
-        fields.editorModel, context.now]);
+        fields.editorModel, context.now, fields.tags]);
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
           [item.id, result.modelInput, result.modelInputSha256]);
       }
       if (item.state === "published") {
         await client.query(`UPDATE evimed_frontier.items SET lexemes = $2::tsvector WHERE id = $1`,
-          [item.id, tsvectorLiteral(this.#lexemeText({ ...item, title_zh: fields.titleZh, summary_zh: fields.summaryZh, entities: fields.entities }))]);
+          [item.id, tsvectorLiteral(this.#lexemeText({ ...item, title_zh: fields.titleZh, summary_zh: fields.summaryZh, entities: fields.entities, tags: fields.tags }))]);
         await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'rescored')", [item.id]);
         // What was embedded described the item before its edit.
         if (context.capabilities?.vector) await client.query("DELETE FROM evimed_frontier.item_vectors WHERE item_id = $1", [item.id]);
@@ -1822,7 +1829,8 @@ export class FrontierPipeline {
   /** The words search finds an item by. @param {any} item */
   #lexemeText(item) {
     const entities = item.entities && typeof item.entities === "object" ? Object.values(item.entities).flat() : [];
-    return [item.title_raw, item.title_zh, item.summary_zh, ...entities].filter((part) => typeof part === "string" && part).join("\n");
+    return [item.title_raw, item.title_zh, item.summary_zh, ...entities, ...(Array.isArray(item.tags) ? item.tags : [])]
+      .filter((part) => typeof part === "string" && part).join("\n");
   }
 
   /**
