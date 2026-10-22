@@ -137,6 +137,50 @@ paths:
               schema: { $ref: "#/components/schemas/Source" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/sources/screening:
+    post:
+      tags: [sources]
+      operationId: reportScreening
+      summary: The platform's screening verdicts per source, for the plugin's trials and off-topic retirement
+      description: |
+        Added in 1.5.0. The platform reports, per source, how many of its entries it screened over
+        the last `window_days` and how many of those it judged off-topic (not medical). The plugin
+        reads these when it decides whether a source on trial is admitted or a source is retired as
+        off-topic; it stores the counts and nothing else. Ids the plugin does not know are named in
+        `unknown`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [window_days, sources]
+              properties:
+                window_days: { type: integer, minimum: 1, maximum: 30 }
+                sources:
+                  type: array
+                  maxItems: 4000
+                  items:
+                    type: object
+                    required: [id, screened, off_topic]
+                    properties:
+                      id: { type: string, maxLength: 120 }
+                      screened: { type: integer, minimum: 0 }
+                      off_topic: { type: integer, minimum: 0, description: "At most `screened`." }
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, unknown]
+                properties:
+                  accepted: { type: integer, minimum: 0 }
+                  unknown: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /v1/entries:
     get:
       tags: [stream]
@@ -538,19 +582,37 @@ components:
               remaining: { $ref: "#/components/schemas/Money" }
               last_error: { type: string, maxLength: 200 }
         discovery:
-          type: array
-          description: "Source discovery's daily counts, today first, then the last 14 days: candidates found, validated, put on trial, admitted, retired and failed. Added in 1.5.0; absent when this build reports none."
-          items:
-            type: object
-            required: [day, candidates, validated, trial, admitted, retired, failed]
-            properties:
-              day: { type: string, format: date }
-              candidates: { type: integer, minimum: 0 }
-              validated: { type: integer, minimum: 0 }
-              trial: { type: integer, minimum: 0 }
-              admitted: { type: integer, minimum: 0 }
-              retired: { type: integer, minimum: 0 }
-              failed: { type: integer, minimum: 0 }
+          type: object
+          description: "Source discovery's counts (Asia/Shanghai days): today, the last 14 days newest first, today's counts by candidate line, and how many sources are on trial now. Added in 1.5.0; absent when this build reports none."
+          required: [today, history, by_line, in_trial]
+          properties:
+            today: { $ref: "#/components/schemas/DiscoveryDay" }
+            history: { type: array, maxItems: 14, items: { $ref: "#/components/schemas/DiscoveryDay" } }
+            by_line:
+              type: object
+              additionalProperties:
+                type: object
+                required: [candidates, validated, trial, admitted, retired, failed]
+                properties:
+                  candidates: { type: integer, minimum: 0 }
+                  validated: { type: integer, minimum: 0 }
+                  trial: { type: integer, minimum: 0 }
+                  admitted: { type: integer, minimum: 0 }
+                  retired: { type: integer, minimum: 0 }
+                  failed: { type: integer, minimum: 0 }
+            in_trial: { type: integer, minimum: 0 }
+
+    DiscoveryDay:
+      type: object
+      required: [day, candidates, validated, trial, admitted, retired, failed]
+      properties:
+        day: { type: string, format: date, description: "An Asia/Shanghai calendar day." }
+        candidates: { type: integer, minimum: 0 }
+        validated: { type: integer, minimum: 0 }
+        trial: { type: integer, minimum: 0 }
+        admitted: { type: integer, minimum: 0 }
+        retired: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
 
     Source:
       type: object
