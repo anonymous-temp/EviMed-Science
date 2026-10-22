@@ -169,6 +169,15 @@ export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
  */
 export const FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT = 2;
 export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
+/**
+ * The module's own model money per day, in CNY, when `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` is unset (config.mjs holds the same
+ * number; frontierConfig.test.mjs holds them equal). The owner's ruling of 2026-10-22: ¥300, from ¥10. At ¥10 the 80% throttle (¥8)
+ * was crossed on 2026-10-20 at ¥8.03 and every non-urgent item that afternoon was published title-only. Production's last fourteen
+ * days spent ¥1.4-8.0 a day on 1,200-5,500 calls (about ¥0.0012 a call, ¥0.004 an item); with the reader's translation, 导读 and
+ * 推荐理由 (frontierEditor.mjs, FRONTIER_TRANSLATION_LIMITS) the expected day is about ¥15-40 (the handoff's arithmetic), so the
+ * throttle at ¥240 is reached only by a runaway day, and then the last ¥60 still edits safety feeds, regulators and the top journals.
+ */
+export const FRONTIER_DAILY_BUDGET_CNY_DEFAULT = 300;
 /** Owed edits cover recent source dates, actual publication, or generated dailies. */
 export const FRONTIER_DEFERRED_EDIT_WINDOW_MS = 7 * DAY;
 /** Items embedded by the pipeline (older ones are the rebuild script's). */
@@ -621,7 +630,8 @@ export class FrontierPipeline {
     this.threshold = frontierSelectThreshold(this.config);
     this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
     this.preprintLaneMinScore = frontierPreprintLaneMinScore(this.config);
-    this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
+    this.budgetCny = this.config.frontierDailyBudgetCny != null && this.config.frontierDailyBudgetCny !== "" && Number.isFinite(Number(this.config.frontierDailyBudgetCny))
+      ? Number(this.config.frontierDailyBudgetCny) : FRONTIER_DAILY_BUDGET_CNY_DEFAULT;
     this.offpeak = this.config.frontierOffpeak === true;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     // The width the schema's vector column is created with; it must be the

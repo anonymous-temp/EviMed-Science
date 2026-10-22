@@ -29,7 +29,7 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
     knowledgePluginTimeoutMs: config.knowledgePluginTimeoutMs, knowledgePluginMinContract: config.knowledgePluginMinContract,
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
-    frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 10,
+    frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 300,
     frontierProcessConcurrency: 2, frontierOffpeak: false, frontierSelectThreshold: 82, frontierPreprintLanePerDay: 2, frontierPreprintLaneMinScore: 60,
     frontierSafetyPushDailyCap: 3, knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
@@ -46,6 +46,19 @@ test("the selection line has one default: the config's, the pipeline's fallback 
   const lines = [...example.matchAll(/^OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD=(\d+)$/gm)];
   assert.equal(lines.length, 1, "the example names the line once");
   assert.equal(Number(lines[0][1]), FRONTIER_SELECT_THRESHOLD_DEFAULT);
+});
+
+test("the daily budget has one default: the config's, the pipeline's fallback and the example .env agree, and it is the owner's ¥300", async () => {
+  const { FRONTIER_DAILY_BUDGET_CNY_DEFAULT, FrontierPipeline } = await import("../src/frontierPipeline.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(FRONTIER_DAILY_BUDGET_CNY_DEFAULT, 300);
+  assert.equal(configUnder({}).frontierDailyBudgetCny, FRONTIER_DAILY_BUDGET_CNY_DEFAULT);
+  const pipeline = (/** @type {Record<string, any>} */ config) => new FrontierPipeline({ database: {}, editor: { screen() {}, edit() {} }, plugin: { text() {} }, config }).budgetCny;
+  assert.equal(pipeline({}), FRONTIER_DAILY_BUDGET_CNY_DEFAULT);
+  assert.equal(pipeline({ frontierDailyBudgetCny: 0 }), 0, "0 is no cap, not the default");
+  assert.equal(pipeline({ frontierDailyBudgetCny: 12.5 }), 12.5);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  assert.equal([...example.matchAll(/^OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY=(\d+)$/gm)].map((match) => Number(match[1])).join(), "300");
 });
 
 test("the preprint lane has one default for each number: the config's, the pipeline's fallback and the example .env agree", async () => {

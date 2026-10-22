@@ -926,7 +926,7 @@ flowchart TB
 
 ### 4.14 预算、降级与重试
 
-**日预算。** `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY`，默认 10（0–10000，0 为不设限），按配置时区（默认 Asia/Shanghai）的自然日计。状态：`ok`；`throttled`（用掉 ≥80%）；`exhausted`（≥100%）。指标 `budget_state` 在读不到预算账本时另给 `unavailable`。
+**日预算。** `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY`，默认 300（2026-10-22 业主裁定，原为 10；0–10000，0 为不设限），按配置时区（默认 Asia/Shanghai）的自然日计。状态：`ok`；`throttled`（用掉 ≥80%）；`exhausted`（≥100%）。指标 `budget_state` 在读不到预算账本时另给 `unavailable`。
 
 **预留—结算。** 每次调用前按估计成本**预留**，返回后按供应商报告的用量（区分缓存命中与否、峰谷）**结算**；用量报告缺失则标 `uncertain`；失败的调用，被拒绝或从未发出的释放，已发出但丢失的保持 `uncertain`。计入日预算时：已结算的按实际成本，已预留的按预留成本，`uncertain` 的按"预留与估计取小"。
 
