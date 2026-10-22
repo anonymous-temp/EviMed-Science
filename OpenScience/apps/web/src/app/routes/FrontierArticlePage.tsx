@@ -15,6 +15,7 @@ import {
   ReaderAbstract,
   ReaderByline,
   ReaderFollowups,
+  ReaderInsight,
   ReaderLead,
   ReaderMedia,
   ReaderNotes,
@@ -38,8 +39,8 @@ type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDet
  *
  * The header is the title and the item's actions — the way to the original (「查看原文」, a post's 「在 X 查看原帖」), 收藏 and the
  * item's ⋯ (深入研究, 整理为证据卡片, 复制, 不感兴趣, following its source, event, drugs and specialties). Under it, two columns: the text
- * — who said it and when, AI 导读, the full text or the abstract with 中文 / 原文, the pictures, the quoted post, where it came from,
- * 事件后续 — and at the right 推荐理由, 主题 and 标签, which fold under the text on a phone.
+ * — who said it and when, AI 导读, AI 解读 where there is one, the full text or the abstract with 中文 / 原文, the pictures, the quoted
+ * post, where it came from, 事件后续 — and at the right 推荐理由, 主题 and 标签, which fold under the text on a phone.
  *
  * Opening the page is reading the item. The way back returns to the list it was opened from, as it was (`FrontierBack` with the
  * history entry the card left), or to 前沿动态 from anywhere else.
@@ -122,8 +123,9 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
           {fallback && <Note className="mt-4" action={<a href={item.url} {...EXTERNAL} className="text-link hover:underline">阅读来源</a>}>{fallback}</Note>}
           <ReaderSameEvent item={item} className="mt-4" />
           {item.lead && <ReaderLead text={item.lead} className="mt-6" />}
+          {item.insight && <ReaderInsight insight={item.insight} item={item} className="mt-8" />}
           {item.body
-            ? <ReaderText kind="正文" text={item.body} lang={item.lang} language={language} onLanguage={setLanguage} className="mt-8" />
+            ? <ReaderText kind={item.body.source === "abstract" ? "摘要" : "正文"} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage} className="mt-8" />
             : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} className="mt-8" />}
           <ReaderMedia media={item.media} className="mt-6" />
           {item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}
