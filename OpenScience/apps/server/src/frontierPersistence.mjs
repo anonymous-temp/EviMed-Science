@@ -300,6 +300,12 @@ ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at times
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_source text CHECK (body_zh_source IN ('body', 'abstract', 'excerpt'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS quoted_zh text;
+-- reader-text 2026-10-22 (frontierReaderTidy.mjs): the verdict on the reader's text — which text (source), the hash of it as
+-- stored (sha), the paragraphs that are not the article's (drop), and why an answer was refused — null until settled, and
+-- set back to null whenever a text column changes. The translation step waits for it.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_tidy jsonb;
+CREATE INDEX IF NOT EXISTS item_texts_reader_tidy_due ON evimed_frontier.item_texts (item_id)
+  WHERE reader_tidy IS NULL AND (body_text IS NOT NULL OR abstract_raw IS NOT NULL OR body_excerpt IS NOT NULL);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,

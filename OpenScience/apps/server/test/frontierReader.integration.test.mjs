@@ -266,8 +266,17 @@ test("the media proxy serves a published item's picture, cached by its hash, and
 function translatingEditor(behaviour = {}) {
   /** @type {any[]} */
   const asked = [];
+  /** @type {any[]} */
+  const tidied = [];
   return {
-    owner, available: true, asked, timeZone: "Asia/Shanghai",
+    owner, available: true, asked, tidied, timeZone: "Asia/Shanghai", model: "deepseek-flash",
+    // The reader-text verdict (frontierReaderTidy.mjs): `behaviour.drop(input)` names the paragraphs to take out.
+    async callJson(/** @type {any[]} */ messages) {
+      const input = JSON.parse(messages[1].content);
+      tidied.push(input);
+      if (behaviour.tidyFail) throw Object.assign(new Error(behaviour.tidyFail), { code: behaviour.tidyFail });
+      return behaviour.drop ? behaviour.drop(input) : { drop: [] };
+    },
     async screen() { return { verdicts: new Map(), errors: new Map(), calls: 0 }; },
     async edit() { throw new Error("not in this test"); },
     async translateBody(/** @type {any} */ input) {
@@ -322,10 +331,71 @@ test("the translation stage: selected and near-line items, on the edit; Chinese 
   // (The unedited item's owed edit fails in this test's editor; on its third failure it is left title-only — edited — and would
   // be translated like any other: out of the way.)
   await database.query("DELETE FROM evimed_frontier.items WHERE id = $1", [unedited.id]);
-  // The full text arrives after the abstract was translated: it is the better text, and it is translated.
-  await set(selected.id, {}, { body_text: "Full text paragraph one.\n\nFull text paragraph two." });
+  // The full text arrives after the abstract was translated (ingest settles it again): it is the better text, and it is translated.
+  await set(selected.id, {}, { body_text: "Full text paragraph one, long enough to be worth a look by the editor.\n\nFull text paragraph two, with "
+    + "its own sentence about the trial, the population and the outcome the investigators measured.\n\nAnd a third one to read.", reader_tidy: null });
   assert.equal((await pipeline.processBatch()).translated, 1);
-  assert.deepEqual([(await texts(selected.id)).body_zh, (await texts(selected.id)).body_zh_source], ["译：Full text paragraph one.\n\n译：Full text paragraph two.", "body"]);
+  const full = await texts(selected.id);
+  assert.equal(full.body_zh_source, "body");
+  assert.equal(full.body_zh.split("\n\n").length, 3);
+  assert.equal(full.reader_tidy.source, "body", "the full text was settled before it was translated");
+});
+
+test("the reader's text is settled before it is shown or translated: furniture out by the model, an abstract by section in code", options, async () => {
+  const page = await insertItem(database, { sourceId: "stat", title: "Workers pay 9% more for family coverage", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const structured = await insertItem(database, { title: "CKM staging and hearing", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const greedy = await insertItem(database, { sourceId: "stat", title: "A page the model would empty", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  const body = ["By Tara Bannow", "Tara covers the business of health care. You can reach Tara on Signal.",
+    "The amount that workers pay in premiums for a family plan jumped 9% in 2026, to $7,471 on average, KFF's survey found.",
+    "Advertisement", "Workers at small businesses faced even larger increases than those at large firms, the survey said."].join("\n\n");
+  await set(page.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { body_text: body });
+  await set(structured.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
+    { abstract_raw: "Background: Hearing loss is common. Methods: We analyzed NHANES 2017-2020. Results: CKM stage tracked thresholds. Conclusions: Screen hearing." });
+  await set(greedy.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { body_text: body });
+  const editor = translatingEditor({ drop: (/** @type {any} */ input) => (input.title === "A page the model would empty" ? { drop: [0, 1, 2, 4] } : { drop: [0, 1, 3] }) });
+  const pipeline = pipelineFor(editor);
+  const summary = await pipeline.processBatch();
+  assert.equal(summary.tidied, 3);
+  assert.equal(summary.tidyDropped, 3, "three paragraphs out of the page, none out of the others");
+  assert.deepEqual(editor.tidied.map((input) => input.title).sort(), ["A page the model would empty", "Workers pay 9% more for family coverage"],
+    "the two page texts were judged by the model; the abstract was laid out in code without a call");
+  assert.equal(editor.tidied[0].p.length, 5);
+  const settled = await texts(page.id);
+  assert.deepEqual([settled.reader_tidy.source, settled.reader_tidy.drop, settled.reader_tidy.model], ["body", [0, 1, 3], "deepseek-flash"]);
+  assert.equal(settled.reader_tidy.sha, createHash("sha256").update(body).digest("hex"), "the verdict names the text it was made for");
+  assert.deepEqual((await texts(greedy.id)).reader_tidy.refused, "too_much", "an answer that would empty the text is refused by code");
+  assert.deepEqual((await texts(greedy.id)).reader_tidy.drop, []);
+  // The translation was made of what the reader is shown.
+  const asked = editor.asked.map((input) => input.paragraphs);
+  assert.ok(asked.some((paragraphs) => paragraphs.length === 2 && paragraphs[0].startsWith("The amount that workers pay")), "the page without its furniture");
+  assert.ok(asked.some((paragraphs) => paragraphs.length === 4 && paragraphs[1] === "Methods: We analyzed NHANES 2017-2020."), "the abstract by section");
+  const { item } = (await serviceFor().getItem(reader, page.publicId)).body;
+  assert.equal(item.body.original.split("\n\n").length, 2);
+  assert.ok(!item.body.original.includes("Tara covers") && !item.body.original.includes("Advertisement"));
+  assert.equal((await serviceFor().getItem(reader, structured.publicId)).body.item.body.original.split("\n\n")[2], "Results: CKM stage tracked thresholds.");
+  assert.equal(pipeline.status().counters.tidyRefused, 1);
+
+  // A text that changes (the plugin read it again) is settled again, and the translation made from the old text is cleared
+  // by ingest; here, as ingest leaves it: the verdict gone, the old translation in place but made of five paragraphs.
+  await set(page.id, {}, { reader_tidy: null, body_zh: "译1\n\n译2\n\n译3\n\n译4\n\n译5", body_zh_kind: "translation", body_zh_source: "body", body_complete: true });
+  const again = await pipelineFor(translatingEditor({ drop: () => ({ drop: [0, 1, 3] }) })).processBatch();
+  assert.equal(again.tidied, 1);
+  const redone = await texts(page.id);
+  assert.equal(redone.body_zh.split("\n\n").length, 2, "the stale translation was cleared and made again of the settled text");
+});
+
+test("a provider outage while judging records nothing and pauses; the translation waits for the verdict", options, async () => {
+  const page = await insertItem(database, { sourceId: "stat", title: "A page", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
+  await set(page.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION },
+    { body_text: "Paragraph one of a page, long enough to be judged by the editor this morning, with a sentence about a trial and "
+      + "its result.\n\nParagraph two of the page, also long enough to count: the second sentence says who ran the trial and when." });
+  const down = translatingEditor({ tidyFail: "model_gateway_upstream_unavailable" });
+  const pipeline = pipelineFor(down);
+  const summary = await pipeline.processBatch();
+  assert.deepEqual([summary.tidied, summary.translated], [0, 0]);
+  assert.equal((await texts(page.id)).reader_tidy, null, "not recorded: it is judged again");
+  assert.equal(down.asked.length, 0, "nothing is translated before its text is settled");
+  assert.ok(pipeline.status().providerPausedUntil);
 });
 
 test("a provider outage records nothing and waits; a refused paragraph keeps its original in place and the translation is not complete", options, async () => {

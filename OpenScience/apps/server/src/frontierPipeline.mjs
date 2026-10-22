@@ -81,6 +81,7 @@ import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SC
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
+import { frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
@@ -205,6 +206,9 @@ export const FRONTIER_READER_MARGIN = 10;
 const ENTRY_BATCH = FRONTIER_SCREEN_BATCH;
 /** Items one round translates at most; each is at most a few calls (`FRONTIER_TRANSLATION_LIMITS`). */
 const TRANSLATE_BATCH = 3;
+/** Reader texts settled a round: those the model judges (one call each, at once), and those code settles alone. */
+const TIDY_MODEL_BATCH = 6;
+const TIDY_PLAIN_BATCH = 200;
 const ITEM_BATCH = 20;
 const DEFERRED_BATCH = 8;
 const EMBED_BATCH = 16;
@@ -620,7 +624,10 @@ export const FRONTIER_READER_SOURCES = Object.freeze(/** @type {const} */ (["bod
 
 /**
  * The text a reader's full text is read from, best first: the plugin's full text (contract 1.4.0), the abstract, the page
- * excerpt; or the one a translation was made from, when `source` names it. Null when there is none.
+ * excerpt; or the one a translation was made from, when `source` names it. Null when there is none. It is the settled text
+ * (`frontierReaderTidy.mjs`, 2026-10-22): a structured abstract laid out by section, and the paragraphs the stored verdict
+ * found not to be the article's taken out — as paragraphs joined by blank lines, so the reader, the translation and the
+ * check that a translation is still its text's all read the same thing.
  * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | null} [source]
  * @returns {{ source: "body" | "abstract" | "excerpt", text: string } | null}
  */
@@ -628,7 +635,7 @@ export function frontierReaderText(texts, source = null) {
   const columns = { body: texts?.body_text, abstract: texts?.abstract_raw, excerpt: texts?.body_excerpt };
   for (const name of source ? [source] : FRONTIER_READER_SOURCES) {
     const text = columns[name];
-    if (typeof text === "string" && text.trim()) return { source: name, text };
+    if (typeof text === "string" && text.trim()) return { source: name, text: frontierSettledParagraphs(text, name, texts?.reader_tidy ?? null).join("\n\n") };
   }
   return null;
 }
@@ -676,7 +683,7 @@ function orderedFlags(flags) {
 /**
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
- *             preprintLane: number, translated: number }} FrontierBatchSummary
+ *             preprintLane: number, translated: number, tidied: number, tidyDropped: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
@@ -722,6 +729,9 @@ export class FrontierPipeline {
     this.counters = {
       batches: 0, claimedEntries: 0, claimedItems: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0,
       failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0, translated: 0, translateIncomplete: 0,
+      // The reader's text (frontierReaderTidy.mjs): texts settled, paragraphs taken out, model answers refused by code, and
+      // translations made from a text that has since changed, cleared to be made again.
+      tidied: 0, tidyDropped: 0, tidyRefused: 0, translationsCleared: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
@@ -799,7 +809,7 @@ export class FrontierPipeline {
     this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
-      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0 };
+      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -813,6 +823,7 @@ export class FrontierPipeline {
         await this.#laneFloor(context);
         summary.preprintLane += await this.#preprintLane(context);
       }
+      await this.#tidy(context);
       summary.translated += await this.#translate(context);
       summary.embedded += await this.#embed(context);
       this.counters.batches += 1;
@@ -1455,14 +1466,26 @@ export class FrontierPipeline {
       // The text the edit will use; the edit stores what it actually sent.
       const modelInput = existing && item.editor_version ? existing.model_input
         : buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.timeZone });
-      await client.query(`INSERT INTO evimed_frontier.item_texts (item_id, abstract_raw, body_excerpt, model_input, model_input_sha256,
+      // A text that changed (the plugin read it again, 2026-10-22 `retext`) is settled again (`reader_tidy`), and a translation
+      // made from the column that changed is cleared: it was the old text's, and the translation step makes it again.
+      const translationStale = `(cur.body_zh_source = 'body' AND cur.body_text IS DISTINCT FROM excluded.body_text)
+          OR (cur.body_zh_source = 'abstract' AND cur.abstract_raw IS DISTINCT FROM excluded.abstract_raw)
+          OR (cur.body_zh_source = 'excerpt' AND cur.body_excerpt IS DISTINCT FROM excluded.body_excerpt)`;
+      await client.query(`INSERT INTO evimed_frontier.item_texts AS cur (item_id, abstract_raw, body_excerpt, model_input, model_input_sha256,
           publication_types, mesh, journal, authors_short, open_access, enrichment, body_text, body_text_complete)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
         ON CONFLICT (item_id) DO UPDATE SET abstract_raw = excluded.abstract_raw, body_excerpt = excluded.body_excerpt,
           model_input = excluded.model_input, model_input_sha256 = excluded.model_input_sha256,
           publication_types = excluded.publication_types, mesh = excluded.mesh, journal = excluded.journal,
           authors_short = excluded.authors_short, open_access = excluded.open_access, enrichment = excluded.enrichment,
-          body_text = excluded.body_text, body_text_complete = excluded.body_text_complete`,
+          body_text = excluded.body_text, body_text_complete = excluded.body_text_complete,
+          reader_tidy = CASE WHEN cur.body_text IS NOT DISTINCT FROM excluded.body_text AND cur.abstract_raw IS NOT DISTINCT FROM excluded.abstract_raw
+            AND cur.body_excerpt IS NOT DISTINCT FROM excluded.body_excerpt THEN cur.reader_tidy END,
+          body_zh = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_zh END,
+          body_zh_kind = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_zh_kind END,
+          body_zh_at = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_zh_at END,
+          body_complete = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_complete END,
+          body_zh_source = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_zh_source END`,
       [itemId, texts.abstract_raw, texts.body_excerpt, modelInput, createHash("sha256").update(modelInput).digest("hex"),
         texts.publication_types, texts.mesh, texts.journal, texts.authors_short, texts.open_access, JSON.stringify(texts.enrichment),
         texts.body_text, texts.body_text_complete]);
@@ -2085,6 +2108,106 @@ export class FrontierPipeline {
   }
 
   /**
+   * The reader's text, settled (2026-10-22, `frontierReaderTidy.mjs`): every published item's best reader text gets a verdict,
+   * stored with the hash of the text it was made for (`item_texts.reader_tidy`), and the translation waits for it. A page or
+   * WeChat text (the full text, or the page excerpt) is judged by the model — which paragraphs are not the article's — at most
+   * `TIDY_MODEL_BATCH` a round, all at once; an abstract (laid out by section in code), an X post and a text too short to
+   * judge are settled without a call, `TIDY_PLAIN_BATCH` a round. Selected items and safety alerts first, newest first; past
+   * 80 % of the budget only they are judged, and nothing is while the provider is paused or the budget is spent. A call that
+   * could not be made for the provider or the budget records nothing (the text is tried again); an answer code refuses
+   * keeps the whole text and is recorded with its reason, so it is not asked again. A translation made from paragraphs the
+   * reader is no longer shown — a paragraph taken out, or an abstract now laid out in more paragraphs than the translation
+   * has — is cleared, and the translation step makes it again. Claimed with the item lease; written only while the text is
+   * still the one judged. Moves the content version when what a reader sees changed.
+   * @param {any} context
+   */
+  async #tidy(context) {
+    const { now, budget, summary } = context;
+    const hasText = "(t.body_text IS NOT NULL OR t.abstract_raw IS NOT NULL OR t.body_excerpt IS NOT NULL)";
+    // The reader's text (frontierReaderText's order) is judged by the model when it is a page's or a WeChat article's.
+    const judged = `(i.platform IS DISTINCT FROM 'x' AND (btrim(coalesce(t.body_text, '')) <> ''
+      OR (btrim(coalesce(t.abstract_raw, '')) = '' AND btrim(coalesce(t.body_excerpt, '')) <> '')))`;
+    const modelReady = this.editor.available && typeof this.editor.callJson === "function" && budget.state !== "exhausted"
+      && !this.#providerPause(now);
+    /** @param {string} which @param {number} limit @param {boolean} onlyLeading */
+    const claim = async (which, limit, onlyLeading) => (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE t.reader_tidy IS NULL AND ${hasText} AND i.state = 'published' AND (i.lease_until IS NULL OR i.lease_until <= $1)
+          AND ${which} AND (NOT $2::boolean OR i.selected OR i.safety_alert)
+        ORDER BY i.safety_alert DESC, i.selected DESC, i.visible_at DESC NULLS LAST, i.id DESC
+        LIMIT $3
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $4, lease_until = $5 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.platform, i.primary_source_id, i.lease_until`,
+    [now, onlyLeading, limit, this.workerId, new Date(now.getTime() + this.leaseMs)])).rows;
+    const plain = await claim(`NOT ${judged}`, TIDY_PLAIN_BATCH, false);
+    const models = modelReady ? await claim(judged, TIDY_MODEL_BATCH, budget.state === "throttled") : [];
+    const names = models.length ? await this.#sources(models.map((item) => item.primary_source_id)) : new Map();
+    /** @param {any} item @param {boolean} ask */
+    const settle = async (item, ask) => {
+      let release = true;
+      try {
+        const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+        const reader = frontierReaderText({ ...texts, reader_tidy: null });
+        if (!reader) return;
+        const basis = /** @type {{ text: string, sha: string }} */ (frontierTidyBasis(texts, reader.source));
+        /** @type {{ drop: number[], refused: string | null, called: boolean }} */
+        let verdict = { drop: [], refused: null, called: false };
+        if (ask && reader.source !== "abstract" && basis.text.length >= FRONTIER_TIDY_LIMITS.minChars) {
+          if (this.#providerPause(now)) return;
+          try {
+            verdict = await frontierTidyVerdict(this.editor, { title: item.title_raw, source: names.get(item.primary_source_id)?.name ?? null,
+              paragraphs: frontierParagraphs(basis.text) });
+          } catch (error) {
+            const code = codeOf(error);
+            if (frontierProviderUnavailable(error)) { this.#pauseForProvider(now, code); return; }
+            if (code === "usage_budget_exceeded" || code === "frontier_editor_unavailable") return;
+            verdict = { drop: [], refused: code, called: true };
+          }
+        }
+        const tidy = { source: reader.source, sha: basis.sha, drop: verdict.drop, at: now.toISOString(),
+          ...(verdict.called ? { model: this.editor.model ?? null } : {}), ...(verdict.refused ? { refused: verdict.refused } : {}) };
+        const outcome = await this.database.transaction(async (/** @type {any} */ client) => {
+          const current = (await client.query(`SELECT i.id FROM evimed_frontier.items i WHERE i.id = $1 AND i.lease_owner = $2 AND i.lease_until = $3 FOR UPDATE`,
+            [item.id, this.workerId, item.lease_until])).rows[0];
+          if (!current) return null;
+          const row = (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1 FOR UPDATE", [item.id])).rows[0];
+          // The text may have moved while the model was reading it: a verdict on another text is not this text's.
+          if (frontierTidyBasis(row, reader.source)?.sha !== basis.sha) return null;
+          const settled = frontierSettledParagraphs(basis.text, reader.source, tidy);
+          const zh = row.body_zh_kind === "translation" && row.body_zh_source === reader.source && typeof row.body_zh === "string" ? row.body_zh : null;
+          const stale = zh !== null && item.platform !== "x" && (tidy.drop.length > 0 || zh.split(/\n[ \t]*\n/).length !== settled.length);
+          await client.query(`UPDATE evimed_frontier.item_texts SET reader_tidy = $2::jsonb${stale
+            ? ", body_zh = NULL, body_zh_kind = NULL, body_zh_source = NULL, body_zh_at = NULL, body_complete = NULL" : ""} WHERE item_id = $1`,
+          [item.id, JSON.stringify(tidy)]);
+          await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
+          const visible = tidy.drop.length > 0 || stale || settled.join("\n\n") !== frontierParagraphs(basis.text).join("\n\n");
+          if (visible) await bumpFrontierVersion(client);
+          return { stale };
+        });
+        if (outcome) {
+          release = false;
+          summary.tidied += 1;
+          summary.tidyDropped += tidy.drop.length;
+          this.counters.tidied += 1;
+          this.counters.tidyDropped += tidy.drop.length;
+          if (verdict.refused) this.counters.tidyRefused += 1;
+          if (outcome.stale) this.counters.translationsCleared += 1;
+        }
+      } catch (error) {
+        this.lastError = codeOf(error);
+      } finally {
+        if (release) {
+          await this.database.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1 AND lease_owner = $2 AND lease_until = $3",
+            [item.id, this.workerId, item.lease_until]).catch(() => { this.counters.releaseFailures += 1; });
+        }
+      }
+    };
+    for (const item of plain) await settle(item, false);
+    await Promise.all(models.map((item) => settle(item, true)));
+  }
+
+  /**
    * The reader's full-text translation (contract B `body`, 2026-10-22), on the edit and never on a reader's click: published,
    * edited items that are selected or within `FRONTIER_READER_MARGIN` of the line, shown in the last week, whose best reader text
    * (`frontierReaderText`) is better than the one a translation was last made from — never translated, or the full text arrived
@@ -2093,7 +2216,9 @@ export class FrontierPipeline {
    * the text it was made from is still the item's. A translation that could not be had for the provider or the budget is not
    * recorded (it is tried again); one the checks refused is recorded with no Chinese text, and is tried again only when a better
    * text arrives — the reader keeps the original and the click path (中文摘要) stays. Moves the content version, and writes no
-   * `item_changes` row: no downstream copy reads a translation. Past 80% of the budget only safety alerts are translated.
+   * `item_changes` row: no downstream copy reads a translation. Past 80% of the budget only safety alerts are translated. A
+   * text is translated once its best text is settled (`#tidy`), so a translation is never made of paragraphs the reader is not
+   * shown.
    * @param {any} context @returns {Promise<number>} items whose Chinese text was written
    */
   async #translate(context) {
@@ -2106,7 +2231,8 @@ export class FrontierPipeline {
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.editor_version IS NOT NULL AND (i.lease_until IS NULL OR i.lease_until <= $1)
           AND i.visible_at > $2 AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND (NOT $4::boolean OR i.safety_alert)
-          AND ${best} > ${rank("body_zh_source")}
+          AND ${best} > ${rank("body_zh_source")} AND t.reader_tidy->>'source' = (CASE WHEN btrim(coalesce(t.body_text, '')) <> '' THEN 'body'
+            WHEN btrim(coalesce(t.abstract_raw, '')) <> '' THEN 'abstract' WHEN btrim(coalesce(t.body_excerpt, '')) <> '' THEN 'excerpt' END)
         ORDER BY i.safety_alert DESC, i.selected DESC, i.score_total DESC NULLS LAST, i.id DESC
         LIMIT $5
         FOR UPDATE OF i SKIP LOCKED)

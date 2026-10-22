@@ -47,7 +47,7 @@ test("a tick starts every due loop; the periodic ones wait for their interval", 
   await worker.tick();
   assert.deepEqual(calls, ["process", "process"], "two batches side by side, nothing periodic yet");
   assert.deepEqual(worker.status().pipeline, { batches: 2, claimed: 6, promoted: 2, published: 2, merged: 2, screenedOut: 2, held: 0, failed: 0,
-    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0 });
+    dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0 });
   assert.equal(owners, 1, "the owner is ensured once");
 
   calls.length = 0;

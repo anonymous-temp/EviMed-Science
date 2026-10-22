@@ -905,7 +905,7 @@ export class FrontierService {
       // `same_event_item_id` is fr-events' verdict column (cc/briefs/fr-contract.md); read through to_jsonb so this reader answers
       // whether or not the column exists yet.
       const row = (await client.query(`SELECT ${ITEM_COLUMNS}, i.quoted, i.metrics, t.abstract_raw, t.abstract_zh, t.publication_types, t.mesh, t.journal,
-          t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh,
+          t.authors_short, t.enrichment, t.body_text, t.body_excerpt, t.body_zh, t.body_zh_kind, t.body_zh_source, t.body_complete, t.quoted_zh, t.reader_tidy,
           (to_jsonb(i)->>'same_event_item_id') AS same_event_item_id
         FROM ${ITEM_FROM} WHERE i.public_id=$1 AND i.state = 'published' AND s.enabled`, [publicId])).rows[0];
       if (!row) throw failure(404, "frontier_item_not_found", "No such item.");

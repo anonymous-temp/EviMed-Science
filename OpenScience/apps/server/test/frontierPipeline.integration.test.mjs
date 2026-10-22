@@ -1246,3 +1246,41 @@ test("a social post is screened with its author, counts and quote, and its item 
   assert.deepEqual([journalItem.channel, journalItem.author, journalItem.media], [null, null, []]);
   assert.equal((await database.query("SELECT body_text_complete FROM evimed_frontier.item_texts WHERE item_id=$1", [journalItem.id])).rows[0].body_text_complete, null);
 });
+
+// reader-text 2026-10-22: the plugin reads a text again (`retext`) and delivers the entry as its next revision.
+test("a text that changes is settled again, and the translation made from the old text is cleared; an unchanged one keeps both", options, async () => {
+  await reset();
+  let clock = new Date("2026-10-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const first = await deliver({ source_id: "m-stat", title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  const fragments = "The amount that workers pay\n\njumped 9%\n\nin 2026.";
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 1, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: fragments, body_text: fragments, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  const id = Number((await entry(first.id)).item_id);
+  assert.equal((await item(id)).state, "published");
+  const settled = { source: "body", sha: createHash("sha256").update(fragments).digest("hex"), drop: [], at: clock.toISOString() };
+  await database.query(`UPDATE evimed_frontier.item_texts SET reader_tidy = $2::jsonb, body_zh = '译1\n\n译2\n\n译3', body_zh_kind = 'translation',
+    body_zh_source = 'body', body_zh_at = $3, body_complete = true WHERE item_id = $1`, [id, JSON.stringify(settled), clock]);
+
+  // The same text again: nothing to settle, nothing to translate again.
+  clock = new Date(clock.getTime() + HOUR);
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 2, title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 2, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: fragments, body_text: fragments, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  let texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [id])).rows[0];
+  assert.deepEqual([texts.reader_tidy, texts.body_zh_source], [settled, "body"]);
+
+  // The text read again with its paragraphs: settled again, and the old translation is not this text's.
+  clock = new Date(clock.getTime() + HOUR);
+  const whole = "The amount that workers pay jumped 9% in 2026.";
+  await deliver({ source_id: "m-stat", plugin_entry_id: first.pluginEntryId, revision: 3, title: "Workers pay 9% more for family coverage", summary: "S".repeat(200) });
+  plugin.texts.set(first.pluginEntryId, { entry_id: first.pluginEntryId, revision: 3, status: "available", text_kind: "excerpt", abstract: null,
+    body_excerpt: whole, body_text: whole, fetched_from: "page", enrichment: {} });
+  await pipeline.processBatch();
+  texts = (await database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [id])).rows[0];
+  assert.equal(texts.body_text, whole);
+  assert.notDeepEqual(texts.reader_tidy, settled, "the old verdict was for the old text");
+  assert.deepEqual([texts.body_zh, texts.body_zh_kind, texts.body_zh_source, texts.body_zh_at, texts.body_complete], [null, null, null, null, null]);
+});
