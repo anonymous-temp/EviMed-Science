@@ -143,6 +143,22 @@ export function ago(value: string | null, now = Date.now()): string {
 }
 
 /**
+ * 「刚刚」「5 分钟前」「3 小时前」「2 天前」: how long ago, beside a line that already names the moment (the reader's byline, a follow-up's
+ * row). Empty past thirty days, where the date says it better, and for a time that cannot be read or is ahead of the clock.
+ */
+export function sinceText(value: string | null, now = Date.now()): string {
+  if (!value) return "";
+  const at = Date.parse(value);
+  if (Number.isNaN(at) || at > now + 60_000) return "";
+  const minutes = Math.floor(Math.max(0, now - at) / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 小时前`;
+  const days = Math.floor(minutes / (24 * 60));
+  return days <= 30 ? `${days} 天前` : "";
+}
+
+/**
  * The feed's time column. Inside a day group the day is its heading, so the
  * column is the clock; where the list is not cut into days (a search, 与我相关)
  * it is the clock today and the day (「9月20日」) before.
