@@ -40,11 +40,13 @@
  *   a number that happens to be the digits of an identifier; it cannot fail a
  *   faithful translation, which is the failure that costs a summary.
  * - **English number words, month names and Roman numerals are source-only.**
- *   A source says "three trials", "September 20", "phase III", "doubled"; the
- *   model is told to write Arabic digits, so 「3 项试验」, 「9 月 20 日」,
- *   「3 期」 and 「2 倍」 must find them. They are closed tables (number words
- *   zero to ninety-nine, twelve months written next to a number, Roman I–XII
- *   after phase/stage/grade/class/type).
+ *   A source says "three trials", "September 20", "since August", "phase III",
+ *   "doubled", "8.30am"; the model is told to write Arabic digits, so 「3 项试验」,
+ *   「9 月 20 日」, 「8 月以来」, 「3 期」, 「2 倍」 and 「8时30分」 must find them.
+ *   They are closed tables (number words zero to ninety-nine, twelve months —
+ *   May and March alone only after in/since/from/by… —, Roman I–XII after
+ *   phase/stage/grade/class/type, a clock time's hour and minute).
+ * - **A chemical locant is a name** on the claim side: 5-羟色胺 (serotonin).
  * - **Units are observed, not enforced** (plan §10.3.7): `30%` matched only by
  *   a source's plain 30 passes and is reported in `unitMismatches`, a metric
  *   until a measured distribution says it should refuse.
@@ -304,6 +306,8 @@ function arabicMentions(text, side) {
       if (/[A-Za-z]-?$/.test(before)) continue;
       if (/^-[A-Za-z]/.test(after)) continue;
       if (glued && !UNIT_SUFFIXES.has(glued.toLowerCase())) continue;
+      // A chemical locant joined to its Chinese name is a name too: 5-羟色胺 for serotonin, 6-巯基嘌呤, 5-氟尿嘧啶.
+      if (/^-[\u4e00-\u9fff]/.test(after)) continue;
     }
     let value = Number(raw.replace(/,/g, "").replace(/^\./, "0."));
     if (!Number.isFinite(value)) continue;
@@ -316,7 +320,8 @@ function arabicMentions(text, side) {
       ?? /^\s?-?\s?(fold)\b/i.exec(after)
       ?? /^\s?([×xX])(?![A-Za-z])/.exec(after)
       ?? (side === "source" ? /^\s+(times)\b/i.exec(after) : null)
-      ?? (side === "source" ? /^\s?(thousand|million|billion|trillion|bn|mn)\b/i.exec(after) : null)
+      // A scale word on either side: an English original checked against its translation is the claim (`verifyParagraph`).
+      ?? /^\s?(thousand|million|billion|trillion|bn|mn)\b/i.exec(after)
       ?? (/(?:[$€£¥]|US\$|RMB\s?)$/.test(text.slice(Math.max(0, start - 4), start)) ? /^\s?([kKmMbB])\b/.exec(after) : null);
     if (unit) {
       const word = unit[1];
@@ -487,11 +492,19 @@ function englishCandidates(text) {
     // five-fold, ten fold.
     if (pair === "fold" && (word in EN_UNITS || word in EN_TENS)) found.push(candidate(EN_UNITS[word] ?? EN_TENS[word], "multiple"));
   }
-  // A month is a number only next to a date's other numbers: "September 20",
-  // "20 Sept 2026", "May 2026" — never the modal verb.
+  // A month next to a date's other numbers: "September 20", "20 Sept 2026", "May 2026".
   for (const match of text.matchAll(/(?<![A-Za-z])([A-Z][a-z]{2,8})\.?(?=\s?\d)|(?<=\d\s?)([A-Z][a-z]{2,8})\b/g)) {
     const month = EN_MONTHS[(match[1] ?? match[2]).toLowerCase()];
     if (month !== undefined) found.push(candidate(month, "count"));
+  }
+  // A month on its own ("since August", "In June", "approved in December") is written 8 月, 6 月, 12 月 by a translation:
+  // its full name capitalised, and May and March — a modal verb and a verb — only after a word that makes them months.
+  for (const match of text.matchAll(/(?<![A-Za-z])(January|February|April|June|July|August|September|October|November|December)(?![A-Za-z])|\b(?:in|since|from|until|till|by|of|during|early|late|mid-?|last|next|this|each|every)\s+(May|March)(?![A-Za-z])/g)) {
+    found.push(candidate(EN_MONTHS[(match[1] ?? match[2]).toLowerCase()], "count"));
+  }
+  // A clock time is two numbers in Chinese: 8.30am, 8:30 a.m. → 上午8时30分.
+  for (const match of text.matchAll(/(?<![\d.])(\d{1,2})[:.](\d{2})\s?(?:am|pm|a\.m\.|p\.m\.|hrs?|h)\b/gi)) {
+    found.push(candidate(Number(match[1]), "count"), candidate(Number(match[2]), "count"));
   }
   // Roman numerals where medicine writes them: phase III, stage IV, class I
   // recall, type II diabetes, phase I/II, phase IIb.

@@ -336,6 +336,7 @@ export const FRONTIER_TRANSLATE_BODY_INSTRUCTIONS = [
   "4. 不增删信息，不加解释、评论或译注。",
   "5. 某一段已经是中文，或只有符号和数字时，原样返回这一段。",
   "6. 以「## 」开头的段落是全文的小标题：保留开头的「## 」，只翻译其后的标题文字。",
+  "7. 原文里的每一个阿拉伯数字都要在译文里以阿拉伯数字原样出现，不改写成汉字数字、分数或序数词：如 1 in 10 写作“10 人中有 1 人”，3rd 写作“第 3”，2,242 写作“2,242”。",
 ].join("\n");
 
 /** An X post (and the post it quotes), after AIHOT's `industry/prompts/translate-post.md` (MIT, KKKKhazix/AIHOT 47531fa). */
@@ -394,11 +395,6 @@ export function frontierParagraphs(text) {
 /** Digit groups split by a space of any width (13 403, 223 000 — Lancet, BMJ, WHO): joined, on both sides alike. @param {string} text */
 const joinDigitGroups = (text) => text.replace(/(\d)[ \u00a0\u2009\u202f](?=\d{3}(?!\d))/g, "$1");
 
-/** The digit runs of a text as numbers are written (separators gone, the decimal point kept). @param {string} text @returns {string[]} */
-function digitRuns(text) {
-  return (joinDigitGroups(text).match(/\d+(?:[.,]\d+)*/g) ?? []).map((run) => run.replace(/,(?=\d{3}(?!\d))/g, ""));
-}
-
 /**
  * One translated paragraph, checked against its own original. Null when it fails any of:
  * - present, and not far longer than its original;
@@ -407,8 +403,8 @@ function digitRuns(text) {
  *   to translate needs none;
  * - every number written in digits is one the original states (`frontierNumbers.mjs`, after joining digit groups a space splits
  *   on both sides); a Chinese numeral word (两个 for "both") is a translation of a word, not a figure, and is not held to one;
- * - every digit run of the original is in the translation, as written or followed only by zeros (1 million → 100万), so a
- *   translation cannot drop a figure.
+ * - every number of the original is in the translation, in any notation the number check reads (1 million → 100万, 04
+ *   February → 2月4日), so a translation cannot drop a figure.
  * The live check of 2026-10-22 (20 real items) is where the last three readings come from: the first version refused 「资助：Eli
  * Lilly and Company。」, 「13 403 个变异」 against a thin space, and 「这两个术语」 for "Both terms".
  * @param {unknown} translation @param {string} original @returns {string | null}
@@ -429,8 +425,11 @@ export function verifyParagraph(translation, original) {
   }
   const [claims, source] = [joinDigitGroups(text), joinDigitGroups(original)];
   if (checkNumbers({ translation: claims }, source).missing.some(({ raw }) => /\d/.test(raw))) return null;
-  const written = digitRuns(text);
-  if (!digitRuns(original).every((run) => written.some((candidate) => candidate === run || (candidate.startsWith(run) && /^0+$/.test(candidate.slice(run.length)))))) return null;
+  // Every number of the original is in the translation: the same check the other way round, so a figure may be written in
+  // the translation's notation — 170 million as 1.7亿, 04 February as 2月4日, 95% CI after a comma — and a citation glued
+  // to a word ("studies43") is not a figure. Measured on 2026-10-22: of 79 paragraphs left in English, most were refused by
+  // the old digit-run comparison for one of those notations.
+  if (checkNumbers({ original: source }, claims).missing.some(({ raw }) => /\d/.test(raw))) return null;
   return text;
 }
 

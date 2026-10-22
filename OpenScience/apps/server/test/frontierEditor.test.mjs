@@ -1082,6 +1082,25 @@ test("the live check of 2026-10-22: names kept as written, digit groups split by
   assert.equal(verifyParagraph("约有200万人。", "approximately 1 million people"), null, "a figure changed");
 });
 
+test("rt2's live check: a figure in the translation's own notation passes; a figure dropped, changed or made up still fails", () => {
+  // Paragraphs production left in English on 2026-10-22, each with the translation the model gave and the old check refused.
+  const pass = /** @type {Array<[string, string]>} */ ([
+    ["In 2024, 170 million children and adolescents aged 5–19 years were living with obesity.", "2024年，有1.7亿5–19岁儿童和青少年患有肥胖。"],
+    ["Kostaive received a marketing authorisation valid throughout the EU on 04 February 2025.", "Kostaive 于 2025 年 2 月 4 日获得在欧盟全境有效的上市许可。"],
+    ["The effect was significant in children (SMD=-1.00,95%CI [-1.56,-0.43]).", "该效应在儿童中显著（SMD=-1.00，95%CI [-1.56,-0.43]）。"],
+    ["Since August, 21 new cases have been recorded.", "自8月以来，新增21例病例。"],
+    ["Call between 8.30am and 5pm, Monday to Friday.", "请于周一至周五上午8时30分至下午5时致电。"],
+    ["Long-lasting pain can be managed with serotonin norepinephrine reuptake inhibitors.", "持续性疼痛可使用5-羟色胺去甲肾上腺素再摄取抑制剂治疗。"],
+    ["Search strategies for the remaining registries are provided in Appendices 5,6.", "其余登记库的检索策略见附录5、6。"],
+    ["The findings were consistent with prior studies43.", "这些结果与既往研究一致。"],
+    ["The articles seized were valued at about $364 million.", "检获物品约值3.64亿美元。"],
+  ]);
+  for (const [en, zh] of pass) assert.equal(verifyParagraph(zh, en), zh, zh);
+  assert.equal(verifyParagraph("2024年，有1.7亿儿童和青少年患有肥胖。", "In 2024, 170 million children and adolescents aged 5–19 years were living with obesity."), null, "an age range dropped");
+  assert.equal(verifyParagraph("2024年，有1.6亿5–19岁儿童和青少年患有肥胖。", "In 2024, 170 million children and adolescents aged 5–19 years were living with obesity."), null, "a figure changed");
+  assert.equal(verifyParagraph("5月起，副作用可能影响多达十分之一的人。", "Side effects may affect up to 1 in 10 people."), null, "a month made up from the modal verb, and 1 in 10 lost");
+});
+
 test("translateBody: one translation per paragraph or none trusted; refused paragraphs asked once more; complete only when all came back", async () => {
   const paragraphs = ["Semaglutide reduced events by 20%.", "Adverse events occurred in 12% of patients.", "The trial enrolled adults with obesity."];
   const good = ["司美格鲁肽使事件减少 20%。", "12% 的患者发生不良事件。", "该试验纳入了肥胖成人。"];
