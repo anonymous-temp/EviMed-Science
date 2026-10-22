@@ -112,6 +112,7 @@ class Settings:
     ncbi_key_file: str | None = None
     openfda_key_file: str | None = None
     evimed_api_key_file: str | None = None           # batch 3 (lookups); reserved
+    elsevier_key_file: str | None = None             # Elsevier's Article Retrieval API (X-ELS-APIKey); unset = not asked
     edge_proxy_credentials_file: str | None = None   # relay egress: "user:password", by path
     edge_proxy_url: str | None = None                # relay egress: https://<Tokyo node> (http: for tests)
     browser_cdp_url: str | None = None               # browser egress: http://frontier-browser:9222
@@ -175,6 +176,7 @@ class Settings:
             ncbi_key_file=_path(env, "KNOWLEDGE_PLUGIN_NCBI_KEY_FILE"),
             openfda_key_file=_path(env, "KNOWLEDGE_PLUGIN_OPENFDA_KEY_FILE"),
             evimed_api_key_file=_path(env, "KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE"),
+            elsevier_key_file=_path(env, "KNOWLEDGE_PLUGIN_ELSEVIER_KEY_FILE"),
             edge_proxy_credentials_file=_path(env, "KNOWLEDGE_PLUGIN_EDGE_PROXY_CREDENTIALS_FILE"),
             edge_proxy_url=_path(env, "KNOWLEDGE_PLUGIN_EDGE_PROXY_URL"),
             browser_cdp_url=_path(env, "KNOWLEDGE_PLUGIN_BROWSER_CDP_URL"),
@@ -218,6 +220,7 @@ class Settings:
             "ncbi_key": self.ncbi_key_file,
             "openfda_key": self.openfda_key_file,
             "evimed_api_key": self.evimed_api_key_file,
+            "elsevier_key": self.elsevier_key_file,
             "edge_proxy_credentials": self.edge_proxy_credentials_file,
             "socialdata_key": self.socialdata_key_file,
             "dajiala_key": self.dajiala_key_file,

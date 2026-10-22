@@ -190,10 +190,13 @@ TRUNCATION_MARKS = ("…", "...", "[...]", "[…]", "(...)", "read more", "conti
 
 
 def looks_truncated(summary: str) -> bool:
+    """Whether a text ends the way a cut one does. A mark is matched as written, and without the punctuation that may
+    follow it ("Read more »"); "..." itself has nothing left once stripped, and until 2026-10-22 that dropped it from the
+    test altogether, so NEJM's ``dc.Description`` cut at 200 characters ("…two patients in the mava...") read as uncut."""
     low = summary.strip().lower()
     stripped = low.rstrip(" .»›>)]").strip()
-    return any(low.endswith(mark) or stripped.endswith(mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS
-               if mark.rstrip(" .»›>)]"))
+    return any(low.endswith(mark) or (bare and stripped.endswith(bare))
+               for mark, bare in ((mark, mark.rstrip(" .»›>)]")) for mark in TRUNCATION_MARKS))
 
 
 def summary_and_defects(summary: str | None, *, feed: bool = False) -> tuple[str | None, list[str]]:

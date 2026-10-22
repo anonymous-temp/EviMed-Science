@@ -147,6 +147,12 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
             if node.get("IdType") == "doi" and (node.text or "").strip():
                 doi = normalize_doi(node.text)
                 break
+        pmcid = None
+        id_list = article.find("PubmedData/ArticleIdList")   # the article's own ids, not its references'
+        for node in (id_list if id_list is not None else []):
+            if node.get("IdType") == "pmc" and (node.text or "").strip().upper().startswith("PMC"):
+                pmcid = node.text.strip().upper()
+                break
         if doi is None:
             for node in art.iter("ELocationID"):
                 if node.get("EIdType") == "doi":
@@ -194,6 +200,7 @@ def parse_pubmed_xml(body: bytes) -> list[dict[str, Any]]:
         records.append({
             "pmid": pmid,
             "doi": doi,
+            "pmcid": pmcid,
             "title": _text(art.find("ArticleTitle")) or _text(art.find("VernacularTitle")),
             "abstract": "\n".join(parts) or None,      # one section a line; the summary folds it, /text keeps it
             "publication_types": [t for t in (_text(n) for n in art.iter("PublicationType")) if t],

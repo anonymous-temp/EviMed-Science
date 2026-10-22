@@ -32,6 +32,11 @@ class Endpoints:
     medrxiv_details: str = "https://api.medrxiv.org/details"
     evimed_literature: str = "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide"
     evimed_instruction: str = "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction"
+    openalex_works: str = "https://api.openalex.org/works"
+    europepmc_rest: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
+    doi_resolver: str = "https://doi.org"
+    doi_handles: str = "https://doi.org/api/handles"
+    elsevier_article: str = "https://api.elsevier.com/content/article/doi"
 
     @classmethod
     def from_settings(cls, settings: Any) -> "Endpoints":
@@ -74,11 +79,14 @@ class Trace:
 
 
 async def get(fetcher: Any, url: str, *, api: bool = True, source_id: str | None = None, egress: str = "direct",
-              method: str = "GET", body: bytes | None = None, headers: dict | None = None) -> Attempt:
-    """One request through the core's protected fetcher; a ``FetchError`` is returned, not raised."""
+              method: str = "GET", body: bytes | None = None, headers: dict | None = None,
+              allowed_hosts: list[str] | None = None) -> Attempt:
+    """One request through the core's protected fetcher; a ``FetchError`` is returned, not raised. ``allowed_hosts``
+    is passed only when given (the browser exit's route list)."""
     spec = RequestSpec(url=url, method=method, body=body, headers=dict(headers or {}), conditional=False, api=api)
+    extra = {"allowed_hosts": allowed_hosts} if allowed_hosts else {}
     try:
-        result = await fetcher.fetch(spec, source_id=source_id, egress=egress)
+        result = await fetcher.fetch(spec, source_id=source_id, egress=egress, **extra)
     except FetchError as error:
         return Attempt(error=error)
     return Attempt(result=result)

@@ -78,6 +78,12 @@ async def resolve_doi(fetcher: Any, endpoints: Endpoints, source: str, record_id
     return None
 
 
+def result_pmcid(result: dict) -> str | None:
+    """The PMC id of a core result (``PMC1234567``), when Europe PMC holds the article in PMC."""
+    value = str(result.get("pmcid") or "").strip().upper()
+    return value if value.startswith("PMC") and value[3:].isdigit() else None
+
+
 def preprint_links(result: dict) -> list[tuple[str, str, str]]:
     """``(type, source, id)`` of the preprint relations in a core result (``Preprint of`` / ``Preprint in`` …)."""
     corrections = (result.get("commentCorrectionList") or {}).get("commentCorrection") or []

@@ -16,6 +16,9 @@ www.federalregister.gov     1     1.5 s          200
 api.medrxiv.org/biorxiv     1     2 s (30 s TO)  300
 export.arxiv.org            1     3 s            100        terms of use: one request per 3 s
 www.who.int, EMA, GOV.UK    1     1.5 s          300 each
+api.openalex.org            1     0.2 s          20,000     a single work is free; OpenAlex asks for ≤ 10 req/s
+doi.org                     1     0.5 s          10,000     the handle API naming each landing page (rt-papers)
+api.elsevier.com            1     1 s            2,000      only with a key (KNOWLEDGE_PLUGIN_ELSEVIER_KEY_FILE)
 anything else               1     1.5 s          none       and the site's robots.txt crawl-delay
 ==========================  ====  =============  =========  ==========================================
 
@@ -79,6 +82,11 @@ def host_rules(*, ncbi_key: bool, openfda_key: bool) -> dict[str, HostRule]:
         "www.ema.europa.eu": HostRule(1.5, 300),
         "www.gov.uk": HostRule(1.5, 300),
         "api.unpaywall.org": HostRule(1.0, 2000),
+        # rt-papers (2026-10-22), the paper text chain: OpenAlex's single works are free (it asks at most ten a second);
+        # doi.org's handle API names each landing page; Elsevier's API only with a key.
+        "api.openalex.org": HostRule(0.2, 20000),
+        "doi.org": HostRule(0.5, 10000),
+        "api.elsevier.com": HostRule(1.0, 2000),
         # Contract 1.5.0, the paid providers: their money caps are the social ledger's; these are pacing and deadlines.
         # A deep page of a two-dozen-account search can take well over 20 s (AIHOT providers/socialdata.ts: 60 s).
         "api.socialdata.tools": HostRule(1.0, None, timeout_s=60.0),

@@ -251,7 +251,8 @@ class EntryText(ContractModel):
     body_excerpt: str | None = Field(default=None, max_length=TEXT_MAX_CHARS)
     body_text: str | None = Field(default=None, max_length=BODY_TEXT_MAX)
     fetched_from: Literal["pubmed", "europepmc", "crossref", "page", "browser", "relay", "evimed-api", "wechat", "x",
-                          "social"] | None = None
+                          "social", "openalex", "landing", "publisher-feed", "europepmc-fulltext",
+                          "elsevier"] | None = None
     fetched_at: datetime | None = None
     next_attempt_at: datetime | None = None
     enrichment: Enrichment | None = None
