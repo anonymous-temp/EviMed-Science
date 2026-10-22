@@ -371,3 +371,9 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.provider_calls (
   error       text CHECK (char_length(error) <= 200)
 );
 CREATE INDEX IF NOT EXISTS knowledge_provider_calls_idx ON evimed_knowledge.provider_calls (provider, called_at DESC);
+
+-- fr-ext 2026-10-22
+-- entry_texts: the paid calls made for an entry's text (Dajiala `article_detail` for a WeChat article, ¥0.03 each). A WeChat
+-- article's text is bought, never read as a page (robots.txt refuses mp.weixin.qq.com), and a call that failed for a reason
+-- that passes (code 20002 while the balance ran low, 2026-10-22) is tried again later — at most six calls per entry.
+ALTER TABLE evimed_knowledge.entry_texts ADD COLUMN IF NOT EXISTS paid_attempts smallint NOT NULL DEFAULT 0;

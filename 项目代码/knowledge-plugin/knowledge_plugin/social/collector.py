@@ -9,6 +9,10 @@ otherwise), and the source's state updated in the same transaction — next read
 health by the same rule (``policy.health_state``) — so ``/v1/sources`` and the hourly health re-check see these sources
 like any other. A post already stored is not bought again: posts are matched against the stream by their key before any
 media, article or body is fetched.
+
+A WeChat article's text that was not bought with the post is bought when the platform asks ``/text`` for it
+(``wechat_text``, called by the scheduler's text worker instead of the page reader; ``wechat`` module docstring, Bodies).
+Both paths share one bound: five body calls failing in a row pause every body purchase for an hour.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from psycopg.types.json import Jsonb
 
 from .. import policy
 from ..db import meta_get, meta_set
-from ..model import SUCCESS_OUTCOMES
+from ..model import SUCCESS_OUTCOMES, EntryTextResult
 from ..normalize import Rejected, key_sha256, prepare
 from ..registry import source_from_row
 from ..store import StoreResult, insert_fetch, reliability_24h, store_entries
@@ -29,7 +33,8 @@ from . import crawl as crawl_mod
 from . import wechat as wechat_mod
 from . import x as x_mod
 from .media import MediaStore
-from .providers import (DAJIALA_HOST, SOCIALDATA_HOST, CrawlClient, DajialaClient, ProviderError, SocialDataClient)
+from .providers import (ARTICLE_DETAIL_CNY, DAJIALA_HOST, SOCIALDATA_HOST, CrawlClient, DajialaClient, ProviderError,
+                        SocialDataClient)
 from .spend import DAJIALA, SOCIALDATA, ProviderLedger, SpendCapReached, day_window
 
 log = logging.getLogger("knowledge_plugin.social")
@@ -57,6 +62,8 @@ class SocialCollector:
         self.watch = crawl_mod.load_watch_list(settings.social_registry())
         self.paused: dict[str, datetime] = {}
         self.wechat_bodies_per_read = wechat_mod.MAX_BODIES_PER_READ
+        self.body_failures = 0                  # body calls failing in a row (wechat.BODY_STREAK)
+        self.bodies_paused_until: datetime | None = None
         self._last_upkeep: datetime | None = None
         self.counters: Counter = Counter()
         self.last_error: str | None = None
@@ -290,11 +297,14 @@ class SocialCollector:
             if isinstance(post.get("cover_url"), str) and post["cover_url"].startswith(("http://", "https://")):
                 cover = await self.media.ensure(post["cover_url"].replace("http://", "https://", 1))
             detail = None
+            if buying and self.bodies_wait(now) is not None:
+                buying = False
             if buying and bodies < self.wechat_bodies_per_read and (not first_contact or wechat_mod.is_recent(post, now)):
                 link, _ = wechat_mod.article_link(post.get("url"))
                 try:
                     detail = await self.dajiala.article_detail(link) if link else None
                     bodies += 1 if detail else 0
+                    self.body_failures = 0
                 except SpendCapReached:
                     buying = False
                 except ProviderError as error:
@@ -302,6 +312,8 @@ class SocialCollector:
                         buying = False
                         if error.kind == "balance":
                             self.paused[DAJIALA] = day_window(now)[1]
+                    elif error.kind == "failed":
+                        self._body_failed(now)   # the post is stored without it; its text is bought when asked for
             entries.append(wechat_mod.build_entry(post, row, nickname or row["name"], now=now, cover=cover, detail=detail,
                                                   alias=resolved.get("alias")))
         result = await self._store(row, entries, now)
@@ -354,6 +366,90 @@ class SocialCollector:
         await self._finish(row, now, outcome="http-error", detail=f"dajiala_{error.kind}:{error.detail}"[:100],
                            next_at=next_at, host=DAJIALA_HOST, cursor=cursor)
         return "failed"
+
+    # ------------------------------------------------------------------ WeChat texts, bought when asked for
+
+    def bodies_wait(self, now: datetime) -> datetime | None:
+        """When body purchases may resume — Dajiala paused (balance, key) or the bodies' own pause —, or ``None``."""
+        waits = [until for until in (self.paused.get(DAJIALA), self.bodies_paused_until)
+                 if until is not None and now < until]
+        return max(waits) if waits else None
+
+    async def bodies_blocked(self, now: datetime) -> str | None:
+        """Why no body can be bought now (``paused``, ``daily_cap``, ``unconfigured``), or ``None``."""
+        if not self.dajiala.configured:
+            return "unconfigured"
+        if self.bodies_wait(now) is not None:
+            return "paused"
+        try:
+            await self.ledger.check(self.dajiala.cap, ARTICLE_DETAIL_CNY, now)
+        except SpendCapReached:
+            return "daily_cap"
+        return None
+
+    def _body_failed(self, now: datetime) -> None:
+        """A body call failed for a reason that passes: the fifth in a row pauses every body purchase for an hour."""
+        self.body_failures += 1
+        self.counters["wechat_body_failed"] += 1
+        if self.body_failures >= wechat_mod.BODY_STREAK:
+            self.bodies_paused_until = now + wechat_mod.BODY_PAUSE
+            self.body_failures = 0
+            self.counters["wechat_bodies_paused"] += 1
+            log.warning("wechat bodies paused until %s: %s calls failed in a row", self.bodies_paused_until.isoformat(),
+                        wechat_mod.BODY_STREAK)
+
+    async def _paid_attempt(self, job: dict) -> int:
+        """Count one call made for an entry's text; returns the calls made so far."""
+        async with self._pool.connection() as conn:
+            row = await (await conn.execute(
+                """UPDATE evimed_knowledge.entry_texts SET paid_attempts = least(paid_attempts + 1, 32767)
+                    WHERE entry_id = %s RETURNING paid_attempts""", (job["entry_id"],))).fetchone()
+        return int(row["paid_attempts"]) if row else int(job.get("paid_attempts") or 0) + 1
+
+    async def wechat_text(self, job: dict, now: datetime) -> EntryTextResult:
+        """The text of a WeChat article the platform asked for: bought through Dajiala ``article_detail`` within the day's
+        cap, never read as a page (``wechat`` module docstring, Bodies). ``job`` is a claimed text job
+        (``store.claim_texts``: the entry, ``attempts``, ``paid_attempts``). A pending answer names its own retry."""
+        link, _ = wechat_mod.article_link(job.get("url"))
+        if link is None:
+            return EntryTextResult(status="unavailable", notes=["wechat_no_article_link"])
+        if not self.dajiala.configured:
+            return EntryTextResult(status="unavailable", notes=["wechat_body_unconfigured"])
+        if int(job.get("paid_attempts") or 0) >= wechat_mod.BODY_CALLS:
+            return EntryTextResult(status="unavailable", notes=["wechat_body_calls_spent"])
+        resume = self.bodies_wait(now)
+        if resume is not None:
+            return _pending(resume, now, "dajiala_paused")
+        try:
+            detail = await self.dajiala.article_detail(link)
+        except SpendCapReached as capped:
+            return _pending(capped.retry_at, now, "dajiala_daily_cap")
+        except ProviderError as error:
+            calls = await self._paid_attempt(job)
+            self.counters[f"wechat_text:{error.kind}"] += 1
+            if error.kind == "balance":
+                self.paused[DAJIALA] = day_window(now)[1]
+                return _pending(self.paused[DAJIALA], now, "dajiala_balance")
+            if error.kind == "refused":
+                self.paused[DAJIALA] = now + REFUSED_PAUSE
+                return _pending(self.paused[DAJIALA], now, "dajiala_key_refused")
+            if error.kind == "rate-limited":
+                return _pending(now + RATE_LIMITED_WAIT, now, "dajiala_rate_limited")
+            if error.kind != "failed":           # the article is gone, or Dajiala says the request is wrong
+                return EntryTextResult(status="unavailable", notes=[f"dajiala_{error.kind}:{error.detail}"[:100]])
+            self._body_failed(now)
+            note = f"dajiala_failed:{error.detail}"[:100]
+            if calls >= wechat_mod.BODY_CALLS:
+                return EntryTextResult(status="unavailable", notes=[note, "wechat_body_calls_spent"])
+            return _pending(now + wechat_mod.body_retry_after(calls), now, note)
+        await self._paid_attempt(job)
+        self.body_failures = 0
+        body = wechat_mod.body_of(detail)
+        self.counters["wechat_text:ok" if body else "wechat_text:empty"] += 1
+        if not body:
+            return EntryTextResult(status="unavailable", notes=["wechat_body_empty"])
+        return EntryTextResult(status="available", text_kind="full", body_text=body, body_excerpt=body,
+                               fetched_from="wechat", fetched_at=now)
 
     # ------------------------------------------------------------------ the six platforms
 
@@ -416,3 +512,8 @@ class SocialCollector:
         async with self._pool.connection() as conn:
             await conn.execute("DELETE FROM evimed_knowledge.media_failures WHERE failed_at < %s", (now - timedelta(days=7),))
         return {"evicted": evicted, "ledger_purged": purged}
+
+
+def _pending(until: datetime, now: datetime, note: str) -> EntryTextResult:
+    return EntryTextResult(status="pending", retry_after_s=max(60, int((until - now).total_seconds())), notes=[note])
+

@@ -16,7 +16,12 @@ After AIHOT's ``providers/dajiala.ts`` and ``sources/mp.ts`` (MIT, engine at 475
   the regulators, journals and societies are read before the portals and the trade press.
 - **Bodies.** A post seen for the first time (and not older than the first-contact window) has its text bought once
   (``article_detail``, ¥0.03, at most eight a read) and arrives with it; a body that fails, or that the cap no longer
-  allows, leaves the post readable from its title and digest, and ``/text`` reads its page like any other page.
+  allows, leaves the post readable from its title and digest, and its text is bought later, when the platform asks
+  ``/text`` for it (fr-ext 2026-10-22): the text worker hands a WeChat article to ``SocialCollector.wechat_text`` instead
+  of the page reader, because mp.weixin.qq.com refuses every page read in its robots.txt — before that, a body lost to a
+  provider hiccup was never recovered. A call that fails for a reason that passes is tried again later, at most
+  ``BODY_CALLS`` times per entry with a doubling wait (``body_retry_after``); five such failures in a row pause every
+  body purchase for an hour (``BODY_STREAK``, ``BODY_PAUSE``), so a key-level problem costs a handful of calls an hour.
 - **Identity.** ``wx:<__biz>:<mid>:<idx>`` from the post's link (contract rule 3); a link without them keys by URL.
 """
 
@@ -34,6 +39,11 @@ MAX_BODIES_PER_READ = 8
 MISMATCH_PARK = timedelta(days=30)
 GONE_RETRY = timedelta(days=3)
 FIRST_CONTACT_WINDOW = timedelta(days=7)
+BODY_CALLS = 6                          # paid calls per entry's text, at most (entry_texts.paid_attempts)
+BODY_RETRY_FIRST = timedelta(minutes=30)
+BODY_RETRY_MAX = timedelta(hours=6)
+BODY_STREAK = 5                         # body calls failing in a row that pause every body purchase ...
+BODY_PAUSE = timedelta(hours=1)         # ... for this long
 
 
 def normalize_name(name: str | None) -> str:
@@ -53,6 +63,17 @@ def polls_per_day(row: dict) -> int:
 def priority(row: dict) -> int:
     value = (row.get("config") or {}).get("priority")
     return value if isinstance(value, int) else 9
+
+
+def body_retry_after(failed_calls: int) -> timedelta:
+    """The wait after the ``failed_calls``-th body call that failed for a reason that passes: 30 minutes, doubling, at
+    most six hours."""
+    return min(BODY_RETRY_MAX, BODY_RETRY_FIRST * 2 ** max(0, failed_calls - 1))
+
+
+def is_article(url: str | None) -> bool:
+    """Whether a link is a WeChat article's (its text is bought, never read as a page)."""
+    return article_link(url)[0] is not None
 
 
 def article_link(url: str | None) -> tuple[str | None, dict]:

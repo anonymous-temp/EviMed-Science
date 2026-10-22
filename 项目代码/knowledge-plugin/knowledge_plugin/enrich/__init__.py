@@ -23,7 +23,9 @@ Order of work (plan 10.3.4), by entry kind:
     The feed's own text when it is already the full, uncut text; else the main text of the
     entry's page (``page.py``), plus trial facts when the entry names a registered trial.
     Challenge pages, robots refusals, PDFs and 404s are final (``unavailable``); timeouts, 5xx,
-    429 and the plugin's own budget are transient (``pending``).
+    429 and the plugin's own budget are transient (``pending``). A WeChat article's page is never
+    read (robots.txt refuses mp.weixin.qq.com): its text is bought through Dajiala by the text
+    worker (``social.wechat``), and an enricher handed one anyway answers ``unavailable``.
 ``record`` (openFDA, MedHELM, PREPARE, STAR, and the EviMed API scans — ChiCTR registrations and
 guideline index records)
     The structured record already is the text; nothing is fetched (``unavailable``). An EviMed
@@ -59,6 +61,7 @@ from typing import Any
 from ..adapters.common import registry_ids
 from ..adapters.json_api import family_for
 from ..model import EntryTextResult
+from ..social.wechat import is_article as is_wechat_article
 from . import crossref as crossref_step
 from . import europepmc as europepmc_step
 from . import evimed as evimed_step
@@ -203,6 +206,9 @@ async def _page(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResul
     url = row.get("url")
     if not url:
         return EntryTextResult(status="unavailable", enrichment=enrichment, notes=trace.notes + ["no_url"])
+    if is_wechat_article(url):
+        return EntryTextResult(status="available" if enrichment else "unavailable", enrichment=enrichment,
+                               notes=trace.notes + ["wechat_page_not_read"])
     text, attempt = await page_excerpt(fetcher, url, source_id=row.get("source_id"),
                                        egress=row.get("source_egress") or "direct", trace=trace)
     if text:
