@@ -434,3 +434,23 @@ test("a model of the event-history shape is kept with the card it arrives with, 
   }));
   assert.deepEqual(complete.issues, []);
 });
+
+test('the canonical conversation remembers submitted intake after the transient activity has expired', async () => {
+  const study = { ...t0Study, status: 'draft', conversationSessionId: 'canonical', steps: { definition: { status: 'none', requested: true, held: true } } };
+  const { store } = studyOnly(study);
+  store.one = async sql => sql.includes("detail->>'purpose' = 'intake'") ? { run_id: 'intake_run', session_id: 'canonical', detail: { goalsApplied: true, awaitingInput: true } } : null;
+  const view = await new VcrService({ store, config: {} }).studyView({ id: 'lead' }, study.id);
+  assert.equal(view.activity, null);
+  assert.equal(view.conversation.submitted, true);
+  assert.equal(view.conversation.sessionId, 'canonical');
+});
+
+test('an unsubmitted or sibling-session intake mark cannot mark the canonical conversation submitted', async () => {
+  const study = { ...t0Study, status: 'draft', conversationSessionId: 'canonical', steps: { definition: { status: 'none', requested: true, held: true } } };
+  for (const mark of [null, { run_id: null, session_id: 'canonical', detail: { goalsApplied: false } }, { run_id: 'other_run', session_id: 'sibling', detail: { goalsApplied: true, awaitingInput: true } }]) {
+    const { store } = studyOnly(study);
+    store.one = async sql => sql.includes("detail->>'purpose' = 'intake'") ? mark : null;
+    const view = await new VcrService({ store, config: {} }).studyView({ id: 'lead' }, study.id);
+    assert.equal(Boolean(view.conversation.submitted), false);
+  }
+});

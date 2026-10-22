@@ -1,3 +1,4 @@
+import { completeMethodCatalogue } from "./vcrMethodDisplay";
 /**
  * 「虚拟临床研究」 — the browser's side of `/api/vcr/*` (build contract 2026-09-28 §3.1).
  *
@@ -42,13 +43,13 @@ import {
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody,
   studyPatchBody, transitionBody, trialSearchBody,
   type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
-  type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody,
+  type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody, type VcrQualityBasis,
   type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
   VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
-  VcrDefinitionUseBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
+  VcrDefinitionUseBody, VcrJobBody, VcrQualityBasis, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
   VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody, VcrTransitionBody,
 } from "./vcrBodies";
 
@@ -253,6 +254,7 @@ export interface VcrPartial {
 
 /** One row of the home list (`GET /api/vcr/studies`). */
 export interface VcrStudySummary {
+  purpose?: "programme" | "calculation";
   id: string;
   projectId: string;
   name: string;
@@ -421,9 +423,10 @@ export interface VcrBudget {
 /** Everything a job says about itself. */
 export interface VcrJob {
   id: string;
+  method?: string;
   kind: string;
-  /** 「方案的模拟运行」. */
-  label: string;
+  /** Present on presented study activities; raw job endpoints identify the canonical method instead. */
+  label?: string;
   state: VcrJobState;
   progress?: { done: number; total: number } | null;
   /** What the job may spend; a job waiting on budget says what it would need. */
@@ -536,10 +539,14 @@ export interface VcrStepSummary {
 export interface VcrConversationRef {
   sessionId: string | null;
   exists: boolean;
+  /** A persisted acknowledged intake, independent of the transient activity display. */
+  submitted?: boolean;
+  awaitingInput?: boolean;
 }
 
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
+  purpose?: "programme" | "calculation";
   id: string;
   projectId: string;
   name: string;
@@ -686,7 +693,7 @@ export interface VcrPopulationTab {
   version: string | null;
   /** 「真实队列」. */
   kind?: string | null;
-  versions: Array<{ id: string; label: string; stale?: boolean; counts?: VcrCounts | null }>;
+  versions: Array<{ id: string; label: string; stale?: boolean; counts?: VcrCounts | null; generationInput?: VcrQualityBasis | null }>;
   definition: {
     timeZero?: string | null;
     evidenceWindow?: string | null;
@@ -781,6 +788,8 @@ export interface VcrModelCard {
 
 /** One series of a trajectory chart. */
 export interface VcrSeries {
+  pooled?: boolean;
+  atRisk?: Array<{ x: number; n: number }>;
   key: string;
   label: string;
   /** `observed` draws a solid line, `reconstructed` a dashed one, `predicted` a band. */
@@ -1761,8 +1770,10 @@ export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
   const conversation = obj(value.conversation);
   return {
+    purpose: value.purpose === "calculation" ? "calculation" : "programme",
     ...(value as unknown as VcrStudy),
-    conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true },
+    conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true,
+      ...(conversation.submitted === true ? { submitted: true } : {}), ...(conversation.awaitingInput === true ? { awaitingInput: true } : {}) },
     activity: readVcrActivity(value.activity),
     next: readNext(value.next),
     stepSummaries: readStepSummaries(value.stepSummaries),
@@ -2327,6 +2338,26 @@ export function createVcrStudy(input: VcrCreateBody = {}) {
   return productRequest<{ id: string; projectId: string; sessionId: string | null; status?: VcrStudyStatus }>("/vcr/studies", "POST", studyCreateBody(input));
 }
 
+export interface VcrStartBody {
+  brief: string;
+  requestId: string;
+  name?: string;
+  action?: "definition" | "auto" | "cohort" | "patients" | "comparator" | "trial";
+}
+export interface VcrStartAnswer {
+  studyId: string;
+  sessionId: string;
+  runId: string;
+  status: string;
+  dispatchStatus: string;
+  errorCode: string | null;
+  state: "accepted" | "confirming" | "rejected" | "awaiting_input";
+}
+/** Retry the same immutable payload and request id after an uncertain receipt. */
+export function startVcrStudy(studyId: string, input: VcrStartBody) {
+  return productRequest<VcrStartAnswer>(`${study(studyId)}/start`, "POST", input);
+}
+
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {
   return readVcrStudy(await productRequest<unknown>(study(studyId)));
 }
@@ -2494,8 +2525,9 @@ export function getVcrJob(studyId: string, jobId: string) {
   return productRequest<VcrJob>(`${study(studyId)}/jobs/${id(jobId)}`);
 }
 
-export function cancelVcrJob(studyId: string, jobId: string) {
-  return productRequest<VcrJob>(`${study(studyId)}/jobs/${id(jobId)}/cancel`, "POST", cancelBody());
+export async function cancelVcrJob(studyId: string, jobId: string): Promise<VcrJob> {
+  const response = await productRequest<{ job: VcrJob; canceled: boolean }>(`${study(studyId)}/jobs/${id(jobId)}/cancel`, "POST", cancelBody());
+  return response.job;
 }
 
 /**
@@ -2542,7 +2574,8 @@ export async function getVcrExport(studyId: string, exportId: string): Promise<V
 }
 
 export async function getVcrModels(): Promise<VcrModels> {
-  return readVcrModels(await productRequest<unknown>("/vcr/models"));
+  const catalogue = readVcrModels(await productRequest<unknown>("/vcr/models"));
+  return { ...catalogue, methods: completeMethodCatalogue(catalogue.methods) };
 }
 
 /** Take a literature model into the account's library; its tier is set by the server, never by the page. */
@@ -2922,7 +2955,9 @@ export interface VcrIntakeTable {
   outcomeBearing: boolean;
 }
 
+export interface VcrQualityInput { inputId: string; kind: "analysis_table" | "snapshot_file"; shape: string | null; label: string; columns: string[]; columnLabels?: Record<string, string> }
 export interface VcrIntakeSnapshot {
+  qualityInputs?: VcrQualityInput[];
   id: string;
   sourceId: string;
   version: number | null;
@@ -3250,6 +3285,11 @@ export function applyVcrReferenceTrial(studyId: string, registry: string, regist
 
 /** Only reproducible caller references are returned; engine locations and resolved data stay server-side. */
 export interface VcrMethodConfiguration {
+  reconstructionResultId?: string | null;
+  reconstructionResultAvailable?: boolean | null;
+  qualityBasis?: VcrQualityBasis | null;
+  qualityBasisAvailable?: boolean | null;
+  subjectId?: string | null;
   sourceModel?: { id: string; version: string } | null;
   kind: string;
   method: string;
@@ -3261,9 +3301,32 @@ export interface VcrMethodConfiguration {
   inputRefs: Array<{ kind: "snapshot"; id: string }>;
   unavailableInputs: number;
 }
+export interface VcrReconstructionResult { resultId: string; label: string; version: number; createdAt: string | null; method: "evidence.reconstruct_km"; valueSource: "reconstructed"; table: "reconstructed-ipd"; source?: { kind: string; origin?: unknown }; timeUnit?: string | null }
 export function getVcrMethodHistory(studyId: string) {
-  return productRequest<{ jobs: Array<VcrJob & { method?: string; methodVersion?: string | null; scenarioHash?: string | null; createdAt?: string }> }>(`${study(studyId)}/jobs`);
+  return productRequest<{ reconstructionResults?: VcrReconstructionResult[]; jobs: Array<VcrJob & { method?: string; methodVersion?: string | null; scenarioHash?: string | null; createdAt?: string }> }>(`${study(studyId)}/jobs`);
 }
 export function getVcrMethodConfiguration(studyId: string, jobId: string) {
   return productRequest<VcrMethodConfiguration>(`${study(studyId)}/jobs/${id(jobId)}/configuration`);
+}
+
+
+export interface VcrSavedMethodConfiguration { subjectId: string | null; objectKind: string | null; version: number | null; reconstructionResultId?: string; scenario?: Record<string, unknown> }
+export function saveVcrMethodConfiguration(studyId: string, input: { method: string; name: string; scenario: Record<string, unknown>; subjectId?: string; modelId?: string; reconstructionResultId?: string }) {
+  return productRequest<VcrSavedMethodConfiguration>(`${study(studyId)}/method-configurations`, "POST", input);
+}
+export interface VcrMethodResult {
+  jobId: string;
+  result: { id: string; kind: string; subjectId?: string | null; conclusion?: VcrConclusion; counts?: Partial<VcrCounts>; measures?: Array<{ name: string; label?: string; value: number | null; unit?: string; mcse?: number | null; interval?: VcrInterval | null; lower?: number | null; upper?: number | null; source?: VcrValueSource }>; diagnostics?: Record<string, unknown>; [key: string]: unknown } | null;
+  execution?: { method: string; methodVersion?: string | null; seed?: number | null; scenarioHash?: string | null; sourceModel?: { id: string; version: string } | null };
+  records: { available: boolean; state?: string; code?: string; result?: string; source?: "patients" | "population"; rows?: number; csvUrl?: string; rowsUrl?: string; profile?: VcrGeneratedRow[]; calibration?: VcrCalibration | null; labels?: Record<string, string>; [key: string]: unknown };
+}
+/** The immutable result of this job, including a partial result; never the study's latest tab. */
+export async function getVcrMethodResult(studyId: string, jobId: string): Promise<VcrMethodResult> {
+  const answer = await productRequest<VcrMethodResult>(`${study(studyId)}/jobs/${id(jobId)}/result`);
+  return { ...answer, records: { ...answer.records, profile: arr(answer.records?.profile).map(row => {
+    const profile = readGeneratedRow({ ...row, levels: arr(row.levels).map(level => ({ ...level, percent: finite(level.percent) ?? (finite(level.p) == null ? null : Number(level.p) * 100) })) });
+    const histogram = obj(row.histogram);
+    if ([...Array.isArray(histogram.breaks) ? histogram.breaks : [], ...Array.isArray(histogram.counts) ? histogram.counts : []].some(value => finite(value) === null)) profile.histogram = null;
+    return profile;
+  }) } };
 }

@@ -62,3 +62,41 @@ it("requests the existing Chinese abstract when only an original is stored", asy
   expect(await screen.findByText("新生成的中文摘要")).toBeInTheDocument();
   expect(client.fetchFrontierAbstractZh).toHaveBeenCalledWith("item-1");
 });
+
+
+it("explains a rejected Chinese headline and guide while preserving the source headline", async () => {
+  client.fetchFrontierItem.mockResolvedValue({ ...frontierItem({ id: "item-1" }),
+    title: "Original source headline", titleRaw: "Original source headline", titleZh: null, summary: null,
+    verification: "title-only", editorDiagnostics: { schemaVersion: 1, outcome: "title-only", attempts: 2,
+      inputSha256: "a".repeat(64), editorVersion: "editor-test", checkedAt: "2026-10-20T00:00:00.000Z",
+      reason: null, fields: { title_zh: ["language"], summary_zh: ["number"] } }, abstract: null, abstractZh: null });
+  show();
+  expect(await screen.findByRole("heading", { name: "Original source headline", level: 1 })).toBeInTheDocument();
+  expect(screen.getByText(/中文标题未能完整表达来源内容，保留原标题/)).toBeInTheDocument();
+  expect(screen.getByText(/导读中的数字未能与来源对应/)).toBeInTheDocument();
+  expect(screen.queryByText("editor-test")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "原文" })).toBeInTheDocument();
+});
+
+
+it.each([
+  ["source_missing", "来源暂未提供可用于导读的摘要或正文"],
+  ["not_checked", "中文内容暂未完成"],
+])("offers source reading for %s without inventing Chinese content", async (code, message) => {
+  client.fetchFrontierItem.mockResolvedValue({ ...frontierItem({ id: "item-1" }), title: "Source headline", titleRaw: "Source headline",
+    titleZh: null, summary: null, verification: "pending", abstract: null, abstractZh: null,
+    editorDiagnostics: { schemaVersion: 1, outcome: "pending", attempts: 0, inputSha256: null,
+      editorVersion: null, checkedAt: "2026-10-20T00:00:00Z", reason: null, fields: { title_zh: ["not_checked"], summary_zh: [code] } } });
+  show();
+  expect(await screen.findByRole("heading", { name: "Source headline", level: 1 })).toBeInTheDocument();
+  expect(screen.getByText(new RegExp(message))).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "阅读来源" })).toHaveAttribute("target", "_blank");
+});
+
+it("keeps historical fallback causes unknown", async () => {
+  client.fetchFrontierItem.mockResolvedValue({ ...frontierItem({ id: "item-1" }), titleZh: null, summary: null,
+    verification: "title-only", editorDiagnostics: null, abstract: null, abstractZh: null });
+  show();
+  expect(await screen.findByText(/目前保留来源标题，中文导读暂缺/)).toBeInTheDocument();
+  expect(screen.queryByText(/数字未能与来源对应/)).not.toBeInTheDocument();
+});

@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage, verifyCompactWorkflowViews } from "../../../scripts/ops/ui-walk.mjs";
+import { compositionFindings, familyFindings, forgetProjectChoice, measureComposition, scrollPage, verifyCompactWorkflowViews, memoryReady, addressProbe, addressStateFindings, ADDRESS_CASES, moduleViewLabels, verifyModuleNavigation, walkMemoryMap, moduleReady, waitMemory, moduleResultProbe, readModuleResult, moduleViewAddressHolds, walkCalculationTaskFamily, rowClickShown, calculationFamilyMethodIds } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -41,9 +41,9 @@ const CSS = `
   @media (max-width:600px){header{padding:24px 16px 0} [data-page-chrome]{margin:0;padding:0 16px} [data-page-body]{margin:0 16px}}
 `;
 
-const rail = (count = 8) => `<nav data-step-rail aria-label="进度"><ol>${Array.from({ length: count }, (_, index) => `<li data-rail-step="s${index}" data-rail-state="todo"><span>第${index + 1}步</span></li>`).join("")}</ol></nav>`;
+const rail = (count = 8) => `<nav data-step-rail aria-label="进度"><ol>${Array.from({ length: count }, (_, index) => `<li data-rail-step="s${index}" data-rail-state="todo"><a href="/step/${index}">第${index + 1}步<span class="text-caption">未开始</span></a></li>`).join("")}</ol></nav>`;
 const tabs = (labels, { dots = false, label = "项目视图", zero = [] } = {}) => `<div role="tablist" aria-label="${label}">${labels.map((text, index) => `<button role="tab" aria-selected="${index === 0}">${text}${dots && index > 0 ? '<span data-tab-dot="done" aria-hidden="true"></span>' : ""}${zero.includes(text) ? "<span>0</span>" : ""}</button>`).join("")}</div>`;
-const toolbar = (label = "筛选与操作", extra = "") => `<div data-toolbar role="group" aria-label="${label}"><button aria-pressed="false">引擎</button>${extra}</div>`;
+const toolbar = (label = "筛选与操作", extra = '<button aria-label="查看：总览">总览</button>') => `<div data-toolbar role="group" aria-label="${label}"><button aria-pressed="false">引擎</button>${extra}</div>`;
 const rows = (count, prefix = "行") => `<table>${Array.from({ length: count }, (_, index) => `<tr><td>${prefix}${index + 1}</td></tr>`).join("")}</table>`;
 const TABS = ["总览", "可见度", "对照", "试验", "信源", "行动", "方案", "依据"];
 /** A framework page: header, band, body. `band` and `body` are HTML; `wrap` wraps the band (to make it sticky in a parent as short as itself). */
@@ -79,7 +79,7 @@ test("a framework page that is right is read as one and has nothing to say", { s
 });
 
 test("control after content: a toolbar below the table it filters and a chip group below the chart it switches are named", { skip }, async () => {
-  const below = await compose(framed({ band: rail() + tabs(TABS), body: section(`${rows(5)}${toolbar("试验先例的检索")}`) }));
+  const below = await compose(framed({ band: rail() + tabs(TABS) + toolbar(), body: section(`${rows(5)}${toolbar("试验先例的检索")}`) }));
   assert.deepEqual(rulesOf(below), ["control-after-content", "toggle-layers"].filter((rule) => rule !== "toggle-layers"));
   assert.match(textOf(below, "control-after-content")[0], /^geo-plan@desktop: \[control-after-content\] “试验先例的检索” \(at \d+ px\) stands after the table it controls \(at \d+ px\)$/);
   const chips = await compose(framed({ body: section(`<canvas></canvas><div role="group" aria-label="地图的视图"><button aria-pressed="true">关系</button><button aria-pressed="false">主题</button></div>`) }));
@@ -124,9 +124,9 @@ test("the band: sticky in its parent and held when the page moves; a band that s
 
 test("a module page without its steps is named; a rail on the page's own tab row of dots is steps", { skip }, async () => {
   const none = await compose(framed({ band: tabs(TABS) + toolbar(), body: section(rows(3)) }));
-  assert.match(textOf(none, "step-rail")[0], /^geo-plan@desktop: \[step-rail\] the compact workflow does not expose all eight steps/);
+  assert.match(textOf(none, "step-rail")[0], /^geo-plan@desktop: \[step-rail\] the module must show all 8 workflow steps/);
   const dotted = await compose(framed({ band: tabs(["总览", "人群", "患者", "对照", "试验", "匹配", "数据"], { dots: true, label: "研究视图" }) + toolbar(), body: section(rows(3)) }), { name: "vcr-trial" });
-  assert.deepEqual(textOf(dotted, "step-rail"), []);
+  assert.ok(textOf(dotted, "step-rail").length > 0, "tabs cannot replace the seven visible steps");
   assert.deepEqual(dotted.facts.tablists.map((entry) => [entry.tabs, entry.dots]), [[7, 6]]);
   const folded = await compose(framed({ band: `<nav data-step-rail aria-label="进度"><button aria-label="进度：已完成 3/8 步">已完成 3/8 步</button></nav>${tabs(TABS)}${toolbar()}`, body: section(rows(3)) }), { viewport: "phone" });
   assert.deepEqual([folded.facts.stepRail.folded, folded.facts.stepRail.count], [true, 8], "a phone's folded rail still says how many steps there are");
@@ -238,7 +238,7 @@ test("a module's tabs read in the browser show the same steps at the same height
   const fewer = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility", { count: 7 }), await tab("geo-plan")]);
   assert.equal(familyFindings(fewer)[0].text, "geo@desktop: the steps are not the same on every tab: geo-overview 8, geo-visibility 7, geo-plan 8");
   const lower = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility"), ["geo-plan@desktop", { composition: (await compose(framed({ band: rail() + tabs(TABS), body: section(rows(2)) }).replace("[data-step-rail]{height:40px}", "[data-step-rail]{height:88px}"), { name: "geo-plan" })).facts }]]);
-  assert.match(familyFindings(lower).map((entry) => entry.text).join("\n"), /geo@desktop: the tab row stands at a different height on some tabs: geo-overview \d+ px, geo-visibility \d+ px, geo-plan \d+ px/);
+  assert.match(familyFindings(lower).map((entry) => entry.text).join("\n"), /geo@desktop: the band is not the same height on every tab:/);
 });
 
 test("a page that scrolled itself on load is read from its top and put back where it was", { skip }, async () => {
@@ -278,7 +278,7 @@ test("the project the app remembers is forgotten at the start of every document,
   try {
     await context.addInitScript(forgetProjectChoice);
     const tab = await context.newPage();
-    await tab.route("http://walk.test/**", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>x</title>" }));
+    await tab.route("http://walk.test/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<!doctype html><title>x</title>" }));
     await tab.goto("http://walk.test/a");
     // The app's own words for it (apiClient.ts), as a click into a study sets them, and a setting of the app's that is not the project.
     await tab.evaluate(() => { const page = globalThis; page.sessionStorage.setItem("openScience.projectId", "p-study"); page.localStorage.setItem("openScience.projectId", "p-study"); page.localStorage.setItem("openScience.theme", "dark"); });
@@ -294,13 +294,13 @@ test("the compact workflow collector reads the progress menu and result selector
   for (const viewport of ["desktop", "phone"]) {
     const read = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="查看：总览">总览</button>'), body: section(rows(3)) + LONG }), { viewport });
     assert.deepEqual(read.facts.compactWorkflow, { count: 8, views: true, folded: false, inChrome: true });
-    assert.ok(!rulesOf(read).includes("step-rail"));
+    assert.ok(rulesOf(read).includes("step-rail"), "compact progress cannot replace the visible rail");
     if (viewport === "phone") {
       const folded = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="筛选，已选 1 项">筛选</button>'), body: section(rows(3)) + LONG }), { viewport });
       assert.deepEqual(folded.facts.compactWorkflow, { count: 8, views: false, folded: true, inChrome: true });
       assert.ok(rulesOf(folded).includes("chrome"), "a folded trigger alone does not certify its destinations");
     }
-    const absent = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar(), body: section(rows(3)) + LONG }), { viewport });
+    const absent = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", ""), body: section(rows(3)) + LONG }), { viewport });
     assert.ok(rulesOf(absent).includes("chrome"));
   }
 });
@@ -317,4 +317,280 @@ test("the folded workflow probe opens the menu, checks all destinations and clos
   await assert.rejects(verifyCompactWorkflowViews(page), /Timeout/);
   page.setDefaultTimeout(30_000);
   assert.equal(await page.getByRole("menu", { name: "筛选" }).isVisible(), false, "a failed destination check also restores the menu");
+});
+
+// These browser fixtures deliberately mount controls before data, as the real MemoryFrame does.
+test("memory readiness waits for data, distinguishes errors, and requires the addressed controls", { skip }, async () => {
+  await page.route("http://memory.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">关于你</button></div><input type="search" aria-label="搜索记忆"><div data-page-body><div class="animate-pulse">Loading</div></div></main>' }));
+  await page.goto("http://memory.walk/app/memory?tab=self");
+  assert.equal(await page.evaluate(memoryReady, { map: false, selected: "关于你" }), false);
+  await page.evaluate(() => { setTimeout(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<ul><li><button data-row-title="A">A</button></li></ul>'; }, 50); });
+  await page.waitForFunction(memoryReady, { map: false, selected: "关于你" });
+  assert.equal(await page.evaluate(memoryReady, { map: true }), false);
+  assert.equal(await page.evaluate(memoryReady, { map: false, selected: "项目" }), false);
+  await page.evaluate(() => { globalThis.document.querySelector("input").setAttribute("aria-label", "搜索记忆地图"); });
+  assert.equal(await page.evaluate(memoryReady, { map: false }), false);
+  await page.evaluate(() => {
+    globalThis.document.querySelector("input").setAttribute("aria-label", "搜索记忆");
+    globalThis.document.querySelector("[data-page-body]").innerHTML = '<div role="alert">暂时读不到记忆。<button>重试</button></div>';
+  });
+  assert.equal(await page.evaluate(memoryReady, { map: false }), true, "error is terminal, not successful empty coverage");
+  assert.equal(await page.locator("main [role=alert]").count(), 1);
+  await assert.rejects(waitMemory(page, false), /memory data could not be read/);
+  assert.equal(await page.locator("[data-row-title]").count(), 0);
+  await page.unroute("http://memory.walk/**");
+});
+
+test("map addressed state checks query and view through Back and reload, and rejects parameter loss", { skip }, async () => {
+  const content = '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><div role="group" aria-label="地图的视图"><button aria-pressed="true">维度</button></div><input aria-label="搜索记忆地图" value="探针"><div data-page-body>Data</div></main>';
+  await page.route("http://map.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: content }));
+  await page.goto("http://map.walk/app/memory/map?view=dims&q=" + encodeURIComponent("探针"));
+  await page.waitForFunction(memoryReady, { map: true, selected: "地图", query: "探针" });
+  const first = await page.evaluate(addressProbe, ["memory-map"]);
+  await page.goto("http://map.walk/app/capabilities");
+  await page.goBack();
+  const back = await page.evaluate(addressProbe, ["memory-map"]);
+  await page.reload();
+  const reload = await page.evaluate(addressProbe, ["memory-map"]);
+  const chosen = ADDRESS_CASES.find((entry) => entry.page === "memory-map");
+  const read = { pressed: [true], first, away: "/app/capabilities", back, reload };
+  assert.deepEqual(addressStateFindings(chosen, read), { failures: [], notices: [] });
+  assert.ok(addressStateFindings(chosen, { ...read, reload: { ...reload, search: "", query: "" } }).notices.length >= 2);
+  await page.unroute("http://map.walk/**");
+});
+
+function moduleFixture(module, { programme = true, canonical = false, omit = "", duplicate = false, missingRail = false, collapsed = false } = {}) {
+  const labels = moduleViewLabels(module, programme, canonical).filter((label) => label !== omit);
+  const count = module === "geo" ? 8 : 7;
+  const base = module === "geo" ? "/app/geo/study" : programme ? "/app/virtual-research/study" : "/app/capabilities/calculations/study";
+  const resultKeys = Object.fromEntries((module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"]).map((label, index) => [label, (module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"])[index]]));
+  const visit = `<script>function visit(label){const from=new URL(location.href);const key=${JSON.stringify(resultKeys)}[label];const base=${JSON.stringify(base)};let target;if(${JSON.stringify(module)}==='vcr'){target=label==='对话'?'/app/virtual-research/study/chat':base+(key==='overview'?'':'/'+key)}else{const part=from.pathname.slice(base.length).split('/')[1];const previous=part==='chat'?from.searchParams.get('result')||'overview':part||'overview';if(label==='对话'){const params=new URLSearchParams(from.search);params.set('result',previous);target=base+'/chat/ses-canonical?'+params}else{const params=new URLSearchParams();params.set('session',from.searchParams.get('session')||'ses-canonical');if(from.searchParams.has('step'))params.set('step',from.searchParams.get('step'));if(key===previous&&from.searchParams.has('view'))params.set('view',from.searchParams.get('view'));target=base+(key==='overview'?'':'/'+key)+'?'+params}}history.pushState({},'',target)}</script>`;
+  const railMarkup = !programme || missingRail ? "" : `<nav data-step-rail><ol style="display:flex;width:350px;overflow-x:auto">${Array.from({ length: count }, (_, i) => `<li data-rail-step="s${i}" data-rail-state="todo"><a style="display:block;min-width:140px" href="${base}?${module === "geo" ? "session=ses-canonical&" : ""}step=s${i}" onclick="event.preventDefault();history.pushState({},'',this.href);globalThis.document.querySelectorAll('[aria-current]').forEach(e=>e.removeAttribute('aria-current'));this.setAttribute('aria-current','step')">Step ${i}<span class="text-caption">未开始</span></a></li>`).join("")}</ol></nav>`;
+  return `<main><div data-page-chrome>${railMarkup}<button aria-label="${collapsed ? "筛选" : "查看：总览"}" onclick="globalThis.document.querySelector('[role=menu]').hidden=false">查看</button>${duplicate ? '<button aria-label="查看：重复">重复</button>' : ""}<div hidden role="menu">${labels.map((label) => `<button role="menuitemradio" onclick="visit(this.textContent);globalThis.document.querySelector('button[aria-label]').setAttribute('aria-label','查看：'+this.textContent);this.parentElement.hidden=true">${label}</button>`).join("")}</div></div><div data-page-body><table><tr><td>Result</td></tr></table></div></main>${visit}`;
+}
+
+test("module navigation clicks every visible rail and programme result on desktop and a scrolling phone rail", { skip }, async () => {
+  for (const module of ["geo", "vcr"]) for (const width of [1512, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.route("http://module.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: moduleFixture(module) }));
+    await page.goto(`http://module.walk/app/${module === "geo" ? "geo" : "virtual-research"}/study`);
+    const read = await verifyModuleNavigation(page, module);
+    assert.equal(read.destinations.length, module === "geo" ? 8 : 7);
+    assert.deepEqual(read.views.map((entry) => entry.label), moduleViewLabels(module));
+    await page.unroute("http://module.walk/**");
+  }
+});
+
+test("module navigation rejects missing rails, duplicate selectors and omitted programme destinations", { skip }, async () => {
+  for (const defect of [{ missingRail: true }, { duplicate: true }, { collapsed: true }, { omit: "虚拟患者" }, { omit: "对照" }, { omit: "试验" }]) {
+    await page.route("http://module.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: moduleFixture("vcr", defect) }));
+    await page.goto("http://module.walk/app/virtual-research/study");
+    await assert.rejects(verifyModuleNavigation(page, "vcr"), /distinct steps|unique pinned|omits or adds/);
+    await page.unroute("http://module.walk/**");
+  }
+});
+
+test("calculation result choices include conversation only with its canonical session", { skip }, async () => {
+  for (const canonical of [false, true]) {
+    await page.route("http://module.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: moduleFixture("vcr", { programme: false, canonical }) }));
+    await page.goto("http://module.walk/app/capabilities/calculations/study");
+    const read = await verifyModuleNavigation(page, "vcr", { programme: false, canonical });
+    assert.deepEqual(read.views.map((entry) => entry.label), [...(canonical ? ["对话"] : []), "总览", "定义与证据", "人群", "匹配与招募"]);
+    await page.unroute("http://module.walk/**");
+  }
+});
+
+
+test("twelve unfiltered map marks retain exact drawer identity through reload, Back and Close; zero is not coverage", { skip }, async () => {
+  const html = (count) => `<meta charset="utf-8"><main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><div data-page-body><ul aria-label="标记">${Array.from({ length: count }, (_, i) => `<li><button data-row-title="Mark ${i}" onclick="history.pushState({},'', '?open=record:m${i}');render()">Mark ${i}</button></li>`).join("")}</ul></div><div id="drawer"></div></main><script>function render(){const host=globalThis.document.querySelector('#drawer');host.replaceChildren();if(new URLSearchParams(location.search).has('open')){const dialog=globalThis.document.createElement('div');dialog.setAttribute('role','dialog');const close=globalThis.document.createElement('button');close.textContent='关闭';close.onclick=()=>{history.replaceState({},'',location.pathname);render()};dialog.append(close);host.append(dialog)}}addEventListener('popstate',render);render()</script>`;
+  for (const count of [12, 0]) {
+    await page.route("http://marks.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html(count) }));
+    const result = await walkMemoryMap(page, "http://marks.walk", "/app/memory/map");
+    if (count) {
+      assert.deepEqual(result.failures, []);
+      assert.equal(result.read.rows, 12);
+      assert.equal(result.read.opened.open, "record:m0");
+      assert.equal(result.read.reload.open, "record:m0");
+      assert.equal(result.read.reopened.open, "record:m0");
+      assert.equal(result.read.back.address, false);
+      assert.equal(result.read.closed.dialog, false);
+    } else assert.ok(result.notices.some((entry) => entry.includes("not observable")));
+    await page.unroute("http://marks.walk/**");
+  }
+});
+
+
+test("module readiness ignores a running-status dot in chrome but waits for selected result skeletons", { skip }, async () => {
+  await page.setContent('<main><div data-page-chrome><span data-forced-colors="preserve" class="animate-pulse">Running</span></div><div data-page-body><div class="animate-pulse">Loading result</div></div></main>');
+  assert.equal(await page.evaluate(moduleReady), false);
+  await page.evaluate(() => { globalThis.document.querySelector('[data-page-body]').textContent = 'Result'; });
+  assert.equal(await page.evaluate(moduleReady), true);
+});
+
+
+test("a selected result error, including a late failure after loading, never becomes navigation coverage", { skip }, async () => {
+  for (const late of [false, true]) {
+    const fixture = moduleFixture("vcr", { programme: false }).replaceAll('this.parentElement.hidden=true', 'this.parentElement.hidden=true;changeResult(this.textContent)');
+    const effect = `<script>function changeResult(label){if(label!=='人群')return;const body=globalThis.document.querySelector('[data-page-body]');body.innerHTML=${late ? "'<div class=animate-pulse>Loading</div>'" : "'<div role=alert>人群暂时无法读取。<button>重试</button></div>'"};${late ? "setTimeout(()=>{body.innerHTML='<div role=alert>人群暂时无法读取。<button>重试</button></div>'},70)" : ""}}</script>`;
+    await page.route("http://result.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: fixture + effect }));
+    await page.goto("http://result.walk/app/capabilities/calculations/study");
+    await assert.rejects(verifyModuleNavigation(page, "vcr", { programme: false }), /vcr view 人群: selected result could not be read/);
+    await page.unroute("http://result.walk/**");
+  }
+});
+
+test("empty and unobservable module results are terminal but explicitly lack positive content coverage", { skip }, async () => {
+  for (const [body, status] of [['<div data-empty><p>还没有结果</p><button>开始</button></div>', 'empty'], ['', 'unobservable'], ['<table><tr><th>Column</th></tr></table>', 'unobservable']]) {
+    const fixture = moduleFixture("vcr", { programme: false }).replace('<table><tr><td>Result</td></tr></table>', body);
+    await page.route("http://result.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: fixture }));
+    await page.goto("http://result.walk/app/capabilities/calculations/study");
+    const read = await verifyModuleNavigation(page, "vcr", { programme: false });
+    assert.ok(read.views.every((view) => view.result.status === status && view.result.coverage === false));
+    assert.equal(read.notices.length, 4);
+    await page.unroute("http://result.walk/**");
+  }
+});
+
+test("retained partial scientific results survive a limited-source warning or failed refresh", { skip }, async () => {
+  for (const retry of [false, true]) {
+    await page.setContent(`<main><div data-page-body><div role="alert">${retry ? '这次没有读到最新的内容。<button>重试</button>' : '证据有限，请结合研究假设解释。'}</div><table><tr><td>Preserved estimate</td><td>1.3</td></tr></table></div></main>`);
+    const result = await readModuleResult(page, "retained analysis");
+    assert.equal(result.status, "partial");
+    assert.equal(result.coverage, true);
+    assert.equal(result.errors.length, retry ? 1 : 0);
+  }
+  await page.setContent('<main><div data-page-body><div data-state-screen role="alert"><div data-empty>读取失败</div></div></div></main>');
+  await assert.rejects(readModuleResult(page, "whole-page failure"), /terminal page failure/);
+  await page.setContent('<main><div data-page-body><div data-study-pane="conversation"><div data-frame-skeleton>正在打开</div></div></div></main>');
+  const native = await page.evaluate(moduleResultProbe);
+  assert.equal(native.status, "conversation");
+  assert.equal(native.coverage, false);
+  assert.match(native.boundary, /no runtime started/);
+  await page.setContent('<main><div data-page-body><iframe title="Data viewer"></iframe><div role="alert">结果无法读取<button>重试</button></div></div></main>');
+  await assert.rejects(readModuleResult(page, "unrelated viewer"), /selected result could not be read/);
+});
+
+
+test("a result selector cannot certify label-only navigation or sending every choice to the same result", { skip }, async () => {
+  for (const action of ['', "history.pushState({},'', '/app/virtual-research/study/data');"]) {
+    const fixture = moduleFixture("vcr").replaceAll('visit(this.textContent);', action);
+    await page.route("http://destination.walk/**", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: fixture }));
+    await page.goto("http://destination.walk/app/virtual-research/study");
+    await assert.rejects(verifyModuleNavigation(page, "vcr"), /selector label changed without reaching its canonical destination/);
+    await page.unroute("http://destination.walk/**");
+  }
+});
+
+test("module destination contracts retain GEO query context and addressed sessions, with supported overview aliases", { skip }, async () => {
+  const initial = 'https://walk.test/app/geo/g1';
+  const before = initial + '/accuracy?session=ses-a&step=diagnosis&view=claims';
+  assert.equal(moduleViewAddressHolds('geo', '对话', initial, before, initial + '/chat/ses-a?session=ses-a&step=diagnosis&view=claims&result=accuracy'), true);
+  assert.equal(moduleViewAddressHolds('geo', '对话', initial, before, initial + '/chat/ses-b?session=ses-a&step=diagnosis&view=claims&result=accuracy'), false);
+  assert.equal(moduleViewAddressHolds('geo', '对话', initial, before, initial + '/chat/ses-a?result=accuracy'), false);
+  assert.equal(moduleViewAddressHolds('geo', '问题与回答', initial, before, initial + '/questions?session=ses-a&step=diagnosis'), true);
+  assert.equal(moduleViewAddressHolds('geo', '问题与回答', initial, before, initial + '/questions?session=ses-a'), false);
+  assert.equal(moduleViewAddressHolds('geo', '总览', initial, before, initial + '/overview?session=ses-a&step=diagnosis'), true);
+  const vcr = 'https://walk.test/app/virtual-research/s1';
+  assert.equal(moduleViewAddressHolds('vcr', '总览', vcr, vcr + '/trial', vcr + '/overview'), true);
+  assert.equal(moduleViewAddressHolds('vcr', '试验', vcr, vcr + '/trial', vcr + '/trial'), true, 'reselecting the actual current result is allowed');
+  assert.equal(moduleViewAddressHolds('vcr', '对话', vcr, vcr, vcr + '/chat'), true);
+});
+
+test("only the measured main-area method workbench owns a named 44px sticky Run before configuration and results", { skip }, async () => {
+  const content = ({ orphan = false, below = false, offscreen = false, sticky = true, size = 44, unnamed = false, duplicate = false, covered = false } = {}) => {
+    const action = `<div data-vcr-run-actions style="position:${sticky ? "sticky" : "relative"};top:80px;background:white;z-index:5"><button class="bg-accent" style="height:${size}px">${unnamed ? "" : "保存配置并运行"}</button></div>`;
+    const targets = '<div data-vcr-method-configuration><form><label>Risk ratio<input value="1.5"></label></form><div style="height:1400px"></div></div><div data-vcr-method-results><table><tr><td>Preserved result</td></tr></table></div>';
+    return framed({ band: toolbar(), body: `${covered ? '<div style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.1)"></div>' : ""}<section ${orphan ? "" : "data-vcr-method-workbench"}><p>Purpose and required inputs.</p>${offscreen ? '<div style="height:1100px"></div>' : ""}${below ? targets + action : action + targets}${duplicate ? action : ""}</section>` });
+  };
+  for (const viewport of ["desktop", "phone"]) {
+    const good = await compose(content(), { name: "method-workbench", viewport });
+    assert.deepEqual(textOf(good, "primary-action"), []);
+    assert.equal(good.facts.primaries[0].run.height, 44);
+    assert.equal(good.facts.primaries[0].run.held.reachable, true);
+    for (const defect of [{ orphan: true }, { below: true }, { offscreen: true }, { sticky: false }, { size: 36 }, { unnamed: true }, { duplicate: true }, { covered: true }]) {
+      const bad = await compose(content(defect), { name: "method-workbench", viewport });
+      assert.ok(textOf(bad, "primary-action").length > 0, JSON.stringify(defect));
+    }
+    const ordinary = await compose(content(), { name: "capabilities", viewport });
+    assert.ok(textOf(ordinary, "primary-action").length > 0, "marking an arbitrary page does not grant the workbench contract");
+  }
+});
+
+
+test("the declared method workbench requires its Run bar and named primary even when they disappear entirely", { skip }, async () => {
+  for (const viewport of ["desktop", "phone"]) {
+    for (const controls of ["", '<div data-vcr-run-actions>Run unavailable</div>', '<div data-vcr-run-actions><button>保存配置并运行</button></div>']) {
+      const html = framed({ band: toolbar(), body: `<section data-vcr-method-workbench>${controls}<div data-vcr-method-configuration>Configuration</div><div data-vcr-method-results>Results</div></section>` });
+      const broken = await compose(html, { name: "method-workbench", viewport });
+      assert.ok(textOf(broken, "primary-action").some(text => text.includes("must expose one Run action bar and one named primary action")));
+      const optional = await compose(html, { name: "capabilities", viewport });
+      assert.deepEqual(textOf(optional, "primary-action"), [], "ordinary pages retain optional primary actions");
+    }
+  }
+});
+
+
+function calculationTaskFixture(defect = "") {
+  const family = ["consolidated", "raw-patient-id"].includes(defect) ? "模拟患者结局" : "查看数据与构建人群";
+  const methodId = defect === "wrong-family" ? "mth_comparator" : defect === "unknown-method" ? "mth_unknown" : defect === "consolidated" ? "patient-outcomes" : defect === "raw-patient-id" ? "mth_binary" : "mth_fixture";
+  const list = `<div data-vcr-method-catalogue><ul aria-label="${defect === "wrong-list" ? "其他任务" : family}"><li><button data-vcr-method="${methodId}" onclick="openMethod()">方法一</button></li>${defect === "wrong-family-tail" ? '<li><button data-vcr-method="mth_comparator" onclick="openMethod()">Wrong-family method</button></li>' : ""}</ul></div>`;
+  return `<meta charset="utf-8"><main><div data-page-chrome><button aria-label="计算任务：全部">全部</button></div><ul aria-label="选择计算任务"><li><button data-row-title onclick="choose()">${family}</button></li></ul><div id="methods"></div><div id="pane"></div></main><script>
+    function choose(){${defect === "no-op" ? "return;" : ""}globalThis.document.querySelector('[data-page-chrome] button').setAttribute('aria-label',${JSON.stringify(`计算任务：${family}`)});globalThis.document.querySelector('ul[aria-label="选择计算任务"]').remove();globalThis.document.querySelector('#methods').innerHTML=${JSON.stringify(list)}}
+    function openMethod(){${defect === "dead-method" ? "return;" : ""}history.pushState({},'',${JSON.stringify(`/app/capabilities/methods/${defect === "wrong-method" ? "mth_wrong" : methodId}?study=${defect === "wrong-study" ? "study-foreign" : "study-a"}`)});globalThis.document.querySelector('#pane').innerHTML='<section data-vcr-method-workbench>Configuration and result</section>'}
+  </script>`;
+}
+
+const taskCatalogue = { methods: [
+  { id: "mth_fixture", method: "profile.snapshot", name: "Profile" },
+  { id: "mth_comparator", method: "comparator.evalue", name: "E-value" },
+  ...["binary", "continuous", "time_to_event", "longitudinal"].map(mode => ({ id: `mth_${mode}`, method: `patients.${mode}`, name: mode })),
+] };
+const taskRoute = (defect) => (route) => new URL(route.request().url()).pathname === "/api/vcr/models"
+  ? route.fulfill({ json: { data: taskCatalogue } }) : route.fulfill({ contentType: "text/html; charset=utf-8", body: calculationTaskFixture(defect) });
+
+test("calculation task rows must choose their matching methods and open the exact method in the same study", { skip }, async () => {
+  for (const defect of ["", "no-op", "wrong-list", "wrong-study", "wrong-method", "dead-method"]) {
+    await page.route("http://task.walk/**", taskRoute(defect));
+    await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+    if (!defect) {
+      const result = await walkCalculationTaskFamily(page, { timeout: 500 });
+      assert.equal(result.family, "查看数据与构建人群");
+      assert.deepEqual(result.methodIds, ["mth_fixture"]);
+      assert.equal(result.address, "/app/capabilities/methods/mth_fixture?study=study-a");
+    } else await assert.rejects(walkCalculationTaskFamily(page, { timeout: 200 }), /matching method list|exact method and study destination/);
+    await page.unroute("http://task.walk/**");
+  }
+  assert.equal(rowClickShown({ dialog: false, path: "/list", expanded: 0 }, { dialog: false, path: "/list", expanded: 0 }, 0), false, "generic inert record rows remain failures");
+});
+
+test("discovery and calculation workspaces have separate width families while genuine list siblings still align", { skip }, async () => {
+  const html = framed({ band: toolbar(), body: section(rows(2)) });
+  const narrow = html.replace("header{height:60px;padding:24px 296px 0}", "header{height:60px;padding:24px 376px 0}");
+  const discovery = (await compose(narrow, { name: "capabilities" })).facts;
+  const calculation = (await compose(html, { name: "calculation-history" })).facts;
+  assert.equal(discovery.title.left - calculation.title.left, 80);
+  assert.deepEqual(familyFindings({ "capabilities@desktop": { composition: discovery }, "calculation-history@desktop": { composition: calculation } }), []);
+  assert.ok(familyFindings({ "files@desktop": { composition: discovery }, "knowledge-pages@desktop": { composition: calculation } }).some(entry => entry.rule === "left-edge"));
+});
+
+
+test("correctly named task lists reject working methods from another semantic family, including a wrong second method", { skip }, async () => {
+  for (const defect of ["wrong-family", "wrong-family-tail", "unknown-method", "raw-patient-id", "consolidated"]) {
+    await page.route("http://task.walk/**", taskRoute(defect));
+    await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+    if (defect === "consolidated") {
+      const result = await walkCalculationTaskFamily(page, { timeout: 500 });
+      assert.deepEqual(result.methodIds, ["patient-outcomes"]);
+      assert.equal(result.address, "/app/capabilities/methods/patient-outcomes?study=study-a");
+    } else await assert.rejects(walkCalculationTaskFamily(page, { timeout: 200 }), /unknown or wrong-family catalogue methods/);
+    await page.unroute("http://task.walk/**");
+  }
+  await page.route("http://task.walk/**", route => new URL(route.request().url()).pathname === "/api/vcr/models"
+    ? route.fulfill({ status: 401, json: { error: "authentication required" } }) : route.fulfill({ contentType: "text/html; charset=utf-8", body: calculationTaskFixture() }));
+  await page.goto("http://task.walk/app/capabilities/calculations/study-a");
+  await assert.rejects(walkCalculationTaskFamily(page), /catalogue could not be read \(HTTP 401\)/);
+  await page.unroute("http://task.walk/**");
+  assert.deepEqual(calculationFamilyMethodIds(taskCatalogue, "查看数据与构建人群"), ["mth_fixture"]);
+  assert.ok(calculationFamilyMethodIds(taskCatalogue, "稳健性分析").includes("mth_comparator"));
+  assert.deepEqual(calculationFamilyMethodIds(taskCatalogue, "模拟患者结局").filter(id => id.startsWith("patient")), ["patient-outcomes"]);
 });

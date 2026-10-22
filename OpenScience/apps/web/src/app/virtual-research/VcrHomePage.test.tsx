@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readStudyBrief, studyBriefKey } from "@/lib/vcrStudyBrief";
 import { WebApiError } from "@/lib/apiClient";
 import { fixture, installVcrServer } from "@/components/vcr/__fixtures__/serverFixtures";
 import { VcrHomePage } from "./VcrHomePage";
@@ -57,11 +58,12 @@ const pageHeader = () => within(screen.getByRole("heading", { level: 1, name: "�
 let server: ReturnType<typeof installVcrServer>;
 
 beforeEach(() => {
+  window.localStorage.clear();
   server = installVcrServer(network.productRequest, {
     "POST /vcr/studies": { id: "std_9", projectId: "prj_new", sessionId: "ses_9", status: "draft" },
   });
   me.fetchWebMe.mockReset();
-  me.fetchWebMe.mockResolvedValue({ features: { vcr: true } });
+  me.fetchWebMe.mockResolvedValue({ user: { id: "brief-user" }, features: { vcr: true } });
   toasts.error.mockReset();
   store.select.mockClear();
   store.load.mockClear();
@@ -87,6 +89,15 @@ describe("the module being off for this account", () => {
 });
 
 describe("the home page", () => {
+  it("opens a lightweight local brief without allocating a project", async () => {
+    draw();
+    await screen.findByRole("link", { name: EV201 });
+    await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
+    expect(await screen.findByRole("textbox", { name: "研究问题" })).toBeInTheDocument();
+    expect(server.calls.filter(call => call.method === "POST")).toHaveLength(0);
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
   it("has one way in — 新建研究 — and none of the four action cards or the box of recent reviews", async () => {
     draw();
     await screen.findByRole("link", { name: EV201 });
@@ -101,16 +112,15 @@ describe("the home page", () => {
   it("has the four views, in the order the plan names them, and the list is the first", async () => {
     draw();
     await screen.findByRole("link", { name: EV201 });
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["研究2", "方法库", "参考试验", "人群定义"]);
-    expect(screen.getByRole("tab", { name: /^研究/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("list", { name: "研究" })).toBeInTheDocument();
   });
 
   it("puts the views, the filters and the search in the one toolbar above the list they act on, and has no second row of tabs", async () => {
     draw();
     await screen.findByRole("link", { name: EV201 });
     const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
-    expect(document.querySelectorAll("[role=tablist]")).toHaveLength(1);
-    expect(toolbar).toContainElement(screen.getByRole("tablist"));
+    expect(document.querySelectorAll("[role=tablist]")).toHaveLength(0);
     expect(toolbar).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
     const list = screen.getByRole("list", { name: "研究" });
     expect(toolbar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -265,24 +275,18 @@ describe("the study list", () => {
     cleanup();
     server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
     draw("/app/virtual-research?tab=models");
-    await screen.findByRole("tab", { name: /方法库/ });
+    await screen.findByRole("list", { name: "选择计算任务" });
     await waitFor(() => expect(pageHeader().queryByRole("button", { name: "新建研究" })).toBeNull());
     expect(screen.queryByRole("button", { name: "新建研究" })).toBeNull();
   });
 
   it("creates the first study from the empty state and lands in the study's conversation view", async () => {
-    server = installVcrServer(network.productRequest, {
-      "GET /vcr/studies": { studies: [], draftProjectIds: [] },
-      "POST /vcr/studies": { id: "std_9", projectId: "prj_new", sessionId: "ses_9", status: "draft" },
-    });
-    draw();
-    // The header's button stands until the empty state has taken its place: wait for the state before pressing.
-    await screen.findByText("还没有研究");
-    // A tab that counts nothing does not say 0: the number is for a list with something in it.
-    expect(screen.getAllByRole("tab")[0].textContent).toBe("研究");
+    server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
+    draw(); await screen.findByText("还没有研究");
     await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
-    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === "/vcr/studies")).toBe(true));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_9/chat"));
+    expect(await screen.findByRole("textbox", { name: "研究问题" })).toBeInTheDocument();
+    expect(server.calls.filter(call => call.method === "POST")).toHaveLength(0);
+    expect(screen.getByTestId("location")).toHaveTextContent("?new=1");
   });
 
   it("offers 重试 when the list cannot be read", async () => {
@@ -302,35 +306,31 @@ describe("the study list", () => {
 describe("新建研究", () => {
   // None of it opens a form (plan §9.3): the study is made as a draft and its conversation view opens with the step bar above it.
   it("makes a study with nothing said about it, tells the sidebar it is a draft, moves the shell to its project and lands in the study's own page — not the chat surface", async () => {
-    draw();
-    await screen.findByRole("link", { name: EV201 });
+    draw(); await screen.findByRole("link", { name: EV201 });
     await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies", "POST", {}));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_9/chat"));
-    expect(screen.getByTestId("location")).not.toHaveTextContent("/app/chat");
-    expect(sidebar.hint).toHaveBeenCalledWith("prj_new", "std_9");
-    expect(sidebar.changed).toHaveBeenCalled();
-    expect(store.select).toHaveBeenCalledWith("prj_new", expect.any(Function));
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await screen.findByRole("textbox", { name: "研究问题" });
+    expect(network.productRequest.mock.calls.filter(call => call[1] === "POST")).toHaveLength(0);
+    expect(store.select).not.toHaveBeenCalled(); expect(sidebar.hint).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
   });
 
   it("says so when the study could not be made, and stays", async () => {
-    server = installVcrServer(network.productRequest, {
-      "POST /vcr/studies": () => { throw new WebApiError("no", { status: 409, code: "project_limit_reached" }); },
-    });
-    draw();
-    await screen.findByRole("link", { name: EV201 });
-    await userEvent.click(screen.getByRole("button", { name: "新建研究" }));
-    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
-    expect(sidebar.hint).not.toHaveBeenCalled();
+    server = installVcrServer(network.productRequest, { "POST /vcr/studies": () => { throw new WebApiError("no", { status: 409, code: "project_limit_reached" }); } });
+    draw("/app/virtual-research?new=1");
+    const input = await screen.findByRole("textbox", { name: "研究问题" });
+    await userEvent.type(input, "一个待保存的问题");
+    await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await screen.findByRole("status");
+    expect(input).toHaveValue("一个待保存的问题");
+    expect(store.select).not.toHaveBeenCalled(); expect(sidebar.hint).not.toHaveBeenCalled();
   });
 });
 
 describe("the home's other views", () => {
   it("keeps the chosen view in the address and reads the model library there, under the name 方法库", async () => {
     draw("/app/virtual-research?tab=models");
-    expect(await screen.findByRole("tab", { name: "方法库" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("list", { name: "选择计算任务" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).toBeNull();
     await waitFor(() => expect(server.calls.some((call) => call.path === "/vcr/models")).toBe(true));
     expect(await screen.findByRole("button", { name: /二线 NSCLC 多西他赛组 PFS · Weibull/ })).toBeInTheDocument();
     // The study list is not on this view, and neither is its search box.
@@ -344,34 +344,94 @@ describe("the home's other views", () => {
     expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
   });
 
-  // The page has one row of controls (DESIGN.md rule 7): the libraries hand theirs to it instead of drawing a second under it.
-  it("puts 方法库's tier chips, count and 引入文献模型 in the page's one toolbar, beside the views", async () => {
+  // Legacy library links retain the shared task catalogue and keep source actions in their own context.
+  it("keeps one view toolbar above the compatibility task catalogue and preserves contextual source actions", async () => {
     draw("/app/virtual-research?tab=models");
-    await screen.findByRole("button", { name: /二线 NSCLC 多西他赛组 PFS · Weibull/ });
+    const tasks = await screen.findByRole("list", { name: "选择计算任务" });
     const toolbars = document.querySelectorAll("[data-toolbar]");
     expect(toolbars).toHaveLength(1);
-    expect(toolbars[0]).toContainElement(screen.getByRole("tablist"));
-    expect(toolbars[0]).toContainElement(screen.getByRole("button", { name: "引入文献模型" }));
-    expect(toolbars[0]).toHaveTextContent(/\d+ 个模型/);
-    // And it is above the list it acts on.
-    expect(toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "模型" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(toolbars[0].compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(screen.getByText("文献参数与模型来源"));
+    expect(toolbars[0]).not.toContainElement(screen.getByRole("button", { name: "使用文献参数" }));
+    const models = screen.getByRole("list", { name: "保存的参数与模型" });
+    expect(models.children).toHaveLength(fixture("ev201/models.json").models.length);
   });
 
-  it("puts 参考试验's search in the same one toolbar, and takes 方法库's controls away when the view changes", async () => {
-    draw("/app/virtual-research?tab=models");
-    await screen.findByRole("button", { name: "引入文献模型" });
-    await userEvent.click(screen.getByRole("tab", { name: "参考试验" }));
+  it("puts reference search in the one toolbar and removes the previous library's contextual actions when switching views", async () => {
+    const current = draw("/app/virtual-research?tab=models");
+    await userEvent.click(await screen.findByText("文献参数与模型来源"));
+    expect(screen.getByRole("button", { name: "使用文献参数" })).toBeInTheDocument();
+    current.unmount(); draw("/app/virtual-research?tab=precedents");
     expect(await screen.findByText("CTR20990001")).toBeInTheDocument();
     const toolbars = document.querySelectorAll("[data-toolbar]");
     expect(toolbars).toHaveLength(1);
-    expect(toolbars[0]).toContainElement(screen.getByRole("tablist"));
     expect(toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索登记试验" }));
-    expect(screen.queryByRole("button", { name: "引入文献模型" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "使用文献参数" })).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 
   it("calls the definitions' view 人群定义", async () => {
     draw("/app/virtual-research?tab=definitions");
-    expect(await screen.findByRole("tab", { name: "人群定义" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("还没有人群定义")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "回到研究列表" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "人群定义库" })).toBeNull();
   });
+});
+
+it("keeps valid live search results separate from an empty saved library", async () => {
+  installVcrServer(network.productRequest, {
+    "GET /vcr/precedents": { available: true, precedents: [], registryCoverage: [] },
+    "GET /vcr/precedents/search": { status: "ok", candidates: [{ registry: "clinicaltrials.gov", registryId: "NCT_LIVE", title: "Live registry result" }], registries: [{ registry: "clinicaltrials.gov", status: "ok", total: 200 }] },
+  });
+  draw("/app/virtual-research?tab=precedents");
+  const input = await screen.findByRole("searchbox", { name: "搜索登记试验" });
+  await userEvent.type(input, "diabetes{Enter}");
+  expect(await screen.findByText("NCT_LIVE")).toBeInTheDocument();
+  expect(screen.queryByText("尚未保存参考试验")).toBeNull();
+  expect(screen.queryByText("没有找到已保存的参考试验")).toBeNull();
+});
+
+it("does not select or navigate after leaving while the accepted Start waits for project loading", async () => {
+  let loaded!: () => void;
+  store.load.mockImplementationOnce(() => new Promise<undefined>(resolve => { loaded = () => resolve(undefined); }));
+  installVcrServer(network.productRequest, {
+    "POST /vcr/studies": { id: "std_late", projectId: "prj_not_loaded", status: "draft" },
+    "POST /vcr/studies/std_late/start": { studyId: "std_late", sessionId: "canonical", runId: "run_late", status: "succeeded", dispatchStatus: "accepted", errorCode: null, state: "awaiting_input" },
+  });
+  const page = draw("/app/virtual-research?new=1");
+  await userEvent.type(await screen.findByRole("textbox", { name: "研究问题" }), "等待载入项目的问题");
+  await userEvent.click(screen.getByRole("button", { name: "开始研究" }));
+  await waitFor(() => expect(store.load).toHaveBeenCalledOnce());
+  page.unmount(); loaded();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(store.select).not.toHaveBeenCalled();
+  expect(network.productRequest.mock.calls.filter(call => call[0].endsWith("/start"))).toHaveLength(1);
+});
+
+it.each([
+  { kind: "start", mode: "delayed" }, { kind: "data", mode: "delayed" },
+  { kind: "start", mode: "superseded" }, { kind: "data", mode: "superseded" },
+])("retains the original $kind record when project selection is $mode and never lands", async ({ kind, mode }) => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  store.select.mockImplementationOnce(async (_projectId, land) => {
+    if (mode === "delayed") { await pending; land?.(); }
+    // A superseded selection returns without invoking its landing callback.
+  });
+  installVcrServer(network.productRequest, {
+    "POST /vcr/studies": { id: "std_9", projectId: "prj_new", status: "draft" },
+    "POST /vcr/studies/std_9/start": { studyId: "std_9", sessionId: "canonical", runId: "run_retained", status: "succeeded", dispatchStatus: "accepted", errorCode: null, state: "awaiting_input" },
+  });
+  const page = draw("/app/virtual-research?new=1");
+  await userEvent.type(await screen.findByRole("textbox", { name: "研究问题" }), "保留未交接的简述");
+  await userEvent.click(screen.getByRole("button", { name: kind === "start" ? "开始研究" : "保存草稿并接入研究数据" }));
+  await waitFor(() => expect(store.select).toHaveBeenCalledOnce());
+  if (mode === "delayed") { page.unmount(); release(); await new Promise(resolve => setTimeout(resolve, 0)); }
+  else await waitFor(() => expect(screen.getByRole("button", { name: kind === "start" ? "打开研究对话" : "保存草稿并接入研究数据" })).not.toBeDisabled());
+  const retained = readStudyBrief(studyBriefKey("brief-user", "brief-user"));
+  expect(retained?.fields.question).toBe("保留未交接的简述");
+  expect(retained?.remote?.id).toBe("std_9");
+  if (kind === "start") expect(retained?.request?.state).toBe("accepted");
+  expect(network.productRequest.mock.calls.filter(call => call[0].endsWith("/start"))).toHaveLength(kind === "start" ? 1 : 0);
 });

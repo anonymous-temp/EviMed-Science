@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   lease_until       timestamptz(3),
   updated_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS editor_diagnostics jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_doi_key ON evimed_frontier.items (lower(doi)) WHERE doi IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS frontier_items_identity_key ON evimed_frontier.items (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_items_url_idx ON evimed_frontier.items (md5(canonical_url));

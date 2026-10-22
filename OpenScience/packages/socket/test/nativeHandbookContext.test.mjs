@@ -5,14 +5,14 @@ import { apply } from '../plugins/capsule.mjs'
 import { sha256Hex } from '../src/digest.mjs'
 
 /** @param {import('node:test').TestContext} t */
-async function fixture(t) {
+async function fixture(t, omitRoutes = false) {
   /** @type {any[]} */ const calls = []
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk
     const body = JSON.parse(raw)
     // The current document selection is refreshed separately; these assertions track handbook receipts only.
     if (!req.url?.endsWith('/session')) calls.push({ path: req.url, body, token: req.headers.authorization })
-    const data = req.url?.endsWith('/handbook-context') ? { contexts: (body.inputs ?? []).map((/** @type {any} */ input) => ({ requestId: input.requestId, digest: 'd'.repeat(64), context: `Supplement ${input.requestId}` })) }
+    const data = req.url?.endsWith('/handbook-context') ? { ...(omitRoutes ? {} : { routes: body.inputs }), contexts: (body.inputs ?? []).map((/** @type {any} */ input) => ({ requestId: input.requestId, digest: 'd'.repeat(64), context: `Supplement ${input.requestId}` })) }
       : req.url?.endsWith('/handbook-attached') ? { attached: body.receipts.map((/** @type {any} */ item) => item.requestId) } : { context: '' }
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(data))
   })
@@ -20,13 +20,14 @@ async function fixture(t) {
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => resolve(undefined)) }))
   /** @type {Map<string,any>} */ const hooks = new Map()
   /** @type {string[]} */ const degraded = []
+  /** @type {Map<string,any>} */ const services = new Map()
   const ctx = {
     effect: (/** @type {any} */ fn) => fn(), on: (/** @type {string} */ event, /** @type {any} */ handler) => { const previous = hooks.get(event); hooks.set(event, previous ? (/** @type {any} */ payload, /** @type {any} */ next) => handler(payload, () => previous(payload, next)) : handler); return () => {} },
-    provide: () => {}, get: (/** @type {string} */ key) => key === 'fs' ? { resolve: async (/** @type {any} */ value) => value, readText: async () => 'fixture-workload' } : key === 'evimedDiagnostics' ? { degrade: (/** @type {string} */ text) => degraded.push(text) } : undefined,
+    provide: (/** @type {string} */ key, /** @type {any} */ value) => services.set(key, value), get: (/** @type {string} */ key) => key === 'fs' ? { resolve: async (/** @type {any} */ value) => value, readText: async () => 'fixture-workload' } : key === 'evimedDiagnostics' ? { degrade: (/** @type {string} */ text) => degraded.push(text) } : undefined,
     tools: { register: () => () => {} }, systemPrompt: { section: () => () => {} },
   }
   await apply(ctx, { methodsDir: '', recallUrl: `http://127.0.0.1:${/** @type {any} */ (server.address()).port}/internal/capsules/v1`, tokenFile: '/workload', recallTimeoutMs: 1000 })
-  return { calls, hooks, degraded }
+  return { calls, hooks, degraded, services }
 }
 /** @param {string} id @param {string} [text] @param {string} [kind] */
 const input = (id, text = id, kind = 'user') => ({ role: 'user', source: { kind, rpcId: id }, content: [{ type: 'text', text }] })
@@ -60,4 +61,23 @@ test('rejected steps, plugin messages and subagent inputs do not acknowledge nat
   assert.equal(f.calls.length, 1)
   await f.hooks.get('agent/pre-step')(payload, async () => ({ kind: 'enter', messages: payload.messages }))
   assert.equal(f.calls.length, 3, 'a later entering retry can attach the still-unconsumed request')
+})
+
+
+test('pre-assembly route service uses the workload-authenticated exact-input gateway', async t => {
+  const f = await fixture(t)
+  const resolve = f.services.get('evimedNativeRoute')
+  assert.equal(typeof resolve, 'function')
+  const inputs = [{ requestId: 'current', textDigest: await sha256Hex('current text') }]
+  const contexts = await resolve('session', inputs)
+  assert.deepEqual(f.calls[0].body, { sessionId: 'session', inputs })
+  assert.equal(f.calls[0].token, 'Bearer fixture-workload')
+  assert.equal(contexts[0].requestId, 'current')
+  assert.equal(f.calls.length, 1, 'route resolution alone does not acknowledge handbook attachment')
+})
+
+
+test('an older control plane without route metadata cannot grant native capabilities', async t => {
+  const f = await fixture(t, true)
+  assert.deepEqual(await f.services.get('evimedNativeRoute')('session', [{ requestId: 'current', textDigest: await sha256Hex('current') }]), [])
 })

@@ -98,7 +98,7 @@ describe("LoginPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => expect(mocks.loginWeb).toHaveBeenCalledWith("alice", "secret"));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/chat");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
   });
 
   // Design reference §16.3: signing in puts the reader back at the address they were sent away from.
@@ -142,18 +142,18 @@ describe("LoginPage", () => {
     it("uses the front door for a missing next and refuses every address that is not a page inside the app", async () => {
       renderLogin();
       await signIn();
-      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat$/));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/home$/));
       cleanup();
       for (const hostile of ["//evil.example/app/chat", "/\\evil.example", "https://evil.example/", "/settings", "/app/%2e%2e/login", "/app//evil.example", "javascript:alert(1)"]) {
         mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
         const { unmount } = renderLogin(`?next=${encodeURIComponent(hostile)}`);
-        await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat$/));
+        await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/home$/));
         unmount();
       }
       mocks.fetchWebMe.mockResolvedValue(null);
       mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "oidc", oidc: { label: "统一身份登录", startUrl: "/api/auth/oidc/start" } });
       renderLogin(`?next=${encodeURIComponent("//evil.example")}`);
-      expect(await screen.findByRole("link", { name: /统一身份登录/ })).toHaveAttribute("href", "/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
+      expect(await screen.findByRole("link", { name: /统一身份登录/ })).toHaveAttribute("href", "/api/auth/oidc/start?returnTo=%2Fapp%2Fhome");
     });
   });
 
@@ -181,7 +181,7 @@ describe("LoginPage", () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
     renderLogin();
 
-    expect(await screen.findByTestId("location")).toHaveTextContent("/app/chat");
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
   });
 
   // The server decides whether this deployment takes new accounts. Offering
@@ -205,7 +205,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => expect(mocks.registerWeb).toHaveBeenCalledWith("bob", "another correct horse"));
     expect(mocks.loginWeb).not.toHaveBeenCalled();
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/chat");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
   });
 
   // Each refusal has a different remedy, and a single "registration failed"

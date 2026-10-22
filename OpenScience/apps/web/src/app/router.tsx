@@ -20,12 +20,15 @@ import { RouteError } from "./routes/RouteError";
  * flight shows the shell with its navigation rather than a blank page.
  */
 const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").then((m) => ({ default: m.FrontierArticlePage })));
+const GlobalHomeRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.GlobalHomeRoute })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
+const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
@@ -75,7 +78,8 @@ export const routes: RouteObject[] = [
       // the conversation frame stay where they were.
       errorElement: <RouteError />,
       children: [
-        { index: true, element: <Navigate to="/app/chat" replace /> },
+        { index: true, element: <Navigate to="/app/home" replace /> },
+        { path: "home", element: <GlobalHomeRoute /> },
         // One route, with or without the conversation's id. Two route objects
         // made `/app/chat` → `/app/chat/:id` a remount, and the surface resumes
         // the last conversation on arrival, so every plain visit paid for one
@@ -140,6 +144,8 @@ export const routes: RouteObject[] = [
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
+        { path: "capabilities/methods/:methodId", element: <VcrMethodWorkbenchPage /> },
+        { path: "capabilities/calculations/:studyId/:tab?", element: <VcrCalculationWorkbenchPage /> },
         { path: "account", element: <AccountPage /> },
         // The simulated wallet's two commerce pages — 模拟充值 and 模拟订单 — at the
         // addresses the domain names (`SIMULATED_WALLET_PAGES`), which is where
@@ -178,7 +184,7 @@ export const routes: RouteObject[] = [
   ...(import.meta.env.PROD && import.meta.env.VITE_EVIMED_GALLERY !== "1"
     ? []
     : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
-  { path: "/", element: <Navigate to="/app/chat" replace /> },
+  { path: "/", element: <Navigate to="/app/home" replace /> },
   // The paths this shell used before it had a prefix. They were linked to from
   // runs, from notification mail and from people's bookmarks, and a redirect
   // costs one route each; dropping them would turn every one of those into a

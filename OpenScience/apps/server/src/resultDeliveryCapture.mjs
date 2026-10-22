@@ -127,9 +127,9 @@ function unreceiptedEntries(files, receipt) {
  * the bytes readable now — and before its siblings, so a report captured beside
  * it can bind its numbers to it. `transformationsFor` joins the script to the
  * dataset transformations N03 recorded for it.
- * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture" }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
@@ -178,10 +178,12 @@ export async function captureResultDelivery({ results, project, run, receipt = n
           } catch (error) { fail(relativePath, error); }
         }
         if (paths.length > MAX_SOURCES) fail(matrixFile.path, { code: "result_source_capture_limit" });
-        const verification = claimVerification({ matrix, sourceArtifacts });
+        const previous = await results.list(project.userId, { projectId: project.id, runId: run.id, limit: 100 });
+        const frozen = (previous.items ?? []).find(item => item.review?.status === "available" && item.review.verification && item.review.matrixDigest === matrixFile.sha256)?.review;
+        const verification = frozen?.verification ?? claimVerification({ matrix, sourceArtifacts });
         // Where each verified quotation sits in its source, frozen with the verdict
         // so a historical version shows the place it showed then. Best effort.
-        try { attachClaimSourceLocations(verification, { matrix, sourceArtifacts }); } catch { /* locations stay absent */ }
+        if (!frozen?.verification) try { attachClaimSourceLocations(verification, { matrix, sourceArtifacts }); } catch { /* locations stay absent */ }
         links = clinicalResultLinks(matrix, { capturedSources, verdict: verification });
         // Metadata bounds are advisory. The original matrix/report still get captured without an oversized join.
         if (links.inputs.length > 255 || Buffer.byteLength(JSON.stringify(links)) > 1024 * 1024) {
@@ -189,8 +191,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
         }
         matrixVersion = await results.captureFile({ userId: project.userId, project, relativePath: matrixFile.path,
           producer, expectedDigest: matrixFile.sha256, ...links, findings: [...links.findings, ...findings] });
-        review = { status: "available", matrixText: bytes.toString("utf8"), verification,
-          matrixVersionId: matrixVersion.versionId, matrixDigest: matrixVersion.digest };
+        review = await results.captureReview({ userId: project.userId, project, matrixVersion, verification, origin: frozen ? "legacy-capture" : reviewOrigin });
         items.push(matrixVersion);
       } catch (error) { fail(matrixFile.path, error); links = { inputs: [], findings: [] }; review = null; }
     }
@@ -253,9 +254,9 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  * `unreceipted` is off for the platform's own background projects, whose runs
  * are jobs rather than something a researcher was handed: what they got
  * captured before — the files a receipt vouches for — is all they get.
- * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string}} input
  */
-export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null }) {
+export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture" }) {
   const receipt = await readReceipt(project, run);
   const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
   if (!receipt && files.length === 0) return null;
@@ -274,7 +275,7 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
       if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
     }
   } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
-  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce });
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce, reviewOrigin });
   // Reports written while the run was still working were captured before its calculations existed.
   try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
   return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;

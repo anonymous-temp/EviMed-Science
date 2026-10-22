@@ -1,3 +1,4 @@
+import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
  * The six data tabs of a study page, presented (contract 2026-09-29 §5).
@@ -256,6 +257,7 @@ export function presentPopulationTab(bundle) {
     kind: (/** @type {Record<string, string>} */ (VCR_POPULATION_KIND_LABELS_ZH))[current.kind] ?? current.kind,
     versions: populations.map((/** @type {any} */ population) => ({
       id: population.id,
+      generationInput: vcrPopulationGenerationInput(population, resultById(bundle, population.resultId), executionOf(bundle, resultById(bundle, population.resultId))),
       label: `人群 v${population.version}`,
       stale: Boolean(markFor(stale, vcrObjectNode("population", population))),
       counts: countsView(population.counts, { tier: study.dataTier }),
@@ -570,7 +572,7 @@ function robustnessView(result, value) {
     .map((entry) => object(entry.regulatoryStatus)).find((status) => status.qualification !== undefined);
   const qualification = regulatory?.qualification === VCR_PROGNOSTIC_QUALIFICATION ? VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH : null;
   // `survival_difference_at_tau` is also the weighted comparators' own number; it is listed here only for a prognostic result.
-  const names = new Set([...VCR_ROBUSTNESS_MEASURES, ...(regulatory ? ["survival_difference_at_tau"] : [])]);
+  const names = new Set(["e_value", "e_value_confidence_limit", ...VCR_ROBUSTNESS_MEASURES, ...(regulatory ? ["survival_difference_at_tau"] : [])]);
   const rows = list(result.measures).filter((measure) => names.has(String(object(measure).name)))
     .map((measure) => ({ key: String(object(measure).name), label: measureLabel(String(object(measure).name)), value: value(measure) }));
   const notes = VCR_ROBUSTNESS_STAGES.flatMap((stage) => {
@@ -699,9 +701,14 @@ export function presentComparatorTab(bundle) {
   const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
   const tauWords = numeric(diagnostics.tau) !== null && echoedUnit ? `${diagnostics.tau} ${echoedUnit.after} ` : "";
   const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
+  // The owned execution identifies a sensitivity-only run. An E-value measure alongside
+  // another method's effect estimate must not relabel that comparison.
+  const sensitivityOnly = execution?.method === "comparator.evalue";
   return {
     headline: shown && conclusion && conclusion !== "not_estimable"
-      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
+      ? sensitivityOnly
+        ? `未测量混杂敏感性分析：${conclusion === "limited" ? "结果有限制" : "已计算"}；输入效应值的来源需另行核实${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
+        : `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${tauWords}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
       : null,
     routes,
     curves,
@@ -709,7 +716,7 @@ export function presentComparatorTab(bundle) {
     median: medianMeasure ? value(medianMeasure) : null,
     qc,
     // The method by its Chinese name (`METHOD_LABELS`); an id the table does not hold is shown as a plain word, never as the engine's own.
-    methods: execution ? [{ label: METHOD_LABELS[String(execution.method)] ?? "引擎计算", version: execution.methodVersion ? `v${execution.methodVersion}` : null, note: null, passed: result?.conclusion !== "not_estimable" }] : [],
+    methods: execution ? [{ label: METHOD_LABELS[String(execution.method)] ?? "引擎计算", version: execution.methodVersion ? `v${execution.methodVersion}` : null, note: sensitivityOnly ? "基于输入效应值评估未测量混杂的敏感性，不估计治疗效应，也不建立对照组。" : null, passed: result?.conclusion !== "not_estimable" }] : [],
     e10: e10.map((entry) => ({
       key: text(entry.key) ?? "", label: (/** @type {Record<string, string>} */ (VCR_E10_CONDITION_LABELS_ZH))[String(entry.key)] ?? text(entry.label) ?? "",
       state: ["met", "partial", "doubtful"].includes(String(entry.state)) ? String(entry.state) : "doubtful", note: text(entry.note),
@@ -1731,6 +1738,7 @@ export function presentIntake(bundle) {
       valueSource: (/** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH))[String(snapshot.valueSource)] ?? null,
       files: list(snapshot.files).map((file) => String(object(file).name)),
       sealed: snapshot.sealed === true, sealedFields: list(snapshot.sealedFields).map(String), sealedUntil: zhTime(snapshot.sealedUntil, now),
+      qualityInputs: list(snapshot.qualityInputs),
       findings: numeric(object(snapshot.quality).findings),
       quality: qualityRows(snapshot.quality),
       tables: list(snapshot.tables).map((table) => ({

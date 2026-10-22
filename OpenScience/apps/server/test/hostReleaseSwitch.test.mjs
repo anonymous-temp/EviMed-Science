@@ -169,8 +169,17 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   const web = path.join(rel, "deploy/web");
   await mkdir(path.join(web, "monitoring"), { recursive: true });
   await mkdir(path.join(rel, "scripts/ops"), { recursive: true });
-  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs"]) {
+  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs", "prepare-host-ops-dependencies.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
+  }
+  await mkdir(path.join(rel, "packages/domain"), { recursive: true });
+  await writeFile(path.join(rel, "packages/domain/package.json"), JSON.stringify({
+    name: "@evimed/domain", type: "module", exports: { ".": "./index.mjs" },
+  }));
+  await writeFile(path.join(rel, "packages/domain/index.mjs"), "export {};\n");
+  await mkdir(path.join(rel, "apps/server/src"), { recursive: true });
+  for (const name of ["internalProjects.mjs", "security.mjs"]) {
+    await writeFile(path.join(rel, "apps/server/src", name), "import '@evimed/domain';\n");
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
   await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
@@ -646,4 +655,16 @@ test("custom immutable manifest identity governs health and owned maintenance re
 
 test("manifest versus env identity mismatch refuses before current or shared configuration changes",{skip},async()=>{
  const {root,rel}=await host();try{const env=path.join(rel,"deploy/web/.env");await writeFile(env,(await readFile(env,"utf8")).replace(`OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1`,`OPEN_SCIENCE_RELEASE_ID=foreign-release`));const result=await runSwitch(root,["--no-prune"]);assert.notEqual(result.code,0);await assert.rejects(realpath(path.join(root,"current")));assert.doesNotMatch(result.stdout,/probe targets follow|current ->/);}finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test("an invalid host dependency shadow refuses the switch before Docker or current changes", { skip }, async t => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(rel, "apps/server/node_modules/@evimed/domain"), { recursive: true });
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /host_ops_dependency_invalid/);
+  await assert.rejects(readFile(path.join(root, "docker.log"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(realpath(path.join(root, "current")), { code: "ENOENT" });
 });

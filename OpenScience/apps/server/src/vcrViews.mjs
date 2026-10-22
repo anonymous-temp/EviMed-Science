@@ -474,7 +474,8 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
-    steps: publicSteps(study.steps),
+    purpose: study.purpose ?? "programme",
+    steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
     attention: attentionOf({ comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
     updatedAt: zhTime(study.updatedAt, now) ?? "",
@@ -668,11 +669,12 @@ export function presentStudy(bundle) {
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
-    steps: publicSteps(study.steps),
+    purpose: study.purpose ?? "programme",
+    steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
     // The step the study should do next, from the one function every sentence that names "next" reads (`vcrNext`), and one short
     // finding per step with its one number (`vcrStepSummaries`): the step bar and the primary action are drawn from these.
-    next: vcrNext({ steps: study.steps, described: Boolean(text(study.question) || bundle.definition) }),
-    stepSummaries: vcrStepSummaries(bundle, designs),
+    next: study.purpose === "calculation" ? null : vcrNext({ steps: study.steps, described: Boolean(text(study.question) || bundle.definition) }),
+    stepSummaries: study.purpose === "calculation" ? [] : vcrStepSummaries(bundle, designs),
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
     // What the study's frozen data would let it claim above its own tier, for a lead who may move it (`#tierOffer`); one confirmation.

@@ -1,6 +1,7 @@
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import type { VcrGeneratedRow } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
+import { formatPercent } from "@/lib/format";
 import { declaredCentre, declaredShare, expectedCounts, limitState } from "./distribution";
 import { numberText } from "../vcrText";
 
@@ -36,8 +37,8 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
     ? [row.mean !== null ? `均数 ${numberText(row.mean)}` : null, row.sd !== null ? `标准差 ${numberText(row.sd)}` : null].filter(Boolean).join(" · ")
     : row.levels && row.levels.length > 0 ? "" : row.result ?? "";
   return (
-    <section data-vcr-distribution={row.variable} className="min-w-0">
-      <h4 className="truncate text-ui font-semibold text-text">{row.label}</h4>
+    <figure data-vcr-distribution={row.variable} className="min-w-0">
+      <figcaption className="truncate text-ui font-semibold text-text">{row.label}</figcaption>
       <div className="mt-2">{continuous && row.histogram ? <Bins row={row} /> : <Levels row={row} />}</div>
       {stats && <p className="mt-1.5 text-caption tabular-nums text-text-2">{stats}</p>}
       {row.missing && <p className="text-caption tabular-nums text-text-3">{row.missing}</p>}
@@ -58,7 +59,7 @@ function DistributionCard({ row }: { row: VcrGeneratedRow }) {
           {state.text}
         </p>
       )}
-    </section>
+    </figure>
   );
 }
 
@@ -114,7 +115,7 @@ function Levels({ row }: { row: VcrGeneratedRow }) {
                   <span data-vcr-target="" className="absolute -inset-y-0.5 w-px bg-text-2" style={{ left: `${Math.min(100, share)}%` }} />
                 )}
               </span>
-              <span className="w-12 shrink-0 text-right tabular-nums text-text">{`${level.percent}%`}</span>
+              <span className="w-12 shrink-0 text-right tabular-nums text-text">{formatPercent(level.percent)}</span>
             </>
           )}
         </li>

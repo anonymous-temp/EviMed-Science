@@ -46,7 +46,7 @@ interface ProjectState {
    * moving when a later switch overtook this one. Rejects with the reason when
    * the project cannot be opened; the shell then stays where it was.
    */
-  select: (projectId: string, land?: () => void) => Promise<void>;
+  select: (projectId: string, land?: () => void, signal?: AbortSignal) => Promise<void>;
   /** Creates a project from its name; the server chooses the id. */
   create: (name: string) => Promise<WebProject>;
   rename: (projectId: string, name: string) => Promise<WebProject>;
@@ -127,7 +127,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  select: async (projectId, land) => {
+  select: async (projectId, land, signal) => {
+    if (signal?.aborted) return;
     const generation = ++switchGeneration;
     if (projectId === get().currentId) {
       // Also how a click on this project overrides a switch still proving
@@ -150,6 +151,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       throw error;
     }
     if (generation !== switchGeneration) return;
+    if (signal?.aborted) { set({ switching: null }); return; }
     if (!me || me.project.id !== projectId) {
       set({ switching: null });
       throw new Error("该项目当前不可用。");

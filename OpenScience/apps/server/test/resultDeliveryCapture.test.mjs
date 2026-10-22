@@ -9,9 +9,135 @@ import { ResultImpactService } from "../src/resultImpact.mjs";
 import { captureFinishedRun, captureResultDelivery, runFindingsOf } from "../src/resultDeliveryCapture.mjs";
 import { clinicalSafetyCautionNotice } from "../src/runNotices.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+import { productPayload } from "../src/productPersistence.mjs";
+import { ResultCaptureRepairService } from "../src/resultCaptureRepair.mjs";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
 const QUOTE = "The observed reduction was 20 percent in the selected study.";
+
+test("a 196416-byte 87-claim matrix keeps sibling metadata under 256 KiB and freezes one review snapshot", async t => {
+  const f = await fixture(t);
+  const put = f.documents.put.bind(f.documents);
+  f.documents.put = async (...args) => { productPayload(args[3]); return put(...args); };
+  f.matrix.claims = Array.from({ length: 87 }, (_, index) => ({ ...f.matrix.claims[0], claimId: `CLM-${index + 1}` }));
+  f.matrix.padding = "";
+  f.matrix.padding = "x".repeat(196416 - Buffer.byteLength(JSON.stringify(f.matrix)));
+  await f.writeOutputs();
+  const outputs = [[f.reportPath, "r".repeat(82860)], ["deliverables/d1/research-agenda.json", JSON.stringify({ note: "a".repeat(65878) })]];
+  for (const [relative, text] of outputs) {
+    await writeFile(path.join(f.project.workspaceDir, relative), text);
+    const entry = { path: relative, sha256: sha(text), bytes: Buffer.byteLength(text) };
+    const at = f.receipt.entries[0].files.findIndex(file => file.path === relative);
+    if (at >= 0) f.receipt.entries[0].files[at] = entry; else f.receipt.entries[0].files.push(entry);
+  }
+  const reply = await captureResultDelivery(f);
+  assert.deepEqual(reply.failures, []);
+  const report = reply.items.find(item => item.path === f.reportPath);
+  assert.equal(report.review.verification.claims.length, 87);
+  assert.deepEqual(JSON.parse(report.review.matrixText), f.matrix);
+  const stored = await f.documents.get("owner", "result-version", report.versionId);
+  assert.equal(stored.payload.review.matrixText, undefined);
+  assert.equal(stored.payload.review.verification, undefined);
+  assert.match(stored.payload.review.verificationSnapshot.digest, /^[a-f0-9]{64}$/);
+  assert.ok(Buffer.byteLength(JSON.stringify(stored.payload)) < 262144);
+  const revision = stored.revision;
+  const replay = await captureResultDelivery(f);
+  assert.deepEqual(replay.failures, []);
+  assert.equal((await f.documents.get("owner", "result-version", report.versionId)).revision, revision);
+  const snapshot = stored.payload.review.verificationSnapshot;
+  await writeFile(path.join(f.project.metaDir, "result-snapshots", snapshot.digest), "corrupt");
+  const corrupted = await f.results.get("owner", "p", report.versionId);
+  assert.equal(corrupted.review.status, "unknown");
+  assert.equal(corrupted.review.matrixText, null);
+});
+
+test("historical capture repair reuses the original matrix, freezes a labeled repair-time verdict and replays one generation", async t => {
+  const f = await fixture(t);
+  const initial = await captureResultDelivery(f);
+  const matrix = initial.items.find(item => item.path === f.matrixPath);
+  const report = initial.items.find(item => item.path === f.reportPath);
+  // The old capture had saved its matrix and sources, but no report or durable review.
+  f.documents.rows.delete(JSON.stringify(["owner", "result-version", report.versionId]));
+  const original = await f.documents.get("owner", "result-version", matrix.versionId);
+  await f.documents.put("owner", "result-version", matrix.versionId, { ...original.payload, review: null }, { projectId: "p", expectedRevision: original.revision });
+  const run = { ...f.run, status: "succeeded", verification: "unverified", finishedAt: "2026-10-02T01:00:00Z" };
+  const unchanged = structuredClone(run);
+  let settlements = 0;
+  const service = new ResultCaptureRepairService({ results: f.results, runs: { list: async () => [run] }, programme: { settleCaptureRepair: async () => { settlements += 1; return { state: "no_qualifying_claims" }; } } });
+  const request = { userId: "owner", projectId: "p", runId: "run" };
+  const before = f.documents.rows.size;
+  const plan = await service.plan(request);
+  assert.equal(f.documents.rows.size, before, "dry-run publishes nothing");
+  await assert.rejects(service.apply({ ...request, expectedReceiptSha256: plan.receiptSha256, expectedPlanSha256: "0".repeat(64) }), { code: "result_capture_repair_plan_changed" });
+  const input = { ...request, expectedReceiptSha256: plan.receiptSha256, expectedPlanSha256: plan.planSha256 };
+  const applied = await service.apply(input);
+  assert.equal(applied.receipt.matrixVersionId, matrix.versionId);
+  const recovered = await f.results.get("owner", "p", report.versionId);
+  assert.equal(recovered.review.verificationRecord.origin, "capture-repair");
+  assert.equal(recovered.review.verificationRecord.verifierVersion, "claim-verification-v1");
+  assert.deepEqual(run, unchanged);
+  const revision = (await f.documents.get("owner", "result-version", matrix.versionId)).revision;
+  f.results.now = () => new Date("2030-01-01T00:00:00Z");
+  const replayPlan = await service.plan(request);
+  assert.equal(replayPlan.planSha256, plan.planSha256);
+  const replay = await service.apply(input);
+  assert.equal(replay.receipt.generation, applied.receipt.generation);
+  assert.equal((await f.documents.get("owner", "result-version", matrix.versionId)).revision, revision);
+  assert.equal(settlements, 0, "settlement is explicit");
+  await writeFile(path.join(f.project.workspaceDir, f.reportPath), "changed");
+  await assert.rejects(service.apply(input), { code: "result_capture_changed" });
+});
+
+test("compact review reads reauthorize sources and projects, reject reference corruption and preserve a concurrent annotation", async t => {
+  const f = await fixture(t);
+  const first = await captureResultDelivery(f);
+  const matrix = first.items.find(item => item.path === f.matrixPath);
+  const report = first.items.find(item => item.path === f.reportPath);
+  f.results.authorizeReference = async (_user, _project, ref) => ref.kind === "source" ? null : ref;
+  assert.equal((await f.results.get("owner", "p", report.versionId)).review.status, "unavailable");
+  assert.equal((await f.results.list("owner", { projectId: "p", runId: "run" })).items.find(item => item.versionId === report.versionId).review.verification, null);
+  await assert.rejects(f.results.get("owner", "foreign", report.versionId), { code: "result_project_forbidden" });
+  f.results.authorizeReference = async (_user, _project, ref) => ref;
+  const original = await f.documents.get("owner", "result-version", matrix.versionId);
+  const review = original.payload.review;
+  await f.documents.put("owner", "result-version", matrix.versionId, { ...original.payload, review: null }, { projectId: "p", expectedRevision: original.revision });
+  const put = f.documents.put.bind(f.documents);
+  let raced = false;
+  f.documents.put = async (...args) => {
+    if (!raced && args[2] === matrix.versionId && args[3].review) {
+      raced = true;
+      const row = await f.documents.get("owner", "result-version", matrix.versionId);
+      await put("owner", "result-version", matrix.versionId, { ...row.payload, concurrentAnnotation: "preserved" }, { projectId: "p", expectedRevision: row.revision });
+      throw Object.assign(new Error("race"), { code: "product_revision_conflict" });
+    }
+    return put(...args);
+  };
+  await f.results.annotateReview("owner", f.project, await f.documents.get("owner", "result-version", matrix.versionId), review);
+  const after = await f.documents.get("owner", "result-version", matrix.versionId);
+  assert.equal(after.payload.concurrentAnnotation, "preserved");
+  assert.equal(after.payload.digest, matrix.digest);
+  assert.deepEqual(after.payload.producer, original.payload.producer);
+  const bad = { ...review, verificationSnapshot: { ...review.verificationSnapshot, digest: "0".repeat(64) } };
+  assert.equal((await f.results.readReview("owner", f.project, bad)).status, "unknown");
+  const ref = review.verificationSnapshot;
+  const snapshot = path.join(f.project.metaDir, "result-snapshots", ref.digest);
+  await rm(snapshot);
+  await symlink(path.join(f.project.workspaceDir, f.sourcePath), snapshot);
+  assert.equal((await f.results.get("owner", "p", report.versionId)).review.status, "unknown");
+});
+
+test("capture-repair planning refuses a changed source, a linked output and another run's receipt before capture", async t => {
+  for (const mode of ["source", "symlink", "foreign-run"]) {
+    const f = await fixture(t);
+    const run = { ...f.run, status: "succeeded" };
+    const service = new ResultCaptureRepairService({ results: f.results, runs: { list: async () => [run] } });
+    if (mode === "source") await writeFile(path.join(f.project.workspaceDir, f.sourcePath), "Changed source");
+    if (mode === "symlink") { await rm(path.join(f.project.workspaceDir, f.reportPath)); await symlink(path.join(f.project.workspaceDir, f.matrixPath), path.join(f.project.workspaceDir, f.reportPath)); }
+    if (mode === "foreign-run") await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify({ ...f.receipt, runId: "foreign" }));
+    await assert.rejects(service.plan({ userId: "owner", projectId: "p", runId: "run" }), { code: mode === "source" ? "result_source_capture_changed" : mode === "symlink" ? "path_forbidden" : "result_capture_receipt_invalid" });
+    assert.equal(f.documents.rows.size, 0);
+  }
+});
 async function fixture(t) {
   const root = await mkdtemp("/tmp/evimed-delivery-capture-");
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -1050,8 +1050,8 @@ function vcrSettings(overrides) {
     vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", true),
     vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
     vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
-    // How long a draft study (made by 「新建研究」, never described) lives with nobody speaking in it, in minutes; then the sweep deletes
-    // it and its project. A resource limit, not an opinion: every draft is a project row, a conversation record and a runtime slot's worth.
+    // Age in minutes at which a draft becomes a retention candidate. The hosted sweep preserves existing projects because
+    // concurrent study, source and native-upload writes cannot establish safe automatic deletion. The environment name stays compatible.
     vcrDraftTtlMinutes: integer("vcrDraftTtlMinutes", "OPEN_SCIENCE_VCR_DRAFT_TTL_MINUTES", 60, 5, 10_080),
     // A step that runs while the researcher's own runtime is open is a turn of the study's own conversation (its visible sentence,
     // the assistant's work and the result, in the one conversation that belongs to the study) and not a hidden programme session.

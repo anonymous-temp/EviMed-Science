@@ -130,6 +130,10 @@ finish() {
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
 
+# Git-archive releases have no package installation. Prepare only the owned,
+# same-release domain resolver before any host CLI imports server vocabulary.
+node "${REL}/OpenScience/scripts/ops/prepare-host-ops-dependencies.mjs" --source-root "${REL}/OpenScience"
+
 # A prepared artifact's immutable release identity need not name its staging
 # directory. Refuse disagreement before shared configuration or current moves.
 EXPECTED_RELEASE_ID=$(env -u OPEN_SCIENCE_RELEASE_ID node --env-file="${REL}/OpenScience/deploy/web/.env" -e '

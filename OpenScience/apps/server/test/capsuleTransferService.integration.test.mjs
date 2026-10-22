@@ -387,3 +387,59 @@ test("a pack signed by another key that names the issuer and the held version is
   const secondPreview=await transfers.preview(recipient,{archive:second.archive,password});
   assert.equal(secondPreview.upgrades?.capsuleId,held.id);
 });
+
+test("native selected-scope export encrypts full engine bodies and imports through the existing scanner", options, async () => {
+  const { NativeMemoryStore } = await import("../src/nativeMemoryStore.mjs");
+  const { migrateNativeMemory } = await import("../src/nativeMemoryPersistence.mjs");
+  await migrateNativeMemory(database);
+  const { nativeMemoryRoot } = await import("../src/openVikingLayout.mjs");
+  const { NativeMemoryOverlay } = await import("../src/nativeMemoryOverlay.mjs");
+  const { createHash } = await import("node:crypto");
+  const sharer = `native_transfer_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Native researcher','development')", [sharer]);
+  try {
+    const root = nativeMemoryRoot(sharer);
+    let body = "# Cohort\n\nThe explicit project cohort contains 123 participants and preserves the prespecified outcome.";
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'native-cohort','Cohort',1024)", [sharer]);
+    const uri = `${root}/projects/cohort.md`;
+    const nativeMemory = new NativeMemoryStore({
+      sessions: { configured: true, memoryRoot: () => root,
+        tree: async () => [{ uri, isDir: false, modTime: "2026-10-21", size: body.length, tags: ["project=native-cohort"] }], read: async () => body },
+      overlay: new NativeMemoryOverlay({ database }),
+    });
+    const nativeTransfers = new CapsuleTransferService({ documents, capsules, identities, dataDir: directory, nativeMemory, memoryEngine: async () => "native" });
+    const capsule = await capsules.create(sharer, { title: "Native selected facts" });
+    assert.equal((await nativeTransfers.exportPreview(sharer, capsule.id)).empty, true);
+    const scopes = ["workstyle", "+knowledge"];
+    assert.equal((await nativeTransfers.exportPreview(sharer, capsule.id, { scopes })).entries[0].content, body);
+    const exported = await nativeTransfers.export(sharer, capsule.id, { password, scopes });
+    assert.ok(!exported.archive.includes("123 participants"));
+    const stored = await documents.get(sharer, "preferences", exported.snapshot.id);
+    assert.equal(stored.payload.sourceEntries[0].nativeSource.sha256, createHash("sha256").update(body).digest("hex"));
+    const preview = await transfers.preview(recipient, { archive: exported.archive, password });
+    assert.equal(preview.entries[0].content, body);
+    const imported = await transfers.import(recipient, { archive: exported.archive, password, expectedDigest: preview.archiveSha256, confirmed: true });
+    const received = await capsules.entries(recipient, imported.id);
+    assert.equal(received.items[0].payload.content, body);
+    await assert.rejects(transfers.export(recipient, imported.id, { password, scopes }), { code: "capsule_share_not_own" });
+    // Migration carried legacy inferred notes as user-role statements. A replay must not launder them into a share.
+    const migratedArchive = `${root}/migration-original`;
+    const replayArchive = `${root}/migration-replay`;
+    await database.query(`INSERT INTO evimed_memory.native_commits(user_id,archive_uri,engine_session,origin,state,replayed_as)
+      VALUES($1,$2,'migration-test','migration','replayed',$3),($1,$3,'replay-test','replay','completed',NULL)`, [sharer, migratedArchive, replayArchive]);
+    await nativeMemory.overlay.addRevision({ userId: sharer, uri, memoryType: "project_context", change: "added", actor: "engine",
+      reason: "", before: null, after: body, archiveUri: replayArchive });
+    assert.equal((await nativeTransfers.exportPreview(sharer, capsule.id, { scopes })).empty, true);
+    await nativeMemory.overlay.addRevision({ userId: sharer, uri, memoryType: "project_context", change: "updated", actor: "user",
+      reason: "edited", before: "Earlier body", after: body });
+    assert.equal((await nativeTransfers.exportPreview(sharer, capsule.id, { scopes })).entries[0].content, body);
+    body += "\nA later engine addition was not adopted.";
+    await nativeMemory.overlay.addRevision({ userId: sharer, uri, memoryType: "project_context", change: "updated", actor: "engine",
+      reason: "", before: "Earlier body", after: body, archiveUri: replayArchive });
+    assert.equal((await nativeTransfers.exportPreview(sharer, capsule.id, { scopes })).empty, true);
+    nativeMemory.sessions.tree = async () => { throw Object.assign(new Error("unavailable"), { code: "memory_engine_unavailable" }); };
+    await assert.rejects(nativeTransfers.exportPreview(sharer, capsule.id, { scopes }), { code: "memory_engine_unavailable" });
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [sharer]);
+  }
+});

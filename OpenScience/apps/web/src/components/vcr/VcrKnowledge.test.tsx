@@ -308,3 +308,17 @@ describe("what the study payload carries", () => {
     expect(readVcrKnowledge({ pack: { id: "x", status: "unknown" } })?.pack?.status).toBe("ai-draft");
   });
 });
+
+it("offers templates before any population exists and requires an explicit single-version choice", async () => {
+  installVcrServer(network.productRequest, {
+    "GET /vcr/definitions": { definitions: [LIBRARY.definitions[1]] },
+    [`POST /vcr/studies/${STUDY_ID}/definitions/dfn_2/use`]: { populationId: "new_cohort", version: 1, renamed: [], unmatched: [] },
+  });
+  draw(<VcrDefinitionsSection studyId={STUDY_ID} knowledge={null} canWrite canRun onChanged={() => undefined} />);
+  await userEvent.selectOptions(await screen.findByLabelText("用定义库里的定义"), "dfn_2");
+  const use = screen.getByRole("button", { name: "用于本研究" });
+  expect(use).toBeDisabled();
+  await userEvent.selectOptions(screen.getByLabelText("版本"), "1");
+  await userEvent.click(use);
+  await waitFor(() => expect(posted("POST", `/vcr/studies/${STUDY_ID}/definitions/dfn_2/use`)[0]?.[2]).toEqual({ version: 1 }));
+});

@@ -52,24 +52,14 @@ export function bandSteps(project: GeoProject, hrefOf: (step: GeoStepKey) => str
             : held ? "todo"
               : working ? "active" : "todo";
     const summary = budget ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : step?.summary?.text ?? shortNote(step?.note);
-    return { id: key, label: GEO_STEP_NAMES[key], state, summary, href: hrefOf(key) };
+    return { id: key, label: GEO_STEP_NAMES[key], state, stateLabel: status === "none" ? step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : "未开始" : status === "queued" ? "排队中" : undefined, summary, href: hrefOf(key) };
   });
 }
 
 /** 「周一」「周二」… for a day in the reader's calendar. */
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/**
- * The one sentence at the rail's right end — 「现在」: what the programme is doing and when it measures next. No percentage, no bar:
- * a number on work an agent is doing is one nobody can honour.
- *
- *  - the steps being worked on, in the work's own word (「正在写稿、投放」) — 监测 is the schedule's and is said by the next line;
- *  - a measurement under way (the next date has come and the round is queued or running): 「第 3 轮复测中」;
- *  - otherwise the next one: 「下次复测 周一 10月21日」.
- *
- * `next` is the monitoring read's `next` (a date and the round kind); null where it is not known yet, and then only the work is said.
- * Null when there is nothing to say.
- */
+/** The current persisted work state and next scheduled date; a due schedule proves no execution or current round identity. */
 export function bandNow(
   project: GeoProject,
   next: { date: string; kind: string } | null | undefined,
@@ -77,24 +67,29 @@ export function bandNow(
 ): string | null {
   const steps = stepsOf(project);
   const working = GEO_STEP_KEYS
-    .filter((key) => key !== "monitoring")
-    .filter((key) => {
-      const step = steps[key];
-      return step && (step.status === "running" || step.status === "queued") && !stepAllowanceWait(step);
-    })
-    .map((key) => GEO_STEP_WORK[key]);
+    .filter(key => key !== "monitoring")
+    .filter(key => steps[key]?.status === "running" && !stepAllowanceWait(steps[key]))
+    .map(key => GEO_STEP_WORK[key]);
+  const queued = GEO_STEP_KEYS
+    .filter(key => key !== "monitoring")
+    .filter(key => steps[key]?.status === "queued" && !stepAllowanceWait(steps[key]))
+    .map(key => GEO_STEP_WORK[key]);
   const parts: string[] = [];
   if (working.length > 0) parts.push(`正在${working.join("、")}`);
+  if (queued.length > 0) parts.push(`排队中：${queued.join("、")}`);
+  const monitor = steps.monitoring;
+  if (stepAllowanceWait(monitor)) parts.push("复测等待额度");
+  else if (monitor?.status === "running") parts.push("复测进行中");
+  else if (monitor?.status === "queued") parts.push("复测排队中");
   if (next?.date) {
     const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
-    const rounds = steps.monitoring?.summary?.count ?? project.overview?.metrics?.[0]?.trend?.length ?? 0;
+    const day = parseGeoDate(next.date);
+    const date = `${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? next.date}`.trim();
     if (next.date <= today) {
-      // The round the date names has begun: the baseline when nothing was measured yet, else the n-th re-test.
-      parts.push(rounds > 0 ? `第 ${rounds} 轮复测中` : "基线测量中");
-    } else {
-      const day = parseGeoDate(next.date);
-      parts.push(`下次复测 ${day ? `${WEEKDAYS[day.getDay()]} ` : ""}${monthDay(next.date) ?? ""}`.trim());
-    }
+      // A due schedule is not evidence that a round began, nor an identity for the next round.
+      if (monitor?.status !== "running") parts.push(`待复测 ${monthDay(next.date) ?? next.date}`);
+      else parts.push(`计划日期 ${date}`);
+    } else parts.push(`下次复测 ${date}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }

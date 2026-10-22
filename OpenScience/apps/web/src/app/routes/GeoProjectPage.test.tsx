@@ -123,8 +123,9 @@ async function chooseResult(label: string) {
   await userEvent.click(screen.getByRole("menuitemradio", { name: label }));
 }
 async function chooseStep(label: RegExp) {
-  await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
-  await userEvent.click(screen.getByRole("menuitemradio", { name: label }));
+  const text = label.source.replace(/^\^/, "").split(" ·")[0];
+  const step = await screen.findByRole("link", { name: new RegExp(`^${text}`) });
+  await userEvent.click(step);
 }
 const band = () => document.querySelector("[data-page-chrome]") as HTMLElement;
 
@@ -133,9 +134,9 @@ describe("a GEO project's page", () => {
     renderProject();
     expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "周报" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^进度，已完成 5\/8 步/ })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(8);
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
     await userEvent.click(screen.getByRole("button", { name: /^查看：/ }));
     for (const tab of GEO_TABS) expect(screen.getByRole("menuitemradio", { name: tab.label })).toBeInTheDocument();
   });
@@ -262,9 +263,9 @@ describe("a GEO project's page", () => {
 
   it("keeps truthful workflow statuses available in its progress menu", async () => {
     renderProject();
-    await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
-    expect(screen.getByRole("menuitemradio", { name: /^内容 · 进行中/ })).toBeInTheDocument();
-    expect(screen.getByRole("menuitemradio", { name: /^投放 · 进行中/ })).toBeInTheDocument();
+    await screen.findByRole("navigation", { name: "循证 GEO 进度" });
+    expect(screen.getByRole("link", { name: /^内容.*进行中/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^投放.*进行中/ })).toBeInTheDocument();
   });
 
   it("opens the answer a 本周 line quotes, whichever tab the server files it under; a line that quotes none lands on its tab", async () => {
@@ -300,8 +301,8 @@ describe("a GEO project's page", () => {
   it("marks placing that waits on the reader in the workflow menu", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null });
     renderProject();
-    await userEvent.click(await screen.findByRole("button", { name: /^进度，已完成/ }));
-    expect(screen.getByRole("menuitemradio", { name: /^投放 · 等你/ })).toBeInTheDocument();
+    await screen.findByRole("navigation", { name: "循证 GEO 进度" });
+    expect(screen.getByRole("link", { name: /^投放.*等你/ })).toBeInTheDocument();
   });
 
   it("without a media market offers no budget action", async () => {
@@ -387,8 +388,8 @@ describe("a GEO project's page", () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, steps: { ...GEO_PROJECT.steps, diagnosis: { status: "running", requested: true } }, overview: { ...GEO_PROJECT.overview, steps: { ...GEO_PROJECT.overview.steps, diagnosis: { status: "running", requested: true } } } });
     renderProject();
     await screen.findByRole("heading", { level: 1 });
-    await userEvent.click(screen.getByRole("button", { name: /^进度，已完成/ }));
-    expect(screen.getByRole("menuitemradio", { name: /^诊断 · 进行中/ })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "循证 GEO 进度" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^诊断.*进行中/ })).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     // The poll is a timer: the one read is all this test waits for.
     expect(client.getGeoProject).toHaveBeenCalledTimes(1);
@@ -548,7 +549,7 @@ describe("a GEO project's page", () => {
     client.getGeoMonitoring.mockResolvedValue({ series: [], arms: { pilot: [], control: [], netEffect: {} }, byEngine: [], cited: [], newErrors: [], next: null });
     renderProject();
     await screen.findByRole("heading", { level: 1 });
-    expect(screen.getByRole("button", { name: /^进度，已完成 0\/8 步/ })).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-rail-state="todo"]')).toHaveLength(8);
     expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "品类问题可见率" })).toHaveTextContent("—");
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();

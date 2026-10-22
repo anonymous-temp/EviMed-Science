@@ -1576,6 +1576,39 @@ another channel. To prove the row on a deployment, export a replayed engine resu
 run the verifier on the ZIP, rebuild the engine at the recorded code digests and
 compare the numbers it writes with `verify.py --compare`.
 
+### Finished-run inventory and capture repair
+
+These operations reuse existing run ledgers, result versions and immutable result snapshots. They do not rerun a model,
+change a run's original status, verification, notices, completion time or usage, or publish a card by force.
+
+- An authenticated owner may `POST /api/agent-runs/<run-id>/artifacts/refresh` with
+  `{ "projectId": "<owned-project>", "expectedTranscriptSha256": "<retained-transcript-sha256>" }` and the normal CSRF token.
+  The retained raw transcript must match its ledger receipt and run header. Successful presentation witnesses and bounded
+  files written during that run are joined to its inventory; paths, links and file hashes are checked. The appended
+  `artifacts-refreshed` event records discovery evidence only. An original `unverified` label remains `unverified`.
+- A signed-in member of `operatorUsers`, with CSRF, may `POST /api/ops/result-capture-repairs`. First send
+  `{ "action": "plan", "userId": "<owner>", "projectId": "<project>", "runId": "<finished-run>" }`.
+  This dry run returns `receiptSha256`, `planSha256` and the exact original file/source hashes. An optional
+  `expectedReceiptSha256` also checks a previously recorded receipt identity. Inspect this plan, then send the same target
+  with `action: "apply"`, `expectedReceiptSha256` and `expectedPlanSha256` set to those exact values. Changed receipt,
+  output or preserved-source bytes refuse the stale plan. The plan has no clock expiry. One original clinical matrix,
+  at most 64 files and 48 preserved sources are eligible in one request; existing storage and metadata limits still apply.
+- Apply fills missing captures through the normal capture service and reuses existing immutable version identities.
+  Existing frozen quotation verdicts are reused. If none was ever persisted, a deterministic verdict over the exact
+  preserved sources is recorded with `origin: "capture-repair"`, its time and verifier version; it is not a historical verdict.
+  The matrix row records a successful repair receipt. Its generation depends on the original run/receipt and exact
+  matrix/sibling version identities and digests, so retries cannot mint a new generation by advancing the clock.
+- Only for a programme-owned project, apply may include `resettle: true`. A verified repair generation allows one normal
+  settlement of an exhausted `no_evidence_matrix` outcome. Original attempts and outcome history remain recorded; normal
+  claim, source, clinical and supersession checks still decide publication. Replaying the same generation does not enqueue
+  research or settle it again. Every settlement holds a scoped PostgreSQL episode lock and commits the card and outcome in
+  one existing transaction; losing its owner rolls both back, allowing the pending generation to recover safely after restart.
+
+A missing, corrupted, linked or no-longer-authorized snapshot cannot become evidence by repairing bookkeeping. Capture
+repair refuses incomplete preservation. Result reads retain usable files with an unknown/unavailable review. Account
+exports hydrate authorized compact reviews into the existing inline format; unavailable review content is cleared and
+counted in `omissions`, while other usable records remain exportable. Account/archive size limits remain unchanged.
+
 ## Research allowance billing
 
 The account page uses CNY research allowance. The existing EviMed wallet remains

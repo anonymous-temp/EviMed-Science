@@ -159,7 +159,7 @@ import { brotliDecompressSync } from "node:zlib";
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's tabs (`module`) show the same steps and stand at the same height; 虚拟临床研究's tab row is its step bar (a state dot on every tab but the overview), 循证 GEO uses one compact progress menu and a result-view selector (owner, 2026-10-19).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's views (`module`) keep the same visible workflow rail and one contextual view selector; both 虚拟临床研究 and 循证 GEO retain their step states during conversation, including on a phone (owner, 2026-10-20).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
@@ -190,6 +190,8 @@ const WALK_TABLES = {
       {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
+      {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
+      {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
@@ -237,6 +239,7 @@ const WALK_TABLES = {
       {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
     ],
     "unwalked": [
+      {"pattern":"/app/home","template":"kernel","why":"the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project"},
       {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
@@ -398,6 +401,50 @@ const WALK_TABLES = {
     "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
   ]
 };
+// Canonical frontend grouping, compiled at build time from vcrMethodDisplay.ts; never a hand-maintained taxonomy.
+const WALK_METHOD_GROUPING = (() => {
+const exports = {};
+const VCR_LONGITUDINAL_METHODS = {"forecast.trajectories":{"version":"1.0.0","modelTier":null},"forecast.evaluate":{"version":"1.1.0","modelTier":null},"forecast.compare":{"version":"1.1.0","modelTier":null},"forecast.trial_benchmark":{"version":"1.0.0","modelTier":null}};
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.METHOD_FAMILIES = void 0;
+exports.methodTask = methodTask;
+exports.methodEntryId = methodEntryId;
+exports.methodEntries = methodEntries;
+exports.completeMethodCatalogue = completeMethodCatalogue;
+exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"];
+const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
+const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
+function methodTask(method) {
+    if (/^(profile|cohort|population)\./.test(method))
+        return exports.METHOD_FAMILIES[0];
+    if (method.startsWith("patients.") || method === "forecast.trajectories")
+        return exports.METHOD_FAMILIES[1];
+    if (method.startsWith("evidence."))
+        return exports.METHOD_FAMILIES[2];
+    if (/^(accrual|matching)\./.test(method))
+        return exports.METHOD_FAMILIES[6];
+    if (ROBUSTNESS.includes(method))
+        return exports.METHOD_FAMILIES[5];
+    if (method.startsWith("comparator."))
+        return exports.METHOD_FAMILIES[3];
+    if (method.startsWith("design."))
+        return exports.METHOD_FAMILIES[4];
+    return "其他方法";
+}
+function methodEntryId(method) { return PATIENT_MODES.includes(method.method ?? method.id) ? "patient-outcomes" : method.id; }
+function methodEntries(methods) {
+    const seen = new Set();
+    return methods.filter(method => { const id = methodEntryId(method); if (seen.has(id))
+        return false; seen.add(id); return true; });
+}
+const FORECAST_TITLES = { "forecast.trajectories": "预测后续轨迹", "forecast.evaluate": "验证预测与后续结局", "forecast.compare": "比较预测版本", "forecast.trial_benchmark": "验证试验效果预测" };
+/** The domain owns these four protocols; an older server catalogue can omit rows, never their identity. Availability is checked against each study's actual inputs. */
+function completeMethodCatalogue(methods) {
+    return [...methods, ...Object.entries(VCR_LONGITUDINAL_METHODS).filter(([id]) => !methods.some(row => (row.method ?? row.id) === id)).map(([id, protocol]) => ({ id, method: id, name: FORECAST_TITLES[id], version: protocol.version }))];
+}
+return exports;
+})();
 // END EMBEDDED WALK TABLES
 
 /** The page table: every view the walk visits with its template, budgets and the kinds of check it is held to. @type {any} */
@@ -508,7 +555,7 @@ const ROW_CLICK_LISTS_PER_PAGE = 8;
  * @returns {{ primary: string | null, second: string | null }}
  */
 export function pickVcrStudies(studies) {
-  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string") : [];
+  const rows = Array.isArray(studies) ? studies.filter((row) => typeof row?.id === "string" && row.purpose !== "calculation") : [];
   const produced = (row) => Object.values(row.steps ?? {}).filter((step) => ["done", "minimal"].includes(step?.status)).length;
   let primary = null;
   for (const row of rows) if (primary === null || produced(row) > produced(primary)) primary = row;
@@ -627,6 +674,30 @@ async function readData(context, base, pathname, failures) {
   return (await answer.json().catch(() => null))?.data ?? null;
 }
 
+/** A calculation's historical list has answered; a visible failure is terminal, never an empty-history success. */
+export function calculationHistoryReady() {
+  return [...document.querySelectorAll("main ul[aria-label='此计算空间的历史'] > li, main [role='alert']")].some((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+}
+
+/** Find a genuine calculation with frozen, readable history. Programme studies and unreadable results cannot stand in for it. */
+export async function discoverCalculationHistory(context, base, studies, failures = []) {
+  for (const candidate of (Array.isArray(studies) ? studies : []).filter((row) => row?.purpose === "calculation" && typeof row.id === "string").slice(0, 8)) {
+    const at = `/api/vcr/studies/${encodeURIComponent(candidate.id)}`;
+    const detail = await readData(context, base, at, failures);
+    if (detail?.purpose !== "calculation" || detail?.id !== candidate.id) continue;
+    const history = await readData(context, base, `${at}/jobs`, failures);
+    for (const job of (Array.isArray(history?.jobs) ? history.jobs : []).filter((row) => row?.state === "succeeded" && typeof row.id === "string").slice(0, 20)) {
+      const prefix = `${at}/jobs/${encodeURIComponent(job.id)}`;
+      const result = await readData(context, base, `${prefix}/result`, failures);
+      const configuration = await readData(context, base, `${prefix}/configuration`, failures);
+      if (typeof result?.result?.id === "string" && typeof configuration?.subjectId === "string" && typeof configuration?.method === "string") {
+        return { studyId: candidate.id, jobId: job.id, resultId: result.result.id, method: configuration.method, route: `/app/capabilities/calculations/${encodeURIComponent(candidate.id)}` };
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
@@ -650,7 +721,11 @@ async function discoverRoutes(context, base, notices, failures) {
     else skip("geo-answer", "the first project lists no wrong sentence with an answer");
   }
 
-  const { primary, second } = pickVcrStudies((await readData(context, base, "/api/vcr/studies", failures))?.studies);
+  const studies = (await readData(context, base, "/api/vcr/studies", failures))?.studies;
+  const calculation = await discoverCalculationHistory(context, base, studies, failures);
+  if (calculation) routes.push(["calculation-history", calculation.route]);
+  else skip("calculation-history", "the account has no calculation-purpose workspace with readable configuration and successful history");
+  const { primary, second } = pickVcrStudies(studies);
   for (const [id, suffix] of [[primary, ""], [second, "@2"]]) {
     if (!id) continue;
     const at = `/app/virtual-research/${encodeURIComponent(id)}`;
@@ -939,18 +1014,43 @@ export function unexpectedRefusals(name, httpErrors) {
   return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
 }
 
-/** A Docker network change can leave Chromium retrying its error page. Reset it before one recorded retry. */
+/** Replace a tab, keeping its authenticated context and reinstalling its observers. */
+export async function replaceWalkPage(context, previous, install) {
+  if (previous) await previous.close().catch(() => {});
+  const page = await context.newPage();
+  install(page);
+  return page;
+}
+
+/** Retry one network-change navigation on a clean tab; the callback retains the first failure. */
 export async function navigateForWalk(page, url, onRetry) {
   const options = { waitUntil: "domcontentloaded", timeout: 60_000 };
   try {
     return await page.goto(url, options);
   } catch (error) {
     if (!/net::ERR_NETWORK_CHANGED\b/.test(String(error))) throw error;
-    onRetry();
-    await page.goto("about:blank", options);
-    await page.waitForTimeout(1_000);
-    return page.goto(url, options);
+    const replacement = await onRetry(error);
+    if (!replacement) throw error;
+    return replacement.goto(url, options);
   }
+}
+
+/** Preserve the full error and the failed tab before replacing it, including timeout DOM evidence. */
+export async function walkFailureDiagnostics(page, out, view, phase, error, requestFailures = []) {
+  const evidence = { phase, error: String(error), stack: error instanceof Error ? error.stack : null,
+    url: page?.url() ?? null, requestFailures: [...requestFailures], files: {}, captureErrors: [] };
+  for (const [kind, capture] of [
+    ["dom", async () => { const file = `${view}.${phase}.html`; await writeFile(path.join(out, file), await page.content()); return file; }],
+    ["screenshot", async () => { const file = `${view}.${phase}.jpg`; await page.screenshot({ path: path.join(out, file), type: "jpeg", quality: CAPTURE_QUALITY, timeout: 5_000 }); return file; }],
+  ]) {
+    try { evidence.files[kind] = await capture(); }
+    catch (captureError) { evidence.captureErrors.push(`${kind}: ${String(captureError)}`); }
+  }
+  return evidence;
+}
+
+export function assertWalkAuthenticated(url) {
+  if (/\/(?:login|auth)(?:[/?#]|$)/.test(new URL(url).pathname)) throw new Error(`walk_auth_redirect: ${new URL(url).pathname}`);
 }
 
 /** A visible failed read is not a successfully loaded module without its chrome. */
@@ -962,20 +1062,22 @@ export function routeLoadProbe() {
 }
 
 /** Retry a rendered load error once only after this view's observed network change, never an HTTP failure. */
-export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false) {
+export async function recoverWalkLoad(page, url, errors, httpErrors, navigationRetried = false, replacePage) {
   const initial = await page.evaluate(routeLoadProbe);
   const networkChanges = errors.filter((entry) => /net::ERR_NETWORK_CHANGED\b/.test(entry)).length;
   if (!initial?.failed) return { loaded: true, retried: false, networkChanges };
   if (navigationRetried || networkChanges === 0 || httpErrors.length > 0) return { loaded: false, retried: false, initial, networkChanges, httpErrors: [...httpErrors] };
-  // Same-address reload is the bounded equivalent of the visible user retry. Keep the original error in the report.
+  // Retry the same address once, with a clean tab when provided. Keep the original error in the report.
   try {
+    if (replacePage) page = await replacePage(initial);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    assertWalkAuthenticated(page.url());
     await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
     await page.waitForTimeout(3_000);
     const final = await page.evaluate(routeLoadProbe);
     return { loaded: !final?.failed, retried: true, initial, final, networkChanges, httpErrors: [...httpErrors] };
   } catch (error) {
-    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error).slice(0, 160), httpErrors: [...httpErrors] };
+    return { loaded: false, retried: true, initial, networkChanges, retryError: String(error), retryStack: error instanceof Error ? error.stack : null, httpErrors: [...httpErrors] };
   }
 }
 
@@ -1075,7 +1177,7 @@ export function measureStructure() {
   const side = {
     landmarks: sidebars.length,
     holdsDivider: sidebar ? [...sidebar.querySelectorAll("*")].some((el) => el.getAttribute("role") === "separator") : false,
-    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/chat") : false,
+    chatLink: sidebar ? [...sidebar.querySelectorAll("a")].some((el) => el.getAttribute("href") === "/app/home") : false,
     closed: sidebar ? sidebar.getBoundingClientRect().width <= 1 : false,
     inert: sidebar ? hasAttribute(sidebar, "inert") || sidebar.inert === true : false,
   };
@@ -1269,7 +1371,7 @@ export function measureComposition([options] = [{}]) {
     const total = Number(/(\d+)\s*\/\s*(\d+)/.exec(chip?.getAttribute("aria-label") ?? "")?.[2] ?? 0);
     stepRail = {
       ...box(railEl), folded, count: folded ? total : steps.length, inChrome: railEl.closest("[data-page-chrome]") !== null,
-      steps: steps.map((el) => ({ id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
+      steps: steps.map((el) => ({ current: Boolean(el.querySelector("[aria-current='step']")), href: el.querySelector("a[href]")?.getAttribute("href") ?? null, stateVisible: [...el.querySelectorAll("span")].some((span) => visible(span) && !span.classList.contains("sr-only") && span.classList.contains("text-caption") && Boolean(span.textContent?.trim())), id: el.getAttribute("data-rail-step"), state: el.getAttribute("data-rail-state"), label: cut(el.textContent, 20) })),
     };
   }
 
@@ -1367,11 +1469,42 @@ export function measureComposition([options] = [{}]) {
     return cs.cursor === "pointer" || cs.textDecorationLine.includes("underline");
   }).map((el) => ({ text: cut(el.textContent, 20), tag: el.tagName.toLowerCase(), ...box(el) }));
 
-  // The one primary action of a page stands on the header's row. Empty states, recipes and forms carry their own.
+  // Ordinary primary actions belong to the header. A named analysis workbench has a measured main-area Run contract.
   const titleBottom = title ? title.bottom : 0;
   const primaries = live("button, a, [role='button']").filter((el) => el.classList.contains("bg-accent")).map((el) => {
     const at = box(el);
-    return { text: nameOf(el), ...at, inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    const bar = el.closest("[data-vcr-run-actions]");
+    const workbench = bar?.closest("[data-vcr-method-workbench]");
+    let run = null;
+    if (bar && workbench) {
+      const targets = [workbench.querySelector("[data-vcr-method-configuration]"), workbench.querySelector("[data-vcr-method-results]")];
+      const scroller = scrollerOf(bar);
+      const room = scroller.scrollHeight - scroller.clientHeight;
+      const saved = scroller.scrollTop;
+      const reachable = () => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth && Boolean(hit && (hit === el || el.contains(hit)));
+      };
+      const before = Math.round(bar.getBoundingClientRect().top);
+      const initialReachable = reachable();
+      let held = null;
+      if (hold && room > 0) {
+        scroller.scrollTop = Math.min(room, 480);
+        const scrolled = scroller.scrollTop - saved;
+        const after = Math.round(bar.getBoundingClientRect().top);
+        const inset = Number.parseFloat(getComputedStyle(bar).top);
+        const boundary = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+        held = { scrolled, after, expected: Math.round(Math.max(before - scrolled, boundary + inset)), reachable: reachable() };
+        scroller.scrollTop = saved;
+      }
+      run = { named: Boolean((el.getAttribute("aria-label") || (el.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim() || el.textContent || "").trim()), height: at.height, bars: workbench.querySelectorAll("[data-vcr-run-actions]").length,
+        primaries: workbench.querySelectorAll(".bg-accent").length, position: getComputedStyle(bar).position, initialReachable, room, held,
+        beforeContent: workbench.querySelectorAll("[data-vcr-method-configuration]").length === 1 && workbench.querySelectorAll("[data-vcr-method-results]").length === 1 && targets.every((target) => target && !bar.contains(target) && Boolean(bar.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+    }
+    return { text: nameOf(el), ...at, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
@@ -1408,6 +1541,11 @@ export function measureComposition([options] = [{}]) {
 
   const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
+    viewSelector: (() => {
+      const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
+      return { count: choices.length, top: choices[0] ? box(choices[0]).top : null };
+    })(),
     compactWorkflow: (() => {
       const progress = live("button[aria-label]").find((el) => /^进度，已完成 \d+\/(\d+) 步/.test(el.getAttribute("aria-label") ?? ""));
       const views = live("button[aria-label]").find((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
@@ -1436,6 +1574,149 @@ export async function verifyCompactWorkflowViews(page) {
     await page.keyboard.press("Escape");
     await page.getByRole("menu", { name: "筛选", exact: true }).waitFor({ state: "hidden" });
   }
+}
+
+/** Module controls can precede their lazy result; wait until content has stopped showing loading placeholders. */
+export function moduleReady() {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  const body = main?.querySelector("[data-page-body]");
+  return Boolean(body) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
+}
+
+/** Read the selected result, not its toolbar or the native conversation surface. A retry panel alone is a failed read;
+ * the same panel beside retained scientific results is a partial result, never a whole-page veto.
+ */
+export function moduleResultProbe() {
+  const body = document.querySelector("main [data-page-body]");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
+  const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
+  if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
+  const alerts = [...body.querySelectorAll("[role='alert']")].filter(visible);
+  const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
+  const warnings = alerts.filter((alert) => !retry.includes(alert)).map((alert) => alert.textContent?.trim().slice(0, 180));
+  const empty = [...body.querySelectorAll("[data-empty]")].filter(visible).map((el) => el.textContent?.trim().slice(0, 120));
+  const wholeFailure = [...body.querySelectorAll("[data-state-screen][role='alert']")].some(visible);
+  const retained = [...body.querySelectorAll("table tr:has(td), ul li, ol li, dl dd, [data-stat-band], [data-chart], canvas, [data-prose], article")]
+    .filter((el) => visible(el) && !el.closest("[role='alert'], [data-empty], [data-step-state], [data-state-screen], [data-study-pane]"));
+  const errors = retry.map((alert) => alert.textContent?.trim().slice(0, 180));
+  const status = wholeFailure || (retry.length > 0 && retained.length === 0) ? "error"
+    : retained.length > 0 ? (alerts.length > 0 ? "partial" : "content") : empty.length > 0 ? "empty" : "unobservable";
+  return { status, coverage: status === "content" || status === "partial", retained: retained.length, errors, warnings, empty };
+}
+
+/** Wait through a selected result's loading phase, then classify what actually arrived. */
+export async function readModuleResult(page, target) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const result = await page.evaluate(moduleResultProbe);
+  if (result.status === "error") throw new Error(`${target}: selected result could not be read: ${result.errors.join("; ") || "terminal page failure"}`);
+  return result;
+}
+
+/** Expected result choices, including the canonical conversation only where it exists. */
+export function moduleViewLabels(module, programme = true, canonical = false) {
+  if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
+  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"] : ["总览", "定义与证据", "人群", "匹配与招募"])];
+}
+
+/** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
+ * GeoBand.destination/useOpenGeoConversation. Result switches keep only the context those helpers own.
+ */
+export function moduleViewAddressHolds(module, label, initial, before, after, { programme = true } = {}) {
+  const start = new URL(initial);
+  const from = new URL(before);
+  const to = new URL(after);
+  if (to.origin !== start.origin) return false;
+  const match = start.pathname.match(module === "geo" ? /^\/app\/geo\/([^/]+)/u : programme ? /^\/app\/virtual-research\/([^/]+)/u : /^\/app\/capabilities\/calculations\/([^/]+)/u);
+  if (!match) return false;
+  const id = match[1];
+  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"];
+  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"];
+  const key = keys[labels.indexOf(label)];
+  const base = module === "geo" ? `/app/geo/${id}` : programme ? `/app/virtual-research/${id}` : `/app/capabilities/calculations/${id}`;
+  const path = to.pathname.replace(/\/$/u, "");
+  if (module === "vcr") {
+    if (label === "对话") return path === `/app/virtual-research/${id}/chat`;
+    return Boolean(key) && (path === `${base}/${key}` || (key === "overview" && path === base));
+  }
+  const part = from.pathname.slice(`/app/geo/${id}`.length).split("/")[1];
+  const previous = part === "chat" ? from.searchParams.get("result") ?? "overview" : part === "answers" ? "questions" : part || "overview";
+  const addressedSession = part === "chat" ? from.pathname.split("/")[5] : null;
+  const session = addressedSession ?? from.searchParams.get("session");
+  if (label === "对话") {
+    const chatBase = `${base}/chat`;
+    const chatSession = path.startsWith(`${chatBase}/`) ? path.slice(chatBase.length + 1) : null;
+    const chat = path === chatBase || (chatSession && /^[A-Za-z0-9_-]{1,160}$/u.test(chatSession));
+    if (!chat || (session && chatSession !== session) || to.searchParams.get("result") !== previous) return false;
+    return [...from.searchParams].every(([name, value]) => name === "result" || to.searchParams.get(name) === value);
+  }
+  if (!key || !(path === `${base}/${key}` || (key === "overview" && path === base))) return false;
+  if (session && to.searchParams.get("session") !== session) return false;
+  if (to.searchParams.get("step") !== from.searchParams.get("step")) return false;
+  return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
+}
+
+/** Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. */
+export async function verifyModuleNavigation(page, module, { programme = true, canonical = false } = {}) {
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await readModuleResult(page, `${module} initial view`);
+  const initial = page.url();
+  const expected = module === "geo" ? 8 : 7;
+  const rail = page.locator("[data-page-chrome] [data-step-rail]");
+  const steps = rail.locator("[data-rail-step]");
+  const ids = await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-rail-step")));
+  if (programme && (ids.length !== expected || new Set(ids).size !== expected)) throw new Error(`the ${module} rail must expose ${expected} distinct steps`);
+  const destinations = [];
+  const notices = [];
+  const recordCoverage = (target, result) => {
+    if (["empty", "unobservable"].includes(result.status)) notices.push(`not observable: ${target} reached ${result.status} content; navigation is not positive result coverage`);
+  };
+  for (const id of programme ? ids : []) {
+    const item = rail.locator(`[data-rail-step="${id}"]`);
+    const link = item.locator("a[href]");
+    if (await link.count() !== 1) throw new Error(`step ${id} has no unique destination`);
+    const href = await link.getAttribute("href");
+    const state = await item.getAttribute("data-rail-state");
+    if (!state) throw new Error(`step ${id} has no state`);
+    await link.scrollIntoViewIfNeeded();
+    await link.click();
+    await page.waitForFunction(({ id }) => Boolean(document.querySelector(`[data-rail-step="${id}"] [aria-current="step"]`)), { id }, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const target = new URL(href, initial);
+    const actual = new URL(page.url());
+    if (actual.pathname !== target.pathname || actual.search !== target.search || actual.hash !== target.hash) throw new Error(`step ${id} did not reach its destination`);
+    const result = await readModuleResult(page, `${module} step ${id}`);
+    recordCoverage(`step ${id}`, result);
+    destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
+  }
+  const labels = moduleViewLabels(module, programme, canonical);
+  const views = [];
+  for (const label of labels) {
+    const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^查看：/ });
+    if (await selector.count() !== 1) throw new Error("the module has no unique pinned result selector");
+    await selector.click();
+    const choices = page.getByRole("menuitemradio");
+    const shown = (await choices.allTextContents()).map((text) => text.trim());
+    if (shown.length !== labels.length || labels.some((choice) => !shown.includes(choice))) throw new Error(`the ${module} result selector omits or adds destinations: ${shown.join(", ")}`);
+    const before = page.url();
+    await page.getByRole("menuitemradio", { name: label, exact: true }).click();
+    await page.waitForFunction((label) => [...document.querySelectorAll("[data-page-chrome] button")].some((button) => button.getAttribute("aria-label") === `查看：${label}`), label, { timeout: 15_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if (!moduleViewAddressHolds(module, label, initial, before, page.url(), { programme })) throw new Error(`${module} view ${label}: selector label changed without reaching its canonical destination (${new URL(page.url()).pathname + new URL(page.url()).search})`);
+    if (programme && await rail.locator("[data-rail-step]").count() !== expected) throw new Error(`the rail disappeared in ${label}`);
+    const result = await readModuleResult(page, `${module} view ${label}`);
+    recordCoverage(`view ${label}`, result);
+    views.push({ label, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
+  }
+  await page.goto(initial, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  return { destinations, views, notices };
 }
 
 /** A grid of charts fills this much of the box round its cards, at least (audit D §4 S6). */
@@ -1500,6 +1781,12 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
+    if ((view?.module || view?.band) && c.viewSelector) {
+      const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
+      if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
+      if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
+      if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
+    }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
     if (template.stepRail === "every-tab") {
@@ -1525,8 +1812,16 @@ export function compositionFindings(name, viewportName, c) {
   }
   for (const control of c.tagLike) add("tag-as-control", `the ${control.tag} “${control.text}” is drawn as a tag (the tag's height, corner and type size) and can be pressed`);
   for (const word of c.words) add("word-as-link", `“${word.text}” is plain text in a ${word.tag} that looks pressable, and is the name of a tab or a step`);
+  if (view?.primaryPlacement === "method-workbench" && (c.workbenchActions?.workbenches !== 1 || c.workbenchActions?.bars !== 1
+    || c.primaries.filter((primary) => primary.markedRun && primary.run?.named).length !== 1)) {
+    add("primary-action", "the method workbench must expose one Run action bar and one named primary action");
+  }
   for (const primary of c.primaries) {
-    if (!primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+    const run = primary.run;
+    const workbenchRun = view?.primaryPlacement === "method-workbench" && run && run.named && run.height >= 44 && run.bars === 1 && run.primaries === 1
+      && run.beforeContent && run.position === "sticky" && run.initialReachable
+      && (run.room <= 0 || (run.held && run.held.scrolled >= Math.min(100, run.room) && run.held.reachable && Math.abs(run.held.after - run.held.expected) <= BAND_TOLERANCE_PX));
+    if (primary.markedRun && view?.primaryPlacement === "method-workbench" ? !workbenchRun : !primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
   }
   for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
 
@@ -1581,7 +1876,7 @@ export function familyFindings(pages) {
     const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : c.compactWorkflow?.count ?? (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
     const counts = tabs.map((tab) => steps(tab.c));
     if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
-    const tops = tabs.map((tab) => tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const tops = tabs.map((tab) => tab.c.viewSelector ? tab.c.viewSelector.top ?? tab.c.stepRail?.top ?? null : tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
     const known = tops.filter((top) => top !== null);
     if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
       found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
@@ -1784,6 +2079,7 @@ export function pageProbe([kind, arg]) {
   const all = (selector, root = main) => [...root.querySelectorAll(selector)];
   const outside = (el) => !el.closest("[role='dialog'], nav, aside");
 
+  if (kind === "calculationHistory") return { rows: all("ul[aria-label='此计算空间的历史'] > li").filter(visible).length };
   if (kind === "geoMarketOff") {
     const el = all("[data-geo-market-off]")[0];
     return el ? { present: true, top: Math.round(el.getBoundingClientRect().top), viewport: window.innerHeight } : { present: false };
@@ -1931,6 +2227,7 @@ export const PAGE_PROBES = {
   "frontier-following": [["followingEmpty", ["desktop", "phone"]]],
   "frontier-event": [["eventGroups", ["desktop", "phone"]]],
   frontier: [["firstRowTop", ["phone"]]],
+  "calculation-history": [["calculationHistory", ["desktop", "phone"]]],
   "virtual-research": [["rowWidth", ["phone"]]],
   capabilities: [["capabilityCards", ["desktop"]]],
   memory: [["memoryTabs", ["desktop"]]],
@@ -2117,6 +2414,10 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      break;
+    }
+    case "calculationHistory": {
+      if (!(r.rows > 0)) failures.push(`${current}: the calculation workspace shows no readable historical calculation`);
       break;
     }
     case "knowledgeGraph": {
@@ -3027,6 +3328,68 @@ export function knowledgeReturnFindings(title, read) {
   return { failures, notices };
 }
 
+/** The calculation catalogue first chooses a task family, then displays its methods. This is filtering, not a drawer.
+ * Kept separate from the generic row verdict so an unrelated state change cannot certify an inert record row.
+ */
+export function calculationTaskFamilyReady(family) {
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  const main = document.querySelector("main");
+  if (!main) return false;
+  const selected = [...main.querySelectorAll("[data-page-chrome] button[aria-label]")].some((el) => visible(el) && el.getAttribute("aria-label") === `计算任务：${family}`);
+  const chooser = [...main.querySelectorAll("ul[aria-label='选择计算任务']")].some(visible);
+  const lists = [...main.querySelectorAll("[data-vcr-method-catalogue] ul[aria-label]")].filter(visible);
+  return selected && !chooser && lists.length === 1 && lists[0].getAttribute("aria-label") === family
+    && [...lists[0].querySelectorAll("[data-vcr-method]")].some((el) => visible(el) && Boolean(el.getAttribute("data-vcr-method")));
+}
+
+/** Authenticated same-origin catalogue read, serialized independently like every browser probe. */
+export async function calculationMethodCatalogueProbe() {
+  const response = await fetch("/api/vcr/models", { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`calculation task catalogue could not be read (HTTP ${response.status})`);
+  return (await response.json())?.data;
+}
+
+/** Derive displayed identities from the authenticated catalogue using the product's embedded, source-checked grouping helpers. */
+export function calculationFamilyMethodIds(catalogue, family) {
+  if (!Array.isArray(catalogue?.methods)) throw new Error("calculation task catalogue has no readable methods");
+  const complete = WALK_METHOD_GROUPING.completeMethodCatalogue(catalogue.methods);
+  const entries = WALK_METHOD_GROUPING.methodEntries(complete);
+  return entries.filter(method => WALK_METHOD_GROUPING.methodTask(method.method ?? method.id) === family).map(WALK_METHOD_GROUPING.methodEntryId);
+}
+
+/** Actually select a task, read its matching method list, and open its first method in this calculation's scope. */
+export async function walkCalculationTaskFamily(page, { timeout = 15_000 } = {}) {
+  const initial = new URL(page.url());
+  const match = /^\/app\/capabilities\/calculations\/([^/]+)\/?$/u.exec(initial.pathname);
+  if (!match) throw new Error("calculation task selection has no calculation workspace identity");
+  const chooser = page.getByRole("list", { name: "选择计算任务", exact: true });
+  const control = chooser.locator("button[data-row-title]").first();
+  const family = (await control.innerText()).trim();
+  if (!family) throw new Error("calculation task selection has no named task");
+  const catalogue = await page.evaluate(calculationMethodCatalogueProbe);
+  const allowed = new Set(calculationFamilyMethodIds(catalogue, family));
+  if (allowed.size === 0) throw new Error(`calculation task ${family} has no declared catalogue methods`);
+  await control.click();
+  await page.waitForFunction(calculationTaskFamilyReady, family, { timeout }).catch((cause) => {
+    throw new Error(`calculation task ${family} did not produce its matching method list and selected filter`, { cause });
+  });
+  if (new URL(page.url()).pathname !== initial.pathname) throw new Error("calculation task selection left its calculation workspace");
+  const methods = page.getByRole("list", { name: family, exact: true }).locator("[data-vcr-method]");
+  const methodIds = await methods.evaluateAll((items) => items.map((item) => item.getAttribute("data-vcr-method")));
+  const method = methodIds[0];
+  if (!method || new Set(methodIds).size !== methodIds.length) throw new Error("calculation task methods have no distinct identities");
+  const unexpected = methodIds.filter(id => !allowed.has(id));
+  if (unexpected.length) throw new Error(`calculation task ${family} lists unknown or wrong-family catalogue methods: ${unexpected.join(", ")}`);
+  await methods.first().click();
+  const expected = `/app/capabilities/methods/${encodeURIComponent(method)}`;
+  await page.waitForFunction(({ origin, path, study }) => location.origin === origin && location.pathname === path && new URLSearchParams(location.search).get("study") === study,
+    { origin: initial.origin, path: expected, study: decodeURIComponent(match[1]) }, { timeout }).catch((cause) => {
+    throw new Error("calculation task method did not open its exact method and study destination", { cause });
+  });
+  await page.locator("[data-vcr-method-workbench]").waitFor({ state: "visible", timeout });
+  return { family, methodIds, method, studyId: decodeURIComponent(match[1]), address: new URL(page.url()).pathname + new URL(page.url()).search };
+}
+
 /**
  * The first row of each list of one page, clicked, and what that showed (R10 rule 6; R13 V-11). Lists are found by `rowProbe`. The first list's first row is read again with `afterClickProbe` while it is open. Every page is clicked
  * behind a guard that refuses every request that is not a read, so the walk's clicks write nothing even where a row marks itself read on
@@ -3064,6 +3427,11 @@ async function walkRowClicks(page, base, route, name, popups) {
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
       await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
+      if (name === "calculation-history" && labels[index] === "选择计算任务") {
+        const task = await walkCalculationTaskFamily(page);
+        rows.push({ label: labels[index], shown: true, after: { kind: "calculation-task-family", ...task } });
+        continue;
+      }
       const external = await page.evaluate(rowProbe, ["external", labels[index]]);
       popups.count = 0;
       await page.evaluate(rowProbe, ["click", labels[index]]);
@@ -3112,25 +3480,43 @@ export function clickFirstMarkProbe() {
 
 /** Whether a drawer is open, and whether the address says so (`open=`). */
 export function drawerStateProbe() {
-  return { dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
+  return { open: new URLSearchParams(location.search).get("open"), dialog: [...document.querySelectorAll("[role='dialog']")].some((el) => el.getBoundingClientRect().width > 0), address: new URLSearchParams(location.search).has("open") };
 }
 
 /**
  * 记忆地图's mark and its drawer: the first mark of the list is pressed, the drawer is read as open and in the address, and its own 关闭
  * is pressed and read again. Pressing a mark opens a drawer and reads; nothing here writes.
  */
-async function walkMemoryMap(page, base, route) {
+export async function walkMemoryMap(page, base, route) {
   await openRoute(page, base, route);
+  await waitMemory(page, true, { selected: "地图" });
   const rows = await page.evaluate(markRowsProbe);
   if (rows === 0) return { ...memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null }), read: { rows } };
   await page.evaluate(clickFirstMarkProbe);
-  await page.waitForTimeout(1_500);
+  await page.waitForFunction(() => new URLSearchParams(location.search).has("open") && Boolean(document.querySelector("[role='dialog']")), undefined, { timeout: 15_000 });
   const opened = await page.evaluate(drawerStateProbe);
-  const pressed = opened.dialog ? await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]) : false;
-  await page.waitForTimeout(800);
+  if (!opened.dialog) return { ...memoryMapFindings("memory-map", { rows, opened, closed: null }), read: { rows, opened, closed: null } };
+  if (!opened.open) throw new Error("the first mark has no addressed identity");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reload = await page.evaluate(drawerStateProbe);
+  if (reload.open !== opened.open || !reload.dialog) throw new Error("reloading the mark lost its addressed identity or drawer");
+  // Reloading the document preserves the pushed entry; Back must still return to the unfiltered map.
+  await page.goBack();
+  await waitMemory(page, true, { selected: "地图" });
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  const back = await page.evaluate(drawerStateProbe);
+  if (back.address || back.dialog) throw new Error("Back did not close the mark");
+  await page.evaluate(clickFirstMarkProbe);
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  const reopened = await page.evaluate(drawerStateProbe);
+  if (reopened.open !== opened.open) throw new Error("the first unfiltered mark changed identity");
+  const pressed = await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]);
+  if (pressed) await page.getByRole("dialog").waitFor({ state: "hidden" });
   const closed = pressed ? await page.evaluate(drawerStateProbe) : null;
   const judged = memoryMapFindings("memory-map", { rows, opened, closed });
-  return { ...judged, read: { rows, opened, closed } };
+  return { ...judged, read: { rows, opened, reload, back, reopened, closed } };
 }
 
 /**
@@ -3210,7 +3596,7 @@ async function walkCleanupCover(context, base, waitMs) {
       headers: { "content-type": "application/json", "retry-after": "5" },
       body: JSON.stringify({ error: "The previous runtime is still being cleaned up.", code: "runtime_cleanup_required" }),
     }));
-    await probe.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await probe.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await probe.waitForTimeout(10_000);
     const early = await probe.evaluate(cleanupProbe);
     let late = null;
@@ -3222,7 +3608,8 @@ async function walkCleanupCover(context, base, waitMs) {
         if (late.alertButtons) break;
       }
     }
-    return { failures: cleanupFindings(early, late), notices: cleanupNotices(early), read: { early, late } };
+    const address = globalConversationAddress(probe);
+    return { failures: [...cleanupFindings(early, late), ...(address.valid ? [] : [`chat@desktop: the global entry did not open the default conversation (${address.loadedRoute})`])], notices: cleanupNotices(early), read: { early, late, loadedRoute: address.loadedRoute } };
   } finally {
     await probe.close().catch(() => {});
   }
@@ -3306,15 +3693,23 @@ async function main() {
     }
     /** @type {Array<{ view: string, result: any }>} */ const axeScans = [];
     report.discovered = { routes: found.routes.map(([name]) => name), evidenceMatrix: found.matrix !== null, pdf: found.pdfTitle !== null, keylessConnectors: found.keyless.length };
-    const page = await context.newPage();
-    // A row that opens a link in a new tab has shown something: the tab is
-    // counted and closed.
+    let page;
     const popups = { count: 0 };
-    page.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
     const consoleErrors = {};
     const httpErrors = {};
-    page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
-    page.on("response", (response) => { if (response.status() >= 400) (httpErrors[current] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+    const requestFailures = {};
+    const installObservers = (tab) => {
+      const view = current;
+      tab.on("popup", (popup) => { popups.count += 1; popup.close?.().catch(() => {}); });
+      tab.on("console", (message) => { if (message.type() === "error") (consoleErrors[view] ||= []).push(message.text().slice(0, 160)); });
+      tab.on("response", (response) => { if (response.status() >= 400) (httpErrors[view] ||= []).push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`); });
+      tab.on("requestfailed", (request) => { (requestFailures[view] ||= []).push({ method: request.method(), url: request.url().split("?")[0], error: request.failure()?.errorText ?? "unknown" }); });
+    };
+    const freshPage = async (viewport) => {
+      page = await replaceWalkPage(context, page, installObservers);
+      await page.setViewportSize(viewport);
+      return page;
+    };
     // An open tab after a release asks for a page chunk the new image no
     // longer has (2026-09-23 plan §2.1). Played here by refusing the inbox's
     // chunk to a fresh page and navigating to it in place: the sidebar must
@@ -3337,7 +3732,7 @@ async function main() {
         await probe.waitForTimeout(8_000);
         const state = await probe.evaluate(() => ({
           english: /Unexpected Application Error|dynamically imported module|Failed to fetch/.test(document.body.innerText),
-          sidebar: Boolean(document.querySelector("aside a[href='/app/chat']")),
+          sidebar: Boolean(document.querySelector("aside a[href='/app/home']")),
           text: document.body.innerText.replace(/\s+/g, " ").slice(0, 200),
         }));
         await probe.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
@@ -3351,25 +3746,41 @@ async function main() {
       }
     }
     for (const [viewportName, viewport] of VIEWPORTS) {
-      await page.setViewportSize(viewport);
       for (const [name, route] of routes) {
         current = `${name}@${viewportName}`;
+        let phase = "navigation";
+        const navigationFailures = [];
         try {
+          await freshPage(viewport);
           let navigationRetried = false;
-          await navigateForWalk(page, `${base}${route}`, () => { navigationRetried = true; report.info.push(`${current}: retried once after Chromium reported a host network change`); });
+          await navigateForWalk(page, `${base}${route}`, async (error) => {
+            navigationRetried = true;
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "navigation-initial", error, requestFailures[current]));
+            report.info.push(`${current}: retried once on a clean tab after Chromium reported a host network change; initial failure retained`);
+            return freshPage(viewport);
+          });
+          assertWalkAuthenticated(page.url());
+          phase = "route-ready";
           await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
+          assertWalkAuthenticated(page.url());
           await page.waitForTimeout(3_000);
-          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried);
+          phase = "route-load";
+          const routeLoad = await recoverWalkLoad(page, `${base}${route}`, consoleErrors[current] ?? [], unexpectedRefusals(name, httpErrors[current] ?? []), navigationRetried, async (initial) => {
+            navigationFailures.push(await walkFailureDiagnostics(page, out, current, "read-initial", new Error(initial.message ?? "failed read"), requestFailures[current]));
+            return freshPage(viewport);
+          });
           if (!routeLoad.loaded) {
-            report.pages[current] = { route, routeLoad, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
-            await page.screenshot({ path: path.join(out, `${current}.load-error.jpg`), type: "jpeg", quality: CAPTURE_QUALITY });
+            report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+            report.pages[current].diagnostic = await walkFailureDiagnostics(page, out, current, phase, new Error(routeLoad.retryError ?? routeLoad.initial?.message ?? "failed read"), requestFailures[current]);
             failures.push(`${current}: route load failed (${routeLoad.initial?.message ?? "failed read"}); composition was not judged`);
             continue;
           }
           if (routeLoad.retried) report.info.push(`${current}: visible read error retried once after an observed network change; initial error retained in routeLoad`);
+          if (name === "calculation-history") await page.waitForFunction(calculationHistoryReady, undefined, { timeout: 30_000 });
+          phase = "measurement";
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags]),
             RETIRED_NAMES.map((re) => [re.source, re.flags]), OPERATOR_SENTENCES]);
-          report.pages[current] = { route, routeLoad, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
+          report.pages[current] = { route, routeLoad, navigationFailures, requestFailures: requestFailures[current] ?? [], ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
             runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
           const refusals = unexpectedRefusals(name, httpErrors[current] ?? []);
           const verdict = pageFindings(name, viewportName, measured, refusals);
@@ -3386,6 +3797,11 @@ async function main() {
           const composition = await page.evaluate(measureComposition, [{ hold: true }]);
           if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
+          }
+          if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
+            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr");
+            report.pages[current].navigation = navigation;
+            notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
           }
           report.pages[current].composition = composition;
           const arranged = compositionFindings(name, viewportName, composition);
@@ -3436,6 +3852,7 @@ async function main() {
             const where = await page.evaluate(() => location.pathname);
             if (!clicked || where !== record.to) failures.push(`${current}: ${record.back} ${clicked ? `goes to ${where}` : "is not on the page"} (${record.to})`);
           }
+          phase = "row-interactions";
           if (viewportName === "desktop" && ROW_CLICK_PAGES.has(name)) {
             // Read-only by construction: a row's title opens a drawer, a page or itself; the pages new to the walk in R13 also have
             // every request that is not a read refused in the browser while their row is clicked (`walkRowClicks`).
@@ -3469,12 +3886,19 @@ async function main() {
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
         } catch (error) {
-          failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
+          const diagnostic = await walkFailureDiagnostics(page, out, current, phase, error, requestFailures[current]);
+          report.pages[current] = { ...report.pages[current], route, navigationFailures, diagnostic,
+            consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+          failures.push(`${current}: did not load [${phase}] (${String(error).slice(0, 300)})`);
+        } finally {
+          await page?.close().catch(() => {});
+          page = undefined;
         }
       }
       if (found.matrix) {
         // A finished package's evidence matrix, read at this width (R11); it is a page of the run's own files, found from the run list.
         current = `evidence-matrix@${viewportName}`;
+        await freshPage(viewport);
         await recordStep(report, failures, notices, current, () => walkMatrix(page, base, found.matrix, viewportName));
       }
     }
@@ -3485,8 +3909,8 @@ async function main() {
     report.axe = { from: axe.from, version: axe.version, scanned: axeScans.filter((scan) => scan.result).length, why: axe.why };
     // R13 (V-7), the cases that are more than a page's measure and run at the desktop width: where the reader is lives in the address (A08), and
     // the event page's hand-off to the conversation (A01). Each is a notice that says "not observable" when the account has nothing to try it on.
-    await page.setViewportSize(VIEWPORTS[0][1]);
     current = "address@desktop";
+    await freshPage(VIEWPORTS[0][1]);
     if (!setting.only.length) await recordStep(report, failures, notices, "address-state", () => walkAddressState(page, base));
     const eventRoute = found.routes.find(([name]) => name === "frontier-event")?.[1] ?? null;
     if (setting.only.length) { /* a partial walk takes no step that is not about a page it was asked for */ }
@@ -3494,8 +3918,8 @@ async function main() {
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
+      await freshPage(VIEWPORTS[0][1]);
       allowRuntimeStart = true;
-      await page.setViewportSize(VIEWPORTS[0][1]);
       const kernelMisses = [];
       page.on("response", (response) => {
         if (response.status() >= 400 && /\/__evimed\/[ka]\//.test(new URL(response.url()).pathname)) {
@@ -3504,7 +3928,7 @@ async function main() {
       });
       const chat = await walkChat(page, base).catch((error) => ({ loaded: false, error: String(error).slice(0, 160) }));
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
-      report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
+      report.pages[current] = { route: "/app/home", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
       else if (chat.retriedAfterNetworkChange) report.info.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
@@ -3840,7 +4264,7 @@ export function addressAct([kind, first = "", second = ""]) {
 /**
  * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
- * @param {["inbox" | "memory"]} args
+ * @param {["inbox" | "memory" | "memory-map"]} args
  */
 export function addressProbe([kind]) {
   const visible = (el) => {
@@ -3855,13 +4279,14 @@ export function addressProbe([kind]) {
     const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
-  if (kind === "memory") {
+  if (kind === "memory" || kind === "memory-map") {
     // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
     const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
     const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
-    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
-    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null };
+    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === (kind === "memory-map" ? "搜索记忆地图" : "搜索记忆") && visible(el));
+    const views = [...document.querySelectorAll("[role='group'][aria-label='地图的视图'] button[aria-pressed='true']")].filter(visible);
+    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-map" ? { view: views[0] ? words(views[0]) : null } : {}) };
   }
   return null;
 }
@@ -3873,8 +4298,32 @@ export function addressProbe([kind]) {
  */
 export const ADDRESS_CASES = [
   { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
-  { page: "memory", route: "/app/memory", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory", route: "/app/memory?tab=self", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
+  { page: "memory-map", route: "/app/memory/map", probe: "memory-map", act: [["chip", "地图的视图", "维度"]], fill: ["搜索记忆地图", "探针"], search: { view: "dims", q: "探针" }, state: { selected: "地图", view: "维度", query: "探针" } },
 ];
+
+/** Memory controls mount before data. An error is terminal but never empty or successful coverage.
+ * @param {{ map: boolean, selected?: string, query?: string }} wanted
+ */
+export function memoryReady(wanted) {
+  const main = document.querySelector("main");
+  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
+  if (!main || location.pathname !== (wanted.map ? "/app/memory/map" : "/app/memory")) return false;
+  const selected = [...main.querySelectorAll("[role='tablist'][aria-label='记忆'] [aria-selected='true']")].find(visible);
+  if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
+  const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === (wanted.map ? "搜索记忆地图" : "搜索记忆") && visible(el));
+  if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
+  if ([...main.querySelectorAll("[role='alert']")].some(visible)) return true;
+  if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
+  return Boolean(main.querySelector("[data-page-body]"));
+}
+
+/** Wait for memory data as well as its controls; fail an unreadable page instead of calling it empty. */
+export async function waitMemory(page, map, state = {}) {
+  await page.waitForFunction(memoryReady, { map, ...state }, { timeout: 30_000 });
+  const errors = await page.locator("main [role='alert']").allTextContents();
+  if (errors.length) throw new Error(`memory data could not be read: ${errors.join("; ").slice(0, 180)}`);
+}
 
 /**
  * Whether a page's state is what a case says. Strings match by prefix, except a search box's text, which is exact.
@@ -3958,6 +4407,7 @@ async function walkAddressState(page, base) {
   const failures = [];
   for (const c of ADDRESS_CASES) {
     await openRoute(page, base, c.route);
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.probe === "memory-map" ? "地图" : "关于你" });
     const pressed = [];
     for (const act of c.act) {
       pressed.push(Boolean(await page.evaluate(addressAct, act)));
@@ -3968,6 +4418,7 @@ async function walkAddressState(page, base) {
       await page.getByRole("searchbox", { name: c.fill[0] }).fill(c.fill[1], { timeout: 5_000 }).catch(() => null);
       await page.waitForTimeout(1_200);
     }
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
     const first = await page.evaluate(addressProbe, [c.probe]);
     let away = null;
     let back = null;
@@ -3979,10 +4430,12 @@ async function walkAddressState(page, base) {
         away = await page.evaluate(() => location.pathname);
         await page.goBack();
         await page.waitForTimeout(1_500);
+        if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
         back = await page.evaluate(addressProbe, [c.probe]);
       }
       // The address loaded again: a reload, a pasted link.
       await openRoute(page, base, `${first.path}${first.search}`);
+      if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
       reload = await page.evaluate(addressProbe, [c.probe]);
     }
     const read = { pressed, first, away, back, reload };
@@ -3998,10 +4451,11 @@ async function walkAddressState(page, base) {
     failures.push(...probeFindings("memory-landing", "desktop", "memoryTabs", landing).failures);
   }
   await openRoute(page, base, "/app/memory?tab=self");
+  await waitMemory(page, false, { selected: "关于你" });
   const self = await page.evaluate(pageProbe, ["memoryTabs"]);
   const composition = await page.evaluate(measureComposition, [{ hold: false }]);
   const coverage = memoryRowCoverage(self?.tabs, composition.empties?.[0]?.title);
-  if (coverage) await openRoute(page, base, coverage.route);
+  if (coverage) { await openRoute(page, base, coverage.route); await waitMemory(page, false); }
   reads["memory-row-coverage"] = coverage ?? { route: "/app/memory?tab=self" };
   const rows = (await page.evaluate(rowProbe, ["inPlace"])) ?? [];
   /** @type {{ rows: number, opened: any, closed: any }} */ const open = { rows: rows.length, opened: null, closed: null };
@@ -4244,6 +4698,12 @@ async function walkComposer(page, operator) {
   return { failures: [...a.failures, ...b.failures], notices: [...a.notices, ...b.notices], read: { desktop, phone } };
 }
 
+/** @param {any} page */
+function globalConversationAddress(page) {
+  const address = new URL(page.url());
+  return { loadedRoute: address.pathname + address.search, valid: /^\/app\/chat(?:\/[^/]+)?$/.test(address.pathname) && address.searchParams.get("project") === "default" };
+}
+
 /**
  * Open the conversation page and wait for the kernel frame's composer.
  *
@@ -4261,7 +4721,7 @@ async function walkChat(page, base) {
   const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };
   page.on?.("requestfailed", onFailed);
   try {
-    await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(`${base}/app/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     let retried = false;
     let deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
@@ -4273,7 +4733,11 @@ async function walkChat(page, base) {
           // On screen: a researcher's statistics are in the document and hidden (R13 E-17), and are not what this records.
           stats: [...document.querySelectorAll("[data-composer-stats],[data-composer-stat]")].filter((node) => node.getClientRects().length > 0).map((node) => node.textContent?.trim() ?? ""),
         })).catch(() => null);
-        if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        if (seen?.composer) {
+          const address = globalConversationAddress(page);
+          if (!address.valid) return { loaded: false, loadedRoute: address.loadedRoute, state: `the global entry did not open the default conversation (${address.loadedRoute})` };
+          return { loaded: true, loadedRoute: address.loadedRoute, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+        }
       }
       const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
       if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) {

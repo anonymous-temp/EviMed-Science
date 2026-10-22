@@ -94,7 +94,7 @@ export function frontierToolbar({
           ...(narrowedFollow ? [{ kind: "toggle" as const, label: "全部关注", icon: X, pressed: true, onChange: () => onAllFollows() }] : []),
           ...(follow === "full" ? feed : []),
         ];
-        actions = <Button variant="secondary" size="sm" onClick={onManageFollows}>管理关注</Button>;
+        actions = <Button variant="text" size="sm" onClick={onManageFollows}>管理关注</Button>;
       }
       break;
     default:

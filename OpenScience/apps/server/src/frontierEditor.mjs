@@ -730,13 +730,44 @@ function trimOverlongSummary(answer, verified, item, modelInput) {
   return again.issues.length ? null : again;
 }
 
+/** Closed, non-content diagnostics. Historical rows without this object stay unknown. */
+export const FRONTIER_DIAGNOSTIC_CODES = Object.freeze(["passed", "empty", "length", "link", "language", "number", "source_missing", "answer_invalid", "withheld", "not_checked"]);
+export const FRONTIER_DIAGNOSTIC_REASONS = Object.freeze(["provider_unavailable", "call_failed", "budget", "peak", "throttled", "unavailable", "retry_exhausted", "source_changed"]);
+
+/** Explicit allow-list for persisted and public metadata; never copy model/error text.
+ * @param {any} value */
+export function frontierEditorDiagnostics(value) {
+  if (!value || value.schemaVersion !== 1 || !["passed", "repaired", "title-only", "pending", "deferred", "stale"].includes(value.outcome)) return null;
+  /** @param {unknown} codes */
+  const field = (codes) => Array.isArray(codes) ? [...new Set(codes.filter((code) => typeof code === "string" && FRONTIER_DIAGNOSTIC_CODES.includes(code)))].slice(0, FRONTIER_DIAGNOSTIC_CODES.length) : [];
+  const checkedAt = typeof value.checkedAt === "string" && Number.isFinite(Date.parse(value.checkedAt)) ? new Date(value.checkedAt).toISOString() : null;
+  if (!checkedAt) return null;
+  return { schemaVersion: 1, outcome: /** @type {string} */ (value.outcome),
+    attempts: Number.isInteger(value.attempts) && value.attempts >= 0 && value.attempts <= 3 ? value.attempts : null,
+    inputSha256: typeof value.inputSha256 === "string" && /^[a-f0-9]{64}$/.test(value.inputSha256) ? value.inputSha256 : null,
+    editorVersion: typeof value.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(value.editorVersion) ? value.editorVersion : null,
+    checkedAt, reason: FRONTIER_DIAGNOSTIC_REASONS.includes(value.reason) ? value.reason : null,
+    fields: { title_zh: field(value.fields?.title_zh), summary_zh: field(value.fields?.summary_zh) } };
+}
+
+/** @param {any} verified @param {FrontierEditItem} item */
+function editFieldDiagnostics(verified, item) {
+  /** @param {string} field */
+  const codes = (field) => verified.failed.has("answer") ? ["answer_invalid"]
+    : [...new Set(verified.kinds.filter((/** @type {FrontierProseIssue} */ issue) => issue.field === field).map((/** @type {FrontierProseIssue} */ issue) => issue.kind))];
+  const title = codes("title_zh");
+  const summary = codes("summary_zh");
+  return { title_zh: title.length ? title : ["passed"],
+    summary_zh: !(item.abstract || item.summary || item.bodyExcerpt) ? ["source_missing"] : summary.length ? summary : ["passed"] };
+}
+
 // ───────────────────────── the editor ─────────────────────────
 
 /**
  * @typedef {{ key: string, title: string, sourceName: string, excerpt?: string | null, allowedLanes: string[] }} ScreenInput
  * @typedef {{ medical: boolean, news: boolean, lane: string, specialties: string[], language: string, digest: boolean }} ScreenVerdict
  * @typedef {{ verification: "passed" | "repaired" | "title-only" | "pending", output: FrontierEditOutput | null,
- *             modelInput: string, modelInputSha256: string, attempts: number, issues: string[],
+ *             modelInput: string, modelInputSha256: string, attempts: number, issues: string[], fieldDiagnostics: { title_zh: string[], summary_zh: string[] },
  *             numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } | null,
  *             error: string | null, upstreamStatus?: number, networkCode?: string, model: string, editorVersion: string }} FrontierEditResult
  */
@@ -1373,7 +1404,7 @@ export class FrontierEditor {
     /** @type {FrontierEditResult} */
     const result = {
       verification: "pending", output: null, modelInput, modelInputSha256: sha256(modelInput), attempts: 0,
-      issues: [], numbers: null, error: null, model: this.model, editorVersion: policy.revisionId.startsWith("default:") ? FRONTIER_EDITOR_VERSION : policy.revisionId,
+      issues: [], fieldDiagnostics: { title_zh: ["not_checked"], summary_zh: item.abstract || item.summary || item.bodyExcerpt ? ["not_checked"] : ["source_missing"] }, numbers: null, error: null, model: this.model, editorVersion: policy.revisionId.startsWith("default:") ? FRONTIER_EDITOR_VERSION : policy.revisionId,
     };
     const messages = [
       { role: "system", content: policy.policy.editInstructions },
@@ -1401,6 +1432,7 @@ export class FrontierEditor {
     if (first.numbers.missing.length > 0) this.counters.numberCheck.firstFailed += 1;
     if (!first.issues.length) {
       result.verification = "passed";
+      result.fieldDiagnostics = editFieldDiagnostics(first, item);
       result.output = first.output;
       result.numbers = first.numbers;
       this.counters.verification.passed += 1;
@@ -1432,6 +1464,7 @@ export class FrontierEditor {
     }
     if (second && !second.issues.length) {
       result.verification = "repaired";
+      result.fieldDiagnostics = editFieldDiagnostics(second, item);
       result.output = second.output;
       result.numbers = second.numbers;
       this.counters.verification.repaired += 1;
@@ -1444,6 +1477,7 @@ export class FrontierEditor {
     const trimmed = trimOverlongSummary(lastAnswer, last, item, modelInput);
     if (trimmed) {
       result.verification = "repaired";
+      result.fieldDiagnostics = editFieldDiagnostics(trimmed, item);
       result.output = trimmed.output;
       result.numbers = trimmed.numbers;
       result.issues = last.issues;
@@ -1461,6 +1495,9 @@ export class FrontierEditor {
       : keep("title_zh") ? last.output.titleZh
         : !first.failed.has("title_zh") && !first.failed.has("answer") ? first.output.titleZh : null;
     result.verification = "title-only";
+    result.fieldDiagnostics = editFieldDiagnostics(last, item);
+    if (titleZh) result.fieldDiagnostics.title_zh = ["passed"];
+    if (result.fieldDiagnostics.summary_zh.includes("passed")) result.fieldDiagnostics.summary_zh = ["withheld"];
     result.issues = last.issues;
     result.numbers = last.numbers;
     result.output = {

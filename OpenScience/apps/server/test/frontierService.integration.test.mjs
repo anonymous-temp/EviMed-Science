@@ -457,3 +457,25 @@ test("search by time: the items the words match, newest first; by relevance othe
     { code: "invalid_cursor" }, "a cursor of the time order is not one of the relevance order");
   await assert.rejects(service.listItems(reader, params({ sort: "random" })), { code: "frontier_query_invalid" });
 });
+
+
+test("editor diagnostics survive a new service and expose only bounded metadata", options, async () => {
+  const inserted = await insertItem(database, { title: "Original headline", verification: "title-only" });
+  const unknown = await serviceFor().getItem(reader, inserted.publicId);
+  assert.equal(unknown.body.item.editorDiagnostics, null, "historical rejection reasons are unknown");
+  const metadata = { schemaVersion: 1, outcome: "title-only", attempts: 2, inputSha256: "a".repeat(64),
+    editorVersion: "policy:v2", checkedAt: NOW.toISOString(), reason: null,
+    fields: { title_zh: ["language", "private answer"], summary_zh: ["number"] }, answer: "private answer", error: "private error" };
+  await database.query("UPDATE evimed_frontier.items SET editor_diagnostics=$2::jsonb WHERE id=$1", [inserted.id, JSON.stringify(metadata)]);
+  const reopened = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    await migrateFrontier(reopened, { dimension: 1024 });
+    const raw = (await reopened.query("SELECT editor_diagnostics FROM evimed_frontier.items WHERE id=$1", [inserted.id])).rows[0];
+    assert.equal(raw.editor_diagnostics.attempts, 2);
+    const answer = await serviceFor().getItem(reader, inserted.publicId);
+    assert.deepEqual(answer.body.item.editorDiagnostics, { schemaVersion: 1, outcome: "title-only", attempts: 2,
+      inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: NOW.toISOString(), reason: null,
+      fields: { title_zh: ["language"], summary_zh: ["number"] } });
+    assert.ok(!JSON.stringify(answer.body.item.editorDiagnostics).includes("private"));
+  } finally { await reopened.close(); }
+});

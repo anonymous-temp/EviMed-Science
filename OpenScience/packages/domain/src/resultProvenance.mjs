@@ -67,7 +67,10 @@ export function projectResultVersion(value) {
       matrixText: typeof value.review.matrixText === "string" ? value.review.matrixText : null,
       verification: value.review.verification ?? null,
       matrixVersionId: typeof value.review.matrixVersionId === "string" ? value.review.matrixVersionId : null,
-      matrixDigest: isResultDigest(value.review.matrixDigest) ? value.review.matrixDigest : null } : { status: "unknown" },
+      matrixDigest: isResultDigest(value.review.matrixDigest) ? value.review.matrixDigest : null,
+      ...(isResultDigest(value.review.verificationSnapshot?.digest) && Number.isSafeInteger(value.review.verificationSnapshot?.size)
+        && value.review.verificationSnapshot.size > 0 && value.review.verificationSnapshot.schemaVersion === 1
+        ? { verificationSnapshot: { digest: value.review.verificationSnapshot.digest, size: value.review.verificationSnapshot.size, schemaVersion: 1 } } : {}) } : { status: "unknown" },
     coverage: value.coverage, supersedesVersionId: value.supersedesVersionId ?? null,
     // How the bytes were produced and which calculation each printed number came from (`resultLineage.mjs`).
     // A version captured before either was recorded says so: it is unobserved, and its numbers are not checked.

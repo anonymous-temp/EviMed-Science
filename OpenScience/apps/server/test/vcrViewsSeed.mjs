@@ -263,7 +263,10 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
   const eventsAt = (/** @type {number} */ index) => criteria[index].id;
   const population = await store.savePopulation({
     studyId, userId, kind: "real", name: "合作方候选人 v2", allowedUses: ["feasibility", "design"], reviewState: "ai_set",
-    definition: { timeZero: "一线治疗后首次影像进展日", evidenceWindow: "影像 ≤ 12 周 · 体能评分与化验 ≤ 4 周", exit: "死亡 · 失访 · 已开始二线治疗" },
+    definition: { rules: [
+      { name: "adult", rule: { op: "compare", column: "age", comparator: "gte", value: 18 } },
+      { name: "ecog_0_1", rule: { op: "compare", column: "ecog", comparator: "lte", value: 1 } },
+    ], timeZero: "一线治疗后首次影像进展日", evidenceWindow: "影像 ≤ 12 周 · 体能评分与化验 ≤ 4 周", exit: "死亡 · 失访 · 已开始二线治疗" },
     counts: { realPatients: 3412, eligible: 57, indeterminate: 612, excluded: 2743 },
     waterfall: [
       { key: "all", label: "全部候选人", remaining: 3412 },

@@ -40,7 +40,7 @@ import { VcrToolbarActions } from "../VcrToolbarActions";
 import { PatientTrials } from "./PatientTrials";
 import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
-import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
+import { criterionStateLabel, intervalLabel, intervalLevelText, NO_VALUE, numberText, referralStateLabel, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
 
 type View = "matching" | "referral" | "sites" | "followup";
 type Direction = NonNullable<MatchingData["direction"]>;
@@ -674,7 +674,7 @@ function ReferralView({ studyId, data, abilities }: { studyId: string; data: Mat
   // The band's own level, from the forecast's own rows: 「80% 预测区间」 is
   // written only when the data says 80.
   const level = forecast?.rows?.map((row) => row.value.interval).find((interval) => interval?.kind === "prediction")?.level ?? null;
-  const bandName = `${level != null ? `${numberText(level, 0)}% ` : ""}${intervalLabel("prediction")}`;
+  const bandName = `${intervalLevelText(level)}${intervalLabel("prediction")}`;
   const drawable = Boolean(forecast && ((forecast.actual ?? []).length || (forecast.median ?? []).length || (forecast.band ?? []).length));
   return (
     <>

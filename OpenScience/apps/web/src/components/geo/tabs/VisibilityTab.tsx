@@ -301,10 +301,10 @@ function ByPool({ geoId, diagnosis, loading, pool }: { geoId: string; diagnosis:
   const footnote = risk || sameIssue ? (
     <span className="flex flex-col gap-1">
       {risk && (
-        <span data-geo-risk-line="" className="inline-flex flex-wrap items-baseline gap-x-1.5">
-          {`${GEO_POOL_KINDS.P4}问题里，${metricName("M-15") ?? risk.name}`}
+        <span data-geo-risk-line="">
+          {`${GEO_POOL_KINDS.P4}问题里，${metricName("M-15") ?? risk.name} `}
           <CellLink geoId={geoId} cell={readGeoCell(risk.cell)} layout="inline" label={metricName("M-15") ?? risk.name} />
-          （越低越好）
+          {" （越低越好）"}
         </span>
       )}
       {sameIssue && <span>{`各类问题的主要问题都是“${sameIssue}”`}</span>}

@@ -696,6 +696,50 @@ export function onPromptAssemble(ctx, fn) {
   })
 }
 
+/** Current inputs claimed by the loop before assembly, never pending inbox
+ * entries or session history. Verified against the pinned loop's preStep:
+ * claim -> inbox/claimed -> assemble -> pre-step.
+ * @param {any} ctx
+ * @param {(agent:any, claimed:{inputs:{requestId:string,text:string}[],turn:number,signal?:AbortSignal})=>Promise<boolean>} fn
+ * @returns {()=>void}
+ */
+export function onClaimedPromptAssemble(ctx, fn) {
+  /** @type {Map<any,{messages:any[],turn:number}>} */ const batches = new Map()
+  const claimed = ctx.on(SEAMS.events.inputClaimed, (/** @type {any} */ payload) => {
+    if (!payload?.agent || !payload.message) return
+    const current = batches.get(payload.agent)
+    const turn = Number(payload.turn ?? 0)
+    const batch = current?.turn === turn ? current : { messages: [], turn }
+    batch.messages.push(payload.message)
+    batches.set(payload.agent, batch)
+  })
+  const ended = ctx.on(SEAMS.events.sessionEvent, (/** @type {any} */ session, /** @type {any} */ event) => {
+    if (!['turn/start', 'turn/end'].includes(event?.type)) return
+    for (const agent of batches.keys()) if (agent.session === session) batches.delete(agent)
+  })
+  const assemble = ctx.on(SEAMS.events.promptAssemble, async (/** @type {any} */ assembly, /** @type {any} */ context, /** @type {any} */ next) => {
+    const agent = context?.agent
+    if (agent) {
+      const batch = batches.get(agent)
+      batches.delete(agent)
+      if (!context?.signal?.aborted && await fn(agent, { inputs: stepUserInputs(batch), turn: batch?.turn ?? 0, signal: context?.signal })) {
+        const registry = ctx?.get?.('tools') ?? ctx?.tools
+        // Remove only schemas owned by this registry; provider-generated tools
+        // remain intact. run_code carries a different schema surface.
+        if (typeof registry?.schemas === 'function' && Array.isArray(assembly?.tools)
+          && !assembly.tools.some((/** @type {any} */ tool) => tool?.name === 'run_code')) {
+          const visible = new Set(registry.schemas(agent).map((/** @type {any} */ tool) => tool.name))
+          const owned = new Set(registeredToolNames(ctx))
+          assembly.tools = assembly.tools.filter((/** @type {any} */ tool) => !owned.has(tool.name) || visible.has(tool.name))
+        }
+        addVisibleTools(ctx, assembly, agent)
+      }
+    }
+    return next()
+  })
+  return () => { batches.clear(); claimed(); ended(); assemble() }
+}
+
 /**
  * Add to an assembly the tools the registry shows `agent` and the assembly
  * does not carry, each at its place in code-unit name order — the order the

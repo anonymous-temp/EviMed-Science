@@ -1380,6 +1380,54 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   assert.equal(script.includes("mock-agent-artifact.md"), false);
 });
 
+test("CI base aliases preserve every mirrored Dockerfile version and Compose build recipe", async () => {
+  const composeDir = path.join(repoRoot, "deploy/web");
+  const overlayPath = path.join(repoRoot, "../.github/ci/docker-compose.build-secrets.yml");
+  const overlay = YAML.parse(await readFile(overlayPath, "utf8"));
+  const services = {}, expected = {};
+  for (const filename of ["docker-compose.yml", "docker-compose.local-auth.yml", "docker-compose.backup.yml",
+    "docker-compose.ingestion.yml", "docker-compose.result-replay.yml"]) {
+    const document = YAML.parse(await readFile(path.join(composeDir, filename), "utf8"));
+    for (const [name, service] of Object.entries(document.services ?? {})) {
+      if (service.build) services[name] = { build: { ...service.build } };
+    }
+  }
+  for (const [name, service] of Object.entries(services)) {
+    const context = path.resolve(composeDir, service.build.context);
+    const dockerfile = await readFile(path.resolve(context, service.build.dockerfile ?? "Dockerfile"), "utf8");
+    const args = Object.fromEntries([...dockerfile.matchAll(/^ARG (\w+)=docker\.m\.daocloud\.io\/(\S+)$/gm)]
+      .map(([, argument, image]) => [argument, `docker.io/${image}`]));
+    if (Object.keys(args).length) expected[name] = args;
+    service.build.context = context;
+  }
+  assert.ok(Object.keys(expected).length > 0);
+  assert.deepEqual(Object.fromEntries(Object.entries(overlay.services).map(([name, service]) => [name, service.build.args])), expected);
+  // Exercise Compose's merge without a daemon or build. Project only builds
+  // so production credentials and service env files are never required.
+  const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-ci-base-merge-"));
+  try {
+    const basePath = path.join(directory, "compose.json");
+    await writeFile(basePath, JSON.stringify({ services }));
+    const { stdout } = await execFileAsync("docker", ["compose", "-p", "evimed-ci-base-contract", "-f", basePath,
+      "-f", overlayPath, "--profile", "*", "config", "--no-interpolate", "--format", "json"]);
+    const merged = JSON.parse(stdout);
+    for (const [name, service] of Object.entries(services)) {
+      assert.equal(merged.services[name].build.context, service.build.context, name);
+      assert.equal(merged.services[name].build.dockerfile, service.build.dockerfile, name);
+      const mergedArgs = merged.services[name].build.args;
+      const normalizedArgs = Array.isArray(mergedArgs) ? Object.fromEntries(mergedArgs.map((argument) => {
+        const separator = argument.indexOf("=");
+        return [argument.slice(0, separator), argument.slice(separator + 1)];
+      })) : mergedArgs;
+      assert.deepEqual(normalizedArgs, { ...service.build.args, ...expected[name] }, name);
+    }
+    assert.deepEqual(merged.services["evimed-mr-agent"].build.secrets, [{ source: "github_token" }]);
+    assert.equal(merged.secrets.github_token.environment, "GITHUB_TOKEN");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the engine image build hands the workflow's token to the R install as a BuildKit secret, and works without one", async () => {
   // 2026-10-05: the Mendelian randomization engine installs its pinned R packages from GitHub and `remotes` resolves their
   // `Remotes:` through api.github.com, whose 60-requests-an-hour unauthenticated limit a shared runner spent on about every
@@ -1394,8 +1442,9 @@ test("the engine image build hands the workflow's token to the R install as a Bu
 
   const overlay = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-secrets.yml"), "utf8"));
   assert.deepEqual(overlay.secrets, { github_token: { environment: "GITHUB_TOKEN" } });
-  assert.deepEqual(Object.keys(overlay.services), ["evimed-mr-agent"], "only the engine that reaches the GitHub API is given it");
-  assert.deepEqual(overlay.services["evimed-mr-agent"].build, { secrets: ["github_token"] });
+  assert.deepEqual(Object.entries(overlay.services).filter(([, service]) => service.build.secrets)
+    .map(([name]) => name), ["evimed-mr-agent"], "only the engine that reaches the GitHub API is given it");
+  assert.deepEqual(overlay.services["evimed-mr-agent"].build.secrets, ["github_token"]);
   // A build that is not handed it (a host build, a fork) must not be asked for one: the deployment's compose never names it.
   const base = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   assert.doesNotMatch(base, /github_token|GITHUB_TOKEN|GITHUB_PAT/);

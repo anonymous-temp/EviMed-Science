@@ -38,9 +38,8 @@ export function VcrPrecedentsPanel() {
   const [asked, setAsked] = useState("");
   const { state, reload } = useVcrLoad(`vcr:precedents:${asked}`, () => getVcrPrecedents(asked ? { q: asked } : {}));
   const off = state.kind === "error" && state.off === true;
-  const unavailable = state.kind === "ready" && !state.data.available;
   // The search and the count are the page's one toolbar, beside its views; a library that is not composed here has neither.
-  useVcrToolbar(off || unavailable
+  useVcrToolbar(off
     ? null
     : {
       label: "参考试验的检索",
@@ -54,24 +53,18 @@ export function VcrPrecedentsPanel() {
         onClear: () => { setQuery(""); setAsked(""); },
         inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
       },
-      summary: state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined,
+      summary: !asked && state.kind === "ready" ? `已保存 ${state.data.precedents.length} 项` : undefined,
     });
   if (off) return <EmptyState icon={Library} title={VCR_OFF_SENTENCE} />;
-  if (state.kind === "ready" && !state.data.available) {
-    return (
-      <div data-vcr-precedents-unavailable="">
-        <EmptyState icon={Library} title={state.data.message ?? "参考试验库在本部署尚未接入。"} />
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-4">
-      {asked && <VcrReferenceSearch query={asked} onApplied={reload} />}
+      {asked && <VcrReferenceSearch key={asked} query={asked} onApplied={reload} />}
       {!asked && <Button variant="text" onClick={() => { setQuery("diabetes"); setAsked("diabetes"); }}>检索示例：diabetes</Button>}
-      {state.kind === "loading" ? <VcrTabSkeleton />
+      {!asked && (state.kind === "loading" ? <VcrTabSkeleton />
         : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} />
-          : state.data.precedents.length === 0
+          : !state.data.available ? <div data-vcr-precedents-unavailable=""><EmptyState icon={Library} title={state.data.message ?? "参考试验库在本部署尚未接入。"} /></div>
+            : state.data.precedents.length === 0
             ? (
               <EmptyState
                 icon={Library}
@@ -79,10 +72,10 @@ export function VcrPrecedentsPanel() {
                 action={asked ? <Button variant="secondary" onClick={() => { setQuery(""); setAsked(""); }}>清除检索</Button> : undefined}
               />
             )
-            : <VcrPrecedentTable rows={state.data.precedents} />}
+            : <VcrPrecedentTable rows={state.data.precedents} />)}
 
       {/* What the registries could and could not be read for is the answer to 「为什么没有这一条」, one click under the precedents rather than above them. */}
-      {state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
+      {!asked && state.kind === "ready" && (state.data.registryCoverage?.length ?? 0) > 0 && (
         <Disclosure
           summary={(
             <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-0.5">

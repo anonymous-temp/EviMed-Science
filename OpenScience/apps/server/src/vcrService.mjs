@@ -353,7 +353,7 @@ export async function seedVcrCatalogue({ store, engine = null, methodValidationF
 
 /** Which step each of the home page's four action cards asks for (plan §9.2). */
 export const VCR_ACTION_STEPS = Object.freeze({
-  cohort: "population", patients: "patients", comparator: "comparator", trial: "trial",
+  definition: "definition", cohort: "population", patients: "patients", comparator: "comparator", trial: "trial",
 });
 
 /**
@@ -362,7 +362,8 @@ export const VCR_ACTION_STEPS = Object.freeze({
  * for all seven.
  * @param {string | undefined | null} action
  */
-export function vcrRequestedSteps(action) {
+export function vcrRequestedSteps(action, purpose = "programme") {
+  if (purpose === "calculation") return Object.freeze([]);
   const step = /** @type {Record<string, string>} */ (VCR_ACTION_STEPS)[String(action ?? "")];
   return step ? Object.freeze([step]) : VCR_STEPS;
 }
@@ -583,6 +584,7 @@ export class VcrService {
 
   /** The seven-step rail, row-level. @param {any} study */
   #progress(study) {
+    if (study.purpose === "calculation") return [];
     return VCR_STEPS.map((step) => ({
       step,
       status: study.steps?.[step]?.status ?? "none",
@@ -617,7 +619,7 @@ export class VcrService {
    * say what the study is — a name, or a question to name it from — gets an
    * active study at once.
    * @param {{ id: string }} user
-   * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string }} input already validated by the route
+   * @param {{ name?: string, question?: string, dataTier?: string, intendedUse?: string, action?: string, draft?: boolean, purpose?: "programme" | "calculation" }} input already validated by the route
    * @param {{ createResearcherProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
    *   bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
    */
@@ -627,24 +629,28 @@ export class VcrService {
     const control = await hooks.createResearcherProject(user, name);
     const study = await this.store.createStudy({
       userId: String(user.id), projectId: control.id, name, question: String(input.question ?? ""),
-      dataTier: input.dataTier, intendedUse: input.intendedUse, status: given ? "active" : "draft",
+      dataTier: input.dataTier, intendedUse: input.intendedUse, purpose: input.purpose,
+      status: input.draft === true ? "draft" : input.purpose === "calculation" || given ? "active" : "draft",
     });
     // What the study is asked for at birth. One of the home page's four action
     // cards asks for that one step, and whatever it needs upstream comes as a
     // minimal version; 「新建研究」 with a question asks for the whole
     // programme, which is what makes 一句话到研究包 the default path (plan §4,
     // §9.2). Nothing else about the study waits for a person.
-    for (const step of vcrRequestedSteps(input.action)) {
+    for (const step of input.draft === true ? [] : vcrRequestedSteps(input.action, input.purpose)) {
       await this.store.setStep(study.id, step, { requested: true });
     }
-    const session = await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition)
-      .catch(() => ({ sessionId: "", bound: false }));
+    // A saved research draft has one held goal. Keeping definition requested also prevents the legacy
+    // all-seven backfill when a later ordinary conversation happens to write its definition.
+    if (input.draft === true && input.purpose !== "calculation") await this.store.setStep(study.id, "definition", { requested: true, held: true });
+    const session = input.purpose === "calculation" ? { sessionId: "", bound: false }
+      : await hooks.bindSession(user, control.id, VCR_STEP_CAPABILITIES.definition).catch(() => ({ sessionId: "", bound: false }));
     // The conversation the study was opened with is the one its 「对话」 opens, whatever background runs follow. A study whose
     // conversation could not be made now (no runtime could be opened) has none yet, and its owner's next read makes one.
     if (session.sessionId) await this.store.setConversationSession(study.id, session.sessionId);
     this.counters.studiesCreated += 1;
     return {
-      id: study.id, projectId: control.id, name: study.name, status: study.status, requested: [...vcrRequestedSteps(input.action)],
+      id: study.id, projectId: control.id, name: study.name, status: study.status, purpose: study.purpose, requested: input.draft === true ? input.purpose === "calculation" ? [] : ["definition"] : [...vcrRequestedSteps(input.action, input.purpose)],
       sessionId: session.sessionId || null, bound: session.bound === true,
     };
   }
@@ -724,7 +730,7 @@ export class VcrService {
     if (action !== undefined) {
       // A changed 起点 re-asks which steps run; a step already done stays done,
       // it is only no longer requested of the programme.
-      const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action));
+      const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action, study.purpose));
       // Re-asking which steps run is an instruction of its own: a hold a 「取消」 put on the programme ends with it.
       for (const step of VCR_STEPS) updated = await this.store.setStep(study.id, step, { requested: wanted.has(step), held: false }) ?? updated;
     }
@@ -748,11 +754,16 @@ export class VcrService {
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
     const bundle = await this.#bundle(study, user);
-    const [activity, conversation] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user)]);
+    const [activity, conversation, intake] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user),
+      this.store.one(`SELECT run_id, session_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+        WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id])]);
+    // Activity has a short display tail. An acknowledged intake remains a conversation when it needs more information, including on reload.
+    const submitted = Boolean(conversation.sessionId && intake?.run_id && intake.session_id === conversation.sessionId
+      && (intake.detail?.goalsApplied === true || intake.detail?.awaitingInput === true));
     // `activity`: what is going on now, `null` when nothing is; `conversation`: the study's own conversation, which is never one of the
     // programme's runs; `sessionId` is the same id for the readers that predate `conversation`; `engine` is what the page's one line at
     // the top says.
-    return { ...presentStudy(bundle), activity, conversation, sessionId: conversation.sessionId, engine: this.engineState() };
+    return { ...presentStudy(bundle), activity, conversation: { ...conversation, ...(submitted ? { submitted: true, ...(intake.detail?.awaitingInput === true ? { awaitingInput: true } : {}) } : {}) }, sessionId: conversation.sessionId, engine: this.engineState() };
   }
 
   /**
@@ -777,6 +788,7 @@ export class VcrService {
    * @returns {Promise<{ sessionId: string | null, exists: boolean }>}
    */
   async #conversation(study, user) {
+    if (study.purpose === "calculation") return { sessionId: study.conversationSessionId ?? null, exists: Boolean(study.conversationSessionId) };
     const resolver = this.packages.conversations;
     if (resolver?.resolve) {
       const found = await resolver.resolve(study, { create: String(study.userId) === String(user.id) }).catch(() => null);
@@ -812,7 +824,7 @@ export class VcrService {
     const ceiling = useCeilingOf({ study, results, reviews, stale, current });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
-      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, entityKeys: study.entityKeys ?? [],
+      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, purpose: study.purpose ?? "programme", entityKeys: study.entityKeys ?? [],
       steps: study.steps, progress: this.#progress(study), tabs: [...VCR_TABS],
       definition,
       counts: vcrCountBand(object(headline?.counts)),

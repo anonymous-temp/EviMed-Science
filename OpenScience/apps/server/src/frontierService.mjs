@@ -1,6 +1,6 @@
 import { frontierEventEvidenceCounts } from '@evimed/domain';
 import { frontierEventChanges } from './frontierEventReading.mjs';
-import { FRONTIER_EDITOR_VERSION } from "./frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics } from "./frontierEditor.mjs";
 import { issueFrontierExposure } from "./frontierEvolution.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
@@ -378,7 +378,7 @@ export function frontierCardFacts(raw) {
 // the five latest.
 const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.lang, i.lane, i.source_type,
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
-  i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification,
+  i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification, i.editor_diagnostics,
   i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.score_total, i.primary_source_id,
   s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
   t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
@@ -539,6 +539,7 @@ export class FrontierService {
       selectedRule: row.selected ? row.selected_rule ?? null : null,
       safetyAlert: row.safety_alert === true,
       verification: row.verification,
+      editorDiagnostics: frontierEditorDiagnostics(row.editor_diagnostics),
       // The editorial total and its band; a safety alert is not scored for a reader.
       score: row.safety_alert === true || row.score_total == null ? null : Number(row.score_total),
       scoreBand: row.safety_alert === true ? null : frontierScoreBand(row.score_total, this.selectThreshold),

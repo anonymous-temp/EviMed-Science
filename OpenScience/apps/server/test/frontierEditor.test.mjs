@@ -18,6 +18,7 @@ import {
   buildAiMinuteInput,
   buildDigestInput,
   buildModelInput,
+  frontierEditorDiagnostics,
   digestNumberSource,
   editNumberSource,
   isChineseProse,
@@ -930,4 +931,57 @@ test("confirmed timeout or network outage never fans a screening batch out into 
     assert.equal(result.errors.size,20);
     assert.equal(editor.counters.screenSingles,0);
   }
+});
+
+
+test("edit diagnostics preserve actual field outcomes without model prose", async () => {
+  const editor = new FrontierEditor(config, { owner, callModel: stubModel([
+    () => answer({ summary_zh: "English summary", title_zh: "司美格鲁肽降低心血管事件 20%" }),
+    () => answer({ summary_zh: "English summary", title_zh: "English title" }),
+  ]).callModel });
+  const result = await editor.edit(item());
+  assert.equal(result.output?.titleZh, "司美格鲁肽降低心血管事件 20%");
+  assert.deepEqual(result.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["language"] });
+  assert.equal(result.attempts, 2);
+  assert.equal(result.modelInputSha256, sha256(result.modelInput));
+  assert.ok(!JSON.stringify(result.fieldDiagnostics).includes("English"));
+});
+
+test("source-only items distinguish missing source text from rejected summaries", async () => {
+  const result = await new FrontierEditor(config, { owner, callModel: stubModel([() => answer({ title_zh: "司美格鲁肽研究", summary_zh: null })]).callModel })
+    .edit({ ...item(), abstract: null, summary: null, bodyExcerpt: null });
+  assert.deepEqual(result.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["source_missing"] });
+});
+
+
+test("public diagnostics reject unknown content and retain only closed bounded metadata", () => {
+  assert.equal(frontierEditorDiagnostics({}), null);
+  const kept = frontierEditorDiagnostics({ schemaVersion: 1, outcome: "title-only", attempts: 9999,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00Z",
+    reason: "private upstream message", answer: "private model answer", fields: {
+      title_zh: ["language", "language", "private body"], summary_zh: ["number"], private: ["answer"] } });
+  assert.deepEqual(kept, { schemaVersion: 1, outcome: "title-only", attempts: null,
+    inputSha256: "a".repeat(64), editorVersion: "policy:v2", checkedAt: "2026-10-20T00:00:00.000Z", reason: null,
+    fields: { title_zh: ["language"], summary_zh: ["number"] } });
+});
+
+test("pending and repaired diagnostics reflect the last actual field check", async () => {
+  const pending = await new FrontierEditor(config, { owner, callModel: stubModel([refuse("usage_budget_exceeded")]).callModel }).edit(item());
+  assert.equal(pending.attempts, 1);
+  assert.deepEqual(pending.fieldDiagnostics, { title_zh: ["not_checked"], summary_zh: ["not_checked"] });
+  const repaired = await new FrontierEditor(config, { owner, callModel: stubModel([
+    () => answer({ title_zh: "English title", summary_zh: "English summary" }), () => answer(),
+  ]).callModel }).edit(item());
+  assert.equal(repaired.verification, "repaired");
+  assert.deepEqual(repaired.fieldDiagnostics, { title_zh: ["passed"], summary_zh: ["passed"] });
+});
+
+
+test("diagnostic provenance uses the resolved policy and actual bounded calls", async () => {
+  const editor = new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel,
+    policies: { resolve: async (_module, policy) => ({ revisionId: "policy:v2", policy }) } });
+  const result = await editor.edit(item());
+  assert.equal(result.editorVersion,"policy:v2");
+  assert.equal(result.attempts,1);
+  assert.equal(result.modelInputSha256,sha256(result.modelInput));
 });

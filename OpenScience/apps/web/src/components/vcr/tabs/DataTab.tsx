@@ -1,3 +1,4 @@
+import { VcrReferenceWorkspace } from "../VcrReferenceSearch";
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -138,6 +139,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       <div className="flex flex-col gap-6">
         {defined ? <DefinitionCard study={study} /> : null}
         {defined ? pack : null}
+        <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
         <VcrRegistryCoverage sources={data.registryCoverage} />
         {defined ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
       </div>
@@ -169,6 +171,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       {headline.length > 0 && <Headline parts={headline} />}
       <DefinitionCard study={study} />
       {pack}
+      <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
 
       {cards && (
         <MasterDetail

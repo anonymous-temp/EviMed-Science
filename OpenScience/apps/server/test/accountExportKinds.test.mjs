@@ -212,7 +212,7 @@ function databaseOver(documents) {
 
 /** The owner's archive state, and what the export told the operator.
  * @param {ReturnType<typeof productDocumentsDouble>} documents */
-async function exportOf(documents) {
+async function exportOf(documents, results = null) {
   const database = databaseOver(documents);
   /** @type {string[]} */
   const reported = [];
@@ -221,7 +221,8 @@ async function exportOf(documents) {
     { id: OWNER, accountCreatedAt: GENERATION },
     {},
     async (snapshot) => JSON.parse(snapshot.data.toString()),
-    { report: (line) => reported.push(line) },
+    { report: (line) => reported.push(line), readResultReview: results ? async (actor, row) =>
+      (await results.project(actor.id, await results.scope(actor.id, row.projectId), row.payload)).review : undefined },
   );
   // Both document queries ran, each filtered by the exported kinds and nothing
   // else: this is what makes "a kind is absent" below mean the export left it
@@ -462,7 +463,7 @@ async function resultFixture(t) {
     },
   }, { expectedRevision: 1, projectId: project.id });
 
-  return { documents, project, run, report, matrix, source, note, impact, staged, calculation, calculated, recalculation, recalculated,
+  return { documents, results, project, run, report, matrix, source, note, impact, staged, calculation, calculated, recalculation, recalculated,
     conversionId, reportPath, matrixText, workspaceFile, write };
 }
 
@@ -474,7 +475,7 @@ const INTERNAL_KEYS = ["storagePath", "requestedBy", "ownerId", "jobId", "execut
 
 test("an account with captured results exports them, and nothing the customer did not write leaves with them", async (t) => {
   const f = await resultFixture(t);
-  const { state, reported } = await exportOf(f.documents);
+  const { state, reported } = await exportOf(f.documents, f.results);
 
   // The incident itself: this account used to be refused whole.
   assert.equal(state.version, 1);
@@ -509,7 +510,7 @@ test("an account with captured results exports them, and nothing the customer di
 
 test("a result version leaves as the record the product serves, its bytes referenced by path and digest", async (t) => {
   const f = await resultFixture(t);
-  const { state } = await exportOf(f.documents);
+  const { state } = await exportOf(f.documents, f.results);
   const row = state.documents.find((item) => item.id === f.report.versionId);
   assert.equal(row.kind, "result-version");
   assert.equal(row.projectId, f.project.id);
@@ -553,14 +554,14 @@ test("a result version leaves as the record the product serves, its bytes refere
   // ... and once the workspace has moved on, the record still says what the
   // result was, so the difference is visible rather than silent.
   await f.write(f.reportPath, "A later edit.");
-  const later = (await exportOf(f.documents)).state.documents.find((item) => item.id === f.report.versionId).payload;
+  const later = (await exportOf(f.documents, f.results)).state.documents.find((item) => item.id === f.report.versionId).payload;
   assert.equal(later.digest, sha(REPORT));
   assert.notEqual(sha(await readFile(f.workspaceFile(later.path))), later.digest);
 });
 
 test("selections, source corrections and calculations leave as what the researcher did and what came of it", async (t) => {
   const f = await resultFixture(t);
-  const { state } = await exportOf(f.documents);
+  const { state } = await exportOf(f.documents, f.results);
   const payloadOf = (/** @type {string} */ id) => state.documents.find((row) => row.id === id).payload;
 
   assert.deepEqual(payloadOf(f.staged.referenceId), {
@@ -632,7 +633,7 @@ test("selections, source corrections and calculations leave as what the research
 
 test("a document conversion leaves as what was converted and what came out, each file by digest", async (t) => {
   const f = await resultFixture(t);
-  const { state } = await exportOf(f.documents);
+  const { state } = await exportOf(f.documents, f.results);
   assert.deepEqual(state.documents.find((row) => row.id === f.conversionId).payload, {
     projectId: f.project.id,
     title: "clinical-evidence-report.md",
@@ -699,7 +700,7 @@ test("an account holding a document of every declared kind exports, each kind ca
     assert.ok(exported, `the export cannot read a ${row.kind} document`);
   }
 
-  const { state, reported } = await exportOf(f.documents);
+  const { state, reported } = await exportOf(f.documents, f.results);
   const carried = new Set(state.documents.map((row) => row.kind));
   for (const kind of PRODUCT_KINDS) {
     if (Object.hasOwn(UNEXPORTED_DOCUMENT_KINDS, kind)) {
@@ -729,7 +730,7 @@ test("a stored kind with no export decision is left out and named, and the rest 
   await f.documents.put(OWNER, "future-kind", "future-one", { body: "future-payload-body" }, { expectedRevision: 0, projectId: f.project.id });
   await f.documents.put(OWNER, "future-kind", "future-two", { body: "future-payload-body" }, { expectedRevision: 0 });
   await f.documents.put(OWNER, "another-future-kind", "one", { body: "future-payload-body" }, { expectedRevision: 0 });
-  const { state, reported } = await exportOf(f.documents);
+  const { state, reported } = await exportOf(f.documents, f.results);
 
   assert.deepEqual(state.omissions, [
     { kind: "future-kind", reason: "no_export_contract", documents: 2 },
@@ -758,7 +759,7 @@ test("a result record that does not read as one is left out and counted, not a r
     assert.equal(exportDocumentRow({ id: "misfiled", kind, payload: { recordType: "something-else", body: "x" } }), null, kind);
   }
   await f.documents.put(OWNER, "result-version", "rv_broken", broken, { expectedRevision: 0, projectId: f.project.id });
-  const { state, reported } = await exportOf(f.documents);
+  const { state, reported } = await exportOf(f.documents, f.results);
 
   assert.deepEqual(state.omissions, [{ kind: "result-version", reason: "unreadable_record", documents: 1, revisions: 1 }]);
   assert.ok(!JSON.stringify(state).includes("unreadable-payload-body"));

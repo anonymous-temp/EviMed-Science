@@ -368,6 +368,17 @@ test("the pack entries a definition rests on are the mappings its columns match,
   await assert.rejects(knowledge.saveFromStudy(STUDY_A, { populationId: "pop_1", name: "x", text: "t", packEntries: [{ section: "criteria", id: "c_nothing" }] }, "u1"), { code: "vcr_definition_invalid" });
 });
 
+test("saving and reusing a population retains explicit unknown policies and an omitted default", async () => {
+  const rules = RULES_V1.map((rule, i) => ({ ...rule, unknownAs: i ? "exclude" : "include" }));
+  rules.push({ name: "known", rule: cmp("AGE", "lte", 90) });
+  const { knowledge, populations, store } = compose({ populations: [{ id: "pop_policy", kind: "real", name: "Policy", definition: { rules } }] });
+  const saved = await knowledge.saveFromStudy(STUDY_A, { populationId: "pop_policy", text: "Policies" }, "u1");
+  await knowledge.useInStudy(STUDY_B, { definitionId: saved.definitionId, columnMap: { AGE: "age_years", ECOG: "performance" } }, "u1");
+  assert.deepEqual(store.state.versions[0].body.rules, rules);
+  assert.deepEqual(populations.at(-1).definition.rules, rules.map((step) => ({ ...step, rule: { ...step.rule, column: step.rule.column === "AGE" ? "age_years" : "performance" } })));
+  assert.equal(Object.hasOwn(populations.at(-1).definition.rules[2], "unknownAs"), false);
+});
+
 test("comparing two versions queues the cohort job with the second as `compare`, on the study's dataset, kept apart from the study's results", async () => {
   /** @type {any[]} */
   const queued = [];

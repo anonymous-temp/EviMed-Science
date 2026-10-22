@@ -1,7 +1,7 @@
 import { safeAppReturnPath } from "@evimed/domain";
 
 /** Where a sign-in lands when it was not sent from a page inside the app. */
-export const LOGIN_DEFAULT_RETURN = "/app/chat";
+export const LOGIN_DEFAULT_RETURN = "/app/home";
 
 /** The search parameter of `/login` that names the address to return to. */
 export const LOGIN_RETURN_PARAM = "next";

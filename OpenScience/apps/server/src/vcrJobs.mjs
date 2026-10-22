@@ -134,6 +134,7 @@ import { vcrId } from "./vcrStoreBase.mjs";
 import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues } from "./vcrEngineClient.mjs";
+import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -424,7 +425,8 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
 export function vcrResultKindFor(kind) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
-  if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
+  if (kind === "population_quality") return "population_quality";
+  if (["build_cohort", "generate_population", "literature_population", "synthesize_population"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
   if (method.startsWith("comparator.") || kind === "procova") return "comparator";
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
@@ -447,6 +449,7 @@ export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "co
  * @param {string} kind
  */
 export function vcrJobObjectKind(kind) {
+  if (kind === "population_quality") return "population";
   const filed = vcrResultKindFor(kind);
   return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
 }
@@ -586,7 +589,7 @@ export class VcrJobs {
    * `principal`, else `userId`.
    *
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
-   *   derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
+   *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
    * @returns {Promise<{ job: any, created: boolean }>}
    */
@@ -630,13 +633,26 @@ export class VcrJobs {
     if (callerIssues.length) throw this.#invalid("vcr_job_scenario_invalid", callerIssues);
 
     // 2. what the control plane makes of it
+    let qualityBasis = input.qualityBasis == null ? null : await this.#qualityBasis(studyId, kind, object(input.detail).subjectId, scenario, input.qualityBasis);
+    const qualityInput = qualityBasis ? await this.#resolveDerived(studyId, qualityBasis) : null;
     const resolvedDerived = await Promise.all(derivedEntries.map((entry) => this.#resolveDerived(studyId, entry)));
     const bound = vcrBindReconstruction(kind, scenario, derivedEntries, resolvedDerived);
     if ("code" in bound) throw bound.invalid ? this.#invalid("vcr_job_scenario_invalid", bound.invalid) : new HttpError(400, bound.code, bound.message);
     scenario = bound.scenario;
+    const generatedDerived = derivedEntries.find(entry => ["population", "synthetic-population"].includes(entry.table)
+      && resolvedDerived.some(resolved => resolved.id === `${entry.resultId}:${entry.table}` && resolved.id === scenario.syntheticInputId && resolved.valueSource === "synthetic"));
+    const qualityAttachmentResultId = kind === "population_quality" ? qualityBasis?.resultId ?? generatedDerived?.resultId ?? null : null;
+    if (!qualityBasis && kind === "population_quality" && generatedDerived) {
+      const population = (await this.store.populations(studyId, 1000)).find(row => row.id === object(input.detail).subjectId);
+      const result = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+      const execution = result?.executionId ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, studyId]) : null;
+      const current = vcrPopulationGenerationInput(population, result, execution);
+      if (current?.resultId === generatedDerived.resultId && current?.table === generatedDerived.table) qualityBasis = current;
+    }
     const inputs = [
       ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
       ...resolvedDerived,
+      ...(qualityInput ? [qualityInput] : []),
     ];
 
     const scenarioHash = vcrScenarioHash(scenario);
@@ -661,9 +677,12 @@ export class VcrJobs {
     const row = await this.store.transaction(async (client) => {
       // A distinct request must reserve against the same locked study budget
       // as every other enqueue and confirmation, before its job becomes visible.
-      const study = (await client.query(`SELECT budget FROM ${VCR_SCHEMA}.studies
+      const study = (await client.query(`SELECT budget, status FROM ${VCR_SCHEMA}.studies
         WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [studyId])).rows[0];
       if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+      if (!["draft", "active"].includes(study.status)) {
+        throw new HttpError(409, "vcr_study_paused", "This study is paused or archived.");
+      }
       // A job needs a person only when it could not run even if nothing else were going on: its ceiling is more than
       // the study has not yet spent. What other queued jobs might cost is not spent, and is checked when each is handed to the engine.
       const standing = await this.#cpuStanding(client, studyId);
@@ -678,7 +697,15 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...curveDetail, configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...curveDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      // Completion locks the job before its population. A duplicate enqueue must take the same order:
+      // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
+      if (qualityBasis) {
+        const current = (await client.query(`SELECT result_id, version FROM ${VCR_SCHEMA}.populations WHERE study_id=$1 AND id=$2 FOR SHARE`, [studyId, qualityBasis.populationId])).rows[0];
+        if (!current || current.result_id !== qualityBasis.resultId || Number(current.version) !== qualityBasis.populationVersion) {
+          throw new HttpError(409, "vcr_derived_table_missing", "所选人群生成结果已变更，请重新选择人群版本。");
+        }
+      }
       if (inserted?.inserted === true) await this.store.audit({ client, studyId, userId: String(input.userId), action: "vcr.job.enqueue",
         object: String(inserted.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
       return inserted;
@@ -733,6 +760,51 @@ export class VcrJobs {
     return out;
   }
 
+  /** Resolve the narrow public reconstruction selection using the queue's canonical binder.
+   * @param {string} studyId @param {string} kind @param {Record<string, any>} scenario @param {unknown} resultId
+   */
+  async prepareReconstruction(studyId, kind, scenario, resultId) {
+    if (resultId == null) {
+      if (kind === VCR_RECONSTRUCTION_REFERENCE.kind && (Object.hasOwn(scenario, "pseudoIpdInputId") || scenario.anchored !== true)) {
+        throw new HttpError(400, "vcr_job_scenario_invalid", "Select an owned reconstruction result for the comparator.");
+      }
+      return { scenario, derived: [], reconstructionResultId: null };
+    }
+    if (kind !== VCR_RECONSTRUCTION_REFERENCE.kind || typeof resultId !== "string" || !/^[-a-zA-Z0-9_]+$/.test(resultId)) {
+      throw new HttpError(400, "vcr_job_scenario_invalid", "A reconstruction result is only supported for the time-to-event comparator.");
+    }
+    const entry = { resultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo };
+    const resolved = await this.#resolveDerived(studyId, entry);
+    const bound = vcrBindReconstruction(kind, scenario, [entry], [resolved]);
+    if ("code" in bound) throw new HttpError(400, bound.code, bound.message);
+    return { scenario: bound.scenario, derived: [entry], reconstructionResultId: resultId };
+  }
+
+  /** Available owned reconstructions, without paths or patient rows. @param {string} studyId */
+  async reconstructionResults(studyId) {
+    const rows = await this.store.rows(`SELECT r.*, c.origin AS curve_origin,
+        c.digitization #>> '{calibration,x,unit}' AS curve_time_unit
+      FROM ${VCR_SCHEMA}.results r
+      JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
+      JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
+      JOIN ${VCR_SCHEMA}.curve_extractions c ON c.id=j.checkpoint->>'curveReceiptId' AND c.study_id=r.study_id
+      WHERE r.study_id=$1 AND e.method='evidence.reconstruct_km'
+        AND e.receipt @> '{"signed":true}'::jsonb
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.tables) t WHERE t->>'name'='reconstructed-ipd'
+          AND t->>'location' LIKE 'derived/%' AND t->>'sha256' ~ '^[a-f0-9]{64}$')
+      ORDER BY r.created_at DESC LIMIT 100`, [studyId]);
+    const choices = [];
+    for (const row of rows) {
+      const result = resultFromRow(row);
+      const table = list(result.tables).find(candidate => object(candidate).name === VCR_RECONSTRUCTION_REFERENCE.table);
+      if (!vcrLocationIsValid(String(table?.location ?? ""))) continue;
+      choices.push({ resultId: result.id, label: "Kaplan–Meier reconstruction", version: result.version,
+        createdAt: result.createdAt, method: "evidence.reconstruct_km", valueSource: "reconstructed", table: "reconstructed-ipd",
+        source: { kind: "curve_image", origin: row.curve_origin }, timeUnit: row.curve_time_unit ?? null });
+    }
+    return choices;
+  }
+
   /**
    * A table one job wrote, as the next job's input: found through the result
    * that lists it, checked against the sha256 the result carries, and given the
@@ -749,9 +821,22 @@ export class VcrJobs {
       throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表没有存入数据平面：这一步需要它，暂时算不了。");
     }
     const execution = result.executionId
-      ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id = $1`, [result.executionId]) : null;
+      ? await this.store.one(`SELECT method, receipt, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
+    if (entry.bindTo !== undefined) {
+      if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
+      const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
+      if (execution?.method !== "evidence.reconstruct_km" || object(execution.receipt).signed !== true
+        || !producer?.checkpoint?.curveReceiptId || !producer.checkpoint.curveImageHash || !producer.checkpoint.curvePointsHash || !this.curveVerifier) {
+        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
+      }
+      const verified = await this.curveVerifier({ studyId, principal: producer.checkpoint.curvePrincipal,
+        scenario: producer.scenario, inputs: producer.inputs, receiptId: producer.checkpoint.curveReceiptId });
+      if (verified.detail.curveImageHash !== producer.checkpoint.curveImageHash || verified.detail.curvePointsHash !== producer.checkpoint.curvePointsHash) {
+        throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction source receipt changed.");
+      }
+    }
     const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir ?? ""));
     const file = path.resolve(root, location);
     if (!file.startsWith(`${root}${path.sep}`)) throw new HttpError(409, "vcr_derived_table_missing", "输出表的位置不在数据平面里。");
@@ -762,6 +847,25 @@ export class VcrJobs {
     // The engine reads it as a raw table of the value source the method that
     // wrote it earns; it is not an analysis table of a snapshot.
     return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source };
+  }
+
+  /** Validate only the server-selected generated quality input; this grants no general derived-input privilege.
+   * @param {string} studyId @param {string} kind @param {unknown} subjectId @param {Record<string, any>} scenario @param {Record<string, any>} raw
+   */
+  async #qualityBasis(studyId, kind, subjectId, scenario, raw) {
+    const keys = ["populationId", "populationVersion", "resultId", "table", "inputId", "sha256"];
+    if (kind !== "population_quality" || !raw || typeof raw !== "object" || Array.isArray(raw)
+      || Object.keys(raw).length !== keys.length || keys.some(key => !Object.hasOwn(raw, key)) || raw.populationId !== subjectId) {
+      throw new HttpError(400, "vcr_job_scenario_invalid", "质量评估必须选择本研究的已生成人群版本。");
+    }
+    const population = (await this.store.populations(studyId, 1000)).find(row => row.id === subjectId);
+    const result = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+    const execution = result?.executionId ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, studyId]) : null;
+    const basis = vcrPopulationGenerationInput(population, result, execution);
+    if (!basis || keys.some(key => basis[key] !== raw[key]) || scenario.syntheticInputId !== basis.inputId) {
+      throw new HttpError(409, "vcr_derived_table_missing", "所选人群生成结果已变更或不可用，请重新选择人群版本。");
+    }
+    return basis;
   }
 
   /** @param {string} studyId @param {number} [limit] */
@@ -781,8 +885,30 @@ export class VcrJobs {
     const row = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [studyId, jobId]);
     if (!row) return null;
     const refs = list(object(row.checkpoint).configurationInputRefs);
-    return { kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
-      scenario: object(row.scenario), seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
+    const qualityBasis = object(row.checkpoint).qualityBasis ?? null;
+    let qualityBasisAvailable = null;
+    if (qualityBasis) {
+      try { await this.#qualityBasis(studyId, String(row.kind), object(row.checkpoint).subjectId, object(row.scenario), qualityBasis);
+        await this.#resolveDerived(studyId, qualityBasis); qualityBasisAvailable = true; } catch { qualityBasisAvailable = false; }
+    }
+    const frozenReconstruction = list(row.inputs).map(object).filter(input => input.valueSource === "reconstructed"
+      && input.id === object(row.scenario).pseudoIpdInputId && String(input.id).endsWith(":reconstructed-ipd"));
+    const reconstructionResultId = object(row.checkpoint).reconstructionResultId
+      ?? (row.kind === VCR_RECONSTRUCTION_REFERENCE.kind && frozenReconstruction.length === 1
+        ? String(frozenReconstruction[0].id).slice(0, -":reconstructed-ipd".length) : null);
+    let reconstructionResultAvailable = null;
+    const scenario = { ...object(row.scenario) };
+    if (reconstructionResultId) {
+      delete scenario.pseudoIpdInputId;
+      try {
+        const selected = await this.prepareReconstruction(studyId, String(row.kind), scenario, reconstructionResultId);
+        const original = list(row.inputs).find(input => object(input).id === selected.scenario.pseudoIpdInputId);
+        const resolved = await this.#resolveDerived(studyId, selected.derived[0]);
+        reconstructionResultAvailable = !!original && object(original).hash === resolved.hash;
+      } catch { reconstructionResultAvailable = false; }
+    }
+    return { reconstructionResultId, reconstructionResultAvailable, qualityBasis, qualityBasisAvailable, subjectId: object(row.checkpoint).subjectId ?? null, kind: String(row.kind), method: String(row.method), methodVersion: String(row.method_version), scenarioHash: String(row.scenario_hash),
+      scenario, seed: row.seed == null ? null : Number(row.seed), replicates: row.replicates == null ? null : Number(row.replicates),
       sourceModel: object(row.checkpoint).sourceModel ? { id: object(object(row.checkpoint).sourceModel).id, version: object(object(row.checkpoint).sourceModel).version } : null,
       inputRefs: refs.filter((entry) => object(entry).kind === "snapshot").map((entry) => ({ kind: "snapshot", id: String(object(entry).id) })),
       unavailableInputs: refs.length ? refs.filter((entry) => object(entry).kind !== "snapshot").length : list(row.inputs).length,
@@ -811,7 +937,8 @@ export class VcrJobs {
    * Take up to `limit` queued jobs, honouring the deployment's global
    * concurrency. `FOR UPDATE SKIP LOCKED`, so two control planes never take the
    * same row, and an advisory lock around the count-and-claim so two of them
-   * never *count* the same free slot either. A job of a paused study waits; a
+   * never *count* the same free slot either. Explicit jobs may run in an editable
+   * draft without activating its programme; paused and archived studies wait. A
    * job another worker held that has run out of attempts is failed by name
    * rather than run again.
    * @param {{ workerId?: string, leaseMs?: number, limit?: number }} [options]
@@ -840,7 +967,7 @@ export class VcrJobs {
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
       const picked = await client.query(`SELECT j.id FROM ${VCR_SCHEMA}.jobs j
-        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status = 'active'
+        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status IN ('draft', 'active')
         WHERE ($2::text IS NULL OR j.id=$2) AND ((j.state = 'queued' AND j.run_after <= now())
            OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts))
         ORDER BY CASE WHEN j.state='running' OR j.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,
@@ -1405,7 +1532,7 @@ export class VcrJobs {
     const { tiers, models } = record ? await this.#usedModels(row) : { tiers: [], models: [] };
     const study = record ? await this.store.studyById(String(row.study_id)) : null;
     const detail = object(row.checkpoint);
-    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
     const leaseOwner = outcome.leaseOwner ?? null;
     const leaseAttempt = outcome.leaseAttempt ?? null;
@@ -1583,7 +1710,7 @@ export class VcrJobs {
     const { tiers, models } = await this.#usedModels(row);
     const study = await this.store.studyById(String(row.study_id));
     const detail = object(row.checkpoint);
-    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
     return this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [String(row.id)])).rows[0];

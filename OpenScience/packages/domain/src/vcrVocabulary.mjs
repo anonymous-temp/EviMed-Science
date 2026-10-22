@@ -525,7 +525,7 @@ export const VCR_WAITING_FOR_KINDS = frozen(['allowance', 'simulated_allowance',
 export const VCR_RUN_PLACEMENTS = frozen(['open-runtime', 'bounded'])
 
 /** The four action cards on the module's home page (§9.2), and where each starts. */
-export const VCR_ACTIONS = frozen(['cohort', 'patients', 'comparator', 'trial'])
+export const VCR_ACTIONS = frozen(['definition', 'cohort', 'patients', 'comparator', 'trial'])
 export const VCR_ACTION_LABELS_ZH = Object.freeze({
   cohort: '创建虚拟队列', patients: '创建虚拟患者', comparator: '构建合成对照', trial: '模拟临床试验',
 })

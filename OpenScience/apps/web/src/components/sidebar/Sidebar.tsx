@@ -23,7 +23,6 @@ import { useFrontierFeature } from "@/lib/frontierFeature";
 import { useGeoFeature } from "@/lib/geoClient";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useVcrFinishedToasts } from "@/components/vcr/useVcrFinishedToasts";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -60,7 +59,7 @@ interface NavItem {
  * made the conversation page read as three shells.
  */
 const NAV: NavItem[] = [
-  { to: "/app/chat", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
+  { to: "/app/home", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
   { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
@@ -93,7 +92,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo: boolean }): NavItem[] {
   return NAV.flatMap((item) => [
     item,
-    ...(frontier && item.to === "/app/chat" ? [FRONTIER_NAV] : []),
+    ...(frontier && item.to === "/app/home" ? [FRONTIER_NAV] : []),
     ...(item.to === "/app/capabilities" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
   ]);
 }
@@ -106,8 +105,8 @@ function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo:
  */
 export function isCurrent(to: string, pathname: string, projectModule: "geo" | "vcr" | null): boolean {
   if (to === "/app/extensions/skills") return pathname.startsWith("/app/extensions");
-  const chatting = pathname.startsWith("/app/chat");
-  if (to === "/app/chat") return chatting && projectModule === null;
+  const chatting = pathname === "/app/home" || pathname.startsWith("/app/chat");
+  if (to === "/app/home") return chatting && projectModule === null;
   if (to === VCR_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "vcr");
   if (to === GEO_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "geo");
   return pathname.startsWith(to);
@@ -190,8 +189,10 @@ export function Sidebar() {
       <div className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-center gap-1.5">
-            <EviMedMark className="h-5 w-5 shrink-0" />
-            <div className="text-wordmark font-semibold text-text">EviMed</div>
+            <Link to="/app/home" aria-label="EviMed 首页" className="flex items-center gap-1.5">
+              <EviMedMark className="h-5 w-5 shrink-0" />
+              <span className="text-wordmark font-semibold text-text">EviMed</span>
+            </Link>
             <InboxBell />
             <IconButton icon={PanelLeft} label="收起侧边栏" title="收起侧边栏 (Ctrl+B)" onClick={toggleSidebar} />
           </div>
@@ -205,7 +206,7 @@ export function Sidebar() {
               icon={item.icon}
               label={item.label}
               active={isCurrent(item.to, location.pathname, projectModule)}
-              freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
+              freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
           ))}
         </nav>

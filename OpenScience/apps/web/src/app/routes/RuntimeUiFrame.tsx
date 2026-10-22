@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
-import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
@@ -933,10 +933,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
         if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname)) && intent?.requestId === request.requestId) {
-          const nextState = { ...location.state };
-          delete nextState.runtimeUiIntent;
+          const nextState = conversationNavigationState(location.state, projectId);
           const geoId = geoIdFromChatPath(location.pathname);
-          navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : `/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: nextState });
+          navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), { replace: true, state: nextState });
         }
       } else if (message.type === "evimed.runtime-ui.session" && message.subagent === true
         && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
@@ -960,13 +959,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const geoId = geoIdFromChatPath(location.pathname);
         if (message.sessionId === null) {
           const next = newRuntimeUiIntent();
-          navigate(geoId ? `${geoChatPath(geoId, next.sessionId)}${location.search}` : "/app/chat", { state: { runtimeUiIntent: next } });
+          navigate(geoId ? `${geoChatPath(geoId, next.sessionId)}${location.search}` : scopedConversationPath("/app/chat", projectId), { state: { ...conversationNavigationState(location.state, projectId), runtimeUiIntent: next } });
         }
         // A branch of a finished turn (`session/fork`) is a task of its own —
         // the control plane takes it into the ledger — and says where it came
         // from, for whatever renders the task.
-        else navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : `/app/chat/${encodeURIComponent(message.sessionId)}`, {
-          state: typeof message.forkedFrom === "string" && SESSION_ID.test(message.forkedFrom) ? { forkedFrom: message.forkedFrom } : null,
+        else navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), {
+          state: { ...conversationNavigationState(location.state, projectId), ...(typeof message.forkedFrom === "string" && SESSION_ID.test(message.forkedFrom) ? { forkedFrom: message.forkedFrom } : {}) },
         });
       }
     };

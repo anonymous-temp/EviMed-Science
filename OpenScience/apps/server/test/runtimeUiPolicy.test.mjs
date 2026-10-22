@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,8 +31,23 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, beforeDataCleanup = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
+  const peers = new Set(), clients = new Set();
+  let upstream, wss, ui;
+  t.after(async () => {
+    const errors = [];
+    const attempt = async operation => { try { await operation(); } catch (error) { errors.push(error); } };
+    if (beforeDataCleanup) await attempt(beforeDataCleanup);
+    for (const client of clients) await attempt(() => client.terminate());
+    for (const peer of peers) await attempt(() => peer.terminate());
+    if (ui) await attempt(() => ui.close());
+    if (wss) await attempt(() => new Promise(resolve => wss.close(resolve)));
+    if (upstream?.listening) await attempt(() => new Promise(resolve => upstream.close(resolve)));
+    await attempt(() => rm(dataDir, { recursive: true, force: true }));
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Runtime UI fixture cleanup failed");
+  });
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     runtimeUiPublicOrigin: UI_ORIGIN, publicUrl: SHELL_ORIGIN, ...overrides,
@@ -48,9 +63,8 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
   cookie += `; ${frame.cookie.split(";")[0]}`;
   const received = [];
   const handshakes = [];
-  const peers = new Set();
-  const upstream = createServer();
-  const wss = new WebSocketServer({ server: upstream });
+  upstream = createServer();
+  wss = new WebSocketServer({ server: upstream });
   wss.on("connection", (peer, request) => {
     peers.add(peer);
     handshakes.push(request.headers);
@@ -77,11 +91,10 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate });
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
-  const clients = new Set();
   function connect(headers = {}, suffix = "/api/remote.mux", options = {}) {
     const target = suffix.startsWith("/__evimed/") ? `${origin}${suffix}` : `${base}${suffix}`;
     const ws = new WebSocket(target.replace("http", "ws"), {
@@ -108,14 +121,6 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
       send: (frame) => ws.send(JSON.stringify(frame)),
     };
   }
-  t.after(async () => {
-    for (const client of clients) client.terminate();
-    for (const peer of peers) peer.terminate();
-    await ui.close();
-    await new Promise((resolve) => wss.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-    await rm(dataDir, { recursive: true, force: true });
-  });
   return { config, store, user, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
 }
 
@@ -810,7 +815,8 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   // The paperclip (2026-09-22): the raw-byte route the upload Worker posts to,
   // and the Remote fallback the client uses for exact bytes. Both were refused
   // until then, which left the conversation with no way to hand over a file.
-  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const attempts = [];
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 }, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
   const arrived = [];
@@ -831,15 +837,39 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   assert.equal(arrived[1].fileBody, false);
   c.send(open("upload", "fileUploads/upload", { request: { sessionId: "s1" } }));
   assert.deepEqual((await c.next()).value, { reached: "fileUploads/upload" });
+  assert.deepEqual(attempts, ["default"], "mux records the authenticated project before forwarding");
 });
 
 test("an attachment's bytes reach the kernel as they are, and one past the file ceiling reaches nothing", { timeout: 5000 }, async (t) => {
   // Every POST used to be parsed as a JSON RPC before it was forwarded, so the
   // first file anyone attached was refused as invalid_runtime_proxy_payload
   // (production, 2026-09-22). A file is bytes: ceilinged, never parsed.
-  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const requests = [];
+  let kernel, server, manager;
+  let releaseWriters;
+  const writersReleased = new Promise(resolve => { releaseWriters = resolve; });
+  let auditWriters = 0, quotaWriters = 0;
+  const cleanup = async () => {
+    const errors = [];
+    const attempt = async operation => { try { await operation(); } catch (error) { errors.push(error); } };
+    if (server?.listening) await attempt(() => new Promise(resolve => server.close(resolve)));
+    releaseWriters();
+    errors.push(...(await Promise.all(requests)).filter(Boolean));
+    // All handlers have now admitted their POST quota checks; only now take
+    // the snapshot, so response completion cannot race a later admission.
+    if (manager) {
+      const quotas = await Promise.allSettled([...manager.backgroundQuotaChecks.values()]);
+      errors.push(...quotas.filter(row => row.status === "rejected").map(row => row.reason));
+    }
+    if (kernel?.listening) await attempt(() => new Promise(resolve => kernel.close(resolve)));
+    if (manager) await attempt(() => manager.closeAll());
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Attachment proxy cleanup failed");
+  };
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 }, {}, { beforeDataCleanup: cleanup });
   const received = [];
-  const kernel = createServer((req, res) => {
+  const attempts = [];
+  kernel = createServer((req, res) => {
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
@@ -849,17 +879,28 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
     });
   });
   await new Promise((resolve) => kernel.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => kernel.close(resolve)));
-  const manager = new RuntimeManager(f.config);
+  manager = new RuntimeManager(f.config);
   const project = await f.store.requireProject(f.user, "default");
   const started = [];
   manager.start = async () => { started.push(true); return { url: `http://127.0.0.1:${kernel.address().port}`, cookie: "k=1" }; };
-  const server = createServer((req, res) => {
-    void manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true })
+  const quotaCheck = manager.stopRuntimeIfProjectQuotaExceeded.bind(manager);
+  manager.stopRuntimeIfProjectQuotaExceeded = async project => {
+    await writersReleased;
+    await quotaCheck(project);
+    await writeFile(path.join(project.metaDir, "held-quota-writer"), "drained");
+    quotaWriters++;
+  };
+  server = createServer((req, res) => {
+    const handled = manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true, beforeForward: async () => { attempts.push({ userId: project.userId, projectId: project.id, state: "attempted" }); } })
       .catch((error) => { res.writeHead(error.status ?? 500, { "content-type": "application/json" }); res.end(JSON.stringify({ code: error.code })); });
+    const writer = handled.then(async () => {
+      await writersReleased;
+      await writeFile(path.join(project.metaDir, "held-audit-writer"), "drained");
+      auditWriters++;
+    });
+    requests.push(writer.then(() => null, error => error));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
   const { port } = server.address();
   // A .docx is a zip: not JSON, and past the JSON ceiling.
   const docx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(2000, 7)]);
@@ -873,6 +914,27 @@ test("an attachment's bytes reach the kernel as they are, and one past the file 
   assert.equal((await tooBig.json()).code, "runtime_proxy_body_too_large");
   assert.equal(received.length, 1, "refused before a byte reached the kernel");
   assert.equal(started.length, 1, "and before the runtime was even asked for");
+  assert.deepEqual(attempts, [{ userId: project.userId, projectId: project.id, state: "attempted" }], "only the authorized, size-checked attempt is recorded");
+  assert.equal(auditWriters, 0, "response completion does not drain held metadata writers");
+  assert.equal(quotaWriters, 0, "POST quota checks still own the project after response completion");
+  await cleanup();
+  assert.equal(auditWriters, 2);
+  assert.equal(quotaWriters, 1);
+  assert.equal(manager.backgroundQuotaChecks.size, 0);
+});
+
+test("a failed owned proxy cleanup still closes shared servers and removes its data directory", async t => {
+  let cleanup;
+  const failure = new Error("deliberate attachment handler failure");
+  const f = await fixture({ after: operation => { cleanup = operation; } }, {}, {}, {
+    beforeDataCleanup: async () => { throw failure; },
+  });
+  let attempted = false;
+  t.after(async () => { if (!attempted) await cleanup(); });
+  attempted = true;
+  await assert.rejects(cleanup(), error => error === failure);
+  assert.equal(f.upstream.listening, false);
+  await assert.rejects(stat(f.dataDir), { code: "ENOENT" });
 });
 
 test("HTTP rejects revoked and malformed session cookies without dev-session minting", { timeout: 5000 }, async (t) => {
@@ -1691,4 +1753,46 @@ test("runtime UI shutdown joins its sockets and listener even when browser clean
   finally { refuse = false; }
   await closed;
   assert.equal(f.ui.address(), null);
+});
+
+test("a refused native upload cannot record activity for a foreign project", { timeout: 5000 }, async (t) => {
+  const attempts = [];
+  const f = await fixture(t, {}, {}, { recordUploadAttempt: async (project) => { attempts.push(project.id); } });
+  const response = await fetch(`${f.base}/api/session/uploadFileBinary`, {
+    method: "POST", headers: { Origin: UI_ORIGIN, "content-type": "application/octet-stream" }, body: Buffer.from("input"),
+  });
+  assert.equal(response.status, 401);
+  assert.deepEqual(attempts, []);
+});
+
+test("maintenance rejects cold native frame GET and WebSocket starts while warm reads remain available", async t => {
+  const f = await fixture(t);
+  let blocked = true, creations = 0, admissions = 0;
+  f.manager.runtimeCreationMutation = async operation => {
+    admissions += 1;
+    if (blocked) throw new HttpError(503, 'maintenance_active', 'Draining');
+    return operation();
+  };
+  // Exercise the actual shared creation boundary rather than the fixture's start stub.
+  f.manager.start = RuntimeManager.prototype.start.bind(f.manager);
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.manager.startKernel = async project => {
+    creations += 1;
+    return { project, workspaceDir: project.workspaceDir, proxyWorkspaceDir: project.workspaceDir,
+      url: 'http://kernel.local', socketPath: path.join(f.dataDir, 'mux.sock'), cookie: 'kernel_auth=internal-only', close: async () => {} };
+  };
+  f.config.runtimeMode = 'kernel';
+  f.upstream.on('request', (_request, response) => { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<html><body>fixture</body></html>'); });
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 503);
+  assert.equal(await f.connect().opened, 503);
+  assert.equal(creations, 0);
+  assert.equal(admissions, 2);
+  blocked = false;
+  const project = await f.store.requireProject(f.user, 'default');
+  await f.manager.start(project);
+  blocked = true;
+  assert.equal((await fetch(`${f.base}/`, { headers: { cookie: f.cookie } })).status, 200);
+  assert.equal(await f.connect().opened, 101);
+  assert.equal(creations, 1);
+  assert.equal(admissions, 3, 'warm GET and WebSocket reads do not request creation admission');
 });

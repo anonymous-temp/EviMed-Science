@@ -132,7 +132,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(current).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Paper 1" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: "心衰" })).toHaveAttribute("aria-expanded", "false");
-    expect(await screen.findByRole("link", { name: /阿司匹林一级预防的证据/ })).toHaveAttribute("href", "/app/chat/ses-run-1");
+    expect(await screen.findByRole("link", { name: /阿司匹林一级预防的证据/ })).toHaveAttribute("href", "/app/chat/ses-run-1?project=default");
     expect(screen.queryByText("论文一的任务")).not.toBeInTheDocument();
     // Never every project's ledger on load: the other two were not asked.
     expect(readProjects()).toEqual(["default"]);
@@ -454,7 +454,7 @@ describe("ProjectBrowser — task rows", () => {
     renderBrowser();
     const rows = await screen.findAllByRole("link", { name: /阿司匹林一级预防的获益与风险/ });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveAttribute("href", "/app/chat/ses-shared");
+    expect(rows[0]).toHaveAttribute("href", "/app/chat/ses-shared?project=default");
     expect(screen.queryByRole("link", { name: /那 65–69 岁呢/ })).toBeNull();
   });
 
@@ -1031,6 +1031,31 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     useProjectStore.setState({ currentId: "p-heart" });
   });
 
+
+  it("keeps an explicit null canonical session separate from an ordinary sibling", async () => {
+    mocks.runs["p-heart"] = [run({ id: "sibling", question: "另一段讨论" })];
+    const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: null });
+    try {
+      renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
+      expect(await screen.findByRole("link", { name: /另一段讨论/ })).toHaveAttribute("href", "/app/chat/ses-sibling?project=p-heart");
+      expect(document.querySelector("[data-conversation-placeholder]")).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+    } finally { withdraw(); }
+  });
+
+  it("keeps a held canonical conversation even when only a sibling has ledger rows", async () => {
+    mocks.runs["p-heart"] = [run({ id: "sibling", question: "另一段讨论" })];
+    const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: "ses_canonical_missing" });
+    try {
+      renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
+      expect(await screen.findByRole("link", { name: /另一段讨论/ })).toHaveAttribute("href", "/app/chat/ses-sibling?project=p-heart");
+      expect(document.querySelector("[data-conversation-placeholder]")).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
+    } finally { withdraw(); }
+  });
+  it("opens a calculation container explicitly without treating it as a seven-step study", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "calc_1", projectId: "p-heart", name: "Small calculation", purpose: "calculation", status: "active" }], draftProjectIds: [] });
+    renderModules({ vcr: true }, "/app/capabilities/calculations/calc_1");
+    expect(await screen.findByRole("link", { name: "打开计算空间" })).toHaveAttribute("href", "/app/capabilities/calculations/calc_1");
+  });
   it("opens its group and brings its row into view when the study is opened, once per visit to it", async () => {
     const scroll = vi.fn();
     const original = Element.prototype.scrollIntoView;
@@ -1119,7 +1144,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     ];
     renderModules({ vcr: true }, "/app/virtual-research/std_1/population");
     expect(await screen.findByRole("link", { name: /说明研究要做什么/ })).toHaveAttribute("href", "/app/virtual-research/std_1/chat");
-    expect(screen.getByRole("link", { name: /后来另开的对话/ })).toHaveAttribute("href", "/app/chat/ses-later");
+    expect(screen.getByRole("link", { name: /后来另开的对话/ })).toHaveAttribute("href", "/app/chat/ses-later?project=p-heart");
   });
 
   it("does not list a step the programme dispatched as a conversation, and does not count it", async () => {

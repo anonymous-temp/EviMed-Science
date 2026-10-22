@@ -303,7 +303,7 @@ export class ControlPlaneDatabase {
     return this.pool.query(text, values);
   }
 
-  async transaction(operation) {
+  async transaction(operation, { rollbackOnly = false } = {}) {
     const scoped = this.transactionScope();
     if (scoped) {
       const enclosing = this.atomicTransactions.getStore();
@@ -315,6 +315,7 @@ export class ControlPlaneDatabase {
           const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
           atomic.open = false;
           await atomic.serial;
+          if (rollbackOnly) await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
           await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
           return result;
         } catch (error) {
@@ -334,13 +335,22 @@ export class ControlPlaneDatabase {
       try {
         await client.query("BEGIN");
         const result = await operation(client);
-        await client.query("COMMIT");
+        await client.query(rollbackOnly ? "ROLLBACK" : "COMMIT");
         return result;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => {});
         throw error;
       }
     });
+  }
+
+  /** Read-and-lock admission must end its locks before the caller's work.
+   * A nested fence borrows its owned client but rolls back only its savepoint,
+   * preserving the parent's writes and transaction context. Standalone reads
+   * keep the ordinary short transaction. Never use this to publish writes.
+   * @param {(client: Record<string, any>) => Promise<any>} operation */
+  readFence(operation) {
+    return this.transaction(operation, { rollbackOnly: Boolean(this.transactionScope()) });
   }
 
   /** @returns {any} Only an open owned scope, including admitted atomic work draining at close. */

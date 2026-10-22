@@ -60,7 +60,8 @@
 
 # One realm for the four rows that share state.
 #
-# Four of them publish services — `evimedCapabilities`, `evimedCapsuleMethods`,
+# These rows publish services — `evimedCapabilities`, `evimedCapsuleMethods`,
+# `evimedNativeRoute` (the authenticated current-input route),
 # `evimedCapsuleMemory` (only while the capsule's recall and note tools are
 # mounted), `evimedEvidence` — and a preset row may not publish into the process-global
 # scope: the kernel refuses to mount the preset, saying a preset service must
@@ -82,6 +83,7 @@
     evimedCapabilities: true
     evimedCapsuleMethods: true
     evimedCapsuleMemory: true
+    evimedNativeRoute: true
     evimedEvidence: true
   config:
     # What every task is told: the workspace, how files are produced and handed

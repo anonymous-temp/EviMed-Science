@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "@/lib/projects";
 import { SessionRoute } from "./SessionRoute";
 
-const mocks = vi.hoisted(() => ({ association: vi.fn(), getProject: vi.fn() }));
+vi.mock("./RuntimeUiFrame", () => ({ FrameSkeleton: () => <div /> }));
+const mocks = vi.hoisted(() => ({ association: vi.fn(), getProject: vi.fn(), runs: vi.fn() }));
+vi.mock("@/lib/apiClient", async original => ({ ...await original<typeof import("@/lib/apiClient")>(), listWebAgentRuns: mocks.runs }));
 vi.mock("@/components/geo/useGeoProjectIds", () => ({ useGeoAssociation: mocks.association }));
 vi.mock("@/lib/geoClient", () => ({ getGeoProject: mocks.getProject }));
 function Location() {
@@ -20,6 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useProjectStore.setState({ currentId: "p-own" });
   mocks.association.mockReturnValue(null);
+  mocks.runs.mockResolvedValue([{ sessionId: "ses_own" }]);
 });
 
 describe("ordinary conversations associated with GEO", () => {
@@ -35,6 +38,14 @@ describe("ordinary conversations associated with GEO", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_own/chat/ses_own"));
     expect(screen.getByTestId("location")).toHaveTextContent("?step=evidence");
     expect(screen.getByTestId("location")).toHaveTextContent("kept");
+  });
+  it("does not reinterpret an unscoped foreign session as the current GEO project", async () => {
+    mocks.association.mockReturnValue({ id: "geo_own" });
+    mocks.getProject.mockResolvedValue({ id: "geo_own", projectId: "p-own", sessionId: "ses_geo" });
+    mocks.runs.mockResolvedValue([]);
+    draw();
+    await waitFor(() => expect(mocks.runs).toHaveBeenCalledWith({ projectId: "p-own" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/chat/ses_own");
   });
   it("does not trust a stale association or a refused project", async () => {
     mocks.association.mockReturnValue({ id: "geo_own" });

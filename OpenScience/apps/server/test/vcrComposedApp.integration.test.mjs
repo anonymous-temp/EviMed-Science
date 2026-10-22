@@ -102,6 +102,7 @@ before(async () => {
         await writeFile(path.join(root, "output/manifest.json"), JSON.stringify({ sourceDigest: input.sourceDigest, rendererVersion: input.rendererVersion, formats }));
       },
     },
+    vcrStartStudy: async () => ({ accepted: true }),
     vcrDispatchRun: async (/** @type {any} */ input) => {
       dispatches.push(input);
       return { runId: `run_${dispatches.length}`, sessionId: `session_${dispatches.length}`, status: "running" };
@@ -192,6 +193,7 @@ function requests(target, ids) {
     "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
+    "POST /studies/:id/start": async () => ["POST", `${S}/start`, { brief: "Partial research brief", requestId: "request_123" }],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
     // Stop what the study is doing: the run its slot holds and its open jobs (nothing is out here, so nothing is stopped).
     "POST /studies/:id/cancel": async () => ["POST", `${S}/cancel`, {}],
@@ -203,6 +205,8 @@ function requests(target, ids) {
     "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],
     "GET /studies/:id/jobs/:job": async () => ["GET", `${S}/jobs/job_none`, undefined],
+    "GET /studies/:id/jobs/:job/result": async () => ["GET", `${S}/jobs/job_none/result`, undefined],
+    "POST /studies/:id/method-configurations": async () => ["POST", `${S}/method-configurations`, { method: "profile.snapshot", name: "Profile", scenario: {} }],
     "POST /studies/:id/jobs": async () => ["POST", `${S}/jobs`, { kind: "design_simulation", scenario: {} }],
     "POST /studies/:id/jobs/:job/cancel": async () => ["POST", `${S}/jobs/job_none/cancel`, {}],
     "POST /studies/:id/budget": async () => ["POST", `${S}/budget`, { cpuSeconds: 600 }],
@@ -301,7 +305,7 @@ test("CS-45 every route, driven through the real server as the owner and as each
       const answer = await call(who, method, route, body);
       // Reference-only case export still requires current patient-level read
       // authority; study export alone cannot read its underlying documents.
-      const allowed = holdsAny(held, abilities) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);
@@ -324,10 +328,10 @@ test("the study a project belongs to is found by the project — a draft nobody 
   const made = await call("owner", "POST", "/api/vcr/studies", {});
   assert.equal(made.status, 201, made.text);
   assert.equal(made.body.data.status, "draft");
-  // The home list leaves the untouched draft out: that is why the frame cannot find its study there.
+  // A bound legacy conversation cannot prove absence of unsent native attachments. Keep it reachable.
   const listed = await call("owner", "GET", "/api/vcr/studies");
-  assert.ok(!listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
-  assert.ok(listed.body.data.draftProjectIds.includes(made.body.data.projectId));
+  assert.ok(listed.body.data.studies.some((entry) => entry.id === made.body.data.id));
+  assert.ok(!listed.body.data.draftProjectIds.includes(made.body.data.projectId));
   const found = await call("owner", "GET", `/api/vcr/studies/of-project/${made.body.data.projectId}`);
   assert.equal(found.status, 200, found.text);
   assert.deepEqual(Object.keys(found.body.data).sort(), ["abilities", "id", "intendedUse", "projectId", "status", "steps"]);
@@ -890,11 +894,15 @@ test("shared exports serve all VCR kinds to current members without a new resear
   assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
 });
 
-test("a draft nobody spoke in is swept with its project an hour on, through the real server; one that was named is not a draft and stays", options, async () => {
+test("automatic draft expiry preserves projects and inputs through the real server", options, async (t) => {
   const projectIds = async () => (await call("viewer", "GET", "/api/projects")).body.data.map((/** @type {any} */ project) => project.id);
   const draft = await call("viewer", "POST", "/api/vcr/studies", {});
   assert.equal(draft.status, 201, draft.text);
   const { id, projectId } = draft.body.data;
+  t.after(async () => {
+    const removed = await call("viewer", "DELETE", `/api/projects/${projectId}`, { confirm: projectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   assert.equal((await rows(`SELECT status FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].status, "draft");
   assert.ok((await projectIds()).includes(projectId), "the project is there while the draft is");
 
@@ -904,12 +912,20 @@ test("a draft nobody spoke in is swept with its project an hour on, through the 
 
   const named = await call("viewer", "POST", "/api/vcr/studies", { name: "已命名的研究" });
   assert.equal(named.status, 201, named.text);
+  t.after(async () => {
+    const namedProjectId = named.body.data.projectId;
+    const removed = await call("viewer", "DELETE", `/api/projects/${namedProjectId}`, { confirm: namedProjectId });
+    assert.equal(removed.status, 200, removed.text);
+  });
   await rows(`UPDATE evimed_vcr.studies SET created_at = now() - interval '3 hours' WHERE id = ANY($1)`, [[id, named.body.data.id]]);
 
   const swept = await context.app.vcr.drafts.sweep();
-  assert.ok(swept.deleted >= 1, "the old draft is deleted");
-  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 0, "the study row goes");
-  assert.equal((await projectIds()).includes(projectId), false, "and its project with it");
+  assert.equal(swept.deleted, 0, "expiry cannot prove absence against concurrent project writes");
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [id]))[0].n, 1, "the study row stays");
+  assert.equal((await projectIds()).includes(projectId), true, "the project and its materials stay");
+  await context.app.vcr.store.updateStudy(id, { question: "Saved after candidate selection" }, accounts.viewer);
+  assert.equal((await context.app.vcr.drafts.sweep()).deleted, 0);
+  assert.equal((await context.app.vcr.store.studyById(id)).question, "Saved after candidate selection");
   assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE id = $1`, [named.body.data.id]))[0].n, 1, "a study that is not a draft is never swept");
   assert.deepEqual(await context.app.vcr.drafts.sweep().then((result) => result.deleted), 0, "a second sweep has nothing left to do");
 });

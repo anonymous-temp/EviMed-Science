@@ -1,3 +1,4 @@
+import { createVcrStudyStart } from "./vcrStudyStart.mjs";
 import { WebVitals } from './webVitals.mjs';
 import { GeoJudge } from './geoJudge.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
@@ -12,6 +13,8 @@ import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProje
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
+import { ResultCaptureRepairService } from "./resultCaptureRepair.mjs";
+import { createResultCaptureRepairRoutes } from "./resultCaptureRepairRoutes.mjs";
 import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
 import { captureFinishedRun, sourceCapture } from "./resultDeliveryCapture.mjs";
 import { createSourceIntakeHandoff } from "./sourceIntakeHandoff.mjs";
@@ -373,7 +376,8 @@ import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
-import { createVcrDraftSweeper } from "./vcrDrafts.mjs";
+import { recordNativeUploadAttempt } from "./nativeUploadActivity.mjs";
+import { createVcrDraftSweeper, createVcrDraftUsage } from "./vcrDrafts.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
 import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
@@ -1615,6 +1619,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({ config, store: researchMemory, capsules: capsuleService });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    nativeMemory: config.ovNativeMemoryEnabled ? nativeMemory : null, memoryEngine: (userId) => researchMemory.memoryEngine(userId),
     maxLiveSnapshots: config.capsuleMaxLiveSnapshots,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
     // What became of an account's capsule cleanup: a deletion that rolled back and was released, or a cleanup that stopped on a code.
@@ -2829,11 +2834,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return null;
     }
   }
+  const startVcrStudy = createVcrStudyStart({
+    conversations: study => resolveStudyConversation(study, { create: true }),
+    runs: { list: project => agentRuns.list(project), existingDispatch: (project, run) => agentRuns.existingDispatch(project, run) },
+    projectFor: async study => store.requireProject(await store.userById(study.userId), study.projectId),
+    inbox: (project, sessionId) => runtimeManager.sessionInbox(project, sessionId),
+    orchestrator: () => vcr.orchestrator,
+    save: async (user, study, input) => {
+      await vcr.store.updateStudy(study.id, { question: input.brief, ...(input.name ? { name: input.name } : {}) }, String(user.id));
+      if (input.name && input.name !== study.name) {
+        const owner = await store.userById(study.userId);
+        const project = await store.requireProject(owner, study.projectId);
+        if (project.name === study.name) await store.renameProject(owner, project.id, [...input.name].slice(0, 40).join(""));
+      }
+    },
+    dispatch: (user, project, sessionId, dispatchId, text, options) => dispatchChannelRun(user, project, sessionId, dispatchId, text, options),
+  });
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
     store, vcrStore: vcr?.store ?? null, service: vcr?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
+    startStudy: overrides.vcrStartStudy ?? ((user, study, input) => startVcrStudy(user, study, input)),
     projects: {
       create: (user, name) => createResearcherProject(user, { name }),
       // A study whose row (or first conversation) could not be made takes the
@@ -3240,6 +3262,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // that one's private state.
   const preStopTranscripts = new PreStopTranscripts();
   const runtimeManager = runtimeManagerFactory(config, {
+    // The read fence releases its admission lock before a boot while keeping
+    // an enclosing plugin transaction and its owned connection intact.
+    runtimeCreationMutation: async operation => {
+      if (!maintenanceService) return operation();
+      const release = await maintenanceService.admitMutation();
+      try { return await operation(); } finally { release(); }
+    },
     agentRegistry,
     recordRuntimeEgressDispatch: (project, runId, at) => agentRuns?.recordRuntimeEgressDispatch(project, runId, at),
     readRuntimeEgressRun: async (project, runId) => {
@@ -3848,6 +3877,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           }));
         }
       }
+      if (vcr?.orchestrator && !String(run.dispatchId ?? "").startsWith("vcr-")) {
+        await vcr.orchestrator.onRunFinished(project, run).catch(error => securityAudit(config, "vcr.intake.complete", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id, code: error?.code ?? "vcr_run_completion_failed",
+        }));
+      }
       // A GEO run (dispatch id `geo-…`): its bounded runtime is let go, then
       // the orchestrator folds it into the program's steps.
       if (geo?.orchestrator && String(run.dispatchId ?? "").startsWith("geo-")) {
@@ -4157,6 +4191,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
   });
+  const resultCaptureRepairRoutes = createResultCaptureRepairRoutes({ store, runs: agentRuns, config, maxJsonBytes: config.maxJsonBytes,
+    service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns, programme: evidenceProgramme }) : null });
   // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
   // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
   // answers and no run asks which card it came from. The citation gift is the credits service's own grant entry
@@ -5352,44 +5388,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       conversations: { resolve: (study, options) => resolveStudyConversation(study, options) },
     });
-    // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
-    // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
-    /** Whether anybody has sent a message in a draft's conversation: the run ledger holds every one. @param {any} study */
-    const draftSpokenIn = async (study) => {
+    // Draft visibility and expiry share the same saved-input, research-object, source and run predicate.
+    // Unreadable state keeps the draft: absence must be established, never guessed.
+    const draftSpokenIn = createVcrDraftUsage({ store: vcr.store, projectUsed: async (study) => {
       const owner = await store.userById(study.userId);
-      if (!owner) return false;
-      return (await agentRuns.list(await store.requireProject(owner, study.projectId))).length > 0;
-    };
-    // The home list shows a draft somebody has spoken in, so the conversation is never out of reach.
+      if (!owner) return true;
+      const project = await store.requireProject(owner, study.projectId);
+      if ((await agentRuns.list(project)).length > 0) return true;
+      if (!productDocuments) return true;
+      const activity = await productDocuments.get(owner.id, "preferences", `native-upload-attempt:${project.id}`);
+      if (activity?.projectId === project.id && activity.payload?.recordType === "native-upload-attempt") return true;
+      // Older native attachments left no product row. Binding is not proof of materials,
+      // but makes emptiness unknown; keep the unfinished study reachable without claiming an upload.
+      if (study.conversationSessionId) return true;
+      if (!sourceService) return true;
+      const sources = await sourceService.list(owner.id, { projectId: project.id, limit: 1 });
+      return sources.items.length > 0;
+    } });
+    // A saved draft remains reachable even before the first AI conversation.
     vcr.service.attach({ draftSpokenIn });
     vcr.drafts = createVcrDraftSweeper({
       store: vcr.store, ttlMs: Number(config.vcrDraftTtlMinutes) > 0 ? Number(config.vcrDraftTtlMinutes) * 60_000 : undefined,
       spokenIn: draftSpokenIn,
-      remove: async (study) => {
-        const owner = await store.userById(study.userId);
-        if (!owner) {
-          // The account is gone: its rows go with it (`deleteVcrUserRows`); a stray draft has nothing else to wait for.
-          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
-          return;
-        }
-        // What the project holds beyond its rows goes first, as a project's deletion does it: the conversation's runtime (a draft was
-        // opened in one, and it would hold the workspace the deletion removes) and the memory the project may have written. A project
-        // with work in it, or one that is already gone, is told apart by the code the store answers with.
-        const project = await store.requireProject(owner, study.projectId).catch((error) => {
-          if (error?.code === "project_not_found") return null;
-          throw error;
-        });
-        if (project) {
-          if (await taskManager.hasActiveProject(project)) throw Object.assign(new Error("project_busy"), { code: "project_busy" });
-          await runtimeManager.stop(project, { by: "platform" });
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(owner.id, project.id, { sessionIds: await projectConversationIds(project) });
-          if (await nativeMemoryHeldBy(owner.id)) await nativeMemory.deleteProject(owner.id, project.id);
-        }
-        await removeStudyProject(owner, study.projectId).catch(async (error) => {
-          // A project that is already gone leaves its draft behind: the row is the only thing left to remove.
-          if (error?.code !== "project_not_found") throw error;
-          await vcr.store.transaction((client) => deleteVcrProjectRows(client, study.userId, study.projectId));
-        });
+      remove: async () => {
+        // Automatic expiry has no shared exclusion with study/source/upload writes. It must never
+        // remove a live project or stop its runtime: absence at a prior read cannot authorize deletion.
+        // Explicit user deletion retains its existing behavior. Keep even apparently empty projects.
+        return false;
       },
       report: (code) => process.stderr.write(`vcr drafts: ${code}\n`),
       audit: vcrAudit,
@@ -5935,7 +5960,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * never reaches a kernel.
    * @param {any} user @param {any} project @param {string} sessionId @param {string} dispatchId @param {string} text
    */
-  async function dispatchChannelRun(user, project, sessionId, dispatchId, text) {
+  async function dispatchChannelRun(user, project, sessionId, dispatchId, text, options = /** @type {any} */ ({})) {
     if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
     }
@@ -5955,10 +5980,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ? registry.get(route.effectiveAgentId) : null;
     const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
-    const dispatch = () => agentRuns.dispatch(project, {
+    const dispatch = async () => {
+      if (options.beforeReserve) await options.beforeReserve();
+      return agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
-      waitForRoom: true,
+      ...(options.dispatchFingerprint ? { dispatchFingerprint: options.dispatchFingerprint } : { waitForRoom: true }),
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: text,
       effectiveAgentId: route.effectiveAgentId ?? null,
@@ -5966,52 +5993,67 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       effectiveRuntimeAgent: route.effectiveRuntimeAgent ?? null,
       effectiveRouteReason: route.effectiveRouteReason ?? null,
     }, async (session, dispatchedRun, repairText = null) => {
-      // A repair round is the gate's words in the researcher's conversation,
-      // so it carries the gate's tag (see the chat route).
-      const promptText = typeof repairText === "string" && repairText.trim()
-        ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
-        : text;
-      let resident;
+      let promptAttempted = false;
       try {
-        resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId });
-      } catch (error) {
-        throw memoryRecallRejection(error);
-      }
-      const prepared = await prepareOwnedResearchContext(project, session, {
-        query: text,
-        resident,
-        specialists: routableAgents,
-        // A person sent this from their channel and reads the reply there.
-        attended: true,
-        routedSpecialist: routed
-          ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
-            skill: routed.skill, companionSkills: routed.companionSkills }
-          : null,
-      }, dispatchedRun);
-      if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
-        await agentRuns.recordLearning(project, dispatchedRun.id, {
-          ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
-          ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+        // A repair round is the gate's words in the researcher's conversation,
+        // so it carries the gate's tag (see the chat route).
+        const promptText = typeof repairText === "string" && repairText.trim()
+          ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
+          : text;
+        if (options.beforeSend) await options.beforeSend(dispatchedRun);
+        let resident;
+        try {
+          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId });
+        } catch (error) {
+          throw memoryRecallRejection(error);
+        }
+        const prepared = await prepareOwnedResearchContext(project, session, {
+          query: text,
+          resident,
+          specialists: routableAgents,
+          // A person sent this from their channel and reads the reply there.
+          attended: true,
+          routedSpecialist: routed
+            ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
+              skill: routed.skill, companionSkills: routed.companionSkills }
+            : null,
+        }, dispatchedRun);
+        if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
+          await agentRuns.recordLearning(project, dispatchedRun.id, {
+            ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
+            ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+          });
+        }
+        // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
+        // the run is reserved and the person is waiting on this answer, so a place in
+        // line is the right shape and a refusal is the wrong one.
+        if (options.dispatchFingerprint) await runtimeManager.start(project);
+        else await runtimeManager.startWhenRoom(project);
+        if (options.dispatchFingerprint) {
+          const state = await runtimeManager.sessionInbox(project, session.sessionId);
+          if (!state || state.running !== false || state.queued !== 0) throw new HttpError(409, "vcr_conversation_busy", "The study conversation is busy. Retry when it finishes.");
+        }
+        if (options.beforePrompt) await options.beforePrompt();
+        promptAttempted = true;
+        await runtimeManager.dispatchPrompt(project, session.sessionId, {
+          recordPromptActor: request => recordExtensionPromptActor(user, project, request),
+          text: promptText,
+          system: options.systemSupplement ? `${prepared.system ?? ""}\n\n${options.systemSupplement}` : prepared.system,
+          routedCapability: prepared.routedCapability,
+          memoryContext: prepared.memoryContext,
+          agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
+          model: `deepseek/${config.deepseekModel}`,
+          runId: dispatchedRun.id,
+          requestId: dispatchedRun.kernelRequestIds?.at(-1),
+          strictContext: true,
         });
+        await resident.delivered();
+      } catch (error) {
+        if (options.dispatchFingerprint && !promptAttempted) error.definitivelyRejected = true;
+        throw error;
       }
-      // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
-      // the run is reserved and the person is waiting on this answer, so a place in
-      // line is the right shape and a refusal is the wrong one.
-      await runtimeManager.startWhenRoom(project);
-      await runtimeManager.dispatchPrompt(project, session.sessionId, {
-        recordPromptActor: request => recordExtensionPromptActor(user, project, request),
-        text: promptText,
-        system: prepared.system,
-        routedCapability: prepared.routedCapability,
-        memoryContext: prepared.memoryContext,
-        agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
-        model: `deepseek/${config.deepseekModel}`,
-        runId: dispatchedRun.id,
-        requestId: dispatchedRun.kernelRequestIds?.at(-1),
-        strictContext: true,
-      });
-      await resident.delivered();
     });
+    };
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
   }
 
@@ -6285,6 +6327,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
       if (await resultRoutes(req, res)) return;
+      if (await resultCaptureRepairRoutes(req, res)) return;
       if (await resultReuseRoutes(req, res)) return;
       if (await resultImpactRoutes(req, res)) return;
       if (await dataSemanticsRoutes(req, res)) return;
@@ -7335,6 +7378,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
         assertNotPlatformAccount(user);
+        const exportProjects = new Map();
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
@@ -7348,7 +7392,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        }, { skillArtifacts });
+        }, { skillArtifacts, readResultReview: resultProvenance ? async (actor, row) => {
+          if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
+          const project = await exportProjects.get(row.projectId);
+          // Use this exact historical row, not the latest revision of its version.
+          return (await resultProvenance.project(actor.id, project, row.payload)).review;
+        } : undefined });
         return;
       }
 
@@ -8008,6 +8057,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     usageLedger,
     managedBrowser,
     authorizeOpenSession: authorizeOwnedNativeSession,
+    recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
     authorizePrompt: assertPublicSessionPrompt,
     // A turn begun in the kernel's own application never passes through the
     // dispatch route, so the allowance is asked here too (§9.6). The capability

@@ -222,6 +222,59 @@ test("a caller's inputs are checked as a caller's, a snapshot is resolved by the
   assert.equal((await jobs.listForStudy(study.id)).length, before);
 });
 
+test("explicit draft method jobs use the existing engine without activating the programme", options, async () => {
+  const study = await makeStudy("draft-method", { status: "draft", purpose: "programme" });
+  const engine = engineDouble();
+  const table = { kind: "analysis_table", id: "snp_draft:subject", shape: "subject", location: "snapshots/snp_draft/subject.csv", hash: "a".repeat(64), valueSource: "observed" };
+  const dataPlane = { async resolveEngineInputs(/** @type {any} */ request) {
+    assert.equal(request.principal, study.userId);
+    assert.equal(request.studyId, study.id);
+    assert.equal(request.snapshotId, "snp_draft");
+    return [table];
+  } };
+  const jobs = new VcrJobs({ store, config, engine, dataPlane });
+  const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "build_cohort",
+    inputs: [{ kind: "snapshot", id: "snp_draft" }],
+    scenario: { rules: [{ name: "Adults", rule: { op: "compare", column: "age", comparator: "gte", value: 18 } }] } });
+  assert.equal(job.state, "queued");
+  const [first, second] = await Promise.all([jobs.claim(), jobs.claim({ workerId: "other-worker" })]);
+  assert.equal(first.length + second.length, 1, "the draft has the same exclusive lease as an active study");
+  const claimed = [...first, ...second][0];
+  await jobs.advance(claimed);
+  assert.deepEqual(engine.submitted, [job.id]);
+  await jobs.advance(claimed);
+  assert.equal((await store.job(study.id, job.id)).state, "succeeded");
+  assert.equal((await store.studyById(study.id)).status, "draft", "a manual job never starts the programme");
+
+  // Force each worker identity to win once; Promise.all alone may always favour the default owner.
+  for (const [index, workerId] of [jobs.owner, "other-worker"].entries()) {
+    const { job: next } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "build_cohort",
+      inputs: [{ kind: "snapshot", id: "snp_draft" }], seed: index + 11,
+      scenario: { rules: [{ name: "Adults", rule: { op: "compare", column: "age", comparator: "gte", value: 18 } }] } });
+    const [winner] = await jobs.claim({ workerId });
+    assert.equal(winner.leaseOwner, workerId);
+    assert.deepEqual(await jobs.claim({ workerId: "losing-worker" }), []);
+    await jobs.advance(winner);
+    await jobs.advance(winner);
+    assert.equal((await store.job(study.id, next.id)).state, "succeeded", `${workerId} can advance its own claim`);
+  }
+  assert.equal((await store.studyById(study.id)).status, "draft");
+});
+
+test("inactive or deleted studies refuse new jobs and cannot claim previously queued work", options, async () => {
+  for (const status of ["paused", "archived", "deleted"]) {
+    const study = await makeStudy(`job-state-${status}`, { status: "draft" });
+    const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+    await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+    await store.query(status === "deleted"
+      ? "UPDATE evimed_vcr.studies SET deleted_at=now() WHERE id=$1"
+      : "UPDATE evimed_vcr.studies SET status=$2 WHERE id=$1", status === "deleted" ? [study.id] : [study.id, status]);
+    await assert.rejects(jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario }),
+      { code: status === "deleted" ? "vcr_study_not_found" : "vcr_study_paused" });
+    assert.deepEqual(await jobs.claim(), [], `${status} work remains stopped`);
+  }
+});
+
 test("a claim is exclusive, and the deployment's concurrency is the ceiling even when two workers ask at once", options, async () => {
   const study = await makeStudy("claim");
   const jobs = new VcrJobs({ store, config, engine: engineDouble() });

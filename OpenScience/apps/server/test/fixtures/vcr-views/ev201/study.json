@@ -15,6 +15,7 @@
   "tier": "T0",
   "intendedUse": "design_support",
   "status": "active",
+  "purpose": "programme",
   "steps": {
     "definition": {
       "status": "done",

@@ -110,7 +110,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
-  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCE_LIMITS, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
+  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_COLUMN_SOURCE_LIMITS, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
   VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
   suppressForModel, vcrTierSupportedBy, workspaceLayout,
 } from "@evimed/domain";
@@ -1861,6 +1861,35 @@ export function tablesNeededBy(method, endpointType, derived) {
   return wanted.every((shape) => derived.includes(shape)) ? wanted : ["files"];
 }
 
+/** Engine identity shared by actual resolution and the public selectors.
+ * @param {string} snapshotId @param {string | number} table
+ */
+export const snapshotInputId = (snapshotId, table) => `${snapshotId}:${table}`;
+
+/** The raw view's aliases depend on the complete header order and the permitted columns.
+ * @param {string[]} header @param {string[]} keep @param {VcrFieldEntry[]} entries
+ */
+export function rawInputColumns(header, keep, entries) {
+  /** @type {Record<string, string>} */
+  const rename = {};
+  const used = new Set(["USUBJID"]);
+  header.forEach((name, index) => {
+    if (!keep.includes(name)) return;
+    const mapped = entries.find(entry => entry.column === name);
+    let wanted = mapped?.alias ?? (VCR_ANALYSIS_COLUMN.test(name) ? name : `col_${index + 1}`);
+    for (let attempt = 2; used.has(wanted); attempt += 1) wanted = `${mapped?.alias ?? name}_${attempt}`;
+    used.add(wanted);
+    if (wanted !== name) rename[name] = wanted;
+  });
+  return { rename, columns: keep.map(name => rename[name] ?? name), columnLabels: Object.fromEntries(keep.map(name => [rename[name] ?? name, name])) };
+}
+
+/** Analysis aliases, paired with the source fields on which access is judged. @param {any} table */
+export function analysisInputColumns(table) {
+  return (table.columns ?? []).map((/** @type {string} */ name) => ({ name,
+    source: (table.derivedFrom?.columns ?? []).find((/** @type {any} */ column) => column.name === name)?.source ?? null }));
+}
+
 /**
  * The data files of a source as a snapshot sees them: one per name, the latest
  * upload of that name (files come oldest first).
@@ -2939,7 +2968,7 @@ export class VcrDataPlane {
     const outcomeColumns = new Set(entries.filter(isOutcomeEntry).map((entry) => entry.column));
 
     for (const { table } of wantedTables) {
-      const id = `${snapshot.id}:${table.shape}`;
+      const id = snapshotInputId(snapshot.id, table.shape);
       /** @type {{ source: string, name: string, valueSource?: string }[]} */
       const mapped = table.derivedFrom?.columns ?? [];
       const missing = [...new Set(mapped.map((column) => column.source).filter((name) => judgeable(name) && !allowed.has(name)))];
@@ -2953,7 +2982,7 @@ export class VcrDataPlane {
       const carried = mapped.filter((column) => !missing.includes(column.source));
       if (table.shape === "subject" && carried.length) {
         const parsed = parseTable(await fs.readFile(this.resolve(table.location), "utf8"));
-        const projection = projectTable(parsed, { keep: ["USUBJID", ...carried.map((column) => column.name)] });
+        const projection = projectTable(parsed, { keep: ["USUBJID", ...analysisInputColumns(table).filter(column => carried.some(item => item.source === column.source)).map(column => column.name)] });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         // The view holds fewer columns than the table, so it is labelled by the columns it holds.
         const viewSource = weakestSource(carried.map((column) => column.valueSource ?? table.valueSource), table.valueSource);
@@ -2971,7 +3000,7 @@ export class VcrDataPlane {
       let position = 0;
       for (const file of dataFiles) {
         position += 1;
-        const id = `${snapshot.id}:${position}`;
+        const id = snapshotInputId(snapshot.id, position);
         const columns = fileColumns.get(file.name) ?? [];
         const missing = columns.filter((name) => !allowed.has(name));
         const keep = columns.filter((name) => allowed.has(name));
@@ -2985,17 +3014,7 @@ export class VcrDataPlane {
         // A replay's raw files are cut like its derived tables: the rows the
         // platform could see then, and no others.
         const parsed = frozen.asOf && derivesRows(own) ? tableVisibleAsOf({ name: file.name, ...whole }, entries, frozen.asOf).table : whole;
-        /** @type {Record<string, string>} */
-        const rename = {};
-        const used = new Set(["USUBJID"]);
-        parsed.header.forEach((name, index) => {
-          if (!keep.includes(name)) return;
-          const mapped = own.find((entry) => entry.column === name);
-          let wanted = mapped?.alias ?? (VCR_ANALYSIS_COLUMN.test(name) ? name : `col_${index + 1}`);
-          for (let attempt = 2; used.has(wanted); attempt += 1) wanted = `${mapped?.alias ?? name}_${attempt}`;
-          used.add(wanted);
-          if (wanted !== name) rename[name] = wanted;
-        });
+        const { rename } = rawInputColumns(parsed.header, keep, own);
         const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         const viewSource = weakestSource(keep.map((name) => columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)), snapshot.valueSource);
@@ -3156,7 +3175,7 @@ export class VcrDataPlane {
       columnCount: snapshot.columnCount, frozenAt: snapshot.frozenAt, valueSource: snapshot.valueSource,
       ...(frozen.asOf ? { asOf: frozen.asOf } : {}),
       files: files.filter(file => file.role === 'data').map((file) => ({ name: file.name, format: file.format,
-        inputId: `${snapshot.id}:${snapshot.fileHashes.filter((/** @type {any} */ item) => item.role === 'data').findIndex((/** @type {any} */ item) => item.id === file.id)+1}` })),
+        inputId: snapshotInputId(snapshot.id, snapshot.fileHashes.filter((/** @type {any} */ item) => item.role === 'data').findIndex((/** @type {any} */ item) => item.id === file.id)+1) })),
       inputProjection: { subjectColumn: 'USUBJID', subjectColumnBasis: 'generated_study_pseudonym',
         otherColumns: 'field_map_alias_or_source_column', profileColumns: 'original_source_columns' },
       sealedFields: sealActive ? [...sealed].sort() : [],
@@ -3548,6 +3567,40 @@ export class VcrDataPlane {
     return vcrTierSupportedBy(await this.store.listAnalysisTables({ studyId }));
   }
 
+  /** Public metadata for the same tables population.quality resolves, without reading rows or recording outcome access.
+   * @param {any} study @param {{id:string}} viewer @param {any} snapshot @param {any[]} tables
+   */
+  async qualityInputOptions(study, viewer, snapshot, tables) {
+    const entries = entriesOfRows(await this.store.listFieldMaps(snapshot.id), snapshotFreezeNotes(snapshot));
+    const identifying = new Set(entries.filter(entry => entry.identifier || entry.role === "subject_key").map(entry => entry.column));
+    for (const table of snapshot.profile?.tables ?? []) for (const column of table.columns ?? []) {
+      if (column?.vocabulary?.identifying === true) identifying.add(String(column.name));
+    }
+    const wanted = tablesNeededBy("population.quality", null, tables.map(table => table.shape));
+    const profiles = snapshot.profile?.tables ?? [];
+    const fields = [...new Set((wanted.includes("files") ? profiles.flatMap((/** @type {any} */ table) => (table.columns ?? []).map((/** @type {any} */ column) => String(column.name)))
+      : tables.filter(table => wanted.includes(table.shape)).flatMap(table => analysisInputColumns(table).map(column => column.source).filter(Boolean))))].filter(name => !identifying.has(name));
+    const decision = await this.pageAccess.judge({ actor: viewer.id, studyId: study.id, snapshotId: snapshot.id,
+      ability: "read_patient_level", purpose: "vcr", ...(fields.length ? { fields } : {}) });
+    if (!decision.allowed) return [];
+    const allowed = new Set(decision.fields.allowed);
+    if (wanted.includes("files")) return snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data").flatMap((/** @type {any} */ file, /** @type {number} */ index) => {
+      const header = (profiles.find((/** @type {any} */ table) => table.name === file.name)?.columns ?? []).map((/** @type {any} */ column) => String(column.name));
+      const keep = header.filter((/** @type {string} */ name) => allowed.has(name) && !identifying.has(name));
+      const { columns, columnLabels } = rawInputColumns(header, keep, entries.filter(entry => entry.table === file.name));
+      return columns.length ? [{ inputId: snapshotInputId(snapshot.id, index + 1), kind: "snapshot_file", shape: null, label: file.name, columns, columnLabels }] : [];
+    });
+    return tables.filter(table => wanted.includes(table.shape)).flatMap(table => {
+      const columns = analysisInputColumns(table);
+      const missing = columns.some(column => column.source && !identifying.has(column.source) && !allowed.has(column.source));
+      if (missing && table.shape !== "subject") return [];
+      const kept = columns.filter(column => !column.source || allowed.has(column.source));
+      if (!kept.some(column => column.source)) return [];
+      return [{ inputId: snapshotInputId(snapshot.id, table.shape), kind: "analysis_table", shape: table.shape,
+        label: VCR_ANALYSIS_TABLE_LABELS_ZH[table.shape] ?? table.shape, columns: kept.map(column => column.name), columnLabels: Object.fromEntries(kept.filter(column => column.source).map(column => [column.name, column.source])) }];
+    });
+  }
+
   /**
    * The intake half of the data tab for one viewer: every source of the study
    * with its files, its field map (and what is wrong with it), its grants and
@@ -3613,6 +3666,8 @@ export class VcrDataPlane {
       // it: a study raised to a confirmatory use after its snapshot was frozen shows
       // its outcome columns sealed before anyone has read them.
       snapshots: await Promise.all(snapshots.map(async (snapshot) => {
+        const ownTables = tables.filter((table) => table.snapshotId === snapshot.id);
+        const qualityInputs = openings.get(snapshot.sourceId) ? await this.qualityInputOptions(study, viewer, snapshot, ownTables) : [];
         const outcomeColumns = vcrOutcomeColumns(await this.store.listFieldMaps(snapshot.id));
         const { sealed } = vcrEffectiveSeal({ study: /** @type {any} */ (study), snapshot, outcomeColumns, now: this.now().getTime() });
         return {
@@ -3620,7 +3675,8 @@ export class VcrDataPlane {
             sealed: sealed.size > 0,
             fields: [...new Set([...snapshot.sealedFields, ...outcomeColumns.filter((column) => sealed.has(column))])].sort(),
           }),
-          tables: tables.filter((table) => table.snapshotId === snapshot.id).map(tableView),
+          qualityInputs,
+          tables: openings.get(snapshot.sourceId) ? ownTables.map(tableView) : [],
         };
       })),
     };

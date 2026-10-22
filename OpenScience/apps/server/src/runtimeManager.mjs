@@ -3456,10 +3456,12 @@ export class RuntimeManager {
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
+    runtimeCreationMutation = async operation => operation(),
     agentbayClient = null,
   } = {}) {
     assertExtensionAssessmentAuthority(assessmentAuthority);this.#assessmentAuthority=assessmentAuthority;
     this.config = config;
+    this.runtimeCreationMutation = runtimeCreationMutation;
     this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
     this.readRuntimeEgressRun = readRuntimeEgressRun;
     /** @type {any} */ this.pluginService = null;
@@ -4200,23 +4202,16 @@ export class RuntimeManager {
     await this.runtimeQuotaStops.get(key);
     if (this.failedRuntimeStops.has(key)) await this.settleFailedStop(project, "The previous runtime needs a confirmed cleanup before replacement.");
     this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
-    return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
+    return this.startAdmitted(project, options, true);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] */
-  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null } = {}) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, replaceRuntime?: (()=>Promise<boolean|void>) | null }} [options] @param {boolean} [withPluginAdmission] */
+  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null } = {}, withPluginAdmission = false) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
     this.assertBoundedStartOwnership(project, boundedScope);
-    let existing = this.runtimes.get(key);
-    if (existing && existing.workspaceDir !== project.workspaceDir) {
-      // Opening the interactive workspace is not permission to interrupt a
-      // bounded source/agenda run. Only its owning workflow releases it.
-      this.assertInteractiveRuntimeAvailable(project);
-      await this.stop(project);
-      existing = null;
-    }
+    const existing = this.runtimes.get(key);
     // A running runtime is returned without measuring the project. Every
     // proxied request of the session page comes through here, and the walk
     // below used to run on each of them, inside the plugin admission's
@@ -4226,9 +4221,9 @@ export class RuntimeManager {
     // already warm: 29 s to a usable composer). A running runtime is watched by
     // its quota monitor (`runtimeQuotaCheckIntervalMs`), which is what stops it
     // when the project goes over, whoever wrote the bytes.
-    if (existing) {
-      this.scheduleIdleStop(project);
-      return existing;
+    if (existing && existing.workspaceDir === project.workspaceDir && !replaceRuntime) {
+      const warm = () => { this.scheduleIdleStop(project); return existing; };
+      return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
     }
     if (opening) this.openingStarts.add(key);
     if (dispatch) this.dispatchStarts.add(key);
@@ -4239,7 +4234,19 @@ export class RuntimeManager {
     }
     if (speculative && !opening) this.speculativeStarts.add(key);
 
-    const started = (async () => {
+    let creationSkipped = false;
+    // Register before either admission can wait. Concurrent cold readers join
+    // without retaining another pool connection behind the same container boot.
+    const create = () => this.runtimeCreationMutation(async () => {
+      if (replaceRuntime) {
+        if (await replaceRuntime() === false) {
+          creationSkipped = true;
+          return this.runtimes.get(key) ?? null;
+        }
+      } else if (existing && existing.workspaceDir !== project.workspaceDir) {
+        this.assertInteractiveRuntimeAvailable(project);
+        await this.stop(project);
+      }
       this.noteStartStage(project, "environment");
       // Measured, and room made, inside the pending start: registered before
       // the first wait, it is what a second caller arriving meanwhile joins
@@ -4311,10 +4318,13 @@ export class RuntimeManager {
       });
       this.scheduleQuotaMonitor(project);
       return runtime;
-    })();
+    });
+    const started = Promise.resolve().then(() => withPluginAdmission && this.pluginService
+      ? this.pluginService.withAdmission(project, create) : create());
     this.starts.set(key, started);
     try {
       const runtime = await started;
+      if (creationSkipped) return runtime;
       this.startFailures.delete(key);
       this.noteRoomFound(project);
       try {
@@ -6321,7 +6331,7 @@ export class RuntimeManager {
     await this.prepareGeneration(project, candidate);
     if (await this.pluginRuntimeBusy(project)) throw new HttpError(409, 'plugin_runtime_busy', 'The runtime has active or queued native work.');
     const key = this.key(project);this.extensionGenerationOverrides.set(key, candidate);
-    try { await this.stop(project); await this.startAdmitted(project); return { joined: true }; }
+    try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
     finally { this.extensionGenerationOverrides.delete(key); }
   }
   restoreGeneration(project, candidate) { return this.replaceGeneration(project, candidate); }
@@ -6363,8 +6373,12 @@ export class RuntimeManager {
         const guard=async()=>this.runtimes.get(key)===runtime&&await this.idleVerdict(project)==='idle'&&(!this.pluginService||!await this.pluginService.hasPendingPrompts(project));
         this.platformSkillOverrides.set(key,wanted);
         try{
-          if(!await this.stopIdleRuntime(project,{event:'platform_skills_updated',evenIfConnected:true,guard}))return{adopted:false,pending:true};
-          await this.startAdmitted(project);return{adopted:true,generationHash:wanted?.reference?.generationHash??null};
+          let replaced=false;
+          await this.startAdmitted(project,{replaceRuntime:async()=>{
+            replaced=await this.stopIdleRuntime(project,{event:'platform_skills_updated',evenIfConnected:true,guard});
+            return replaced;
+          }});
+          return replaced?{adopted:true,generationHash:wanted?.reference?.generationHash??null}:{adopted:false,pending:true};
         }finally{this.platformSkillOverrides.delete(key);}
       };
       if(!this.pluginService)return refresh();
@@ -6410,7 +6424,7 @@ export class RuntimeManager {
   async replacePersonalSkillRuntime(project, candidate) {
     const key = this.key(project);
     this.personalSkillOverrides.set(key, candidate);
-    try { await this.stop(project); return await this.startAdmitted(project); }
+    try { return await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); }
     finally { this.personalSkillOverrides.delete(key); }
   }
   /** Native cold-readable catalogue; no diagnostic user conversation or model call.
@@ -6459,8 +6473,7 @@ export class RuntimeManager {
     const key = this.key(project);
     this.pluginOverrides.set(key, pluginConfig);
     try {
-      await this.stop(project);
-      return await this.startAdmitted(project);
+      return await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } });
     } finally { this.pluginOverrides.delete(key); }
   }
 
@@ -7074,14 +7087,14 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
    *   `rebaseDocument: false` serves bytes as they are (an asset route);
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -7115,6 +7128,7 @@ export class RuntimeManager {
       const runtime = await this.start(project);
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
+      if (beforeForward) await beforeForward();
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
       // UI suffix is the complete raw path and query, including native combo-bundle syntax.

@@ -294,7 +294,7 @@ export function validateRowRule(rule, { columns = null, path = '' } = {}) {
 }
 
 /**
- * Validate a list of `{ name, rule }` items — how a scenario names its cohort
+ * Validate a list of `{ name, rule, unknownAs? }` items — how a scenario names its cohort
  * steps, population constraints and quality criteria.
  * @param {unknown} items
  * @param {{ columns?: readonly string[] | null, path?: string, allowEmpty?: boolean }} [options]
@@ -310,7 +310,7 @@ export function validateNamedRules(items, { columns = null, path = '', allowEmpt
   items.forEach((item, i) => {
     const where = atIndex(path, i)
     if (!isPlainObject(item)) {
-      issues.push({ code: 'rule_shape_invalid', field: where, detail: 'A named rule is { name, rule }.' })
+      issues.push({ code: 'rule_shape_invalid', field: where, detail: 'A named rule is { name, rule } with optional unknownAs.' })
       return
     }
     if (Object.hasOwn(item, 'expression')) {
@@ -318,7 +318,10 @@ export function validateNamedRules(items, { columns = null, path = '', allowEmpt
       return
     }
     for (const key of Object.keys(item)) {
-      if (key !== 'name' && key !== 'rule') issues.push({ code: 'rule_shape_invalid', field: at(where, key), detail: 'A named rule is { name, rule }.' })
+      if (key !== 'name' && key !== 'rule' && key !== 'unknownAs') issues.push({ code: 'rule_shape_invalid', field: at(where, key), detail: 'A named rule is { name, rule } with optional unknownAs.' })
+    }
+    if (Object.hasOwn(item, 'unknownAs') && item.unknownAs !== 'include' && item.unknownAs !== 'exclude') {
+      issues.push({ code: 'rule_shape_invalid', field: at(where, 'unknownAs'), detail: 'An unknown result is treated as include or exclude.' })
     }
     if (typeof item.name !== 'string' || characters(item.name) < 1 || characters(item.name) > maxNameLength) {
       issues.push({ code: 'rule_shape_invalid', field: at(where, 'name'), detail: `A rule name is 1–${maxNameLength} characters.` })

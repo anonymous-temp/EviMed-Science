@@ -12,11 +12,21 @@ test('preparation refuses an obsolete base or unbounded baseline tool selection 
   await assert.rejects(manager.prepareGeneration(project,{...baseline,projection:{...baseline.projection,plugins:[{extensionId:'arbitrary-plugin',enabled:true}]}}),{code:'extension_contract_invalid'});
 });
 test('idle replacement is joined, while actual native busy observation leaves the captured runtime untouched',async()=>{
-  const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});manager.inspectRuntimeImage=async()=>({imageId:currentImage});
-  let busy=true,stops=0,starts=0;manager.pluginRuntimeBusy=async()=>busy;manager.stop=async()=>{stops++;};manager.startAdmitted=async()=>{starts++;assert.deepEqual(manager.extensionGenerationOverrides.get(manager.key(project)),baseline);return{};};
-  await assert.rejects(manager.replaceGeneration(project,baseline),{code:'plugin_runtime_busy'});assert.equal(stops,0);
-  busy=false;assert.deepEqual(await manager.replaceGeneration(project,baseline),{joined:true});assert.equal(stops,1);assert.equal(starts,1);assert.equal(manager.extensionGenerationOverrides.size,0);
-  manager.startAdmitted=async()=>{throw new Error('controlled startup failure');};await assert.rejects(manager.restoreGeneration(project,baseline),/controlled startup failure/u);assert.equal(manager.extensionGenerationOverrides.size,0);
+  const manager=new RuntimeManager({runtimeMode:'kernel',runtimeIdleTimeoutMs:0});manager.inspectRuntimeImage=async()=>({imageId:currentImage});
+  const captured={workspaceDir:project.workspaceDir,close:async()=>{}};
+  manager.runtimes.set(manager.key(project),captured);
+  let busy=true,stops=0,starts=0;
+  manager.pluginRuntimeBusy=async()=>busy;
+  manager.stop=async()=>{stops++;manager.runtimes.delete(manager.key(project));};
+  // Keep the shared creation boundary real; isolate provider-side stop/boot effects.
+  manager.startKernel=async()=>{starts++;assert.deepEqual(manager.extensionGenerationOverrides.get(manager.key(project)),baseline);return{...captured};};
+  await assert.rejects(manager.replaceGeneration(project,baseline),{code:'plugin_runtime_busy'});
+  assert.equal(stops,0);assert.equal(starts,0);assert.equal(manager.runtimes.get(manager.key(project)),captured);
+  busy=false;assert.deepEqual(await manager.replaceGeneration(project,baseline),{joined:true});
+  assert.equal(stops,1);assert.equal(starts,1);assert.equal(manager.extensionGenerationOverrides.size,0);
+  manager.startKernel=async()=>{throw new Error('controlled startup failure');};
+  await assert.rejects(manager.restoreGeneration(project,baseline),/controlled startup failure/u);
+  assert.equal(stops,2);assert.equal(manager.extensionGenerationOverrides.size,0);assert.equal(manager.starts.size,0);
 });
 test('target native registry facts are joined to unchanged runtime epoch, not caller permission flags',async()=>{
   const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});manager.runtimes.set(manager.key(project),{modelGatewayTokenJti:'actual-epoch'});

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { projectResultInput, projectResultMethod, projectResultVersion, normalizeResultPath, RESULT_PRODUCER_KINDS } from "@evimed/domain/result-provenance";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
-import { RESULT_LINEAGE_LIMITS, SNAPSHOT_UNKNOWNS, authoredSnapshot, bindPrintedNumbers, bindableKind, bindingGaps, bindingSources,
+import { RESULT_LINEAGE_LIMITS, SNAPSHOT_UNKNOWNS, authoredSnapshot, bindPrintedNumbers, bindableKind, bindingGaps, bindingSources, canonicalJson,
   projectProducerSnapshot, projectValueBindings, snapshotGaps, valueBindingRecord } from "@evimed/domain";
 import { HttpError, assertProjectCapacity, mimeFor, openScopedFileNoFollow, readStableFileHandle,
   resolveScopedPath, withProjectStorageMutation, writeFileExclusiveNoFollow } from "./security.mjs";
@@ -11,6 +11,22 @@ import { HttpError, assertProjectCapacity, mimeFor, openScopedFileNoFollow, read
 function digestOf(value) { return createHash("sha256").update(value).digest("hex"); }
 /** @param {any} error */
 function unavailable(error) { return error?.code === "ENOENT" || error?.code === "product_document_not_found"; }
+
+/** The one server-owned content store; callers already hold the project's storage lock.
+ * @param {ResultProvenanceService} service @param {any} project @param {Buffer} bytes */
+async function preserveSnapshot(service, project, bytes) {
+  if (bytes.length > service.maxSnapshotBytes) throw new HttpError(413, "result_snapshot_too_large", "Result exceeds the snapshot size limit.");
+  const digest = digestOf(bytes);
+  const storagePath = `result-snapshots/${digest}`;
+  const target = resolveScopedPath(project.metaDir, storagePath);
+  await assertProjectCapacity({ ...project, baseDir: project.rootDir }, target, bytes.length, service.config);
+  try { await writeFileExclusiveNoFollow(project.rootDir, target, bytes); }
+  catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    await service.readSnapshot(project, { storagePath, digest, size: bytes.length });
+  }
+  return { digest, size: bytes.length, storagePath };
+}
 
 /** Only the owned workspace is eligible; data-plane paths cannot enter through
  * arbitrary absolute paths, links, imported manifests or runtime assertions. */
@@ -107,19 +123,12 @@ export class ResultProvenanceService {
       const versionId = `rv_${digestOf(JSON.stringify([project.userId, project.id, producer.sessionId, producer.runId,
         producer.callId ?? producer.eventId, relativePath, digest]))}`;
       const existing = await this.documents.get(project.userId, "result-version", versionId);
-      if (existing) return this.project(input.userId, project, existing.payload);
-      if (input.supersedesVersionId) await this.get(input.userId, project.id, input.supersedesVersionId);
-      const storagePath = `result-snapshots/${digest}`;
-      const snapshot = resolveScopedPath(project.metaDir, storagePath);
-      // The store's baseDir is workspaceRoot; metadata is its sibling. Count
-      // the owned project root so immutable history consumes the same quota.
-      await assertProjectCapacity({ ...project, baseDir: project.rootDir }, snapshot, bytes.length, this.config);
-      try { await writeFileExclusiveNoFollow(project.rootDir, snapshot, bytes); }
-      catch (error) {
-        if (error?.code !== "EEXIST") throw error;
-        // Another process may have published this same content; verify its bytes.
-        await this.readSnapshot(project, { storagePath, digest, size: bytes.length });
+      if (existing) {
+        if (input.review && !existing.payload.review) return this.annotateReview(input.userId, project, existing, input.review);
+        return this.project(input.userId, project, existing.payload);
       }
+      if (input.supersedesVersionId) await this.get(input.userId, project.id, input.supersedesVersionId);
+      const { storagePath } = await preserveSnapshot(this, project, bytes);
       const producerStatus = input.expectedDigest ? "bound" : producer.callId || producer.eventId || producer.runId ? "observed" : "unknown";
       const coverage = { snapshot: "complete", producer: producerStatus,
         inputs: inputs.length && inputs.every(reference => reference.digest && reference.availability === "captured") ? "captured" : "unknown",
@@ -163,6 +172,122 @@ export class ResultProvenanceService {
       catch { /* A correction that could not be recorded leaves the version it describes. */ }
     }
     return captured;
+  }
+
+  /** Freeze a deterministic quotation verdict beside the matrix bytes, never inside each sibling's metadata.
+   * Internal only: there is no public byte-upload or snapshot route.
+   * @param {{userId:string,project:any,matrixVersion:any,verification:any,origin?:string}} input */
+  async captureReview({ userId, project, matrixVersion, verification, origin = "capture" }) {
+    const scoped = await this.scope(userId, project.id);
+    const row = await this.documents.get(scoped.userId, "result-version", matrixVersion.versionId);
+    if (!row || row.projectId !== scoped.id || row.payload.digest !== matrixVersion.digest) throw new HttpError(409, "result_review_invalid", "The review matrix is unavailable.");
+    // A prior snapshot is the verdict. Replaying capture cannot replace it with today's check.
+    if (row.payload.review) {
+      const frozen = await this.readReview(userId, scoped, row.payload.review);
+      if (frozen.status !== "available") throw new HttpError(409, "result_review_unavailable", "The preserved review is unavailable.");
+      return row.payload.review;
+    }
+    const value = { schemaVersion: 1, matrixVersionId: matrixVersion.versionId, matrixDigest: matrixVersion.digest,
+      verification, origin: ["capture-repair", "legacy-capture"].includes(origin) ? origin : "capture", recordedAt: this.now().toISOString(), verifierVersion: "claim-verification-v1" };
+    const snapshot = await withProjectStorageMutation(scoped, () => preserveSnapshot(this, scoped, Buffer.from(JSON.stringify(value))));
+    const review = { status: "available", matrixVersionId: value.matrixVersionId, matrixDigest: value.matrixDigest,
+      verificationSnapshot: { digest: snapshot.digest, size: snapshot.size, schemaVersion: 1 } };
+    await this.annotateReview(userId, scoped, row, review);
+    // A competing capture may have won; return its frozen reference.
+    return (await this.documents.get(scoped.userId, "result-version", matrixVersion.versionId)).payload.review;
+  }
+
+  /** Add review metadata as a recoverable row revision; identities, producer and bytes never change.
+   * @param {string} userId @param {any} project @param {any} initial @param {any} review */
+  async annotateReview(userId, project, initial, review) {
+    let row = initial;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (!row || row.projectId !== project.id || row.payload.versionId !== initial.payload.versionId || row.payload.digest !== initial.payload.digest) {
+        throw new HttpError(409, "result_review_invalid", "The result changed before its review was attached.");
+      }
+      if (row.payload.review) return this.project(userId, project, row.payload);
+      try {
+        const saved = await this.documents.put(project.userId, "result-version", row.payload.versionId, { ...row.payload, review },
+          { expectedRevision: row.revision, projectId: project.id });
+        return this.project(userId, project, saved.payload);
+      } catch (error) {
+        if (error?.code !== "product_revision_conflict") throw error;
+        row = await this.documents.get(project.userId, "result-version", row.payload.versionId);
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "The result changed before its review was attached.");
+  }
+
+  /** Reauthorize both the matrix relation and its sources before hydrating the legacy reader shape.
+   * @param {string} userId @param {any} project @param {any} review @param {boolean} [denied] */
+  async readReview(userId, project, review, denied = false) {
+    const absent = { ...review, status: denied ? "unavailable" : "unknown", matrixText: null, verification: null };
+    if (denied || !review?.matrixVersionId || !review?.matrixDigest) return absent;
+    try {
+      const reference = await this.reference(userId, project, { kind: "artifact", id: review.matrixVersionId,
+        versionId: review.matrixVersionId, digest: review.matrixDigest, availability: "captured" });
+      if (reference.availability !== "captured") return absent;
+      const row = await this.documents.get(project.userId, "result-version", review.matrixVersionId);
+      if (!row || row.projectId !== project.id || row.payload.digest !== review.matrixDigest) return absent;
+      for (const input of row.payload.inputs ?? []) if ((await this.reference(userId, project, input)).availability === "restricted") return { ...absent, status: "unavailable" };
+      const matrix = await this.readSnapshot(project, row.payload);
+      if (!review.verificationSnapshot) {
+        return typeof review.matrixText === "string" && digestOf(Buffer.from(review.matrixText)) === review.matrixDigest ? review : absent;
+      }
+      const snapshot = review.verificationSnapshot;
+      if (snapshot.schemaVersion !== 1 || !/^[a-f0-9]{64}$/.test(snapshot.digest) || !Number.isSafeInteger(snapshot.size) || snapshot.size < 1) return absent;
+      const bytes = await this.readSnapshot(project, { ...snapshot, storagePath: `result-snapshots/${snapshot.digest}` });
+      const frozen = JSON.parse(bytes.toString("utf8"));
+      if (frozen.schemaVersion !== 1 || frozen.matrixVersionId !== review.matrixVersionId || frozen.matrixDigest !== review.matrixDigest) return absent;
+      return { ...review, matrixText: matrix.toString("utf8"), verification: frozen.verification,
+        verificationRecord: { origin: frozen.origin, recordedAt: frozen.recordedAt, verifierVersion: frozen.verifierVersion } };
+    } catch { return absent; }
+  }
+
+  /** Record only a complete, byte-bound repair. This is an annotation of the existing matrix, not another result entity.
+   * @param {{userId:string,project:any,runId:string,receiptSha256:string,items:any[],requestedBy?:string}} input */
+  async recordCaptureRepair({ userId, project, runId, receiptSha256, items, requestedBy = userId }) {
+    const scoped = await this.scope(userId, project.id);
+    const matrix = items.find(item => /(?:^|\/)clinical-evidence-matrix\.json$/.test(item.path));
+    if (!matrix || !/^[a-f0-9]{64}$/.test(receiptSha256) || items.length > 64) throw new HttpError(409, "result_capture_repair_incomplete", "Capture repair has no exact matrix and receipt.");
+    const core = { schemaVersion: 1, projectId: scoped.id, runId, receiptSha256, matrixVersionId: matrix.versionId, matrixDigest: matrix.digest,
+      versions: items.map(item => ({ versionId: item.versionId, digest: item.digest })).sort((a, b) => a.versionId.localeCompare(b.versionId)) };
+    const generation = digestOf(canonicalJson(core));
+    const repair = { ...core, generation, capturedAt: this.now().toISOString(), requestedBy };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const row = await this.documents.get(scoped.userId, "result-version", matrix.versionId);
+      if (!row || row.projectId !== scoped.id || row.payload.producer?.runId !== runId || row.payload.digest !== matrix.digest
+        || (await this.readReview(userId, scoped, row.payload.review)).status !== "available") throw new HttpError(409, "result_capture_repair_incomplete", "Capture repair has no preserved review.");
+      if (row.payload.captureRepairReceipt?.generation === generation) return this.captureRepairReceipt(userId, scoped.id, matrix.versionId, generation);
+      try {
+        await this.documents.put(scoped.userId, "result-version", matrix.versionId, { ...row.payload, captureRepairReceipt: repair },
+          { projectId: scoped.id, expectedRevision: row.revision });
+        return this.captureRepairReceipt(userId, scoped.id, matrix.versionId, generation);
+      } catch (error) { if (error?.code !== "product_revision_conflict") throw error; }
+    }
+    throw new HttpError(409, "product_revision_conflict", "The capture repair changed.");
+  }
+
+  /** Validate the server's generation and every preserved output before it can reopen one programme settlement.
+   * @param {string} userId @param {string} projectId @param {string} matrixVersionId @param {string} generation */
+  async captureRepairReceipt(userId, projectId, matrixVersionId, generation) {
+    const project = await this.scope(userId, projectId);
+    const row = await this.documents.get(project.userId, "result-version", matrixVersionId);
+    const repair = row?.payload.captureRepairReceipt;
+    if (!row || row.projectId !== project.id || !repair || repair.generation !== generation || repair.projectId !== project.id
+      || repair.schemaVersion !== 1 || repair.matrixVersionId !== matrixVersionId || repair.matrixDigest !== row.payload.digest || !Array.isArray(repair.versions)
+      || repair.versions.length < 1 || repair.versions.length > 64 || !/^[a-f0-9]{64}$/.test(repair.receiptSha256 ?? "")
+      || !repair.versions.some(ref => ref.versionId === matrixVersionId && ref.digest === repair.matrixDigest)) throw new HttpError(409, "result_capture_repair_invalid", "No such successful capture repair.");
+    const { capturedAt: _at, generation: _generation, requestedBy: _actor, ...core } = repair;
+    if (digestOf(canonicalJson(core)) !== generation) throw new HttpError(409, "result_capture_repair_invalid", "The capture repair generation changed.");
+    for (const ref of repair.versions) {
+      const output = await this.documents.get(project.userId, "result-version", ref.versionId);
+      if (!output || output.projectId !== project.id || output.payload.digest !== ref.digest || output.payload.producer?.runId !== repair.runId
+        || output.payload.coverage?.producer !== "bound") throw new HttpError(409, "result_capture_repair_invalid", "A repaired output is unavailable.");
+      await this.readSnapshot(project, output.payload);
+    }
+    if ((await this.readReview(userId, project, row.payload.review)).status !== "available") throw new HttpError(409, "result_capture_repair_invalid", "The repaired review is unavailable.");
+    return repair;
   }
 
   /**
@@ -295,16 +420,7 @@ export class ResultProvenanceService {
     const denied = value.inputs.some(reference => reference.availability === "restricted")
       || value.findings.some(finding => finding.sourceRefs.some(reference => reference.availability === "restricted"));
     if (denied && !value.coverage.gaps.includes("inputs_restricted")) value.coverage.gaps.push("inputs_restricted");
-    if (value.review) {
-      const review = value.review;
-      let bound = false;
-      if (review.matrixVersionId && review.matrixDigest && !denied) {
-        const matrix = await this.reference(userId, project, { kind: "artifact", id: review.matrixVersionId,
-          versionId: review.matrixVersionId, digest: review.matrixDigest, availability: "captured" });
-        bound = matrix.availability === "captured" && (!review.matrixText || digestOf(Buffer.from(review.matrixText)) === review.matrixDigest);
-      }
-      if (!bound) value.review = { ...review, status: denied ? "unavailable" : "unknown", matrixText: null, verification: null };
-    }
+    if (value.review) value.review = await this.readReview(userId, project, value.review, denied);
     value.reuseEligibility = this.deriveEligibility ? await this.deriveEligibility(userId, value) : {
       replay: { status: "unavailable", reasons: ["no_owned_deterministic_recipe"] },
       export: { status: "partial", reasons: value.coverage.gaps },

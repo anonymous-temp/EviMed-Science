@@ -170,3 +170,175 @@ test("loopback operator route blocks new API mutations while health remains read
   assert.equal(release.status, 200);
   assert.equal((await fetch(`${base}/api/auth/dev-login`, { method: "POST" })).status, 200);
 });
+
+test("runtime creation releases its read fence inside an ambient PostgreSQL transaction before the deferred boot", options, async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-maintenance-cold-start-"));
+  const app = createWebApiApp({ dataDir, devAuth: true, runtimeMode: "mock", stateStore: "postgres",
+    databaseUrl: isolatedDatabaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000,
+    requireDurableUsageLedger: false,
+  });
+  t.after(async () => { await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  await app.listen(0, "127.0.0.1");
+  const user = await app.store.devUser();
+  const project = await app.store.requireProject(user, "default");
+  const manager = app.runtimeManager, db = app.store.database;
+  manager.config = { ...manager.config, runtimeMode: "kernel" };
+  manager.onRuntimeStart = () => {};
+  let finish, entered, outerPid, checkOuterContext = true;
+  const gate = new Promise(resolve => { finish = resolve; });
+  const began = new Promise(resolve => { entered = resolve; });
+  manager.startKernel = async () => {
+    const current = await db.query("SELECT pg_backend_pid() AS pid");
+    if (checkOuterContext) assert.equal(current.rows[0].pid, outerPid, "only the short admission detaches; creation retains its original transaction context");
+    entered(); await gate;
+    return { kind: "dsh", workspaceDir: project.workspaceDir, project, close: async () => {} };
+  };
+  const started = db.transaction(async client => {
+    outerPid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+    return db.withTransactionClient(client, () => manager.startAdmitted(project));
+  });
+  const timeout = new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error("maintenance waited for a deferred cold start")), 2000); timer.unref(); });
+  try {
+    await began;
+    const requested = await Promise.race([app.maintenanceService.request({ requestId: "cold-start-drain", ttlSeconds: 30 }), timeout]);
+    assert.equal(requested.state, "draining");
+    assert.ok(requested.blockers.activeMutations >= 1, "the admitted container boot remains visible until it settles");
+    const second = { ...project, id: "not-admitted", workspaceDir: project.workspaceDir + "-other" };
+    await assert.rejects(manager.startAdmitted(second), { code: "maintenance_active" });
+  } finally { finish(); await started; }
+  assert.equal(app.maintenanceService.activeMutations, 0);
+  manager.runtimes.clear();
+  await app.maintenanceService.release({ requestId: "cold-start-drain" });
+  checkOuterContext = false;
+  assert.ok(await manager.startAdmitted(project), "creation works again after the lease is released");
+});
+
+test("one-connection cold readers share actual plugin admission without starving maintenance read fencing", options, async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-maintenance-one-client-"));
+  const app = createWebApiApp({ dataDir, devAuth: true, runtimeMode: "mock", stateStore: "postgres",
+    databaseUrl: isolatedDatabaseUrl, databasePoolMax: 1, databaseConnectionTimeoutMs: 500,
+    requireDurableUsageLedger: false,
+  });
+  t.after(async () => {
+    // This composition-only fixture deliberately never starts HTTP or workers.
+    try { await app.close(); }
+    catch (error) { if (error.code !== "ERR_SERVER_NOT_RUNNING") throw error; await app.store.close(); }
+    await rm(dataDir, { recursive: true, force: true });
+  });
+  await app.maintenanceService.initialize();
+  const user = await app.store.devUser();
+  const project = await app.store.requireProject(user, "default");
+  const manager = app.runtimeManager, db = app.store.database;
+  manager.config = { ...manager.config, runtimeMode: "kernel" };
+  manager.onRuntimeStart = () => {};
+  let finish, entered, pluginAdmissions = 0, boots = 0, parentPid;
+  const gate = new Promise(resolve => { finish = resolve; });
+  const began = new Promise(resolve => { entered = resolve; });
+  const pluginAdmission = app.pluginService.withAdmission.bind(app.pluginService);
+  app.pluginService.withAdmission = (p, operation, settings) => pluginAdmission(p, async () => {
+    pluginAdmissions += 1;
+    parentPid = (await db.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+    await db.query("UPDATE evimed_control.projects SET name='before read fence' WHERE user_id=$1 AND id=$2", [user.id, project.id]);
+    const result = await operation();
+    await db.query("UPDATE evimed_control.projects SET name=name || ' and after' WHERE user_id=$1 AND id=$2", [user.id, project.id]);
+    return result;
+  }, settings);
+  manager.startKernel = async () => {
+    boots += 1;
+    assert.equal((await db.query("SELECT pg_backend_pid() AS pid")).rows[0].pid, parentPid);
+    entered(); await gate;
+    return { kind: "dsh", workspaceDir: project.workspaceDir, project, close: async () => {} };
+  };
+  const started = Promise.all([manager.start(project), manager.start(project), manager.start(project)]);
+  try {
+    await Promise.race([began, started.then(() => assert.fail("must wait for the deferred boot"))]);
+    assert.equal(db.pool.totalCount, 1);
+    assert.equal(app.maintenanceService.activeMutations, 1);
+    // This independent operator connection must acquire the exclusive maintenance
+    // lock while the one-connection pool retains its original plugin transaction.
+    const requested = await Promise.race([
+      service.request({ requestId: "one-client-drain", ttlSeconds: 30 }),
+      new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error("admission lock survived its read fence")), 1500); timer.unref(); }),
+    ]);
+    assert.equal(requested.lease.requestId, "one-client-drain");
+  } finally { finish(); await started; }
+  assert.equal(boots, 1);
+  assert.equal(pluginAdmissions, 1, "cold readers join before taking another plugin connection");
+  assert.equal(app.maintenanceService.activeMutations, 0);
+  assert.equal((await db.query("SELECT name FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [user.id, project.id])).rows[0].name,
+    "before read fence and after", "neither parent write was rolled back by admission");
+  await assert.rejects(manager.startAdmitted({ ...project, id: "blocked", workspaceDir: project.workspaceDir + "-other" }), { code: "maintenance_active" });
+  const warm = manager.runtimes.get(manager.key(project));
+  await assert.rejects(manager.replacePersonalSkillRuntime(project, {}), { code: "maintenance_active" });
+  assert.equal(manager.runtimes.get(manager.key(project)), warm, "denied replacement preserves the admitted warm runtime");
+  await service.release({ requestId: "one-client-drain" });
+  manager.runtimes.clear();
+  manager.startKernel = async () => { throw new Error("synthetic provider failure"); };
+  await assert.rejects(manager.start(project), /synthetic provider failure/);
+  assert.equal(app.maintenanceService.activeMutations, 0, "a failed provider releases its admission exactly once");
+});
+
+test("an ambient read fence releases only its own locks and rolls back only its own savepoint", options, async () => {
+  const observer = new pg.Client({ connectionString: isolatedDatabaseUrl });
+  await observer.connect();
+  try {
+    await database.transaction(client => database.withTransactionClient(client, async () => {
+      await client.query("CREATE TEMP TABLE g15_read_fence_parent(value text) ON COMMIT DROP");
+      await client.query("INSERT INTO g15_read_fence_parent VALUES ('before')");
+      const pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+      await database.readFence(async borrowed => {
+        assert.equal((await borrowed.query("SELECT pg_backend_pid() AS pid")).rows[0].pid, pid);
+        await borrowed.query("SELECT pg_advisory_xact_lock_shared(hashtextextended('g15-read-only-admission',0))");
+        // Even an accidental write in the fence must not escape or undo its parent.
+        await borrowed.query("UPDATE g15_read_fence_parent SET value='discard me'");
+      });
+      assert.equal((await client.query("SELECT value FROM g15_read_fence_parent")).rows[0].value, 'before');
+      await observer.query("BEGIN");
+      const lock = await observer.query("SELECT pg_try_advisory_xact_lock(hashtextextended('g15-read-only-admission',0)) AS acquired");
+      assert.equal(lock.rows[0].acquired, true, 'the shared admission lock ended before the parent transaction');
+      await observer.query("ROLLBACK");
+      await assert.rejects(database.readFence(async borrowed => {
+        await borrowed.query("UPDATE g15_read_fence_parent SET value='also discard'");
+        throw new Error('synthetic read-fence error');
+      }), /synthetic read-fence error/);
+      assert.equal((await client.query("SELECT value FROM g15_read_fence_parent")).rows[0].value, 'before');
+      await client.query("UPDATE g15_read_fence_parent SET value=value || ' and after'");
+      assert.equal((await client.query("SELECT value FROM g15_read_fence_parent")).rows[0].value, 'before and after');
+    }));
+  } finally { await observer.end(); }
+});
+
+test("repeatable-read admission rejects a stale ambient lease snapshot without damaging its parent", options, async () => {
+  let release;
+  try {
+    await database.transaction(client => database.withTransactionClient(client, async () => {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+      await client.query("SELECT count(*) FROM evimed_product.maintenance_lease");
+      await client.query("CREATE TEMP TABLE g15_snapshot_parent(value text) ON COMMIT DROP");
+      await client.query("INSERT INTO g15_snapshot_parent VALUES ('before')");
+      await database.withoutTransactionClient(() => service.request({ requestId: "snapshot-owner", ttlSeconds: 30 }));
+      try {
+        await assert.rejects(async () => { release = await service.admitMutation(); }, { code: "maintenance_state_invalid" });
+      } finally { release?.(); }
+      assert.equal(service.activeMutations, 0);
+      assert.equal((await client.query("SELECT value FROM g15_snapshot_parent")).rows[0].value, 'before');
+      await client.query("UPDATE g15_snapshot_parent SET value=value || ' and after'");
+      assert.equal((await client.query("SELECT value FROM g15_snapshot_parent")).rows[0].value, 'before and after');
+    }));
+  } finally { await service.release({ requestId: "snapshot-owner" }); }
+});
+
+test("standalone admission fails closed when the connection defaults to repeatable read", options, async () => {
+  const db = new ControlPlaneDatabase({ databaseUrl: isolatedDatabaseUrl, databasePoolMax: 1, databaseConnectionTimeoutMs: 500 });
+  const guard = new MaintenanceService(db, { inspectActivity: async () => EMPTY_ACTIVITY });
+  let release;
+  try {
+    await guard.initialize();
+    await db.withClient(client => client.query("SET default_transaction_isolation TO 'repeatable read'"));
+    try {
+      await assert.rejects(async () => { release = await guard.admitMutation(); }, { code: "maintenance_state_invalid" });
+    } finally { release?.(); }
+    assert.equal(guard.activeMutations, 0);
+    assert.equal((await db.query("SELECT 1 AS usable")).rows[0].usable, 1);
+  } finally { await guard.close(); await db.close(); }
+});

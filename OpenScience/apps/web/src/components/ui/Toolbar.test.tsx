@@ -155,7 +155,12 @@ describe("Toolbar", () => {
         return this.classList.contains("flex-wrap") ? widths.current : 0;
       });
       const observers: Array<() => void> = [];
-      vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observers.push(callback); } observe() {} disconnect() {} });
+      vi.stubGlobal("ResizeObserver", class {
+        constructor(private callback: () => void) {}
+        observe(element: HTMLElement) { if (element.classList.contains("-ml-3")) observers.push(this.callback); }
+        unobserve() {}
+        disconnect() {}
+      });
       return observers;
     }
     const filters: ToolbarFilter[] = [
@@ -203,5 +208,80 @@ describe("Toolbar", () => {
       render(<Toolbar inBand filters={filters} />);
       expect(screen.getByRole("button", { name: "本周" })).toBeInTheDocument();
     });
+
+    it("keeps an open pinned menu and its focus when late filters fold the row, then when it unfolds", async () => {
+      const widths = { current: 900 };
+      const observers = layout(widths);
+      const selected = vi.fn();
+      const declared: ToolbarFilter[] = [
+        { kind: "toggle", label: "收藏", pressed: false, onChange: () => {} },
+        { kind: "select", label: "查看", pinned: true, value: "accuracy", options: [{ value: "accuracy", label: "准确与安全" }, { value: "questions", label: "问题与回答" }], onChange: selected },
+      ];
+      const { rerender } = render(<Toolbar inBand filters={declared} />);
+      const trigger = screen.getByRole("button", { name: "查看：准确与安全" });
+      const order = [...trigger.parentElement!.querySelectorAll("button")].map(button => button.getAttribute("aria-label") ?? button.textContent);
+      expect(order).toEqual(["收藏", "查看：准确与安全"]);
+      await userEvent.click(trigger);
+      const menu = screen.getByRole("menu", { name: "查看" });
+      const focused = document.activeElement;
+      rerender(<Toolbar inBand filters={[...declared, filters[1]]} />);
+      act(() => observers.forEach(notify => notify()));
+      expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "查看：准确与安全" })).toBe(trigger);
+      expect(screen.getByRole("menu", { name: "查看" })).toBe(menu);
+      expect(document.activeElement).toBe(focused);
+      await userEvent.click(within(menu).getByRole("menuitemradio", { name: "问题与回答" }));
+      expect(selected).toHaveBeenLastCalledWith("questions");
+      await userEvent.click(trigger);
+      const reopened = screen.getByRole("menu", { name: "查看" });
+      const refocused = document.activeElement;
+      widths.current = 1100;
+      act(() => observers.forEach(notify => notify()));
+      expect(screen.queryByRole("button", { name: "筛选" })).toBeNull();
+      expect(screen.getByRole("button", { name: "查看：准确与安全" })).toBe(trigger);
+      expect(screen.getByRole("menu", { name: "查看" })).toBe(reopened);
+      expect(document.activeElement).toBe(refocused);
+      expect([...trigger.parentElement!.querySelectorAll("button")].map(button => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "查看：准确与安全", "当前", "本周", "本月"]);
+      await userEvent.click(within(reopened).getByRole("menuitemradio", { name: "问题与回答" }));
+      expect(selected).toHaveBeenCalledTimes(2);
+    });
+
+    it("lets a band summary give room to mobile actions while keeping its complete text accessible", () => {
+      narrow();
+      const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
+      const { rerender } = render(<Toolbar inBand filters={[{ kind: "select", label: "查看", pinned: true, value: "matching", options: [{ value: "matching", label: "匹配与招募" }], onChange: () => {} }]} summary={summary} actions={<button>选择方法</button>} />);
+      const text = screen.getByText(summary);
+      expect(text).not.toHaveAttribute("title");
+      expect(text).toHaveClass("min-w-0", "truncate", "max-sm:flex-1");
+      expect(text.parentElement).toHaveClass("max-sm:flex-1");
+      expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
+      rerender(<Toolbar summary={summary} actions={<button>选择方法</button>} />);
+      expect(screen.getByText(summary)).not.toHaveClass("max-sm:flex-1");
+      rerender(<Toolbar inBand actions={<button>选择方法</button>} />);
+      expect(screen.getByRole("button", { name: "选择方法" }).parentElement).not.toHaveClass("max-sm:flex-1");
+    });
   });
+});
+
+it("keeps an opted-in View select explicit on a phone while ordinary filters fold", () => {
+  narrow();
+  render(<Toolbar filters={[{ kind: "select", label: "查看", value: "chat", options: [{ value: "chat", label: "对话" }], onChange: () => undefined, pinned: true }, { kind: "select", label: "状态", value: "running", options: [{ value: "running", label: "进行中" }], onChange: () => undefined }]} />);
+  expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "筛选，已选 1 项" })).toBeInTheDocument();
+});
+
+it("uses the shared tooltip for a clipped band summary and lets touch readers open its full text without a second row", async () => {
+  narrow();
+  const summary = "合作方：研究协作中心 · 候选 6 名 · 数据快照 2026-10-20";
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 400 : 0; });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === summary ? 40 : 0; });
+  render(<Toolbar inBand summary={summary} actions={<button>选择方法</button>} />);
+  const trigger = screen.getByRole("button", { name: summary });
+  expect(trigger).not.toHaveAttribute("title");
+  await userEvent.tab();
+  expect(trigger).toHaveFocus(); expect(screen.getByRole("tooltip")).toHaveTextContent(summary);
+  await userEvent.click(trigger);
+  expect(screen.getByRole("dialog", { name: "完整摘要" })).toHaveTextContent(summary);
+  expect(screen.getByRole("button", { name: "选择方法" })).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}"); expect(screen.queryByRole("dialog", { name: "完整摘要" })).toBeNull();
 });

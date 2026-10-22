@@ -28,16 +28,17 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
+  if (name === "calculation-history") return "/app/capabilities/calculations/std_calc";
   const fixed = ROUTES.find(([route]) => route === name);
   if (fixed) return fixed[1];
   const geo = GEO_TABS.find(([route]) => route === name);
@@ -93,6 +94,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     .map((address) => `/app/${address}`))];
   assert.ok(pages.length >= 12 && ["/app/frontier", "/app/account", "/app/autopilot"].every((page) => pages.includes(page)), `read ${pages.length} fixed pages from the router; the scan did not walk`);
   const notWalked = {
+    "/app/home": "the global entry is covered by OPEN_SCIENCE_WALK_CHAT=1, which verifies the default conversation",
     "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
@@ -621,6 +623,7 @@ function probe(kind, arg, search) {
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
     case "memoryMap": return wrong ? { views: ["关系"], figures: [{ kind: "relations", named: false }], lists: [], thin: false, empty: false }
       : { views: ["关系", "主题", "维度", "时间", "活跃"], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 3 }], thin: false, empty: false };
+    case "calculationHistory": return { rows: wrong ? 0 : 2 };
     case "knowledgeGraph": return wrong ? { figures: [{ kind: "knowledge-wiki", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true, empty: false }
       : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["资料", "知识页", "图谱"], engineAddress: false, empty: false };
     case "inboxSafety": return wrong ? { heading: 2, bell: 5 } : { heading: 2, bell: 2 };
@@ -652,7 +655,8 @@ function compositionRead(pathname) {
   const geo = /^\/app\/geo\/geo_1(\/(visibility|accuracy|questions|sources|actions|plan|evidence|answers\/[^/]+))?$/.test(pathname);
   const vcr = /^\/app\/virtual-research\/std_/.test(pathname);
   const read = { viewport: { width: 1512, height: 945 }, height: 945, title: { text: "页面", ...box(26, 32) }, chrome: null, stepRail: null, tablists: [], viewGroups: [], toolbars: [],
-    controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
+    workbenchActions: { workbenches: pathname.includes("/capabilities/methods/") ? 1 : 0, bars: pathname.includes("/capabilities/methods/") ? 1 : 0 },
+    controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: pathname.includes("/capabilities/methods/") ? [{ text: "保存配置并运行", top: 178, inHeader: false, excused: false, markedRun: true, run: { named: true, height: 44, bars: 1, primaries: 1, beforeContent: true, position: "sticky", initialReachable: true, room: 0 } }] : [], zeroCounts: [], outline: { outlines: 0, showMore: 0 }, chartGrids: [], empties: [],
     notes: [], headline: 0, activity: 0, stepStates: [] };
   if (geo || vcr) {
     read.chrome = { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: mode === "band" && pathname.endsWith("/plan") ? { scrolled: 400, before: 60, after: -340, scrollerTop: 0 } : null };
@@ -684,13 +688,14 @@ function context() {
       await handler({ abort: async () => log({ start: url, verdict: "aborted" }), continue: async () => log({ start: url, verdict: "allowed" }), fulfill: async () => {} });
     }
   };
+  let loadAttempts = 0;
   const newPage = async () => {
     let url = "";
+    let poisoned = false;
     let routeSettled = false;
     let dialogOpen = false;
     const failed = [];
     const consoles = [];
-    let loadAttempts = 0;
     const pageRoutes = [];
     let phone = false;
     // The page one sidebar link left, for Back; and how often each list page's address was read (the walk reads it in a fixed order).
@@ -703,7 +708,7 @@ function context() {
     // FAKE_CHAT=broken: 重试 does not help either.
     const chatMode = process.env.FAKE_CHAT || "";
     let retried = false;
-    const chatFailing = () => chatMode && url.endsWith("/app/chat") && !(chatMode === "network-changed" && retried);
+    const chatFailing = () => chatMode && new URL(url).pathname === "/app/chat" && !(chatMode === "network-changed" && retried);
     const target = () => new URL(url);
     const locator = (role, name) => ({
       count: async () => (chatFailing() && role === "button" && name === "重试" ? 1 : 0),
@@ -716,7 +721,7 @@ function context() {
       on(event, handler) { if (event === "requestfailed") failed.push(handler); if (event === "console") consoles.push(handler); }, off() {},
       async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
       async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },
-      async goBack() { log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
+      async goBack() { dialogOpen = false; log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
       async waitForFunction() {
@@ -725,6 +730,7 @@ function context() {
         routeSettled = true;
       },
       url: () => url,
+      content: async () => "<main>Failed navigation</main>",
       frames: () => [{
         url: () => "https://evimed.example.org/__evimed/f/x",
         evaluate: async (fn, arg) => {
@@ -732,9 +738,16 @@ function context() {
           return { composer: !chatFailing(), stats: [] };
         },
       }],
-      getByRole: (role, { name }) => locator(role, name),
+      getByRole: (role, { name } = {}) => ({ ...locator(role, name), waitFor: async () => {} }),
+      locator: () => ({ allTextContents: async () => [] }),
+      reload: async () => {},
       async goto(target, options) {
-        url = target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
+        if (poisoned) throw Error("page.goto: navigation interrupted by chrome-error://chromewebdata/");
+        if (process.env.FAKE_POISON_ROUTE && phone && target.endsWith("/app/account")) {
+          poisoned = true;
+          throw Error("page.goto: net::ERR_NETWORK_CHANGED");
+        }
+        url = target.endsWith("/app/home") ? new URL(process.env.FAKE_HOME_REDIRECT === "stuck" ? "/app/home" : "/app/chat" + (process.env.FAKE_HOME_SESSION ? "/ses_new" : "") + "?project=" + (process.env.FAKE_HOME_PROJECT || "default"), target).href : target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
           loadAttempts++;
           for (const handler of consoles) handler({ type: () => "error", text: () => "Failed to load resource: net::ERR_NETWORK_CHANGED" });
@@ -744,7 +757,8 @@ function context() {
         const own = pageRoutes.find(([pattern]) => typeof pattern.test === "function" && pattern.test(start));
         if (own) { log({ start, verdict: "fulfilled" }); await own[1]({ fulfill: async () => {} }); }
         else await fire(start);
-        if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
+        if (process.env.FAKE_CHAT_CONSOLE && target.endsWith("/app/home")) for (const handler of consoles) handler({ type: () => "error", text: () => "chat console attribution marker" });
+        if (chatMode && target.endsWith("/app/home")) for (const handler of failed) handler({ method: () => "GET", url: () => target, failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn, arg) {
         if (typeof fn === "function" && fn.name === "routeLoadProbe") {
@@ -774,7 +788,7 @@ function context() {
           const own = target().pathname === "/app/files" ? [{ id: "color-contrast", impact: "serious", nodes: 4, target: ".text-text-3", help: "Elements must meet minimum color contrast" }] : [];
           return { version: "4.12.1", violations: [shell, ...own], incomplete: 2 };
         }
-        if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
+        if (new URL(url).pathname === "/app/chat" && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         // FAKE_ROWS=dead: a row that does nothing when clicked; FAKE_ROWS=two: two lists on every page, so the walk loads the page again between clicks.
         if (typeof fn === "function" && fn.name === "rowProbe") {
           const [action] = arg;
@@ -837,7 +851,7 @@ function context() {
         // FAKE_CLOSE=stuck: a drawer that stays open when its 关闭 is pressed.
         if (typeof fn === "function" && fn.name === "markRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "clickFirstMarkProbe") { dialogOpen = process.env.FAKE_ROWS !== "dead"; log({ markClick: new URL(url).pathname }); return true; }
-        if (typeof fn === "function" && fn.name === "drawerStateProbe") return { dialog: dialogOpen, address: dialogOpen };
+        if (typeof fn === "function" && fn.name === "drawerStateProbe") return { open: dialogOpen ? "record:first" : null, dialog: dialogOpen, address: dialogOpen };
         // 知识页's graph: a list of marks that open a file, the file's page and the way back.
         if (typeof fn === "function" && fn.name === "knowledgeMarkRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "firstKnowledgeMarkProbe") { previousUrl = url; url = new URL("/app/files/src_" + "a".repeat(32), url).href; log({ knowledgeMark: new URL(url).pathname }); return 1; }
@@ -855,6 +869,7 @@ function context() {
           const n = (addressCalls[kind] = (addressCalls[kind] ?? 0) + 1);
           const lost = process.env.FAKE_ADDRESS === "lost" && n > 1 && n < 4;
           if (kind === "inbox") return { path: "/app/inbox", search: lost ? "" : "?filter=unread", dialog: false, found: true, selected: lost ? "全部" : "未读 3" };
+          if (kind === "memory-map") return { path: "/app/memory/map", search: "?view=dims&q=" + encodeURIComponent("探针"), dialog: false, found: true, selected: "地图", query: "探针", view: "维度" };
           const search = "?tab=project&q=" + encodeURIComponent("探针");
           if (n === 4) return { path: "/app/memory", search: search + "&open=r1", dialog: true, found: true, selected: "项目 5", query: "探针" };
           if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "项目 5", query: "探针" };
@@ -917,7 +932,11 @@ function context() {
         if (url.endsWith("/api/agents")) return json(200, { data: ["a1", "a2", "a3", "a4", "a5"].map((id) => ({ id: "capability-" + id })) });
         if (url.endsWith("/api/geo/projects")) return json(200, { data: { projects: [{ id: "geo_1" }] } });
         if (url.endsWith("/api/geo/projects/geo_1/diagnosis")) return json(200, { data: { errors: [{ snapshotId: "snap_old", firstSnapshotId: "snap_1" }] } });
-        if (url.endsWith("/api/vcr/studies")) return json(200, { data: { studies: [{ id: "std_a", steps: {} }, { id: "std_b", steps: { population: { status: "done" }, trial: { status: "minimal" } } }, { id: "std_c", steps: { population: { status: "done" } } }] } });
+        if (url.endsWith("/api/vcr/studies/std_calc")) return json(200, { data: { id: "std_calc", purpose: "calculation" } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs")) return json(200, { data: { jobs: [{ id: "job_calc", state: "succeeded" }] } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs/job_calc/result")) return json(200, { data: { result: { id: "res_calc" } } });
+        if (url.endsWith("/api/vcr/studies/std_calc/jobs/job_calc/configuration")) return json(200, { data: { subjectId: "pset_calc", method: "patients.binary" } });
+        if (url.endsWith("/api/vcr/studies")) return json(200, { data: { studies: [{ id: "std_calc", purpose: "calculation", steps: {} }, { id: "std_a", steps: {} }, { id: "std_b", steps: { population: { status: "done" }, trial: { status: "minimal" } } }, { id: "std_c", steps: { population: { status: "done" } } }] } });
         if (url.endsWith("/api/frontier/items?limit=1")) return json(200, { data: { items: [{ id: "item_1" }] } });
         if (url.endsWith("/api/frontier/zones")) return json(200, { data: { items: [{ id: "z_user", kind: "user" }, { id: "z_official", kind: "official" }] } });
         if (url.endsWith("/api/frontier/hot")) return json(200, { data: { events: [{ id: "ev_1" }] } });
@@ -1136,13 +1155,32 @@ test("every document the walk opens starts in the account's own project, so that
 });
 
 test("the chat page, when asked for, is the one page allowed to start the runtime", async () => {
-  const { code, stdout, stderr, log } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
-  const chatAt = log.findIndex((entry) => entry.goto?.endsWith("/app/chat"));
-  assert.ok(chatAt > 0, "the chat page was opened");
+  const chatAt = log.findIndex((entry) => entry.goto?.endsWith("/app/home"));
+  assert.ok(chatAt > 0, "the global home was opened");
+  assert.equal(log.filter((entry) => entry.goto?.endsWith("/app/home")).length, 2);
+  assert.equal(report.pages["chat@desktop"].loadedRoute, "/app/chat?project=default");
+  assert.equal(report.steps["chat-cleanup-cover"].loadedRoute, "/app/chat?project=default");
   assert.deepEqual([...new Set(log.slice(0, chatAt).filter((entry) => entry.start).map((entry) => entry.verdict))], ["aborted"]);
   // The conversation's own start is let through; the cleanup cover that follows it is answered by the walk itself, and never reaches the runtime.
   assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed", "fulfilled"]);
+});
+
+test("the global entry verifies its project and accepts a native session address", async () => {
+  const session = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_HOME_SESSION: "1" });
+  assert.equal(session.code, 0, session.stdout + session.stderr);
+  assert.equal(session.report.pages["chat@desktop"].loadedRoute, "/app/chat/ses_new?project=default");
+  for (const variant of [{ FAKE_HOME_PROJECT: "geo_1" }, { FAKE_HOME_REDIRECT: "stuck" }]) {
+    const bad = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", ...variant });
+    assert.equal(bad.code, 1);
+    assert.equal(bad.report.pages["chat@desktop"].loaded, false);
+    assert.match(bad.report.pages["chat@desktop"].state, /the global entry did not open the default conversation/);
+    assert.ok(bad.report.failures.some((line) => line.startsWith("chat@desktop: the global entry did not open the default conversation")));
+  }
+  const off = await walk();
+  assert.ok(!off.log.some((entry) => entry.goto?.endsWith("/app/home")));
+  assert.ok(!off.log.some((entry) => entry.start && entry.verdict === "allowed"));
 });
 
 test("a chat page that fails because the walk's own network changed is retried once, as a reader would, and noted", async () => {
@@ -1154,6 +1192,15 @@ test("a chat page that fails because the walk's own network changed is retried o
   assert.deepEqual(log.filter((entry) => entry.click).map((entry) => entry.click), ["重试"]);
   assert.ok(report.info.some((line) => /chat@desktop: loaded after one 重试/.test(line)), report.info.join("\n"));
   assert.deepEqual(report.failures, []);
+});
+
+test("the chat tab installs its own observers after address checks and attributes its console errors to chat", async () => {
+  const { code, stdout, stderr, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT_CONSOLE: "1" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(report.pages["chat@desktop"].consoleErrors, ["chat console attribution marker"]);
+  for (const [view, page] of Object.entries(report.pages)) {
+    if (view !== "chat@desktop") assert.ok(!page.consoleErrors?.includes("chat console attribution marker"), view);
+  }
 });
 
 test("a chat page that still fails after the one retry fails the walk", async () => {
@@ -1196,6 +1243,24 @@ test("a slow route is measured after it settles, and an unresolved route or miss
   const missing = await walk({ FAKE_MISSING_TITLE: "1" });
   assert.equal(missing.code, 1);
   assert.ok(missing.report.failures.some(line => line.includes("the page has no title of its own")));
+});
+
+test("a navigation that poisons Chromium fails its view but cannot poison following views", async () => {
+  const result = await walk({ FAKE_POISON_ROUTE: "1" });
+  assert.equal(result.code, 1);
+  const failed = result.report.pages["account@phone"];
+  assert.equal(failed.navigationFailures.length, 1);
+  assert.match(failed.navigationFailures[0].error, /ERR_NETWORK_CHANGED/);
+  assert.equal(failed.diagnostic.phase, "navigation");
+  assert.match(failed.diagnostic.stack, /ERR_NETWORK_CHANGED/);
+  assert.ok(failed.diagnostic.files.dom);
+  assert.ok(failed.diagnostic.files.screenshot);
+  const pages = Object.keys(result.report.pages);
+  const later = pages.slice(pages.indexOf("account@phone") + 1);
+  assert.ok(later.length > 0);
+  assert.ok(later.some((name) => result.report.pages[name].composition));
+  assert.ok(!result.report.failures.some((failure) => /chrome-error/.test(failure)));
+  assert.equal(result.log.filter((entry) => entry.goto === "about:blank").length, 0);
 });
 
 test("the walk clicks the first row of each list on the pages R10 rebuilt, at the desktop width only, and reports what it clicked", async () => {
@@ -1357,19 +1422,51 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   assert.equal(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["502 /api/skills/x"])).failures.length, 1);
 });
 
-test("navigation resets Chromium's error page after a network change and retries only once", async () => {
+test("network-change navigation uses one clean authenticated-context tab and preserves the initial error", async () => {
   const visited = [];
-  let notices = 0;
-  const page = { goto: async (url) => { visited.push(url); if (visited.length === 1) throw new Error("page.goto: net::ERR_NETWORK_CHANGED"); return "loaded"; }, waitForTimeout: async () => {} };
-  assert.equal(await navigateForWalk(page, "https://example.org/app/files", () => notices++), "loaded");
-  assert.deepEqual(visited, ["https://example.org/app/files", "about:blank", "https://example.org/app/files"]);
-  assert.equal(notices, 1);
+  const context = { newPage: async () => ({ goto: async (url) => { visited.push(url); return "loaded"; } }) };
+  let closed = 0;
+  let installed = 0;
+  const poisoned = { close: async () => { closed++; }, goto: async () => { throw new Error("page.goto: net::ERR_NETWORK_CHANGED"); } };
+  const initialErrors = [];
+  assert.equal(await navigateForWalk(poisoned, "https://example.org/app/files", async (error) => {
+    initialErrors.push(String(error));
+    return replaceWalkPage(context, poisoned, () => installed++);
+  }), "loaded");
+  assert.deepEqual(visited, ["https://example.org/app/files"]);
+  assert.equal(closed, 1);
+  assert.equal(installed, 1);
+  assert.match(initialErrors[0], /ERR_NETWORK_CHANGED/);
+  // A second failed navigation is terminal, and the next view still gets its own healthy page.
   let attempts = 0;
-  page.goto = async (url) => { if (url !== "about:blank") { attempts++; throw new Error("net::ERR_NETWORK_CHANGED"); } };
-  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => {}), /ERR_NETWORK_CHANGED/);
+  const failing = { goto: async () => { attempts++; throw new Error("net::ERR_NETWORK_CHANGED"); } };
+  await assert.rejects(navigateForWalk(failing, "https://example.org/app/files", async () => failing), /ERR_NETWORK_CHANGED/);
   assert.equal(attempts, 2);
-  page.goto = async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); };
-  await assert.rejects(navigateForWalk(page, "https://example.org/app/files", () => { throw new Error("unexpected retry"); }), /ERR_CONNECTION_REFUSED/);
+  const next = await replaceWalkPage(context, poisoned, () => installed++);
+  assert.equal(await next.goto("https://example.org/app/inbox"), "loaded");
+  failing.goto = async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); };
+  await assert.rejects(navigateForWalk(failing, "https://example.org/app/files", () => { throw new Error("unexpected retry"); }), /ERR_CONNECTION_REFUSED/);
+});
+
+test("failure diagnostics retain phase, full timeout stack, DOM, screenshot and failed requests", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "walk-failure-"));
+  try {
+    const error = new Error("Timeout exceeded: " + "x".repeat(400));
+    const page = { url: () => "https://example.org/app/files", content: async () => "<main>Still loading</main>",
+      screenshot: async ({ path: file }) => writeFile(file, "screenshot") };
+    const requests = [{ method: "GET", url: "https://example.org/api/files", error: "net::ERR_NETWORK_CHANGED" }];
+    const evidence = await walkFailureDiagnostics(page, dir, "files@desktop", "row-interactions", error, requests);
+    assert.equal(evidence.phase, "row-interactions");
+    assert.equal(evidence.stack, error.stack);
+    assert.equal(evidence.error, String(error));
+    assert.deepEqual(evidence.requestFailures, requests);
+    assert.equal(await readFile(path.join(dir, evidence.files.dom), "utf8"), "<main>Still loading</main>");
+    assert.equal(await readFile(path.join(dir, evidence.files.screenshot), "utf8"), "screenshot");
+    page.content = async () => { throw new Error("page closed"); };
+    assert.match((await walkFailureDiagnostics(page, dir, "files", "navigation", error)).captureErrors[0], /page closed/);
+    assert.throws(() => assertWalkAuthenticated("https://example.org/login?next=/app/files"), /walk_auth_redirect/);
+    assert.doesNotThrow(() => assertWalkAuthenticated("https://example.org/app/files"));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("the studies and ids the walk opens are read from the lists, and a missing id is a page not walked", () => {
@@ -1415,10 +1512,16 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
 });
 
 /** The sidebar a page of the shell has: one landmark named 侧栏, its divider and its link to the conversation. */
-const sidebar = (w = 240, attrs = {}) => node("aside", { attrs: { "aria-label": "侧栏", "data-sidebar": "", ...attrs }, w }, [
-  node("nav", {}, [node("a", { attrs: { href: "/app/chat" }, text: "对话", tabIndex: 0 })]),
+const sidebar = (w = 240, attrs = {}, href = "/app/home") => node("aside", { attrs: { "aria-label": "侧栏", "data-sidebar": "", ...attrs }, w }, [
+  node("nav", {}, [node("a", { attrs: { href }, text: "对话", tabIndex: 0 })]),
   node("div", { attrs: { role: "separator" }, w: 4 }),
 ]);
+
+test("the sidebar conversation link is the global home entry", () => {
+  for (const href of ["/app/chat", "/app/chat?project=geo_1"]) {
+    assert.equal(inPage(node("body", {}, [sidebar(240, {}, href)]), () => measureStructure()).sidebar.chatLink, false);
+  }
+});
 
 test("the structure measure reads the sidebar landmark, the regions that scroll sideways, the heading levels and the page's height", () => {
   const reachable = node("div", { attrs: { class: "scroller" }, w: 400, scrollW: 900, style: { overflowX: "auto" } }, [node("button", { text: "按钮", tabIndex: 0 })]);
@@ -2210,7 +2313,7 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["other"]), false);
   });
   assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
-  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory"]);
+  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory", "memory-map"]);
   assert.equal(addressStateHolds({ selected: "未读" }, { selected: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
   assert.equal(addressStateHolds({ selected: "未读" }, null), false);
@@ -2296,9 +2399,9 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
   // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
   assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
-    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"]]);
+    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"], ["chip", "地图的视图", "维度"], ["link", "/app/capabilities"]]);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
-  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-landing", "memory-row-coverage", "memory-open"]);
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-map", "memory-landing", "memory-row-coverage", "memory-open"]);
   assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
 
   // The address that does not come back, a row that stays open after Back.
@@ -2669,7 +2772,7 @@ test("scheduled pending daily preserves today's truth and separately names a rea
 test("a rendered load error retries exactly once only for this view's observed network change", async () => {
   const failed = { failed: true, message: "研究暂时无法读取。重试" }, ready = { failed: false, message: null };
   let states, visits;
-  const page = { evaluate: async () => states.shift(), goto: async (url) => { visits.push(url); }, waitForFunction: async () => {}, waitForTimeout: async () => {} };
+  const page = { url: () => "https://example.org/app/vcr", evaluate: async () => states.shift(), goto: async (url) => { visits.push(url); }, waitForFunction: async () => {}, waitForTimeout: async () => {} };
   states = [failed, ready]; visits = [];
   const recovered = await recoverWalkLoad(page, "https://example.org/app/virtual-research/a/comparator", ["net::ERR_NETWORK_CHANGED"], []);
   assert.equal(recovered.loaded, true); assert.equal(recovered.retried, true); assert.deepEqual(recovered.initial, failed); assert.equal(visits.length, 1);
@@ -2711,4 +2814,21 @@ test("a retry navigation failure retains the original error and remains a failed
   const page = { evaluate: async () => initial, goto: async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); } };
   const result = await recoverWalkLoad(page, "https://example.org/app/vcr", ["net::ERR_NETWORK_CHANGED"], []);
   assert.equal(result.loaded, false); assert.equal(result.retried, true); assert.deepEqual(result.initial, initial); assert.match(result.retryError, /ERR_CONNECTION_REFUSED/);
+});
+
+
+test("calculation history discovery requires its real purpose, successful job, configuration and readable result", async () => {
+  const studies = [{ id: "programme", purpose: "programme" }, { id: "calc", purpose: "calculation" }];
+  const discover = (change = {}) => discoverCalculationHistory({ request: { get: async (url) => ({ ok: () => true, status: () => 200, json: async () => ({ data: {
+    "https://walk.test/api/vcr/studies/calc": { id: "calc", purpose: "calculation" },
+    "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [{ id: "job-real", state: "succeeded" }] },
+    "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": { result: { id: "result-real" } },
+    "https://walk.test/api/vcr/studies/calc/jobs/job-real/configuration": { subjectId: "configuration-real", method: "patients.binary" }, ...change,
+  }[url] }) }) } }, "https://walk.test", studies);
+  assert.equal((await discover()).route, "/app/capabilities/calculations/calc");
+  assert.equal((await discover()).jobId, "job-real");
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc": { id: "calc", purpose: "programme" } }), null);
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [] } }), null);
+  assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": {} }), null);
+  assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
 });

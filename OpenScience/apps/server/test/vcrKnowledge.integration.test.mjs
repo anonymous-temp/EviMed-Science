@@ -174,6 +174,38 @@ test("a definition is saved from one study, reused in a second, versioned, and c
   assert.equal((await knowledge.getLibraryDefinition("u_lib", v1.definitionId)).versions.length, 2);
 });
 
+test("template versions retain unknown policies through PostgreSQL, remapping and comparison jobs", options, async () => {
+  const one = await newStudy("u_policy");
+  const two = await newStudy("u_policy");
+  const rules = [
+    { name: "adult", rule: cmp("age", "gte", 18), unknownAs: "include" },
+    { name: "fit", rule: cmp("ecog", "lte", 1), unknownAs: "exclude" },
+    { name: "upper", rule: cmp("age", "lte", 90) },
+  ];
+  const population = await studies.savePopulation({ studyId: one.id, userId: "u_policy", name: "Policies", kind: "real", definition: { rules } });
+  const v1 = await knowledge.saveFromStudy(one, { populationId: population.id, text: "First policy" }, "u_policy");
+  const changed = rules.map((step, index) => index < 2 ? { ...step, unknownAs: index ? "include" : "exclude" } : step);
+  const next = await studies.savePopulation({ studyId: one.id, userId: "u_policy", name: "Policies", kind: "real", definition: { rules: changed } });
+  await knowledge.saveFromStudy(one, { populationId: next.id, definitionId: v1.definitionId, text: "Second policy" }, "u_policy");
+  const queued = [];
+  const service = new VcrKnowledge({ store, studyStore: studies,
+    jobs: { enqueue: async (input) => { queued.push(input); return { job: { id: "job_policy" }, created: true }; } },
+    dataStore: { listSnapshots: async () => [{ id: "snp_policy" }], listAnalysisTables: async () => [{ shape: "subject", columns: ["USUBJID", "age", "ecog"] }] },
+  });
+  for (const [version, expected] of [[1, rules], [2, changed]]) {
+    const used = await knowledge.useInStudy(two, { definitionId: v1.definitionId, version, columnMap: { age: "age_years", ecog: "performance" } }, "u_policy");
+    const reused = (await studies.populations(two.id, 10)).find((row) => row.id === used.populationId);
+    assert.deepEqual(reused.definition.rules, expected.map((step) => ({ ...step, rule: { ...step.rule, column: step.rule.column === "age" ? "age_years" : "performance" } })));
+    assert.equal(Object.hasOwn(reused.definition.rules[2], "unknownAs"), false);
+  }
+  await service.compareVersions(one, { id: "u_policy" }, { definitionId: v1.definitionId, versionA: 1, versionB: 2 });
+  assert.deepEqual(queued[0].scenario.rules, rules);
+  assert.deepEqual(queued[0].scenario.compare.rules, changed);
+  const history = await store.getDefinition("u_policy", v1.definitionId);
+  assert.deepEqual(history.versions.map((row) => row.body.rules), [changed, rules], "reusing and comparing leave immutable versions intact");
+  assert.deepEqual((await studies.populations(one.id, 10)).find((row) => row.id === population.id).definition.rules, rules);
+});
+
 test("another account's library is invisible: it is not listed, read, saved to, used or compared", options, async () => {
   const mine = await newStudy("u_a");
   await studies.savePopulation({ studyId: mine.id, userId: "u_a", name: "私有定义", kind: "real", definition: { rules: RULES_V1 } });

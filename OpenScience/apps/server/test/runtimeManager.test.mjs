@@ -4332,3 +4332,141 @@ test("concurrent prompts in one workspace write separate session context and ide
   }
   await assert.rejects(readFile(path.join(project.workspaceDir,'.evimed-brief','index.json'),'utf8'),{code:'ENOENT'});
 });
+
+test("maintenance fences every cold start entry while warm reads remain available", async () => {
+  let admitted = false, admissions = 0, starts = 0;
+  const manager = new RuntimeManager({ runtimeMode: "kernel" }, {
+    runtimeCreationMutation: async operation => {
+      admissions += 1;
+      if (!admitted) throw Object.assign(new Error("Draining"), { status: 503, code: "maintenance_active" });
+      return operation();
+    },
+  });
+  manager.startKernel = async () => { starts += 1; return fakeRuntime(project.id); };
+  for (const begin of [() => manager.start(project), () => manager.startAdmitted(project)]) {
+    await assert.rejects(begin(), { code: "maintenance_active" });
+    assert.equal(manager.starts.size, 0);
+  }
+  assert.equal(starts, 0);
+  admitted = true;
+  const warm = await manager.start(project);
+  admitted = false;
+  assert.equal(await manager.start(project), warm);
+  assert.equal(admissions, 3, "warm reads require no creation admission");
+  assert.equal(starts, 1);
+});
+
+test("maintenance refusal preserves a warm runtime when the workspace changes", async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" }, {
+    runtimeCreationMutation: async () => { throw Object.assign(new Error("Draining"), { code: "maintenance_active" }); },
+  });
+  const warm = fakeRuntime(project.id);
+  manager.runtimes.set(manager.key(project), warm);
+  let stopped = 0;
+  manager.stop = async () => { stopped += 1; manager.runtimes.delete(manager.key(project)); };
+  await assert.rejects(manager.startAdmitted({ ...project, workspaceDir: project.workspaceDir + "/changed" }), { code: "maintenance_active" });
+  assert.equal(stopped, 0);
+  assert.equal(manager.runtimes.get(manager.key(project)), warm);
+  assert.equal((await manager.status(project)).running, true, "the still-running workspace remains available after refusal");
+});
+
+test("a pending cold start is registered before admission and concurrent callers share its release", async () => {
+  let admit, entered;
+  const gate = new Promise(resolve => { admit = resolve; });
+  const began = new Promise(resolve => { entered = resolve; });
+  let admissions = 0, releases = 0, starts = 0;
+  const manager = new RuntimeManager({ runtimeMode: "kernel" }, {
+    runtimeCreationMutation: async operation => {
+      admissions += 1;
+      assert.equal(manager.starts.size, 1, "drain observers see the start before admission waits");
+      entered(); await gate;
+      try { return await operation(); } finally { releases += 1; }
+    },
+  });
+  manager.startKernel = async () => { starts += 1; return fakeRuntime(project.id); };
+  const first = manager.startAdmitted(project);
+  await began;
+  const joined = manager.startAdmitted(project);
+  admit();
+  assert.equal(await first, await joined);
+  assert.equal(admissions, 1); assert.equal(releases, 1); assert.equal(starts, 1);
+  assert.equal(manager.starts.size, 0);
+});
+
+test("failed creation releases admission and an explicit replacement cannot recreate during maintenance", async () => {
+  let blocked = false, releases = 0, starts = 0;
+  const manager = new RuntimeManager({ runtimeMode: "kernel" }, {
+    runtimeCreationMutation: async operation => {
+      if (blocked) throw Object.assign(new Error("Draining"), { code: "maintenance_active" });
+      try { return await operation(); } finally { releases += 1; }
+    },
+  });
+  manager.startKernel = async () => { starts += 1; throw new Error("synthetic launch failure"); };
+  await assert.rejects(manager.start(project), /synthetic launch failure/);
+  assert.equal(releases, 1); assert.equal(manager.starts.size, 0);
+  manager.runtimes.set(manager.key(project), fakeRuntime(project.id));
+  manager.stop = async () => { manager.runtimes.delete(manager.key(project)); };
+  blocked = true;
+  await assert.rejects(manager.restart(project), { code: "maintenance_active" });
+  assert.equal(starts, 1, "replacement never reaches the provider");
+});
+
+test("automatic plugin, personal and extension replacements cannot tear down warm runtimes during maintenance", async () => {
+  for (const replace of ['replacePluginRuntime', 'replacePersonalSkillRuntime', 'replaceGeneration']) {
+    const manager = new RuntimeManager({ runtimeMode: 'kernel' }, {
+      runtimeCreationMutation: async () => { throw Object.assign(new Error('Draining'), { code: 'maintenance_active' }); },
+    });
+    const warm = fakeRuntime(project.id);
+    manager.runtimes.set(manager.key(project), warm);
+    manager.prepareGeneration = async () => {};
+    manager.pluginRuntimeBusy = async () => false;
+    let stops = 0;
+    manager.stop = async () => { stops += 1; manager.runtimes.delete(manager.key(project)); };
+    manager.startKernel = async () => assert.fail('replacement provider must not start');
+    await assert.rejects(manager[replace](project, {}), { code: 'maintenance_active' });
+    assert.equal(stops, 0, replace);
+    assert.equal(manager.runtimes.get(manager.key(project)), warm);
+  }
+});
+
+test("platform skill refresh keeps its warm runtime when maintenance denies replacement", async () => {
+  const manager = new RuntimeManager({ runtimeMode: 'kernel' }, {
+    runtimeCreationMutation: async () => { throw Object.assign(new Error('Draining'), { code: 'maintenance_active' }); },
+  });
+  const warm = fakeRuntime(project.id);
+  manager.runtimes.set(manager.key(project), warm);
+  manager.platformSkillSupply = {};
+  manager.selectPlatformSkills = async () => ({ generation: { reference: { generationHash: 'new-generation' } }, degraded: false });
+  manager.idleVerdict = async () => 'idle';
+  manager.stopIdleRuntime = async () => assert.fail('must not stop before maintenance admission');
+  await assert.rejects(manager.setPlatformSkillScope(project, 'synthetic-capability'), { code: 'maintenance_active' });
+  assert.equal(manager.runtimes.get(manager.key(project)), warm);
+  assert.equal(manager.platformSkillOverrides.size, 0);
+});
+
+test("a cold automatic replacement starts without scheduling its own newly registered start for shutdown", async () => {
+  const manager = new RuntimeManager({ runtimeMode: 'kernel' });
+  manager.startKernel = async () => fakeRuntime(project.id);
+  let stops = 0;
+  manager.stop = async () => { stops += 1; };
+  const runtime = await manager.replacePersonalSkillRuntime(project, {});
+  assert.equal(stops, 0);
+  assert.equal(manager.runtimes.get(manager.key(project)), runtime);
+});
+
+
+test("a platform skill idle-guard no-op never announces a newly created runtime", async () => {
+  let starts = 0;
+  const manager = new RuntimeManager({ runtimeMode: 'kernel' }, { onRuntimeStart: () => { starts += 1; } });
+  const warm = fakeRuntime(project.id);
+  manager.runtimes.set(manager.key(project), warm);
+  manager.platformSkillSupply = {};
+  manager.selectPlatformSkills = async () => ({ generation: { reference: { generationHash: 'new-generation' } }, degraded: false });
+  manager.idleVerdict = async () => 'idle';
+  manager.stopIdleRuntime = async () => false;
+  manager.noteRoomFound = () => assert.fail('no room was acquired by an idle-guard no-op');
+  assert.deepEqual(await manager.setPlatformSkillScope(project, 'synthetic-capability'), { adopted: false, pending: true });
+  assert.equal(starts, 0);
+  assert.equal(manager.runtimes.get(manager.key(project)), warm);
+  assert.equal(manager.starts.size, 0);
+});

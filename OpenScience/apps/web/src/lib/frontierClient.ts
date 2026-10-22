@@ -103,6 +103,36 @@ export interface FrontierItemState {
 /** One enrichment fact: a word, a number, a yes/no, a list, or a small record of those. */
 export type FrontierFact = string | number | boolean | string[] | Record<string, string | number | boolean>;
 
+const EDITOR_DIAGNOSTIC_CODES = ["passed", "empty", "length", "link", "language", "number", "source_missing", "answer_invalid", "withheld", "not_checked"] as const;
+type EditorDiagnosticCode = typeof EDITOR_DIAGNOSTIC_CODES[number];
+export interface FrontierEditorDiagnostics {
+  schemaVersion: 1;
+  outcome: "passed" | "repaired" | "title-only" | "pending" | "deferred" | "stale";
+  attempts: number | null;
+  inputSha256: string | null;
+  editorVersion: string | null;
+  checkedAt: string;
+  reason: "provider_unavailable" | "call_failed" | "budget" | "peak" | "throttled" | "unavailable" | "retry_exhausted" | "source_changed" | null;
+  fields: { title_zh: EditorDiagnosticCode[]; summary_zh: EditorDiagnosticCode[] };
+}
+
+/** Rebuild the allow-listed shape rather than forwarding unknown server keys. */
+export function parseFrontierEditorDiagnostics(value: unknown): FrontierEditorDiagnostics | null {
+  const raw = record(value);
+  const outcome = orNull(raw?.outcome, ["passed", "repaired", "title-only", "pending", "deferred", "stale"] as const);
+  const checkedAt = moment(raw?.checkedAt);
+  if (raw?.schemaVersion !== 1 || !outcome || !checkedAt) return null;
+  const fields = record(raw.fields);
+  const codes = (value: unknown): EditorDiagnosticCode[] => Array.isArray(value)
+    ? [...new Set(value.flatMap((code) => { const known = orNull(code, EDITOR_DIAGNOSTIC_CODES); return known ? [known] : []; }))].slice(0, EDITOR_DIAGNOSTIC_CODES.length) : [];
+  return { schemaVersion: 1, outcome, checkedAt,
+    attempts: typeof raw.attempts === "number" && Number.isInteger(raw.attempts) && raw.attempts >= 0 && raw.attempts <= 3 ? raw.attempts : null,
+    inputSha256: typeof raw.inputSha256 === "string" && /^[a-f0-9]{64}$/.test(raw.inputSha256) ? raw.inputSha256 : null,
+    editorVersion: typeof raw.editorVersion === "string" && /^[a-zA-Z0-9._:-]{1,160}$/.test(raw.editorVersion) ? raw.editorVersion : null,
+    reason: orNull(raw.reason, ["provider_unavailable", "call_failed", "budget", "peak", "throttled", "unavailable", "retry_exhausted", "source_changed"] as const),
+    fields: { title_zh: codes(fields?.title_zh), summary_zh: codes(fields?.summary_zh) } };
+}
+
 /** One published item, as `GET /api/frontier/items` returns it (build spec B.6). */
 export interface FrontierItem {
   id: string;
@@ -137,6 +167,7 @@ export interface FrontierItem {
   selectedRule: string | null;
   safetyAlert: boolean;
   verification: FrontierVerification;
+  editorDiagnostics?: FrontierEditorDiagnostics | null;
   /**
    * The editorial total, 0–100 (「编辑评分 · 满分 100」): null for a safety
    * alert, which is not scored for a reader, and for an item not scored in full.
@@ -634,6 +665,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     selectedRule: text(raw.selectedRule),
     safetyAlert: raw.safetyAlert === true,
     verification: oneOf(raw.verification, ["pending", "passed", "repaired", "title-only"] as const, "pending"),
+    editorDiagnostics: parseFrontierEditorDiagnostics(raw.editorDiagnostics),
     // A safety alert carries no score for a reader, whatever a server sent.
     score: raw.safetyAlert === true ? null : score,
     scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const),

@@ -5,6 +5,8 @@ import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/comp
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { Tooltip, isTruncated } from "@/components/ui/Tooltip";
+import * as Popover from "@radix-ui/react-popover";
 import { useNarrow } from "@/lib/useMediaQuery";
 
 /**
@@ -53,6 +55,8 @@ export interface ToolbarSelect {
   onChange(value: string | null): void;
   /** The option that clears the choice (「全部栏目」). Absent: the choice cannot be cleared. */
   allLabel?: string;
+  /** A contextual View selector stays explicit when other filters fold. */
+  pinned?: boolean;
 }
 
 export interface ToolbarChips {
@@ -188,6 +192,29 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): bo
   return enabled && crowded;
 }
 
+/** A clipped count stays on one line; keyboard/hover and touch can read its complete text without changing the band's height. */
+function BandSummary({ text, className }: { text: string; className: string }) {
+  const line = useRef<HTMLSpanElement | HTMLButtonElement>(null);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const element = line.current;
+    if (!element) return undefined;
+    const check = () => setClipped(isTruncated(element));
+    check();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [text, clipped]);
+  if (!clipped) return <span ref={element => { line.current = element; }} className={className}>{text}</span>;
+  return <Popover.Root>
+    <Tooltip content={text} whenTruncated>
+      <Popover.Trigger asChild><button ref={element => { line.current = element; }} type="button" className={cn(className, "h-sm rounded px-0 text-left outline-none focus-visible:outline-focus")}>{text}</button></Popover.Trigger>
+    </Tooltip>
+    <Popover.Portal><Popover.Content aria-label="完整摘要" side="bottom" align="end" sideOffset={4} collisionPadding={8} className="z-popover max-w-xs break-words rounded-card border border-border bg-surface p-3 text-ui text-text shadow-e2 outline-none">{text}</Popover.Content></Popover.Portal>
+  </Popover.Root>;
+}
+
 export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className, inBand = false }: ToolbarProps) {
   const narrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
@@ -195,31 +222,34 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const crowded = useCrowded(row, inBand && !views && !narrow);
   const fold = narrow || crowded;
   // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned views, which stay as the chips they are.
-  const kept = fold ? declared.filter((filter) => filter.kind === "chips" && filter.pinned) : [];
+  const kept = fold ? declared.filter((filter) => (filter.kind === "chips" || filter.kind === "select") && filter.pinned) : [];
   const filters = fold ? declared.filter((filter) => !kept.includes(filter)) : declared;
   const folded = filters.filter(isActive).length;
   // What 「清除筛选」 lets go of is every filter that is on, the pinned ones too.
   const active = folded + kept.filter(isActive).length;
   const searching = Boolean(search?.value);
+  const shrinkSummary = inBand && summary != null;
+  const summaryClass = cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0");
   // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so the
   // text stands on the page's left edge. Without views the whole row does (below).
   const controls = (
     <>
-      {kept.map((filter, index) => <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} />)}
-      {fold && filters.length > 0 ? (
+      {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
+      {declared.map((filter, index) => !fold || kept.includes(filter) ? <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} /> : null)}
+      {fold && filters.length > 0 && (
         <Menu label="筛选" align="start" items={foldedEntries(filters)}>
           <FilterChip menu className={views ? "-ml-3" : undefined} pressed={folded > 0} aria-label={folded > 0 ? `筛选，已选 ${folded} 项` : "筛选"}>
             {folded > 0 ? `筛选 · ${folded}` : "筛选"}
           </FilterChip>
         </Menu>
-      ) : filters.map((filter, index) => <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} />)}
+      )}
       {onClear && (active > 0 || searching) && <FilterChip onClick={onClear}>清除筛选</FilterChip>}
     </>
   );
   // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
   // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
   const end = (search || summary != null || actions) && (
-    <div className={cn("ml-auto flex min-w-0 items-center gap-2", search && "max-sm:flex-1")}>
+    <div className={cn("ml-auto flex min-w-0 items-center gap-2", (search || shrinkSummary) && "max-sm:flex-1")}>
       {search && (
         <SearchInput
           size="sm"
@@ -233,8 +263,8 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           className="min-w-0 flex-1 max-sm:min-w-28 sm:w-56 sm:flex-none"
         />
       )}
-      {/* On a phone beside a search the count gives way (truncated) before the search does. */}
-      {summary != null && <span className={cn("text-caption tabular-nums text-text-3 sm:shrink-0", search ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0")}>{summary}</span>}
+      {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
+      {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
       {actions}
     </div>
   );

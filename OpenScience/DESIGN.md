@@ -389,7 +389,7 @@ under one another, the memory page a chart, two statistics blocks and a list, �
 capability map and an evolution panel. `scripts/ops/ui-walk.mjs` checks each rule on the live
 pages after every release.
 
-1. **One page, one kind of object, as a list.** Content of a different kind goes in a tab or on its
+1. **One page, one kind of object, as a list.** The October 20 analysis-workbench exception below supersedes this restriction for connected configuration and results. Content of a different kind goes in a tab or on its
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
@@ -403,7 +403,7 @@ pages after every release.
    page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget: the shell's three, the view
    switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
    scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
-2. **A row opens by the nature of what it is** (adopted 2026-10-08 with release 13, from the owner's
+2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
      source or a wrong answer — opens in the right-hand drawer (`Drawer`) and the list stays where it
@@ -417,7 +417,7 @@ pages after every release.
    the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
    solid accent buttons in a header fail the walk.
-4. **Only what can be acted on, and the result itself.** System state, version numbers, model
+4. **Only what can be acted on, and the result itself.** Short purpose/input/output/next-action guidance is allowed under the October 20 correction below. System state, version numbers, model
    names, identifiers and how a statistic was counted are not on a user page; say what the reader
    can do and what came of it.
 5. **At most one row of view switches and one row of filters.** A second tab strip, a row of
@@ -624,7 +624,7 @@ coloured shimmer · put an opacity modifier on a token colour · put a shadow on
 let a badge cover the icon it sits on · render two adjacent rows with identical text · show raw
 validator strings, enum codes, run ids or model names in the body of the UI · rely on hover to
 reveal anything a keyboard user needs · explain how the system works on the page (a subtitle, a
-hint under a card, “为什么入选”) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
+hint under a card, “为什么入选”; this historical blanket wording is superseded for useful task guidance by the October 20 correction below) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
 起生效, token, 缓存命中, tok/s, an API's name, a project id.
 
 ---
@@ -696,3 +696,15 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
 
 Frontier evidence zones belong to the peer navigation. Article titles and Details open one addressed reader; the publisher link is separate and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+
+## Workflow correction adopted 2026-10-20
+
+These presentation decisions supersede conflicting September 23, October 7/8 and October 14/19 rules precisely as described below. Earlier records remain historical; this is an acceptance target, not a claim that the implementation has passed. See `../docs/superpowers/plans/2026-10-19-workflow-rectification.md`, October 20 owner review.
+
+- Global home, logo and New Conversation open the general AI assistant without inherited GEO/study title, progress or specialist binding. Resume-project links are explicit; preserve history, drafts and native tabs. The VCR home lists studies and progress with one New Study action. Methods, reference search and population templates are contextual tools, not competing study-home tabs; retain compatible links and saved objects.
+- Keep the seven VCR and eight GEO steps reachable with visible current/completed/waiting state and next actions, including during conversation. The October 19 compact-control ruling removes redundant navigation, but a compact selector alone cannot be the only discoverable workflow. Use one conversation and one native composer; remove the redundant Chat button when it is open. Preserve project identity, results, actual run history and the native DSH right pane.
+- Research Tools is the existing shared discovery surface for task-oriented methods, visible on its initial screen and reused inside study steps. This supersedes the October 14 fixed catalogue inventory as a restriction on those method entries. Small calculations need not traverse a full study. Show a short purpose, required inputs, expected outputs and reachable next action; meaningful examples, missing prerequisites and remedies are explicitly permitted. The older blanket no-hint/no-purpose-text rule applies only to explanations of implementation, not useful task guidance.
+- Related inputs, configuration, progress and result tables/plots belong together in one analysis workbench in the main area, with responsive tabs where useful. This is an explicit exception to the older one-object/one-shape rule, not permission to stack unrelated metadata. Long method configuration and literature-to-parameter mapping use the main area; drawers hold only short previews or small edits. Do not repurpose the native right pane or add another file/browser system.
+- Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
+- The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
+- Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.

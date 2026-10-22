@@ -96,6 +96,7 @@ const mocks = vi.hoisted(() => ({
   putWebResearchSession: vi.fn(),
   allowance: vi.fn(),
   estimates: vi.fn(),
+  getVcrModels: vi.fn(),
 }));
 
 // The error dictionary (`webErrorMessage`) lives in this module and the code
@@ -110,6 +111,8 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   fetchWebResearchEstimates: mocks.estimates,
   getWebProjectId: () => "default",
 }));
+
+vi.mock("@/lib/vcrClient", () => ({ getVcrModels: mocks.getVcrModels }));
 
 const NO_LINKS = { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null };
 /** `/api/account/allowance` on a deployment that does not bill research — every deployment but one — as the server writes it. */
@@ -162,6 +165,8 @@ const card = (title: string) => tool(title).closest("li")!;
 
 describe("CapabilitiesPage", () => {
   beforeEach(() => {
+    mocks.getVcrModels.mockReset();
+    mocks.getVcrModels.mockResolvedValue({ methods: [], models: [] });
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     mocks.listWebResearchSessions.mockReset();
@@ -205,7 +210,7 @@ describe("CapabilitiesPage", () => {
     renderPage();
     const heading = await screen.findByRole("heading", { level: 1, name: "科研工具" });
     expect(RESEARCH_TOOLS_NAME).toBe("科研工具");
-    const search = screen.getByRole("searchbox", { name: "搜索工具" });
+    const search = screen.getByLabelText("搜索工具");
     expect(search).toHaveAttribute("placeholder", "搜索工具");
     expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
     expect(heading.closest("header")?.querySelector("input")).toBeNull();
@@ -260,16 +265,16 @@ describe("CapabilitiesPage", () => {
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
+    await userEvent.type(screen.getByLabelText("搜索工具"), "氨甲环酸");
     expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "不存在的工具");
+    await userEvent.type(screen.getByLabelText("搜索工具"), "不存在的工具");
     expect(await screen.findByText("没有符合条件的科研工具")).toBeInTheDocument();
     // An empty answer to a filter is a recipe: the one button that lets go of it.
     const empty = screen.getByText("没有符合条件的科研工具").closest("[data-empty]") as HTMLElement;
     await userEvent.click(within(empty).getByRole("button", { name: "清除筛选" }));
-    expect(screen.getByRole("searchbox", { name: "搜索工具" })).toHaveValue("");
+    expect(screen.getByLabelText("搜索工具")).toHaveValue("");
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
 
     const filters = screen.getByRole("group", { name: "分类" });
@@ -290,7 +295,7 @@ describe("CapabilitiesPage", () => {
     await screen.findByRole("button", { name: /药品安全性分析/ });
     const toolbar = screen.getByRole("group", { name: "科研工具筛选" });
     expect(toolbar).toHaveTextContent("4 个");
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
+    await userEvent.type(screen.getByLabelText("搜索工具"), "氨甲环酸");
     expect(toolbar).toHaveTextContent("1 个");
   });
 
@@ -304,7 +309,7 @@ describe("CapabilitiesPage", () => {
     ]);
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "循证传播");
+    await userEvent.type(screen.getByLabelText("搜索工具"), "循证传播");
     expect(await screen.findByRole("button", { name: /公共数据差异分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
@@ -317,7 +322,7 @@ describe("CapabilitiesPage", () => {
     ]);
     renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "虚拟临研");
+    await userEvent.type(screen.getByLabelText("搜索工具"), "虚拟临研");
     expect(await screen.findByRole("button", { name: /样本量估算/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/虚拟临研/)).not.toBeInTheDocument();
@@ -562,9 +567,9 @@ describe("CapabilitiesPage", () => {
     it("is not asked for again by a search or a category, which filter what is already here", async () => {
       renderPage();
       await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆"));
-      await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
+      await userEvent.type(screen.getByLabelText("搜索工具"), "氨甲环酸");
       expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
-      await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
+      await userEvent.clear(screen.getByLabelText("搜索工具"));
       await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "药学评价" }));
       // The row comes back with the price it had.
       expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 4～8 灵豆");
@@ -700,4 +705,21 @@ describe("CapabilitiesPage", () => {
       expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆");
     });
   });
+});
+
+
+it("puts seven task entries before professional capabilities, searches methods, and keeps capability failure independent", async () => {
+  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [
+    { id: "population", method: "population.scenario", name: "Reference population" }, { id: "binary", method: "patients.binary", name: "Binary simulator" }, { id: "continuous", method: "patients.continuous", name: "Continuous simulator" },
+    { id: "pool", method: "evidence.pool", name: "Evidence pooling" }, { id: "entropy", method: "comparator.entropy_balance", name: "Entropy balance" }, { id: "analytic", method: "design.analytic", name: "Analytic design" }, { id: "evalue", method: "comparator.evalue", name: "E-value" }, { id: "matching", method: "matching.evaluate", name: "Matching" },
+  ] });
+  mocks.listWebResearchAgents.mockResolvedValue(agents);
+  mocks.allowance.mockResolvedValue(billingOff); forgetResearchBilling();
+  renderPage();
+  const tasks = await screen.findByRole("list", { name: "选择计算任务" });
+  expect(within(tasks).getAllByRole("button")).toHaveLength(7);
+  expect(screen.queryByRole("button", { name: "使用文献参数" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Binary simulator" })).toBeNull();
+  await userEvent.type(screen.getByLabelText("搜索工具"), "E-value");
+  expect(await screen.findByRole("button", { name: "E-value" })).toBeInTheDocument();
 });

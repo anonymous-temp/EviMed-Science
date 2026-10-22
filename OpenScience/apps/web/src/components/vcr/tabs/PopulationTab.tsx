@@ -26,7 +26,7 @@ import { DistributionGrid } from "../patients/DistributionGrid";
 import { boundsText, limitState } from "../patients/distribution";
 import { PatientTable } from "../patients/PatientTable";
 import { variableLabels } from "../patients/patientFilters";
-import { useVcrToolbar } from "../studyFrameContext";
+import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { countText, numberText } from "../vcrText";
 
@@ -78,6 +78,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
 }) {
   const [editing, setEditing] = useState<"population" | "criteria" | null>(null);
   const [busy, setBusy] = useState<"download" | "regenerate" | null>(null);
+  const frame = useStudyFrame();
   const failed = study.steps.population?.status === "failed";
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
     && data.generated.length === 0 && !data.outcome && !data.quality && !data.records;
@@ -105,6 +106,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
 
   // --- the band's one row -----------------------------------------------------------------------------------------------
   const actions: VcrToolbarAction[] = [];
+  if (frame) actions.push({ key: "sources", label: "数据来源", quiet: true, onSelect: () => frame.openPanel("intake") });
   if (!nothing) {
     if (generated) {
       if (data.download) actions.push({ key: "download", label: "下载记录", icon: Download, loading: busy === "download", onSelect: download });
@@ -117,18 +119,18 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
     }
   }
   const summary = [data.version, data.kind].filter(Boolean).join(" · ");
-  useVcrToolbar(!nothing && (actions.length > 0 || summary)
+  useVcrToolbar(actions.length > 0 || (!nothing && summary)
     ? { label: "人群的操作", ...(summary ? { summary } : {}), ...(actions.length > 0 ? { actions: <VcrToolbarActions actions={actions} /> } : {}) }
     : null);
 
-  if (nothing) {
-    return failed
-      ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
-      : <VcrStepPending studyId={studyId} study={study} step="population" />;
-  }
+  const templates = <VcrDefinitionsSection studyId={studyId} knowledge={data.knowledge} canWrite={mayWrite} canRun={study.abilities.includes("run")} onChanged={changed} />;
+  if (nothing) return <div className="flex flex-col gap-6">{templates}{failed
+    ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
+    : <VcrStepPending studyId={studyId} study={study} step="population" />}</div>;
 
   return (
     <div className="flex flex-col gap-6">
+      {templates}
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "population" }} />}
@@ -145,13 +147,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
         </div>
       </Stale>
 
-      <VcrDefinitionsSection
-        studyId={studyId}
-        knowledge={data.knowledge}
-        canWrite={mayWrite}
-        canRun={study.abilities.includes("run")}
-        onChanged={changed}
-      />
+
 
       {editing && (
         <VcrSettingsDrawer

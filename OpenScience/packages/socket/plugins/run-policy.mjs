@@ -73,7 +73,7 @@ import {
   isSubagentSession,
   listDirAt,
   onPreStep,
-  onPromptAssemble,
+  onClaimedPromptAssemble,
   onSessionEvent,
   onSessionStart,
   onSubagentSettled,
@@ -673,6 +673,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * @returns {{ capabilityId: string, item: Record<string, any> | null } | null}
    */
   const boundCapability = (entry) => {
+    if (entry.nativeCapability !== undefined && !entry.nativeManagedDispatch) return entry.nativeCapability ? { capabilityId: entry.nativeCapability, item: null } : null
     if (entry.routedCapability) return { capabilityId: entry.routedCapability, item: null }
     if (entry.binding) return { capabilityId: entry.binding, item: null }
     // An ordinary file names no capability worth binding, even when the model wrote one beside it.
@@ -726,24 +727,55 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * it, and its tools are granted before the request exists. The method still
    * arrives in `agent/pre-step`, with the step's other messages.
    * @param {any} agent
+   * @param {{inputs:{requestId:string,text:string}[],turn:number,signal?:AbortSignal}} claimed
    * @returns {Promise<boolean>} whether this root's restriction changed
    */
-  const prepareRootRequest = async (agent) => {
+  const prepareRootRequest = async (agent, claimed) => {
     if (!agent?.session || isSubagentSession(agent)) return false
     const entry = sessionState(String(agent.session.id ?? ''))
     entry.assembled = true
+    let changed = false
     try {
+      const revision = entry.contextRevision
       await loadBrief(ctx, agent, sessionState, config)
+      if (revision !== entry.contextRevision && entry.routedCapability) {
+        entry.nativeManagedDispatch = true
+        entry.inlineCapabilities.clear()
+        changed = applyRootNarrowing(agent, [])
+      }
+      if (claimed.inputs.length) {
+        const resolve = ctx.get('evimedNativeRoute')
+        if (typeof resolve === 'function') {
+          const inputs = await Promise.all(claimed.inputs.map(async (input) => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
+          const contexts = await resolve(entry.sessionId, inputs)
+          if (claimed.signal?.aborted) return false
+          const matching = contexts.filter((/** @type {any} */ item) => inputs.some(input => input.requestId === item?.requestId && input.textDigest === item?.textDigest)
+            && /^[a-f0-9]{64}$/.test(item?.digest ?? '') && typeof item?.route?.effectiveAgentId === 'string')
+          const ids = [...new Set(matching.map((/** @type {any} */ item) => item.route.effectiveAgentId))]
+          if (ids.length === 1) {
+            const manifest = inlineManifest(entry, ids[0])
+            // An ordinary route is also authoritative: it removes a former
+            // capability's tools. Unknown/internal ids never authorize tools.
+            if (ids[0] === 'open-domain-answer' || (manifest && manifest.visibility !== 'internal')) {
+              entry.nativeCapability = ids[0] === 'open-domain-answer' ? '' : ids[0]
+              entry.nativeManagedDispatch = Boolean(entry.routedCapability && (revision !== entry.contextRevision
+                || inputs.some(input => input.requestId === entry.contextRevision)))
+              entry.inlineCapabilities.clear()
+              changed = applyRootNarrowing(agent, []) || changed
+            }
+          }
+        }
+      }
       const bound = boundCapability(entry)
-      if (!bound || entry.inlineCapabilities.has(bound.capabilityId)) return false
+      if (!bound || entry.inlineCapabilities.has(bound.capabilityId)) return changed
       const manifest = inlineManifest(entry, bound.capabilityId)
-      if (!manifest) return false
-      return grantCapabilityTools(entry, agent, manifest, inlineContractKind(manifest, bound.item?.contractKind ?? ''))
+      if (!manifest) return changed
+      return grantCapabilityTools(entry, agent, manifest, inlineContractKind(manifest, bound.item?.contractKind ?? '')) || changed
     } catch (error) {
       // isolated: a failure here must not fail the request; the step's own
       // activation still grants the tools, one request later.
       diagnostics(entry.sessionId)?.degrade?.(`capability tools not prepared before the request: ${errorMessage(error)}`)
-      return false
+      return changed
     }
   }
 
@@ -922,7 +954,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }))
 
   // ---- the tools a root's next request carries -----------------------------
-  ctx.effect(() => onPromptAssemble(ctx, prepareRootRequest))
+  ctx.effect(() => onClaimedPromptAssemble(ctx, prepareRootRequest))
 
   // ---- budget and the root/child verdict ----------------------------------
   ctx.effect(() => onPreStep(

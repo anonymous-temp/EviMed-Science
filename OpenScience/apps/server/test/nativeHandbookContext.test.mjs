@@ -67,7 +67,7 @@ test("a preparation that outlives its bound cannot write an envelope later", asy
 test("a learning pause or trial beginning after preparation prevents the queued input from reading the supplement", async () => fixture(async ({ context, project }) => {
   await context.prepare(project, request("A"));
   context.allowed = async () => false;
-  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] }), { contexts: [] });
+  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] }), { contexts: [], routes: [] });
   assert.equal(await context.prepare(project, request("B")), null);
 }));
 
@@ -96,7 +96,7 @@ test("an unbound turn keeps its initial capability snapshot when a steer looks l
   const steer = { ...request("B", "An unrelated capability B question"), mode: "steer" };
   assert.equal(await context.prepare(project, steer), null);
   assert.deepEqual(calls, ["Initial capability A"], "a steer does not classify or prepare a replacement capability");
-  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "B", textDigest: hash("An unrelated capability B question") }] }), { contexts: [] });
+  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "B", textDigest: hash("An unrelated capability B question") }] }), { contexts: [], routes: [] });
   assert.equal((await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("Initial capability A") }] })).contexts.length, 1);
   await context.prepare(project, request("C", "An unrelated capability B question"));
   assert.deepEqual(calls, ["Initial capability A", "An unrelated capability B question"], "the next queued turn still resolves its own capability");
@@ -125,4 +125,17 @@ test("restart and subject supplements retain the exact acknowledged revision wit
   assert.notEqual(supplement.digest, first.digest);
   assert.equal((await restarted.receipts(project, { sessionId: "session", kernelRequestIds: ["A"], effectiveAgentId: "geo-content" }))[0].contentDigest, first.items[0].contentDigest);
   assert.deepEqual(calls, ["Initial evidence", "Add a study for the new subject"]);
+}));
+
+test("authenticated routes survive an empty handbook and foreign or expired inputs authorize nothing", async () => fixture(async ({ context, project, advance }) => {
+  context.select = async () => ({ context: '', items: [] });
+  await context.prepare(project, request('route-only'));
+  const read = await context.read(project, { sessionId: 'session', inputs: [{ requestId: 'route-only', textDigest: hash('route-only') }] });
+  assert.deepEqual(read.routes[0].route, { effectiveAgentId: 'geo-content', effectiveRouteReason: 'session-binding' });
+  assert.deepEqual(read.contexts, []);
+  context.budget = () => 0;
+  assert.equal((await context.read(project, { sessionId: 'session', inputs: [{ requestId: 'route-only', textDigest: hash('route-only') }] })).routes.length, 1);
+  assert.equal((await context.read({ ...project, id: 'foreign' }, { sessionId: 'session', inputs: [{ requestId: 'route-only', textDigest: hash('route-only') }] })).contexts.length, 0);
+  advance(25 * 60 * 60_000);
+  assert.equal((await context.read(project, { sessionId: 'session', inputs: [{ requestId: 'route-only', textDigest: hash('route-only') }] })).contexts.length, 0);
 }));
