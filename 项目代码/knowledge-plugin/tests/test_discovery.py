@@ -298,3 +298,23 @@ async def test_the_journal_line_waits_while_crossref_is_nearly_spent(pool, regis
                                                      hint={"issns": ["2168-6254"]})], NOW, DAY)
     report = await run_discovery(registry_file, pool, web, lambda: NOW, data=data(), gather_lines=[])
     assert report["crossrefTight"] is True and "journal" not in report["validated"] and web.calls == []
+
+
+async def test_a_source_on_trial_is_judged_by_its_trial_not_retired(pool, registry_file):
+    from knowledge_plugin.discovery import apply_retirements
+    from knowledge_plugin.registry import sync_registry
+
+    row = site_row("https://www.tech.example.org/feed", access="rss", egress="direct", name="Tech feed",
+                   homepage="https://www.tech.example.org/", hint={}, language="en", line="outbound")
+    async with pool.connection() as conn:
+        await sync_registry(conn, parse_registry({"sources": [row]}), NOW)
+        await conn.execute("""INSERT INTO evimed_knowledge.source_candidates (id, line, key, first_seen_at, last_seen_at, state,
+                                state_at, source_id, row, trial_started_at, trial_until)
+                              VALUES ('c1', 'outbound', 'https://www.tech.example.org/', %s, %s, 'trial', %s, %s, %s, %s, %s)""",
+                           (NOW, NOW, NOW, row["id"], json.dumps(row), NOW, NOW + timedelta(days=7)))
+        await conn.execute("""INSERT INTO evimed_knowledge.source_screening VALUES (%s, 20, 19, 14, %s)""", (row["id"], NOW))
+        async with conn.transaction():
+            assert await apply_retirements(conn, NOW, DAY, set()) == []
+        await conn.execute("UPDATE evimed_knowledge.source_candidates SET state = 'admitted'")
+        async with conn.transaction():
+            assert [r["reason"] for r in await apply_retirements(conn, NOW, DAY, set())] == ["off-topic"]

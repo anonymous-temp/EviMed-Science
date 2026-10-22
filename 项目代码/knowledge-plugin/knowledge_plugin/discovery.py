@@ -40,8 +40,8 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from itertools import zip_longest
 from datetime import datetime, timedelta
+from itertools import zip_longest
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urljoin, urlsplit, urlunsplit
@@ -672,11 +672,16 @@ class Validator:
 
 
 async def apply_retirements(conn, now: datetime, day: str, curated_ids: set[str]) -> list[dict]:
-    """Retire every source a lifecycle rule names now (``lifecycle.retirement``), once."""
+    """Retire every source a lifecycle rule names now (``lifecycle.retirement``), once. A source on trial is judged at
+    the end of its trial instead (``decide_trials``): it was never admitted, so it cannot be retired."""
     retired = []
-    lines = {row["source_id"]: row["line"] for row in await (await conn.execute(
-        "SELECT source_id, line FROM evimed_knowledge.source_candidates WHERE source_id IS NOT NULL")).fetchall()}
+    candidates = await (await conn.execute(
+        "SELECT source_id, line, state FROM evimed_knowledge.source_candidates WHERE source_id IS NOT NULL")).fetchall()
+    lines = {row["source_id"]: row["line"] for row in candidates}
+    on_trial = {row["source_id"] for row in candidates if row["state"] == "trial"}
     for decision in await retirement_plan(conn, now, curated_ids):
+        if decision.source_id in on_trial:
+            continue
         line = "registry" if decision.source_id in curated_ids else lines.get(decision.source_id, "dynamic")
         recheck = RECHECK_AFTER.get(decision.reason)
         inserted = await (await conn.execute(
