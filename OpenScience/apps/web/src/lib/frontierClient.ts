@@ -235,15 +235,41 @@ export interface FrontierMedia {
   alt: string | null;
 }
 
+/** Which text a body is (contract B `body.source`): the article's own text, the paper's abstract, or an excerpt of either. */
+export const FRONTIER_BODY_SOURCES = ["body", "abstract", "excerpt"] as const;
+export type FrontierBodySource = typeof FRONTIER_BODY_SOURCES[number];
+
 /**
  * The full text the plugin kept (contract B `body`): the Chinese — an AI translation, or the original where it is Chinese already —
- * and the original. `complete` is false while the translation covers only part of the original.
+ * and the original. `complete` is false while the translation covers only part of the original. Paragraphs are separated by a blank
+ * line; one that starts `## ` is a section heading of a full text, and a paragraph of an abstract may start with its own `Heading: `.
+ * `source` says which text it is; null from a server that does not say.
  */
 export interface FrontierBody {
   zh: string | null;
   original: string | null;
   zhKind: "translation" | "original-zh" | null;
   complete: boolean;
+  source: FrontierBodySource | null;
+}
+
+/** A report 「AI 解读」 relies on: `[n]` in its text names it, and it opens as its own article (`publicId`). */
+export interface FrontierInsightRef {
+  n: number;
+  publicId: string;
+  title: string;
+  /** The institution or account that published it; empty where the server named none. */
+  source: string;
+  at: string | null;
+}
+
+/**
+ * 「AI 解读」 (contract B `insight`): one paragraph on what the item means, for a selected item whose material supports one — most
+ * items have none. A related report it relies on is marked `[n]` in the text and is the entry of `refs` with that `n`.
+ */
+export interface FrontierInsight {
+  text: string;
+  refs: FrontierInsightRef[];
 }
 
 /** The post an X post quotes, or the source a WeChat repost names. */
@@ -293,8 +319,10 @@ export interface FrontierFollowups {
 export interface FrontierItemDetail extends FrontierItem {
   abstract: string | null;
   abstractZh: string | null;
-  /** 「AI 导读」: two or three sentences, answer first. The list's `summary` where the server sends no `lead`. */
+  /** 「AI 导读」: one paragraph of three to five sentences, answer first. The list's `summary` where the server sends no `lead`. */
   lead: string | null;
+  /** 「AI 解读」, where the server wrote one; null for most items. */
+  insight: FrontierInsight | null;
   body: FrontierBody | null;
   media: FrontierMedia[];
   quoted: FrontierQuoted | null;
@@ -833,6 +861,32 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
 
 /** The longest body the plugin sends (contract A: ≤ 40 000 characters). */
 const BODY_MAX = 40_000;
+/** 「AI 解读」 is one paragraph of at most 360 characters (contract B); anything far past that is not one, and is cut, never shown whole. */
+const INSIGHT_MAX = 1_200;
+/** The most reports one 解读 cites, and the highest `[n]` it can name. */
+const INSIGHT_REFS = 12;
+const INSIGHT_N = 99;
+
+/**
+ * 「AI 解读」 and the reports it cites. A ref without its number, its article or its title is dropped (its `[n]` then reads as plain
+ * text), and so is a second ref under a number already taken; the rest are ordered by number.
+ */
+function parseInsight(value: unknown): FrontierInsight | null {
+  const raw = record(value);
+  const body = text(raw?.text)?.trim();
+  if (!raw || !body) return null;
+  const taken = new Set<number>();
+  const refs = (Array.isArray(raw.refs) ? raw.refs : []).flatMap((entry) => {
+    const ref = record(entry);
+    const n = ref?.n;
+    const publicId = text(ref?.publicId)?.trim();
+    const title = text(ref?.title)?.trim();
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > INSIGHT_N || taken.has(n) || !publicId || !title) return [];
+    taken.add(n);
+    return [{ n, publicId: publicId.slice(0, 128), title: title.slice(0, 300), source: text(ref?.source)?.trim().slice(0, 120) ?? "", at: moment(ref?.at) }];
+  }).sort((a, b) => a.n - b.n).slice(0, INSIGHT_REFS);
+  return { text: body.slice(0, INSIGHT_MAX), refs };
+}
 const TOPIC_GROUPS = ["specialty", "disease", "drug", "organisation", "genre"] as const;
 
 /** A count the source showed, or null where it showed none. */
@@ -863,12 +917,14 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
     abstract: text(raw.abstract),
     abstractZh: text(raw.abstractZh),
     lead: text(raw.lead) ?? item.summary,
+    insight: parseInsight(raw.insight),
     body: zh || original ? {
       zh,
       original,
       zhKind: zh ? orNull(body?.zhKind, ["translation", "original-zh"] as const) : null,
       // Incomplete only where the server says so: a translation is never called partial on a guess.
       complete: body?.complete !== false,
+      source: orNull(body?.source, FRONTIER_BODY_SOURCES),
     } : null,
     media: (Array.isArray(raw.media) ? raw.media : []).map(parseMedia).filter((media): media is FrontierMedia => media !== null)
       .filter((media, index, all) => all.findIndex((other) => other.id === media.id) === index).slice(0, 8),

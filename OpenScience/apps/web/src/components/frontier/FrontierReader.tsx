@@ -7,6 +7,8 @@ import {
   fetchFrontierAbstractZh,
   frontierErrorMessage,
   type FrontierBody,
+  type FrontierInsight,
+  type FrontierInsightRef,
   type FrontierItem,
   type FrontierItemDetail,
   type FrontierMedia,
@@ -30,9 +32,12 @@ import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, PLATFORM_LABELS, dateClock, ev
 
 /*
  * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
- * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 主题 and 标签, 事件后续). The shapes follow
- * AIHOT's `routes/item.tsx` and `features/item/*` (MIT); the type stays EviMed's four pairs — the serif title at 24 / 600, the reading
- * text at 16, the interface at 14 and every block's label at 12, all 400 — so a block is named by its colour and its rule, not a weight.
+ * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 主题 and 标签, 事件后续; later that evening the
+ * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supports one, and a full text with its sections).
+ * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's: the serif title at 24 / 600, the 导读
+ * and a full text's section headings at 18, the reading text at 16, the interface at 14 and every block's label at 12, all 400 — a
+ * block is named by its colour and its rule, not a weight — and one 600 in the text, the run-in heading of a structured abstract's
+ * paragraph (「Background:」), as a journal sets it.
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -171,11 +176,83 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
   );
 }
 
-/** 「AI 导读」: the two or three sentences that answer first, set as the reading text. */
+/** The name of a block the model wrote (「AI 导读」, 「AI 解读」): in the accent, where every other block names itself in grey. */
+const AI_LABEL = "text-caption text-accent";
+
+/**
+ * 「AI 导读」: one paragraph, answer first, set a size above the reading text (18, at the text's own 1.75) as AIHOT sets its lead — the
+ * first thing read, and plainly not the article.
+ */
 export function ReaderLead({ text, className }: { text: string; className?: string }) {
   return (
-    <Block label="AI 导读" labelClassName="text-caption text-accent" className={className}>
-      <p className="max-w-measure-body whitespace-pre-line text-body text-text">{text}</p>
+    <Block label="AI 导读" labelClassName={AI_LABEL} className={className}>
+      <p className="max-w-measure-body whitespace-pre-line break-words text-section leading-8 text-text">{text}</p>
+    </Block>
+  );
+}
+
+const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
+
+/** A piece of the 解读's paragraph: its own words, or a report it cites. */
+export type InsightPart = string | FrontierInsightRef;
+
+/**
+ * The 解读's paragraph as words and citations: `[n]` (ASCII brackets, n from 1) that names one of its refs is that ref; one that names
+ * none stays the words it is, so a number the server sent no report for is never a dead link.
+ */
+export function insightParts(text: string, refs: readonly FrontierInsightRef[]): InsightPart[] {
+  const byNumber = new Map(refs.map((ref) => [ref.n, ref]));
+  const parts: InsightPart[] = [];
+  let rest = 0;
+  for (const match of text.matchAll(/\[(\d{1,2})\]/g)) {
+    const ref = byNumber.get(Number(match[1]));
+    if (!ref) continue;
+    if (match.index > rest) parts.push(text.slice(rest, match.index));
+    parts.push(ref);
+    rest = match.index + match[0].length;
+  }
+  if (rest < text.length) parts.push(text.slice(rest));
+  return parts;
+}
+
+/**
+ * 「AI 解读」: what the item means, in one paragraph, for an item whose material supports it — most have none and the block is not
+ * there. A report it relies on is a small superscript link to its own article, named by its title for a screen reader; under the
+ * paragraph the reports it cites, one row each — title, who published it, how long ago — each opening its article, whose way back
+ * returns here.
+ */
+export function ReaderInsight({ insight, item, className }: { insight: FrontierInsight; item: FrontierItemDetail; className?: string }) {
+  const origin = useFrontierOrigin();
+  const location = useLocation();
+  const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
+  const parts = insightParts(insight.text, insight.refs);
+  const cited = insight.refs.filter((ref) => parts.includes(ref));
+  return (
+    <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
+      <p className="max-w-measure-body whitespace-pre-line break-words text-body text-text">
+        {parts.map((part, index) => (typeof part === "string" ? part : (
+          <sup key={index}>
+            {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
+              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). */}
+            <Link to={articlePath(part.publicId)} state={state} aria-label={part.title}
+              className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
+          </sup>
+        )))}
+      </p>
+      {cited.length > 0 && (
+        <List label="解读引用的报道" className="mt-3 max-w-measure-body">
+          {cited.map((ref) => (
+            <ListRow
+              key={ref.n}
+              to={articlePath(ref.publicId)}
+              state={state}
+              title={ref.title}
+              leading={<span className="w-5 text-caption tabular-nums text-text-3">{ref.n}</span>}
+              meta={[ref.source, sinceText(ref.at)].filter(Boolean).join(" · ") || undefined}
+            />
+          ))}
+        </List>
+      )}
     </Block>
   );
 }
@@ -184,15 +261,47 @@ export function ReaderLead({ text, className }: { text: string; className?: stri
 const FOLD_AT = 3_000;
 const FOLDED_LENGTH = 1_800;
 
-function paragraphs(text: string): string[] {
-  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+/**
+ * One paragraph of a text as the reader sets it: a section heading of a full text, or a paragraph — an abstract's with its own
+ * heading run in at its start (`runIn`, 「Background:」 / 「背景：」).
+ */
+export type ReaderParagraph = { kind: "heading"; text: string } | { kind: "paragraph"; runIn: string | null; text: string };
+
+/** A full text's section heading: a paragraph of its own written `## Heading` (rt-contract); nothing else starts so. */
+const SECTION = /^##[ \t]+(\S.*)$/;
+/**
+ * A structured abstract's paragraph, `Heading: text` (rt-contract): at most forty characters before the first colon, an ASCII colon
+ * followed by a space (so a link or a clock is not one) or a full-width one, and text after it. A heading is a name, so what holds a
+ * sentence's end (「HR 0.82 (95% CI:」) is not one.
+ */
+const RUN_IN = /^([^:：\n]{1,40}?)(:[ \t]+|：[ \t]*)(?=\S)/u;
+const SENTENCE_END = /[.。!?！？;；]/;
+
+/** The text's paragraphs, split at blank lines; with `abstract`, each one's run-in heading found. */
+export function readerParagraphs(text: string, { abstract = false }: { abstract?: boolean } = {}): ReaderParagraph[] {
+  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).flatMap((part): ReaderParagraph[] => {
+    const [first, ...lines] = part.split("\n");
+    const section = SECTION.exec(first.trim());
+    if (section) {
+      // A heading the text runs straight on from keeps its text as the paragraph under it.
+      const after = lines.join("\n").trim();
+      return [{ kind: "heading", text: section[1].trim() }, ...(after ? readerParagraphs(after, { abstract }) : [])];
+    }
+    const runIn = abstract ? RUN_IN.exec(part) : null;
+    if (runIn && !SENTENCE_END.test(runIn[1])) {
+      const heading = runIn[1].trim();
+      return [{ kind: "paragraph", runIn: `${heading}${runIn[2].trim()}`, text: `${runIn[2].startsWith(":") ? " " : ""}${part.slice(runIn[0].length)}` }];
+    }
+    return [{ kind: "paragraph", runIn: null, text: part }];
+  });
 }
 
 /**
  * The text itself — the article or the post (`正文`), or a paper's abstract (`摘要`) — in Chinese or in the original. Where there is a
  * translation and an original the block's row has 中文 · 原文 and names what is on screen (「正文 · AI 翻译」, 「正文 · 原文」); a
- * translation the server says is partial says so once, with the way to the whole original. A text over three thousand characters
- * opens at its first paragraphs, and 「展开全文」 shows the rest in place.
+ * translation the server says is partial says so once, with the way to the whole original. A full text's `## ` paragraphs are its
+ * section headings, in either language; an abstract's paragraph that starts with its own heading has it set in 600. A text over three
+ * thousand characters opens at its first paragraphs, and 「展开全文」 shows the rest in place.
  */
 export function ReaderText({ kind, text, lang, language, onLanguage, className }: {
   kind: "正文" | "摘要";
@@ -210,11 +319,13 @@ export function ReaderText({ kind, text, lang, language, onLanguage, className }
   const translated = showing === "zh" && text.zhKind === "translation";
   const originalIsChinese = /^zh/i.test(lang);
   const label = translated ? `${kind} · AI 翻译` : showing === "original" && !originalIsChinese && text.zhKind !== "original-zh" ? `${kind} · 原文` : kind;
-  const all = paragraphs(shown);
+  const all = readerParagraphs(shown, { abstract: kind === "摘要" });
   let visible = all;
   if (!open && shown.length > FOLD_AT) {
     let length = 0;
-    visible = all.filter((part) => { const keep = length < FOLDED_LENGTH; length += part.length; return keep; });
+    visible = all.filter((part) => { const keep = length < FOLDED_LENGTH; length += part.text.length; return keep; });
+    // A section is folded whole: its heading is never the last line before 展开全文.
+    while (visible.length > 1 && visible[visible.length - 1].kind === "heading") visible = visible.slice(0, -1);
   }
   const textLang = showing === "original" && lang !== "und" ? lang : undefined;
   return (
@@ -234,7 +345,9 @@ export function ReaderText({ kind, text, lang, language, onLanguage, className }
         <Note className="mb-4" action={<Button variant="text" size="sm" onClick={() => onLanguage("original")}>看原文</Button>}>译文尚不完整</Note>
       )}
       <div data-prose="" lang={textLang} className="max-w-measure-body space-y-4 text-body text-text">
-        {visible.map((part, index) => <p key={index} className="whitespace-pre-line break-words">{part}</p>)}
+        {visible.map((part, index) => (part.kind === "heading"
+          ? <h3 key={index} className="break-words pt-4 text-section text-text first:pt-0">{part.text}</h3>
+          : <p key={index} className="whitespace-pre-line break-words">{part.runIn && <span className="font-semibold">{part.runIn}</span>}{part.text}</p>))}
       </div>
       {visible.length < all.length && (
         <Button variant="secondary" size="sm" className="mt-4" onClick={() => setOpen(true)}>展开全文</Button>
@@ -294,8 +407,8 @@ export function ReaderAbstract({ item, language, onLanguage, className }: {
   if (!state.zh && !state.original) return null;
   const chinese = /^zh/i.test(item.lang);
   const text: FrontierBody = chinese && !state.zh
-    ? { zh: state.original, original: null, zhKind: "original-zh", complete: true }
-    : { zh: state.zh, original: state.original, zhKind: state.zh ? (chinese ? "original-zh" : "translation") : null, complete: true };
+    ? { zh: state.original, original: null, zhKind: "original-zh", complete: true, source: "abstract" }
+    : { zh: state.zh, original: state.original, zhKind: state.zh ? (chinese ? "original-zh" : "translation") : null, complete: true, source: "abstract" };
   return <ReaderText kind="摘要" text={text} lang={item.lang} language={language} onLanguage={onLanguage} className={className} />;
 }
 
@@ -366,7 +479,7 @@ export function ReaderQuote({ quoted, platform, language, className }: {
       <blockquote className="mt-2 whitespace-pre-line break-words text-body text-text-2">{zh ?? quoted.text}</blockquote>
       {zh && (
         <details className="mt-2">
-          <summary className="cursor-pointer select-none text-caption text-text-3 hover:text-text">原文</summary>
+          <summary className="cursor-pointer select-none rounded text-caption text-text-3 hover:text-text">原文</summary>
           <p className="mt-1.5 whitespace-pre-line break-words text-ui text-text-3">{quoted.text}</p>
         </details>
       )}
@@ -414,8 +527,6 @@ export function ReaderSource({ item, reports, className }: {
     </div>
   );
 }
-
-const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
 
 /**
  * 「事件后续 · N」: the other developments of the occurrence this item reports — another report of it (「同事件」) or what happened next

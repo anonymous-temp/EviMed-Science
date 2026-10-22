@@ -121,3 +121,42 @@ export function rawChineseNews(overrides: Record<string, unknown> = {}): Record<
     ...overrides,
   });
 }
+
+/**
+ * An open-access paper whose whole text the plugin kept (rt-contract): the 导读 as one paragraph, an 「AI 解读」 citing two related
+ * reports and naming a third it has no report for, and a full text with `## ` section headings in both languages.
+ */
+export function rawOpenAccessPaper(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawFrontierItem({
+    id: "oa-paper-1",
+    lead: "这项纳入 12000 例高危患者的多中心双盲试验发现，口服 PCSK9 抑制剂使主要心血管事件风险降低 18%。LDL-C 平均下降 52%，且不良事件与安慰剂相当。研究为不能耐受注射剂的患者提供了新的选择，但随访仅 2.1 年，长期安全性仍待观察。",
+    insight: {
+      text: "这是口服 PCSK9 抑制剂的首个硬终点证据，与此前注射剂的结局试验方向一致[1]；FDA 已受理其上市申请[2]。真实世界依从性能否维持试验中的降脂幅度，还要看后续数据[3]。",
+      refs: [
+        { n: 1, publicId: "f-2", title: "MedPage Today：口服 PCSK9 抑制剂降低心血管事件 18%", source: "MedPage Today", at: new Date(Date.now() - 4 * 3_600_000).toISOString() },
+        { n: 2, publicId: "f-1", title: "FDA 受理口服 PCSK9 抑制剂的上市申请", source: "FDA", at: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+      ],
+    },
+    body: {
+      zh: "## 引言\n\n低密度脂蛋白胆固醇（LDL-C）是动脉粥样硬化性心血管病的主要致病因素。\n\n## 方法\n\n我们在 32 个国家开展了一项双盲、安慰剂对照试验。\n\n## 结果\n\n治疗组主要终点事件发生率为 7.2%，安慰剂组为 8.8%（风险比 0.82）。\n\n## 讨论\n\n口服 PCSK9 抑制剂降低了主要心血管事件的风险。",
+      original: "## Introduction\n\nLow-density lipoprotein cholesterol (LDL-C) is a major cause of atherosclerotic cardiovascular disease.\n\n## Methods\n\nWe conducted a double-blind, placebo-controlled trial in 32 countries.\n\n## Results\n\nThe primary end point occurred in 7.2% of the active group and 8.8% of the placebo group (hazard ratio, 0.82).\n\n## Discussion\n\nOral PCSK9 inhibition reduced the risk of major cardiovascular events.",
+      zhKind: "translation", complete: true, source: "body",
+    },
+    openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" },
+    ...overrides,
+  });
+}
+
+/** A paper whose text is its structured abstract (`body.source === "abstract"`): each paragraph runs in with its own heading. */
+export function rawStructuredAbstract(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return rawFrontierItem({
+    id: "abstract-1",
+    lead: "口服 PCSK9 抑制剂使高危患者主要心血管事件风险降低 18%，LDL-C 平均下降 52%。",
+    body: {
+      zh: "背景：口服 PCSK9 抑制可降低 LDL 胆固醇。\n\n方法：在一项双盲试验中，12000 例患者被随机分配接受口服抑制剂或安慰剂。\n\n结果：主要终点事件在治疗组发生率为 7.2%，安慰剂组为 8.8%（风险比 0.82；95% CI：0.75–0.90）。",
+      original: "Background: Oral PCSK9 inhibition lowers LDL cholesterol.\n\nMethods: In a double-blind trial, 12,000 patients were randomly assigned to the oral inhibitor or placebo.\n\nResults: The primary end point occurred in 7.2% of the active group and 8.8% of the placebo group (hazard ratio, 0.82; 95% CI: 0.75 to 0.90).",
+      zhKind: "translation", complete: true, source: "abstract",
+    },
+    ...overrides,
+  });
+}
