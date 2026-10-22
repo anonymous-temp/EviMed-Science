@@ -1112,7 +1112,7 @@ test("translateBody: one translation per paragraph or none trusted; refused para
 
 test("translateBody stops asking past the item's limit, in calls of bounded size, and an X post takes the post shape", async () => {
   const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(30)}`.trim();
-  // Past the item's limit (40,000 characters since 2026-10-22: a whole open-access paper).
+  // Past the item's limit (100,000 characters since 2026-10-22 rt2: a whole open-access paper, its references cut).
   const paragraphs = Array.from({ length: Math.ceil(FRONTIER_TRANSLATION_LIMITS.itemChars / paragraph.length) + 5 }, () => paragraph);
   const { calls, callModel } = stubModel(Array.from({ length: 80 }, () => (/** @type {any} */ call) => ({ t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") })));
   const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
@@ -1126,6 +1126,31 @@ test("translateBody stops asking past the item's limit, in calls of bounded size
   const translated = await new FrontierEditor(config, { owner, callModel: post.callModel }).translateBody({ paragraphs: ["@nejm New trial: semaglutide cut events by 20%. #obesity"], post: true });
   assert.equal(post.calls[0].body.messages[0].content, FRONTIER_TRANSLATE_POST_INSTRUCTIONS);
   assert.equal(translated.complete, true);
+});
+
+test("translateBody asks a whole paper's calls a few at a time, and a call that cannot be made stops the ones not yet started", async () => {
+  const paragraph = `${"Results were consistent across all prespecified subgroups. ".repeat(40)}`.trim();
+  const paragraphs = Array.from({ length: 12 }, () => paragraph);
+  let inFlight = 0;
+  let most = 0;
+  const answer = async (/** @type {any} */ call) => {
+    inFlight += 1;
+    most = Math.max(most, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+    return { t: JSON.parse(call.body.messages[1].content).p.map(() => "各预设亚组的结果一致。") };
+  };
+  const { calls, callModel } = stubModel(Array.from({ length: 12 }, () => answer));
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  assert.equal(result.complete, true);
+  assert.ok(most > 1 && most <= 4, `at most four at once (saw ${most})`);
+  assert.equal(calls.length, 12);
+
+  const failing = stubModel([answer, refuse("usage_budget_exceeded"), ...Array.from({ length: 12 }, () => answer)]);
+  const stopped = await new FrontierEditor(config, { owner, callModel: failing.callModel }).translateBody({ paragraphs });
+  assert.equal(stopped.error, "usage_budget_exceeded");
+  assert.equal(stopped.complete, false);
+  assert.ok(failing.calls.length < 12, `the calls not yet started were not made (made ${failing.calls.length})`);
 });
 
 test("a served edit policy older than the answer's keys is not used: the shipped instructions write the 推荐理由 and the tags", async () => {

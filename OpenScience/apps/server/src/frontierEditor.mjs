@@ -354,9 +354,11 @@ export const FRONTIER_TRANSLATE_POST_INSTRUCTIONS = [
  * `body_text` bound): an open-access paper is translated whole (owner, 2026-10-22: 「是的，不用担心钱，把事情做好」), at the
  * 2026-09-10 reference price at most about ¥0.15 an item; it was twelve thousand before.
  */
-export const FRONTIER_TRANSLATION_LIMITS = Object.freeze({ itemChars: 40_000, callChars: 3_000, paragraphChars: 2_000, postChars: 4_000 });
+export const FRONTIER_TRANSLATION_LIMITS = Object.freeze({ itemChars: 100_000, callChars: 3_000, paragraphChars: 2_000, postChars: 4_000 });
 const TRANSLATE_MAX_TOKENS = 6_000;
 const TRANSLATE_TIMEOUT_MS = 120_000;
+/** Calls one item's translation makes at once: a whole paper is some thirty calls, and one after another they outlast the item lease. */
+const TRANSLATE_CONCURRENCY = 4;
 
 /**
  * A text as the paragraphs a translation is asked for and the reader shows: split at blank lines, whitespace inside a line folded,
@@ -1988,7 +1990,8 @@ export class FrontierEditor {
   }
 
   /**
-   * The reader's Chinese full text (contract B `body`): the paragraphs in calls of at most `callChars`, each answer one
+   * The reader's Chinese full text (contract B `body`): the paragraphs in calls of at most `callChars`, `TRANSLATE_CONCURRENCY` at
+   * a time, each answer one
    * translation per paragraph, each translation checked against its own paragraph (`verifyParagraph`); the paragraphs a call did
    * not answer or a check refused are asked once more together, then left untranslated (null). Past `itemChars` nothing more is
    * asked. `complete` only when every paragraph came back verified. A call that could not be made (budget, provider, no owner)
@@ -2044,10 +2047,24 @@ export class FrontierEditor {
       if (current.length) chunks.push(current);
       return chunks;
     };
+    /** @param {number[][]} chunks a few calls at once (`TRANSLATE_CONCURRENCY`); the first failure stops the rest from starting */
+    const askAll = async (chunks) => {
+      let next = 0;
+      /** @type {unknown} */
+      let failed = null;
+      const lane = async () => {
+        while (failed === null && next < chunks.length) {
+          const chunk = chunks[next];
+          next += 1;
+          try { await ask(chunk); } catch (failure) { failed ??= failure; }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(TRANSLATE_CONCURRENCY, chunks.length) }, lane));
+      if (failed !== null) throw failed;
+    };
     try {
-      for (const chunk of groups(wanted)) await ask(chunk);
-      const missing = wanted.filter((index) => out[index] === null);
-      for (const chunk of groups(missing)) await ask(chunk);
+      await askAll(groups(wanted));
+      await askAll(groups(wanted.filter((index) => out[index] === null)));
     } catch (failure) {
       error = errorCode(failure);
       this.counters.translateFailures += 1;

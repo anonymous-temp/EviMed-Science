@@ -32,7 +32,7 @@ export const FRONTIER_TIDY_SOURCES = Object.freeze(/** @type {const} */ (["body"
  * What one call is shown and what an answer may take out: at most `paragraphs` paragraphs (the rest are kept unjudged),
  * a paragraph longer than `paragraphChars` by its first `headChars` and last `tailChars`, at most `inputChars` in all; a
  * text under `minChars` is not worth a call; an answer that would keep less than `keepShare` of the characters is refused;
- * a paragraph longer than `shortChars` is taken out only from a run that reaches the text's start or end.
+ * in the middle of a text only a paragraph of at most `shortChars` is taken out (`frontierTidyDrops`).
  */
 export const FRONTIER_TIDY_LIMITS = Object.freeze({ paragraphs: 200, paragraphChars: 240, headChars: 160, tailChars: 60,
   inputChars: 18_000, minChars: 200, keepShare: 0.3, shortChars: 100 });
@@ -52,10 +52,11 @@ export const FRONTIER_TIDY_INSTRUCTIONS = [
   "4. 相关阅读、推荐文章、往期回顾、标签列表、上一篇/下一篇、评论区；",
   "5. 版权声明、转载说明、备案号、网站主办单位与地址、免责声明模板；",
   "6. 公众号的引导关注、扫码、点赞在看、投稿与征订广告，编辑、排版、审核、校对署名，“END”之类的结束标记；",
-  "7. 图片来源与摄影署名（如“Image source, Getty Images”“截图来源：某官网”）。",
+  "7. 图片来源与摄影署名（如“Image source, Getty Images”“截图来源：某官网”）；",
+  "8. 论文 PDF 每一页重复出现的页眉页脚：期刊名、作者简称（如“Tian et al.”）、DOI、网址和页码。",
   "",
-  "文章本身一律保留，哪怕很短、哪怕在结尾：小标题、导语、正文、引语、数据和表格、图表说明、研究方法与局限、参考文献、作者的研究单位与资助信息；活动的时间、地点、议程、名单和参与方式；药品的名称、成分、适应症、审批状态等产品信息；论文、试验注册、代码和数据的链接。",
-  "这些混入的内容几乎都在正文的开头或结尾，或是很短的一行；正文中间完整的段落几乎都是文章本身。拿不准的段落保留。",
+  "文章本身一律保留，哪怕很短、哪怕在结尾：小标题、导语、正文、引语、数据和表格、图表说明、研究方法与局限、参考文献、作者的研究单位与资助信息；活动的时间、地点、议程、名单和参与方式；药品的名称、成分、适应症、审批状态等产品信息；论文、试验注册、代码和数据的链接；访谈的提问、说话人的姓名和头衔。",
+  "这些混入的内容几乎都在正文的开头或结尾，或是很短的一行（如每页重复的页眉页脚和页码）；正文中间完整的段落几乎都是文章本身。有的正文被抽取成了碎片，一句话拆成了好几行：这些碎片——哪怕只是一个词、半句话或一个人名——都是文章本身，要保留。拿不准的段落保留。",
 ].join("\n");
 
 /** @param {string} text */
@@ -93,13 +94,65 @@ export function buildTidyInput({ title = null, source = null, paragraphs }) {
   return { content: JSON.stringify({ title: title ?? "", source: source ?? "", p: shown }), judged: shown.length };
 }
 
+/** A paragraph as the repeat test compares it: whitespace folded, case ignored. @param {string} paragraph */
+const repeatKey = (paragraph) => paragraph.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** A paragraph that begins mid-sentence: a comma, a full stop, a colon or a closing bracket first. */
+const CONTINUES = /^[，。、；：？！）」』”,.;:!?)\]]/u;
+
+/**
+ * Which of the paragraphs a verdict names (`named`, indexes) are taken out — the rule a fresh answer is read by and a stored
+ * verdict is shown by, so a verdict made under an earlier rule is shown under this one. Furniture sits at the edges of an
+ * extracted text, or is a short line: so a named paragraph goes when it belongs to a run of named paragraphs that reaches the
+ * text's start or end, or when it is short (`shortChars`); a long paragraph in the middle is the article's whatever the answer
+ * says. A text in fragments is the exception: when at least two of its paragraphs begin mid-sentence (`CONTINUES`), a short
+ * line in its middle is as likely a piece of a sentence as furniture — measured on 2026-10-22: in an interview that arrived
+ * split at every styled run the model took out the interviewer's questions and a quote's speaker; 41 of 969 recent texts were
+ * in fragments, every one a WeChat article read from Dajiala's light HTML, none a web page. In such a text the middle loses
+ * only a short line that repeats, a symbol on its own (®, ✔, ●) and a short line alone between two whole paragraphs.
+ * A short line taken out that repeats three times or more is a running head (a PDF's, on every page) and goes wherever it
+ * stands — a long PDF is judged by its first paragraphs only —, and a bare page number beside it goes with it.
+ * @param {string[]} paragraphs @param {Set<number>} named @returns {number[]}
+ */
+export function frontierTidyDrops(paragraphs, named) {
+  let lead = 0;
+  while (named.has(lead)) lead += 1;
+  let tail = paragraphs.length - 1;
+  while (named.has(tail)) tail -= 1;
+  /** @type {Map<string, number>} */
+  const seen = new Map();
+  for (const paragraph of paragraphs) seen.set(repeatKey(paragraph), (seen.get(repeatKey(paragraph)) ?? 0) + 1);
+  const times = (/** @type {number} */ index) => seen.get(repeatKey(paragraphs[index])) ?? 0;
+  const short = (/** @type {number} */ index) => paragraphs[index].length <= FRONTIER_TIDY_LIMITS.shortChars;
+  // A repeated line with words; a number that repeats may be a value, and goes only beside a running head.
+  const repeated = (/** @type {number} */ index) => short(index) && /\p{L}/u.test(paragraphs[index]) && times(index) >= 2;
+  // A whole paragraph: more than a phrase, and it ends a sentence (a piece of a text in fragments does neither).
+  const whole = (/** @type {number} */ index) => index >= 0 && index < paragraphs.length && paragraphs[index].length > 40
+    && /[.!?。！？…]["'”’)）」』]*$/u.test(paragraphs[index].trim());
+  const fragmented = paragraphs.filter((paragraph) => CONTINUES.test(paragraph.trim())).length >= 2;
+  const middle = (/** @type {number} */ index) => (fragmented
+    ? short(index) && (repeated(index) || !/[\p{L}\p{N}]/u.test(paragraphs[index]) || (whole(index - 1) && whole(index + 1)))
+    : short(index));
+  /** @type {Set<number>} */
+  const drop = new Set();
+  for (const index of named) {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= paragraphs.length) continue;
+    if (index < lead || index > tail || middle(index)) drop.add(index);
+  }
+  const heads = new Set([...drop].filter((index) => repeated(index) && times(index) >= 3).map((index) => repeatKey(paragraphs[index])));
+  paragraphs.forEach((paragraph, index) => { if (short(index) && heads.has(repeatKey(paragraph))) drop.add(index); });
+  paragraphs.forEach((paragraph, index) => {
+    const besideHead = [index - 1, index + 1].some((other) => drop.has(other) && heads.has(repeatKey(paragraphs[other])));
+    if (/^\d{1,4}$/.test(paragraph.trim()) && besideHead) drop.add(index);
+  });
+  return [...drop].sort((a, b) => a - b);
+}
+
 /**
  * An answer, checked by code: the paragraphs to take out, or a refusal. The answer names paragraphs by the labels the call
  * showed (`[1]` …, so the model copies a number instead of counting a list — measured on 2026-10-22, positions were off by
- * one on long texts and the trial results of an article went with them); every label must be one it was shown. A paragraph
- * longer than `shortChars` is taken out only when it belongs to a run of taken-out paragraphs that reaches the text's start
- * or end: furniture sits at the edges of an extracted text or is a short line, and a long paragraph in the middle is the
- * article's whatever the answer says. What is kept must be at least `keepShare` of the characters and one paragraph.
+ * one on long texts and the trial results of an article went with them); every label must be one it was shown. Which of the
+ * named paragraphs go is `frontierTidyDrops`'s. What is kept must be at least `keepShare` of the characters and one paragraph.
  * @param {unknown} answer @param {string[]} paragraphs @param {number} judged
  * @returns {{ drop: number[], refused: string | null }}
  */
@@ -107,13 +160,7 @@ export function readTidyAnswer(answer, paragraphs, judged) {
   const list = /** @type {any} */ (answer)?.drop;
   if (!Array.isArray(list)) return { drop: [], refused: "answer_invalid" };
   if (!list.every((label) => Number.isSafeInteger(label) && label >= 1 && label <= judged)) return { drop: [], refused: "answer_invalid" };
-  const named = new Set(/** @type {number[]} */ (list).map((label) => label - 1));
-  let lead = 0;
-  while (named.has(lead)) lead += 1;
-  let tail = paragraphs.length - 1;
-  while (named.has(tail)) tail -= 1;
-  const drop = [...named].filter((index) => index < lead || index > tail || paragraphs[index].length <= FRONTIER_TIDY_LIMITS.shortChars)
-    .sort((a, b) => a - b);
+  const drop = frontierTidyDrops(paragraphs, new Set(/** @type {number[]} */ (list).map((label) => label - 1)));
   const total = paragraphs.reduce((sum, paragraph) => sum + paragraph.length, 0);
   const kept = paragraphs.reduce((sum, paragraph, index) => sum + (drop.includes(index) ? 0 : paragraph.length), 0);
   if (drop.length >= paragraphs.length || kept < FRONTIER_TIDY_LIMITS.keepShare * total) return { drop: [], refused: "too_much" };
@@ -137,13 +184,13 @@ export async function frontierTidyVerdict(editor, input) {
 
 /**
  * The paragraphs a reader is shown of a text: `frontierParagraphs`, a structured abstract laid out by section first, and the
- * stored verdict's paragraphs taken out when it was made for exactly this text.
+ * stored verdict's paragraphs taken out (`frontierTidyDrops`) when it was made for exactly this text.
  * @param {string} text @param {"body" | "abstract" | "excerpt"} source @param {any} [tidy] `item_texts.reader_tidy`
  */
 export function frontierSettledParagraphs(text, source, tidy = null) {
   const paragraphs = frontierParagraphs(source === "abstract" ? frontierAbstractLayout(text) : text);
   if (!tidy || tidy.source !== source || tidy.sha !== sha256(text) || !Array.isArray(tidy.drop) || !tidy.drop.length) return paragraphs;
-  const drop = new Set(tidy.drop);
+  const drop = new Set(frontierTidyDrops(paragraphs, new Set(tidy.drop)));
   const kept = paragraphs.filter((_, index) => !drop.has(index));
   return kept.length ? kept : paragraphs;
 }
@@ -213,27 +260,63 @@ export function frontierAbstractLayout(text) {
 /** Section headings after which a full text holds no more of the article: its references and back matter. */
 const BACK_MATTER = /^(?:references?|bibliography|literature cited|works cited|参考文献|参考资料)$/i;
 
+/** What the document parser writes at the start of a block it found empty (seen in 2026-10-22's PDF texts: "[empty] Table 1 …"). */
+const PARSER_EMPTY = /^\[empty\]\s*/;
+
+/**
+ * The share of a text's Latin-script characters in words of twenty letters or more with no hyphen, slash or bar — a PDF
+ * whose spaces the extraction lost ("Sixpatients(fivefemales,onemale;agerange15–44yearsat…"). Measured on 2026-10-22: the
+ * plugin's 38 longest full texts at most 0.024 (real words such as "hypertriglyceridemia"), 43 of 44 PDF texts at most 0.021,
+ * the one unreadable PDF 0.19. Links, DOIs and e-mail addresses are not words.
+ * @param {string} text
+ */
+export function frontierGluedShare(text) {
+  const tokens = text.replace(/https?:\/\/\S+|doi\.org\/\S+|\b10\.\d{4,9}\/\S+|\S+@\S+/g, " ").split(/\s+/)
+    .filter((token) => /\p{Script=Latin}/u.test(token));
+  const all = tokens.reduce((sum, token) => sum + token.length, 0);
+  const glued = tokens.filter((token) => (token.match(/\p{Script=Latin}/gu) ?? []).length >= 20 && !/[-_/|\p{Script=Han}]/u.test(token))
+    .reduce((sum, token) => sum + token.length, 0);
+  return all ? glued / all : 0;
+}
+
+/**
+ * A word a PDF broke at a line end and the extraction joined with its hyphen ("sug-gesting", "devel-oped") is put back
+ * together when the text itself writes the whole word elsewhere; a real compound ("real-world", "post-treatment") never is,
+ * because the text never writes it without its hyphen. @param {string} text
+ */
+function rejoinBrokenWords(text) {
+  const words = new Set(text.toLowerCase().match(/\p{L}+/gu) ?? []);
+  return text.replace(/(\p{Ll}{2,})- ?(\p{Ll}{2,})/gu, (whole, head, rest) => (words.has(`${head}${rest}`) ? `${head}${rest}` : whole));
+}
+
 /**
  * A full text read from an open-access PDF (the document parser's text, Markdown headings and all) as the plugin's contract writes
  * a full text: paragraphs separated by blank lines, a section heading a paragraph of its own `## Heading`, the references and what
- * follows them cut, runs of spaces folded, at most `limit` characters (cut at a paragraph end). Null when what is left is too short
- * to be the article (`minChars`).
- * @param {string} text @param {{ limit?: number, minChars?: number }} [options]
+ * follows them cut — at a Markdown heading, or at a line of its own once the article has begun (a PDF's text has no Markdown
+ * headings) —, the parser's empty-block mark taken out, runs of spaces folded, words broken at a line end put back together
+ * (`rejoinBrokenWords`), at most `limit` characters (cut at a paragraph end; `complete` says whether it was). Null when what is
+ * left is too short to be the article (`minChars`), or when the extraction lost the PDF's spaces (`frontierGluedShare` above
+ * `gluedShare`): the item keeps its abstract.
+ * @param {string} text @param {{ limit?: number, minChars?: number, gluedShare?: number }} [options]
+ * @returns {{ body: string, complete: boolean } | null}
  */
-export function frontierFullTextParagraphs(text, { limit = 40_000, minChars = 2_000 } = {}) {
+export function frontierFullTextParagraphs(text, { limit = 100_000, minChars = 2_000, gluedShare = 0.05 } = {}) {
   const out = [];
   let size = 0;
+  let complete = true;
   for (const block of String(text ?? "").replace(/\r\n?/g, "\n").split(/\n\s*\n/)) {
-    const lines = block.split("\n").map((line) => line.replace(/[ \t\f\v\u00a0]+/g, " ").trim()).filter(Boolean);
+    const lines = block.split("\n").map((line) => line.replace(PARSER_EMPTY, "").replace(/[ \t\f\v\u00a0]+/g, " ").trim()).filter(Boolean);
     if (!lines.length) continue;
     const headingMatch = lines.length === 1 ? /^#{1,6}\s+(.{1,160})$/.exec(lines[0]) : null;
     const heading = headingMatch ? headingMatch[1].replace(/[*_`]+/g, "").trim() : null;
-    if (heading && BACK_MATTER.test(heading.replace(/^[\d.\s]+/, ""))) break;
+    const line = lines.length === 1 && !heading && size >= minChars ? lines[0].replace(/[*_`:：]+/g, "").trim() : null;
+    if ((heading ?? line) && BACK_MATTER.test(String(heading ?? line).replace(/^[\d.\s]+/, ""))) break;
     const paragraph = heading ? `## ${heading}` : lines.join(" ");
-    if (size + paragraph.length > limit) break;
+    if (size + paragraph.length > limit) { complete = false; break; }
     out.push(paragraph);
     size += paragraph.length + 2;
   }
-  const body = out.join("\n\n");
-  return body.replace(/^## .*$/gm, "").replace(/\s+/g, "").length >= minChars ? body : null;
+  const body = rejoinBrokenWords(out.join("\n\n"));
+  if (body.replace(/^## .*$/gm, "").replace(/\s+/g, "").length < minChars || frontierGluedShare(body) > gluedShare) return null;
+  return { body, complete };
 }

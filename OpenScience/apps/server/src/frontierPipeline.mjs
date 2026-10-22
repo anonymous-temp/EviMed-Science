@@ -1502,7 +1502,8 @@ export class FrontierPipeline {
       const enrichment = available?.enrichment && typeof available.enrichment === "object" ? available.enrichment : null;
       const existing = (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0] ?? null;
       const texts = {
-        // fr-social 2026-10-22: the full text (contract 1.5.0) and whether the plugin delivered it whole.
+        // fr-social 2026-10-22: the full text (contract 1.5.0) and whether the plugin delivered it whole. A revision without one
+        // keeps the stored full text, the platform's own too (`body_text_origin`, which the plugin's full text replaces).
         body_text: available?.body_text ?? existing?.body_text ?? null,
         body_text_complete: available?.body_text ? available.text_kind === "full" : existing?.body_text_complete ?? null,
         abstract_raw: available?.abstract ?? existing?.abstract_raw ?? null,
@@ -1534,6 +1535,7 @@ export class FrontierPipeline {
           publication_types = excluded.publication_types, mesh = excluded.mesh, journal = excluded.journal,
           authors_short = excluded.authors_short, open_access = excluded.open_access, enrichment = excluded.enrichment,
           body_text = excluded.body_text, body_text_complete = excluded.body_text_complete,
+          body_text_origin = CASE WHEN cur.body_text IS NOT DISTINCT FROM excluded.body_text THEN cur.body_text_origin END,
           reader_tidy = CASE WHEN cur.body_text IS NOT DISTINCT FROM excluded.body_text AND cur.abstract_raw IS NOT DISTINCT FROM excluded.abstract_raw
             AND cur.body_excerpt IS NOT DISTINCT FROM excluded.body_excerpt THEN cur.reader_tidy END,
           body_zh = CASE WHEN ${translationStale} THEN NULL ELSE cur.body_zh END,
@@ -2298,21 +2300,21 @@ export class FrontierPipeline {
     await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
       const texts = (await this.database.query("SELECT enrichment, body_text FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
       const url = String(texts?.enrichment?.oa_pdf_url ?? "");
-      /** @type {string | null} */
-      let body = null;
+      /** @type {{ body: string, complete: boolean } | null} */
+      let read = null;
       try {
         const page = await this.webReader?.read(url, { signal: AbortSignal.timeout(FULLTEXT_TIMEOUT_MS) });
-        body = page?.receipt?.contentType === "document" || page?.receipt?.contentType === "html" ? frontierFullTextParagraphs(page.text) : null;
+        read = page?.receipt?.contentType === "document" || page?.receipt?.contentType === "html" ? frontierFullTextParagraphs(page.text) : null;
       } catch {
-        body = null;
+        read = null;
       }
       return this.#writeUnderLease(item, async (client) => {
         const row = (await client.query("SELECT body_text FROM evimed_frontier.item_texts WHERE item_id = $1 FOR UPDATE", [item.id])).rows[0];
         // The plugin's own full text may have arrived meanwhile: it is kept.
-        const keep = body && !String(row?.body_text ?? "").trim();
+        const keep = read && !String(row?.body_text ?? "").trim();
         await client.query(`UPDATE evimed_frontier.item_texts SET oa_pdf_tried_at = $2${keep
-          ? ", body_text = $3, body_text_complete = true, body_text_origin = 'oa-pdf', reader_tidy = NULL" : ""} WHERE item_id = $1`,
-        keep ? [item.id, now, body] : [item.id, now]);
+          ? ", body_text = $3, body_text_complete = $4, body_text_origin = 'oa-pdf', reader_tidy = NULL" : ""} WHERE item_id = $1`,
+        keep ? [item.id, now, read.body, read.complete] : [item.id, now]);
         await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
         if (keep) {
           this.counters.fullTexts += 1;

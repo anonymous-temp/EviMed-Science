@@ -5,7 +5,7 @@ import test from "node:test";
 import { verifyParagraph } from "../src/frontierEditor.mjs";
 import { buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight, verifyInsight } from "../src/frontierInsight.mjs";
 import { FRONTIER_LEAD_LIMITS, buildLeadInput, frontierWriteLead, verifyLead } from "../src/frontierLead.mjs";
-import { frontierFullTextParagraphs } from "../src/frontierReaderTidy.mjs";
+import { frontierFullTextParagraphs, frontierGluedShare } from "../src/frontierReaderTidy.mjs";
 
 const SOURCE = ["B-Well 1 和 B-Well 2 两项 III 期试验合并数据显示，基线 HBsAg≤3000 IU/ml 人群功能性治愈率 19%（233/1220），安慰剂组 0%（0/614），",
   "两项研究 p 均<0.001。最常见的不良事件为注射部位红斑、局部疼痛和一过性肝酶升高。Bepirovirsen 已在中国申报上市。"].join("");
@@ -97,15 +97,43 @@ test("an open-access PDF's text becomes the contract's paragraphs: headings mark
   const parsed = ["# A randomized trial of X", "", "Abstract text that opens the paper and runs on for a while.", "", "## Methods", "",
     "We enrolled 1,220 adults across 29 countries.\nRandomisation was 2:1.", "", "## Results", "", `${"Functional cure was 19%. ".repeat(60)}`, "",
     "## References", "", "1. Someone et al. A paper. 2024.", "", "## Supplementary", "", "More."].join("\n");
-  const body = frontierFullTextParagraphs(parsed, { minChars: 200 });
-  assert.ok(body);
-  const paragraphs = String(body).split("\n\n");
+  const read = frontierFullTextParagraphs(parsed, { minChars: 200 });
+  assert.ok(read);
+  assert.equal(read.complete, true);
+  const paragraphs = read.body.split("\n\n");
   assert.deepEqual(paragraphs.slice(0, 5), ["## A randomized trial of X", "Abstract text that opens the paper and runs on for a while.", "## Methods",
     "We enrolled 1,220 adults across 29 countries. Randomisation was 2:1.", "## Results"]);
-  assert.ok(!String(body).includes("Someone et al.") && !String(body).includes("More."), "nothing after the references");
+  assert.ok(!read.body.includes("Someone et al.") && !read.body.includes("More."), "nothing after the references");
   assert.equal(frontierFullTextParagraphs("## Title\n\nToo short to be the article."), null);
   const long = frontierFullTextParagraphs(Array.from({ length: 40 }, (_, index) => `Paragraph ${index} ${"word ".repeat(40)}`).join("\n\n"), { limit: 1_000, minChars: 10 });
-  assert.ok(long && long.length <= 1_000 && long.endsWith("word"), "cut at a paragraph end within the limit");
+  assert.ok(long && long.body.length <= 1_000 && long.body.endsWith("word"), "cut at a paragraph end within the limit");
+  assert.equal(long?.complete, false, "a text cut at the limit is not the whole paper");
+});
+
+test("a PDF's text without Markdown headings: references cut at their own line, the parser's empty mark gone, broken words rejoined", () => {
+  // As the document parser wrote Frontiers in Neurology's PDF on 2026-10-22 (item 31132): plain heading lines, "[empty]" marks,
+  // words broken at a line end with their hyphen, and the references after a line of their own.
+  const results = "Efgartigimod was well tolerated; the response was suggesting a durable benefit, as developed below. ".repeat(30);
+  const parsed = ["1 Introduction", "", "Myasthenia gravis is an autoimmune disorder that devel-oped over years, sug-gesting a long course.", "",
+    "[empty] Frontiers in Neurology", "", "3 Results", "", results, "", "The real-world cohort was small.", "", "References", "",
+    "1. Howard JF. Efgartigimod in generalized myasthenia gravis. Lancet Neurol. 2021.", "", "2. Someone. Another paper. 2024."].join("\n");
+  const read = frontierFullTextParagraphs(parsed, { minChars: 200 });
+  assert.ok(read);
+  assert.ok(read.body.includes("disorder that developed over years, suggesting a long course"), "rejoined where the text writes the word whole");
+  assert.ok(read.body.includes("The real-world cohort"), "a compound the text never writes whole keeps its hyphen");
+  assert.ok(read.body.includes("\n\nFrontiers in Neurology\n\n") && !read.body.includes("[empty]"));
+  assert.ok(!read.body.includes("Howard JF") && !read.body.includes("References"), "the references go from their own line");
+  // Before the article has begun, a line reading References is not taken for its end.
+  const early = frontierFullTextParagraphs(["References", "", results].join("\n"), { minChars: 200 });
+  assert.ok(early?.body.startsWith("References"));
+});
+
+test("a PDF whose extraction lost its spaces is not a full text: the item keeps its abstract (Springer, 2026-10-22, item 7232)", () => {
+  const glued = "Sixpatients(fivefemales,onemale;agerange15–44yearsatdiagnosis)withmacroadenomaswerecapturedinthisretrospectiveseries. ".repeat(20);
+  const fine = "Six patients (five females, one male; age range 15–44 years at diagnosis) with macroadenomas were captured. ".repeat(20);
+  assert.equal(frontierFullTextParagraphs(`${fine}\n\n${glued}`, { minChars: 200 }), null);
+  assert.ok(frontierFullTextParagraphs(`${fine}\n\nHypertriglyceridemia and hypercholesterolemia were common.`, { minChars: 200 }));
+  assert.ok(frontierGluedShare(glued) > 0.5 && frontierGluedShare(fine) === 0);
 });
 
 test("a translated section heading keeps its mark, and a paragraph that is not one never gains it", () => {

@@ -469,8 +469,9 @@ test("an open-access PDF the plugin could not read becomes the item's full text,
   } };
   await pipelineFor(translatingEditor(), webReader).processBatch();
   assert.deepEqual(read, ["https://journals.example.org/open.pdf"], "only the item with an open-access PDF, once");
-  const texts = (await database.query("SELECT body_text, body_text_origin, oa_pdf_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [paper.id])).rows[0];
+  const texts = (await database.query("SELECT body_text, body_text_origin, body_text_complete, oa_pdf_tried_at FROM evimed_frontier.item_texts WHERE item_id = $1", [paper.id])).rows[0];
   assert.equal(texts.body_text_origin, "oa-pdf");
+  assert.equal(texts.body_text_complete, true, "the whole paper up to its references");
   assert.match(texts.body_text, /^## An open paper\n\n## Methods\n\nWe enrolled 1,220 adults\./);
   assert.ok(!texts.body_text.includes("1. Ref."));
   assert.equal((await serviceFor().getItem(reader, paper.publicId)).body.item.body.source, "body");
