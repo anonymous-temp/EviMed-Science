@@ -381,6 +381,60 @@ test("the mirror keeps the platform's own switch, retires what the plugin droppe
   assert.equal((await database.query("SELECT retired_at FROM evimed_frontier.sources WHERE id='bmj'")).rows[0].retired_at, null);
 });
 
+test("enabled follows the plugin's own switch and keeps the platform's display switch otherwise", options, async () => {
+  // fr-sources 2026-10-22: the mirror said 753 sources were on while the plugin polled 521.
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm"), pluginSource("planned", { enabled: false, health: "disabled" }), pluginSource("jama")] });
+  const ingest = ingestFor(plugin);
+  await ingest.mirrorSources();
+  const enabled = async () => Object.fromEntries((await database.query("SELECT id, enabled, plugin_enabled FROM evimed_frontier.sources")).rows
+    .map((row) => [row.id, [row.enabled, row.plugin_enabled]]));
+  assert.deepEqual(await enabled(), { nejm: [true, true], planned: [false, false], jama: [true, true] }, "a row the plugin never polls is off from the start");
+
+  // The platform's display switch stands while the plugin's does not move.
+  await database.query("UPDATE evimed_frontier.sources SET enabled=false WHERE id='jama'");
+  await ingest.mirrorSources();
+  assert.deepEqual((await enabled()).jama, [false, true]);
+
+  // The plugin turns a source on or off: the mirror follows.
+  plugin.sources = [pluginSource("nejm", { enabled: false, health: "disabled" }), pluginSource("planned"), pluginSource("jama")];
+  await ingest.mirrorSources();
+  const after = await enabled();
+  assert.deepEqual(after.nejm, [false, false]);
+  assert.deepEqual(after.planned, [true, true]);
+  assert.deepEqual(after.jama, [false, true], "the display switch is untouched when the plugin's does not change");
+
+  // A row mirrored before the column existed: off if either side says off, on only if both do.
+  await database.query("UPDATE evimed_frontier.sources SET plugin_enabled = NULL, enabled = true");
+  plugin.sources = [pluginSource("nejm", { enabled: false, health: "disabled" }), pluginSource("planned"), pluginSource("jama")];
+  await database.query("UPDATE evimed_frontier.sources SET enabled = false WHERE id = 'planned'");
+  await ingest.mirrorSources();
+  assert.deepEqual(await enabled(), { nejm: [false, false], planned: [false, true], jama: [true, true] });
+});
+
+test("after the mirror the screen's verdicts per source go back to the plugin", options, async () => {
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm"), pluginSource("techfeed")],
+    entries: [1, 2, 3, 4, 5, 6].map((seq) => pluginEntry(seq <= 2 ? "nejm" : "techfeed", seq)) });
+  const ingest = ingestFor(plugin);
+  await ingest.mirrorSources();
+  await ingest.pull();
+  // What the screen decided, as the pipeline records it.
+  await database.query(`UPDATE evimed_frontier.entries SET state = CASE
+      WHEN source_id = 'nejm' THEN 'promoted'
+      WHEN plugin_seq = 3 THEN 'screened-out' ELSE 'screened-out' END,
+    state_reason = CASE WHEN source_id = 'techfeed' AND plugin_seq < 6 THEN 'not-medical' WHEN source_id = 'techfeed' THEN 'not-news' ELSE NULL END`);
+  await ingest.mirrorSources();
+  assert.equal(plugin.screening.window_days, 14);
+  assert.deepEqual(plugin.screening.sources, [{ id: "nejm", screened: 2, off_topic: 0 }, { id: "techfeed", screened: 4, off_topic: 3 }]);
+  assert.equal(ingest.counters.screeningReports, 1);
+
+  // A plugin without the route costs the report only: the mirror itself succeeds.
+  plugin.fetchImpl = ((original) => async (/** @type {any} */ input, /** @type {any} */ init) => (String(input).endsWith("/v1/sources/screening")
+    ? new Response(JSON.stringify({ code: "not_found", message: "x", retryable: false }), { status: 404 }) : original(input, init)))(plugin.fetchImpl);
+  const failing = ingestFor(plugin);
+  assert.equal((await failing.mirrorSources()).complete, true);
+  assert.equal(failing.counters.screeningReportFailures, 1);
+});
+
 test("an incompatible contract is recorded and nothing is pulled until it is compatible again", options, async () => {
   const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [pluginEntry("nejm", 1)], contract: "2.0.0" });
   const ingest = ingestFor(plugin);

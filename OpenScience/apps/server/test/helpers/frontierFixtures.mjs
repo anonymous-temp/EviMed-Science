@@ -87,6 +87,13 @@ export function memoryPlugin({ sources = [], entries = [], contract = "1.0.0", o
         const nextAfter = page.length ? page[page.length - 1].seq : after;
         return json({ entries: page, next_after: nextAfter, has_more: visible.length > limit, server_time: new Date().toISOString() });
       }
+      if (url.pathname === "/v1/sources/screening" && init.method === "POST") {
+        // fr-sources 2026-10-22: the platform's screening verdicts per source, kept for the test to read.
+        plugin.screening = JSON.parse(String(init.body ?? "{}"));
+        const known = new Set(plugin.sources.map((row) => row.id));
+        const rows = plugin.screening.sources ?? [];
+        return json({ accepted: rows.filter((row) => known.has(row.id)).length, unknown: rows.filter((row) => !known.has(row.id)).length });
+      }
       if (/^\/v1\/entries\/[^/]+\/text$/.test(url.pathname)) {
         return plugin.text ? json(plugin.text) : json({ code: "not_found", message: "x", retryable: false }, 404);
       }
