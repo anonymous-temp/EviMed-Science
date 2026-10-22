@@ -81,11 +81,11 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 23 feed/reader tables, seventeen native evidence/editorial tables (the topic requests' related links among them)
-    // and two exposure attribution tables, plus the optional vector table.
+    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), seventeen native evidence/editorial tables (the topic
+    // requests' related links among them) and two exposure attribution tables, plus the optional vector table.
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 43 : 42,
+      capabilities.vector ? 44 : 43,
       created.tables.join(),
     );
     for (const table of [
@@ -115,6 +115,7 @@ test(
       "user_profiles",
       "user_prefs",
       "weeklies",
+      "monthlies",
       "evidence_zones",
       "evidence_cards",
       "evidence_zone_follows",

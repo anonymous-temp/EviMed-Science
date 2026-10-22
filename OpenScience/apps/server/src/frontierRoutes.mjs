@@ -53,7 +53,7 @@ export function frontierRoutePattern(pathname) {
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
-  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
+  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
 }
 
@@ -116,6 +116,19 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 2 && parts[0] === "items" && method === "GET") {
       return conditional(await service.getItem(user, parts[1], req.headers["if-none-match"]));
     }
+    // A picture of a published item (contract B): the plugin's bytes, cached a day by the reader's browser under the id they hash to.
+    if (parts.length === 2 && parts[0] === "media" && method === "GET") {
+      const result = await service.media(user, parts[1], req.headers["if-none-match"]);
+      const headers = { ETag: result.etag, "Cache-Control": "private, max-age=86400", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
+      if (result.status === 304) {
+        res.writeHead(304, headers);
+        res.end();
+        return true;
+      }
+      res.writeHead(200, { ...headers, "Content-Type": result.contentType, "Content-Length": result.bytes.length });
+      res.end(result.bytes);
+      return true;
+    }
     if (parts.length === 3 && parts[0] === "items" && method === "POST" && ITEM_ACTIONS.includes(parts[2])) {
       await bodyOf(req, maxJsonBytes, []);
       return reply(await service.setItemState(user, parts[1], parts[2]));
@@ -163,6 +176,8 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 1 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklies(url.searchParams));
     if (parts.length === 2 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklyIssue(user, parts[1]));
+    if (parts.length === 1 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlies(url.searchParams));
+    if (parts.length === 2 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlyIssue(user, parts[1]));
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }

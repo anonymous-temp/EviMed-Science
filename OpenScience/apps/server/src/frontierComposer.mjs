@@ -12,6 +12,7 @@
  *   push      every minute today's issue to readers whose digest time passed
  *   weekly    every minute latest completed calendar week
  *   weeklyPush every minute bounded recipient queue
+ *   monthly   every 10 min the last complete month, once (frontierMonthly.mjs)
  *   safety    every 30 s   bounded change scan
  *   notices   every 10 s   leased inbox deliveries
  *   profiles  every 5 min  readers' profiles (a day old) and rankings (6 h old)
@@ -58,6 +59,7 @@ export const FRONTIER_COMPOSER_CADENCES = Object.freeze({
   profiles: 5 * MINUTE,
   weekly: MINUTE,
   weeklyPush: MINUTE,
+  monthly: 10 * MINUTE,
   safety: 30 * SECOND,
   notices: 10 * SECOND,
 });
@@ -77,16 +79,17 @@ function codeOf(error) {
 
 export class FrontierComposer {
   /**
-   * @param {{ events?: any, daily?: any, profiles?: any, weekly?: any, notifications?: any, canRun?: () => boolean, now?: () => Date,
+   * @param {{ events?: any, daily?: any, profiles?: any, weekly?: any, monthly?: any, notifications?: any, canRun?: () => boolean, now?: () => Date,
    *           report?: (loop: string, code: string) => void, cadences?: Partial<Record<string, number>> }} dependencies
    *   `events` a `FrontierEvents`, `daily` a `FrontierDaily`, `profiles` a
    *   `FrontierProfiles`; each optional — an absent one's loops never run.
    */
-  constructor({ events = null, daily = null, profiles = null, weekly = null, notifications = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
+  constructor({ events = null, daily = null, profiles = null, weekly = null, monthly = null, notifications = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
     this.events = events;
     this.daily = daily;
     this.profiles = profiles;
     this.weekly = weekly;
+    this.monthly = monthly;
     this.notifications = notifications;
     this.canRun = canRun;
     this.now = now;
@@ -160,6 +163,7 @@ export class FrontierComposer {
     /** @type {unknown[]} */
     const failures = [];
     if (this.weekly && this.#due("weekly")) failures.push(await this.#run("weekly", () => this.weekly.runDue()));
+    if (this.monthly && this.#due("monthly")) failures.push(await this.#run("monthly", () => this.monthly.runDue()));
     if (this.notifications && this.#due("weeklyPush")) failures.push(await this.#run("weeklyPush", () => this.notifications.queueWeekly()));
     if (this.notifications && this.#due("safety")) failures.push(await this.#run("safety", () => this.notifications.scanSafety()));
     if (this.notifications && this.#due("notices")) failures.push(await this.#run("notices", () => this.notifications.deliverDue()));
@@ -231,6 +235,7 @@ export class FrontierComposer {
       daily: this.daily?.status?.() ?? null,
       profiles: this.profiles?.status?.() ?? null,
       weekly: this.weekly?.status?.() ?? null,
+      monthly: this.monthly?.status?.() ?? null,
       notifications: this.notifications?.status?.() ?? null,
     };
   }

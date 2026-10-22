@@ -7,6 +7,7 @@ import {
   FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT,
   FRONTIER_SELECT_THRESHOLD_DEFAULT,
   FRONTIER_TEXT_GIVE_UP_MS,
+  FRONTIER_JOURNAL_TEXT_WAIT_MS,
   FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
   FRONTIER_TEXT_RETRY_MS,
@@ -24,6 +25,7 @@ import {
   frontierKeptModelFlags,
   frontierSafetyAlert,
   frontierSelectionDecision,
+  frontierJournalWithoutAbstract,
   frontierTextDecision,
   frontierTextPendingHold,
   frontierTimelineAt,
@@ -193,6 +195,26 @@ test("the text step: take it when it is there, wait for it when it is worth wait
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a whole feed summary is enough to go on");
   assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a published item keeps asking");
+});
+
+test("2026-10-22 backlog: a journal's entry still without its abstract after 48 hours is published with what it has, and keeps asking", () => {
+  const now = new Date("2026-10-22T04:00:00Z");
+  const entryAged = (/** @type {number} */ ms) => ({ first_seen_at: new Date(now.getTime() - ms).toISOString(), summary_raw: null, defects: ["no-summary"] });
+  const decide = (/** @type {any} */ entry, /** @type {any} */ source) => frontierTextDecision({ status: "pending", entry, source, promoted: false, now });
+  assert.equal(FRONTIER_JOURNAL_TEXT_WAIT_MS, 48 * HOUR);
+  assert.deepEqual(decide(entryAged(47 * HOUR), smallJournal), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "within two days it waits");
+  assert.deepEqual(decide(entryAged(48 * HOUR), smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS },
+    "Annals of Oncology on 2026-10-20: published into 全部, asked again for its abstract");
+  const media = { source_type: "media", authority: 2, safety_feed: false };
+  assert.deepEqual(decide(entryAged(48 * HOUR), media), { action: "hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "the rule is a journal's");
+  assert.deepEqual(decide(entryAged(FRONTIER_TEXT_GIVE_UP_MS), smallJournal), { action: "promote", holdMs: 0 }, "and the five days still end the asking");
+  // …and an item a journal published without its abstract is never selected, by the line or by the lane floor's query.
+  const base = { safetyAlert: false, verification: "passed", scoreTotal: 90, demoted: false, source: smallJournal, selectedToday: 0, threshold: 70 };
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"] }), { selected: false, rule: null });
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], source: journal }), { selected: false, rule: null }, "a top journal's too");
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], source: media }), { selected: true, rule: "threshold" }, "the rule is a journal's");
+  assert.deepEqual(frontierSelectionDecision({ ...base, flags: ["no-abstract"], safetyAlert: true }), { selected: true, rule: "safety-bypass" });
+  assert.equal(frontierJournalWithoutAbstract({ source: smallJournal, flags: ["preprint"] }), false);
 });
 
 test("a pending text is asked for again just after the plugin's own next try, backing off while the plugin is behind", () => {

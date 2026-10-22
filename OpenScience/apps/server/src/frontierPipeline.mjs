@@ -76,7 +76,8 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, isChineseTitle } from "./frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
+  isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
@@ -99,6 +100,16 @@ export const FRONTIER_TEXT_HOLD_MS = 12 * HOUR;
 export const FRONTIER_TEXT_AFTER_ATTEMPT_MS = 5 * MINUTE;
 /** After this long from first sight an entry proceeds with what it has (`no-abstract`). */
 export const FRONTIER_TEXT_GIVE_UP_MS = 5 * DAY;
+/**
+ * A journal's entry that has waited this long for its abstract is published with what it has, into 全部 only, and asked
+ * again until `FRONTIER_TEXT_GIVE_UP_MS` (2026-10-22). Production that day: 685 items sat invisible behind 886 held entries,
+ * the oldest five days old, 348 of them Annals of Oncology articles whose abstracts no source the plugin reads had yet
+ * (PubMed `not_indexed_yet`, Crossref without the abstract); a whole day's issue of a journal waited out the five days. A
+ * journal item without its abstract is never selected (`frontierSelectionDecision`) and the daily carries no item without a
+ * verified 导读, so publishing it early shows it where a reader browses everything and nowhere it would stand for 精选; its
+ * abstract, when it comes, re-edits it and it may be selected then.
+ */
+export const FRONTIER_JOURNAL_TEXT_WAIT_MS = 48 * HOUR;
 /** A plugin that did not answer is asked again sooner than one that said "pending". */
 export const FRONTIER_TEXT_RETRY_MS = 15 * MINUTE;
 /** An entry whose work is already in flight under another entry waits this long. */
@@ -169,6 +180,17 @@ export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
  */
 export const FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT = 2;
 export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
+/**
+ * The module's own model money per day, in CNY, when `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` is unset (config.mjs holds the same
+ * number; frontierConfig.test.mjs holds them equal). The owner's ruling of 2026-10-22: ¥300, from ¥10. At ¥10 the 80% throttle (¥8)
+ * was crossed on 2026-10-20 at ¥8.03 and every non-urgent item that afternoon was published title-only. Production's last fourteen
+ * days spent ¥1.4-8.0 a day on 1,200-5,500 calls (about ¥0.0012 a call, ¥0.004 an item). The live check of 2026-10-22 (20 real
+ * items, the shipping prompts) measured ¥0.0042 an edit with the 导读, 推荐理由 and tags, and ¥0.0046 a full-text translation
+ * (FRONTIER_TRANSLATION_LIMITS caps one at about ¥0.04); with 1,000-1,850 items a day and 100-200 of them selected or near the
+ * line, the expected day is about ¥6-15 and a heavy one about ¥25, so the throttle at ¥240 is reached only by a runaway day, and
+ * then the last ¥60 still edits safety feeds, regulators and the top journals.
+ */
+export const FRONTIER_DAILY_BUDGET_CNY_DEFAULT = 300;
 /** Owed edits cover recent source dates, actual publication, or generated dailies. */
 export const FRONTIER_DEFERRED_EDIT_WINDOW_MS = 7 * DAY;
 /** Items embedded by the pipeline (older ones are the rebuild script's). */
@@ -177,7 +199,11 @@ export const FRONTIER_EMBED_WINDOW_MS = 30 * DAY;
 export const FRONTIER_SOURCE_DAILY_CAP = 3;
 export const FRONTIER_TOP_JOURNAL_DAILY_CAP = 5;
 
+/** How far below the selection line an item still gets the reader's 推荐理由 and full-text translation (contract B). */
+export const FRONTIER_READER_MARGIN = 10;
 const ENTRY_BATCH = FRONTIER_SCREEN_BATCH;
+/** Items one round translates at most; each is at most a few calls (`FRONTIER_TRANSLATION_LIMITS`). */
+const TRANSLATE_BATCH = 3;
 const ITEM_BATCH = 20;
 const DEFERRED_BATCH = 8;
 const EMBED_BATCH = 16;
@@ -409,8 +435,18 @@ export function frontierTextDecision({ status, entry, source, promoted, now, nex
   const age = now.getTime() - new Date(entry.first_seen_at).getTime();
   if (status === "available" || status === "unavailable" || age >= FRONTIER_TEXT_GIVE_UP_MS) return { action: "promote", holdMs: 0 };
   const holdMs = status === "error" ? FRONTIER_TEXT_RETRY_MS : frontierTextPendingHold(nextAttemptAt, now);
-  if (promoted || isUrgentSource(source) || usableSummary(entry)) return { action: "promote-hold", holdMs };
+  const journalWaited = source?.source_type === "journal" && age >= FRONTIER_JOURNAL_TEXT_WAIT_MS;
+  if (promoted || isUrgentSource(source) || usableSummary(entry) || journalWaited) return { action: "promote-hold", holdMs };
   return { action: "hold", holdMs };
+}
+
+/**
+ * Whether an item is a journal's without its abstract (flag `no-abstract`): published into 全部, never selected (2026-10-22,
+ * `FRONTIER_JOURNAL_TEXT_WAIT_MS`).
+ * @param {{ source: any, flags: string[] }} input
+ */
+export function frontierJournalWithoutAbstract({ source, flags }) {
+  return source?.source_type === "journal" && flags.includes("no-abstract");
 }
 
 /**
@@ -551,18 +587,60 @@ export function frontierClassIRecall({ source, facts = null }) {
 /**
  * Whether a published item is selected, and by which rule (plan §6.3). A
  * safety alert is selected whatever its score; otherwise a verified,
- * scored item at or above the threshold, while its source has room today.
+ * scored item at or above the threshold, while its source has room today —
+ * never a journal's item still without its abstract (2026-10-22: it is in
+ * 全部 only, until its abstract re-edits it).
  * @param {{ safetyAlert: boolean, verification: string, scoreTotal: number | null, demoted: boolean, flags: string[],
  *           source: any, selectedToday: number, threshold: number }} input
  * @returns {{ selected: boolean, rule: "safety-bypass" | "threshold" | null, capped?: boolean }}
  */
 export function frontierSelectionDecision({ safetyAlert, verification, scoreTotal, demoted, flags, source, selectedToday, threshold }) {
   if (safetyAlert) return { selected: true, rule: "safety-bypass" };
-  if (demoted || flags.includes("retracted")) return { selected: false, rule: null };
+  if (demoted || flags.includes("retracted") || frontierJournalWithoutAbstract({ source, flags })) return { selected: false, rule: null };
   if (!["passed", "repaired"].includes(verification) || scoreTotal == null || scoreTotal < threshold) return { selected: false, rule: null };
   const cap = source?.source_type === "journal" && Number(source?.authority) >= 5 ? FRONTIER_TOP_JOURNAL_DAILY_CAP : FRONTIER_SOURCE_DAILY_CAP;
   if (selectedToday >= cap) return { selected: false, rule: null, capped: true };
   return { selected: true, rule: "threshold" };
+}
+
+/** The reader texts, best first, as `item_texts.body_zh_source` names them. */
+export const FRONTIER_READER_SOURCES = Object.freeze(/** @type {const} */ (["body", "abstract", "excerpt"]));
+
+/**
+ * The text a reader's full text is read from, best first: the plugin's full text (contract 1.4.0), the abstract, the page
+ * excerpt; or the one a translation was made from, when `source` names it. Null when there is none.
+ * @param {any} texts an `item_texts` row @param {"body" | "abstract" | "excerpt" | null} [source]
+ * @returns {{ source: "body" | "abstract" | "excerpt", text: string } | null}
+ */
+export function frontierReaderText(texts, source = null) {
+  const columns = { body: texts?.body_text, abstract: texts?.abstract_raw, excerpt: texts?.body_excerpt };
+  for (const name of source ? [source] : FRONTIER_READER_SOURCES) {
+    const text = columns[name];
+    if (typeof text === "string" && text.trim()) return { source: name, text };
+  }
+  return null;
+}
+
+/**
+ * Whether an item gets the reader's 推荐理由 and full-text translation: selected (a safety alert is), or a score within
+ * `FRONTIER_READER_MARGIN` of the selection line.
+ * @param {{ selected?: boolean | null, safety_alert?: boolean | null, score_total?: number | string | null }} item @param {number} threshold
+ */
+export function frontierReaderWorthy(item, threshold) {
+  return item?.selected === true || item?.safety_alert === true
+    || (item?.score_total != null && Number.isFinite(Number(item.score_total)) && Number(item.score_total) >= threshold - FRONTIER_READER_MARGIN);
+}
+
+/**
+ * fr-events' verdict (cc/briefs/fr-contract.md, 2026-10-22): an item that joined an event whose selected report is another one
+ * and adds nothing to it names that report in `same_event_item_id`, and none of this module's later selections — the re-select
+ * after a re-edit, the lane floor, the preprint lane — takes it while the report it names is published and selected. Read
+ * through `to_jsonb`, so the predicate holds whether or not the column exists yet.
+ * @param {string} alias the items row's alias
+ */
+export function frontierBesideSelectedSql(alias) {
+  return `EXISTS (SELECT 1 FROM evimed_frontier.items beside WHERE beside.id = (to_jsonb(${alias})->>'same_event_item_id')::bigint
+    AND beside.state = 'published' AND beside.selected)`;
 }
 
 /** A title in the form near-duplicates are compared in without trigrams. @param {unknown} title */
@@ -586,7 +664,7 @@ function orderedFlags(flags) {
 /**
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
- *             preprintLane: number }} FrontierBatchSummary
+ *             preprintLane: number, translated: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
@@ -621,7 +699,8 @@ export class FrontierPipeline {
     this.threshold = frontierSelectThreshold(this.config);
     this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
     this.preprintLaneMinScore = frontierPreprintLaneMinScore(this.config);
-    this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
+    this.budgetCny = this.config.frontierDailyBudgetCny != null && this.config.frontierDailyBudgetCny !== "" && Number.isFinite(Number(this.config.frontierDailyBudgetCny))
+      ? Number(this.config.frontierDailyBudgetCny) : FRONTIER_DAILY_BUDGET_CNY_DEFAULT;
     this.offpeak = this.config.frontierOffpeak === true;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     // The width the schema's vector column is created with; it must be the
@@ -630,7 +709,7 @@ export class FrontierPipeline {
     /** Observable counters (principle 15). */
     this.counters = {
       batches: 0, claimedEntries: 0, claimedItems: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0,
-      failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0,
+      failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0, translated: 0, translateIncomplete: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
@@ -708,7 +787,7 @@ export class FrontierPipeline {
     this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
-      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0 };
+      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
@@ -722,6 +801,7 @@ export class FrontierPipeline {
         await this.#laneFloor(context);
         summary.preprintLane += await this.#preprintLane(context);
       }
+      summary.translated += await this.#translate(context);
       summary.embedded += await this.#embed(context);
       this.counters.batches += 1;
       for (const key of /** @type {Array<keyof FrontierBatchSummary>} */ (Object.keys(summary))) {
@@ -1460,7 +1540,12 @@ export class FrontierPipeline {
     const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts?.publication_types });
     const abstract = texts?.abstract_raw ?? null;
     const summary = abstract ? null : (entry?.summary_raw ?? null);
-    const bodyExcerpt = texts?.body_excerpt ?? null;
+    // The full text (contract 1.4.0) stands in for the excerpt a post or a page has none of: the edit is bounded anyway.
+    const bodyExcerpt = texts?.body_excerpt ?? (typeof texts?.body_text === "string" && texts.body_text.trim() ? texts.body_text.slice(0, 12_000) : null);
+    const author = item.author && typeof item.author === "object" && typeof item.author.name === "string" && item.author.name.trim()
+      ? { name: item.author.name, role: ["organisation", "person"].includes(item.author.role) ? item.author.role : null } : null;
+    const quoted = item.quoted && typeof item.quoted === "object" && typeof item.quoted.text === "string" && item.quoted.text.trim()
+      ? { authorName: String(item.quoted.author?.name ?? ""), text: item.quoted.text } : null;
     return {
       titleRaw: item.title_raw,
       // The institution, not the feed: the summary is prose a reader reads, and
@@ -1475,6 +1560,8 @@ export class FrontierPipeline {
       abstract,
       summary,
       bodyExcerpt,
+      author,
+      quoted,
       journal: texts?.journal ?? null,
       publicationTypes: texts?.publication_types ?? [],
       trialFacts: texts?.enrichment?.trial_facts ?? null,
@@ -1761,9 +1848,9 @@ export class FrontierPipeline {
     const fields = {
       titleZh: output ? output.titleZh : (isChinese ? String(item.title_raw).slice(0, 200) : item.title_zh ?? null),
       summaryZh: output ? output.summaryZh : item.summary_zh ?? null,
-      // Retired 2026-09-24: an edit writes none, and a re-edit clears the one
-      // an older edit wrote beside the summary it replaces.
-      reasonZh: output ? null : item.reason_zh ?? null,
+      // The 推荐理由 (back on 2026-10-22, frontierEditor.mjs): an edit writes its own or none, never keeps an older edit's.
+      reasonZh: output ? output.reasonZh ?? null : item.reason_zh ?? null,
+      tags: output ? output.tags ?? [] : item.tags ?? [],
       lane: output?.lane ?? item.lane,
       specialties: output?.specialties ?? item.specialties ?? [],
       entities,
@@ -1778,7 +1865,7 @@ export class FrontierPipeline {
       await client.query(`UPDATE evimed_frontier.items SET title_zh = $2, summary_zh = $3, reason_zh = $4, lane = $5, specialties = $6,
           evidence_type = $7, evidence_basis = $8, entities = $9::jsonb, entity_keys = $10, flags = $11,
           score_authority = $12, score_impact = $13, score_novelty = $14, score_relevance = $15, score_total = $16,
-          safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20,
+          safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20, tags = $22,
           state = CASE WHEN state = 'screened' THEN 'scored' ELSE state END,
           rescored_at = CASE WHEN state = 'published' AND $19::text IS NOT NULL THEN $21::timestamptz ELSE rescored_at END,
           lease_owner = CASE WHEN state = 'published' THEN NULL ELSE lease_owner END,
@@ -1790,14 +1877,14 @@ export class FrontierPipeline {
         scoreAuthority, scores?.impact ?? null, scores?.novelty ?? null, scores?.relevance ?? null,
         scores ? scoreAuthority + scores.impact + scores.novelty + scores.relevance : null,
         safetyAlert, fields.verification, fields.editorVersion,
-        fields.editorModel, context.now]);
+        fields.editorModel, context.now, fields.tags]);
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
           [item.id, result.modelInput, result.modelInputSha256]);
       }
       if (item.state === "published") {
         await client.query(`UPDATE evimed_frontier.items SET lexemes = $2::tsvector WHERE id = $1`,
-          [item.id, tsvectorLiteral(this.#lexemeText({ ...item, title_zh: fields.titleZh, summary_zh: fields.summaryZh, entities: fields.entities }))]);
+          [item.id, tsvectorLiteral(this.#lexemeText({ ...item, title_zh: fields.titleZh, summary_zh: fields.summaryZh, entities: fields.entities, tags: fields.tags }))]);
         await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'rescored')", [item.id]);
         // What was embedded described the item before its edit.
         if (context.capabilities?.vector) await client.query("DELETE FROM evimed_frontier.item_vectors WHERE item_id = $1", [item.id]);
@@ -1812,7 +1899,8 @@ export class FrontierPipeline {
   /** The words search finds an item by. @param {any} item */
   #lexemeText(item) {
     const entities = item.entities && typeof item.entities === "object" ? Object.values(item.entities).flat() : [];
-    return [item.title_raw, item.title_zh, item.summary_zh, ...entities].filter((part) => typeof part === "string" && part).join("\n");
+    return [item.title_raw, item.title_zh, item.summary_zh, ...entities, ...(Array.isArray(item.tags) ? item.tags : [])]
+      .filter((part) => typeof part === "string" && part).join("\n");
   }
 
   /**
@@ -1870,8 +1958,9 @@ export class FrontierPipeline {
   async #reselect(itemId, context) {
     await this.database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const item = (await client.query("SELECT * FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [itemId])).rows[0];
-      if (!item || item.state !== "published" || item.selected) return;
+      const item = (await client.query(`SELECT i.*, ${frontierBesideSelectedSql("i")} AS beside_selected FROM evimed_frontier.items i
+        WHERE i.id = $1 FOR UPDATE OF i`, [itemId])).rows[0];
+      if (!item || item.state !== "published" || item.selected || item.beside_selected) return;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const decision = frontierSelectionDecision({
@@ -1903,6 +1992,7 @@ export class FrontierPipeline {
           FROM evimed_frontier.items i
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2 AND i.score_total >= $3
             AND i.verification IN ('passed', 'repaired') AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
+            AND NOT (i.source_type = 'journal' AND 'no-abstract' = ANY(i.flags)) AND NOT ${frontierBesideSelectedSql("i")}
             AND NOT EXISTS (SELECT 1 FROM evimed_frontier.items s WHERE s.state = 'published' AND s.selected AND s.lane = i.lane
               AND s.timeline_at >= $1 AND s.timeline_at < $2)) AS ranked
         LEFT JOIN evimed_frontier.item_texts t ON t.item_id = ranked.id
@@ -1954,7 +2044,7 @@ export class FrontierPipeline {
         LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.source_type = ANY($1) AND i.timeline_at >= $2 AND i.timeline_at < $3
           AND i.score_total >= $4 AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
-          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0
+          AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0 AND NOT ${frontierBesideSelectedSql("i")}
         ORDER BY i.score_total DESC, i.id LIMIT $5`,
       [FRONTIER_PREPRINT_LANE_SOURCE_TYPES, start, end, this.preprintLaneMinScore, room + 5]);
       const chosen = candidates.rows
@@ -1968,6 +2058,104 @@ export class FrontierPipeline {
       if (chosen.length) await bumpFrontierVersion(client);
       return chosen.length;
     });
+  }
+
+  /**
+   * The reader's full-text translation (contract B `body`, 2026-10-22), on the edit and never on a reader's click: published,
+   * edited items that are selected or within `FRONTIER_READER_MARGIN` of the line, shown in the last week, whose best reader text
+   * (`frontierReaderText`) is better than the one a translation was last made from — never translated, or the full text arrived
+   * after the abstract was translated. A Chinese text is not translated: it is marked `original-zh`. An X post (and the post it
+   * quotes) takes the post shape. Claimed with the item lease, so two rounds never pay for one item; the result is written only if
+   * the text it was made from is still the item's. A translation that could not be had for the provider or the budget is not
+   * recorded (it is tried again); one the checks refused is recorded with no Chinese text, and is tried again only when a better
+   * text arrives — the reader keeps the original and the click path (中文摘要) stays. Moves the content version, and writes no
+   * `item_changes` row: no downstream copy reads a translation. Past 80% of the budget only safety alerts are translated.
+   * @param {any} context @returns {Promise<number>} items whose Chinese text was written
+   */
+  async #translate(context) {
+    const { now, budget, glossary } = context;
+    if (typeof this.editor.translateBody !== "function" || !this.editor.available || budget.state === "exhausted" || this.#providerPause(now)) return 0;
+    const rank = (/** @type {string} */ column) => `CASE ${FRONTIER_READER_SOURCES.map((source, index) => `WHEN t.${column} = '${source}' THEN ${FRONTIER_READER_SOURCES.length - index}`).join(" ")} ELSE 0 END`;
+    const best = `CASE WHEN btrim(coalesce(t.body_text, '')) <> '' THEN 3 WHEN btrim(coalesce(t.abstract_raw, '')) <> '' THEN 2
+      WHEN btrim(coalesce(t.body_excerpt, '')) <> '' THEN 1 ELSE 0 END`;
+    const claimed = (await this.database.query(`WITH picked AS (
+        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.state = 'published' AND i.editor_version IS NOT NULL AND (i.lease_until IS NULL OR i.lease_until <= $1)
+          AND i.visible_at > $2 AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND (NOT $4::boolean OR i.safety_alert)
+          AND ${best} > ${rank("body_zh_source")}
+        ORDER BY i.safety_alert DESC, i.selected DESC, i.score_total DESC NULLS LAST, i.id DESC
+        LIMIT $5
+        FOR UPDATE OF i SKIP LOCKED)
+      UPDATE evimed_frontier.items i SET lease_owner = $6, lease_until = $7 FROM picked WHERE i.id = picked.id
+      RETURNING i.id, i.title_raw, i.platform, i.quoted, i.lease_until`,
+    [now, new Date(now.getTime() - FRONTIER_DEFERRED_EDIT_WINDOW_MS), this.threshold - FRONTIER_READER_MARGIN, budget.state === "throttled",
+      TRANSLATE_BATCH, this.workerId, new Date(now.getTime() + this.leaseMs)])).rows;
+    let written = 0;
+    for (const item of claimed) {
+      let release = true;
+      try {
+        // A provider outage earlier in this round: the rest wait for the next one.
+        if (this.#providerPause(now)) continue;
+        const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
+        const reader = frontierReaderText(texts);
+        if (!reader) continue;
+        const paragraphs = frontierParagraphs(reader.text);
+        const post = item.platform === "x";
+        const quotedText = item.quoted && typeof item.quoted === "object" && typeof item.quoted.text === "string" ? item.quoted.text : "";
+        /** @type {{ kind: "translation" | "original-zh", zh: string | null, complete: boolean, quotedZh: string | null }} */
+        let result;
+        if (isChineseProse(paragraphs.slice(0, 6).join("\n"))) {
+          result = { kind: "original-zh", zh: null, complete: true, quotedZh: null };
+        } else {
+          const hints = glossary.match([item.title_raw, reader.text.slice(0, 6_000)].join("\n"));
+          const body = await this.editor.translateBody({ paragraphs: post ? [paragraphs.join("\n")] : paragraphs, glossary: hints, post });
+          const quoted = quotedText && !isChineseProse(quotedText) && !body.error
+            ? await this.editor.translateBody({ paragraphs: [quotedText], post: true }) : null;
+          const error = body.error ?? quoted?.error ?? null;
+          if (error && frontierProviderUnavailable(error)) {
+            // The provider, not the text: nothing is recorded, the item is tried again after the pause.
+            this.#pauseForProvider(now, error);
+            continue;
+          }
+          if (error === "usage_budget_exceeded" || error === "frontier_editor_unavailable") continue;
+          const done = body.paragraphs.filter((paragraph) => paragraph !== null).length;
+          result = {
+            kind: "translation",
+            // What was verified, each paragraph in its place; one the checks refused keeps its original, so the two texts align.
+            zh: done ? (post ? [body.paragraphs[0] ?? paragraphs.join("\n")] : body.paragraphs.map((paragraph, index) => paragraph ?? paragraphs[index])).join("\n\n") : null,
+            complete: done > 0 && body.complete,
+            quotedZh: quoted?.paragraphs[0] ?? null,
+          };
+          if (!result.complete) this.counters.translateIncomplete += 1;
+        }
+        const applied = await this.database.transaction(async (/** @type {any} */ client) => {
+          const current = (await client.query(`SELECT i.id FROM evimed_frontier.items i WHERE i.id = $1 AND i.lease_owner = $2 AND i.lease_until = $3 FOR UPDATE`,
+            [item.id, this.workerId, item.lease_until])).rows[0];
+          if (!current) return false;
+          const now2 = (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1 FOR UPDATE", [item.id])).rows[0];
+          // The text may have moved while the model was translating: a translation of another text is not this text's.
+          if (frontierReaderText(now2, reader.source)?.text !== reader.text) return false;
+          await client.query(`UPDATE evimed_frontier.item_texts SET body_zh = $2, body_zh_kind = $3, body_zh_source = $4, body_zh_at = $5,
+              body_complete = $6, quoted_zh = $7 WHERE item_id = $1`,
+          [item.id, result.zh, result.kind, reader.source, now, result.complete, result.quotedZh]);
+          await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
+          await bumpFrontierVersion(client);
+          return true;
+        });
+        if (applied) {
+          release = false;
+          if (result.zh || result.kind === "original-zh") written += 1;
+        }
+      } catch (error) {
+        this.lastError = codeOf(error);
+      } finally {
+        if (release) {
+          await this.database.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1 AND lease_owner = $2 AND lease_until = $3",
+            [item.id, this.workerId, item.lease_until]).catch(() => { this.counters.releaseFailures += 1; });
+        }
+      }
+    }
+    return written;
   }
 
   /**

@@ -40,6 +40,7 @@ import { DISPLAY_TIME_ZONE, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, fro
 import { isChineseProse } from "./frontierEditor.mjs";
 import { FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
+import { frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import { webReadUserAgent } from "./webRead.mjs";
@@ -111,7 +112,7 @@ export function frontierLibraryRecord({ item, savedAt, day, reason = null, timeZ
   lines.push(`原文链接：${item.canonical_url}`);
   lines.push(`开放获取：${item.open_access && item.open_access !== "closed" ? item.open_access : "无开放获取全文，这里只存题录和链接"}`);
   if (item.summary_zh) lines.push("", "## 导读", "", String(item.summary_zh));
-  if (item.reason_zh) lines.push("", "## 为什么值得看", "", String(item.reason_zh));
+  if (item.reason_zh) lines.push("", "## 推荐理由", "", String(item.reason_zh));
   if (item.abstract_raw) lines.push("", "## 原文摘要", "", String(item.abstract_raw).trim());
   lines.push("", "---", "",
     `由 EviMed「前沿动态」于 ${agendaLocalDate(timeZone, savedAt)} 存入。${reason ? `${reason}` : ""}`, "");
@@ -202,7 +203,8 @@ export class FrontierActions {
   async #item(publicId) {
     if (!PUBLIC_ID.test(String(publicId ?? ""))) throw new HttpError(404, "frontier_item_not_found", "No such item.");
     await this.ready();
-    const row = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.lang, i.doi, i.pmid,
+    const row = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.selected, i.safety_alert,
+        i.score_total, i.lang, i.doi, i.pmid,
         i.registry_ids, i.canonical_url, i.published_at, i.timeline_at, i.date_precision, i.source_type, i.primary_source_id,
         s.name AS source_name, s.owner_entity AS source_owner,
         t.item_id AS text_id, t.abstract_raw, t.abstract_zh, t.journal, t.authors_short, t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url
@@ -210,8 +212,10 @@ export class FrontierActions {
       LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
       WHERE i.public_id = $1 AND i.state = 'published' AND s.enabled`, [publicId])).rows?.[0];
     if (!row) throw new HttpError(404, "frontier_item_not_found", "No such item.");
-    // The record a reader keeps names the institution, not the feed (plan 2026-09-23 §6.5 #5).
-    return { ...row, source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }) };
+    // The record a reader keeps names the institution, not the feed (plan 2026-09-23 §6.5 #5), and carries the 推荐理由 the reader
+    // shows: a selected or near-line item's (frontierService.mjs).
+    return { ...row, reason_zh: frontierReaderWorthy(row, frontierSelectThreshold(this.config)) ? row.reason_zh : null,
+      source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }) };
   }
 
   /**

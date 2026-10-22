@@ -400,7 +400,8 @@ function frontierSettings(overrides) {
   } catch {
     throw new Error(`OPEN_SCIENCE_FRONTIER_TIMEZONE must be an IANA time zone, got ${JSON.stringify(timeZone)}.`);
   }
-  const budgetValue = read("frontierDailyBudgetCny", "OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY", 10);
+  // FRONTIER_DAILY_BUDGET_CNY_DEFAULT (frontierPipeline.mjs, with the reasoning): the owner's ¥300 of 2026-10-22.
+  const budgetValue = read("frontierDailyBudgetCny", "OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY", 300);
   const budget = Number(budgetValue);
   if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
     throw new Error(`OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);

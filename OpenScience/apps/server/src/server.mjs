@@ -296,6 +296,7 @@ import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextA
 // the worker that turns them.
 import { KnowledgePluginClient } from "./knowledgePluginClient.mjs";
 import { FrontierIngest } from "./frontierIngest.mjs";
+import { FrontierMonthly } from "./frontierMonthly.mjs";
 import { FrontierEditor } from "./frontierEditor.mjs";
 import { FrontierPipeline } from "./frontierPipeline.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
@@ -2096,6 +2097,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
     const weekly = new FrontierWeekly({ database: productDatabase, jobs: productJobs, owner: () => editor.owner, config,
       workerId: randomId("frontier-weekly-") });
+    // The monthly (2026-10-22): compiled from the month's dailies; its writer is the editor, its sentences held to the entries.
+    const monthly = new FrontierMonthly({ database: productDatabase, jobs: productJobs, editor, owner: () => editor.owner, config, budget,
+      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-monthly-") });
     const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary,
@@ -2121,8 +2125,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, profiles, actions });
-    const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions });
+    const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
