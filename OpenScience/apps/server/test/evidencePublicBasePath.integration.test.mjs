@@ -133,6 +133,21 @@ test("with the base at /evimed-evidence the composed app serves every page kind,
   for (const location of locations) assert.ok(location.startsWith(`${PUBLIC_URL}${BASE}/`), location);
   for (const expected of [`/z/${open.id}`, `/c/${cards[2].id}`, `/a/${handle}`]) assert.ok(locations.includes(`${PUBLIC_URL}${BASE}${expected}`), expected);
 
+  // Indexing is on, so what a crawler reads says so: the pages carry no noindex in the header or the markup, a link preview says what the
+  // card is, every listed card, zone and author states a lastmod, and the host's robots.txt (at the root, not under the base) leads to the sitemap.
+  assert.equal(card.headers.get("x-robots-tag"), null);
+  assert.equal(card.body.includes('name="robots"'), false);
+  const preview = `${PUBLIC_URL}${BASE}/c/${cards[0].id}`;
+  assert.ok(card.body.includes(`<meta property="og:url" content="${preview}">`) && card.body.includes('<meta property="og:type" content="article">'));
+  assert.match((await get(`${BASE}/z/${open.id}`)).body, /<meta property="og:type" content="website">/);
+  const stated = new Map([...sitemap.body.matchAll(/<url><loc>([^<]+)<\/loc>(<lastmod>([^<]+)<\/lastmod>)?<\/url>/g)].map((match) => [match[1], match[3] ?? null]));
+  for (const expected of [`/z/${open.id}`, `/c/${cards[0].id}`, `/a/${handle}`, "/"]) assert.match(stated.get(`${PUBLIC_URL}${BASE}${expected}`) ?? "", /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, `${expected} states a lastmod`);
+  const robots = await get("/robots.txt");
+  assert.equal(robots.status, 200);
+  assert.match(robots.headers.get("content-type") ?? "", /^text\/plain/);
+  assert.ok(robots.body.includes(`Allow: ${BASE}/\n`) && robots.body.includes(`Disallow: ${BASE}/api/\n`) && robots.body.includes(`Sitemap: ${PUBLIC_URL}${BASE}/sitemap.xml`));
+  assert.equal(robots.body.includes("/evidence/"), false, "no address under the other base");
+
   // The other member of the closed set is another product's on this deployment: none of these routes answers under it.
   for (const pathname of ["/evidence/", "/evidence/about", `/evidence/z/${open.id}`, `/evidence/c/${cards[0].id}`, `/evidence/a/${handle}`, "/evidence/api/v1/zones", "/evidence/sitemap.xml", "/evidence/assets/site.css", "/evidence/feed.json", "/evidence/feed.xml"]) {
     const answer = await get(pathname);
@@ -145,6 +160,7 @@ test("with the base at /evimed-evidence the composed app serves every page kind,
   // The operator can see which base is served, and the app tells its own page where the public pages are.
   const scrape = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   assert.match(scrape, /^open_science_evidence_public_base_path\{path="\/evimed-evidence"\} 1$/m);
+  assert.match(scrape, /^open_science_evidence_public_requests_total\{kind="robots"\} 1$/m);
   await context.app.store.createUser("base-reader", PASSWORD, "王芳");
   const login = await fetch(`${context.base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "base-reader", password: PASSWORD }) });
   const csrf = (await login.json()).data.csrfToken;
