@@ -98,6 +98,7 @@ from . import trials as trials_step
 from . import unpaywall as unpaywall_step
 from .article_html import fit_body, same_text
 from .common import Endpoints, Trace
+from ..adapters.common import looks_truncated
 from .page import clip_excerpt, page_excerpt, summary_is_full_text
 
 RETRY_NOT_INDEXED_S = 12 * 3600
@@ -124,6 +125,21 @@ SUMMARY_TEXT_SOURCE = {"eutils-query": "pubmed", "europepmc": "europepmc", "cros
 # OpenAlex's oa_status in the contract's vocabulary (Unpaywall's own mapping: hybrid and diamond read as gold).
 OPENALEX_OA_STATUS = {"gold": "gold", "diamond": "gold", "hybrid": "gold", "green": "green", "bronze": "bronze",
                       "closed": "closed"}
+
+
+# A preprint server's own feed (arXiv's Atom API, bioRxiv's and medRxiv's RSS) carries the whole abstract as the entry's summary.
+PREPRINT_SERVER_DOI_PREFIXES = ("10.48550/", "10.1101/", "10.64898/")
+PREPRINT_FEED_ACCESS = frozenset({"atom", "rss"})
+PREPRINT_ABSTRACT_MIN = 200
+
+
+def preprint_feed_abstract(row: dict, doi: str | None) -> bool:
+    """Whether the entry's own summary is its abstract: a preprint server's DOI, read from that server's own feed, and a summary
+    long enough and not cut. Measured on 2026-10-22: 287 published arXiv, bioRxiv and medRxiv papers showed no text although
+    each feed entry carried its abstract (1,500 characters on average); the chain asked PubMed, which does not index them."""
+    summary = row.get("summary") or ""
+    return bool(doi and doi.startswith(PREPRINT_SERVER_DOI_PREFIXES) and row.get("source_access") in PREPRINT_FEED_ACCESS
+                and len(summary) >= PREPRINT_ABSTRACT_MIN and not looks_truncated(summary))
 
 
 def _family(row: dict) -> str | None:
@@ -243,6 +259,8 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
         family = _family(row)
         source_text = SUMMARY_TEXT_SOURCE.get(row.get("source_access")) or \
             {"crossref-works": "crossref", "biorxiv": None, "arxiv": None}.get(family or "", "unset")
+        if source_text == "unset" and preprint_feed_abstract(row, doi):
+            source_text = None
         if source_text != "unset":
             found.abstract, found.abstract_from = row["summary"], source_text
     if not found.abstract and doi and not preprint and not upgrade:
