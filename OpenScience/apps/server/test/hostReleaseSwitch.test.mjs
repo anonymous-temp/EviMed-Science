@@ -186,7 +186,8 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     app: { releaseId }, source: { revision: NEW },
     runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
   }));
-  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
+  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`
+    + "OPEN_SCIENCE_GEO_PROBE_URL=http://203.0.113.9:9999\nOPEN_SCIENCE_GEO_SOCIAL_URL=http://203.0.113.9:9966\n");
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
   await writeFile(path.join(root, "shared", `ops-source-${NEW}`, "compose.builtin.override.yml"), "services: {}\n");
@@ -246,6 +247,8 @@ function runSwitch(root, flags = []) {
   // --env-file` never overrides a variable the caller already has.
   const env = { ...process.env };
   delete env.OPEN_SCIENCE_PUBLIC_HEALTH_URL;
+  delete env.OPEN_SCIENCE_GEO_PROBE_URL;
+  delete env.OPEN_SCIENCE_GEO_SOCIAL_URL;
   delete env.OPEN_SCIENCE_EDGE_PROXY_URL;
   delete env.OPEN_SCIENCE_MANAGED_BROWSER_ENABLED;
   return new Promise((resolve) => {
@@ -284,6 +287,8 @@ test("the switch restarts what still reads the previous release through current,
     // The probe targets were written from the release's `.env` before the move.
     const tls = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/tls.json"), "utf8"));
     assert.deepEqual(tls[0], { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } });
+    const external = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/external.json"), "utf8"));
+    assert.deepEqual(external.map((group) => group.targets), [["http://203.0.113.9:9999/providers"], ["http://203.0.113.9:9966/health"]]);
     // ...and Alertmanager's route to the control plane's alert receiver, the
     // one delivery every alert has (until 2026-09-28 they were all dropped).
     assert.match(result.stdout, /=== alert receiver follows the release ===/);

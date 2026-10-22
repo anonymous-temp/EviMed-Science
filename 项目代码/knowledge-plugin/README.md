@@ -136,7 +136,12 @@ an identity key, polls in the fetch log, health by the same rule — but the sch
   relay when configured).
 - **WeChat**: every account is re-resolved from an article verified to be its own before its first read (a saved id is
   not trusted) and kept only when Dajiala names it as expected; then read by its original id at most twice a day,
-  highest priority first; each new post's text bought once.
+  highest priority first; each new post's text bought once. A text that could not be bought with its post (a failure
+  that passes, such as Dajiala's code 20002 while the balance runs low, or the cap) is bought when the platform asks
+  `/text` for it — never read as a page: mp.weixin.qq.com refuses robots — at most six calls per entry with a doubling
+  wait, and five failures in a row pause every body purchase for an hour. `python -m knowledge_plugin wechat-bodies
+  [--days 7]` lists the WeChat entries answered `unavailable` without their text (writes nothing, calls nobody);
+  `--apply` buys them within the day's cap and delivers each recovered entry again as its next revision.
 - **Six platforms**: a standing watch list (`watch_list` in the same file, each term with its reason) searched one
   platform and one term at a time, 120 requests a day spread over the day, ten minutes' wait whenever GEO's crawler is
   busy. A post keeps an excerpt and the platform's counts, never its author.

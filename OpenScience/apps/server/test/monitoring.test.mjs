@@ -202,7 +202,8 @@ test("monitoring configuration rejects weak secrets and local alert webhooks", a
   }
 });
 
-const noProbeUrls = { OPEN_SCIENCE_PUBLIC_HEALTH_URL: "", OPEN_SCIENCE_EDGE_PROXY_URL: "" };
+const noProbeUrls = { OPEN_SCIENCE_PUBLIC_HEALTH_URL: "", OPEN_SCIENCE_EDGE_PROXY_URL: "", OPEN_SCIENCE_GEO_PROBE_URL: "",
+  OPEN_SCIENCE_GEO_SOCIAL_URL: "" };
 
 test("the probe-target list is written from the environment alone, without the monitoring secrets", async () => {
   // 2026-09-26 (platform audit I3-1): production's `.env` named the public
@@ -213,6 +214,7 @@ test("the probe-target list is written from the environment alone, without the m
   const outputDir = path.join(tmp, "secrets");
   try {
     const written = await runMonitoring(outputDir, ["--targets", "--json"], {
+      ...noProbeUrls,
       OPEN_SCIENCE_PUBLIC_HEALTH_URL: "https://evimed.example.org/api/health",
       OPEN_SCIENCE_EDGE_PROXY_URL: "https://203.0.113.7",
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: "", OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD: "", OPEN_SCIENCE_ALERT_WEBHOOK_URL: "",
@@ -225,6 +227,11 @@ test("the probe-target list is written from the environment alone, without the m
       { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } },
       { targets: ["203.0.113.7:443"], labels: { probe: "edge-proxy-tls" } },
     ]);
+    // A deployment without the GEO module's two services watches neither.
+    assert.deepEqual([result.geoProbe, result.geoSocial], [0, 0]);
+    assert.deepEqual(JSON.parse(await readFile(path.join(tmp, "targets", "external.json"), "utf8")), [
+      { targets: [], labels: { probe: "geo-probe" } }, { targets: [], labels: { probe: "geo-social" } },
+    ]);
     // Nothing secret was asked for, so nothing secret was written.
     await assert.rejects(readFile(path.join(outputDir, "operator-metrics-token.txt")), { code: "ENOENT" });
     // An http origin reports no certificate expiry and is refused, not listed.
@@ -232,6 +239,52 @@ test("the probe-target list is written from the environment alone, without the m
       () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_PUBLIC_HEALTH_URL: "http://evimed.example.org/api/health" }),
       (err) => { assert.match(err.stderr, /public_health_url_insecure/); return true; },
     );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("the GEO module's two external services are probed at the paths the platform asks them on", async () => {
+  // 2026-10-22: the AI-engine probe host had refused connections since 10-19
+  // (1,063 probe jobs skipped as engine_paused, told by one unread inbox
+  // notice) and the social crawler answered 503 with its database gone; both
+  // run on the owner's host and nothing here watched them.
+  const tmp = await temporaryDirectory();
+  const outputDir = path.join(tmp, "secrets");
+  const geo = { OPEN_SCIENCE_GEO_PROBE_URL: "http://203.0.113.9:9999", OPEN_SCIENCE_GEO_SOCIAL_URL: "http://203.0.113.9:9966/" };
+  try {
+    const written = JSON.parse((await runMonitoring(outputDir, ["--targets", "--json"], { ...noProbeUrls, ...geo })).stdout);
+    assert.deepEqual([written.geoProbe, written.geoSocial], [1, 1]);
+    assert.deepEqual(JSON.parse(await readFile(path.join(tmp, "targets", "external.json"), "utf8")), [
+      { targets: ["http://203.0.113.9:9999/providers"], labels: { probe: "geo-probe" } },
+      { targets: ["http://203.0.113.9:9966/health"], labels: { probe: "geo-social" } },
+    ]);
+    assert.equal((await lstat(path.join(tmp, "targets", "external.json"))).mode & 0o777, 0o644);
+    // A probe host under a path is asked beneath it, as geoProbeGateway.mjs asks it.
+    await runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_PROBE_URL: "https://probe.example.org/geo" });
+    assert.deepEqual(JSON.parse(await readFile(path.join(tmp, "targets", "external.json"), "utf8"))[0].targets,
+      ["https://probe.example.org/geo/providers"]);
+    // The list is world-readable: a URL with credentials is refused, and the message never repeats it.
+    await assert.rejects(
+      () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_SOCIAL_URL: "http://crawler:hunter2@203.0.113.9:9966" }),
+      (err) => { assert.match(err.stderr, /geo_social_url_invalid/); assert.doesNotMatch(err.stderr, /hunter2/); return true; },
+    );
+    await assert.rejects(
+      () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_PROBE_URL: "http://203.0.113.9:9999/?token=abc" }),
+      (err) => { assert.match(err.stderr, /geo_probe_url_invalid/); assert.doesNotMatch(err.stderr, /token=abc/); return true; },
+    );
+    // A list generated without them is stale where `.env` names them, and says how to fix it.
+    await runMonitoring(outputDir, [], { ...validEnv, ...noProbeUrls });
+    await runMonitoring(outputDir, ["--check"], noProbeUrls);
+    await assert.rejects(
+      () => runMonitoring(outputDir, ["--check"], { ...noProbeUrls, ...geo }),
+      (err) => { assert.match(err.stderr, /service_targets_stale.*OPEN_SCIENCE_GEO_PROBE_URL.*--targets/); return true; },
+    );
+    await runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, ...geo });
+    await runMonitoring(outputDir, ["--check"], { ...noProbeUrls, ...geo });
+    await rm(path.join(tmp, "targets", "external.json"));
+    await assert.rejects(() => runMonitoring(outputDir, ["--check"], noProbeUrls),
+      (err) => { assert.match(err.stderr, /service_targets_missing/); return true; });
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

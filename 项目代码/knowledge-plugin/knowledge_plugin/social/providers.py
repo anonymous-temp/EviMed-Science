@@ -13,8 +13,11 @@ What each costs (the ledger's amounts):
   page is at most 20 tweets, a user or an article one object; a 404 (no such user or post) costs nothing.
 - Dajiala: what the answer's ``cost_money`` says (``post_history`` ¥0.14 by id or link, ``article_detail`` ¥0.03), with
   ``remain_money`` recorded as the balance. Codes (its documentation, 2026): 0 ok; -1 rate limited (5 a second); 20001
-  balance; 10002 key or code wrong; 101/104 the account or article is gone (charged); 105/20002/20003/30001/400 the request
-  was wrong (free); 2003/2005/50000 the provider failed, try later.
+  balance; 10002 key or code wrong; 101/104 the account or article is gone (charged); 105/20003/30001/400 the request
+  was wrong (free); 2003/2005/50000 the provider failed, try later. 20002 is documented as a wrong request but behaves as
+  one that passes: on 2026-10-22 production had 88 of 300 ``article_detail`` calls answer it, all between 16:21 and 17:29
+  Beijing while the balance ran down, and the same links read fine after the top-up — so it is ``failed`` (try later),
+  and what bounds the retries is the caller's (``collector``: six calls per entry's text, a pause after five in a row).
 - The crawler: one request, counted against the day's request cap; 429/503 means GEO is using it.
 """
 
@@ -45,7 +48,7 @@ ARTICLE_DETAIL_CNY = 0.03
 DAJIALA_RATE_LIMITED = -1
 DAJIALA_BALANCE = 20001
 DAJIALA_GONE = (101, 104)
-DAJIALA_RETRY = (2003, 2005, 50000)
+DAJIALA_RETRY = (2003, 2005, 20002, 50000)    # 20002: module docstring
 CRAWL_PATH = "/api/crawl"
 CRAWL_MAX_BYTES = 8 * 1024 * 1024
 

@@ -25,7 +25,8 @@ within the poll, and a transient failure (``policy.is_transient``) is re-sent up
 jittered wait; re-sends are requests in the fetch log but do not use up ``max_pages``. The plugin's
 own budget refusals (``host-budget``) reschedule without counting as the source's failure.
 
-The same process also runs the text worker (on-demand enrichment for ``/text``), the hourly
+The same process also runs the text worker (on-demand enrichment for ``/text``; a WeChat article's text is
+bought through the social collector, never read as a page — ``social.wechat``), the hourly
 retention purge (fetches 14 d, entries 30 d after delivery or 90 d when their text was asked for,
 seen_keys 400 d), the hourly health re-check (``recheck_health``: the 24 h window moves on without a
 poll) and a registry watcher that re-syncs when the file changes.
@@ -55,6 +56,7 @@ from .model import NEUTRAL_DETAILS, SOCIAL_ACCESSES, EntryTextResult, FetchError
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
+from .social.wechat import is_article as is_wechat_article
 from .store import (StoreResult, claim_texts, insert_fetch, reliability_24h, reliability_24h_all, save_text_result,
                     store_entries, text_failure)
 
@@ -601,6 +603,11 @@ class Crawler:
             jobs = await claim_texts(conn, limit, self._clock(), self._settings.lease_s)
         if not jobs:
             return
+        for job in [job for job in jobs if is_wechat_article(job.get("url"))]:
+            await self.wechat_text_one(job)
+        jobs = [job for job in jobs if not is_wechat_article(job.get("url"))]
+        if not jobs:
+            return
         if self._enrich_batch is not None and len(jobs) > 1:
             await self.enrich_many(jobs)
             return
@@ -665,6 +672,28 @@ class Crawler:
         async with self._pool.connection() as conn:
             status = await save_text_result(conn, job, result, now)
         log.info("text %s %s via %s", job["entry_id"], status, result.fetched_from or "-")
+        return status
+
+    async def wechat_text_one(self, job: dict) -> str:
+        """A WeChat article's text, bought through Dajiala by the social collector (fr-ext 2026-10-22): mp.weixin.qq.com
+        refuses every page read in its robots.txt, so the page reader answered "unavailable" and a body lost to a
+        provider hiccup at collection was never recovered."""
+        now = self._clock()
+        try:
+            async with asyncio.timeout(ENRICH_TIMEOUT_S):
+                result = await self.social().wechat_text(job, now)
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            async with self._pool.connection() as conn:
+                return await text_failure(conn, job, "wechat_text_timeout", now)
+        except Exception as error:
+            log.exception("wechat text of %s failed", job["entry_id"])
+            async with self._pool.connection() as conn:
+                return await text_failure(conn, job, f"wechat_text_failed:{type(error).__name__}", now)
+        async with self._pool.connection() as conn:
+            status = await save_text_result(conn, job, result, now)
+        log.info("text %s %s via dajiala (%s)", job["entry_id"], status, ",".join(result.notes) or "-")
         return status
 
     # ------------------------------------------------------------------ maintenance
@@ -758,12 +787,17 @@ class Crawler:
                              row["id"], row["health"], health, successes, episodes)
         return changed
 
-    async def collect_social(self) -> dict:
-        """One tick of the social collector (``knowledge_plugin.social``): the social read methods are never claimed above."""
+    def social(self):
+        """The social collector (``knowledge_plugin.social``), made on first use; its loop and the WeChat texts share it
+        (one Dajiala pause, one body bound)."""
         if self._social is None:
             from .social.collector import SocialCollector
             self._social = SocialCollector(self._settings, self._pool, self._fetcher, clock=self._clock)
-        return await self._social.tick()
+        return self._social
+
+    async def collect_social(self) -> dict:
+        """One tick of the social collector (``knowledge_plugin.social``): the social read methods are never claimed above."""
+        return await self.social().tick()
 
     async def discover_medical_sources(self) -> dict:
         from .medical_discovery import run_daily_discovery

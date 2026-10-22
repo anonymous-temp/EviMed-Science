@@ -193,6 +193,94 @@
       ]
     },
     {
+      "job_name": "geo-probe-host",
+      "metrics_path": "/probe",
+      "scrape_interval": "2m",
+      "scrape_timeout": "20s",
+      "params": {
+        "module": [
+          "geo_probe_answers"
+        ]
+      },
+      "relabel_configs": [
+        {
+          "source_labels": [
+            "probe"
+          ],
+          "regex": "geo-probe",
+          "action": "keep"
+        },
+        {
+          "source_labels": [
+            "__address__"
+          ],
+          "target_label": "__param_target"
+        },
+        {
+          "source_labels": [
+            "__param_target"
+          ],
+          "target_label": "instance"
+        },
+        {
+          "target_label": "__address__",
+          "replacement": "blackbox-exporter:9115"
+        }
+      ],
+      "file_sd_configs": [
+        {
+          "files": [
+            "/etc/prometheus/targets/external.json"
+          ],
+          "refresh_interval": "5m"
+        }
+      ]
+    },
+    {
+      "job_name": "geo-social-crawler",
+      "metrics_path": "/probe",
+      "scrape_interval": "2m",
+      "scrape_timeout": "20s",
+      "params": {
+        "module": [
+          "http_2xx"
+        ]
+      },
+      "relabel_configs": [
+        {
+          "source_labels": [
+            "probe"
+          ],
+          "regex": "geo-social",
+          "action": "keep"
+        },
+        {
+          "source_labels": [
+            "__address__"
+          ],
+          "target_label": "__param_target"
+        },
+        {
+          "source_labels": [
+            "__param_target"
+          ],
+          "target_label": "instance"
+        },
+        {
+          "target_label": "__address__",
+          "replacement": "blackbox-exporter:9115"
+        }
+      ],
+      "file_sd_configs": [
+        {
+          "files": [
+            "/etc/prometheus/targets/external.json"
+          ],
+          "refresh_interval": "5m"
+        }
+      ]
+    },
+    {
       "job_name": "prometheus",
       "static_configs": [
         {

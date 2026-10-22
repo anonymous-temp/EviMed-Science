@@ -19,6 +19,10 @@ the abstract may have too.
 An entry that arrives with its own full text (contract 1.5.0: an X post, a WeChat article the paid API returned) has it
 written into ``entry_texts`` in the same transaction and is ``available`` at once: nothing is left to enrich, so ``/text``
 answers the post without a round trip and the enrichment worker never fetches its page.
+
+``redeliver`` is the one revision without a content change: a text that arrives after the platform was answered
+``unavailable`` for it (the WeChat texts recovered by ``python -m knowledge_plugin wechat-bodies --apply``). The platform
+asks ``/text`` again when it sees a new revision of an entry (contract, ``getEntryText``) and would not otherwise.
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ from . import policy
 from .db import lock_seq
 from .model import (ENRICHMENT_TYPES, FETCHED_FROM, NEUTRAL_DETAILS, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES,
                     EntryTextResult)
-from .normalize import Prepared, clean_body, clean_text, cut, is_backfill, resolve_dates
+from .normalize import Prepared, clean_body, clean_text, cut, is_backfill, key_sha256, resolve_dates
 
 ENTRY_COLUMNS = (
     "seq, entry_id, source_id, external_key, identity_key, url, canonical_url, doi, pmid, registry_ids, title, "
@@ -195,6 +199,25 @@ async def _store_body(conn: AsyncConnection, item: Prepared, revision: int, now:
     )
 
 
+async def redeliver(conn: AsyncConnection, entry_id: str, now: datetime) -> int | None:
+    """Deliver an entry again as its next revision, its content unchanged (module docstring); returns the revision, or
+    ``None`` when the entry is gone. Holds the seq lock for the caller's transaction, so commit order stays seq order."""
+    async with conn.transaction():
+        await lock_seq(conn)
+        row = await (await conn.execute(
+            """UPDATE evimed_knowledge.entries SET seq = DEFAULT, revision = revision + 1, delivered_at = %s
+                WHERE entry_id = %s RETURNING source_id, external_key, revision""", (now, entry_id))).fetchone()
+        if row is None:
+            return None
+        await conn.execute("UPDATE evimed_knowledge.entry_texts SET revision = %s WHERE entry_id = %s",
+                           (row["revision"], entry_id))
+        await conn.execute(
+            """UPDATE evimed_knowledge.seen_keys SET revision = greatest(revision, %s)
+                WHERE source_id = %s AND key_sha256 = %s""",
+            (row["revision"], row["source_id"], key_sha256(row["external_key"])))
+    return int(row["revision"])
+
+
 # ------------------------------------------------------------------------------------ fetch log
 
 async def insert_fetch(conn: AsyncConnection, *, source_id: str, fetched_at: datetime, egress: str, host: str | None,
@@ -298,7 +321,7 @@ async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s:
                   ORDER BY t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
                UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %s
                  FROM due WHERE t.entry_id = due.entry_id
-               RETURNING t.entry_id, t.attempts""",
+               RETURNING t.entry_id, t.attempts, t.paid_attempts""",
             (now, limit, now + timedelta(seconds=lease_s)),
         )).fetchall()
     jobs = []
@@ -313,6 +336,7 @@ async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s:
         )).fetchone()
         if joined:
             joined["attempts"] = row["attempts"]
+            joined["paid_attempts"] = row["paid_attempts"]
             jobs.append(joined)
     return jobs
 

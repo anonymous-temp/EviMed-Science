@@ -16,14 +16,18 @@ const targetsDir = path.resolve(
   process.env.OPEN_SCIENCE_MONITORING_TARGETS_DIR ?? path.join(repoRoot, "deploy/web/monitoring/targets"),
 );
 const tlsTargetsFile = path.join(targetsDir, "tls.json");
+/** The external services the platform depends on and does not run, beside it. */
+const SERVICE_TARGETS_NAME = "external.json";
+const serviceTargetsFile = path.join(targetsDir, SERVICE_TARGETS_NAME);
 
 const checkOnly = process.argv.includes("--check");
 const probeOnly = process.argv.includes("--probe");
 const prepareReaders = process.argv.includes("--prepare-container-secrets");
-/** Rewrite the probe-target list alone, from the environment (`node
- *  --env-file=.env`), without the three secrets a full generation asks for:
- *  the release switch runs it for every release, so the certificate probes
- *  follow `.env` instead of whoever last ran the generator and with what. */
+/** Rewrite the probe-target lists alone (tls.json, external.json), from the
+ *  environment (`node --env-file=.env`), without the three secrets a full
+ *  generation asks for: the release switch runs it for every release, so the
+ *  certificate and external-service probes follow `.env` instead of whoever
+ *  last ran the generator and with what. */
 const targetsOnly = process.argv.includes("--targets");
 /** Write the alert receiver's credential and Alertmanager's routes to it, and
  *  nothing else: no metrics token, Grafana password or external webhook is
@@ -325,7 +329,7 @@ async function generate() {
   await writePrivateFile(files.prometheusMetricsToken, `${metricsToken}\n`);
   await writePrivateFile(files.grafanaPassword, `${grafanaPassword}\n`);
   await writeAlertReceiver({ externalUrl: webhookUrl });
-  await writeTlsTargets();
+  await writeTargets();
 }
 
 /**
@@ -376,19 +380,77 @@ export function tlsTargetsFromEnv(env) {
   return { targets, edge };
 }
 
-async function writeTlsTargets() {
-  const { targets, edge } = tlsTargetsFromEnv(process.env);
+/**
+ * The external services this deployment depends on and does not run, as
+ * blackbox targets: the GEO module's AI-engine probe host (`GET /providers`)
+ * and its social crawler (`GET /health`). Both run on the owner's host, so
+ * nothing in this stack noticed them go: the probe host refused connections
+ * from 2026-10-19 00:50Z and GEO skipped 1,063 probe jobs as `engine_paused`,
+ * told only by an inbox notice nobody read; the crawler answered 503 (its
+ * MongoDB gone) by 2026-10-22, which stops GEO's social monitoring and the
+ * frontier feed's six-platform monitor.
+ *
+ * What "up" is (prometheus.json `geo-probe-host`, `geo-social-crawler`): the
+ * probe host serves one request at a time and answers 409 while it measures,
+ * and one that verifies the platform's signature refuses the unsigned check
+ * with 401/403 — each an answer from a live host, so blackbox's
+ * `geo_probe_answers` counts them; the crawler is up when /health answers 2xx
+ * (its 503 is its database gone). One check every two minutes, so the probe
+ * host's one-at-a-time measurements are barely touched.
+ *
+ * The list is world-readable, like tls.json, so a URL carrying credentials, a
+ * query or a fragment is refused rather than written into it — the platform's
+ * own config refuses the same for the crawler. Absent means no target and no
+ * alert: a deployment without the GEO module has nothing to watch.
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ geoProbe: string[], geoSocial: string[] }}
+ */
+export function serviceTargetsFromEnv(env) {
+  /** @param {string} name @param {string} code */
+  const origin = (name, code) => {
+    const raw = String(env[name] ?? "").trim();
+    if (!raw) return null;
+    let url;
+    try { url = new URL(raw); } catch {
+      fail(code, `${name} is not a URL.`);
+    }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      fail(code, `${name} must be an http(s) origin with an optional path and no credentials to be probed.`);
+    }
+    if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
+    return url;
+  };
+  // The paths the platform's own clients use (geoProbeGateway.mjs, the
+  // crawler's OpenAPI): a probe answers what the platform would ask.
+  const probe = origin("OPEN_SCIENCE_GEO_PROBE_URL", "geo_probe_url_invalid");
+  const social = origin("OPEN_SCIENCE_GEO_SOCIAL_URL", "geo_social_url_invalid");
+  return {
+    geoProbe: probe ? [new URL("providers", probe).toString()] : [],
+    geoSocial: social ? [new URL("health", social).toString()] : [],
+  };
+}
+
+/** @param {string} file @param {unknown} content */
+async function writeTargetFile(file, content) {
   await assertNoSymlinkPath(targetsDir, { allowMissingTail: true });
   await fsp.mkdir(targetsDir, { recursive: true, mode: 0o755 });
   await assertNoSymlinkPath(targetsDir);
-  await fsp.writeFile(tlsTargetsFile, `${JSON.stringify([{ targets, labels: { probe: "public-tls" } },
-    { targets: edge, labels: { probe: "edge-proxy-tls" } }], null, 2)}\n`, { mode: 0o644 });
+  await fsp.writeFile(file, `${JSON.stringify(content, null, 2)}\n`, { mode: 0o644 });
   // `mode` on writeFile applies only when the file is created, so a file that
   // already exists keeps whatever mode it had — and this one is checked in, so
   // on a host whose umask is 002 the checkout is group-writable and `check()`
   // rejects the generator's own output. The secret writer above chmods for the
   // same reason.
-  await fsp.chmod(tlsTargetsFile, 0o644);
+  await fsp.chmod(file, 0o644);
+}
+
+async function writeTargets() {
+  const { targets, edge } = tlsTargetsFromEnv(process.env);
+  const { geoProbe, geoSocial } = serviceTargetsFromEnv(process.env);
+  await writeTargetFile(tlsTargetsFile, [{ targets, labels: { probe: "public-tls" } },
+    { targets: edge, labels: { probe: "edge-proxy-tls" } }]);
+  await writeTargetFile(serviceTargetsFile, [{ targets: geoProbe, labels: { probe: "geo-probe" } },
+    { targets: geoSocial, labels: { probe: "geo-social" } }]);
 }
 
 async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile = readRegularFile) {
@@ -404,6 +466,7 @@ async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile
   validateSecret(grafanaPassword, "Grafana password", 24);
   const receiver = await checkAlertReceiver(secretFiles, readFile);
   const { publicTls } = await checkTlsTargets(targetsFile, readFile);
+  await checkServiceTargets(path.join(path.dirname(targetsFile), SERVICE_TARGETS_NAME), readFile);
   return { ...receiver, tlsTargets: publicTls };
 }
 
@@ -491,6 +554,38 @@ async function checkTlsTargets(targetsFile = tlsTargetsFile, readFile = readRegu
     }
   }
   return { publicTls: group("public-tls").length, edgeTls: group("edge-proxy-tls").length };
+}
+
+/**
+ * The external services' list, by the same rules as the TLS list: present,
+ * shaped like file-SD, and probing what the environment names (a list
+ * generated without a URL gives its alert no series to fire on).
+ * @returns {Promise<{ geoProbe: number, geoSocial: number }>}
+ */
+async function checkServiceTargets(targetsFile = serviceTargetsFile, readFile = readRegularFile) {
+  let list;
+  try {
+    list = JSON.parse(await readFile(targetsFile, 16 * 1024, false));
+  } catch (err) {
+    if (err?.code === "monitoring_file_missing" || err?.code === "ENOENT") {
+      fail("service_targets_missing", `monitoring/targets/${SERVICE_TARGETS_NAME} is missing; run configure:monitoring --targets.`);
+    }
+    if (err?.code) throw err;
+    fail("service_targets_invalid", `monitoring/targets/${SERVICE_TARGETS_NAME} must contain valid JSON.`);
+  }
+  if (!Array.isArray(list) || list.some((entry) => !Array.isArray(entry?.targets) || typeof entry?.labels?.probe !== "string")) {
+    fail("service_targets_invalid", `monitoring/targets/${SERVICE_TARGETS_NAME} must be a Prometheus file-SD target list.`);
+  }
+  const group = (probe) => list.find((entry) => entry.labels.probe === probe)?.targets ?? [];
+  const expected = serviceTargetsFromEnv(process.env);
+  for (const [probe, want, variable] of [["geo-probe", expected.geoProbe, "OPEN_SCIENCE_GEO_PROBE_URL"],
+    ["geo-social", expected.geoSocial, "OPEN_SCIENCE_GEO_SOCIAL_URL"]]) {
+    const have = group(probe);
+    if (want.length && (have.length !== want.length || want.some((target) => !have.includes(target)))) {
+      fail("service_targets_stale", `monitoring/targets/${SERVICE_TARGETS_NAME} does not probe the ${variable} the environment names; run configure:monitoring --targets.`);
+    }
+  }
+  return { geoProbe: group("geo-probe").length, geoSocial: group("geo-social").length };
 }
 
 /** Prepare existing 0600 bind-mounted files for their fixed container readers.
@@ -639,11 +734,12 @@ export async function probeAlertDelivery({ webhookUrl, receiverName, fetchImpl =
 async function main() {
   if (targetsOnly) {
     if (checkOnly || probeOnly || prepareReaders) fail("monitoring_mode_conflict", "The probe-target list must be written on its own.");
-    await writeTlsTargets();
-    const counts = await checkTlsTargets();
-    const result = { ok: true, mode: "targets", file: tlsTargetsFile, ...counts };
+    await writeTargets();
+    const counts = { ...await checkTlsTargets(), ...await checkServiceTargets() };
+    const result = { ok: true, mode: "targets", file: tlsTargetsFile, servicesFile: serviceTargetsFile, ...counts };
     process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n`
-      : `monitoring probe targets written: ${counts.publicTls} public, ${counts.edgeTls} edge proxy (${tlsTargetsFile})\n`);
+      : `monitoring probe targets written: ${counts.publicTls} public, ${counts.edgeTls} edge proxy (${tlsTargetsFile}); `
+        + `${counts.geoProbe} GEO probe host, ${counts.geoSocial} GEO social crawler (${serviceTargetsFile})\n`);
     return;
   }
   if (alertReceiverOnly) {

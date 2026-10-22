@@ -1,4 +1,4 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|wechat-bodies]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
@@ -10,6 +10,11 @@ and exits non-zero on a problem, without touching a database.
 with the counts by reason; it writes nothing (``lifecycle --apply`` retires them and syncs the registry, what the
 hourly discovery run does once a day). ``discover`` runs the discovery cycle once in the foreground and prints its
 report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`` overrides the day's caps).
+
+``wechat-bodies`` prints, one JSON line each, the WeChat articles answered ``unavailable`` without their text in the last
+``--days`` (default 7) and a last line with the count and what buying them would cost; it writes nothing and calls nobody.
+``wechat-bodies --apply`` buys them through Dajiala within the day's cap and delivers each recovered entry again
+(``social.lost_bodies``).
 """
 
 from __future__ import annotations
@@ -155,6 +160,38 @@ async def _discover(settings: Settings, lines: list[str] | None, caps: str | Non
         await pool.close()
 
 
+async def _wechat_bodies(settings: Settings, days: int, apply: bool) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .fetch import ProtectedFetcher
+    from .social import lost_bodies
+    from .social.collector import SocialCollector
+
+    def clock():
+        return datetime.now(timezone.utc)
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        collector = SocialCollector(settings, pool, fetcher, clock=clock)
+        if apply:
+            outcome = await lost_bodies.apply(collector, pool, clock, days=days)
+        else:
+            outcome = await lost_bodies.report(collector, pool, clock(), days=days)
+        for line in outcome["entries"]:
+            print(json.dumps(line, ensure_ascii=False, default=str))
+        print(json.dumps(outcome["summary"], ensure_ascii=False, default=str))
+        return 0
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
 def check_registry(path: str) -> int:
     from .registry import RegistryError, load_registry
 
@@ -214,7 +251,17 @@ def main(argv: list[str] | None = None) -> int:
             elif flag == "--caps":
                 caps = value
         return asyncio.run(_discover(settings, lines, caps))
-    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle or discover", file=sys.stderr)
+    if command == "wechat-bodies":
+        days = 7
+        for flag, value in zip(argv[1:], argv[2:]):
+            if flag == "--days":
+                if not (value.isdigit() and 1 <= int(value) <= 30):
+                    print("--days takes a whole number of days from 1 to 30", file=sys.stderr)
+                    return 2
+                days = int(value)
+        return asyncio.run(_wechat_bodies(settings, days, apply="--apply" in argv[1:]))
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover or wechat-bodies",
+          file=sys.stderr)
     return 2
 
 
