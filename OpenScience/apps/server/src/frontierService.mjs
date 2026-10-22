@@ -1981,6 +1981,20 @@ export function frontierMetricFamilies(enabled, snapshot) {
       issueRows(editor.counters.finalIssues));
     add("edit_summary_trimmed_total", "Edits published repaired with the whole sentences of a summary that fit its limit, because the length was the only fault left.", "counter",
       [{ value: Number(editor.counters.summaryTrimmed ?? 0) }]);
+    // The reader's parts (2026-10-22): a 推荐理由 dropped by its own checks (by kind) or left empty by the answer, the full-text
+    // translation's calls and paragraphs, and edits a served policy older than the answer's keys would have written.
+    add("edit_reason_total", "Published edits whose 推荐理由 was dropped by its checks (by kind) or that the answer left empty.", "counter", [
+      ...Object.entries(editor.counters.reasonDropped ?? {}).map(([kind, value]) => ({ labels: { outcome: `dropped-${kind}` }, value: Number(value) })),
+      { labels: { outcome: "empty" }, value: Number(editor.counters.reasonEmpty ?? 0) },
+    ]);
+    add("translate_total", "The reader's full-text translation: calls, calls that could not be made, paragraphs verified and paragraphs left in the original.", "counter", [
+      { labels: { kind: "call" }, value: Number(editor.counters.translateCalls ?? 0) },
+      { labels: { kind: "call-failure" }, value: Number(editor.counters.translateFailures ?? 0) },
+      { labels: { kind: "paragraph" }, value: Number(editor.counters.translatedParagraphs ?? 0) },
+      { labels: { kind: "paragraph-refused" }, value: Number(editor.counters.translateRejectedParagraphs ?? 0) },
+    ]);
+    add("edit_outdated_policy_total", "Edits written with the shipped instructions because the served policy did not ask for every answer key.", "counter",
+      [{ value: Number(editor.counters.outdatedPolicies ?? 0) }]);
     add("edit_number_check_total", "First edit answers by whether every number was found in the source (plan §10.5.8's first-pass rate).", "counter", [
       { labels: { outcome: "first-pass" }, value: Number(editor.counters.numberCheck?.first ?? 0) - Number(editor.counters.numberCheck?.firstFailed ?? 0) },
       { labels: { outcome: "first-fail" }, value: Number(editor.counters.numberCheck?.firstFailed ?? 0) },
@@ -1993,7 +2007,7 @@ export function frontierMetricFamilies(enabled, snapshot) {
   const composer = snapshot.composer;
   if (composer) {
     const daily = composer.daily ?? {};
-    for (const name of ["weekly", "notifications"]) {
+    for (const name of ["weekly", "monthly", "notifications"]) {
       const component = composer[name];
       add(`${name}_available`, "Whether frontier background delivery is composed and available.", "gauge", [{ value: component?.available ? 1 : 0 }]);
       add(`${name}_total`, "Frontier background outcomes since this process started.", "counter",

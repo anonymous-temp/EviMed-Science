@@ -1693,7 +1693,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `OPEN_SCIENCE_FRONTIER_MODEL` | `deepseek-flash` | 须是网关认证过的模型 |
 | `OPEN_SCIENCE_FRONTIER_DAILY_TIME` | `07:30` | HH:MM |
 | `OPEN_SCIENCE_FRONTIER_TIMEZONE` | `Asia/Shanghai` | IANA 时区 |
-| `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 10 | 0–10000；0=不设限；≥80% 节流，≥100% 停止 |
+| `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 300 | 0–10000；0=不设限；≥80% 节流，≥100% 停止（2026-10-22 起 300，原为 10） |
 | `OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` | 2 | 1–8 |
 | `OPEN_SCIENCE_FRONTIER_OFFPEAK` | `false` | Edit throughout the day within the existing daily budget; optional offpeak deferral must be explicitly enabled (owner freshness correction, 2026-10-19). |
 | `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` | 82 | 0–100 |
