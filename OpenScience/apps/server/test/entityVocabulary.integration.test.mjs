@@ -109,7 +109,9 @@ test("the pipeline stores the keys it always did while sharing the vocabulary's 
           evidenceType: "observational", entities, scores: { impact: 20, novelty: 10, relevance: 10 }, flags: [] } };
     },
   };
-  const plugin = { async text(/** @type {string} */ entryId) { return { entry_id: entryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} }; } };
+  // The paper arrives with its abstract (2026-10-22: an item with nothing to read is not published).
+  const plugin = { async text(/** @type {string} */ entryId) { return { entry_id: entryId, revision: 1, status: "available", text_kind: "abstract",
+    abstract: "Semaglutide reduced cardiovascular events in heart failure.", body_excerpt: null, enrichment: {} }; } };
   const embedder = { configured: true, modelKey: `fake@${DIMENSION}`, dimension: DIMENSION, async embedDocuments(/** @type {string[]} */ texts) { return texts.map(() => Array.from({ length: DIMENSION }, () => 1)); } };
   const clock = new Date("2026-09-22T12:00:00Z");
   const run = async (/** @type {string} */ doi, /** @type {any} */ glossary, /** @type {string} */ title) => {
