@@ -48,6 +48,17 @@
 #   bytes and closes with the render. What the browser can newly reach is the
 #   control plane's listeners, which face the runtime containers — arbitrary
 #   code — already and authenticate every caller.
+# - Social posts (contract 1.5.0, fr-social 2026-10-22): X through SocialData
+#   and WeChat official accounts through Dajiala, each with the owner's paid key
+#   as a file (root:10002 0440 under /srv/evimed-science/shared/secrets/,
+#   socialdata.api-key and dajiala.api-key; /dev/null when absent, and that
+#   adapter does nothing), each behind a daily cap the plugin counts in its own
+#   database (US$5 and ¥30 by default, Asia/Shanghai day). The six Chinese
+#   platforms are searched through the GEO module's crawler at the address the
+#   platform already has (OPEN_SCIENCE_GEO_SOCIAL_URL; empty = off), 120 requests
+#   a day spread over the day, GEO first. Images posts carry are re-encoded and
+#   kept in the `knowledge-plugin-media` volume (3 GB, least recently served
+#   evicted first) and served to the platform by the plugin.
 services:
   open-science-web:
     environment:
@@ -92,6 +103,15 @@ services:
       # 0 serves the stream without crawling (a restore drill, a paused registry).
       EVIMED_SOURCE_REQUESTS_URL: ${OPEN_SCIENCE_PUBLIC_URL:-http://localhost:8787}/evolution/source-requests.json
       KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
+      # Contract 1.5.0, the social adapters: keys by file, caps, the GEO crawler, the media store.
+      KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE: /run/secrets/socialdata-api-key
+      KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE: /run/secrets/dajiala-api-key
+      KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD: ${KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD:-5}
+      KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY: ${KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY:-30}
+      KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL-${OPEN_SCIENCE_GEO_SOCIAL_URL:-}}
+      KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY: ${KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY:-120}
+      KNOWLEDGE_PLUGIN_MEDIA_DIR: /var/lib/knowledge-plugin/media
+      KNOWLEDGE_PLUGIN_MEDIA_CAP_MB: ${KNOWLEDGE_PLUGIN_MEDIA_CAP_MB:-3072}
       # The platform's own evidence feed (flywheel F09), read as one more ordinary source. Its address is the deployment's own
       # public one, <public url><evidence base path>/feed.json: the platform links every card on OPEN_SCIENCE_PUBLIC_URL and the
       # plugin keeps only the cards on the host it read the feed from, so the feed is read where its cards live. (A compose-internal
@@ -126,6 +146,18 @@ services:
         source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
         target: /run/secrets/edge-proxy-credentials
         read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/socialdata-api-key
+        read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_DAJIALA_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/dajiala-api-key
+        read_only: true
+      # The media store: the one place the plugin writes outside its database (its root filesystem is read-only).
+      - type: volume
+        source: knowledge-plugin-media
+        target: /var/lib/knowledge-plugin/media
     depends_on:
       evimed-postgres:
         condition: service_healthy
@@ -236,6 +268,10 @@ services:
       - /workspace:rw,nosuid,nodev,noexec,size=1m
       - /runtime:rw,nosuid,nodev,noexec,size=1m
     restart: unless-stopped
+
+volumes:
+  # Re-encoded images of social posts, named by their sha256 (contract 1.5.0); rebuildable, never backed up.
+  knowledge-plugin-media:
 
 networks:
   # The plugin and its browser, and nobody else.

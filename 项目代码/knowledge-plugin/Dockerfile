@@ -35,6 +35,10 @@ RUN pip install --index-url "${PIP_INDEX_URL}" --no-deps . \
  && cd / && rm -rf /build
 
 COPY registry/sources.json /opt/knowledge-plugin/registry/sources.json
+# Contract 1.5.0: the social sources (X, WeChat, six platforms), composed with sources.json at start.
+COPY registry/social-sources.json /opt/knowledge-plugin/registry/social-sources.json
+# The media store's mount point, owned by the plugin's user: an empty named volume mounted here takes this ownership.
+RUN mkdir -p /var/lib/knowledge-plugin/media && chown 10002:10002 /var/lib/knowledge-plugin/media
 
 LABEL org.opencontainers.image.title="evimed-knowledge-plugin" \
       org.opencontainers.image.revision="${PLUGIN_BUILD}"

@@ -9,11 +9,12 @@ data and makes no content-generating model call (plan `docs/superpowers/specs/20
 
 ## The contract
 
-`contract/knowledge-plugin-openapi.yaml` (v1.4.0, normative; a vendored copy of the plan's file,
+`contract/knowledge-plugin-openapi.yaml` (v1.5.0, normative; a vendored copy of the plan's file,
 kept byte-identical by a test while this lives in the monorepo). Paths: `/v1/manifest`,
 `/v1/health` (no token), `/v1/sources[/{id}]`, `/v1/entries?after=<seq>` (the stream, ascending
 `seq`), `/v1/entries/{id}`, `/v1/entries/{id}/text` (on-demand abstract and enrichment),
-`POST /v1/entries/{id}/refresh`, `/v1/lookups` (empty in batch 1; `POST` answers 501).
+`POST /v1/entries/{id}/refresh`, `/v1/media/{id}` (1.5.0: a stored image's bytes), `/v1/lookups` (empty in batch 1;
+`POST` answers 501).
 Bearer token from a file; errors are `{code, message, retryable, details?}`.
 
 ## Run it locally
@@ -71,6 +72,14 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_CONCURRENCY` / `KNOWLEDGE_PLUGIN_TEXT_CONCURRENCY` | `4` / `2` | parallel polls / enrichments |
 | `KNOWLEDGE_PLUGIN_BUILD` | `dev` | shown as `manifest.plugin.build` (the image sets it from `PLUGIN_BUILD`) |
 | `KNOWLEDGE_PLUGIN_LOG_LEVEL` | `INFO` | log lines carry URLs without their query string |
+| `KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE` | unset | X through SocialData (`Authorization: Bearer`, added by the transport); unset or empty = no X |
+| `KNOWLEDGE_PLUGIN_SOCIALDATA_DAILY_USD` | `5` | the day's cap (Asia/Shanghai day) at `objects × US$0.0002`; reached = X waits until the next day |
+| `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
+| `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `30` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
+| `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
+| `KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY` | `social-sources.json` beside the registry | the social sources' registry file |
 
 ## Daily medical subscription discovery
 
@@ -79,6 +88,30 @@ The existing crawler checks a bounded rotation of enabled medical publishers onc
 Validated feeds are stored under the existing `medical_sources_admitted` metadata key and enter the ordinary polling queue. Startup, file reload, AI source-request admission and medical discovery compose both dynamic channels together under one registry transaction lock. Parent removal/disable and current operator exclusions are checked again on composition. The source table owns the first successful fetch and entry count; a successful probe is not a published article.
 
 `medical_source_discovery` retains the cursor, current lease and the last thirty measured runs: attempted publishers, validated candidates, admitted feeds, deferrals and zero-growth days. `newInstitutions` is zero by construction: this mechanism expands subscription coverage within trusted institutions, not the set of trusted institutions. It never invents a new-source quota or bypasses robots/challenges. The hourly discovery loop skips a day it has already completed; bounded interrupted attempts can resume on a later tick.
+
+## Social posts (contract 1.5.0)
+
+X accounts (SocialData), WeChat official accounts (Dajiala) and six Chinese platforms (the GEO module's crawler) are
+sources like any other — rows in `registry/social-sources.json`, entries in the same stream with a `seq`, a revision and
+an identity key, polls in the fetch log, health by the same rule — but the scheduler's per-source loop never claims them:
+`knowledge_plugin/social/` reads them, because their cost and pacing are not a source's.
+
+- **X**: accounts packed two dozen to a search (`(from:a OR …) -filter:replies since_id:…`, ≤ 470 characters), each
+  account's watermark moved only to its own newest post; editorial accounts every 30 minutes, the rest hourly; quoted
+  posts and X Articles kept; photos and video posters re-encoded into the media store (`pbs.twimg.com` through the Tokyo
+  relay when configured).
+- **WeChat**: every account is re-resolved from an article verified to be its own before its first read (a saved id is
+  not trusted) and kept only when Dajiala names it as expected; then read by its original id at most twice a day,
+  highest priority first; each new post's text bought once.
+- **Six platforms**: a standing watch list (`watch_list` in the same file, each term with its reason) searched one
+  platform and one term at a time, 120 requests a day spread over the day, ten minutes' wait whenever GEO's crawler is
+  busy. A post keeps an excerpt and the platform's counts, never its author.
+- **Money**: every paid call is a row of `provider_calls`; a provider's daily cap stops that provider until the next
+  Shanghai day and nothing else; `/v1/health`'s `providers` names calls, spend, cap, balance and the last error.
+
+The lists are built from dated research files: `tools/verify_x_accounts.py --key-file <path>` checks each X candidate
+once (exists, public, posted in the last 90 days; status lines only, never the key) and `tools/build_social_registry.py`
+writes `registry/social-sources.json` (`--check` verifies the committed file).
 
 ## Add or change a source
 

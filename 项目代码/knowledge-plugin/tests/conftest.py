@@ -85,3 +85,10 @@ async def pool(settings):
         yield opened
     finally:
         await opened.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_social_registry(monkeypatch, tmp_path):
+    """The repository's ``registry/social-sources.json`` (contract 1.5.0) is composed with every registry sync; a test
+    syncing a registry of its own gets only that registry unless it names a social file itself."""
+    monkeypatch.setenv("KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY", str(tmp_path / "no-social-sources.json"))

@@ -303,3 +303,15 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
     collector._clock = lambda: NOW + timedelta(minutes=23)
     await collector.tick()
     assert len(requests) == 3 and requests[2]["platform"] == "zhihu"
+
+
+async def test_the_scheduler_never_claims_a_social_source(social_settings, pool):
+    from knowledge_plugin.scheduler import Crawler
+
+    feed = {"id": "feed", "name": "A feed", "lane": "evidence", "source_type": "journal", "access": "rss", "egress": "direct",
+            "authority": 3, "safety_feed": False, "owner_entity": "X", "launch_tier": "P0", "poll_floor_s": 3600,
+            "poll_ceiling_s": 7200, "enabled": True, "config": {"url": "https://example.org/feed"}}
+    await sync(pool, [x_row("US_FDA"), wx_row(), crawl_row(), feed])
+    crawler = Crawler(social_settings, pool, FakeFetcher(), adapters={}, enricher=lambda *a: None, clock=lambda: NOW)
+    claimed = await crawler.claim(50)
+    assert [row["id"] for row in claimed] == ["feed"], "the social read methods are the social collector's alone"
