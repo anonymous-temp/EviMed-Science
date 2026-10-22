@@ -80,6 +80,7 @@ import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SC
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
+import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
 
@@ -285,6 +286,17 @@ export function isUrgentSource(source) {
 }
 
 /** The lanes a source's items may take: its own, or all eight for a mixed one. @param {any} source @returns {string[]} */
+/**
+ * The six contract 1.5.0 columns of an entry as query parameters, in table order (channel, platform, author, media,
+ * quoted, metrics): what the item made from the entry carries of the post (fr-social 2026-10-22).
+ * @param {Record<string, any>} entry
+ */
+function socialColumns(entry) {
+  const json = (/** @type {unknown} */ value) => (value == null ? null : JSON.stringify(value));
+  return [entry.channel ?? null, entry.platform ?? null, json(entry.author), json(Array.isArray(entry.media) ? entry.media : []),
+    json(entry.quoted), json(entry.metrics)];
+}
+
 export function allowedLanes(source) {
   return FRONTIER_LANES.includes(source?.lane) ? [source.lane] : [...FRONTIER_LANES];
 }
@@ -1131,9 +1143,11 @@ export class FrontierPipeline {
           editor_version = CASE WHEN state = 'published' AND $9::boolean AND rescored_at IS NULL THEN NULL ELSE editor_version END,
           editor_diagnostics = CASE WHEN $9::boolean THEN '{}'::jsonb ELSE editor_diagnostics END,
           state = CASE WHEN $9::boolean AND state='scored' THEN 'screened' ELSE state END,
+          channel = $10, platform = $11, author = $12::jsonb, media = coalesce($13::jsonb, '[]'::jsonb), quoted = $14::jsonb,
+          metrics = $15::jsonb,
           updated_at = clock_timestamp()
         WHERE id = $1`, [item.id, entry.title_raw, entry.canonical_url, entry.doi, entry.pmid, entry.registry_ids ?? [],
-        entry.published_at, entry.date_precision, moved]);
+        entry.published_at, entry.date_precision, moved, ...socialColumns(entry)]);
       await client.query(`INSERT INTO evimed_frontier.item_keys (key, item_id) SELECT key, $2 FROM unnest($1::text[]) AS key
         ON CONFLICT (key) DO NOTHING`, [[...keys.dedupe, ...keys.cluster], item.id]);
       await client.query(`UPDATE evimed_frontier.entries SET state = 'merged', state_reason = 'superseded', hold_until = NULL,
@@ -1168,11 +1182,13 @@ export class FrontierPipeline {
       summary.deferred += entries.length;
       return;
     }
+    // fr-social 2026-10-22: a post's author (organisation or person), counts and quoted post ride in the source line and
+    // the excerpt (frontierIngest); every other entry reads exactly as before.
     const inputs = entries.map((entry) => ({
       key: String(entry.id),
       title: entry.title_raw,
-      sourceName: sources.get(entry.source_id)?.name ?? entry.source_id,
-      excerpt: String(entry.summary_raw ?? "").slice(0, FRONTIER_SCREEN_EXCERPT_CHARS),
+      sourceName: frontierScreenSource(entry, sources.get(entry.source_id)?.name ?? entry.source_id),
+      excerpt: frontierScreenExcerpt(entry, FRONTIER_SCREEN_EXCERPT_CHARS),
       allowedLanes: allowedLanes(sources.get(entry.source_id)),
     }));
     const { verdicts, errors, providerErrors } = await this.editor.screen(inputs);
@@ -1262,8 +1278,9 @@ export class FrontierPipeline {
       const isChinese = isChineseTitle(entry.title_raw);
       const inserted = await client.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key,
           doi, pmid, registry_ids, title_raw, title_zh, lang, lane, source_type, specialties, published_at, date_precision,
-          first_seen_at, timeline_at, state, safety_alert, flags)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, 'screened', $17, $18)
+          first_seen_at, timeline_at, state, safety_alert, flags, channel, platform, author, media, quoted, metrics)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, 'screened', $17, $18,
+          $19, $20, $21::jsonb, coalesce($22::jsonb, '[]'::jsonb), $23::jsonb, $24::jsonb)
         RETURNING id`, [randomBytes(8).toString("hex"), entry.source_id, entry.canonical_url, entry.identity_key,
         entry.doi, entry.pmid, entry.registry_ids ?? [], entry.title_raw, isChinese ? String(entry.title_raw).slice(0, 200) : null,
         isChinese ? "zh" : verdict.language || entry.lang || "und", verdict.lane, source?.source_type ?? "media", verdict.specialties,
@@ -1271,7 +1288,9 @@ export class FrontierPipeline {
         // 「多事汇总」 is the screening model's call and the item keeps it: a
         // daily column is not one event's report, and the event layer leaves
         // it out of clustering (2026-09-22).
-        verdict.digest === true ? ["digest"] : []]);
+        verdict.digest === true ? ["digest"] : [],
+        // fr-social 2026-10-22 (contract 1.5.0): what the primary entry carries of a post, copied onto the item.
+        ...socialColumns(entry)]);
       const itemId = Number(inserted.rows[0].id);
       await client.query(`INSERT INTO evimed_frontier.item_keys (key, item_id) SELECT key, $2 FROM unnest($1::text[]) AS key
         ON CONFLICT (key) DO NOTHING`, [[...keys.dedupe, ...keys.cluster], itemId]);
@@ -1337,6 +1356,9 @@ export class FrontierPipeline {
       const enrichment = available?.enrichment && typeof available.enrichment === "object" ? available.enrichment : null;
       const existing = (await client.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0] ?? null;
       const texts = {
+        // fr-social 2026-10-22: the full text (contract 1.5.0) and whether the plugin delivered it whole.
+        body_text: available?.body_text ?? existing?.body_text ?? null,
+        body_complete: available?.body_text ? available.text_kind === "full" : existing?.body_complete ?? null,
         abstract_raw: available?.abstract ?? existing?.abstract_raw ?? null,
         body_excerpt: available?.body_excerpt ? String(available.body_excerpt).slice(0, 12_000) : existing?.body_excerpt ?? null,
         publication_types: Array.isArray(enrichment?.publication_types) ? enrichment.publication_types.slice(0, 40) : existing?.publication_types ?? [],
@@ -1354,14 +1376,16 @@ export class FrontierPipeline {
       const modelInput = existing && item.editor_version ? existing.model_input
         : buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.timeZone });
       await client.query(`INSERT INTO evimed_frontier.item_texts (item_id, abstract_raw, body_excerpt, model_input, model_input_sha256,
-          publication_types, mesh, journal, authors_short, open_access, enrichment)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+          publication_types, mesh, journal, authors_short, open_access, enrichment, body_text, body_complete)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
         ON CONFLICT (item_id) DO UPDATE SET abstract_raw = excluded.abstract_raw, body_excerpt = excluded.body_excerpt,
           model_input = excluded.model_input, model_input_sha256 = excluded.model_input_sha256,
           publication_types = excluded.publication_types, mesh = excluded.mesh, journal = excluded.journal,
-          authors_short = excluded.authors_short, open_access = excluded.open_access, enrichment = excluded.enrichment`,
+          authors_short = excluded.authors_short, open_access = excluded.open_access, enrichment = excluded.enrichment,
+          body_text = excluded.body_text, body_complete = excluded.body_complete`,
       [itemId, texts.abstract_raw, texts.body_excerpt, modelInput, createHash("sha256").update(modelInput).digest("hex"),
-        texts.publication_types, texts.mesh, texts.journal, texts.authors_short, texts.open_access, JSON.stringify(texts.enrichment)]);
+        texts.publication_types, texts.mesh, texts.journal, texts.authors_short, texts.open_access, JSON.stringify(texts.enrichment),
+        texts.body_text, texts.body_complete]);
       // Every version bump in a transaction comes last, after its row locks:
       // a transaction never waits for a row while it holds the version.
       const linked = await this.#preprintLinks(client, item, texts.enrichment);

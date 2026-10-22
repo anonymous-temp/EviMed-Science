@@ -315,3 +315,87 @@ test("the text step keeps what the manifest declared", async () => {
   await plugin.manifest();
   assert.deepEqual((await plugin.text("e1")).enrichment, { journal: "NEJM", evidence_grade: "B" });
 });
+
+// fr-social 2026-10-22: contract 1.5.0 — social posts, the full text, the providers and the media route.
+test("contract 1.5.0: a post's channel, author, media, quote and counts are read; a field that breaks its shape is null alone", () => {
+  const photo = { id: "b".repeat(64), kind: "image", width: 1200, height: 800, alt: "chart", original_url: "https://pbs.twimg.com/media/a.jpg" };
+  const checked = validateEntry(entry({
+    channel: "x", platform: "x",
+    author: { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation", extra: "dropped" },
+    media: [photo, { ...photo }, { id: "not-a-hash", kind: "image", original_url: "https://x/y.jpg" },
+      { id: "c".repeat(64), kind: "video", original_url: "https://x/z.jpg" }, { id: "d".repeat(64), kind: "image", original_url: "javascript:alert(1)" }],
+    quoted: { author: { name: "FDA Drug Info", handle: "FDA_Drug_Info" }, text: "Label update.", url: "https://x.com/FDA_Drug_Info/status/1", media: [photo] },
+    metrics: { likes: 12, reposts: -1, replies: 3, views: 1.5, observed_at: "2026-10-22T06:00:00Z" },
+  }));
+  assert.ok(checked.ok);
+  const value = checked.entry;
+  assert.equal(value.channel, "x");
+  assert.deepEqual(value.author, { name: "U.S. FDA", handle: "US_FDA", url: "https://x.com/US_FDA", role: "organisation" });
+  assert.deepEqual(value.media, [photo], "a duplicate, a bad id, an unknown kind and a non-http original are dropped one by one");
+  assert.equal(value.quoted.author.handle, "FDA_Drug_Info");
+  assert.deepEqual(value.quoted.media, [photo]);
+  assert.deepEqual(value.metrics, { likes: 12, reposts: null, replies: 3, views: null, observed_at: "2026-10-22T06:00:00.000Z" },
+    "a count that is not a count is unknown, never zero");
+  const old = validateEntry(entry()).entry;
+  assert.deepEqual([old.channel, old.platform, old.author, old.media, old.quoted, old.metrics], [null, null, null, [], null, null],
+    "an entry from before 1.5.0 reads with every new field absent");
+  const broken = validateEntry(entry({ author: { handle: "nameless" }, quoted: { text: "no author", url: "https://x.com/a" }, metrics: { likes: 3 } })).entry;
+  assert.deepEqual([broken.author, broken.quoted, broken.metrics], [null, null, null]);
+});
+
+test("contract 1.5.0: the text carries the full body within its bound; health names providers and discovery", async () => {
+  const body = "First paragraph.\n\nSecond.";
+  const { plugin } = client([
+    { body: { entry_id: "x-us_fda:1", revision: 1, status: "available", text_kind: "full", body_excerpt: body, body_text: body, fetched_from: "x" } },
+    { body: { entry_id: "x-us_fda:2", revision: 1, status: "available", text_kind: "full", body_excerpt: "head", body_text: "x".repeat(40_001) } },
+    { body: { status: "ok", contract: "1.5.0", sources: {}, egress: {}, latest_seq: 9,
+      providers: [{ name: "dajiala", calls_24h: 3, spend_24h: { amount: 0.42, currency: "CNY" }, spend_today: { amount: 0.42, currency: "CNY" },
+        daily_cap: { amount: 30, currency: "CNY" }, remaining: { amount: 29.58, currency: "CNY" } },
+      { name: "socialdata", calls_24h: 1, spend_24h: { amount: -1, currency: "USD" }, last_error: "http_402" }, { calls_24h: 1 }],
+      discovery: { today: { day: "2026-10-22", candidates: 80, validated: 30, trial: 12, admitted: 10, retired: 2, failed: 5 },
+        history: [{ day: "2026-10-21", candidates: 70, validated: 20, trial: 9, admitted: 8, retired: 1, failed: 4 }],
+        by_line: { "journal-lists": { candidates: 40, validated: 20, trial: 8, admitted: 6, retired: 0, failed: 2 }, "BAD LINE": {} },
+        in_trial: 33 } } },
+    { body: { status: "ok", contract: "1.4.0", sources: {}, egress: {} } },
+  ]);
+  const text = await plugin.text("x-us_fda:1");
+  assert.equal(text.body_text, body);
+  const tooLong = await plugin.text("x-us_fda:2");
+  assert.equal(tooLong.body_text, null, "a body past the contract's bound is refused, not cut and passed off as whole");
+  assert.equal(tooLong.body_excerpt, "head");
+  const health = await plugin.health();
+  assert.deepEqual(health.providers.map((row) => row.name), ["dajiala", "socialdata"], "a provider without a name is left out");
+  assert.deepEqual(health.providers[0].remaining, { amount: 29.58, currency: "CNY" });
+  assert.equal(health.providers[1].spend_24h, null, "a negative amount is no amount");
+  assert.equal(health.providers[1].last_error, "http_402");
+  assert.equal(health.discovery.today.admitted, 10);
+  assert.equal(health.discovery.history.length, 1);
+  assert.deepEqual(Object.keys(health.discovery.by_line), ["journal-lists"]);
+  assert.equal(health.discovery.in_trial, 33);
+  const older = await plugin.health();
+  assert.equal(older.providers, null, "a plugin of an older minor says nothing about providers: absent, not empty");
+  assert.equal(older.discovery, null);
+});
+
+test("contract 1.5.0: media is read as bytes with its type, an unknown id is not found, and a non-image is refused", async () => {
+  const id = "e".repeat(64);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+  const calls = [];
+  const answers = [
+    () => new Response(jpeg, { status: 200, headers: { "content-type": "image/jpeg", etag: `"${id}"` } }),
+    () => new Response(JSON.stringify({ code: "not_found", message: "no such media", retryable: false }), { status: 404, headers: { "content-type": "application/json" } }),
+    () => new Response("<html>login</html>", { status: 200, headers: { "content-type": "text/html" } }),
+  ];
+  const plugin = new KnowledgePluginClient({ baseUrl: "http://plugin.test:8080", tokenFile, sleep: async () => {},
+    fetchImpl: async (url, init) => { calls.push({ url: String(url), init }); return answers.shift()(); } });
+  const media = await plugin.media(id);
+  assert.equal(media.contentType, "image/jpeg");
+  assert.ok(media.body.equals(jpeg));
+  assert.equal(media.etag, id);
+  assert.equal(calls[0].url, `http://plugin.test:8080/v1/media/${id}`);
+  assert.equal(calls[0].init.headers.authorization, "Bearer test-only-token-one");
+  await assert.rejects(plugin.media("f".repeat(64)), { code: "knowledge_plugin_not_found" });
+  await assert.rejects(plugin.media(id), { code: "knowledge_plugin_response_invalid" });
+  await assert.rejects(plugin.media("../etc/passwd"), { code: "knowledge_plugin_not_found" });
+  assert.equal(calls.length, 3, "an id that is not a sha256 never leaves the platform");
+});

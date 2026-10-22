@@ -67,6 +67,11 @@ const MAX_SOURCE_PAGES = 50;
 const SOURCE_PAGE_LIMIT = 500;
 /** Contract `EntryText.body_excerpt` max, and a ceiling for the abstract it leaves unbounded. */
 const MAX_TEXT_CHARS = 20_000;
+/** Contract 1.5.0 `EntryText.body_text`: the full text, at most 40,000 characters. */
+const MAX_BODY_CHARS = 40_000;
+/** Contract 1.5.0 `GET /v1/media/{id}`: an image is at most 1.5 MB; the answer is read to 2 MB and no further. */
+const MAX_MEDIA_BYTES = 2 * 1024 * 1024;
+const MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_ABSTRACT_CHARS = 50_000;
 const SHA256 = /^[a-f0-9]{64}$/;
 const CAPABILITY_ID = /^[a-z][a-z0-9-]{1,60}$/;
@@ -179,6 +184,67 @@ function httpUrl(value) {
 /** @param {unknown} value */
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+/** A count a platform stated: a non-negative safe integer, or undefined. @param {unknown} value */
+const statedCount = (value) => integer(value, 0, Number.MAX_SAFE_INTEGER);
+
+/**
+ * Contract 1.5.0 `Author` (`{name, handle?, url?, role?}`), or null. A field that breaks the shape is dropped on its own;
+ * no name, no author.
+ * @param {unknown} raw
+ */
+function author(raw) {
+  if (!isObject(raw)) return null;
+  const value = /** @type {Record<string, any>} */ (raw);
+  const name = text(value.name, 200);
+  if (!name) return null;
+  const handle = text(value.handle, 100);
+  const link = httpUrl(value.url);
+  return { name, handle: handle ?? null, url: link ?? null, role: ["organisation", "person"].includes(value.role) ? value.role : null };
+}
+
+/**
+ * Contract 1.5.0 `MediaItem[]`: a sha256 id, a known kind and an http(s) original; the rest of an item is optional.
+ * @param {unknown} raw @param {number} max
+ */
+function mediaItems(raw, max) {
+  if (!Array.isArray(raw)) return [];
+  /** @type {Record<string, any>[]} */
+  const items = [];
+  for (const item of raw) {
+    if (items.length >= max || !isObject(item)) continue;
+    const value = /** @type {Record<string, any>} */ (item);
+    const original = httpUrl(value.original_url);
+    if (typeof value.id !== "string" || !SHA256.test(value.id) || !["image", "video-poster"].includes(value.kind) || !original) continue;
+    if (items.some((kept) => kept.id === value.id)) continue;
+    items.push({ id: value.id, kind: value.kind, width: integer(value.width, 1, 100_000) ?? null,
+      height: integer(value.height, 1, 100_000) ?? null, alt: text(value.alt, 1000) ?? null, original_url: original });
+  }
+  return items;
+}
+
+/** Contract 1.5.0 `QuotedPost`, or null. @param {unknown} raw */
+function quotedPost(raw) {
+  if (!isObject(raw)) return null;
+  const value = /** @type {Record<string, any>} */ (raw);
+  const who = author(value.author);
+  const body = text(value.text, 10_000);
+  const link = httpUrl(value.url);
+  if (!who || !body || !link) return null;
+  return { author: { name: who.name, handle: who.handle }, text: body, url: link, lang: text(value.lang, 35) ?? null,
+    media: mediaItems(value.media, 4) };
+}
+
+/** Contract 1.5.0 `PostMetrics`: the platform's counts and when they were read, or null; an unstated count is null. @param {unknown} raw */
+function postMetrics(raw) {
+  if (!isObject(raw)) return null;
+  const value = /** @type {Record<string, any>} */ (raw);
+  const observedAt = isoTime(value.observed_at);
+  const counts = { likes: statedCount(value.likes) ?? null, reposts: statedCount(value.reposts) ?? null,
+    replies: statedCount(value.replies) ?? null, views: statedCount(value.views) ?? null };
+  if (!observedAt || Object.values(counts).every((entry) => entry === null)) return null;
+  return { ...counts, observed_at: observedAt };
+}
+
 /**
  * One `Entry`, checked against the contract's shape and lengths. The platform's
  * own rules — the facts whitelist, the lane vocabulary, safe URL schemes — are
@@ -235,6 +301,14 @@ export function validateEntry(raw) {
       defects: (textList(value.defects, 16, 40) ?? []).filter((defect) => /^[a-z][a-z0-9-]{0,39}$/.test(defect)),
       text_status: ["none", "pending", "available"].includes(value.text_status) ? value.text_status : null,
       facts: isObject(value.facts) ? value.facts : {},
+      // Contract 1.5.0: what a social post carries, and every entry's channel. Optional: an entry without them, or with one
+      // that breaks its shape, is kept with that field null — the vocabulary is the ingest's second look.
+      channel: text(value.channel, 40) ?? null,
+      platform: text(value.platform, 40) ?? null,
+      author: author(value.author),
+      media: mediaItems(value.media, 8),
+      quoted: quotedPost(value.quoted),
+      metrics: postMetrics(value.metrics),
     },
   };
 }
@@ -378,6 +452,30 @@ function validateHealth(raw) {
       if (used !== undefined && cap !== undefined) hostBudget[host] = { used, cap };
     }
   }
+  // Contract 1.5.0: each paid provider's calls, spend, cap and balance (and the GEO crawler's requests), and source
+  // discovery's daily counts. Null when the plugin does not say: absent is not a row of zeros.
+  /** @param {unknown} money */
+  const amount = (money) => (isObject(money) && typeof /** @type {any} */ (money).amount === "number"
+    && Number.isFinite(/** @type {any} */ (money).amount) && /** @type {any} */ (money).amount >= 0
+    && text(/** @type {any} */ (money).currency, 12)
+    ? { amount: /** @type {any} */ (money).amount, currency: text(/** @type {any} */ (money).currency, 12) } : null);
+  const providers = Array.isArray(value.providers) ? value.providers.filter(isObject).slice(0, 20).map((/** @type {any} */ row) => ({
+    name: text(row.name, 40) ?? null, calls_24h: integer(row.calls_24h, 0, 100_000_000) ?? 0, spend_24h: amount(row.spend_24h),
+    spend_today: amount(row.spend_today), daily_cap: amount(row.daily_cap), remaining: amount(row.remaining),
+    last_error: text(row.last_error, 200) ?? null,
+  })).filter((row) => row.name) : null;
+  /** @param {unknown} day */
+  const discoveryDay = (day) => (isObject(day) ? { day: text(/** @type {any} */ (day).day, 10) ?? null,
+    ...Object.fromEntries(["candidates", "validated", "trial", "admitted", "retired", "failed"]
+      .map((key) => [key, integer(/** @type {any} */ (day)[key], 0, 10_000_000) ?? 0])) } : null);
+  const discovery = isObject(value.discovery) ? {
+    today: discoveryDay(value.discovery.today),
+    history: (Array.isArray(value.discovery.history) ? value.discovery.history : []).slice(0, 14).map(discoveryDay).filter(Boolean),
+    by_line: isObject(value.discovery.by_line) ? Object.fromEntries(Object.entries(value.discovery.by_line).slice(0, 40)
+      .filter(([line, row]) => /^[a-z][a-z0-9_-]{0,39}$/.test(line) && isObject(row))
+      .map(([line, row]) => { const { day: _day, ...counts } = /** @type {any} */ (discoveryDay(row)); return [line, counts]; })) : {},
+    in_trial: integer(value.discovery.in_trial, 0, 10_000_000) ?? 0,
+  } : null;
   return {
     status: ["ok", "degraded", "down"].includes(value.status) ? value.status : "degraded",
     contract,
@@ -391,6 +489,8 @@ function validateHealth(raw) {
     rate_limited_1h: rateLimited,
     model_calls_24h: integer(value.model_calls_24h, 0, 10_000_000) ?? null,
     host_budget: hostBudget,
+    providers,
+    discovery,
     latest_seq: integer(value.latest_seq, 0, Number.MAX_SAFE_INTEGER) ?? null,
   };
 }
@@ -502,6 +602,9 @@ function validateEntryText(raw, manifest = {}) {
   }
   const abstract = typeof value.abstract === "string" && value.abstract.trim() ? value.abstract.slice(0, MAX_ABSTRACT_CHARS) : null;
   const excerpt = typeof value.body_excerpt === "string" && value.body_excerpt.trim() ? value.body_excerpt.slice(0, MAX_TEXT_CHARS) : null;
+  // Contract 1.5.0: the full text. A body past the contract's bound is not cut here (a cut text would read as whole):
+  // it is refused on its own and the excerpt stands.
+  const body = typeof value.body_text === "string" && value.body_text.trim() && value.body_text.length <= MAX_BODY_CHARS ? value.body_text : null;
   return {
     entry_id: entryId,
     revision: value.revision,
@@ -509,6 +612,7 @@ function validateEntryText(raw, manifest = {}) {
     text_kind: ["abstract", "excerpt", "full", "none"].includes(value.text_kind) ? value.text_kind : null,
     abstract,
     body_excerpt: excerpt,
+    body_text: body,
     fetched_from: text(value.fetched_from, 40) ?? null,
     fetched_at: isoTime(value.fetched_at),
     next_attempt_at: isoTime(value.next_attempt_at),
@@ -705,6 +809,23 @@ export class KnowledgePluginClient {
     return validateEntryText(await this.#request("GET", `/v1/entries/${this.#segment(entryId)}/text`), { declared: this.declaredEnrichment });
   }
 
+  /**
+   * One stored image (contract 1.5.0 `GET /v1/media/{id}`): its bytes and content type. `knowledge_plugin_not_found` for
+   * an id the plugin never stored or has evicted; an answer that is not one of the four image types, or larger than an
+   * image the contract allows, is refused as invalid rather than passed on.
+   * @param {string} mediaId the sha256 the entry names
+   * @returns {Promise<{ contentType: string, body: Buffer, etag: string }>}
+   */
+  async media(mediaId) {
+    if (!SHA256.test(String(mediaId ?? ""))) throw pluginError(404, "knowledge_plugin_not_found", "The knowledge plugin does not know that id.");
+    const answer = await this.#request("GET", `/v1/media/${mediaId}`, { raw: true });
+    const contentType = String(answer.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!MEDIA_TYPES.has(contentType) || !answer.body.length) {
+      throw pluginError(502, "knowledge_plugin_response_invalid", "The plugin's media answer is not an image.");
+    }
+    return { contentType, body: answer.body, etag: mediaId };
+  }
+
   /** The on-demand capabilities this build offers (an empty list in batch 1). */
   async lookups() {
     const body = await this.#request("GET", "/v1/lookups");
@@ -766,11 +887,11 @@ export class KnowledgePluginClient {
 
   /**
    * @param {"GET" | "POST"} method @param {string} pathname
-   * @param {{ query?: Record<string, string>, body?: Record<string, any>, auth?: boolean }} [options]
+   * @param {{ query?: Record<string, string>, body?: Record<string, any>, auth?: boolean, raw?: boolean }} [options]
    */
-  async #request(method, pathname, { query = {}, body, auth = true } = {}) {
+  async #request(method, pathname, { query = {}, body, auth = true, raw = false } = {}) {
     try {
-      const result = await this.#attempt(method, pathname, { query, body, auth });
+      const result = await this.#attempt(method, pathname, { query, body, auth, raw });
       this.lastError = null;
       return result;
     } catch (error) {
@@ -782,9 +903,9 @@ export class KnowledgePluginClient {
 
   /**
    * @param {"GET" | "POST"} method @param {string} pathname
-   * @param {{ query: Record<string, string>, body?: Record<string, any>, auth: boolean }} options
+   * @param {{ query: Record<string, string>, body?: Record<string, any>, auth: boolean, raw?: boolean }} options
    */
-  async #attempt(method, pathname, { query, body, auth }) {
+  async #attempt(method, pathname, { query, body, auth, raw = false }) {
     if (!this.baseUrl) throw pluginError(503, "knowledge_plugin_unconfigured", "The knowledge plugin is not configured for this deployment.");
     const token = auth ? await this.#token() : null;
     const url = new URL(`${this.baseUrl}${pathname}`);
@@ -796,7 +917,7 @@ export class KnowledgePluginClient {
         response = await this.fetch(url, {
           method,
           headers: {
-            accept: "application/json",
+            accept: raw ? "image/*" : "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
             ...(body ? { "content-type": "application/json" } : {}),
           },
@@ -810,9 +931,10 @@ export class KnowledgePluginClient {
         if (attempt < 2) { this.counters.retries += 1; await this.sleep(RETRY_DELAY_MS); continue; }
         throw pluginError(503, "knowledge_plugin_unreachable", "The knowledge plugin is unreachable.");
       }
-      const raw = await boundedBody(response, this.maxResponseBytes);
+      const bytes = await boundedBody(response, raw && response.ok ? MAX_MEDIA_BYTES : this.maxResponseBytes);
+      if (raw && response.ok) return { headers: response.headers, body: bytes };
       let parsed = null;
-      try { parsed = raw.length ? JSON.parse(raw.toString("utf8")) : null; } catch { parsed = null; }
+      try { parsed = bytes.length ? JSON.parse(bytes.toString("utf8")) : null; } catch { parsed = null; }
       if (response.ok) {
         if (parsed === null) throw pluginError(502, "knowledge_plugin_response_invalid", "The knowledge plugin answered with no JSON.");
         return parsed;

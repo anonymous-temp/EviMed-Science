@@ -149,6 +149,15 @@ CREATE INDEX IF NOT EXISTS frontier_entries_queue_idx
 CREATE INDEX IF NOT EXISTS frontier_entries_identity_idx ON evimed_frontier.entries (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_entries_retention_idx
   ON evimed_frontier.entries (received_at) WHERE state IN ('screened-out', 'dropped', 'backfill', 'failed');
+-- fr-social 2026-10-22
+-- Knowledge plugin contract 1.5.0: what a social post carries (an X post, a WeChat article, a post on one of six Chinese
+-- platforms), and every entry's channel. As the plugin delivered it, whitelisted again by the ingest; NULL when absent.
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.entries ADD COLUMN IF NOT EXISTS metrics jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.items (
   id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -229,6 +238,14 @@ CREATE INDEX IF NOT EXISTS frontier_items_published_idx
 -- each of those is a scan of every item ever published.
 CREATE INDEX IF NOT EXISTS frontier_items_visible_idx
   ON evimed_frontier.items (visible_at DESC) WHERE state = 'published';
+-- fr-social 2026-10-22
+-- The same six fields, copied from the item's primary entry when the item is made and when that entry is revised.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS metrics jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_keys (
   key     text PRIMARY KEY,
@@ -253,6 +270,15 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   open_access        text,
   enrichment         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+-- fr-social 2026-10-22
+-- The full text (the plugin text answer's body_text, contract 1.5.0): a post or article as it arrived, or a page's readable text, and
+-- whether the plugin delivered it whole (body_complete). The Chinese reading of it is fr-edit's to fill: a translation, or
+-- the original when it is Chinese already, and when it was written.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh text CHECK (char_length(body_zh) <= 60000);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_kind text CHECK (body_zh_kind IN ('translation', 'original-zh'));
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_zh_at timestamptz(3);
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_complete boolean;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
