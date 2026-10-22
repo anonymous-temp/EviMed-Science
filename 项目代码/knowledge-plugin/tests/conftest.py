@@ -20,7 +20,8 @@ import pytest
 from knowledge_plugin.settings import Settings
 
 SERVER_URL = os.environ.get("KNOWLEDGE_PLUGIN_TEST_DATABASE_URL", "postgresql://postgres@127.0.0.1:55433")
-TABLES = ("fetches", "entry_texts", "entries", "seen_keys", "sources", "host_counters", "host_state", "meta")
+TABLES = ("fetches", "entry_texts", "entries", "seen_keys", "sources", "host_counters", "host_state", "meta",
+          "media", "media_failures", "provider_calls")
 FIXED_NOW = datetime(2026, 9, 22, 8, 0, 0, tzinfo=timezone.utc)
 
 

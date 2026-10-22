@@ -229,3 +229,68 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.meta (
   value       jsonb NOT NULL,
   updated_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+
+-- fr-social 2026-10-22
+-- Contract 1.5.0: social posts. What a post carries beside the common fields, on the entry as delivered: the channel (every
+-- entry delivered from 1.5.0 on; older rows keep NULL and are delivered without it), the platform, the author, the stored
+-- media (ids of evimed_knowledge.media), the post it quotes and the platform's own counts when it was read.
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS platform text;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS author jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS quoted jsonb;
+ALTER TABLE evimed_knowledge.entries ADD COLUMN IF NOT EXISTS metrics jsonb;
+-- The full text (`/text` body_text): a post or article as it arrived, or the readable text of a page; 40,000 characters.
+ALTER TABLE evimed_knowledge.entry_texts ADD COLUMN IF NOT EXISTS body_text text CHECK (char_length(body_text) <= 40000);
+-- entry_texts.fetched_from gains 'x' and 'social' (a CHECK made with the table, replaced once, the way fetches.outcome was).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_knowledge.entry_texts'::regclass AND conname = 'entry_texts_fetched_from_check'
+                    AND pg_get_constraintdef(oid) LIKE '%''social''%') THEN
+    ALTER TABLE evimed_knowledge.entry_texts DROP CONSTRAINT IF EXISTS entry_texts_fetched_from_check;
+    ALTER TABLE evimed_knowledge.entry_texts ADD CONSTRAINT entry_texts_fetched_from_check CHECK (fetched_from IN
+      ('pubmed', 'europepmc', 'crossref', 'page', 'browser', 'relay', 'evimed-api', 'wechat', 'x', 'social'));
+  END IF;
+END $$;
+
+-- The media store's index (the bytes are files under KNOWLEDGE_PLUGIN_MEDIA_DIR, named by their sha256): one row per stored
+-- image, never deleted. Eviction (least recently served first, past the store's cap) removes the file and sets evicted_at;
+-- the row keeps the id and the original address, so an entry that names the image keeps naming it.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.media (
+  id              text PRIMARY KEY CHECK (id ~ '^[a-f0-9]{64}$'),
+  content_type    text NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  bytes           integer NOT NULL CHECK (bytes > 0 AND bytes <= 1572864),
+  width           integer,
+  height          integer,
+  original_url    text NOT NULL CHECK (char_length(original_url) <= 2048),
+  stored_at       timestamptz(3) NOT NULL,
+  last_served_at  timestamptz(3),
+  evicted_at      timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_media_original_idx ON evimed_knowledge.media (original_url);
+CREATE INDEX IF NOT EXISTS knowledge_media_lru_idx
+  ON evimed_knowledge.media ((coalesce(last_served_at, stored_at))) WHERE evicted_at IS NULL;
+-- An original that could not be stored (not an image, too big to re-encode, refused), so it is not fetched again on every
+-- sighting; retried after a day.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.media_failures (
+  original_url  text PRIMARY KEY CHECK (char_length(original_url) <= 2048),
+  failed_at     timestamptz(3) NOT NULL,
+  reason        text NOT NULL CHECK (char_length(reason) <= 200)
+);
+
+-- Every call to a paid provider (SocialData, Dajiala) and to the GEO social crawler, with what it cost: the daily caps are
+-- sums over this table (Asia/Shanghai calendar day), /v1/health's `providers` reads its last 24 h. Kept 30 days.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.provider_calls (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  provider    text NOT NULL CHECK (char_length(provider) <= 40),
+  called_at   timestamptz(3) NOT NULL,
+  purpose     text NOT NULL CHECK (char_length(purpose) <= 60),
+  outcome     text NOT NULL CHECK (outcome IN ('ok', 'missing', 'refused', 'rate-limited', 'balance', 'failed')),
+  objects     integer NOT NULL DEFAULT 0 CHECK (objects >= 0),
+  amount      numeric(12, 6) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  currency    text NOT NULL CHECK (char_length(currency) <= 12),
+  remaining   numeric(14, 4),
+  error       text CHECK (char_length(error) <= 200)
+);
+CREATE INDEX IF NOT EXISTS knowledge_provider_calls_idx ON evimed_knowledge.provider_calls (provider, called_at DESC);

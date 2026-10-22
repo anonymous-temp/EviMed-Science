@@ -14,6 +14,9 @@ characters, the longest generic wrapper (``article``, ``main``, ``#content`` …
 toolbar and who.int's related-news list into the excerpt. A PDF is not read (the
 plugin has no PDF parser; the document parser is a platform service) and reports
 ``unavailable``. Feed entries whose own summary is already the full, uncut text skip the request.
+
+Contract 1.5.0: the whole main text, up to 40,000 characters, is also kept as ``body_text`` (what the reader shows and
+translates); the excerpt stays its first 12,000 characters, as before.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
 from ..adapters.common import clean_markup, looks_truncated
+from ..model import BODY_TEXT_MAX
 from .common import Attempt, Trace, get
 
 EXCERPT_MAX = 12_000
@@ -42,6 +46,11 @@ _GENERIC_CONTAINERS = ("article", "main", "[role=main]", "#content", "#main-cont
 
 def extract_main_text(html_text: str) -> str:
     """The main text of a page as paragraphs, ≤ ``EXCERPT_MAX`` characters (cut at a paragraph end)."""
+    return clip_excerpt(main_text(html_text))
+
+
+def main_text(html_text: str) -> str:
+    """The main text of a page as paragraphs, ≤ ``BODY_TEXT_MAX`` characters (cut at a paragraph end)."""
     tree = HTMLParser(html_text)
     for selector in _REMOVE:
         for node in tree.css(selector):
@@ -59,7 +68,7 @@ def extract_main_text(html_text: str) -> str:
         body = clean_markup(tree.body.html or "", keep_paragraphs=True)
         if len(body) > len(best):
             best = body
-    return clip_excerpt(best)
+    return clip_excerpt(best, BODY_TEXT_MAX)
 
 
 def clip_excerpt(text: str, limit: int = EXCERPT_MAX) -> str:
@@ -85,7 +94,8 @@ def summary_is_full_text(summary: str | None) -> bool:
 
 async def page_excerpt(fetcher: Any, url: str, *, source_id: str | None, egress: str,
                        trace: Trace) -> tuple[str | None, Attempt]:
-    """``(excerpt or None, attempt)`` for the entry's own page."""
+    """``(main text or None, attempt)`` for the entry's own page: the whole main text (≤ ``BODY_TEXT_MAX``); its excerpt
+    is ``clip_excerpt`` of it."""
     attempt = await get(fetcher, url, api=False, source_id=source_id, egress=egress)
     if attempt.result is None:
         trace.record(attempt, "page")
@@ -101,7 +111,7 @@ async def page_excerpt(fetcher: Any, url: str, *, source_id: str | None, egress:
     if content_type and not any(kind in content_type for kind in ("html", "xml", "text/plain")):
         trace.notes.append("page_not_html")
         return None, attempt
-    text = extract_main_text(decode_body(result))
+    text = main_text(decode_body(result))
     if len(text) < MIN_EXCERPT:
         trace.notes.append("page_no_main_text")
         return None, attempt

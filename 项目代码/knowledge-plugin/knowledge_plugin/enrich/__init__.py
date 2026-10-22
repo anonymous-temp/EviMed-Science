@@ -198,14 +198,16 @@ async def _page(row: dict, fetcher: Any, endpoints: Endpoints) -> EntryTextResul
     if summary_is_full_text(summary):
         excerpt = clip_excerpt(summary)
         return EntryTextResult(status="available", text_kind="full" if excerpt == summary else "excerpt",
-                               body_excerpt=excerpt, enrichment=enrichment, notes=trace.notes + ["feed_text"])
+                               body_excerpt=excerpt, body_text=summary, enrichment=enrichment,
+                               notes=trace.notes + ["feed_text"])
     url = row.get("url")
     if not url:
         return EntryTextResult(status="unavailable", enrichment=enrichment, notes=trace.notes + ["no_url"])
-    excerpt, attempt = await page_excerpt(fetcher, url, source_id=row.get("source_id"),
-                                          egress=row.get("source_egress") or "direct", trace=trace)
-    if excerpt:
-        return EntryTextResult(status="available", text_kind="excerpt", body_excerpt=excerpt, fetched_from="page",
+    text, attempt = await page_excerpt(fetcher, url, source_id=row.get("source_id"),
+                                       egress=row.get("source_egress") or "direct", trace=trace)
+    if text:
+        return EntryTextResult(status="available", text_kind="excerpt", body_excerpt=clip_excerpt(text), body_text=text,
+                               fetched_from="page",
                                fetched_at=attempt.result.fetched_at if attempt.result else None,
                                enrichment=enrichment, notes=trace.notes)
     if attempt.transient:
