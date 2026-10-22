@@ -54,9 +54,14 @@ beforeEach(async () => {
   await database.query("UPDATE evimed_frontier.sources SET platform_produced = true WHERE id = 'evimed-evidence'");
 });
 
-/** An editor that says every pair is the same event when asked, so that only the roles decide what merges. */
-const editor = { available: true, judgeSameEvent: async (input) => ({ verdicts: input.candidates.map(() => "yes"), error: null, attempts: 1 }),
-  writeEventDigest: async () => ({ verification: "passed", digestZh: "综述", latestZh: "最新", error: null }) };
+/** An editor that says every pair is the same occurrence when asked, first and second look, so that only the roles decide what merges. */
+const editor = { available: true,
+  callJson: async (messages) => {
+    const count = (messages[1].content.match(/【候选 C\d+】/g) ?? []).length;
+    return count ? { decisions: Array.from({ length: count }, (_, index) => ({ id: `C${index + 1}`, relation: "SAME_OCCURRENCE", confidence: 1 })), selection: null }
+      : { relation: "SAME_OCCURRENCE", confidence: 1 };
+  },
+  writeJson: async () => ({ verification: "passed", output: { title: "事件", digest: "综述" }, error: null }) };
 const layer = (embedder = testEmbedder, now = NOW) => new FrontierEvents({ database, editor, embedder, budget: async () => ({ state: "ok" }), now: () => now, config: {} });
 const platformItem = (overrides = {}) => insertComposedItem(database, { sourceId: "evimed-evidence", sourceType: "evidence-body", evidenceType: "systematic-review",
   lang: "zh", ...overrides });
@@ -115,8 +120,9 @@ test("the platform's report adds no institution, no heat and no bilingual bonus:
 
 test("a platform item never merges two events: it joins the oldest and is related to the other, even typed as a journal", options, async () => {
   const events = layer(null);
-  const first = await insertComposedItem(database, { sourceId: "nejm", title: "Trial A", registryIds: ["NCT07000001"], visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
-  const second = await insertComposedItem(database, { sourceId: "ctgov", sourceType: "evidence-body", evidenceType: "other", title: "Trial B", registryIds: ["NCT09000001"],
+  // Titles with no word in common: the words recall what the vectors would (2026-10-22), and this editor would join anything recalled.
+  const first = await insertComposedItem(database, { sourceId: "nejm", title: "Semaglutide kidney outcomes", registryIds: ["NCT07000001"], visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
+  const second = await insertComposedItem(database, { sourceId: "ctgov", sourceType: "evidence-body", evidenceType: "other", title: "Tirzepatide sleep apnoea", registryIds: ["NCT09000001"],
     visibleAt: hoursAgo(20), timelineAt: hoursAgo(20) });
   await events.clusterPending();
   const [a, b] = await Promise.all([first, second].map((item) => eventOf(database, item.id)));

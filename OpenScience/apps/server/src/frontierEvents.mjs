@@ -8,16 +8,29 @@
  * the hot list ranks events, and an event page shows the first-hand sources
  * above the reports.
  *
- * Clustering, from the certain to the uncertain (plan §6.4):
+ * Clustering (fr-events 2026-10-22, after AIHOT `events/recall.ts`, `group.ts`, `relate.ts`; the
+ * prompts and the answer's shape are `frontierEventGrouping.mjs`):
  *
- *   1. shared trial identifiers propose earlier reports, including their full
- *      milestone identity and dates; identifiers do not equate trial events;
- *   2. exact cosine proposes additional reports sharing a drug, trial or
- *      organisation; high similarity alone cannot establish the same event;
- *   3. the existing model judges at most three candidate events per item.
- *      `yes` joins, `related` creates an edge, an unknown or invalid answer stays
- *      distinct; a budget that cannot be spent leaves the item unplaced until it can.
- *      Exact DOI/PMID deduplication remains the ingestion layer's responsibility.
+ *   1. recall: the clustered items of the last fourteen days whose vector is
+ *      at least 0.6 cosine from the item's — any subject, no shared entity
+ *      required (that requirement hid nine in ten of the pairs that were one
+ *      story: on the 2026-10-20 production sample it proposed 115 items a day
+ *      where 0.6 proposes 1,276) — or, for an item without a vector, whose
+ *      title and summary share at least a quarter of their words and
+ *      character pairs; plus every report naming the same trial, at any age;
+ *      the ten best events, each by its best member;
+ *   2. one grouping call per item labels each candidate event
+ *      `SAME_OCCURRENCE` (joins), `SAME_STORY` (a `follows` link from the
+ *      older event to the newer, never a merge), `UNRELATED` or `ROUNDUP`
+ *      (nothing), and says whether the report adds anything to the event's
+ *      selected report (`selection`);
+ *   3. a `SAME_OCCURRENCE` below 0.85 cosine — or between one publisher's
+ *      reports, or between two different works — is looked at again by a
+ *      second call on the two reports alone, and joins only if that call
+ *      agrees (a `SAME_STORY` there links instead).
+ *   An unknown or invalid answer leaves the item distinct; a budget that
+ *   cannot be spent leaves it unplaced until it can. Exact DOI/PMID
+ *   deduplication remains the ingestion layer's responsibility.
  *
  * Hidden knowledge:
  *
@@ -34,7 +47,15 @@
  *   fresh item has no vector until the pipeline's next round. An item is
  *   clustered once its edit is done (or 24 hours have passed without one) and
  *   its vector exists (or 30 minutes have passed, or there are no vectors in
- *   this deployment). Items older than seven days are not clustered at all.
+ *   this deployment). Items older than fourteen days are not clustered at all.
+ * - **One selected item per event** (fr-events 2026-10-22). A report that
+ *   joins an event whose selected report it adds nothing to — the grouping
+ *   call's `selection.addsValue` false — names that report in
+ *   `items.same_event_item_id` and, when it was selected by the threshold,
+ *   the lane floor or the preprint lane, is unselected in the same
+ *   transaction (an `item_changes` row, the content version). A safety alert
+ *   and an operator's pin stay selected. The pipeline's later selections read
+ *   the same column.
  * - **A bridge merges.** When one item is the same thing as two events, the two
  *   are one event: the older survives, the other's public id goes into
  *   `event_aliases` and its row keeps `merged_into`, so every old link answers
@@ -83,6 +104,7 @@
 
 import { randomBytes } from "node:crypto";
 import {
+  DISPLAY_TIME_ZONE,
   FRONTIER_HEAT_BILINGUAL_FACTOR,
   FRONTIER_HEAT_HALF_LIFE_HOURS,
   FRONTIER_HEAT_PRIMARY_FACTOR,
@@ -96,6 +118,18 @@ import {
   frontierHeatDisplay,
   frontierSourceDisplayName,
 } from "@evimed/domain";
+import { buildDigestInput } from "./frontierEditor.mjs";
+import { frontierEventReports, frontierRepresentative, frontierStoryEventIds } from "./frontierEventReading.mjs";
+import {
+  FRONTIER_EVENT_DIGEST_INSTRUCTIONS,
+  FRONTIER_GROUP_INSTRUCTIONS,
+  FRONTIER_GROUP_PAIR_INSTRUCTIONS,
+  buildGroupInput,
+  buildGroupPairInput,
+  validateGroupAnswer,
+  validateGroupPair,
+  verifyEventDigest,
+} from "./frontierEventGrouping.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 
 const MINUTE = 60_000;
@@ -106,14 +140,16 @@ const DAY = 24 * HOUR;
 export { FRONTIER_HEAT_HALF_LIFE_HOURS };
 /** The window the independent-source count and hot eligibility read. */
 export const FRONTIER_EVENT_WINDOW_MS = FRONTIER_HOT_WINDOW_HOURS * HOUR;
-/** Clustering compares an item with clustered items this far back. */
-export const FRONTIER_CLUSTER_WINDOW_MS = 7 * DAY;
-/** Historical strong-similarity threshold; similarity is now only a candidate signal. */
-export const FRONTIER_CLUSTER_JOIN_COSINE = 0.82;
-/** Cosine from which a pair is worth asking the model about. */
-export const FRONTIER_CLUSTER_ASK_COSINE = 0.72;
-/** Pairs asked per item. */
-export const FRONTIER_CLUSTER_ASK_MAX = 3;
+/** Clustering compares an item with the items clustered this far back (by when each was published in the feed: AIHOT's 14 days). */
+export const FRONTIER_CLUSTER_WINDOW_MS = 14 * DAY;
+/**
+ * Recall and the second look (AIHOT `group.ts`, `recall.ts`): the cosine from which an earlier item is a candidate, the word
+ * and character-pair overlap that stands in for it when the item has no vector (not on the cosine scale, so it has its own
+ * bar), the candidate events one grouping call weighs, and the cosine below which a `SAME_OCCURRENCE` is looked at again.
+ */
+export const FRONTIER_RECALL = Object.freeze({ minCosine: 0.6, minOverlap: 0.25, topEvents: 10, confirmBelowCosine: 0.85 });
+/** The selection rules the one-selected-item gate may undo: the arithmetic ones. A safety alert and an operator's pin stay. */
+export const FRONTIER_SAME_EVENT_GATED_RULES = Object.freeze(["threshold", "lane-floor", "preprint-lane"]);
 /** Events on the hot list. */
 export const FRONTIER_HOT_SIZE = 10;
 /**
@@ -138,16 +174,32 @@ export const FRONTIER_VECTOR_GRACE_MS = 30 * MINUTE;
 export const FRONTIER_EDIT_GRACE_MS = DAY;
 /** Reports a digest call is shown (the editor bounds its text as well). */
 const DIGEST_REPORTS = 12;
+const DIGEST_MAX_TOKENS = 1_500;
+/** One grouping call's answer: a sentence, then a decision of about 60 tokens per candidate, then the selection (AIHOT). */
+const GROUP_BASE_TOKENS = 400;
+const GROUP_TOKENS_PER_CANDIDATE = 120;
+const GROUP_TIMEOUT_MS = 60_000;
+const PAIR_MAX_TOKENS = 400;
+const PAIR_TIMEOUT_MS = 45_000;
+/** A round of clustering starts no new item after this long: the hot list waits behind it on the same chain. */
+const CLUSTER_ROUND_MS = 2 * MINUTE;
+/** The lexical stand-in reads at most this many of the window's items, newest first. */
+const LEXICAL_POOL = 20_000;
+/** Vector candidates read per item before they are folded into events. */
+const VECTOR_RECALL_ROWS = 200;
 /** A digest that failed is not asked for again for this long. */
 const DIGEST_RETRY_MS = 6 * HOUR;
 /** An item left unplaced because the model could not be asked is not looked at again for this long (or until the budget is back). */
 const CLUSTER_RETRY_MS = 10 * MINUTE;
-/** Candidates the vector step reads at most, newest first. */
-const VECTOR_CANDIDATES = 500;
+/** Reports naming the same trial the identifier step reads at most, newest first. */
+const IDENTIFIER_CANDIDATES = 500;
 const PUBLIC_ID = /^[a-z0-9]{12,32}$/;
+/** What clustering reads of an item it places. */
+const PENDING_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
+  i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
+  i.doi AS doi, i.pmid AS pmid, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS owner_entity,
+  s.platform_produced AS platform_produced`;
 const CLUSTER_LOCK = "evimed-frontier-cluster";
-/** Entity kinds that make two items candidates (plan §6.4): diseases are too broad. */
-const CLUSTER_ENTITY_PREFIXES = Object.freeze(["drug:", "trial:", "org:"]);
 /** How an item link reads as an edge between the two items' events: the direction is from → to. */
 const LINK_RELATIONS = Object.freeze({
   "preprint-of": { relation: "preprint-of", reverse: false },
@@ -556,42 +608,122 @@ export function otherWork(item, other) {
   return Boolean(pmid[0] && pmid[1] && pmid[0] !== pmid[1]);
 }
 
-/** An item's entity keys that make candidates. @param {unknown} keys @returns {string[]} */
-export function frontierClusterEntities(keys) {
-  return (Array.isArray(keys) ? keys : []).filter((key) => typeof key === "string" && CLUSTER_ENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)));
+/**
+ * The words and character pairs two texts are compared by when there is no vector (AIHOT `lexicalSimilarity`, which compares
+ * character pairs only — enough for Chinese text, but any two English sentences share most of their letter pairs): a run of
+ * Chinese characters gives its character pairs, a run of Latin letters or digits gives itself as one word, lower-cased.
+ * @param {unknown} text @returns {Set<string>}
+ */
+export function frontierTextTokens(text) {
+  const tokens = new Set();
+  for (const run of String(text ?? "").toLowerCase().match(/[\u3400-\u9fff\uf900-\ufaff]+|[a-z0-9]+/g) ?? []) {
+    if (/^[a-z0-9]+$/.test(run)) {
+      if (run.length >= 2) tokens.add(run);
+      continue;
+    }
+    const characters = [...run];
+    if (characters.length === 1) tokens.add(run);
+    for (let index = 0; index + 1 < characters.length; index += 1) tokens.add(characters[index] + characters[index + 1]);
+  }
+  return tokens;
 }
 
 /**
- * Candidate similarity ranks which pairs to ask about, never which to merge.
- * Existing publisher and different-work guards are subsumed by asking every
- * candidate event; no publisher or high cosine receives an automatic join.
- * @param {Array<{ eventId: string, cosine: number, samePublisher?: boolean, otherWork?: boolean }>} candidates
- * @returns {{ strong: string[], ask: Array<{ eventId: string, cosine: number, index: number }> }}
+ * How much of the shorter of two token sets the other holds (0–1; AIHOT's overlap over the smaller set).
+ * @param {Set<string>} left @param {Set<string>} right
  */
-export function frontierVectorReading(candidates) {
-  const ordered = candidates.map((candidate, index) => ({ ...candidate, index }))
-    .filter((candidate) => Number.isFinite(candidate.cosine) && candidate.cosine >= FRONTIER_CLUSTER_ASK_COSINE)
-    .sort((left, right) => right.cosine - left.cosine || left.index - right.index);
-  const seen = new Set();
-  const ask = [];
-  for (const candidate of ordered) {
-    if (seen.has(candidate.eventId)) continue;
-    seen.add(candidate.eventId);
-    ask.push(candidate);
-    if (ask.length >= FRONTIER_CLUSTER_ASK_MAX) break;
-  }
-  return { strong: [], ask };
+export function frontierTextOverlap(left, right) {
+  if (!left.size || !right.size) return 0;
+  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
+  let shared = 0;
+  for (const token of small) if (large.has(token)) shared += 1;
+  return shared / small.size;
 }
 
-/** The actual event/work context passed to the existing semantic judge. @param {any} item */
-function eventReport(item) {
+/** The text an item is compared by without a vector: its title and the start of its summary (AIHOT `reportText`). @param {any} item */
+export function frontierRecallText(item) {
+  return `${item?.title_zh || item?.title_raw || ""}。${String(item?.summary_zh ?? "").slice(0, 300)}`;
+}
+
+/**
+ * @typedef {{ eventId: string, itemId: string, score: number, cosine: number | null, identifier?: boolean,
+ *             samePublisher?: boolean, otherWork?: boolean }} FrontierRecallHit
+ *   One earlier item recalled for a new one: `score` what ranks it (the cosine, the overlap, or 1 for a report naming the same
+ *   trial), `cosine` the two vectors' when both exist (null otherwise), and the two pair guards of the clustering rules.
+ */
+
+/**
+ * The candidate events one grouping call weighs (AIHOT `recallFacts`: the best report of each event counts): each event once,
+ * by its best-scoring member, the ten best. The pair guards are the event's if any recalled member of it raised them, and its
+ * cosine is the best of its members' — what the second look reads.
+ * @param {FrontierRecallHit[]} hits @param {{ top?: number }} [options]
+ * @returns {Array<FrontierRecallHit & { index: number }>}
+ */
+export function frontierRecallReading(hits, { top = FRONTIER_RECALL.topEvents } = {}) {
+  /** @type {Map<string, FrontierRecallHit & { index: number }>} */
+  const best = new Map();
+  hits.forEach((hit, index) => {
+    if (!hit?.eventId || !Number.isFinite(hit.score)) return;
+    const seen = best.get(hit.eventId);
+    const cosine = Math.max(Number.isFinite(seen?.cosine) ? Number(seen?.cosine) : -Infinity, Number.isFinite(hit.cosine) ? Number(hit.cosine) : -Infinity);
+    const guards = { samePublisher: Boolean(seen?.samePublisher || hit.samePublisher), otherWork: Boolean(seen?.otherWork || hit.otherWork),
+      identifier: Boolean(seen?.identifier || hit.identifier), cosine: Number.isFinite(cosine) ? cosine : null };
+    best.set(hit.eventId, !seen || hit.score > seen.score ? { ...hit, ...guards, index } : { ...seen, ...guards });
+  });
+  return [...best.values()].sort((left, right) => right.score - left.score || left.index - right.index).slice(0, top);
+}
+
+/**
+ * Whether a `SAME_OCCURRENCE` answer is looked at again before it joins (AIHOT `CONFIRM_BELOW_COSINE`): below 0.85 cosine (or
+ * with no cosine to read), and always between one publisher's reports — its templated notices are a series, not an occurrence
+ * — and between two items that state different works (the clustering rules 1 and 2 of 2026-09-22).
+ * @param {{ cosine?: number | null, samePublisher?: boolean, otherWork?: boolean }} candidate
+ */
+export function frontierNeedsSecondLook(candidate) {
+  const cosine = candidate.cosine ?? null;
+  return !(Number.isFinite(cosine) && Number(cosine) >= FRONTIER_RECALL.confirmBelowCosine) || candidate.samePublisher === true || candidate.otherWork === true;
+}
+
+/**
+ * What a grouping answer asks for before any second look: the candidates it joins at once, those a second call looks at
+ * first, and those it follows from — each list in the candidates' order (best first). `UNRELATED` and `ROUNDUP` ask for
+ * nothing.
+ * @template {{ cosine?: number | null, samePublisher?: boolean, otherWork?: boolean }} T
+ * @param {T[]} candidates @param {Array<{ relation: string }>} decisions one per candidate, in their order
+ * @returns {{ join: T[], check: T[], story: T[] }}
+ */
+export function frontierGroupPlan(candidates, decisions) {
+  /** @type {{ join: T[], check: T[], story: T[] }} */
+  const plan = { join: [], check: [], story: [] };
+  candidates.forEach((candidate, index) => {
+    const relation = decisions[index]?.relation;
+    if (relation === "SAME_OCCURRENCE") (frontierNeedsSecondLook(candidate) ? plan.check : plan.join).push(candidate);
+    else if (relation === "SAME_STORY") plan.story.push(candidate);
+  });
+  return plan;
+}
+
+/**
+ * One report as the grouping call describes it. @param {any} row @param {{ text?: string | null }} [extra]
+ * @returns {import("./frontierEventGrouping.mjs").FrontierGroupReport}
+ */
+function groupReport(row, { text = null } = {}) {
   return {
-    sourceName: item.source_name, titleRaw: item.title_raw, titleZh: item.title_zh, summaryZh: item.summary_zh,
-    publishedAt: iso(item.published_at), timelineAt: iso(item.timeline_at), identityKey: item.identity_key,
-    doi: item.doi, pmid: item.pmid, registryIds: item.registry_ids, evidenceType: item.evidence_type,
-    sourceType: item.source_type, eventTitle: item.event_title,
-    eventFirstAt: iso(item.event_first_at), eventLastAt: iso(item.event_last_at),
+    sourceName: frontierSourceDisplayName({ id: row.source_id ?? row.primary_source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+    primary: frontierEventRole({ sourceType: row.source_type, evidenceType: row.evidence_type, platformProduced: row.platform_produced === true }) === "primary",
+    titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, publishedAt: row.published_at ?? row.timeline_at,
+    doi: row.doi, pmid: row.pmid, registryIds: row.registry_ids, evidenceType: row.evidence_type, milestone: frontierMilestone(row.identity_key), text,
   };
+}
+
+/**
+ * A registry entry's milestone from its identity (`reg:<id>:<what>:<when>`, the plugin's closed format), for the model:
+ * `NCT01234567 · results-posted · 2026-09-21`; null for any other identity.
+ * @param {unknown} identityKey
+ */
+export function frontierMilestone(identityKey) {
+  const match = /^reg:([^:]+):([^:]+):(.+)$/.exec(String(identityKey ?? ""));
+  return match ? `${match[1].toUpperCase()} · ${match[2]} · ${match[3]}` : null;
 }
 
 /**
@@ -665,6 +797,8 @@ export class FrontierEvents {
     this.config = config ?? {};
     this.now = now;
     this.budgetReader = budget;
+    /** The zone the dates the model is shown are read in: the feed's own. */
+    this.timeZone = String(this.config.frontierTimeZone || DISPLAY_TIME_ZONE);
     // The width the pipeline and the service migrate with: a migration asked
     // for another width empties the vector table.
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || dimension;
@@ -676,6 +810,9 @@ export class FrontierEvents {
     this.counters = {
       clustered: 0, created: 0, joined: 0, merged: 0, relatedLinks: 0, identifierLinks: 0, adjudicated: 0, adjudicationSkipped: 0,
       adjudicationFailures: 0, deferred: 0, hotRuns: 0, hotChanges: 0, digestsWritten: 0, digestsDropped: 0, digestsSkipped: 0,
+      // fr-events 2026-10-22: grouping calls and their second looks, what they labelled, the links and the gate they wrote.
+      groupCalls: 0, secondLooks: 0, secondLooksAgreed: 0, sameOccurrence: 0, sameStory: 0, followsLinks: 0, sameEventUnselected: 0,
+      lexicalRecalls: 0, regrouped: 0,
     };
     /** @type {{ at: string, ranking: any[] } | null} */
     this.lastHot = null;
@@ -720,6 +857,7 @@ export class FrontierEvents {
   async clusterPending({ limit = 25 } = {}) {
     const capabilities = await this.ready();
     const now = this.now();
+    const started = Date.now();
     const summary = { clustered: 0, created: 0, joined: 0, merged: 0, skipped: 0 };
     const allowModel = await this.#modelAllowed();
     if (allowModel) this.clusterDeferred.clear();
@@ -737,18 +875,21 @@ export class FrontierEvents {
     // that would never be taken: the clause exists only where the table does.
     const vectorWait = vectors ? `AND (i.visible_at < $${values.push(new Date(now.getTime() - FRONTIER_VECTOR_GRACE_MS))}::timestamptz
           OR EXISTS (SELECT 1 FROM evimed_frontier.item_vectors v WHERE v.item_id = i.id AND v.model_key = $${values.push(modelKey)}))` : "";
-    const rows = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
-        i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-        i.doi AS doi, i.pmid AS pmid, s.name AS source_name, s.owner_entity AS owner_entity, s.platform_produced AS platform_produced
+    const rows = (await this.database.query(`SELECT ${PENDING_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
         AND NOT ('digest' = ANY(i.flags)) AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
         AND i.id <> ALL($${values.push(waiting)}::bigint[])
       ORDER BY i.visible_at, i.id LIMIT $3`, values)).rows ?? [];
     if (!rows.length) return summary;
+    /** The round's lexical pool, read once when an item without a vector first needs it. */
+    const pool = { rows: /** @type {any[] | null} */ (null) };
     for (const item of rows) {
+      // The hot list and the digests wait behind this round on the same chain: a round that has spent its time leaves the rest
+      // for the next one, thirty seconds later.
+      if (Date.now() - started > CLUSTER_ROUND_MS) break;
       try {
-        const outcome = await this.#clusterOne(item, { now, modelKey, allowModel });
+        const outcome = await this.#clusterOne(item, { now, modelKey, allowModel, pool });
         // Skipped: another round placed it first; it is not counted twice.
         if (outcome === "skipped") { summary.skipped += 1; continue; }
         // Deferred: it waits for the model; it is not placed, and it is out of the next rounds' batches until then.
@@ -774,92 +915,277 @@ export class FrontierEvents {
   }
 
   /**
-   * @param {any} item @param {{ now: Date, modelKey: string | null, allowModel: boolean }} context
-   * @returns {Promise<"created" | "joined" | "merged" | "skipped" | "deferred">}
+   * The backfill (fr-events 2026-10-22, `scripts/ops/frontier-regroup.mjs`): the clustered items published in the feed in a
+   * window, oldest first, each recalled again against the items published before it — and, with `apply`, asked about and
+   * placed again (`#applyAgain`). Without `apply` nothing is asked and nothing is written: the report says how many items have
+   * candidates and how many candidate events a call would weigh, which is what it costs. Placement is serialised by the
+   * clustering lock like every round's; the calls of `concurrency` items are made at once. A day's budget that runs out stops
+   * the run (`stopped: "budget"`); a second run takes up where the first left off, because an item already placed with the
+   * events before it is asked again and answers the same; `resumeFrom` says where to start it so nothing is asked twice.
+   * @param {{ since: Date, until?: Date, apply?: boolean, concurrency?: number, limit?: number,
+   *           onProgress?: ((summary: Record<string, unknown>) => void) | null }} options
    */
-  async #clusterOne(item, { now, modelKey, allowModel }) {
-    const identifierCandidates = await this.#identifierCandidates(item);
-    const candidates = [...identifierCandidates, ...(modelKey ? await this.#vectorCandidates(item, modelKey, now) : [])];
-    const reading = frontierVectorReading(candidates);
-    /** @type {string[]} */
-    const yes = [];
-    /** @type {string[]} */
-    const related = [];
-    const asked = reading.ask;
-    if (asked.length) {
-      if (allowModel) {
-        this.counters.adjudicated += asked.length;
-        try {
-          const judged = await this.editor.judgeSameEvent({ report: eventReport(item), candidates: asked.map((pair) => candidates[pair.index].report) });
-          if (Array.isArray(judged?.verdicts) && judged.verdicts.length === asked.length
-              && judged.verdicts.every((/** @type {unknown} */ verdict) => ['yes', 'related', 'no'].includes(/** @type {string} */ (verdict)))) {
-            judged.verdicts.forEach((/** @type {string} */ verdict, /** @type {number} */ index) => {
-              if (verdict === "yes") yes.push(asked[index].eventId);
-              else if (verdict === "related") related.push(asked[index].eventId);
-            });
-          } else this.counters.adjudicationFailures += 1;
-        } catch {
-          this.counters.adjudicationFailures += 1;
-        }
-      } else {
-        this.counters.adjudicationSkipped += asked.length;
-        // Out of budget, not out of editor: the item waits to be asked rather than being an event of its own for good.
-        if (this.editor?.available) return "deferred";
-      }
-    }
-    return this.#apply(item, { identifier: [], strong: [], yes, related }, now);
-  }
-
-  /** Registry matches propose reports, not event membership. @param {any} item */
-  async #identifierCandidates(item) {
-    const keys = frontierClusterKeys(item);
-    if (!keys.length) return [];
-    // item_keys names the first item only; registry_ids also finds later trial
-    // milestones, so a newer event is not hidden behind its registration row.
-    const ids = keys.map((key) => key.slice(4));
-    const rows = (await this.database.query(`SELECT i.*, s.name AS source_name, s.owner_entity,
-        e.title_zh AS event_title, e.first_at AS event_first_at, e.last_at AS event_last_at
+  async regroupRecent({ since, until = this.now(), apply = false, concurrency = 4, limit = 100_000, onProgress = null }) {
+    if (!(since instanceof Date) || !(until instanceof Date) || !(since < until)) throw new TypeError("The regroup window is invalid.");
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new TypeError("The regroup concurrency is invalid.");
+    const capabilities = await this.ready();
+    const vectors = Boolean(capabilities.vector && this.embedder?.configured);
+    const modelKey = vectors ? String(this.embedder.modelKey) : null;
+    const items = (await this.database.query(`SELECT ${PENDING_COLUMNS}
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      JOIN evimed_frontier.events e ON e.id = i.event_id
-      WHERE i.id <> $3 AND i.state = 'published' AND NOT ('digest' = ANY(i.flags))
-        AND (i.registry_ids && $1::text[] OR EXISTS
-          (SELECT 1 FROM evimed_frontier.item_keys k WHERE k.item_id = i.id AND k.key = ANY($2::text[])))
-      ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${VECTOR_CANDIDATES}`, [ids, keys, item.id])).rows ?? [];
-    return rows.map((row) => ({ eventId: String(row.event_id), cosine: 1, report: eventReport(row) }));
+      WHERE i.state = 'published' AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags))
+        AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
+      ORDER BY i.visible_at, i.id LIMIT $3`, [since, until, limit])).rows ?? [];
+    const summary = { items: items.length, scanned: 0, withCandidates: 0, candidateEvents: 0, kept: 0, joined: 0, merged: 0,
+      skipped: 0, failed: 0, stopped: /** @type {string | null} */ (null), resumeFrom: /** @type {string | null} */ (null), apply };
+    const pool = { rows: /** @type {any[] | null} */ (null) };
+    let next = 0;
+    /** The first item not placed when the budget stopped the run: where a run started tomorrow takes up (`since`). */
+    let resume = Infinity;
+    const work = async () => {
+      while (next < items.length && !summary.stopped) {
+        if (apply && !(await this.#modelAllowed())) { summary.stopped = "budget"; resume = Math.min(resume, next); break; }
+        const index = next;
+        const item = items[index];
+        next += 1;
+        try {
+          // The recall's window is the fourteen days before the item; what is written is written now.
+          const recallAt = new Date(new Date(item.visible_at).getTime());
+          if (!apply) {
+            const candidates = frontierRecallReading((await this.#recall(item, { now: recallAt, modelKey, pool, before: true }))
+              .filter((hit) => hit.eventId !== String(item.event_id)));
+            if (candidates.length) { summary.withCandidates += 1; summary.candidateEvents += candidates.length; }
+          } else {
+            // Read again: an earlier item of this run may have folded its event into another since the window was read.
+            const own = (await this.database.query("SELECT event_id FROM evimed_frontier.items WHERE id = $1", [item.id])).rows?.[0]?.event_id;
+            const outcome = own == null ? "skipped"
+              : await this.#clusterOne(item, { now: this.now(), recallAt, modelKey, allowModel: true, pool, own: String(own) });
+            if (outcome === "deferred") { summary.stopped = "budget"; resume = Math.min(resume, index); break; }
+            if (outcome === "kept" || outcome === "joined" || outcome === "merged" || outcome === "skipped") summary[outcome] += 1;
+          }
+        } catch (error) {
+          this.lastError = codeOf(error);
+          summary.failed += 1;
+        }
+        summary.scanned += 1;
+        if (onProgress && summary.scanned % 100 === 0) onProgress({ ...summary });
+      }
+    };
+    await Promise.all(Array.from({ length: apply ? concurrency : 1 }, () => work()));
+    if (Number.isFinite(resume) && items[resume]) summary.resumeFrom = new Date(items[resume].visible_at).toISOString();
+    return summary;
   }
 
   /**
-   * Clustered items of the last seven days that share a drug, trial or
-   * organisation with this one, with their exact cosine to it.
-   * @param {any} item @param {string} modelKey @param {Date} now
+   * Recall, the grouping call and its second looks, then the placement.
+   * @param {any} item @param {{ now: Date, recallAt?: Date, modelKey: string | null, allowModel: boolean, pool: { rows: any[] | null },
+   *   own?: string | null }} context
+   *   `own` the item's present event, when it is placed again (`regroupRecent`): never one of its own candidates; `recallAt` the
+   *   time the recall's window ends (the item's own publication, then), `now` by default.
+   * @returns {Promise<"created" | "joined" | "merged" | "skipped" | "deferred" | "kept">}
    */
-  async #vectorCandidates(item, modelKey, now) {
-    const entities = frontierClusterEntities(item.entity_keys);
-    if (!entities.length) return [];
-    const since = new Date(new Date(item.timeline_at).getTime() - FRONTIER_CLUSTER_WINDOW_MS);
-    const rows = (await this.database.query(`SELECT i.id, i.event_id, i.title_raw, i.title_zh, i.summary_zh, i.published_at, i.timeline_at,
-        i.identity_key, i.registry_ids, i.evidence_type, i.source_type, s.name AS source_name,
-        s.owner_entity AS owner_entity, i.doi AS doi, i.pmid AS pmid, 1 - (v.embedding <=> own.embedding) AS cosine
-      FROM evimed_frontier.items i
-      JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
-      CROSS JOIN (SELECT embedding FROM evimed_frontier.item_vectors WHERE item_id = $1 AND model_key = $2) own
-      WHERE i.state = 'published' AND i.id <> $1 AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags))
-        AND i.timeline_at >= $3::timestamptz AND i.timeline_at <= $4::timestamptz AND i.entity_keys && $5::text[]
-      ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${VECTOR_CANDIDATES}`, [item.id, modelKey, since, now, entities])).rows ?? [];
-    return rows.map((row) => ({
-      itemId: String(row.id), eventId: String(row.event_id), cosine: Number(row.cosine),
-      samePublisher: Boolean(item.owner_entity) && row.owner_entity === item.owner_entity,
-      otherWork: otherWork(item, row),
-      report: eventReport(row),
-    }));
+  async #clusterOne(item, { now, recallAt = now, modelKey, allowModel, pool, own = null }) {
+    const candidates = frontierRecallReading((await this.#recall(item, { now: recallAt, modelKey, pool, before: own != null }))
+      .filter((hit) => hit.eventId !== own));
+    /** @type {{ yes: string[], related: string[], follows: string | null, selection: { addsValue: boolean, reason: string | null } | null }} */
+    let found = { yes: [], related: [], follows: null, selection: null };
+    if (candidates.length) {
+      if (!allowModel) {
+        this.counters.adjudicationSkipped += candidates.length;
+        // Out of budget, not out of editor: the item waits to be asked rather than being an event of its own for good.
+        if (this.editor?.available) return "deferred";
+      } else {
+        const judged = await this.#judge(item, candidates);
+        if (judged === "deferred") return "deferred";
+        if (judged) found = judged;
+      }
+    }
+    if (own) return found.yes.length || found.follows || found.selection ? this.#applyAgain(item, own, found, now) : "kept";
+    const outcome = await this.#apply(item, { identifier: [], strong: [], ...found }, now);
+    // An item placed in this round is a candidate for the rest of it.
+    if (pool.rows && outcome !== "skipped") {
+      const placed = (await this.database.query("SELECT event_id FROM evimed_frontier.items WHERE id = $1", [item.id])).rows?.[0];
+      if (placed?.event_id != null) pool.rows.push({ ...item, event_id: placed.event_id });
+    }
+    return outcome;
+  }
+
+  /**
+   * The earlier items recalled for one (see the module's account of clustering): every report naming the same trial, at any
+   * age, and the window's items by vector — or, when the item has no vector, by the lexical stand-in.
+   * @param {any} item @param {{ now: Date, modelKey: string | null, pool: { rows: any[] | null }, before?: boolean }} context
+   *   `before` keeps to the items published in the feed before this one (a backfill asks about each pair once).
+   * @returns {Promise<FrontierRecallHit[]>}
+   */
+  async #recall(item, { now, modelKey, pool, before = false }) {
+    const earlier = (/** @type {any} */ row) => !before || new Date(row.visible_at).getTime() < new Date(item.visible_at).getTime()
+      || (new Date(row.visible_at).getTime() === new Date(item.visible_at).getTime() && Number(row.id) < Number(item.id));
+    const since = new Date(now.getTime() - FRONTIER_CLUSTER_WINDOW_MS);
+    /** @type {FrontierRecallHit[]} */
+    const hits = [];
+    const guards = (/** @type {any} */ row) => ({ samePublisher: Boolean(item.owner_entity) && row.owner_entity === item.owner_entity, otherWork: otherWork(item, row) });
+    const keys = frontierClusterKeys(item);
+    /** @type {any[]} */
+    let identified = [];
+    if (keys.length) {
+      // item_keys names the first item only; registry_ids also finds later trial
+      // milestones, so a newer event is not hidden behind its registration row.
+      identified = (await this.database.query(`SELECT i.id, i.event_id, i.doi, i.pmid, i.visible_at, s.owner_entity
+        FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+        WHERE i.id <> $3 AND i.state = 'published' AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags))
+          AND (i.registry_ids && $1::text[] OR EXISTS
+            (SELECT 1 FROM evimed_frontier.item_keys k WHERE k.item_id = i.id AND k.key = ANY($2::text[])))
+        ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${IDENTIFIER_CANDIDATES}`, [keys.map((key) => key.slice(4)), keys, item.id])).rows ?? [];
+      identified = identified.filter(earlier);
+    }
+    const hasVector = modelKey ? Boolean((await this.database.query(`SELECT 1 FROM evimed_frontier.item_vectors WHERE item_id = $1 AND model_key = $2`,
+      [item.id, modelKey])).rows?.length) : false;
+    /** @type {Map<string, number>} item id → its cosine to this one */
+    const cosines = new Map();
+    if (hasVector) {
+      // Exact cosine over the window (a few thousand rows a day): an approximate index scan under these filters can return
+      // fewer rows than asked for, and recall is what this round is about.
+      const rows = (await this.database.query(`SELECT i.id, i.event_id, i.doi, i.pmid, i.visible_at, s.owner_entity, 1 - (v.embedding <=> own.embedding) AS cosine
+        FROM evimed_frontier.items i
+        JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+        JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
+        CROSS JOIN (SELECT embedding FROM evimed_frontier.item_vectors WHERE item_id = $1 AND model_key = $2) own
+        WHERE i.state = 'published' AND i.id <> $1 AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags))
+          AND i.visible_at >= $3::timestamptz AND 1 - (v.embedding <=> own.embedding) >= $4
+          AND (NOT $5::boolean OR (i.visible_at, i.id) < ($6::timestamptz, $1::bigint))
+        ORDER BY cosine DESC, i.id LIMIT ${VECTOR_RECALL_ROWS}`, [item.id, modelKey, since, FRONTIER_RECALL.minCosine, before, item.visible_at])).rows ?? [];
+      for (const row of rows) {
+        cosines.set(String(row.id), Number(row.cosine));
+        hits.push({ eventId: String(row.event_id), itemId: String(row.id), score: Number(row.cosine), cosine: Number(row.cosine), ...guards(row) });
+      }
+      const unmeasured = identified.filter((row) => !cosines.has(String(row.id))).map((row) => String(row.id));
+      if (unmeasured.length) {
+        for (const row of (await this.database.query(`SELECT v.item_id, 1 - (v.embedding <=> own.embedding) AS cosine
+          FROM evimed_frontier.item_vectors v
+          CROSS JOIN (SELECT embedding FROM evimed_frontier.item_vectors WHERE item_id = $1 AND model_key = $2) own
+          WHERE v.model_key = $2 AND v.item_id = ANY($3::bigint[])`, [item.id, modelKey, unmeasured])).rows ?? []) {
+          cosines.set(String(row.item_id), Number(row.cosine));
+        }
+      }
+    } else {
+      // No vector of its own (the embedder failed, or this deployment has none): the window's titles and summaries.
+      if (!pool.rows) {
+        pool.rows = (await this.database.query(`SELECT i.id, i.event_id, i.title_raw, i.title_zh, i.summary_zh, i.doi, i.pmid, i.visible_at, s.owner_entity
+          FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+          WHERE i.state = 'published' AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags)) AND i.visible_at >= $1::timestamptz
+          ORDER BY i.visible_at DESC, i.id DESC LIMIT ${LEXICAL_POOL}`, [since])).rows ?? [];
+      }
+      const mine = frontierTextTokens(frontierRecallText(item));
+      this.counters.lexicalRecalls += 1;
+      for (const row of pool.rows) {
+        if (String(row.id) === String(item.id) || row.event_id == null || !earlier(row)) continue;
+        row.tokens ??= frontierTextTokens(frontierRecallText(row));
+        const overlap = frontierTextOverlap(mine, row.tokens);
+        if (overlap >= FRONTIER_RECALL.minOverlap) hits.push({ eventId: String(row.event_id), itemId: String(row.id), score: overlap, cosine: null, ...guards(row) });
+      }
+    }
+    for (const row of identified) {
+      const cosine = cosines.get(String(row.id));
+      hits.push({ eventId: String(row.event_id), itemId: String(row.id), score: 1, cosine: cosine ?? null, identifier: true, ...guards(row) });
+    }
+    return hits;
+  }
+
+  /**
+   * What each candidate event is shown as (AIHOT `candidateViews`): its title, how many reports it holds, its representative
+   * report, and the report of it already selected for the feed. A candidate whose event no longer has a visible report is
+   * dropped.
+   * @param {Array<FrontierRecallHit & { index: number }>} candidates
+   */
+  async #candidateViews(candidates) {
+    const ids = candidates.map((candidate) => candidate.eventId);
+    const titles = new Map(((await this.database.query(`SELECT id, title_zh FROM evimed_frontier.events WHERE id = ANY($1::bigint[])`, [ids])).rows ?? [])
+      .map((row) => [String(row.id), row.title_zh]));
+    const reports = await frontierEventReports(this.database, ids);
+    const details = new Map(((await this.database.query(`SELECT i.id, i.summary_zh, i.published_at, i.doi, i.pmid, i.registry_ids, i.evidence_type,
+        i.identity_key, s.platform_produced FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+      WHERE i.id = ANY($1::bigint[])`, [[...reports.values()].flat().map((row) => row.id)])).rows ?? []).map((row) => [String(row.id), row]));
+    const report = (/** @type {any} */ row) => groupReport({ ...row, ...details.get(String(row.id)) });
+    return candidates.flatMap((candidate) => {
+      const rows = reports.get(candidate.eventId) ?? [];
+      const representative = frontierRepresentative(rows);
+      if (!representative) return [];
+      const selected = frontierRepresentative(rows.filter((row) => row.selected === true));
+      return [{ candidate, view: { title: String(titles.get(candidate.eventId) ?? representative.title_zh ?? representative.title_raw), members: rows.length,
+        report: report(representative), selected: selected ? report(selected) : null } }];
+    });
+  }
+
+  /**
+   * The grouping call for one item and the second looks it asks for: the events it joins, the one it follows from, and its
+   * reading value against the reports already selected — or null when there is no answer to act on (the item then stands
+   * alone: a wrong merge costs more than a missed one), or `deferred` when the day's budget ran out on the way.
+   * @param {any} item @param {Array<FrontierRecallHit & { index: number }>} candidates
+   * @returns {Promise<null | "deferred" | { yes: string[], related: string[], follows: string | null,
+   *   selection: { addsValue: boolean, reason: string | null } | null }>}
+   */
+  async #judge(item, candidates) {
+    const views = await this.#candidateViews(candidates);
+    if (!views.length) return null;
+    const texts = (await this.database.query(`SELECT abstract_raw, body_excerpt FROM evimed_frontier.item_texts WHERE item_id = $1`, [item.id])).rows?.[0];
+    const report = groupReport(item, { text: texts?.abstract_raw || texts?.body_excerpt || null });
+    const messages = [{ role: "system", content: FRONTIER_GROUP_INSTRUCTIONS },
+      { role: "user", content: buildGroupInput({ report, candidates: views.map(({ view }) => view) }, { timeZone: this.timeZone }) }];
+    this.counters.adjudicated += views.length;
+    let answer = null;
+    // An answer that does not address every candidate is asked for once more; a spent budget or a missing owner will not be
+    // different a second later.
+    for (let round = 0; round < 2 && !answer; round += 1) {
+      this.counters.groupCalls += 1;
+      try {
+        answer = validateGroupAnswer(views.length, await this.editor.callJson(messages,
+          { maxTokens: GROUP_BASE_TOKENS + GROUP_TOKENS_PER_CANDIDATE * views.length, timeoutMs: GROUP_TIMEOUT_MS }));
+      } catch (error) {
+        const code = codeOf(error);
+        if (code === "usage_budget_exceeded") return "deferred";
+        if (code === "frontier_editor_unavailable") break;
+      }
+    }
+    if (!answer) {
+      this.counters.adjudicationFailures += 1;
+      return null;
+    }
+    const plan = frontierGroupPlan(views.map(({ candidate, view }) => ({ ...candidate, view })), answer.decisions);
+    const join = [...plan.join];
+    const story = [...plan.story];
+    for (const candidate of plan.check) {
+      this.counters.secondLooks += 1;
+      let pair = null;
+      try {
+        pair = validateGroupPair(await this.editor.callJson([{ role: "system", content: FRONTIER_GROUP_PAIR_INSTRUCTIONS },
+          { role: "user", content: buildGroupPairInput(report, candidate.view.report, { timeZone: this.timeZone }) }],
+        { maxTokens: PAIR_MAX_TOKENS, timeoutMs: PAIR_TIMEOUT_MS }));
+      } catch (error) {
+        if (codeOf(error) === "usage_budget_exceeded") return "deferred";
+      }
+      // The merge stands only when the second look agrees; a development it sees instead links (AIHOT `confirmMerge`).
+      if (pair?.relation === "SAME_OCCURRENCE") { join.push(candidate); this.counters.secondLooksAgreed += 1; }
+      else if (pair?.relation === "SAME_STORY") story.push(candidate);
+    }
+    story.sort((left, right) => right.score - left.score || left.index - right.index);
+    this.counters.sameOccurrence += join.length;
+    this.counters.sameStory += story.length ? 1 : 0;
+    return {
+      yes: join.map((candidate) => candidate.eventId), related: [], follows: story[0]?.eventId ?? null,
+      // Reading value is judged against the reports already selected; with none shown there was nothing to judge.
+      selection: views.some(({ view }) => view.selected) ? answer.selection : null,
+    };
   }
 
   /**
    * Place one item, under the clustering lock: the events named are read again
    * (a merge since may have absorbed one — its survivor is used), the survivor
-   * absorbs the others, the item joins it, and the edges are written.
-   * @param {any} item @param {{ identifier: string[], strong: string[], yes: string[], related: string[] }} found @param {Date} now
+   * absorbs the others, the item joins it, and the edges are written — the
+   * `follows` link to the story it develops, and the one-selected-item gate.
+   * @param {any} item
+   * @param {{ identifier: string[], strong: string[], yes: string[], related: string[], follows?: string | null,
+   *           selection?: { addsValue: boolean, reason: string | null } | null }} found
+   * @param {Date} now
    * @returns {Promise<"created" | "joined" | "merged" | "skipped">}
    */
   async #apply(item, found, now) {
@@ -867,7 +1193,7 @@ export class FrontierEvents {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [CLUSTER_LOCK]);
       const current = (await client.query(`SELECT id, event_id, state FROM evimed_frontier.items WHERE id = $1 FOR UPDATE`, [item.id])).rows?.[0];
       if (!current || current.state !== "published" || current.event_id != null) return "skipped";
-      const named = [...new Set([...found.identifier, ...found.strong, ...found.yes, ...found.related])];
+      const named = [...new Set([...found.identifier, ...found.strong, ...found.yes, ...found.related, ...(found.follows ? [found.follows] : [])])];
       const events = await this.#resolveEvents(client, named);
       const survivorOf = (/** @type {string} */ id) => events.get(id)?.id ?? null;
       const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type, platformProduced: item.platform_produced === true });
@@ -911,13 +1237,134 @@ export class FrontierEvents {
           VALUES ($1, $2, 'related', 'model') ON CONFLICT DO NOTHING`, [target, other]);
         this.counters.relatedLinks += inserted.rowCount ?? 0;
       }
+      const story = found.follows ? survivorOf(found.follows) : null;
+      const linked = story ? await this.#linkStory(client, target, story) : false;
+      const unselected = found.selection ? await this.#applySelection(client, item.id, target, found.selection, now) : false;
       await this.#linkFromItemLinks(client, item.id, target);
       await this.#refresh(client, [target], now);
-      // A card's 「同一事件的全部报道」 appears, or its event's title moves: a
-      // change every reader of the lists can see.
-      if (outcome !== "created") await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
+      // A card's 「同一事件的全部报道」 appears, its event's title moves, it
+      // leaves the selected feed, or its 事件后续 grows: a change every reader
+      // of the lists can see.
+      if (outcome !== "created" || linked || unselected) await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
       return outcome;
     });
+  }
+
+  /**
+   * Place an item that already has an event again (`regroupRecent`): what the grouping answer says about its event and the
+   * earlier ones, under the clustering lock. An item alone in its event moves to the event it is the same occurrence as, and
+   * its old event is folded in (its public id answers 308 for good); an item among other reports folds the events only when it
+   * is first-hand — a report links them (the clustering rule 5). The follows link and the gate as for a new item.
+   * @param {any} item @param {string} own the event it is in @param {{ yes: string[], related: string[], follows: string | null,
+   *   selection: { addsValue: boolean, reason: string | null } | null }} found @param {Date} now
+   * @returns {Promise<"joined" | "merged" | "kept" | "skipped">}
+   */
+  async #applyAgain(item, own, found, now) {
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [CLUSTER_LOCK]);
+      const current = (await client.query(`SELECT id, event_id, state FROM evimed_frontier.items WHERE id = $1 FOR UPDATE`, [item.id])).rows?.[0];
+      if (!current || current.state !== "published" || current.event_id == null) return "skipped";
+      const named = [...new Set([String(current.event_id), own, ...found.yes, ...(found.follows ? [found.follows] : [])])];
+      const events = await this.#resolveEvents(client, named);
+      const home = events.get(String(current.event_id))?.id;
+      if (!home) return "skipped";
+      const yes = [...new Set(found.yes.map((id) => events.get(id)?.id).filter(/** @returns {id is string} */ (id) => Boolean(id) && id !== home))];
+      const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type, platformProduced: item.platform_produced === true });
+      const byId = new Map([...events.values()].map((event) => [event.id, event]));
+      let place = home;
+      let outcome = /** @type {"joined" | "merged" | "kept"} */ ("kept");
+      if (yes.length) {
+        const alone = Number((await client.query(`SELECT count(*)::integer AS n FROM evimed_frontier.event_items WHERE event_id = $1`, [home])).rows?.[0]?.n ?? 0) <= 1;
+        if (alone || role === "primary") {
+          // Alone, the item is free: it is placed as a new item would be, and its old event folds into where it went. Among
+          // other reports, a first-hand item folds its event and the others into the oldest.
+          const decision = frontierClusterDecision({ role, identifier: [], strong: [], yes: alone ? yes : [home, ...yes], related: [], events: byId });
+          const target = /** @type {string} */ (decision.target);
+          for (const absorbed of [...(alone && target !== home ? [home] : []), ...decision.merge]) await this.#mergeInto(client, target, absorbed, now);
+          for (const other of decision.related) {
+            const inserted = await client.query(`INSERT INTO evimed_frontier.event_links (from_event_id, to_event_id, relation, asserted_by)
+              VALUES ($1, $2, 'related', 'model') ON CONFLICT DO NOTHING`, [target, other]);
+            this.counters.relatedLinks += inserted.rowCount ?? 0;
+          }
+          place = target;
+          outcome = "merged";
+          await client.query("UPDATE evimed_frontier.event_items SET joined_by = 'model' WHERE item_id = $1 AND joined_by <> 'operator'", [item.id]);
+        } else {
+          // A report among other reports folds nothing (the clustering rule 5): its event is linked to the others.
+          for (const other of yes) {
+            const inserted = await client.query(`INSERT INTO evimed_frontier.event_links (from_event_id, to_event_id, relation, asserted_by)
+              VALUES ($1, $2, 'related', 'model') ON CONFLICT DO NOTHING`, [home, other]);
+            this.counters.relatedLinks += inserted.rowCount ?? 0;
+            if (inserted.rowCount) outcome = "joined";
+          }
+        }
+      }
+      const story = found.follows ? events.get(found.follows)?.id ?? null : null;
+      const linked = story && story !== place ? await this.#linkStory(client, place, story) : false;
+      const unselected = found.selection ? await this.#applySelection(client, item.id, place, found.selection, now) : false;
+      await this.#refresh(client, [...new Set([place, home])], now);
+      if (outcome !== "kept" || linked || unselected) {
+        this.counters.regrouped += 1;
+        await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
+        return outcome === "kept" ? "joined" : outcome;
+      }
+      return "kept";
+    });
+  }
+
+  /**
+   * A `follows` link between an event and the story it develops (fr-events 2026-10-22, AIHOT `storyForDevelopment`): to the
+   * story's root — the event the candidate itself follows, else the candidate — so a story grows as a star and not by
+   * chaining; from the older of the two to the newer (by first report). Nothing when the two are already linked either way.
+   * @param {any} client @param {string} eventId @param {string} candidateId both survivors, locked
+   * @returns {Promise<boolean>} whether a link was written
+   */
+  async #linkStory(client, eventId, candidateId) {
+    const root = String((await client.query(`SELECT l.from_event_id FROM evimed_frontier.event_links l
+      JOIN evimed_frontier.events e ON e.id = l.from_event_id
+      WHERE l.to_event_id = $1 AND l.relation = 'follows' AND e.merged_into IS NULL ORDER BY e.first_at, e.id LIMIT 1`, [candidateId])).rows?.[0]?.from_event_id
+      ?? candidateId);
+    if (root === eventId) return false;
+    const linked = (await client.query(`SELECT 1 FROM evimed_frontier.event_links WHERE relation = 'follows'
+      AND ((from_event_id = $1 AND to_event_id = $2) OR (from_event_id = $2 AND to_event_id = $1))`, [eventId, root])).rows?.length;
+    if (linked) return false;
+    const [from, to] = ((await client.query(`SELECT id FROM evimed_frontier.events WHERE id = ANY($1::bigint[]) ORDER BY first_at, id`,
+      [[eventId, root]])).rows ?? []).map((row) => String(row.id));
+    if (!from || !to) return false;
+    const inserted = await client.query(`INSERT INTO evimed_frontier.event_links (from_event_id, to_event_id, relation, asserted_by)
+      VALUES ($1, $2, 'follows', 'model') ON CONFLICT DO NOTHING`, [from, to]);
+    this.counters.followsLinks += inserted.rowCount ?? 0;
+    return Boolean(inserted.rowCount);
+  }
+
+  /**
+   * The one-selected-item gate (see the module's hidden knowledge): the verdict is recorded on the item; when it adds nothing to
+   * a report of its event that is already selected, it names that report and, if an arithmetic rule selected it, leaves the
+   * selected feed. The caller holds the item's row.
+   * @param {any} client @param {string | number} itemId @param {string} eventId
+   * @param {{ addsValue: boolean, reason: string | null }} selection @param {Date} now
+   * @returns {Promise<boolean>} whether the item was unselected
+   */
+  async #applySelection(client, itemId, eventId, selection, now) {
+    const verdict = JSON.stringify({ addsValue: selection.addsValue, reason: selection.reason ?? null, decidedAt: now.toISOString() });
+    const others = selection.addsValue === false ? (await client.query(`SELECT i.id, ei.role, i.source_type, i.selected, i.score_total, i.timeline_at
+      FROM evimed_frontier.event_items ei JOIN evimed_frontier.items i ON i.id = ei.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+      WHERE ei.event_id = $1 AND i.id <> $2 AND i.state = 'published' AND i.selected AND s.enabled`, [eventId, itemId])).rows ?? [] : [];
+    const named = frontierRepresentative(others);
+    if (!named) {
+      await client.query(`UPDATE evimed_frontier.items SET event_selection = $2::jsonb, same_event_item_id = NULL WHERE id = $1`, [itemId, verdict]);
+      return false;
+    }
+    const before = (await client.query(`SELECT selected, selected_rule FROM evimed_frontier.items WHERE id = $1`, [itemId])).rows?.[0];
+    const unselect = before?.selected === true && FRONTIER_SAME_EVENT_GATED_RULES.includes(String(before.selected_rule));
+    await client.query(`UPDATE evimed_frontier.items SET event_selection = $2::jsonb, same_event_item_id = $3,
+        selected = CASE WHEN $4::boolean THEN false ELSE selected END, selected_rule = CASE WHEN $4::boolean THEN NULL ELSE selected_rule END,
+        selected_at = CASE WHEN $4::boolean THEN NULL ELSE selected_at END, updated_at = clock_timestamp()
+      WHERE id = $1`, [itemId, verdict, named.id, unselect]);
+    if (!unselect) return false;
+    await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'same-event')", [itemId]);
+    this.counters.sameEventUnselected += 1;
+    return true;
   }
 
   /**
@@ -971,7 +1418,7 @@ export class FrontierEvents {
     await client.query("UPDATE evimed_frontier.events SET merged_into = $1 WHERE merged_into = $2", [survivorId, absorbedId]);
     // A digest the survivor lacks is carried over, marked stale: the next
     // primary source rewrites it from every report.
-    await client.query(`UPDATE evimed_frontier.events s SET digest_zh = a.digest_zh, digest_state = 'stale'
+    await client.query(`UPDATE evimed_frontier.events s SET digest_zh = a.digest_zh, digest_title_zh = a.digest_title_zh, digest_state = 'stale'
       FROM evimed_frontier.events a WHERE s.id = $1 AND a.id = $2 AND s.digest_zh IS NULL AND a.digest_zh IS NOT NULL`, [survivorId, absorbedId]);
     await client.query(`UPDATE evimed_frontier.events SET digest_state = CASE WHEN digest_state = 'written' THEN 'stale' ELSE digest_state END,
       updated_at = clock_timestamp() WHERE id = $1`, [survivorId]);
@@ -1034,8 +1481,8 @@ export class FrontierEvents {
   }
 
   /**
-   * Recompute an event from its visible members: title (its first primary
-   * source's, else its first report's), lane, entities, the three counts,
+   * Recompute an event from its visible members: title (its overview's, else
+   * its first primary source's, else its first report's), lane, entities, the three counts,
    * heat, the time span and the status.
    * @param {any} client @param {string[]} eventIds @param {Date} now
    */
@@ -1051,7 +1498,8 @@ export class FrontierEvents {
       const counts = frontierEventCounts({ members, now });
       const lead = rows.find((row) => row.role === "primary") ?? rows[0];
       const keys = [...new Set(rows.flatMap((row) => Array.isArray(row.entity_keys) ? row.entity_keys : []))].slice(0, 64);
-      await client.query(`UPDATE evimed_frontier.events SET title_zh = $2, lane = $3, entity_keys = $4, source_count_72h = $5, report_count = $6,
+      // The overview's title names the event once written (`writeDigests`); until then its first primary source's does.
+      await client.query(`UPDATE evimed_frontier.events SET title_zh = coalesce(digest_title_zh, $2), lane = $3, entity_keys = $4, source_count_72h = $5, report_count = $6,
           entity_count = $7, has_primary = $8, heat = $9, heat_updated_at = $10, first_at = $11, last_at = $12,
           status = CASE WHEN $12::timestamptz < $13::timestamptz THEN 'settled' ELSE 'developing' END, updated_at = clock_timestamp()
         WHERE id = $1`, [eventId, eventTitle(lead), lead.lane, keys, counts.sourceCount72h,
@@ -1337,8 +1785,13 @@ export class FrontierEvents {
       if (failedAt && now.getTime() - failedAt < DIGEST_RETRY_MS) { summary.skipped += 1; continue; }
       const reports = await this.#digestReports(String(event.id));
       if (!reports.length) { summary.skipped += 1; continue; }
-      const result = await this.editor.writeEventDigest({ reports, previousDigest: event.digest_zh ?? null });
-      if (!["passed", "repaired"].includes(result.verification) || !result.digestZh) {
+      // The overview (AIHOT `story-digest.md`): the core change and its conclusion first, 100–300 characters, and a title for
+      // the whole event; checked like every piece of prose, rewritten once with the issues named.
+      const input = buildDigestInput({ reports, previousDigest: event.digest_zh ?? null }, { timeZone: this.timeZone });
+      const result = await this.editor.writeJson(FRONTIER_EVENT_DIGEST_INSTRUCTIONS, input, DIGEST_MAX_TOKENS,
+        { verify: (/** @type {any} */ answer) => verifyEventDigest(answer, input) });
+      const written = { digest: result.output?.digest ?? null, title: result.output?.title ?? null };
+      if (!["passed", "repaired"].includes(result.verification) || !written.digest) {
         // The previous digest (or none) stands; the event is asked again later.
         this.digestFailures.set(String(event.id), now.getTime());
         if (result.error === "usage_budget_exceeded") break;
@@ -1351,11 +1804,15 @@ export class FrontierEvents {
         const current = (await client.query(`SELECT digest_revision, merged_into FROM evimed_frontier.events WHERE id = $1 FOR UPDATE`, [event.id])).rows?.[0];
         if (!current || current.merged_into != null) return;
         const revision = Number(current.digest_revision) + 1;
-        await client.query(`UPDATE evimed_frontier.events SET digest_zh = $2, latest_zh = coalesce($3, latest_zh), digest_state = 'written',
-          digest_revision = $4, updated_at = clock_timestamp() WHERE id = $1`, [event.id, result.digestZh, result.latestZh, revision]);
+        // 「最新进展」 stays the newest report's own title, by code; the overview's title names the event from now on.
+        await client.query(`UPDATE evimed_frontier.events SET digest_zh = $2, digest_title_zh = coalesce($3, digest_title_zh),
+          title_zh = coalesce($3, title_zh), digest_state = 'written', digest_revision = $4, updated_at = clock_timestamp() WHERE id = $1`,
+        [event.id, written.digest, written.title, revision]);
         await client.query(`INSERT INTO evimed_frontier.event_revisions (event_id, revision, digest_zh, cause) VALUES ($1, $2, $3, $4)
-          ON CONFLICT (event_id, revision) DO NOTHING`, [event.id, revision, result.digestZh, cause]);
-        // The hot list shows 「最新进展」.
+          ON CONFLICT (event_id, revision) DO NOTHING`, [event.id, revision, written.digest, cause]);
+        // The cards name their event by its title; the hot list shows it with its 「最新进展」.
+        await bumpFrontierVersion(client, FRONTIER_META_KEYS.contentVersion);
+        if (hot.includes(String(event.id))) await bumpFrontierVersion(client, FRONTIER_META_KEYS.hotVersion);
         if (hot.includes(String(event.id))) await bumpFrontierVersion(client, FRONTIER_META_KEYS.hotVersion);
       });
       summary.written += 1;
@@ -1389,13 +1846,21 @@ export class FrontierEvents {
   /**
    * One event as the page reads it, or where it went, or null.
    * `{ redirect }` for a merged event's old public id — its row, or an alias.
-   * @param {string} publicId
+   * `order` puts its reports (the timeline) and its developments in time
+   * order, newest (`desc`) or oldest (`asc`) first; without it the reports
+   * keep the page's first order — first-hand sources, then the newest.
+   * `developments` are the other events of its story (`follows` links, two
+   * hops: `frontierStoryEventIds`), each by its representative report.
+   * @param {string} publicId @param {{ order?: "asc" | "desc" | null }} [options]
    * @returns {Promise<null | { redirect: string } | { event: any, members: Array<{ rowId: string, role: string }>,
    *   related: Array<{ id: string, title: string, relation: string, at: string | null }>, specialties: string[],
    *   heat: number | null, institutions: { total: number, byType: Array<{ type: string, count: number }> },
-   *   trend: Array<{ at: string, heat: number | null }> | null, primary: "official" | "guideline" | "paper" | null }>}
+   *   trend: Array<{ at: string, heat: number | null }> | null, primary: "official" | "guideline" | "paper" | null,
+   *   developments: Array<{ eventId: string, itemId: string, title: string, sourceName: string, at: string,
+   *     relation: "follows", position: "earlier" | "later" }> }>}
    */
-  async read(publicId) {
+  async read(publicId, { order = null } = {}) {
+    if (order != null && order !== "asc" && order !== "desc") throw Object.assign(new Error("The order is invalid."), { code: "frontier_query_invalid" });
     if (!PUBLIC_ID.test(String(publicId ?? ""))) return null;
     await this.ready();
     const named = (await this.database.query(`SELECT id, merged_into FROM evimed_frontier.events WHERE public_id = $1`, [publicId])).rows?.[0];
@@ -1419,7 +1884,8 @@ export class FrontierEvents {
         i.title_zh, i.title_raw, i.summary_zh, s.owner_entity FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE ei.event_id = $1 AND i.state = 'published' AND s.enabled
-      ORDER BY (ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC`, [event.id])).rows ?? [];
+      ORDER BY ${order ? `i.timeline_at ${order.toUpperCase()}, i.id ${order.toUpperCase()}` : "(ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC"}`,
+    [event.id])).rows ?? [];
     if (!members.length) return null;
     const related = (await this.database.query(`SELECT l.relation, other.public_id, other.title_zh, other.last_at, l.linked_at
       FROM evimed_frontier.event_links l
@@ -1446,7 +1912,29 @@ export class FrontierEvents {
       institutions: frontierEventInstitutions({ members: facts, now }),
       trend: frontierHeatTrend({ members: facts, now }),
       primary: frontierPrimaryKind(facts),
+      developments: await this.#developments(event, order ?? "desc"),
     };
+  }
+
+  /**
+   * The other events of an event's story, each by its representative report (a regulator's own notice, then the party's own
+   * text, then a selected report, the higher score, the earliest: `frontierRepresentative`), in time order.
+   * @param {any} event its row @param {"asc" | "desc"} order
+   */
+  async #developments(event, order) {
+    const story = await frontierStoryEventIds(this.database, event.id);
+    const reports = await frontierEventReports(this.database, story);
+    const rows = story.flatMap((id) => {
+      const row = frontierRepresentative(reports.get(id) ?? []);
+      return row ? [{
+        eventId: String(row.event_public_id), itemId: String(row.public_id), title: String(row.title_zh || row.title_raw),
+        sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+        at: new Date(row.timeline_at).toISOString(), relation: /** @type {const} */ ("follows"),
+        position: /** @type {"earlier" | "later"} */ (new Date(row.event_first_at).getTime() < new Date(event.first_at).getTime() ? "earlier" : "later"),
+      }] : [];
+    });
+    const sign = order === "asc" ? 1 : -1;
+    return rows.sort((left, right) => sign * (Date.parse(left.at) - Date.parse(right.at)) || left.itemId.localeCompare(right.itemId));
   }
 
   status() {

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  FRONTIER_CLUSTER_ASK_MAX,
+  FRONTIER_RECALL,
   FRONTIER_HOT_SIZE,
   FRONTIER_HOT_TRACKED,
   frontierEventInstitutions,
@@ -17,7 +17,6 @@ import {
   frontierSnapshotReading,
   frontierTrackedHeats,
   frontierClusterDecision,
-  frontierClusterEntities,
   frontierClusterKeys,
   frontierEventCounts,
   frontierEventHeat,
@@ -26,7 +25,13 @@ import {
   frontierHotEligible,
   frontierPrimaryKind,
   frontierRankHot,
-  frontierVectorReading,
+  frontierGroupPlan,
+  frontierMilestone,
+  frontierNeedsSecondLook,
+  frontierRecallReading,
+  frontierRecallText,
+  frontierTextOverlap,
+  frontierTextTokens,
   otherWork,
 } from "../src/frontierEvents.mjs";
 
@@ -127,8 +132,6 @@ test("cluster keys: every registry id, and the bare id of an event-level registr
   assert.deepEqual(frontierClusterKeys({ registry_ids: ["nct01234567", " NCT07654321 "], identity_key: "doi:10.1/x" }), ["reg:NCT01234567", "reg:NCT07654321"]);
   assert.deepEqual(frontierClusterKeys({ registry_ids: [], identity_key: "reg:NCT01234567:results-posted:2026-09-20" }), ["reg:NCT01234567"]);
   assert.deepEqual(frontierClusterKeys({ registry_ids: null, identity_key: "fda:NDA123:SUPPL-4" }), []);
-  assert.deepEqual(frontierClusterEntities(["drug:semaglutide", "disease:obesity", "trial:select", "org:fda", 7]), ["drug:semaglutide", "trial:select", "org:fda"],
-    "a disease alone is too broad to make two items candidates");
   // A column that names several trials is writing about them.
   const roundup = { source_type: "media", registry_ids: ["NCT05376150", "NCT06000001"], identity_key: "url:x" };
   assert.deepEqual(frontierClusterKeys(roundup), []);
@@ -138,28 +141,63 @@ test("cluster keys: every registry id, and the bare id of an event-level registr
     "a registry's own entry keeps its own id");
 });
 
-test("two works that state different identities are asked about, never joined by cosine alone", () => {
+test("two works that state different identities are looked at twice, never joined on one answer", () => {
   assert.equal(otherWork({ doi: "10.1/a" }, { doi: "10.1/B" }), true);
   assert.equal(otherWork({ doi: "10.1/a" }, { doi: " 10.1/A " }), false);
   assert.equal(otherWork({ doi: null, pmid: "1" }, { doi: "10.1/b", pmid: "2" }), true);
   assert.equal(otherWork({ doi: "10.1/a" }, { doi: null, pmid: "2" }), false, "nothing to compare is not a difference");
-  const reading = frontierVectorReading([
-    { eventId: "1", cosine: 0.95, otherWork: true }, { eventId: "2", cosine: 0.9 }, { eventId: "3", cosine: 0.93, samePublisher: true },
-  ]);
-  assert.deepEqual(reading.strong, []);
-  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["1", "3", "2"]);
+  assert.equal(frontierNeedsSecondLook({ cosine: 0.95, otherWork: true }), true, "the clustering rule 2 holds above any cosine");
+  assert.equal(frontierNeedsSecondLook({ cosine: 0.93, samePublisher: true }), true, "the clustering rule 1 holds above any cosine");
+  assert.equal(frontierNeedsSecondLook({ cosine: 0.85 }), false, "0.85 and above is obvious enough (AIHOT CONFIRM_BELOW_COSINE)");
+  assert.equal(frontierNeedsSecondLook({ cosine: 0.849 }), true);
+  assert.equal(frontierNeedsSecondLook({ cosine: null }), true, "a report matched by trial or by words has no cosine to vouch for it");
 });
 
-test("vectors only propose candidates at every cosine, one pair per event, at most three", () => {
-  const reading = frontierVectorReading([
-    { eventId: "1", cosine: 0.9 }, { eventId: "1", cosine: 0.75 }, { eventId: "2", cosine: 0.82 },
-    { eventId: "3", cosine: 0.8 }, { eventId: "3", cosine: 0.79 }, { eventId: "4", cosine: 0.74 }, { eventId: "5", cosine: 0.73 },
-    { eventId: "6", cosine: 0.72 }, { eventId: "7", cosine: 0.71 }, { eventId: "8", cosine: Number.NaN },
-  ]);
-  assert.deepEqual(reading.strong, []);
-  assert.deepEqual(reading.ask.map((pair) => [pair.eventId, pair.cosine]), [["1", 0.9], ["2", 0.82], ["3", 0.8]]);
-  assert.equal(reading.ask.length, FRONTIER_CLUSTER_ASK_MAX);
-  assert.equal(reading.ask[0].index, 0, "the index points back at the candidate the pair came from");
+test("recall: each event once by its best member, the ten best, any cosine from 0.6; the guards are the event's", () => {
+  const hits = [
+    { eventId: "1", itemId: "a", score: 0.9, cosine: 0.9 }, { eventId: "1", itemId: "b", score: 0.75, cosine: 0.75, samePublisher: true },
+    { eventId: "2", itemId: "c", score: 0.82, cosine: 0.82 }, { eventId: "3", itemId: "d", score: 1, cosine: null, identifier: true },
+    ...Array.from({ length: 10 }, (_, index) => ({ eventId: String(10 + index), itemId: `x${index}`, score: 0.7 - index / 100, cosine: 0.7 - index / 100 })),
+    { eventId: "8", itemId: "e", score: Number.NaN, cosine: null },
+  ];
+  const reading = frontierRecallReading(hits);
+  assert.equal(reading.length, FRONTIER_RECALL.topEvents);
+  assert.deepEqual(reading.slice(0, 3).map((hit) => [hit.eventId, hit.itemId]), [["3", "d"], ["1", "a"], ["2", "c"]], "a report naming the same trial counts as 1");
+  assert.equal(reading[1].samePublisher, true, "a guard any recalled member raised stays with its event");
+  assert.equal(reading[1].cosine, 0.9, "the event's cosine is its best member's");
+  assert.equal(reading[0].cosine, null);
+  assert.equal(hits[reading[1].index].itemId, "a", "the index points back at the hit the event was chosen by");
+  assert.equal(reading.at(-1).eventId, "16", "the ten best: the rest are not asked about");
+  assert.equal(FRONTIER_RECALL.minCosine, 0.6);
+});
+
+test("the grouping plan: SAME_OCCURRENCE joins (or is looked at again), SAME_STORY links, the rest asks for nothing", () => {
+  const candidates = [{ eventId: "1", cosine: 0.92 }, { eventId: "2", cosine: 0.7 }, { eventId: "3", cosine: 0.8 },
+    { eventId: "4", cosine: 0.9 }, { eventId: "5", cosine: 0.99, samePublisher: true }];
+  const plan = frontierGroupPlan(candidates, [{ relation: "SAME_OCCURRENCE" }, { relation: "SAME_OCCURRENCE" }, { relation: "SAME_STORY" },
+    { relation: "ROUNDUP" }, { relation: "SAME_OCCURRENCE" }]);
+  assert.deepEqual(plan.join.map((candidate) => candidate.eventId), ["1"]);
+  assert.deepEqual(plan.check.map((candidate) => candidate.eventId), ["2", "5"]);
+  assert.deepEqual(plan.story.map((candidate) => candidate.eventId), ["3"]);
+  assert.deepEqual(frontierGroupPlan(candidates, candidates.map(() => ({ relation: "UNRELATED" }))), { join: [], check: [], story: [] });
+});
+
+test("a registry entry's milestone is read from its identity for the model; any other identity has none", () => {
+  assert.equal(frontierMilestone("reg:nct01234567:results-posted:2026-09-21"), "NCT01234567 · results-posted · 2026-09-21");
+  assert.equal(frontierMilestone("doi:10.1/x"), null);
+  assert.equal(frontierMilestone(null), null);
+});
+
+test("the lexical stand-in: Chinese by character pairs, Latin script by words, over the smaller set", () => {
+  assert.deepEqual([...frontierTextTokens("医保钱包 2.0 Wallet")], ["医保", "保钱", "钱包", "wallet"], "single digits and letters are no words");
+  const one = frontierTextTokens(frontierRecallText({ title_zh: "医保钱包升级2.0版 职工个账跨省共济全国落地", summary_zh: "" }));
+  const two = frontierTextTokens(frontierRecallText({ title_zh: "医保钱包 2.0 版上线，个人账户跨省共济落地全国", summary_zh: "" }));
+  assert.ok(frontierTextOverlap(one, two) >= FRONTIER_RECALL.minOverlap, "one policy, two outlets");
+  const english = frontierTextTokens("The trial met its primary endpoint in heart failure");
+  const other = frontierTextTokens("Hospitals sue to stop the rebate pilot");
+  assert.ok(frontierTextOverlap(english, other) < FRONTIER_RECALL.minOverlap, "two English sentences share letter pairs, not words");
+  assert.equal(frontierTextOverlap(new Set(), one), 0);
+  assert.equal(frontierRecallText({ title_raw: "T", summary_zh: "x".repeat(400) }).length, 2 + 300);
 });
 
 test("where an item goes: the oldest of the events it is the same as survives the rest; related events are edges", () => {
@@ -204,16 +242,18 @@ test("a regulator's notice is hot on its own only when it is major: a top-band s
   assert.equal(eligible(notice({ sourceType: "media", scoreTotal: 95 })), false, "one outlet alone is never hot");
 });
 
-test("one publisher's notices above the join cosine are asked about, never joined by the vector alone", () => {
+test("one publisher's notices above the join cosine are asked about, and looked at twice before they join", () => {
   // Production, 2026-09-22: 「EMA 对 Sogroya / Anzupgo / Keytruda … 给出正面意见」
   // were joined into one event by the template's cosine.
-  const reading = frontierVectorReading([
-    { eventId: "7", cosine: 0.93, samePublisher: true },
-    { eventId: "8", cosine: 0.9, samePublisher: false },
-    { eventId: "9", cosine: 0.76, samePublisher: false },
+  const reading = frontierRecallReading([
+    { eventId: "7", itemId: "a", score: 0.93, cosine: 0.93, samePublisher: true },
+    { eventId: "8", itemId: "b", score: 0.9, cosine: 0.9, samePublisher: false },
+    { eventId: "9", itemId: "c", score: 0.76, cosine: 0.76, samePublisher: false },
   ]);
-  assert.deepEqual(reading.strong, []);
-  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["7", "8", "9"]);
+  assert.deepEqual(reading.map((hit) => hit.eventId), ["7", "8", "9"]);
+  const plan = frontierGroupPlan(reading, reading.map(() => ({ relation: "SAME_OCCURRENCE" })));
+  assert.deepEqual(plan.join.map((hit) => hit.eventId), ["8"]);
+  assert.deepEqual(plan.check.map((hit) => hit.eventId), ["7", "9"]);
 });
 
 // ───────────────── the hot list's numbers (plan 2026-09-23 §6.5 #1, #2, #4) ─────────────────
@@ -335,9 +375,9 @@ test("the event's hourly trend: the heat function at each hour over the reports 
 
 
 test("different publishers mentioning one organization cannot autojoin different drug events", () => {
-  const reading = frontierVectorReading([{ eventId: "different-drug", cosine: 0.98, samePublisher: false }]);
-  const decision = frontierClusterDecision({ identifier: [], strong: reading.strong, yes: [], related: [],
+  const reading = frontierRecallReading([{ eventId: "different-drug", itemId: "a", score: 0.98, cosine: 0.98, samePublisher: false }]);
+  const decision = frontierClusterDecision({ identifier: [], strong: [], yes: [], related: [],
     events: new Map([["different-drug", { id: "different-drug", firstAt: NOW }]]) });
-  assert.equal(decision.target, null);
-  assert.equal(reading.ask.length, 1);
+  assert.equal(decision.target, null, "recall proposes; only an answer joins");
+  assert.equal(reading.length, 1);
 });
