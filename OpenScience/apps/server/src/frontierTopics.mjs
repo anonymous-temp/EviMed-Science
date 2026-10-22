@@ -90,25 +90,44 @@ export function frontierTopicTagNames() {
  */
 
 /**
- * The topics an item is in, in group order and then table order, at most `limit`.
+ * How many topics of each group one item shows: its specialties and the diseases, drugs and kinds it is most about — the live
+ * check of 2026-10-22 gave a trial of an oral GLP-1 agonist eight topics, among them a comparator class its abstract only
+ * mentioned.
+ */
+export const FRONTIER_TOPICS_PER_GROUP = Object.freeze({ specialty: 2, disease: 2, drug: 2, organisation: 1, genre: 2 });
+
+/**
+ * The topics an item is in, in group order; within a group, by how early the item names them — its tags in the editor's order,
+ * then its entities in theirs, then its specialties, evidence type, lane, flags and source — at most
+ * `FRONTIER_TOPICS_PER_GROUP` of a group and `limit` in all.
  * @param {FrontierTopicInput} item @param {{ limit?: number }} [options]
  * @returns {Array<{ slug: string, name: string, group: FrontierTopicGroup }>}
  */
 export function frontierItemTopics(item, { limit = FRONTIER_ITEM_TOPICS_MAX } = {}) {
-  const names = new Set();
-  for (const key of item?.specialties ?? []) names.add(topicKey(`specialty:${key}`));
-  for (const list of Object.values(item?.entities && typeof item.entities === "object" ? item.entities : {})) {
-    for (const name of Array.isArray(list) ? list : []) if (typeof name === "string") names.add(topicKey(name));
+  /** @type {string[]} */
+  const names = [];
+  for (const tag of item?.tags ?? []) names.push(tag);
+  const entities = item?.entities && typeof item.entities === "object" ? /** @type {Record<string, unknown>} */ (item.entities) : {};
+  for (const kind of ["diseases", "drugs", "orgs", "trials", ...Object.keys(entities).filter((key) => !["diseases", "drugs", "orgs", "trials"].includes(key))]) {
+    const list = entities[kind];
+    for (const name of Array.isArray(list) ? list : []) if (typeof name === "string") names.push(name);
   }
-  for (const tag of item?.tags ?? []) names.add(topicKey(tag));
-  if (item?.evidenceType) names.add(topicKey(`evidence:${item.evidenceType}`));
-  if (item?.lane) names.add(topicKey(`lane:${item.lane}`));
-  for (const flag of item?.flags ?? []) names.add(topicKey(`flag:${flag}`));
-  if (item?.sourceName) names.add(topicKey(item.sourceName));
-  names.delete("");
-  const found = MATCHERS.filter(({ keys }) => [...keys].some((key) => names.has(key))).map(({ topic }) => topic);
-  found.sort((left, right) => FRONTIER_TOPIC_GROUPS.indexOf(left.group) - FRONTIER_TOPIC_GROUPS.indexOf(right.group));
-  return found.slice(0, Math.max(0, limit)).map(({ slug, name, group }) => ({ slug, name, group }));
+  for (const key of item?.specialties ?? []) names.push(`specialty:${key}`);
+  if (item?.evidenceType) names.push(`evidence:${item.evidenceType}`);
+  if (item?.lane) names.push(`lane:${item.lane}`);
+  for (const flag of item?.flags ?? []) names.push(`flag:${flag}`);
+  if (item?.sourceName) names.push(item.sourceName);
+  /** @type {Map<string, number>} */
+  const first = new Map();
+  names.map(topicKey).forEach((key, index) => { if (key && !first.has(key)) first.set(key, index); });
+  const ranked = MATCHERS.flatMap(({ topic, keys }) => {
+    const positions = [...keys].map((key) => first.get(key)).filter((position) => position !== undefined);
+    return positions.length ? [{ topic, rank: Math.min(.../** @type {number[]} */ (positions)) }] : [];
+  }).sort((left, right) => FRONTIER_TOPIC_GROUPS.indexOf(left.topic.group) - FRONTIER_TOPIC_GROUPS.indexOf(right.topic.group) || left.rank - right.rank);
+  /** @type {Record<string, number>} */
+  const taken = {};
+  const shown = ranked.filter(({ topic }) => (taken[topic.group] = (taken[topic.group] ?? 0) + 1) <= FRONTIER_TOPICS_PER_GROUP[topic.group]);
+  return shown.slice(0, Math.max(0, limit)).map(({ topic: { slug, name, group } }) => ({ slug, name, group }));
 }
 
 /**

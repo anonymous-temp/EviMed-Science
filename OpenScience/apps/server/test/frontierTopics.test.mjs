@@ -46,7 +46,14 @@ test("an item is in a topic by equality of names: specialties, entities, tags, e
   assert.deepEqual(slugs({ entities: { diseases: ["1型糖尿病"] } }), ["diabetes"]);
   assert.deepEqual(slugs({}), []);
   assert.deepEqual(slugs({ specialties: ["astrology"], entities: "x", tags: null }), []);
-  assert.equal(frontierItemTopics({ specialties: [...FRONTIER_SPECIALTIES] }).length, 8, "eight at most");
+  assert.equal(frontierItemTopics({ specialties: [...FRONTIER_SPECIALTIES] }).length, 2, "two specialties at most");
+  // The live check of 2026-10-22: an oral GLP-1 trial named its comparator classes among its entities; two drug topics, in the
+  // editor's order, and the kind of study still shown.
+  const glp1 = frontierItemTopics({ specialties: ["endocrinology", "cardiology"], tags: ["2型糖尿病", "GLP-1 受体激动剂"],
+    entities: { drugs: ["orforglipron", "甘精胰岛素", "恩格列净", "达格列净"], diseases: ["2型糖尿病", "肥胖", "慢性肾脏病"] }, evidenceType: "rct" });
+  assert.deepEqual(glp1.map((topic) => topic.slug), ["endocrinology", "cardiology", "diabetes", "obesity", "glp1", "sglt2", "rct"]);
+  assert.ok(frontierItemTopics({ specialties: [...FRONTIER_SPECIALTIES], tags: ["肥胖", "肺癌", "乳腺癌", "GLP-1 受体激动剂", "疫苗", "CAR-T"],
+    entities: { orgs: ["FDA", "EMA"] }, evidenceType: "rct", lane: "safety", flags: ["preprint"] }).length <= 8, "eight at most");
   assert.deepEqual(frontierItemTopics({ lane: "ai" }), [{ slug: "medical-ai", name: "医学 AI", group: "genre" }], "a topic as the reader gets it");
 });
 
