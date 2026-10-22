@@ -266,8 +266,8 @@ test("the GEO module's two external services are probed at the paths the platfor
       ["https://probe.example.org/geo/providers"]);
     // The list is world-readable: a URL with credentials is refused, and the message never repeats it.
     await assert.rejects(
-      () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_SOCIAL_URL: "http://crawler:hunter2@203.0.113.9:9966" }),
-      (err) => { assert.match(err.stderr, /geo_social_url_invalid/); assert.doesNotMatch(err.stderr, /hunter2/); return true; },
+      () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_SOCIAL_URL: "http://crawler:fake-password@203.0.113.9:9966" }),
+      (err) => { assert.match(err.stderr, /geo_social_url_invalid/); assert.doesNotMatch(err.stderr, /fake-password/); return true; },
     );
     await assert.rejects(
       () => runMonitoring(outputDir, ["--targets"], { ...noProbeUrls, OPEN_SCIENCE_GEO_PROBE_URL: "http://203.0.113.9:9999/?token=abc" }),
