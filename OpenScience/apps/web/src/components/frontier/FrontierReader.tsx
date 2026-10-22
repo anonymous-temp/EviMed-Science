@@ -232,8 +232,10 @@ export function ReaderInsight({ insight, item, className }: { insight: FrontierI
       <p className="max-w-measure-body whitespace-pre-line break-words text-body text-text">
         {parts.map((part, index) => (typeof part === "string" ? part : (
           <sup key={index}>
+            {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
+              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). */}
             <Link to={articlePath(part.publicId)} state={state} aria-label={part.title}
-              className="rounded px-px tabular-nums text-link hover:underline">[{part.n}]</Link>
+              className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
           </sup>
         )))}
       </p>
@@ -477,7 +479,7 @@ export function ReaderQuote({ quoted, platform, language, className }: {
       <blockquote className="mt-2 whitespace-pre-line break-words text-body text-text-2">{zh ?? quoted.text}</blockquote>
       {zh && (
         <details className="mt-2">
-          <summary className="cursor-pointer select-none text-caption text-text-3 hover:text-text">原文</summary>
+          <summary className="cursor-pointer select-none rounded text-caption text-text-3 hover:text-text">原文</summary>
           <p className="mt-1.5 whitespace-pre-line break-words text-ui text-text-3">{quoted.text}</p>
         </details>
       )}
