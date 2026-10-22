@@ -7,7 +7,8 @@ what was lost is not in the stored text any more:
 - ``wechat``: bodies made from Dajiala's light HTML, a paragraph split at every styled run (222 of 256). The article is
   bought again (``SocialCollector.wechat_text``, ¥0.03) and read from its own HTML.
 - ``page``: page texts whose paragraph breaks were folded by ``save_text_result`` (5,408 of 7,968 excerpts) or that carry
-  the page's furniture. The page is read again (``enrich``, robots.txt and the host budget as always).
+  the page's furniture, and feed texts taken whole from a summary stored as one line. The page is read again (``enrich``,
+  robots.txt and the host budget as always).
 - ``crossref``: Crossref abstracts with an entity escaped twice (``P &lt;.001``, 58). The record is read again.
 
 Only entries the platform asked a text for (``text_requested_at``) are read, newest first, those whose text was fetched
@@ -42,13 +43,16 @@ CONCURRENCY = 6          # texts read at once; each host's own pace is the fetch
 
 _WHERE = {
     "wechat": "t.fetched_from = 'wechat' AND t.body_text IS NOT NULL",
-    "page": "t.fetched_from = 'page' AND (t.body_text IS NOT NULL OR t.body_excerpt IS NOT NULL)",
+    # A page's text, or a feed's whole text taken from its summary (stored folded, no fetched_from): the page is read.
+    "page": "(t.fetched_from = 'page' AND (t.body_text IS NOT NULL OR t.body_excerpt IS NOT NULL)) "
+            "OR (t.fetched_from IS NULL AND t.body_text IS NOT NULL AND e.url !~* '^https?://mp\\.weixin\\.qq\\.com/')",
     "crossref": r"t.fetched_from = 'crossref' AND t.abstract ~ '&(lt|gt|amp|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);'",
 }
 
 
 def kind_of_row(row: dict) -> str:
     return "wechat" if row["fetched_from"] == "wechat" else "crossref" if row["fetched_from"] == "crossref" else "page"
+
 
 
 async def candidates(pool, kinds: list[str], *, since: datetime, before: datetime, limit: int = DEFAULT_LIMIT) -> list[dict]:
