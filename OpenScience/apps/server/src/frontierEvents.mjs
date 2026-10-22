@@ -955,7 +955,9 @@ export class FrontierEvents {
               .filter((hit) => hit.eventId !== String(item.event_id)));
             if (candidates.length) { summary.withCandidates += 1; summary.candidateEvents += candidates.length; }
           } else {
-            const outcome = await this.#clusterOne(item, { now, modelKey, allowModel: true, pool, own: String(item.event_id) });
+            // Read again: an earlier item of this run may have folded its event into another since the window was read.
+            const own = (await this.database.query("SELECT event_id FROM evimed_frontier.items WHERE id = $1", [item.id])).rows?.[0]?.event_id;
+            const outcome = own == null ? "skipped" : await this.#clusterOne(item, { now, modelKey, allowModel: true, pool, own: String(own) });
             if (outcome === "deferred") { summary.stopped = "budget"; resume = Math.min(resume, index); break; }
             if (outcome === "kept" || outcome === "joined" || outcome === "merged" || outcome === "skipped") summary[outcome] += 1;
           }
