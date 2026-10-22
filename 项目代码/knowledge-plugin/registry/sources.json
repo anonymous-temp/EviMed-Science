@@ -1367,6 +1367,10 @@
     "allowed_hosts": [
      "academic.oup.com",
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5332/advanceAccess_3198.xml",
+     "https://academic.oup.com/rss/site_5332/3198.xml"
     ]
    }
   },
@@ -1783,6 +1787,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.jamia.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5396/advanceAccess_3257.xml",
+     "https://academic.oup.com/rss/site_5396/3257.xml"
     ]
    }
   },
@@ -2633,6 +2641,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "eurheartj.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5375/advanceAccess_3236.xml",
+     "https://academic.oup.com/rss/site_5375/3236.xml"
     ]
    }
   },
@@ -3025,6 +3037,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "brain.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5367/advanceAccess_3228.xml",
+     "https://academic.oup.com/rss/site_5367/3228.xml"
     ]
    }
   },
@@ -3260,6 +3276,10 @@
     "allowed_hosts": [
      "api.crossref.org",
      "www.oxfordjournals.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+     "https://academic.oup.com/rss/site_5269/3135.xml"
     ]
    }
   },
@@ -4422,6 +4442,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5299/advanceAccess_3165.xml",
+     "https://academic.oup.com/rss/site_5299/3165.xml"
     ]
    }
   },
@@ -4459,6 +4483,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_5257/advanceAccess_3123.xml",
+     "https://academic.oup.com/rss/site_5257/3123.xml"
     ]
    }
   },
@@ -5499,6 +5527,10 @@
     "incremental": true,
     "allowed_hosts": [
      "api.crossref.org"
+    ],
+    "abstract_feed": [
+     "https://academic.oup.com/rss/site_6198/advanceAccess_4022.xml",
+     "https://academic.oup.com/rss/site_6198/4022.xml"
     ]
    }
   },

@@ -103,7 +103,14 @@
  },
  "j-0195-668x": {
   "authority": 5,
-  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5375/advanceAccess_3236.xml",
+    "https://academic.oup.com/rss/site_5375/3236.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3236.xml: 1/2 with text, median 1594; 3236.xml: 8/20 with text, median 368"
+  }
  },
  "j-2213-8587": {
   "authority": 5,
@@ -3699,6 +3706,69 @@
     "https://www.jci.org/rss/recent.xml"
    ],
    "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.jci.org/recent.xml: 17/20 with text, median 1498"
+  }
+ },
+ "j-0006-8950": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5367/advanceAccess_3228.xml",
+    "https://academic.oup.com/rss/site_5367/3228.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3228.xml: 5/5 with text, median 1992; 3228.xml: 13/20 with text, median 1502"
+  }
+ },
+ "j-1058-4838": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5269/advanceAccess_3135.xml",
+    "https://academic.oup.com/rss/site_5269/3135.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3135.xml: 3/5 with text, median 371; 3135.xml: 7/7 with text, median 1601"
+  }
+ },
+ "j-0300-5771": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5299/advanceAccess_3165.xml",
+    "https://academic.oup.com/rss/site_5299/3165.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3165.xml: 1/1 with text, median 1213; 3165.xml: 6/10 with text, median 1749"
+  }
+ },
+ "j-0002-9262": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5257/advanceAccess_3123.xml",
+    "https://academic.oup.com/rss/site_5257/3123.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3123.xml: 4/6 with text, median 1387; 3123.xml: 13/20 with text, median 1387"
+  }
+ },
+ "j-1079-2082": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_6198/advanceAccess_4022.xml",
+    "https://academic.oup.com/rss/site_6198/4022.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_4022.xml: 3/3 with text, median 1804; 4022.xml: 0/1 with text, median 0"
+  }
+ },
+ "j-2053-714x": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5332/advanceAccess_3198.xml",
+    "https://academic.oup.com/rss/site_5332/3198.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3198.xml: 3/3 with text, median 1312; 3198.xml: 12/20 with text, median 1285"
+  }
+ },
+ "j-1067-5027": {
+  "config": {
+   "abstract_feed": [
+    "https://academic.oup.com/rss/site_5396/advanceAccess_3257.xml",
+    "https://academic.oup.com/rss/site_5396/3257.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, OUP's advance-articles and current-issue feeds (site ids from archived listings), measured through the plugin's fetcher (last 20 items): advanceAccess_3257.xml: 2/2 with text, median 2187; 3257.xml: 19/20 with text, median 1836"
   }
  }
 }
