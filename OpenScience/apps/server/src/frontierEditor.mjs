@@ -334,7 +334,7 @@ export const FRONTIER_TRANSLATE_BODY_INSTRUCTIONS = [
   "2. 数字、单位、剂量、日期和统计量（HR、OR、RR、95% CI、P 值）照原文写，不四舍五入，不换算，不自行计算。",
   "3. 药物名称以原文实际实体范围为准：手工术语仅在范围一致时使用；自动生成术语只是译名候选，不能补入原文没有的盐、酯或剂型。试验名称缩写、基因和蛋白符号、网址、代码、人名保留原文。",
   "4. 不增删信息，不加解释、评论或译注。",
-  "5. 某一段已经是中文，或只有符号和数字时，原样返回这一段。",
+  "5. 某一段已经是中文，或只有符号、数字、名称、型号、编号和日期（如公司名、产品名、药品通用名、批号）时，原样返回这一段。",
   "6. 以「## 」开头的段落是全文的小标题：保留开头的「## 」，只翻译其后的标题文字。",
   "7. 原文里的每一个阿拉伯数字都要在译文里以阿拉伯数字原样出现，不改写成汉字数字、分数或序数词：如 1 in 10 写作“10 人中有 1 人”，3rd 写作“第 3”，2,242 写作“2,242”。",
 ].join("\n");
@@ -360,11 +360,23 @@ const TRANSLATE_MAX_TOKENS = 6_000;
 const TRANSLATE_TIMEOUT_MS = 120_000;
 /** Calls one item's translation makes at once: a whole paper is some thirty calls, and one after another they outlast the item lease. */
 const TRANSLATE_CONCURRENCY = 4;
+/**
+ * A bibliography entry: a list mark or a number, then authors as Vancouver writes them — a surname and its initials, a comma or
+ * "et al." after ("- Colella V, Young ND, …", "12. Fleseriu M, Rusch E, …"). Measured on 2026-10-22: a full text's reference
+ * list (CDC EID) was asked for and refused paragraph by paragraph, and its translation marked incomplete.
+ */
+export const FRONTIER_REFERENCE_ENTRY = /^(?:[-•*]\s*|\[?\d{1,3}[.)\]]\s*)\p{Lu}[\p{L}'’-]+(?:\s\p{Lu}[\p{L}'’-]+)?\s\p{Lu}{1,3}(?:,\s\p{Lu}[\p{L}'’-]+(?:\s\p{Lu}[\p{L}'’-]+)?\s\p{Lu}{1,3}|,?\set al\.)/u;
 
 /**
  * A text as the paragraphs a translation is asked for and the reader shows: split at blank lines, whitespace inside a line folded,
- * a paragraph longer than `FRONTIER_TRANSLATION_LIMITS.paragraphChars` cut at its line breaks, then at sentence ends, then at the
- * limit. The reader's 原文 is these paragraphs joined by blank lines, so its paragraphs and the translation's are the same count.
+ * a sentence a page broke across paragraphs put back together, a paragraph longer than `FRONTIER_TRANSLATION_LIMITS.paragraphChars`
+ * cut at its line breaks, then at sentence ends, then at the limit. The reader's 原文 is these paragraphs joined by blank lines,
+ * so its paragraphs and the translation's are the same count.
+ *
+ * A paragraph that ends on a lowercase letter or a comma, followed by one that begins with a lowercase letter, is one sentence a
+ * page broke at its line ends (measured on 2026-10-22: 33 of 2,609 recent full texts — WHO's outbreak news "Based on the current"
+ * / "situation and available information, …", all of Cleveland Clinic's ConsultQD, 6 of 10 MMWR reports); a real paragraph never
+ * begins in lowercase after one that stopped mid-clause. Two single words are left apart (a list of terms).
  * @param {unknown} text @returns {string[]}
  */
 export function frontierParagraphs(text) {
@@ -387,9 +399,19 @@ export function frontierParagraphs(text) {
     if (current.trim()) out.push(current.trim());
     return out;
   };
-  return String(text ?? "").replace(/\r\n?/g, "\n").split(/\n[ \t]*\n/)
+  const blocks = String(text ?? "").replace(/\r\n?/g, "\n").split(/\n[ \t]*\n/)
     .map((block) => block.split("\n").map((line) => line.replace(/[ \t\f\v]+/g, " ").trim()).filter(Boolean).join("\n"))
-    .filter(Boolean).flatMap(cut);
+    .filter(Boolean);
+  /** @type {string[]} */
+  const joined = [];
+  for (const block of blocks) {
+    const previous = joined.at(-1);
+    const words = (/** @type {string} */ piece) => piece.split(/\s+/).length;
+    if (previous && /[\p{Ll},;]$/u.test(previous) && /^\p{Ll}/u.test(block) && (words(previous) > 1 || words(block) > 1)) {
+      joined[joined.length - 1] = `${previous} ${block}`;
+    } else joined.push(block);
+  }
+  return joined.flatMap(cut);
 }
 
 /** Digit groups split by a space of any width (13 403, 223 000 — Lancet, BMJ, WHO): joined, on both sides alike. @param {string} text */
@@ -418,6 +440,11 @@ export function verifyParagraph(translation, original) {
   const text = bare ? (heading ? `## ${bare}` : bare) : "";
   if (!text) return null;
   if (codePoints(text) > Math.max(200, codePoints(original) * 3)) return null;
+  // Names, codes and dates are their own translation ("- Rasonque", "Maquet Critical Care AB: Flow-i C20", "EMEA/H/C/007122"):
+  // a paragraph handed back unchanged passes when it has no run of three lowercase words — prose has them, a list of names not —
+  // and does not open with a section label to translate ("FUNDING: Eli Lilly and Company." is 资助：…).
+  if (text.replace(/\s+/g, " ") === original.replace(/\s+/g, " ").trim() && !/\p{Ll}{2,}\s+\p{Ll}{2,}\s+\p{Ll}{2,}/u.test(original)
+    && !/^[A-Z]{3,}[A-Z ]*:/.test(original.trim())) return text;
   if ((original.match(/[A-Za-z]{3,}/g) ?? []).length >= 2) {
     const kept = new Set((original.match(/[A-Za-z][A-Za-z0-9.\-/]*/g) ?? []).map((word) => word.replace(/[.\-/]+$/, "").toLowerCase()));
     const rest = text.replace(/[A-Za-z][A-Za-z0-9.\-/]*/g, (word) => (kept.has(word.replace(/[.\-/]+$/, "").toLowerCase()) ? " " : word));
@@ -2008,6 +2035,8 @@ export class FrontierEditor {
     const wanted = [];
     for (const [index, paragraph] of sources.entries()) {
       if (!paragraph.trim()) continue;
+      // A bibliography entry is kept as written (its names, title and journal are what a reader looks up), and is no gap.
+      if (!post && FRONTIER_REFERENCE_ENTRY.test(paragraph.trim())) { out[index] = paragraph; continue; }
       if (paragraph.length > budget) break;
       budget -= paragraph.length;
       wanted.push(index);

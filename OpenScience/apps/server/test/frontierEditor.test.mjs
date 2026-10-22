@@ -26,6 +26,7 @@ import {
   editNumberSource,
   frontierEditPolicyCurrent,
   frontierParagraphs,
+  FRONTIER_REFERENCE_ENTRY,
   isChineseProse,
   isChineseTitle,
   parseModelJson,
@@ -1080,6 +1081,28 @@ test("the live check of 2026-10-22: names kept as written, digit groups split by
   assert.equal(verifyParagraph("资助：Novo Nordisk 公司。", "FUNDING: Eli Lilly and Company."), null, "a name the original does not have is untranslated Latin");
   assert.equal(verifyParagraph("方法：我们生成了变异文库。", "METHODS: a library of 13\u2009403 variants."), null, "a figure dropped");
   assert.equal(verifyParagraph("约有200万人。", "approximately 1 million people"), null, "a figure changed");
+});
+
+test("a sentence a page broke across paragraphs is one paragraph again; a list of single terms and a heading stay apart (WHO, 2026-10-22)", () => {
+  const text = ["WHO advice", "Based on the current", "situation and available information, WHO re-emphasizes the importance of",
+    "maintaining strong surveillance for acute respiratory infections.", "aspirin", "clopidogrel", "Human-to-human", "transmission is limited."].join("\n\n");
+  assert.deepEqual(frontierParagraphs(text), ["WHO advice",
+    "Based on the current situation and available information, WHO re-emphasizes the importance of maintaining strong surveillance for acute respiratory infections.",
+    "aspirin", "clopidogrel", "Human-to-human transmission is limited."]);
+  assert.deepEqual(frontierParagraphs("第一段。\n\n第二段。"), ["第一段。", "第二段。"], "Chinese has no case: never joined");
+});
+
+test("a bibliography entry is kept as written and no gap; a list of names handed back unchanged is its own translation", async () => {
+  assert.ok(FRONTIER_REFERENCE_ENTRY.test("- Colella V, Young ND, Manzanell R, et al. Dirofilaria asiatica sp. nov."));
+  assert.ok(FRONTIER_REFERENCE_ENTRY.test("12. Fleseriu M, Rusch E, Geer EB (2017) Safety and tolerability of pasireotide."));
+  for (const text of ["- The recall covers 22 lots of compounded tirzepatide.", "1. Introduction", "- Rasonque"]) assert.equal(FRONTIER_REFERENCE_ENTRY.test(text), false, text);
+  const paragraphs = ["Dirofilaria infections are rising in Asia.", "- Colella V, Young ND, Manzanell R, et al. Dirofilaria asiatica sp. nov."];
+  const { calls, callModel } = stubModel([() => ({ t: ["亚洲的恶丝虫感染正在增加。"] })]);
+  const result = await new FrontierEditor(config, { owner, callModel }).translateBody({ paragraphs });
+  assert.deepEqual(JSON.parse(calls[0].body.messages[1].content).p, [paragraphs[0]], "the entry is not asked for");
+  assert.deepEqual([result.complete, result.paragraphs], [true, ["亚洲的恶丝虫感染正在增加。", paragraphs[1]]]);
+  assert.equal(verifyParagraph("- Maquet Critical Care AB: Flow-i C20, Flow-i C30", "- Maquet Critical Care AB: Flow-i C20, Flow-i C30"), "- Maquet Critical Care AB: Flow-i C20, Flow-i C30");
+  assert.equal(verifyParagraph("The safety profile was consistent with prior studies.", "The safety profile was consistent with prior studies."), null, "prose handed back is not translated");
 });
 
 test("rt2's live check: a figure in the translation's own notation passes; a figure dropped, changed or made up still fails", () => {
