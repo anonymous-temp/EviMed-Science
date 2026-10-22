@@ -397,8 +397,7 @@ export function ReaderSource({ item, reports, className }: {
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-ui text-text-3">
-        <span>来源：</span>
-        <a href={item.url} {...EXTERNAL} className="rounded text-text-2 hover:text-accent hover:underline">{name}</a>
+        <span>来源：<a href={item.url} {...EXTERNAL} className="rounded text-text-2 hover:text-accent hover:underline">{name}</a></span>
         {host && <span>· {host}</span>}
         {pdf && (
           <a href={pdf} {...EXTERNAL} className={cn(INLINE_ACTION, "ml-2 px-1.5 text-link")}>

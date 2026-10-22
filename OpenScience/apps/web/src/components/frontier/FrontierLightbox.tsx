@@ -53,7 +53,7 @@ export function FrontierLightbox({ media, index, onIndex, onClose }: {
         aria-modal="true"
         aria-label={many ? `图片 ${index + 1} / ${media.length}` : "图片"}
         tabIndex={-1}
-        className="flex max-h-full max-w-full flex-col items-center gap-3 outline-none"
+        className="flex max-h-full max-w-full flex-col items-center gap-3 focus:outline-none"
       >
         <div className="fixed right-4 top-4 flex items-center gap-2">
           {many && <span className="text-caption tabular-nums text-text-2">{index + 1} / {media.length}</span>}

@@ -56,7 +56,8 @@ export function feedFilters({ value, showWindow, searching, onChange }: {
 }): ToolbarFilter[] {
   return [
     ...(searching ? [{ kind: "toggle" as const, label: "按时间", pressed: value.byTime, onChange: (pressed: boolean) => onChange({ byTime: pressed }) }] : []),
-    { kind: "select", label: "全部渠道", allLabel: "全部渠道", options: CHANNEL_OPTIONS, value: value.channel || null, onChange: (channel) => onChange({ channel: readChannel(channel) }) },
+    // Pinned: where the row is full (a 1512 px screen beside seven views) the others fold into 「筛选」 and the kind of outlet stays in sight.
+    { kind: "select", label: "全部渠道", allLabel: "全部渠道", pinned: true, options: CHANNEL_OPTIONS, value: value.channel || null, onChange: (channel) => onChange({ channel: readChannel(channel) }) },
     { kind: "select", label: "全部栏目", allLabel: "全部栏目", options: LANE_OPTIONS, value: value.lane || null, onChange: (lane) => onChange({ lane: lane ?? "" }) },
     { kind: "select", label: "全部专科", allLabel: "全部专科", options: SPECIALTY_OPTIONS, value: value.specialty || null, onChange: (specialty) => onChange({ specialty: specialty ?? "" }) },
     ...(showWindow ? [{ kind: "select" as const, label: "时间", allLabel: "不限时间", options: WINDOW_OPTIONS, value: value.window || null, onChange: (window: string | null) => onChange({ window: (window ?? "") as FrontierWindow | "" }) }] : []),

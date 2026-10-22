@@ -165,10 +165,21 @@ function foldedEntries(filters: readonly ToolbarFilter[]): MenuEntry[] {
 const ONE_LINE_MAX = 44;
 
 /**
- * Whether the row's controls take more than one line, and so must fold — in the band only. Measured from the layout, so a test without
- * one (jsdom) never folds. Unfolding is tried again when the row has grown past the width at which it last wrapped.
+ * Whether the row does not fit. A row of controls of its own wraps to a second line; a row beside the page's views (`Tabs`, which keeps
+ * its trailing controls whole and lets the tab list scroll) pushes views out of sight — the 前沿动态 band lost 关注 and 简报 behind its
+ * filters on a 1512 px screen once 全部渠道 joined them (fr-web, 2026-10-22).
  */
-function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): boolean {
+function overflows(element: HTMLElement, beside: boolean): boolean {
+  if (!beside) return element.offsetHeight > ONE_LINE_MAX;
+  const list = element.querySelector<HTMLElement>('[role="tablist"]');
+  return Boolean(list && list.scrollWidth > list.clientWidth + 1);
+}
+
+/**
+ * Whether the row's controls do not fit (`overflows`), and so must fold — in the band only. Measured from the layout, so a test without
+ * one (jsdom) never folds. Unfolding is tried again when the row has grown past the width at which it last did not fit.
+ */
+function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean, besideViews = false): boolean {
   const [crowded, setCrowded] = useState(false);
   // The width of the row when the unfolded controls last wrapped: unfolding is only tried above it.
   const failedAt = useRef(0);
@@ -178,7 +189,7 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): bo
     const check = () => {
       const width = element.clientWidth;
       if (!crowded) {
-        if (element.offsetHeight > ONE_LINE_MAX) { failedAt.current = width; setCrowded(true); }
+        if (overflows(element, besideViews)) { failedAt.current = width; setCrowded(true); }
       } else if (width > failedAt.current + 8) {
         setCrowded(false);
       }
@@ -188,7 +199,7 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean): bo
     const observer = new ResizeObserver(check);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [row, enabled, crowded]);
+  }, [row, enabled, crowded, besideViews]);
   return enabled && crowded;
 }
 
@@ -218,8 +229,9 @@ function BandSummary({ text, className }: { text: string; className: string }) {
 export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, search, summary, actions, className, inBand = false }: ToolbarProps) {
   const narrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
-  // A row with views is the tab row, which lays its own trailing controls out (`Tabs`); only a toolbar of its own can be crowded.
-  const crowded = useCrowded(row, inBand && !views && !narrow);
+  const root = useRef<HTMLDivElement>(null);
+  // A row of its own is crowded when it wraps; the tab row (`Tabs` lays its trailing controls out) when its views no longer all show.
+  const crowded = useCrowded(views ? root : row, inBand && !narrow, Boolean(views));
   const fold = narrow || crowded;
   // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned views, which stay as the chips they are.
   const kept = fold ? declared.filter((filter) => (filter.kind === "chips" || filter.kind === "select") && filter.pinned) : [];
@@ -238,7 +250,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
       {declared.map((filter, index) => !fold || kept.includes(filter) ? <Inline key={`${filter.kind}-${filter.label}-${index}`} filter={filter} /> : null)}
       {fold && filters.length > 0 && (
         <Menu label="筛选" align="start" items={foldedEntries(filters)}>
-          <FilterChip menu className={views ? "-ml-3" : undefined} pressed={folded > 0} aria-label={folded > 0 ? `筛选，已选 ${folded} 项` : "筛选"}>
+          <FilterChip menu className={views && narrow ? "-ml-3" : undefined} pressed={folded > 0} aria-label={folded > 0 ? `筛选，已选 ${folded} 项` : "筛选"}>
             {folded > 0 ? `筛选 · ${folded}` : "筛选"}
           </FilterChip>
         </Menu>
@@ -269,7 +281,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
     </div>
   );
   return (
-    <div data-toolbar="" role="group" aria-label={label} className={className}>
+    <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
       {views ? (
         <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
           <>
