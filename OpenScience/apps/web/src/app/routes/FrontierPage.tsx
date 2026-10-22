@@ -37,7 +37,7 @@ import { frontierToolbar, type PageView } from "@/components/frontier/FrontierCo
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
-import type { FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import { readChannel, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
@@ -81,7 +81,7 @@ function readDay(value: string | null): string | null {
  * Hidden knowledge:
  *
  *  - Everything that describes the reader's position lives in the URL
- *    (`?view=&q=&lane=&specialty=&window=&starred=&sort=&day=&scope=`), so a
+ *    (`?view=&q=&channel=&lane=&specialty=&window=&starred=&sort=&day=&scope=`), so a
  *    notification's link (`?view=daily&day=…`), Back and a shared address all
  *    land on the same screen. `window` is the 全部 view's time range there and
  *    the 热榜's ranking (`week`, `month`) here; a view change clears it.
@@ -130,6 +130,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const listingView = view === "selected" || view === "all"
     || (view === "following" && Boolean(follow) && (follow !== "all" || following.topics.length > 0));
   const q = (params.get("q") ?? "").trim();
+  const channel = readChannel(params.get("channel"));
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
   const specialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
   const starred = params.get("starred") === "1";
@@ -140,18 +141,19 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const day = readDay(params.get("day"));
   const zoneScope = readZoneScope(params.get("scope"));
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
-  const filtered = Boolean(lane || specialty || starred || windowFilter || (follow && follow !== "all"));
+  const filtered = Boolean(channel || lane || specialty || starred || windowFilter || (follow && follow !== "all"));
 
   const query = useMemo<FrontierItemsQuery>(() => ({
     view: view === "all" || view === "following" ? "all" : "selected",
     follow,
+    channel: channel || null,
     lane: lane || null,
     specialty: specialty || null,
     window: windowFilter || null,
     q: q || null,
     starred,
     ...(byTime ? { sort: "time" as const } : {}),
-  }), [view, follow, lane, specialty, windowFilter, q, starred, byTime]);
+  }), [view, follow, channel, lane, specialty, windowFilter, q, starred, byTime]);
   const key = JSON.stringify(query);
 
   /* ------------------------------------------------------------- status */
@@ -545,6 +547,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (value === "" || value === false) updated.delete(name);
       else updated.set(name, value === true ? "1" : value);
     };
+    assign("channel", change.channel);
     assign("lane", change.lane);
     assign("specialty", change.specialty);
     assign("starred", change.starred);
@@ -672,7 +675,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       onFresh={() => { if (fresh) { pages.current = 1; show(fresh.listing); scrollToListTop(); } }}
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
-      onClear={() => { setFilters({ lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); }}
+      onClear={() => { setFilters({ channel: "", lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); }}
     />
   );
 
@@ -682,7 +685,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const toolbar = frontierToolbar({
     view,
     onView: setView,
-    filters: { lane, specialty, starred, window: windowFilter, byTime },
+    filters: { channel, lane, specialty, starred, window: windowFilter, byTime },
     onFilters: setFilters,
     showWindow: view === "all",
     searching: Boolean(q),
@@ -714,7 +717,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
       onCreate: zones.canCreate ? () => zones.setCreating(!zones.creating) : null,
     },
-    onClear: () => { setFilters({ lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); },
+    onClear: () => { setFilters({ channel: "", lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); },
   });
 
   const main = (() => {

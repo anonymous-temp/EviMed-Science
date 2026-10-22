@@ -285,6 +285,27 @@ describe("the control row", () => {
     await waitFor(() => expect(lastFeedQuery()?.lane).toBeNull());
   });
 
+  it("narrows by channel — 文献, 资讯, 社媒, 官方 — keeps it in the address, and lets go of it with the other filters", async () => {
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "全部渠道" }));
+    expect((await screen.findAllByRole("menuitemradio")).map((item) => item.textContent)).toEqual(["全部渠道", "文献", "资讯", "社媒", "官方"]);
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "社媒" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ channel: "social" }));
+    expect(location()).toContain("channel=social");
+    expect(screen.getByRole("button", { name: "全部渠道：社媒" })).toBeInTheDocument();
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "清除筛选" }));
+    await waitFor(() => expect(lastFeedQuery()?.channel).toBeNull());
+    expect(location()).not.toContain("channel=");
+  });
+
+  it("reads a channel from the address, and ignores one it does not know", async () => {
+    renderPage("/app/frontier?view=all&channel=literature");
+    await screen.findByText("今天的一条 RCT");
+    expect(lastFeedQuery()).toMatchObject({ channel: "literature" });
+    expect(screen.getByRole("button", { name: "全部渠道：文献" })).toBeInTheDocument();
+  });
+
   it("offers the time range in 全部", async () => {
     renderPage("/app/frontier?view=all");
     await screen.findByText("今天的一条 RCT");

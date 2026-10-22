@@ -302,3 +302,30 @@ it("opens an event from more actions even when it has only one report", async ()
   await userEvent.click(await screen.findByRole("menuitem", { name: "同一事件的全部报道" }));
   expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/events/single-event");
 });
+
+describe("a social post's card", () => {
+  const post = (overrides: Record<string, unknown> = {}) => frontierItem({
+    platform: "x", channel: "x", author: { name: "Arena.ai", handle: "arena", url: null, role: "organisation" },
+    source: { id: "x-arena", name: "X 精选账号", homepage: null, platformProduced: false }, ...overrides,
+  });
+
+  it("is said by its account, its handle and its platform, where any other item is said by its institution", () => {
+    renderCard(post());
+    expect(screen.getByRole("article")).toHaveTextContent("Arena.ai @arena · X");
+    expect(screen.getByRole("article")).not.toHaveTextContent("X 精选账号");
+  });
+
+  it("shows its first picture beside the title, from this deployment's proxy, opening the same article", async () => {
+    renderCard(post({ thumb: { id: "c".repeat(64), width: 400, height: 300, alt: "图" } }));
+    const picture = document.querySelector("article img") as HTMLImageElement;
+    expect(picture).toHaveAttribute("src", `/api/frontier/media/${"c".repeat(64)}`);
+    const link = picture.closest("a")!;
+    expect(link).toHaveAttribute("href", screen.getByRole("link", { name: frontierItem().title }).getAttribute("href"));
+    expect(link).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("draws no picture where there is none, or where it cannot be served", () => {
+    renderCard(frontierItem());
+    expect(document.querySelector("article img")).toBeNull();
+  });
+});

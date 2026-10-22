@@ -24,13 +24,11 @@ import {
   ReaderText,
   frontierFallbackReason,
   hasReaderNotes,
-  isSocialItem,
-  originalLinkLabel,
   useReaderLanguage,
 } from "@/components/frontier/FrontierReader";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
-import { EXTERNAL } from "@/components/frontier/frontierText";
+import { EXTERNAL, isSocialItem, originalLinkLabel } from "@/components/frontier/frontierText";
 import { toast } from "@/lib/toast";
 
 type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDetail } | { kind: "gone" } | { kind: "off" } | { kind: "error"; message: string };

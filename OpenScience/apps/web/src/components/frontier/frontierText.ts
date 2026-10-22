@@ -15,6 +15,7 @@ import type {
   FrontierHotEvent,
   FrontierHotWindow,
   FrontierItem,
+  FrontierPlatform,
   FrontierPrimaryKind,
   FrontierScoreBand,
   FrontierTrendPoint,
@@ -93,6 +94,25 @@ export function itemMarkdown(item: Pick<FrontierItem, "title" | "url" | "summary
   const title = item.title.replace(/([[\]])/g, "\\$1");
   const who = [item.source.name, item.evidenceTypeLabel, item.publishedAt?.slice(0, 10)].filter(Boolean).join(" · ");
   return [`**[${title}](${item.url})**`, ...(item.summary ? ["", item.summary] : []), "", who].join("\n");
+}
+
+/* ---------------------------------------------------------------- platforms */
+
+/** Where a post was published, as a reader names it; an ordinary web page names no platform. */
+export const PLATFORM_LABELS: Readonly<Record<FrontierPlatform, string | null>> = Object.freeze({
+  x: "X", wechat: "微信公众号", xiaohongshu: "小红书", douyin: "抖音", zhihu: "知乎", weibo: "微博", bilibili: "哔哩哔哩", channels: "视频号", web: null,
+});
+
+/** A post on a social platform: its account is who said it, and the publication it came through is that platform. */
+export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
+  return item.platform !== null && item.platform !== "web";
+}
+
+/** The header's way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「查看原文」. */
+export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
+  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "查看原文";
+  const platform = PLATFORM_LABELS[item.platform];
+  return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
 }
 
 /* -------------------------------------------------------------------- times */

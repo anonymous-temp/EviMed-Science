@@ -26,7 +26,7 @@ import { Toolbar } from "@/components/ui/Toolbar";
 import { cardFacts } from "./frontierFacts";
 import { FrontierLightbox } from "./FrontierLightbox";
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, dateClock, evidenceTag, shortDate, sinceText } from "./frontierText";
+import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, PLATFORM_LABELS, dateClock, evidenceTag, isSocialItem, shortDate, sinceText } from "./frontierText";
 
 /*
  * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
@@ -36,23 +36,6 @@ import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, dateClock, evidenceTag, shortD
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
-
-/** Where a post was published, as a reader names it; an ordinary web page names no platform. */
-const PLATFORM_LABELS: Readonly<Record<FrontierPlatform, string | null>> = Object.freeze({
-  x: "X", wechat: "微信公众号", xiaohongshu: "小红书", douyin: "抖音", zhihu: "知乎", weibo: "微博", bilibili: "哔哩哔哩", channels: "视频号", web: null,
-});
-
-/** A post on a social platform: its account is who said it, and the publication it came through is that platform. */
-export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
-  return item.platform !== null && item.platform !== "web";
-}
-
-/** The header's way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「查看原文」. */
-export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
-  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "查看原文";
-  const platform = PLATFORM_LABELS[item.platform];
-  return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
-}
 
 /** The address's site, for the 来源 line (「nejm.org」). */
 function hostOf(url: string): string {

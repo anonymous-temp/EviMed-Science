@@ -13,8 +13,10 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import {
   CARD_FLAG_KEYS,
   INLINE_ACTION,
+  PLATFORM_LABELS,
   cardTags,
   evidenceTag,
+  isSocialItem,
   itemMarkdown,
   researchDraft,
   scoreBand,
@@ -138,6 +140,12 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
   const actionTextClass = "text-caption";
   const also = item.alsoReportedCount;
   const { more, reports, research } = useItemActions(item, { onHide, onSave, saving, onOpened, onOpenArticle: openArticle });
+  // A post is said by its account (「Arena.ai @arena · X」); anything else by its institution.
+  const platform = item.platform ? PLATFORM_LABELS[item.platform] : null;
+  const who = isSocialItem(item) && item.author
+    ? [[item.author.name, item.author.handle ? `@${item.author.handle}` : null].filter(Boolean).join(" "), platform].filter(Boolean).join(" · ")
+    : item.source.name;
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   return (
     <li data-frontier-item={item.id} className="flex">
@@ -149,7 +157,7 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
       <article aria-labelledby={titleId} className="min-w-0 flex-1 border-b border-border pb-5 pt-4">
         <div className="flex min-h-6 items-center gap-2 text-caption text-text-3">
           {item.safetyAlert && <Tag tone="safety">安全警示</Tag>}
-          <span className="min-w-0 truncate">{item.source.name}</span>
+          <span className="min-w-0 truncate">{who}</span>
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
           {evidence && <Tag>{evidence}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
@@ -166,13 +174,26 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
           )}
         </div>
 
-        <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
-          <Link to={articlePath} state={articleState} onClick={() => { rememberFrontierPosition(); onOpened?.(item); }}
-            className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
-            {item.title}
-          </Link>
-        </h3>
-        {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
+        <div className="flex gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
+              <Link to={articlePath} state={articleState} onClick={() => { rememberFrontierPosition(); onOpened?.(item); }}
+                className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
+                {item.title}
+              </Link>
+            </h3>
+            {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
+          </div>
+          {/* The item's first picture, the title's link again for the pointer (the title is the one a keyboard reaches); a picture
+            * this deployment can no longer serve leaves no empty box. */}
+          {item.thumb && !thumbFailed && (
+            <Link to={articlePath} state={articleState} tabIndex={-1} aria-hidden="true" onClick={() => { rememberFrontierPosition(); onOpened?.(item); }}
+              className="mt-2 shrink-0 overflow-hidden rounded-card bg-surface-2">
+              <img src={item.thumb.url} alt="" loading="lazy" decoding="async" onError={() => setThumbFailed(true)}
+                className="block h-16 w-24 object-cover sm:h-20 sm:w-32" />
+            </Link>
+          )}
+        </div>
 
         <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
           {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className={actionTextClass}>{expanded ? "收起摘要" : "展开摘要"}</span></button>}
