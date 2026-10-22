@@ -6,6 +6,10 @@
 // - **The head says what the deployment decided.** `noindex` is written both here (`<meta name="robots">`) and, by the router, as the
 //   `X-Robots-Tag` header, because a crawler that reads only one of them must still be told. When a page is indexable neither is
 //   written (the default is to index) — there is no "index" tag to forget to remove.
+// - **Link previews are Open Graph, and say what the page already says.** `og:title` and `og:description` repeat `<title>` and the
+//   description, `og:url` is the canonical address (so only where a public address is configured), `og:type` is `article` for a card and
+//   `website` for the rest, and the summary card is the only Twitter tag. They are written whether or not the page is indexable: a preview
+//   of a page a person pasted into a chat reveals nothing the page does not. There is no `og:image`: the pages carry no pictures.
 // - **No structured markup for machines that read answers** (plan §2.3, ruling 6): no JSON-LD, no microdata and no llms file. The only
 //   machine-readable additions are the two the plan keeps: the canonical address and the AI-generated-content metadata.
 // - **The AI label has two parts** (《人工智能生成合成内容标识办法》, in force 2025-09-01, and the national standard it points to,
@@ -56,10 +60,10 @@ export function aigcMetadata({ producerName, produceId, propagateId }) {
 /**
  * A full page.
  * @param {{ title: string, description: string, path: string, noindex: boolean, active?: string, body: any, wide?: boolean, aigc?: string | null,
- *   publicUrl?: unknown, alternates?: boolean }} page
+ *   publicUrl?: unknown, alternates?: boolean, ogType?: "website" | "article" }} page
  * @returns {string}
  */
-export function renderPage({ title, description, path, noindex, active = "", body, wide = false, aigc = null, publicUrl = null, alternates = false }) {
+export function renderPage({ title, description, path, noindex, active = "", body, wide = false, aigc = null, publicUrl = null, alternates = false, ogType = "website" }) {
   const canonical = evidenceAbsoluteUrl(publicUrl, path.split("?")[0]);
   const feedLinks = alternates
     ? html`<link rel="alternate" type="application/rss+xml" title="${EVIDENCE_SITE_NAME}" href="${evidencePublicPath("/feed.xml")}"><link rel="alternate" type="application/json" title="${EVIDENCE_SITE_NAME}（JSON）" href="${evidencePublicPath("/feed.json")}">`
@@ -72,6 +76,13 @@ export function renderPage({ title, description, path, noindex, active = "", bod
 <meta name="description" content="${description}">
 ${noindex ? raw('<meta name="robots" content="noindex">') : ""}
 ${canonical ? html`<link rel="canonical" href="${canonical}">` : ""}
+<meta property="og:site_name" content="${EVIDENCE_SITE_NAME}">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:type" content="${ogType}">
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${description}">
+${canonical ? html`<meta property="og:url" content="${canonical}">` : ""}
+<meta name="twitter:card" content="summary">
 ${aigc ? html`<meta name="AIGC" content="${aigc}">` : ""}
 ${feedLinks}
 <link rel="stylesheet" href="${evidencePublicStylesheetPath()}">

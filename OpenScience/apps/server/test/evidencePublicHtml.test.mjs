@@ -6,7 +6,8 @@ import test from "node:test";
 import { COLOR_ROLES, colorRole } from "@evimed/design-tokens";
 import { escapeHtml, externalLink, html, raw, safeHref, timeTag } from "../src/evidencePublicHtml.mjs";
 import { aigcMetadata, renderPage } from "../src/evidencePublicLayout.mjs";
-import { createEvidencePublicIndexing, evidenceAbsoluteUrl, evidenceSitemapXml } from "../src/evidencePublicIndexing.mjs";
+import { createEvidencePublicIndexing, evidenceAbsoluteUrl, evidenceRobotsTxt, evidenceSitemapXml } from "../src/evidencePublicIndexing.mjs";
+import { setEvidencePublicBase } from "../src/evidencePublicPaths.mjs";
 import { aboutPage, cardPage, changesPage, claimCountsText, indexPage, metricsPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage } from "../src/evidencePublicPages.mjs";
 import { evidenceFeedRss } from "../src/evidenceFeed.mjs";
 import { createEvidencePublicRoutes } from "../src/evidencePublicRoutes.mjs";
@@ -267,6 +268,94 @@ test("the sitemap is the sitemaps.org document of absolute addresses, and needs 
   assert.equal(evidenceAbsoluteUrl("ftp://x.test/", "/evidence/"), null);
 });
 
+test("renderPage writes the Open Graph tags a link preview reads, repeating the page's title and description, and the canonical address only where there is one", () => {
+  const page = cardPage({ card: card(), links, view: "clinical" });
+  const text = renderPage({ ...page, path: "/evidence/c/ec_0123456789ab", noindex: false, publicUrl: "https://www.evimed.test", wide: false, ogType: "article" });
+  const tag = (/** @type {string} */ property) => new RegExp(`<meta property="${property}" content="([^"]*)">`).exec(text)?.[1];
+  assert.equal(tag("og:site_name"), "EviMed 证据中心");
+  assert.equal(tag("og:locale"), "zh_CN");
+  assert.equal(tag("og:type"), "article");
+  assert.equal(tag("og:title"), /<title>([^<]*)<\/title>/.exec(text)?.[1], "the preview's title is the page's");
+  assert.equal(tag("og:description"), /<meta name="description" content="([^"]*)">/.exec(text)?.[1]);
+  assert.equal(tag("og:url"), "https://www.evimed.test/evidence/c/ec_0123456789ab");
+  assert.match(text, /<meta name="twitter:card" content="summary">/);
+  assert.equal(text.includes("og:image"), false, "the pages carry no pictures to preview");
+  // Hostile text in a title is escaped in the tag as it is in the page.
+  const hostile = renderPage({ title: `"><script>x</script>`, description: "d", path: "/evidence/", noindex: false, publicUrl: "https://www.evimed.test", body: html`` });
+  assert.equal(hostile.includes("<script>"), false);
+  // Without a usable public address there is no canonical and no og:url, but the rest of the preview stays; the default type is a website.
+  const bare = renderPage({ ...page, path: "/evidence/", noindex: true, publicUrl: "", wide: false });
+  assert.equal(bare.includes('og:url'), false);
+  assert.match(bare, /<meta property="og:type" content="website">/);
+  assert.match(bare, /<meta property="og:title" content="[^"]+">/);
+});
+
+test("robots.txt keeps crawlers off the private surfaces and the pages' JSON API, names the sitemap only while it exists, and never disallows a page", () => {
+  const on = evidenceRobotsTxt({ indexable: true, publicUrl: "https://www.evimed.test" });
+  assert.equal(on, [
+    "User-agent: *", "Allow: /evidence/", "Disallow: /evidence/api/", "Disallow: /app/", "Disallow: /api/", "Disallow: /internal/", "Disallow: /evolution/", "", "Sitemap: https://www.evimed.test/evidence/sitemap.xml", "",
+  ].join("\n"));
+  // Indexing off: the pages say noindex and must stay crawlable to be read as such; no sitemap exists to announce.
+  const off = evidenceRobotsTxt({ indexable: false, publicUrl: "https://www.evimed.test" });
+  assert.equal(off.includes("Sitemap:"), false);
+  assert.equal(off.includes("Allow:"), false);
+  assert.doesNotMatch(off, /^Disallow: \/(evidence\/?)?$/m, "no rule shuts the site or the pages");
+  // Indexing on but no usable public address: the sitemap answers 404 there, so it is not announced either.
+  for (const publicUrl of ["", "not a url", "ftp://www.evimed.test"]) assert.equal(evidenceRobotsTxt({ indexable: true, publicUrl }).includes("Sitemap:"), false, publicUrl);
+  // The base the deployment serves the pages at is the one written, and the bare IP keeps its scheme and port.
+  setEvidencePublicBase("/evimed-evidence");
+  try {
+    const ip = evidenceRobotsTxt({ indexable: true, publicUrl: "https://82.156.128.153" });
+    assert.match(ip, /^Allow: \/evimed-evidence\/$/m);
+    assert.match(ip, /^Disallow: \/evimed-evidence\/api\/$/m);
+    assert.match(ip, /^Sitemap: https:\/\/82\.156\.128\.153\/evimed-evidence\/sitemap\.xml$/m);
+    assert.equal(ip.includes("/evidence/"), false);
+  } finally {
+    setEvidencePublicBase("/evidence");
+  }
+});
+
+test("the router answers /robots.txt while the pages are on: a text document, no query, no limit, and a method it does not serve falls through", async () => {
+  const database = countingDatabase();
+  const on = createEvidencePublicRoutes({ config: { evidencePublicWebEnabled: true, evidencePublicIndexable: true, publicUrl: "https://www.evimed.test" }, database, limiter: () => { throw new Error("robots.txt is not limited"); } });
+  /** @type {any} */ const seen = {};
+  const res = { writeHead: (/** @type {number} */ status, /** @type {any} */ headers) => { seen.status = status; seen.headers = headers; }, end: (/** @type {any} */ body) => { seen.body = body; } };
+  assert.equal(await on(/** @type {any} */ ({ url: "/robots.txt", method: "GET", headers: {} }), res), true);
+  assert.equal(seen.status, 200);
+  assert.match(seen.headers["Content-Type"], /^text\/plain; charset=utf-8$/);
+  assert.equal(seen.headers["Cache-Control"], "public, max-age=3600");
+  assert.equal(seen.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(String(seen.body), evidenceRobotsTxt({ indexable: true, publicUrl: "https://www.evimed.test" }));
+  assert.equal(seen.headers["Content-Length"], String(Buffer.byteLength(String(seen.body))));
+  const head = {};
+  const headRes = { writeHead: (/** @type {number} */ status) => { /** @type {any} */ (head).status = status; }, end: (/** @type {any} */ body) => { /** @type {any} */ (head).body = body; } };
+  assert.equal(await on(/** @type {any} */ ({ url: "/robots.txt", method: "HEAD", headers: {} }), headRes), true);
+  assert.deepEqual(head, { status: 200, body: undefined }, "HEAD carries no body");
+  assert.equal(await on(/** @type {any} */ ({ url: "/robots.txt", method: "POST", headers: {} }), /** @type {any} */ ({})), false, "a POST is nobody's business here");
+  assert.equal(await on(/** @type {any} */ ({ url: "/robots.txt/extra", method: "GET", headers: {} }), /** @type {any} */ ({})), false);
+  assert.deepEqual(database.calls, { query: 0, transaction: 0 });
+  assert.equal(/** @type {any} */ (on.stats()).robots, 2);
+});
+
+test("the sitemap states the latest change under each author and under the index, ignores a date it cannot read, and stays inside the protocol's size", async () => {
+  const reads = { authorQualifies: async () => true };
+  const on = createEvidencePublicIndexing({ config: { evidencePublicIndexable: true }, reads });
+  const paths = await on.sitemapPaths({
+    zones: [{ id: "ez_a", kind: "user", authorHandle: "veteran", updatedAt: "2026-10-01T00:00:00.000Z" }, { id: "ez_b", kind: "user", authorHandle: "veteran", updatedAt: "2026-10-03T00:00:00.000Z" }],
+    cards: [{ id: "ec_a", kind: "user", authorHandle: "veteran", updatedAt: "2026-10-09T00:00:00.000Z" }, { id: "ec_b", kind: "user", authorHandle: "second", updatedAt: "2026-10-05T00:00:00.000Z" }, { id: "ec_c", kind: "user", authorHandle: "second", updatedAt: "not a date" }],
+  });
+  const lastmod = (/** @type {string} */ path) => paths.find((entry) => entry.path === path)?.lastmod;
+  assert.equal(lastmod("/evidence/a/veteran"), "2026-10-09T00:00:00.000Z", "an author's page changes when their newest card does");
+  assert.equal(lastmod("/evidence/a/second"), "2026-10-05T00:00:00.000Z", "an author known only from cards is listed too, and an unreadable date does not win");
+  assert.equal(lastmod("/evidence/"), "2026-10-09T00:00:00.000Z", "the index changes with anything it lists");
+  assert.equal(lastmod("/evidence/about"), null);
+  assert.equal(lastmod("/evidence/z/ez_a"), "2026-10-01T00:00:00.000Z");
+  const xml = evidenceSitemapXml([{ path: "/evidence/c/ec_c", lastmod: "not a date" }, { path: "/evidence/c/ec_d", lastmod: null }], "https://www.evimed.test");
+  assert.equal(xml.includes("lastmod"), false, "a date that cannot be written is left out rather than failing the document");
+  const many = await on.sitemapPaths({ zones: [], cards: Array.from({ length: 50_050 }, (_, index) => ({ id: `ec_${index}`, kind: "official", authorHandle: null, updatedAt: null })) });
+  assert.equal(many.length, 50_000);
+});
+
 /** A database that counts every call and answers none. */
 function countingDatabase() {
   const calls = { query: 0, transaction: 0 };
@@ -277,7 +366,7 @@ test("with the switch off (or no database) the router handles nothing, issues no
   for (const [config, database] of [[{ evidencePublicWebEnabled: false, evidencePublicIndexable: true }, countingDatabase()], [{ evidencePublicWebEnabled: true }, null]]) {
     const routes = createEvidencePublicRoutes({ config, database, limiter: () => { throw new Error("the limiter must not run"); } });
     for (const path of ["/evidence/", "/evidence", "/evidence/z/ez_0123456789ab", "/evidence/c/ec_0123456789ab", "/evidence/a/alice", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests", "/evidence/sitemap.xml",
-      "/evidence/assets/site.css", "/evidence/api/v1/zones", "/evidence/api/v1/metrics"]) {
+      "/evidence/assets/site.css", "/evidence/api/v1/zones", "/evidence/api/v1/metrics", "/robots.txt"]) {
       let wrote = false;
       const res = { writeHead: () => { wrote = true; }, end: () => { wrote = true; } };
       assert.equal(await routes(/** @type {any} */ ({ url: path, method: "GET", headers: {} }), res), false, `${JSON.stringify(config)} ${path}`);

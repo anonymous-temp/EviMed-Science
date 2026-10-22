@@ -338,6 +338,13 @@ test("indexing: with the switch off every page says noindex in its markup and it
     assert.match(await response.text(), /<meta name="robots" content="noindex">/, path);
   }
   assert.equal((await text("/evidence/sitemap.xml")).status, 404);
+  // The host's robots.txt still answers (a crawler must be able to read the noindex), keeps the private surfaces closed, and announces no sitemap.
+  const robots = await text("/robots.txt");
+  assert.equal(robots.status, 200);
+  assert.match(robots.headers.get("content-type") ?? "", /^text\/plain/);
+  assert.ok(robots.body.includes("Disallow: /app/\n") && robots.body.includes("Disallow: /evidence/api/\n"));
+  assert.equal(robots.body.includes("Sitemap:") || robots.body.includes("Allow:"), false);
+  assert.equal(robots.body.split("\n").some((line) => /^Disallow: \/(evidence\/?)?$/.test(line)), false, "no rule closes the pages that say noindex");
 });
 
 test("indexing: on, a page is indexable unless its author is new (fewer than three published cards that each carry a ✓) or the card is withdrawn; the new-author rule lifts at exactly three", options, async (t) => {

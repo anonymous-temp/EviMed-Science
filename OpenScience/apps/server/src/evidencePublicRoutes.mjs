@@ -9,6 +9,7 @@
 //   /evidence/c/<card>?view=          a card             /evidence/requests         the public topic requests
 //   /evidence/a/<handle>              an author (`au_…`) /evidence/sitemap.xml      only while indexing is on
 //   /evidence/api/v1/…                the JSON API       /evidence/assets/site.css  the stylesheet
+//   /robots.txt                       the host's root, the one path answered outside the base (see below)
 //
 // Hidden knowledge:
 //
@@ -16,6 +17,9 @@
 //   anything, so every `/evidence/…` path is answered by whatever answers an unknown path — the single-page app's fallback today —
 //   and no table is read, no timer started, no counter moved. (The feed's two paths are the feed's, answered by `evidenceFeedRoutes.mjs`,
 //   which is registered first and names its own refusal.)
+// - **`/robots.txt` is answered here, outside the base, while the pages are on.** The application is the host's catch-all, and its
+//   single-page fallback used to hand a crawler's first request an HTML shell. The text is made by `evidenceRobotsTxt` (indexing,
+//   the sitemap's address); it needs no database, is not limited per address, and is counted as its own kind of request.
 // - **Not found is one answer.** A page or API id that is missing, is a draft, sits in a zone that is platform-visible, or belongs to an
 //   account that is gone gets the same 404 body and the same headers, so the answer cannot be used to find out what exists.
 // - **A withdrawn card keeps its page**: 410, the reason and the date, `noindex`. It is not counted as a read.
@@ -29,7 +33,7 @@ import { createHash } from "node:crypto";
 import { EVIDENCE_PLATFORM_PRODUCER_NAME } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { createEvidencePublicReads, EVIDENCE_PUBLIC_AUTHOR_HANDLE } from "./evidencePublicQuery.mjs";
-import { createEvidencePublicIndexing, evidenceSitemapXml } from "./evidencePublicIndexing.mjs";
+import { createEvidencePublicIndexing, evidenceRobotsTxt, evidenceSitemapXml } from "./evidencePublicIndexing.mjs";
 import { createEvidencePublicMetrics } from "./evidencePublicMetrics.mjs";
 import { createEvidencePublicApi, evidencePublicApiPrefix } from "./evidencePublicApi.mjs";
 import { evidencePublicDay, evidencePublicIsBot, recordPageRead } from "./evidencePublicReads.mjs";
@@ -87,7 +91,7 @@ function matches(header, etag) {
 export function createEvidencePublicRoutes({ config, database, simulations = null, requests = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, receiptsFor = null, report = () => {} }) {
   const enabled = config.evidencePublicWebEnabled === true && Boolean(database);
   const counters = {
-    pages: 0, api: 0, assets: 0, sitemap: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
+    pages: 0, api: 0, assets: 0, sitemap: 0, robots: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
     readsCounted: 0, readsSkippedBot: 0, readsFailed: 0,
   };
   const reads = enabled ? createEvidencePublicReads({ database, now, receiptsFor }) : null;
@@ -106,7 +110,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
    * A page.
    * @param {any} res @param {boolean} head @param {number} status
    * @param {{ title: string, description: string, body: any }} page
-   * @param {{ path: string, noindex: boolean, active?: string, wide?: boolean, aigc?: string | null, alternates?: boolean }} frame
+   * @param {{ path: string, noindex: boolean, active?: string, wide?: boolean, aigc?: string | null, alternates?: boolean, ogType?: "website" | "article" }} frame
    */
   function sendPage(res, head, status, page, frame) {
     counters.pages += 1;
@@ -187,7 +191,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       await countRead(req, head, { zoneId: card.zone.id, cardId: card.id });
       const version = `${card.id}@${card.revision}`;
       return sendPage(res, head, 200, cardPage({ card, links, view }), {
-        path: cardPath(id), noindex, wide: false, active: "zones",
+        path: cardPath(id), noindex, wide: false, active: "zones", ogType: "article",
         aigc: card.aiGenerated ? aigcMetadata({ producerName: EVIDENCE_PLATFORM_PRODUCER_NAME, produceId: version, propagateId: version }) : null,
       });
     }
@@ -250,10 +254,19 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       const pathname = url.pathname;
       // Only the base this deployment serves the pages at is answered; the other member of the closed set falls through like any unknown path.
       const below = evidencePublicSuffix(pathname);
-      if (below === null) return false;
+      const robots = pathname === "/robots.txt";
+      if (below === null && !robots) return false;
       if (!enabled || !reads || !indexing || !figures || !api) return false;
-      if (FEED_SUFFIXES.has(below)) return false;
+      if (below !== null && FEED_SUFFIXES.has(below)) return false;
       const method = req.method ?? "GET";
+      if (robots) {
+        // Not a page of ours to refuse a method of, and not limited: a crawler that cannot read its robots.txt may stop reading the site.
+        if (method !== "GET" && method !== "HEAD") return false;
+        counters.robots += 1;
+        send(res, 200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+          evidenceRobotsTxt({ indexable: config.evidencePublicIndexable === true, publicUrl: config.publicUrl }), method === "HEAD");
+        return true;
+      }
       const apiPrefix = evidencePublicApiPrefix();
       const isApi = pathname === apiPrefix || pathname.startsWith(`${apiPrefix}/`);
       if (method !== "GET" && method !== "HEAD") {
@@ -331,8 +344,8 @@ export function evidencePublicMetricFamilies(stats) {
   return [
     { name: "open_science_evidence_public_base_path", help: "The path the public evidence pages, their API, the sitemap and the feed are served under (OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH): one series, labelled with it.",
       type: /** @type {const} */ ("gauge"), series: [{ labels: { path: stats.base }, value: 1 }] },
-    counter("open_science_evidence_public_requests_total", "Requests the public evidence pages answered, by kind (a page, the read-only API, the stylesheet, the sitemap).", [
-      { labels: { kind: "page" }, value: stats.pages }, { labels: { kind: "api" }, value: stats.api }, { labels: { kind: "asset" }, value: stats.assets }, { labels: { kind: "sitemap" }, value: stats.sitemap },
+    counter("open_science_evidence_public_requests_total", "Requests the public evidence pages answered, by kind (a page, the read-only API, the stylesheet, the sitemap, robots.txt).", [
+      { labels: { kind: "page" }, value: stats.pages }, { labels: { kind: "api" }, value: stats.api }, { labels: { kind: "asset" }, value: stats.assets }, { labels: { kind: "sitemap" }, value: stats.sitemap }, { labels: { kind: "robots" }, value: stats.robots },
     ]),
     counter("open_science_evidence_public_refusals_total", "Public evidence requests that were refused or answered without content, by reason.", [
       { labels: { reason: "not_found" }, value: stats.notFound }, { labels: { reason: "withdrawn" }, value: stats.withdrawn },
