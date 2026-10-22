@@ -38,7 +38,8 @@ but answer this honest one (measured 2026-09-22), so the crawler never pretends 
 Credentials are the transport's business, per host: NCBI ``tool``/``email``/``api_key``, openFDA
 ``api_key``, Unpaywall ``email``, OpenAlex ``mailto`` are added to the query here and stripped from
 ``FetchResult.final_url``; the team's EviMed evidence API gets ``Authorization: Bearer <key>`` on its
-API path only; adapters, logs and the fetch log never see any of them, and an ``Authorization``,
+API path only; SocialData (X, contract 1.5.0) gets ``Authorization: Bearer <key>``, Dajiala (WeChat) its ``key``
+query parameter; adapters, logs and the fetch log never see any of them, and an ``Authorization``,
 ``Cookie`` or ``Host`` header an adapter sets is dropped. Log lines carry URLs without their query
 string (``redact_url``).
 """
@@ -230,6 +231,8 @@ def retry_after_seconds(value: str | None, now: datetime) -> float | None:
 # ------------------------------------------------------------------------------------ credentials
 
 CREDENTIAL_KEYS = frozenset({"api_key", "email", "tool", "mailto"})
+SOCIALDATA_HOST = "api.socialdata.tools"     # X through SocialData (contract 1.5.0): Authorization: Bearer
+DAJIALA_HOST = "www.dajiala.com"             # WeChat through Dajiala: the `key` query parameter
 
 
 def _credential_params(host: str, settings: Settings) -> list[tuple[str, str]]:
@@ -250,6 +253,10 @@ def _credential_params(host: str, settings: Settings) -> list[tuple[str, str]]:
         params.append(("email", contact))
     elif host == "api.openalex.org" and contact:
         params.append(("mailto", contact))
+    elif host == DAJIALA_HOST:
+        key = settings.secret("dajiala_key")
+        if key:
+            params.append(("key", key))
     return params
 
 
@@ -270,7 +277,8 @@ def without_credentials(url: str) -> str:
     parts = urlsplit(url)
     if not parts.query:
         return url
-    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in CREDENTIAL_KEYS]
+    secret = CREDENTIAL_KEYS | ({"key"} if (parts.hostname or "").lower() == DAJIALA_HOST else frozenset())
+    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in secret]
     if len(kept) == len(parse_qsl(parts.query, keep_blank_values=True)):
         return url
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
@@ -568,6 +576,13 @@ class ProtectedFetcher:
             if not key:
                 raise FetchError("blocked", "evimed_api_key_unconfigured")
             return {"Authorization": f"Bearer {key}"}
+        if host == SOCIALDATA_HOST:
+            key = self._settings.secret("socialdata_key")
+            if not key:
+                raise FetchError("blocked", "socialdata_key_unconfigured")
+            return {"Authorization": f"Bearer {key}"}
+        if host == DAJIALA_HOST and not self._settings.secret("dajiala_key"):
+            raise FetchError("blocked", "dajiala_key_unconfigured")
         return {}
 
     # ---------------------------------------------------------------- one hop, direct
