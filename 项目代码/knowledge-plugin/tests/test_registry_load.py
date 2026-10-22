@@ -225,12 +225,28 @@ def good_row(document):
     (lambda r: r.update(enabled=True, egress="browser", access="browser-list"), "without a list configuration"),
     (lambda r: r.update(poll_floor_s=60), "poll_floor_s"),
     (lambda r: r.update(surprise=1), "unknown field"),
+    (lambda r: r["config"].update(abstract_feed=["http://feeds.example.org/rss"]), "one to four https URLs"),
+    (lambda r: r["config"].update(abstract_feed="https://feeds.example.org/rss"), "journal entries only"),
 ])
 def test_the_validator_catches(document, mutate, expected):
     row = good_row(document)
     mutate(row)
     problems = validate_row(row)
     assert any(expected in p for p in problems), problems
+
+
+def test_the_journal_feeds_the_paper_text_chain_reads(document):
+    """rt-papers (2026-10-22): the journals whose publishers' feeds carry text name them (``config.abstract_feed``),
+    each measured (``tools/measure_abstract_feeds.py``); The Lancet's, NEJM's, the AHA's, ACP's, JACC's and RSNA's feeds
+    are disallowed by their robots.txt and named nowhere."""
+    rows = {s["id"]: s for s in document["sources"] if (s.get("config") or {}).get("abstract_feed")}
+    assert len(rows) == 43 and all(r["source_type"] == "journal" and r["enabled"] for r in rows.values())
+    assert rows["j-0098-7484"]["config"]["abstract_feed"][0] == "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml"
+    assert rows["j-0016-5085"]["config"]["abstract_feed"] == ["https://www.gastrojournal.org/inpress.rss",
+                                                              "https://www.gastrojournal.org/current.rss"]
+    disallowed = ("thelancet.com/rss", "nejm.org/action", "ahajournals.org/action", "acpjournals.org/action",
+                  "jacc.org/action", "pubs.rsna.org/action")
+    assert not any(part in url for r in rows.values() for url in r["config"]["abstract_feed"] for part in disallowed)
 
 
 def test_duplicate_ids_are_refused(document):

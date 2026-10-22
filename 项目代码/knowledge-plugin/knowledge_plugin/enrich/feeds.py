@@ -10,8 +10,13 @@ article pages answer this crawler with a challenge (OUP, JAMA) or a 403 (the Els
 
 - A feed is read at most once every ``FEED_TTL_S`` (two hours) per URL by this process, whatever number of entries ask;
   a feed that failed is not asked again for ``FAILURE_TTL_S``. Reads are page requests (robots.txt applies).
-- An entry is matched by DOI (``prism:doi``, ``dc:identifier``, the guid, the link, an ``id``), else by its DOI's suffix
-  as the last segment of the item's link (BMJ links ``/content/395/bmj-2026-101102``).
+- An entry is matched by DOI (``prism:doi``, ``dc:identifier``, the guid, the link, an ``id``), else by its DOI's suffix:
+  the last segment of the item's link (The BMJ links ``/content/395/bmj-2026-101102``; Gut's ``…/gutjnl-2026-340844v1``,
+  its version mark aside), the HighWire master id in ``dc:identifier`` (``hwp:master-id:bmjopen;bmjopen-2025-111942``
+  — BMJ Open's links carry only ``e111942``), or the link's number when the suffix is letters and that number (JCI's
+  ``/articles/view/205800`` for ``10.1172/JCI205800``).
+- Atypon's feeds open every description with the issue's citation ("Proceedings of the National Academy of Sciences,
+  Volume 123, Issue 42, October 2026.") — a bibliographic line, taken off; Science's descriptions are nothing else.
 - The item's description (or content) is the text, its markup read with section titles kept (OUP's ``boxTitle``
   becomes ``Heading: text``, ``structured_abstract``). At least ``article_html.ABSTRACT_MIN`` characters and not cut
   (``looks_truncated``) is an ``abstract``; shorter or cut is an ``excerpt``; shorter than ``EXCERPT_MIN`` is nothing,
@@ -43,6 +48,9 @@ MAX_FEEDS_PER_ROW = 4
 _BOX_TITLE = re.compile(r"<div\s+class=\"boxTitle\"\s*>(.*?)</div>", re.I | re.S)
 _DOI_FIELDS = ("prism_doi", "dc_identifier", "id", "guid", "link")
 _TAIL_SUFFIXES = (".full", ".abstract", ".short", ".full-text", ".pdf")
+_VERSION = re.compile(r"v[0-9]{1,2}$")
+_HWP_ID = re.compile(r"hwp:master-id:[^;]+;(\S+)", re.I)
+_ISSUE_CITATION = re.compile(r"^[^.]{5,160}, Volume [0-9]+, Issue [0-9A-Za-z-]+(?:, Pages? [^,]{1,20})?, [A-Z][a-z]+ [0-9]{4}\.\s*")
 
 
 @dataclass
@@ -50,6 +58,7 @@ class FeedItem:
     dois: frozenset[str]
     tail: str | None
     text: str
+    ids: frozenset[str] = frozenset()        # DOI suffixes the item names otherwise (HighWire master id, link tail)
 
 
 @dataclass
@@ -86,8 +95,10 @@ def feed_urls(config: Any) -> list[str]:
 
 
 def item_text(value: str) -> str:
-    """A feed description as paragraphs: OUP's ``boxTitle`` divs are section titles."""
-    return structured_abstract(_BOX_TITLE.sub(lambda m: f"<h4>{m.group(1)}</h4>", value or ""))
+    """A feed description as paragraphs: OUP's ``boxTitle`` divs are section titles; Atypon's issue citation is taken
+    off its first line."""
+    text = structured_abstract(_BOX_TITLE.sub(lambda m: f"<h4>{m.group(1)}</h4>", value or ""))
+    return _ISSUE_CITATION.sub("", text, count=1)
 
 
 def _tail(link: str | None) -> str | None:
@@ -98,7 +109,7 @@ def _tail(link: str | None) -> str | None:
     for suffix in _TAIL_SUFFIXES:
         if last.endswith(suffix):
             last = last[: -len(suffix)]
-    return last or None
+    return _VERSION.sub("", last) if last and not last.isdigit() else last or None
 
 
 def parse_items(body: bytes) -> list[FeedItem]:
@@ -110,9 +121,10 @@ def parse_items(body: bytes) -> list[FeedItem]:
             doi = normalize_doi(entry.get(key))
             if doi:
                 dois.add(doi)
+        ids = {m.group(1).lower() for m in (_HWP_ID.search(str(entry.get("dc_identifier") or "")),) if m}
         texts = [entry.get("summary") or ""] + [c.get("value") or "" for c in entry.get("content") or [] if isinstance(c, dict)]
         text = max((item_text(t) for t in texts), key=len, default="")
-        items.append(FeedItem(dois=frozenset(dois), tail=_tail(entry.get("link")), text=text))
+        items.append(FeedItem(dois=frozenset(dois), tail=_tail(entry.get("link")), text=text, ids=frozenset(ids)))
     return items
 
 
@@ -122,9 +134,13 @@ def match(items: list[FeedItem], doi: str) -> FeedItem | None:
     for item in items:
         if doi in item.dois:
             return item
-    if len(suffix) >= 8:
+    if len(suffix) >= 6:
         for item in items:
-            if item.tail and item.tail == suffix:
+            if suffix in item.ids or (item.tail and item.tail == suffix):
+                return item
+        for item in items:     # the link's number, the suffix being letters and that number (JCI)
+            tail = item.tail or ""
+            if len(tail) >= 5 and tail.isdigit() and suffix.endswith(tail) and suffix[: -len(tail)].isalpha():
                 return item
     return None
 

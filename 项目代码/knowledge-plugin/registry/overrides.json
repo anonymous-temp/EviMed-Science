@@ -17,16 +17,36 @@
  "j-0098-7484": {
   "authority": 5,
   "_why": "top journal (plan 10.3.4: never waits for an abstract)",
-  "owner_entity": "American Medical Association"
+  "owner_entity": "American Medical Association",
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_3/onlineFirst_67.xml",
+    "https://jamanetwork.com/rss/site_3/67.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_67.xml: 20/20 with text, median 228; jamanetwork.com/67.xml: 19/20 with text, median 241"
+  }
  },
  "j-2168-6106": {
   "authority": 5,
-  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_15/onlineFirst_71.xml",
+    "https://jamanetwork.com/rss/site_15/71.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_71.xml: 19/19 with text, median 252; jamanetwork.com/71.xml: 18/20 with text, median 265"
+  }
  },
  "j-1756-1833": {
   "authority": 5,
   "_why": "top journal (plan 10.3.4: never waits for an abstract)",
-  "owner_entity": "BMJ"
+  "owner_entity": "BMJ",
+  "config": {
+   "abstract_feed": [
+    "https://www.bmj.com/rss/recent.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.bmj.com/recent.xml: 6/6 with text, median 976"
+  }
  },
  "j-0003-4819": {
   "authority": 5,
@@ -46,7 +66,14 @@
  },
  "j-0092-8674": {
   "authority": 5,
-  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/cell/inpress.rss",
+    "https://www.cell.com/cell/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 16/20 with text, median 351; www.cell.com/current.rss: 20/20 with text, median 333"
+  }
  },
  "j-1470-2045": {
   "authority": 5,
@@ -58,7 +85,13 @@
  },
  "j-0007-9235": {
   "authority": 5,
-  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "config": {
+   "abstract_feed": [
+    "https://acsjournals.onlinelibrary.wiley.com/feed/15424863/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): acsjournals.onlinelibrary.wiley.com/most-recent: 10/10 with text, median 80"
+  }
  },
  "j-0009-7322": {
   "authority": 5,
@@ -90,7 +123,14 @@
  },
  "j-0016-5085": {
   "authority": 5,
-  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "config": {
+   "abstract_feed": [
+    "https://www.gastrojournal.org/inpress.rss",
+    "https://www.gastrojournal.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.gastrojournal.org/inpress.rss: 11/20 with text, median 453; www.gastrojournal.org/current.rss: 11/20 with text, median 453"
+  }
  },
  "j-0006-4971": {
   "authority": 5,
@@ -99,7 +139,14 @@
  },
  "j-2666-6340": {
   "owner_entity": "Elsevier",
-  "_why": "publisher missing in the probe registry"
+  "_why": "publisher missing in the probe registry",
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/med/inpress.rss",
+    "https://www.cell.com/med/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 11/11 with text, median 362; www.cell.com/current.rss: 15/15 with text, median 366"
+  }
  },
  "j-2095-9273": {
   "owner_entity": "Science China Press",
@@ -107,7 +154,14 @@
  },
  "j-0012-3692": {
   "owner_entity": "Elsevier",
-  "_why": "publisher missing in the probe registry"
+  "_why": "publisher missing in the probe registry",
+  "config": {
+   "abstract_feed": [
+    "https://journal.chestnet.org/inpress.rss",
+    "https://journal.chestnet.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): journal.chestnet.org/inpress.rss: 17/20 with text, median 333; journal.chestnet.org/current.rss: 17/20 with text, median 333"
+  }
  },
  "j-2468-1253": {
   "owner_entity": "Elsevier",
@@ -127,7 +181,14 @@
  },
  "j-0161-6420": {
   "owner_entity": "Elsevier",
-  "_why": "publisher missing in the probe registry"
+  "_why": "publisher missing in the probe registry",
+  "config": {
+   "abstract_feed": [
+    "https://www.aaojournal.org/inpress.rss",
+    "https://www.aaojournal.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.aaojournal.org/inpress.rss: 20/20 with text, median 508; www.aaojournal.org/current.rss: 20/20 with text, median 508"
+  }
  },
  "j-2352-4642": {
   "owner_entity": "Elsevier",
@@ -3346,5 +3407,298 @@
    }
   },
   "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "j-2574-3805": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_214/187.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/187.xml: 15/20 with text, median 207"
+  }
+ },
+ "j-2689-0186": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_193/185.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/185.xml: 17/20 with text, median 192"
+  }
+ },
+ "j-2380-6583": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_192/onlineFirst_184.xml",
+    "https://jamanetwork.com/rss/site_192/184.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_184.xml: 8/8 with text, median 199; jamanetwork.com/184.xml: 20/20 with text, median 224"
+  }
+ },
+ "j-2168-6068": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_12/onlineFirst_68.xml",
+    "https://jamanetwork.com/rss/site_12/68.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_68.xml: 12/12 with text, median 161; jamanetwork.com/68.xml: 20/20 with text, median 191"
+  }
+ },
+ "j-2168-6149": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_16/onlineFirst_72.xml",
+    "https://jamanetwork.com/rss/site_16/72.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_72.xml: 3/3 with text, median 156; jamanetwork.com/72.xml: 20/20 with text, median 254"
+  }
+ },
+ "j-2374-2437": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_159/onlineFirst_174.xml",
+    "https://jamanetwork.com/rss/site_159/174.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_174.xml: 12/12 with text, median 341; jamanetwork.com/174.xml: 20/20 with text, median 186"
+  }
+ },
+ "j-2168-6165": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_17/onlineFirst_73.xml",
+    "https://jamanetwork.com/rss/site_17/73.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_73.xml: 13/13 with text, median 254; jamanetwork.com/73.xml: 20/20 with text, median 212"
+  }
+ },
+ "j-2168-6203": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_19/onlineFirst_75.xml",
+    "https://jamanetwork.com/rss/site_19/75.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_75.xml: 15/15 with text, median 212; jamanetwork.com/75.xml: 20/20 with text, median 333"
+  }
+ },
+ "j-2168-622x": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_14/onlineFirst_70.xml",
+    "https://jamanetwork.com/rss/site_14/70.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_70.xml: 11/11 with text, median 233; jamanetwork.com/70.xml: 20/20 with text, median 213"
+  }
+ },
+ "j-2168-6254": {
+  "config": {
+   "abstract_feed": [
+    "https://jamanetwork.com/rss/site_20/onlineFirst_76.xml",
+    "https://jamanetwork.com/rss/site_20/76.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): jamanetwork.com/onlineFirst_76.xml: 13/13 with text, median 228; jamanetwork.com/76.xml: 20/20 with text, median 318"
+  }
+ },
+ "j-0017-5749": {
+  "config": {
+   "abstract_feed": [
+    "https://gut.bmj.com/rss/ahead.xml",
+    "https://gut.bmj.com/rss/current.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): gut.bmj.com/ahead.xml: 20/20 with text, median 1108; gut.bmj.com/current.xml: 20/20 with text, median 1728"
+  }
+ },
+ "j-2044-6055": {
+  "config": {
+   "abstract_feed": [
+    "https://bmjopen.bmj.com/rss/recent.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): bmjopen.bmj.com/recent.xml: 20/20 with text, median 1060"
+  }
+ },
+ "j-2754-0413": {
+  "config": {
+   "abstract_feed": [
+    "https://bmjmedicine.bmj.com/rss/recent.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): bmjmedicine.bmj.com/recent.xml: 17/20 with text, median 1783"
+  }
+ },
+ "j-2632-1009": {
+  "config": {
+   "abstract_feed": [
+    "https://informatics.bmj.com/rss/recent.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): informatics.bmj.com/recent.xml: 20/20 with text, median 1772"
+  }
+ },
+ "j-1535-6108": {
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/cancer-cell/inpress.rss",
+    "https://www.cell.com/cancer-cell/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 9/10 with text, median 377; www.cell.com/current.rss: 20/20 with text, median 376"
+  }
+ },
+ "j-1550-4131": {
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/cell-metabolism/inpress.rss",
+    "https://www.cell.com/cell-metabolism/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 16/20 with text, median 358; www.cell.com/current.rss: 19/20 with text, median 382"
+  }
+ },
+ "j-2666-3791": {
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/cell-reports-medicine/inpress.rss",
+    "https://www.cell.com/cell-reports-medicine/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 17/17 with text, median 341; www.cell.com/current.rss: 20/20 with text, median 368"
+  }
+ },
+ "j-2666-3899": {
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/patterns/inpress.rss",
+    "https://www.cell.com/patterns/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 14/14 with text, median 454; www.cell.com/current.rss: 12/14 with text, median 454"
+  }
+ },
+ "j-2666-6758": {
+  "config": {
+   "abstract_feed": [
+    "https://www.cell.com/the-innovation/inpress.rss",
+    "https://www.cell.com/the-innovation/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.cell.com/inpress.rss: 14/20 with text, median 576; www.cell.com/current.rss: 20/20 with text, median 587"
+  }
+ },
+ "j-0085-2538": {
+  "config": {
+   "abstract_feed": [
+    "https://www.kidney-international.org/inpress.rss",
+    "https://www.kidney-international.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.kidney-international.org/inpress.rss: 20/20 with text, median 519; www.kidney-international.org/current.rss: 20/20 with text, median 519"
+  }
+ },
+ "j-0168-8278": {
+  "config": {
+   "abstract_feed": [
+    "https://www.journal-of-hepatology.eu/inpress.rss",
+    "https://www.journal-of-hepatology.eu/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.journal-of-hepatology.eu/inpress.rss: 19/20 with text, median 502; www.journal-of-hepatology.eu/current.rss: 19/20 with text, median 502"
+  }
+ },
+ "j-0923-7534": {
+  "config": {
+   "abstract_feed": [
+    "https://www.annalsofoncology.org/inpress.rss",
+    "https://www.annalsofoncology.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.annalsofoncology.org/inpress.rss: 19/20 with text, median 511; www.annalsofoncology.org/current.rss: 19/20 with text, median 511"
+  }
+ },
+ "j-0002-9378": {
+  "config": {
+   "abstract_feed": [
+    "https://www.ajog.org/inpress.rss",
+    "https://www.ajog.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.ajog.org/inpress.rss: 15/20 with text, median 365; www.ajog.org/current.rss: 15/20 with text, median 365"
+  }
+ },
+ "j-0025-6196": {
+  "config": {
+   "abstract_feed": [
+    "https://www.mayoclinicproceedings.org/inpress.rss",
+    "https://www.mayoclinicproceedings.org/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.mayoclinicproceedings.org/inpress.rss: 18/20 with text, median 360; www.mayoclinicproceedings.org/current.rss: 18/20 with text, median 360"
+  }
+ },
+ "j-0895-4356": {
+  "config": {
+   "abstract_feed": [
+    "https://www.jclinepi.com/inpress.rss",
+    "https://www.jclinepi.com/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.jclinepi.com/inpress.rss: 19/20 with text, median 417; www.jclinepi.com/current.rss: 19/20 with text, median 417"
+  }
+ },
+ "j-1098-3015": {
+  "config": {
+   "abstract_feed": [
+    "https://www.valueinhealthjournal.com/inpress.rss",
+    "https://www.valueinhealthjournal.com/current.rss"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.valueinhealthjournal.com/inpress.rss: 18/20 with text, median 346; www.valueinhealthjournal.com/current.rss: 18/20 with text, median 346"
+  }
+ },
+ "j-1723-8617": {
+  "config": {
+   "abstract_feed": [
+    "https://onlinelibrary.wiley.com/feed/20515545/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): onlinelibrary.wiley.com/most-recent: 1/20 with text, median 2127"
+  }
+ },
+ "j-0277-6715": {
+  "config": {
+   "abstract_feed": [
+    "https://onlinelibrary.wiley.com/feed/10970258/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): onlinelibrary.wiley.com/most-recent: 1/2 with text, median 1945"
+  }
+ },
+ "j-0306-5251": {
+  "config": {
+   "abstract_feed": [
+    "https://bpspubs.onlinelibrary.wiley.com/feed/13652125/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): bpspubs.onlinelibrary.wiley.com/most-recent: 13/20 with text, median 1789"
+  }
+ },
+ "j-0025-729x": {
+  "config": {
+   "abstract_feed": [
+    "https://onlinelibrary.wiley.com/feed/13265377/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): onlinelibrary.wiley.com/most-recent: 15/19 with text, median 1390"
+  }
+ },
+ "j-1053-8569": {
+  "config": {
+   "abstract_feed": [
+    "https://onlinelibrary.wiley.com/feed/10991557/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): onlinelibrary.wiley.com/most-recent: 9/10 with text, median 1787"
+  }
+ },
+ "j-1756-5383": {
+  "config": {
+   "abstract_feed": [
+    "https://onlinelibrary.wiley.com/feed/17565391/most-recent"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): onlinelibrary.wiley.com/most-recent: 13/20 with text, median 1823"
+  }
+ },
+ "j-0027-8424": {
+  "config": {
+   "abstract_feed": [
+    "https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.pnas.org/showFeed?type=etoc&feed=rss&jc=pnas: 19/20 with text, median 258"
+  }
+ },
+ "j-1558-8238": {
+  "config": {
+   "abstract_feed": [
+    "https://www.jci.org/rss/recent.xml"
+   ],
+   "_abstract_feed": "rt-papers 2026-10-22, measured through the plugin's fetcher (last 20 items): www.jci.org/recent.xml: 17/20 with text, median 1498"
+  }
  }
 }
