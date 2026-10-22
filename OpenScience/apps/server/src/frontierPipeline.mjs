@@ -100,6 +100,16 @@ export const FRONTIER_TEXT_HOLD_MS = 12 * HOUR;
 export const FRONTIER_TEXT_AFTER_ATTEMPT_MS = 5 * MINUTE;
 /** After this long from first sight an entry proceeds with what it has (`no-abstract`). */
 export const FRONTIER_TEXT_GIVE_UP_MS = 5 * DAY;
+/**
+ * A journal's entry that has waited this long for its abstract is published with what it has, into 全部 only, and asked
+ * again until `FRONTIER_TEXT_GIVE_UP_MS` (2026-10-22). Production that day: 685 items sat invisible behind 886 held entries,
+ * the oldest five days old, 348 of them Annals of Oncology articles whose abstracts no source the plugin reads had yet
+ * (PubMed `not_indexed_yet`, Crossref without the abstract); a whole day's issue of a journal waited out the five days. A
+ * journal item without its abstract is never selected (`frontierSelectionDecision`) and the daily carries no item without a
+ * verified 导读, so publishing it early shows it where a reader browses everything and nowhere it would stand for 精选; its
+ * abstract, when it comes, re-edits it and it may be selected then.
+ */
+export const FRONTIER_JOURNAL_TEXT_WAIT_MS = 48 * HOUR;
 /** A plugin that did not answer is asked again sooner than one that said "pending". */
 export const FRONTIER_TEXT_RETRY_MS = 15 * MINUTE;
 /** An entry whose work is already in flight under another entry waits this long. */
@@ -423,8 +433,18 @@ export function frontierTextDecision({ status, entry, source, promoted, now, nex
   const age = now.getTime() - new Date(entry.first_seen_at).getTime();
   if (status === "available" || status === "unavailable" || age >= FRONTIER_TEXT_GIVE_UP_MS) return { action: "promote", holdMs: 0 };
   const holdMs = status === "error" ? FRONTIER_TEXT_RETRY_MS : frontierTextPendingHold(nextAttemptAt, now);
-  if (promoted || isUrgentSource(source) || usableSummary(entry)) return { action: "promote-hold", holdMs };
+  const journalWaited = source?.source_type === "journal" && age >= FRONTIER_JOURNAL_TEXT_WAIT_MS;
+  if (promoted || isUrgentSource(source) || usableSummary(entry) || journalWaited) return { action: "promote-hold", holdMs };
   return { action: "hold", holdMs };
+}
+
+/**
+ * Whether an item is a journal's without its abstract (flag `no-abstract`): published into 全部, never selected (2026-10-22,
+ * `FRONTIER_JOURNAL_TEXT_WAIT_MS`).
+ * @param {{ source: any, flags: string[] }} input
+ */
+export function frontierJournalWithoutAbstract({ source, flags }) {
+  return source?.source_type === "journal" && flags.includes("no-abstract");
 }
 
 /**
@@ -565,14 +585,16 @@ export function frontierClassIRecall({ source, facts = null }) {
 /**
  * Whether a published item is selected, and by which rule (plan §6.3). A
  * safety alert is selected whatever its score; otherwise a verified,
- * scored item at or above the threshold, while its source has room today.
+ * scored item at or above the threshold, while its source has room today —
+ * never a journal's item still without its abstract (2026-10-22: it is in
+ * 全部 only, until its abstract re-edits it).
  * @param {{ safetyAlert: boolean, verification: string, scoreTotal: number | null, demoted: boolean, flags: string[],
  *           source: any, selectedToday: number, threshold: number }} input
  * @returns {{ selected: boolean, rule: "safety-bypass" | "threshold" | null, capped?: boolean }}
  */
 export function frontierSelectionDecision({ safetyAlert, verification, scoreTotal, demoted, flags, source, selectedToday, threshold }) {
   if (safetyAlert) return { selected: true, rule: "safety-bypass" };
-  if (demoted || flags.includes("retracted")) return { selected: false, rule: null };
+  if (demoted || flags.includes("retracted") || frontierJournalWithoutAbstract({ source, flags })) return { selected: false, rule: null };
   if (!["passed", "repaired"].includes(verification) || scoreTotal == null || scoreTotal < threshold) return { selected: false, rule: null };
   const cap = source?.source_type === "journal" && Number(source?.authority) >= 5 ? FRONTIER_TOP_JOURNAL_DAILY_CAP : FRONTIER_SOURCE_DAILY_CAP;
   if (selectedToday >= cap) return { selected: false, rule: null, capped: true };
@@ -1955,6 +1977,7 @@ export class FrontierPipeline {
           FROM evimed_frontier.items i
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2 AND i.score_total >= $3
             AND i.verification IN ('passed', 'repaired') AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
+            AND NOT (i.source_type = 'journal' AND 'no-abstract' = ANY(i.flags))
             AND NOT EXISTS (SELECT 1 FROM evimed_frontier.items s WHERE s.state = 'published' AND s.selected AND s.lane = i.lane
               AND s.timeline_at >= $1 AND s.timeline_at < $2)) AS ranked
         LEFT JOIN evimed_frontier.item_texts t ON t.item_id = ranked.id

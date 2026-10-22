@@ -312,7 +312,8 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.equal(paper.verification, "passed");
   assert.deepEqual([paper.evidence_type, paper.evidence_basis, paper.score_authority], ["observational", "model", 24],
     "the model's evidence type until PubMed's types arrive: 30 × 5/5 × 0.8");
-  assert.deepEqual([paper.selected, paper.selected_rule], [true, "threshold"]);
+  // A journal's item without its abstract is published and not selected (2026-10-22): 精选 carries a 导读.
+  assert.deepEqual([paper.selected, paper.selected_rule], [false, null]);
   assert.deepEqual(paper.flags, ["no-abstract", "corrected"], "the notice that came first is attached at publication");
   assert.equal(paper.timeline_at.toISOString(), clock.toISOString(), "published 15 hours after its date: today");
   assert.deepEqual(await changes(Number(paper.id)), ["published"]);
@@ -372,7 +373,9 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.equal(edited.editor_version, FRONTIER_EDITOR_VERSION);
   assert.equal(edited.summary_zh, "导读：有摘要。");
   assert.equal(editor.calls.edit.length, editsBefore + 1);
-  assert.deepEqual(await changes(Number(paper.id)), ["published", "rescored"]);
+  // With its abstract and a total over the line, it is selected now.
+  assert.deepEqual([edited.selected, edited.selected_rule], [true, "threshold"]);
+  assert.deepEqual(await changes(Number(paper.id)), ["published", "rescored", "selected"]);
   assert.equal(edited.timeline_at.toISOString(), paper.timeline_at.toISOString(), "timeline_at never moves after publication");
   // The item text the re-edit used is the one stored.
   const retexts = (await database.query("SELECT model_input FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
