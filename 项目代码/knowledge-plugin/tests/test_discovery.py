@@ -318,3 +318,14 @@ async def test_a_source_on_trial_is_judged_by_its_trial_not_retired(pool, regist
         await conn.execute("UPDATE evimed_knowledge.source_candidates SET state = 'admitted'")
         async with conn.transaction():
             assert [r["reason"] for r in await apply_retirements(conn, NOW, DAY, set())] == ["off-topic"]
+
+
+def test_discovery_data_is_read_beside_the_registry_the_plugin_runs_on(tmp_path):
+    from knowledge_plugin.discovery import DATA_PATH, data_path
+    registry = tmp_path / "registry" / "sources.json"
+    registry.parent.mkdir()
+    registry.write_text("{}", encoding="utf-8")
+    assert data_path(str(registry)) == DATA_PATH                                 # nothing beside it: the source tree's
+    (registry.parent / "discovery.json").write_text('{"directories": []}', encoding="utf-8")
+    assert data_path(str(registry)) == registry.parent / "discovery.json"
+    assert data_path(None) == DATA_PATH

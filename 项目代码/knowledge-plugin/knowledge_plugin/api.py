@@ -663,12 +663,15 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
             if not isinstance(row, dict):
                 raise ApiError(400, "invalid_params", "a sources row is not an object", details={"field": "sources"})
             sid, screened, off_topic = row.get("id"), row.get("screened"), row.get("off_topic")
+            selected = row.get("selected")
             if (not isinstance(sid, str) or not 1 <= len(sid) <= 120 or not isinstance(screened, int)
                     or not isinstance(off_topic, int) or isinstance(screened, bool) or isinstance(off_topic, bool)
                     or not 0 <= off_topic <= screened):
                 raise ApiError(400, "invalid_params", "each row needs id, screened >= off_topic >= 0",
                                details={"field": "sources"})
-            clean.append((sid, screened, off_topic))
+            if selected is not None and (not isinstance(selected, int) or isinstance(selected, bool) or selected < 0):
+                raise ApiError(400, "invalid_params", "selected, when given, is an integer >= 0", details={"field": "sources"})
+            clean.append((sid, screened, off_topic, selected))
         now = clock()
         async with pool_of().connection() as conn:
             async with conn.transaction():
@@ -677,11 +680,11 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                 accepted = [c for c in clean if c[0] in known]
                 async with conn.cursor() as cur:
                     await cur.executemany(
-                        """INSERT INTO evimed_knowledge.source_screening (source_id, screened, off_topic, window_days, reported_at)
-                           VALUES (%s, %s, %s, %s, %s)
+                        """INSERT INTO evimed_knowledge.source_screening (source_id, screened, off_topic, selected, window_days, reported_at)
+                           VALUES (%s, %s, %s, %s, %s, %s)
                            ON CONFLICT (source_id) DO UPDATE SET screened = EXCLUDED.screened, off_topic = EXCLUDED.off_topic,
-                             window_days = EXCLUDED.window_days, reported_at = EXCLUDED.reported_at""",
-                        [(sid, screened, off_topic, window, now) for sid, screened, off_topic in accepted])
+                             selected = EXCLUDED.selected, window_days = EXCLUDED.window_days, reported_at = EXCLUDED.reported_at""",
+                        [(sid, screened, off_topic, selected, window, now) for sid, screened, off_topic, selected in accepted])
         return JSONResponse({"accepted": len(accepted), "unknown": len(clean) - len(accepted)})
 
     # ---------------------------------------------------------------- stream

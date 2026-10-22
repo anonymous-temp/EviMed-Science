@@ -870,7 +870,7 @@ export class KnowledgePluginClient {
    * how many of each source's entries the screen read and how many it judged
    * not medical. The plugin judges no content itself; its trials and its
    * off-topic retirement read these.
-   * @param {{ windowDays: number, sources: { id: string, screened: number, off_topic: number }[] }} report
+   * @param {{ windowDays: number, sources: { id: string, screened: number, off_topic: number, selected?: number }[] }} report
    */
   async reportScreening({ windowDays, sources }) {
     const body = await this.#request("POST", "/v1/sources/screening", { body: { window_days: windowDays, sources } });

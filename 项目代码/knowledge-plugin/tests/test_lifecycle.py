@@ -80,6 +80,14 @@ def test_off_topic_keeps_a_general_journal_and_retires_a_general_feed():
     assert retirement(few, NOW) is None                                          # too few to judge
 
 
+def test_off_topic_never_retires_a_source_the_feed_selected_from():
+    # 中国政府网 最新政策 (2026-10-22): most of the State Council's policies are not medical, the one that was is selected.
+    policy = facts(screened=40, off_topic=38, selected=1)
+    assert retirement(policy, NOW) is None
+    assert retirement(facts(screened=40, off_topic=38, selected=0), NOW).reason == "off-topic"
+    assert retirement(facts(screened=40, off_topic=38, selected=None), NOW).reason == "off-topic"   # an older platform
+
+
 def trial(**overrides) -> TrialFacts:
     base = dict(trial_until=NOW - timedelta(hours=1), medical_basis=None, ok_polls=12, new_entries=3)
     return TrialFacts(**{**base, **overrides})

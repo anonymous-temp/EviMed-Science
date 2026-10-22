@@ -459,11 +459,17 @@ export class FrontierIngest {
   async #reportScreening() {
     if (typeof this.plugin.reportScreening !== "function") return null;
     try {
-      const sources = (await this.database.query(`SELECT source_id AS id,
-          count(*) FILTER (WHERE state IN ('screened-out', 'promoted'))::integer AS screened,
-          count(*) FILTER (WHERE state = 'screened-out' AND state_reason = 'not-medical')::integer AS off_topic
-        FROM evimed_frontier.entries WHERE received_at > clock_timestamp() - interval '14 days'
-        GROUP BY source_id HAVING count(*) FILTER (WHERE state IN ('screened-out', 'promoted')) > 0 ORDER BY source_id`)).rows;
+      // `selected`: what the feed selected from the source over 30 days — a source with one selected item is never
+      // retired as off-topic by the plugin, however much else it sends (2026-10-22: 中国政府网 最新政策).
+      const sources = (await this.database.query(`SELECT e.source_id AS id,
+          count(*) FILTER (WHERE e.state IN ('screened-out', 'promoted'))::integer AS screened,
+          count(*) FILTER (WHERE e.state = 'screened-out' AND e.state_reason = 'not-medical')::integer AS off_topic,
+          coalesce(max(s.selected), 0)::integer AS selected
+        FROM evimed_frontier.entries e
+        LEFT JOIN (SELECT primary_source_id, count(*) FILTER (WHERE selected) AS selected FROM evimed_frontier.items
+          WHERE first_seen_at > clock_timestamp() - interval '30 days' GROUP BY primary_source_id) s ON s.primary_source_id = e.source_id
+        WHERE e.received_at > clock_timestamp() - interval '14 days'
+        GROUP BY e.source_id HAVING count(*) FILTER (WHERE e.state IN ('screened-out', 'promoted')) > 0 ORDER BY e.source_id`)).rows;
       if (!sources.length) return { accepted: 0, unknown: 0 };
       const result = await this.plugin.reportScreening({ windowDays: 14, sources });
       this.counters.screeningReports += 1;

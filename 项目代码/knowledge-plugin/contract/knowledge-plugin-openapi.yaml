@@ -167,6 +167,7 @@ paths:
                       id: { type: string, maxLength: 120 }
                       screened: { type: integer, minimum: 0 }
                       off_topic: { type: integer, minimum: 0, description: "At most `screened`." }
+                      selected: { type: integer, minimum: 0, description: "Optional: how many of its items the platform selected over 30 days; a source with one is never retired as off-topic." }
       responses:
         "200":
           description: Accepted

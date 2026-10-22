@@ -424,7 +424,7 @@ test("after the mirror the screen's verdicts per source go back to the plugin", 
     state_reason = CASE WHEN source_id = 'techfeed' AND plugin_seq < 6 THEN 'not-medical' WHEN source_id = 'techfeed' THEN 'not-news' ELSE NULL END`);
   await ingest.mirrorSources();
   assert.equal(plugin.screening.window_days, 14);
-  assert.deepEqual(plugin.screening.sources, [{ id: "nejm", screened: 2, off_topic: 0 }, { id: "techfeed", screened: 4, off_topic: 3 }]);
+  assert.deepEqual(plugin.screening.sources, [{ id: "nejm", screened: 2, off_topic: 0, selected: 0 }, { id: "techfeed", screened: 4, off_topic: 3, selected: 0 }]);
   assert.equal(ingest.counters.screeningReports, 1);
 
   // A plugin without the route costs the report only: the mirror itself succeeds.

@@ -105,6 +105,7 @@ class SourceFacts:
     new_days: list[date] = field(default_factory=list)      # days with a new key, last 90 days
     screened: int | None = None                             # the platform's screen, when reported recently
     off_topic: int | None = None
+    selected: int | None = None                             # items the platform selected (its 30 days), when reported
 
 
 @dataclass
@@ -129,7 +130,7 @@ def retirement(facts: SourceFacts, now: datetime) -> Retirement | None:
                                                   "failing_since": facts.failing_since.isoformat()})
     if (facts.screened is not None and facts.off_topic is not None and facts.screened >= OFF_TOPIC_MIN_SCREENED
             and facts.off_topic / facts.screened > OFF_TOPIC_SHARE
-            and facts.screened - facts.off_topic < OFF_TOPIC_MEDICAL_FLOOR):
+            and facts.screened - facts.off_topic < OFF_TOPIC_MEDICAL_FLOOR and not facts.selected):
         return Retirement(facts.id, "off-topic", {"screened": facts.screened, "not_medical": facts.off_topic})
     if facts.safety_feed or facts.first_contact_at is None or facts.failing_since is not None:
         return None    # a failing source is quiet because it fails: its health says so, silence is not the reason
@@ -182,13 +183,14 @@ def trial_verdict(facts: TrialFacts, now: datetime) -> tuple[str, str | None]:
 # ------------------------------------------------------------------------------------ database
 
 
-async def screening_of(conn, now: datetime) -> dict[str, tuple[int, int]]:
-    """The platform's recent verdicts: ``{source_id: (screened, off_topic)}``."""
+async def screening_of(conn, now: datetime) -> dict[str, tuple[int, int, int | None]]:
+    """The platform's recent verdicts: ``{source_id: (screened, off_topic, selected)}`` (``selected`` null when the
+    platform did not say)."""
     rows = await (await conn.execute(
-        "SELECT source_id, screened, off_topic FROM evimed_knowledge.source_screening WHERE reported_at > %s",
+        "SELECT source_id, screened, off_topic, selected FROM evimed_knowledge.source_screening WHERE reported_at > %s",
         (now - SCREENING_FRESH,),
     )).fetchall()
-    return {row["source_id"]: (row["screened"], row["off_topic"]) for row in rows}
+    return {row["source_id"]: (row["screened"], row["off_topic"], row["selected"]) for row in rows}
 
 
 async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()) -> list[SourceFacts]:
@@ -208,14 +210,14 @@ async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()
     screening = await screening_of(conn, now)
     facts = []
     for row in rows:
-        screened, off_topic = screening.get(row["id"], (None, None))
+        screened, off_topic, selected = screening.get(row["id"], (None, None, None))
         facts.append(SourceFacts(
             id=row["id"], curated=row["id"] in curated_ids, enabled=row["enabled"], retired=row["retired_at"] is not None,
             operator_enabled=row["operator_enabled"], safety_feed=row["safety_feed"],
             platform_produced=bool(row["platform_produced"]), first_contact_at=row["first_contact_at"],
             last_ok_at=row["last_ok_at"], failing_since=row["failing_since"], last_error_code=row["last_error_code"],
             consecutive_failures=row["consecutive_failures"], new_days=new_days.get(row["id"], []),
-            screened=screened, off_topic=off_topic))
+            screened=screened, off_topic=off_topic, selected=selected))
     return facts
 
 

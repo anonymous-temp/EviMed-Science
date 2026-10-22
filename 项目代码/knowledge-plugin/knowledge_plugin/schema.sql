@@ -303,6 +303,9 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.source_screening (
   window_days smallint NOT NULL CHECK (window_days BETWEEN 1 AND 30),
   reported_at timestamptz(3) NOT NULL
 );
+-- How many of the source's items the platform selected (its own window, 30 days): a source that put one item in the
+-- selected feed is never retired as off-topic, however much else it sends (2026-10-22: 中国政府网 最新政策, 1 selected).
+ALTER TABLE evimed_knowledge.source_screening ADD COLUMN IF NOT EXISTS selected integer CHECK (selected >= 0);
 
 -- fr-social 2026-10-22
 -- Contract 1.5.0: social posts. What a post carries beside the common fields, on the entry as delivered: the channel (every

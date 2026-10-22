@@ -83,6 +83,16 @@ COMMON_FEED_PATHS = ("/feed", "/rss.xml", "/feed.xml", "/rss", "/atom.xml", "/in
 MAX_FEED_TRIES = 3
 MAX_PAGE_BYTES = 2 * 1024 * 1024
 DATA_PATH = Path(__file__).resolve().parent.parent / "registry" / "discovery.json"
+
+
+def data_path(registry_path: str | None) -> Path:
+    """``discovery.json`` beside the registry file the plugin runs on (the image keeps the registry in
+    ``/opt/knowledge-plugin/registry``, not beside the installed package), else the source tree's."""
+    if registry_path:
+        beside = Path(registry_path).with_name("discovery.json")
+        if beside.is_file():
+            return beside
+    return DATA_PATH
 CROSSREF = "https://api.crossref.org"
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 SOCIAL_PLATFORMS = ("x", "wechat")
@@ -818,7 +828,7 @@ async def run_discovery(settings, pool, fetcher, clock, *, caps: dict[str, int] 
     from .registry import load_registry
 
     caps = caps or dict(DEFAULT_CAPS)
-    data = data if data is not None else load_data()
+    data = data if data is not None else load_data(data_path(settings.registry_path))
     started = clock()
     day = shanghai_day(started)
     nonce = uuid4().hex
