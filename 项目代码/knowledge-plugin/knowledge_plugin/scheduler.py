@@ -134,6 +134,7 @@ class Crawler:
             asyncio.create_task(self._loop("health", self.recheck_health, HEALTH_RECHECK_EVERY_S, initial_delay=120.0)),
             asyncio.create_task(self._loop("source-requests", self.pull_source_requests, 86400.0, initial_delay=90.0)),
             asyncio.create_task(self._loop("medical-discovery", self.discover_medical_sources, 3600.0, initial_delay=180.0)),
+            asyncio.create_task(self._loop("source-discovery", self.discover_sources, 3600.0, initial_delay=300.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
@@ -756,6 +757,15 @@ class Crawler:
         from .medical_discovery import run_daily_discovery
         return await run_daily_discovery(self._settings, self._pool, self._fetcher, self._clock)
 
+    async def discover_sources(self) -> dict:
+        """Automatic source discovery and the source lifecycle (``discovery.py``), hourly; each step once a day."""
+        if not self._settings.discovery_enabled:
+            return {"status": "disabled"}
+        from .discovery import parse_caps, run_discovery
+        return await run_discovery(self._settings, self._pool, self._fetcher, self._clock,
+                                   caps=parse_caps(self._settings.discovery_caps),
+                                   outbound_pages=self._settings.discovery_outbound_pages)
+
     async def pull_source_requests(self) -> dict:
         """Read the platform's public wish list through the same protected fetch boundary."""
         url = os.environ.get("EVIMED_SOURCE_REQUESTS_URL", "")
@@ -790,7 +800,13 @@ class Crawler:
                 await meta_set(conn, "source_requests_admitted", {"sources": retained})
                 await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
                 await sync_dynamic_registry(conn, base, self._clock())
-        return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions}
+                # Any other lane is a candidate of the discovery's request line, validated and tried like the rest.
+                from .discovery import shanghai_day, upsert_candidates
+                from .discovery_lines import request_candidates
+                requested = await upsert_candidates(conn, request_candidates(document), self._clock(),
+                                                    shanghai_day(self._clock()))
+        return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions,
+                "candidates": requested.get("request", 0)}
 
     async def watch_registry(self) -> None:
         path = self._settings.registry_path

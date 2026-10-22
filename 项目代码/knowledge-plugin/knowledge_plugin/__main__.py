@@ -1,10 +1,15 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
 the same process as the API (one image, one process; plan 14.5). ``migrate`` applies the schema
 and exits; ``check-registry`` validates the registry file (and the adapters' view of each row)
 and exits non-zero on a problem, without touching a database.
+
+``lifecycle`` prints, one JSON line each, the sources the lifecycle rules would retire now and why, and a last line
+with the counts by reason; it writes nothing (``lifecycle --apply`` retires them and syncs the registry, what the
+hourly discovery run does once a day). ``discover`` runs the discovery cycle once in the foreground and prints its
+report (``--lines journal,directory`` limits the gathering; ``--caps line=n,…`` overrides the day's caps).
 """
 
 from __future__ import annotations
@@ -90,6 +95,66 @@ async def _migrate(settings: Settings) -> None:
         await pool.close()
 
 
+async def _lifecycle(settings: Settings, apply: bool) -> int:
+    import json
+    from collections import Counter
+    from datetime import datetime, timezone
+
+    from .db import create_pool
+    from .lifecycle import retirement_plan
+    from .registry import load_registry
+
+    pool = await create_pool(settings)
+    try:
+        now = datetime.now(timezone.utc)
+        curated = {row.source.id for row in load_registry(settings.registry_path)}
+        if apply:
+            from .discovery import apply_retirements, shanghai_day
+            from .dynamic_registry import sync_dynamic_registry
+            async with pool.connection() as conn:
+                async with conn.transaction():
+                    plan = await apply_retirements(conn, now, shanghai_day(now), curated)
+                    await sync_dynamic_registry(conn, lambda: load_registry(settings.registry_path), now)
+            for item in plan:
+                print(json.dumps(item, ensure_ascii=False))
+            print(json.dumps({"applied": len(plan), "by_reason": dict(Counter(i["reason"] for i in plan))}))
+            return 0
+        async with pool.connection() as conn:
+            plan = await retirement_plan(conn, now, curated)
+        for decision in plan:
+            print(json.dumps({"source_id": decision.source_id, "reason": decision.reason,
+                              "registry_row": decision.source_id in curated, "evidence": decision.evidence},
+                             ensure_ascii=False, default=str))
+        print(json.dumps({"would_retire": len(plan), "by_reason": dict(Counter(d.reason for d in plan))}))
+        return 0
+    finally:
+        await pool.close()
+
+
+async def _discover(settings: Settings, lines: list[str] | None, caps: str | None) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from .budget import HostBudget, PgCounterStore, host_rules
+    from .db import create_pool
+    from .discovery import parse_caps, run_discovery
+    from .fetch import ProtectedFetcher
+
+    pool = await create_pool(settings)
+    budget = HostBudget(PgCounterStore(pool), host_rules(ncbi_key=settings.has_ncbi_key(), openfda_key=settings.has_openfda_key()))
+    await budget.load()
+    fetcher = ProtectedFetcher(settings, budget)
+    try:
+        report = await run_discovery(settings, pool, fetcher, lambda: datetime.now(timezone.utc),
+                                     caps=parse_caps(caps if caps is not None else settings.discovery_caps),
+                                     outbound_pages=settings.discovery_outbound_pages, gather_lines=lines)
+        print(json.dumps(report, ensure_ascii=False, default=str, indent=1))
+        return 0
+    finally:
+        await fetcher.aclose()
+        await pool.close()
+
+
 def check_registry(path: str) -> int:
     from .registry import RegistryError, load_registry
 
@@ -139,7 +204,17 @@ def main(argv: list[str] | None = None) -> int:
     if command == "migrate":
         asyncio.run(_migrate(settings))
         return 0
-    print(f"unknown command {command!r}; use serve, migrate or check-registry", file=sys.stderr)
+    if command == "lifecycle":
+        return asyncio.run(_lifecycle(settings, apply="--apply" in argv[1:]))
+    if command == "discover":
+        lines = caps = None
+        for flag, value in zip(argv[1:], argv[2:]):
+            if flag == "--lines":
+                lines = [line.strip() for line in value.split(",") if line.strip()]
+            elif flag == "--caps":
+                caps = value
+        return asyncio.run(_discover(settings, lines, caps))
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle or discover", file=sys.stderr)
     return 2
 
 

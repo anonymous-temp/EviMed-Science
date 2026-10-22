@@ -314,6 +314,10 @@ async def run_daily_discovery(settings, pool, fetcher, clock) -> dict:
                       "advertisedCandidatesValidated": len(candidates), "admittedFeeds": len(admitted),
                       "newInstitutions": 0, "capacityDeferred": max(0, len(held) + len(additions) - MAX_ADMITTED),
                       "items": observations}
+            # The day's discovery counts (``discovery.py``): a validated advertised feed is admitted at once here.
+            from .discovery import count
+            await count(conn, day, "parent-feed", candidates=len(candidates), validated=len(candidates),
+                        admitted=len(admitted))
             history = [*current.get("history", []), report][-30:]
             await meta_set(conn, MEDICAL_STATUS, {"status": status, "runId": nonce, "startedAt": started.isoformat(),
                                                  "leaseUntil": None, "cursor": (cursor + visited) % max(1, len(parents)),

@@ -229,3 +229,77 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.meta (
   value       jsonb NOT NULL,
   updated_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+
+-- fr-sources 2026-10-22 ---------------------------------------------------------------------------------------------
+-- Automatic source discovery and the source lifecycle (discovery.py, lifecycle.py). Candidates found by the candidate
+-- lines are validated (reachable, robots, an adapter reads them, fresh items, medical), put on a seven-day trial as
+-- ordinary registry rows at a low rate, then admitted or not; any source — file, discovered or dynamic — is retired by
+-- rule (robots refusal, 401/403 for seven days, silence past its own rhythm, off-topic by the platform's screen) and
+-- keeps its row and history, so it can come back.
+
+-- One row per thing a line found: a site, a feed, a journal (ISSN), a social account, a requested row, a retired
+-- source due for a re-check. `key` is the canonical identity (a feed or homepage URL, `issn:<ISSN-L>`,
+-- `x:<handle>`, `source:<id>`), unique across lines: the first line that found it owns it, the rest add evidence.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_candidates (
+  id               text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
+  line             text NOT NULL,
+  key              text NOT NULL UNIQUE CHECK (char_length(key) BETWEEN 1 AND 2048),
+  name             text,
+  first_seen_at    timestamptz(3) NOT NULL,
+  last_seen_at     timestamptz(3) NOT NULL,
+  sightings        integer NOT NULL DEFAULT 1 CHECK (sightings >= 1),
+  evidence         jsonb NOT NULL DEFAULT '{}'::jsonb,       -- where it was seen: referring sources, lines, volumes
+  state            text NOT NULL DEFAULT 'candidate'
+                   CHECK (state IN ('candidate', 'trial', 'admitted', 'retired', 'failed', 'rejected')),
+  state_reason     text,
+  state_at         timestamptz(3) NOT NULL,
+  attempts         smallint NOT NULL DEFAULT 0,
+  next_check_at    timestamptz(3),                           -- a candidate whose validation was deferred
+  medical_basis    text,                                     -- data that makes it medical: nlm-catalog, pubmed-stream, directory, request
+  source_id        text,                                     -- the registry row's id once validated
+  row              jsonb,                                    -- the registry row validation built (trial, admitted)
+  validation       jsonb,                                    -- what the probe found: exit, feed, fresh items, sample titles
+  trial_started_at timestamptz(3),
+  trial_until      timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS knowledge_source_candidates_state_idx
+  ON evimed_knowledge.source_candidates (state, line, next_check_at);
+CREATE INDEX IF NOT EXISTS knowledge_source_candidates_source_idx
+  ON evimed_knowledge.source_candidates (source_id) WHERE source_id IS NOT NULL;
+
+-- Daily counts by line (Asia/Shanghai day): what /v1/health `discovery` reports. A transition adds one to its column
+-- on the day it happens; net growth is admitted minus retired.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.discovery_daily (
+  day        date NOT NULL,
+  line       text NOT NULL,
+  candidates integer NOT NULL DEFAULT 0 CHECK (candidates >= 0),
+  validated  integer NOT NULL DEFAULT 0 CHECK (validated >= 0),
+  trial      integer NOT NULL DEFAULT 0 CHECK (trial >= 0),
+  admitted   integer NOT NULL DEFAULT 0 CHECK (admitted >= 0),
+  retired    integer NOT NULL DEFAULT 0 CHECK (retired >= 0),
+  failed     integer NOT NULL DEFAULT 0 CHECK (failed >= 0),
+  PRIMARY KEY (day, line)
+);
+
+-- Sources the lifecycle retired, whatever their origin. The registry composition leaves them out, so the sync marks
+-- them retired (`retired_at`) and nothing polls them; the row, its entries and its fetch history stay. A re-check that
+-- finds the source readable, permitted and fresh again deletes the row here and the source comes back.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_lifecycle (
+  source_id     text PRIMARY KEY,
+  reason        text NOT NULL CHECK (reason IN ('robots', 'forbidden', 'silent', 'off-topic')),
+  line          text NOT NULL,                              -- `registry` for a file row, else the candidate's line
+  decided_at    timestamptz(3) NOT NULL,
+  recheck_after timestamptz(3),                             -- null: never re-checked automatically (off-topic)
+  evidence      jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- The platform's own screening verdicts on each source's entries (POST /v1/sources/screening): how many it screened
+-- and how many it judged not medical over its window. The plugin makes no content judgement; trials and the
+-- off-topic rule read these.
+CREATE TABLE IF NOT EXISTS evimed_knowledge.source_screening (
+  source_id   text PRIMARY KEY,
+  screened    integer NOT NULL CHECK (screened >= 0),
+  off_topic   integer NOT NULL CHECK (off_topic >= 0 AND off_topic <= screened),
+  window_days smallint NOT NULL CHECK (window_days BETWEEN 1 AND 30),
+  reported_at timestamptz(3) NOT NULL
+);
