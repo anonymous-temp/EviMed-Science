@@ -1,7 +1,7 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
 import { WebApiError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
@@ -11,6 +11,7 @@ import {
   frontierErrorMessage,
   useFrontierFeature,
   type FrontierEvent,
+  type FrontierEventOrder,
   type FrontierEventRole,
   type FrontierItem,
 } from "@/lib/frontierClient";
@@ -60,7 +61,8 @@ const RELATION_WORDS: Readonly<Record<string, string>> = Object.freeze({
  * many institutions reported it, when it last moved, its specialty — with
  * 「深入研究」; what is known so far and the latest turn; the reports, the
  * parties' own texts first under 「一手材料」 (a paper, a notice, a label) and the
- * rest as 「其他报道」, newest first — or, where nobody's own text is among them,
+ * rest as 「其他报道」, newest first or, on 最早 (`?order=asc`, asked of the
+ * server too), oldest first — or, where nobody's own text is among them,
  * one line that says so; from ten reports on a menu narrows them to one kind
  * of source; and on the right the heat, its 72-hour trend, the institutions
  * by kind, the first report and whether first-hand material is among the
@@ -80,22 +82,30 @@ export function FrontierEventPage() {
   return <EventView key={eventId} eventId={eventId} ready={feature !== "loading"} />;
 }
 
+/** The order a link names (`?order=asc`, 最早 first); newest first otherwise. */
+function readOrder(value: string | null): FrontierEventOrder {
+  return value === "asc" ? "asc" : "desc";
+}
+
 function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const order = readOrder(params.get("order"));
   const [state, setState] = useState<EventState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!ready) return;
     let active = true;
-    setState({ kind: "loading" });
-    fetchFrontierEvent(eventId).then(
+    // A new order keeps the event on screen while it is read again in that order; only a first read shows the skeleton.
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
+    fetchFrontierEvent(eventId, order === "asc" ? "asc" : undefined).then(
       (event) => {
         if (!active) return;
         setState({ kind: "ready", event });
         if (event.readingMark) void markFrontierEventRead(event.id, event.readingMark).catch(() => {});
-        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}`, { replace: true, state: location.state });
+        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}${location.search}`, { replace: true, state: location.state });
       },
       (error: unknown) => {
         if (!active) return;
@@ -107,7 +117,9 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       },
     );
     return () => { active = false; };
-  }, [eventId, ready, attempt, navigate, location.state]);
+    // `location.search` is read for the redirect only; the order is its own dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, ready, attempt, navigate, location.state, order]);
 
   if (state.kind === "off") return <FrontierOffPage />;
   // A page that is not there is a screen of its own — an icon, one sentence, the way on and the way back — not an empty box in the
@@ -135,7 +147,12 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       </EventFrame>
     );
   }
-  return <EventBody event={state.event} />;
+  const setOrder = (next: FrontierEventOrder) => setParams((current) => {
+    const updated = new URLSearchParams(current);
+    if (next === "asc") updated.set("order", "asc"); else updated.delete("order");
+    return updated;
+  }, { replace: true, state: location.state });
+  return <EventBody event={state.event} order={order} onOrder={setOrder} />;
 }
 
 /**
@@ -170,11 +187,12 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
   );
 }
 
-function EventBody({ event }: { event: FrontierEvent }) {
+function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: FrontierEventOrder; onOrder: (order: FrontierEventOrder) => void }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // The server reads the event in the order asked; the page sorts it too, so a server that does not know the order reads the same.
   const timeline = useMemo(() => [...event.items]
-    .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt)), [event.items]);
+    .sort((a, b) => (order === "asc" ? 1 : -1) * (Date.parse(a.timelineAt) - Date.parse(b.timelineAt))), [event.items, order]);
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: { ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } } } });
   // From ten reports on, a kind of source narrows the list: the kinds the rows already name, in the order they first appear.
   const [sourceType, setSourceType] = useState<string | null>(null);
@@ -185,11 +203,16 @@ function EventBody({ event }: { event: FrontierEvent }) {
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
   const heat = event.heat ?? null;
-  // From ten reports on, a kind of source narrows the list: the filter is the toolbar of the first group, at its heading, over the rows
-  // it narrows (it was a menu on a row of its own between two sections, with no word for what it filters).
-  const sourceFilter = timeline.length >= 10 && sourceTypes.length > 1 ? (
-    <Toolbar label="筛选来源" filters={[{ kind: "select", label: "全部来源", allLabel: "全部来源", value: sourceType, options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }]} />
-  ) : null;
+  // The reports' controls are the toolbar of the first group, at its heading, over the rows they order and narrow (the source filter was a
+  // menu on a row of its own between two sections, with no word for what it filters): 最新 · 最早 from two reports on, and from ten
+  // reports on a kind of source.
+  const reportControls = [
+    ...(timeline.length > 1 ? [{ kind: "chips" as const, label: "报道顺序", pinned: true, value: order,
+      options: [{ value: "desc", label: "最新" }, { value: "asc", label: "最早" }], onChange: (next: string) => onOrder(next === "asc" ? "asc" : "desc") }] : []),
+    ...(timeline.length >= 10 && sourceTypes.length > 1 ? [{ kind: "select" as const, label: "全部来源", allLabel: "全部来源", value: sourceType,
+      options: sourceTypes.map((label) => ({ value: label, label })), onChange: setSourceType }] : []),
+  ];
+  const sourceFilter = reportControls.length > 0 ? <Toolbar label="报道的顺序与来源" filters={reportControls} /> : null;
 
   return (
     <EventFrame

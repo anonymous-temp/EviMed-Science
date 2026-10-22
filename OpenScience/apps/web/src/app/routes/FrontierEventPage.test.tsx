@@ -46,12 +46,12 @@ function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
 function Probe() {
   const location = useLocation();
   const intent = (location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="location">{location.pathname}{intent?.draft ? `|${intent.draft}` : ""}</div>;
+  return <div data-testid="location">{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
 }
 
-function renderEvent(id = "ev1") {
+function renderEvent(id = "ev1", search = "") {
   return render(
-    <MemoryRouter initialEntries={[`/app/frontier/events/${id}`]}>
+    <MemoryRouter initialEntries={[`/app/frontier/events/${id}${search}`]}>
       <Routes>
         <Route path="/app/frontier/events/:eventId" element={<><FrontierEventPage /><Probe /></>} />
         <Route path="*" element={<Probe />} />
@@ -159,7 +159,7 @@ describe("an event", () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ id: "ev-survivor" }));
     renderEvent("ev-old");
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/ev-survivor"));
-    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev-old");
+    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev-old", undefined);
     expect(await screen.findByRole("heading", { level: 1, name: /脂质体/ })).toBeInTheDocument();
   });
 });
@@ -252,13 +252,46 @@ describe("an event with many reports", () => {
     renderEvent();
     const filter = await screen.findByRole("button", { name: "全部来源" });
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).closest("section")).toContainElement(filter);
-    expect(within(screen.getByRole("group", { name: "筛选来源" })).getByRole("button", { name: "全部来源" })).toBe(filter);
+    expect(within(screen.getByRole("group", { name: "报道的顺序与来源" })).getByRole("button", { name: "全部来源" })).toBe(filter);
   });
   it("offers no menu when all the reports are of one kind", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: many(12).map((item) => ({ ...item, sourceTypeLabel: "媒体" })) }));
     renderEvent();
     await screen.findByRole("heading", { level: 2, name: "其他报道" });
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the order of the reports", () => {
+  const reportTitles = () => Array.from(document.querySelectorAll("#event-reports > li")).map((row) => row.querySelector("a")?.textContent);
+  it("reads newest first, then oldest first on 最早 — asked of the server and kept in the address — and back", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event({ items: [
+      { ...frontierItem({ id: "a", title: "最早的报道", timelineAt: ago(30) }), role: "report" },
+      { ...frontierItem({ id: "b", title: "最新的报道", timelineAt: ago(1) }), role: "report" },
+      { ...frontierItem({ id: "c", title: "中间的报道", timelineAt: ago(10) }), role: "report" },
+    ] }));
+    renderEvent();
+    await screen.findByRole("heading", { level: 2, name: "报道" });
+    expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
+    const order = screen.getByRole("group", { name: "报道顺序" });
+    expect(within(order).getByRole("button", { name: "最新" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(order).getByRole("button", { name: "最早" }));
+    expect(reportTitles()).toEqual(["最早的报道", "中间的报道", "最新的报道"]);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/ev1?order=asc");
+    await waitFor(() => expect(client.fetchFrontierEvent).toHaveBeenLastCalledWith("ev1", "asc"));
+    // The event stays on screen while it is read again.
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最新" }));
+    expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/frontier\/events\/ev1$/);
+  });
+
+  it("opens in the order its address names", async () => {
+    client.fetchFrontierEvent.mockResolvedValue(event());
+    renderEvent("ev1", "?order=asc");
+    await screen.findByRole("heading", { level: 1 });
+    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev1", "asc");
+    expect(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最早" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
