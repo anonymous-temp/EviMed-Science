@@ -26,6 +26,7 @@ import {
   frontierPrimaryKind,
   frontierRankHot,
   frontierGroupPlan,
+  frontierMilestone,
   frontierNeedsSecondLook,
   frontierRecallReading,
   frontierRecallText,
@@ -179,6 +180,12 @@ test("the grouping plan: SAME_OCCURRENCE joins (or is looked at again), SAME_STO
   assert.deepEqual(plan.check.map((candidate) => candidate.eventId), ["2", "5"]);
   assert.deepEqual(plan.story.map((candidate) => candidate.eventId), ["3"]);
   assert.deepEqual(frontierGroupPlan(candidates, candidates.map(() => ({ relation: "UNRELATED" }))), { join: [], check: [], story: [] });
+});
+
+test("a registry entry's milestone is read from its identity for the model; any other identity has none", () => {
+  assert.equal(frontierMilestone("reg:nct01234567:results-posted:2026-09-21"), "NCT01234567 · results-posted · 2026-09-21");
+  assert.equal(frontierMilestone("doi:10.1/x"), null);
+  assert.equal(frontierMilestone(null), null);
 });
 
 test("the lexical stand-in: Chinese by character pairs, Latin script by words, over the smaller set", () => {
