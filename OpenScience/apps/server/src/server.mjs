@@ -341,6 +341,7 @@ import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
 import { FrontierWeekly } from "./frontierWeekly.mjs";
 import { FrontierNotifications } from "./frontierNotifications.mjs";
+import { createFrontierUsage } from "./frontierUsage.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
@@ -738,6 +739,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname === "/api/ops/evidence-flywheel") return pathname;
+  if (pathname === "/api/ops/frontier-usage") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
@@ -2065,7 +2067,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
    *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
-   *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
+   *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage> } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
@@ -2149,6 +2151,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
+  }
+  // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
+  // They ride the module's switch and read tables it already has; the plugin's own blocks come from the ingest's last health read.
+  if (frontier) {
+    const { ingest: frontierIngest } = frontier;
+    frontier.usage = createFrontierUsage({ database: productDatabase, config, plugin: () => frontierIngest.status() });
   }
   // The evidence programme's day (evidenceBudget.mjs): the publisher account's `evidence` spend against its own budget, and its
   // concurrency. A reading is never taken while the programme's switch is off.
@@ -6428,6 +6436,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return;
       }
 
+      // The feed's use and supply per day (frontierUsage.mjs): readers, item and event reads, stars, follows, the frontier's notices (inbox and Feishu),
+      // sources by state, discovery, the paid providers and the model's spend. Behind the scrape token like the figures above; with the frontier off the
+      // route answers by name once the token has been checked.
+      if (pathname === "/api/ops/frontier-usage" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!frontier?.usage) throw new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
+        const asked = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams.get("days");
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await frontier.usage.snapshot(asked === null ? {} : { days: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
+        return;
+      }
+
       // What each purpose cost across every account (X1): the operator's cost
       // report, behind the scrape token the metrics above use. Money is read
       // from the ledger here rather than exported as a metric, because a price
@@ -9939,6 +9959,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The feed's use and supply by day, for the operator (frontierUsage.mjs): today's and yesterday's readers, reads, notices, source states,
+  // discovery, provider calls and spend. A figure that cannot be read has no series.
+  if (frontier?.usage) for (const family of await frontier.usage.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
