@@ -57,8 +57,8 @@ from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
 from .social.wechat import is_article as is_wechat_article
-from .store import (StoreResult, claim_texts, insert_fetch, reliability_24h, reliability_24h_all, save_text_result,
-                    store_entries, text_failure)
+from .store import (StoreResult, claim_texts, insert_fetch, redeliver, reliability_24h, reliability_24h_all,
+                    save_text_result, store_entries, text_failure)
 
 log = logging.getLogger("knowledge_plugin.scheduler")
 
@@ -643,8 +643,17 @@ class Crawler:
         async with self._pool.connection() as conn:
             for job, result in zip(jobs, results, strict=True):
                 statuses.append(await save_text_result(conn, job, result, now))
+                await self._deliver_upgrade(conn, job, result, now)
         log.info("texts: %s", dict(Counter(statuses)))
         return statuses
+
+    @staticmethod
+    async def _deliver_upgrade(conn, job: dict, result: EntryTextResult, now: datetime) -> None:
+        """An index's abstract replaced a provisional text (``enrich``: the upgrade): the entry is delivered again as
+        its next revision, so the platform reads the new text."""
+        if job.get("upgrade") and result.abstract and "upgraded" in result.notes:
+            revision = await redeliver(conn, job["entry_id"], now)
+            log.info("text %s upgraded, delivered again as revision %s", job["entry_id"], revision)
 
     async def enrich_one(self, job: dict) -> str:
         now = self._clock()
@@ -671,6 +680,7 @@ class Crawler:
                 return await text_failure(conn, job, f"enrich_failed:{type(error).__name__}", now)
         async with self._pool.connection() as conn:
             status = await save_text_result(conn, job, result, now)
+            await self._deliver_upgrade(conn, job, result, now)
         log.info("text %s %s via %s", job["entry_id"], status, result.fetched_from or "-")
         return status
 

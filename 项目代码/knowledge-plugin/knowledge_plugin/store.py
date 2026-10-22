@@ -312,13 +312,16 @@ async def schedule_text(conn: AsyncConnection, entry_id: str, revision: int, now
 
 
 async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s: int) -> list[dict]:
-    """Take up to ``limit`` due enrichment jobs; the lease is a pushed-back ``next_attempt_at``."""
+    """Take up to ``limit`` due enrichment jobs; the lease is a pushed-back ``next_attempt_at``. A due journal entry
+    whose text is there but provisional (``enrich``: a feed's teaser, a standfirst) is a job too, marked ``upgrade``."""
     async with conn.transaction():
         rows = await (await conn.execute(
             """WITH due AS (
                  SELECT t.entry_id FROM evimed_knowledge.entry_texts t
                    JOIN evimed_knowledge.entries e ON e.entry_id = t.entry_id
-                  WHERE e.text_status = 'pending' AND t.next_attempt_at <= %s
+                  WHERE (e.text_status = 'pending'
+                         OR (e.text_status = 'available' AND (e.doi IS NOT NULL OR e.pmid IS NOT NULL)))
+                    AND t.next_attempt_at <= %s
                   ORDER BY t.next_attempt_at LIMIT %s FOR UPDATE OF t SKIP LOCKED)
                UPDATE evimed_knowledge.entry_texts t SET next_attempt_at = %s
                  FROM due WHERE t.entry_id = due.entry_id
@@ -338,6 +341,7 @@ async def claim_texts(conn: AsyncConnection, limit: int, now: datetime, lease_s:
         if joined:
             joined["attempts"] = row["attempts"]
             joined["paid_attempts"] = row["paid_attempts"]
+            joined["upgrade"] = joined.get("text_status") == "available"
             jobs.append(joined)
     return jobs
 
@@ -397,6 +401,10 @@ async def save_text_result(conn: AsyncConnection, job: dict, result: EntryTextRe
     if status == "pending":
         delay = result.retry_after_s or TEXT_RETRY_DEFAULT_S
         next_attempt = now + timedelta(seconds=min(max(delay, TEXT_RETRY_MIN_S), TEXT_RETRY_MAX_S))
+    elif status == "available" and result.retry_after_s:
+        # A provisional text, asked again for an index's abstract until the horizon (``enrich``: the upgrade).
+        next_attempt = now + timedelta(seconds=min(max(result.retry_after_s, TEXT_RETRY_MIN_S), TEXT_RETRY_MAX_S))
+        next_attempt = next_attempt if next_attempt < text_deadline(job, now) else None
     else:
         next_attempt = None
     async with conn.transaction():

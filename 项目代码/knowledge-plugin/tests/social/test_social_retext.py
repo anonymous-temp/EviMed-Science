@@ -71,8 +71,9 @@ async def test_retext_reports_then_reads_the_wechat_bodies_again_and_delivers_on
 
 def test_the_window_flags():
     now = NOW
-    assert retext.window([], now) == (list(retext.KINDS), now - timedelta(days=retext.DEFAULT_SINCE_DAYS), now,
+    assert retext.window([], now) == (list(retext.DEFAULT_KINDS), now - timedelta(days=retext.DEFAULT_SINCE_DAYS), now,
                                       retext.DEFAULT_LIMIT)
+    assert retext.window(["--kinds", "journal"], now)[0] == ["journal"]       # named only
     kinds, since, before, limit = retext.window(["--kinds", "page,crossref", "--since", "2026-09-01", "--before",
                                                  "2026-10-22T14:00:00Z", "--limit", "50"], now)
     assert kinds == ["page", "crossref"] and since.isoformat() == "2026-09-01T00:00:00+00:00"

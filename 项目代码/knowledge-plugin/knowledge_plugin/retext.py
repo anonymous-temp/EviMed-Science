@@ -1,5 +1,5 @@
-"""``python -m knowledge_plugin retext [--kinds wechat,page,crossref] [--since 2026-09-01] [--before <iso>] [--limit N]
-[--apply]``: the texts stored before the 2026-10-22 reader-text fixes, read again through them.
+"""``python -m knowledge_plugin retext [--kinds wechat,page,crossref,journal] [--since 2026-09-01] [--before <iso>]
+[--limit N] [--apply]``: the texts stored before the 2026-10-22 reader-text fixes, read again through them.
 
 The audit of the 23,948 published texts (2026-10-22) found three stored kinds the fixes cannot repair in place, because
 what was lost is not in the stored text any more:
@@ -10,6 +10,11 @@ what was lost is not in the stored text any more:
   the page's furniture, and feed texts taken whole from a summary stored as one line. The page is read again (``enrich``,
   robots.txt and the host budget as always).
 - ``crossref``: Crossref abstracts with an entity escaped twice (``P &lt;.001``, 58). The record is read again.
+- ``journal`` (rt-papers, 2026-10-22; only when named — the default is the three above): journal-like entries (a journal
+  read method, or a DOI or PMID) the platform asked a text for whose abstract, body and excerpt are all empty — the gap
+  the paper text chain was built for (OpenAlex, the journal's feeds, the landing page, Europe PMC's full text). The
+  whole chain runs again, the landing page read as on a first attempt; an entry it finds a text for is stored and
+  delivered again, one it finds nothing for stays as it was and is a candidate of the next run.
 
 Only entries the platform asked a text for (``text_requested_at``) are read, newest first, those whose text was fetched
 before ``--before`` (default: now) and that were first seen after ``--since`` (default: 60 days ago).
@@ -36,7 +41,8 @@ from .social import wechat as wechat_mod
 from .social.providers import ARTICLE_DETAIL_CNY
 from .store import ENTRY_COLUMNS, redeliver, save_text_result
 
-KINDS = ("wechat", "page", "crossref")
+KINDS = ("wechat", "page", "crossref", "journal")
+DEFAULT_KINDS = ("wechat", "page", "crossref")
 DEFAULT_SINCE_DAYS = 60
 DEFAULT_LIMIT = 20_000
 CONCURRENCY = 6          # texts read at once; each host's own pace is the fetcher's budget, as for the text worker
@@ -47,17 +53,24 @@ _WHERE = {
     "page": "(t.fetched_from = 'page' AND (t.body_text IS NOT NULL OR t.body_excerpt IS NOT NULL)) "
             "OR (t.fetched_from IS NULL AND t.body_text IS NOT NULL AND e.url !~* '^https?://mp\\.weixin\\.qq\\.com/')",
     "crossref": r"t.fetched_from = 'crossref' AND t.abstract ~ '&(lt|gt|amp|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);'",
+    "journal": "t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL "
+               "AND (s.access IN ('crossref-issn', 'eutils-query', 'europepmc') OR e.doi IS NOT NULL OR e.pmid IS NOT NULL)",
 }
+# Which stored states a kind reads: a text that is there (the fixes' kinds), or a journal entry answered without one.
+_STATUS = {"wechat": "('available')", "page": "('available')", "crossref": "('available')",
+           "journal": "('available', 'unavailable')"}
 
 
 def kind_of_row(row: dict) -> str:
+    if not (row.get("stored_body") or row.get("stored_excerpt") or row.get("stored_abstract")):
+        return "journal"            # the only kind read without a stored text
     return "wechat" if row["fetched_from"] == "wechat" else "crossref" if row["fetched_from"] == "crossref" else "page"
 
 
 
 async def candidates(pool, kinds: list[str], *, since: datetime, before: datetime, limit: int = DEFAULT_LIMIT) -> list[dict]:
     """The text jobs to read again, newest first, shaped like ``store.claim_texts``'s (plus the stored texts)."""
-    where = " OR ".join(f"({_WHERE[kind]})" for kind in kinds)
+    where = " OR ".join(f"(e.text_status IN {_STATUS[kind]} AND {_WHERE[kind]})" for kind in kinds)
     async with pool.connection() as conn:
         rows = await (await conn.execute(
             f"""SELECT {', '.join('e.' + column.strip() for column in ENTRY_COLUMNS.split(','))},
@@ -67,8 +80,8 @@ async def candidates(pool, kinds: list[str], *, since: datetime, before: datetim
                   FROM evimed_knowledge.entries e
                   JOIN evimed_knowledge.entry_texts t USING (entry_id)
                   JOIN evimed_knowledge.sources s ON s.id = e.source_id
-                 WHERE e.text_status = 'available' AND e.text_requested_at IS NOT NULL AND e.first_seen_at >= %s
-                   AND t.fetched_at < %s AND ({where})
+                 WHERE e.text_requested_at IS NOT NULL AND e.first_seen_at >= %s
+                   AND coalesce(t.fetched_at, '-infinity') < %s AND ({where})
                  ORDER BY e.first_seen_at DESC, e.entry_id LIMIT %s""",
             (since, before, limit))).fetchall()
     return [row for row in rows if kind_of_row(row) != "wechat" or wechat_mod.is_article(row["url"])]
@@ -100,6 +113,8 @@ def changed(row: dict, result: EntryTextResult) -> bool:
 async def read_again(collector, fetcher, settings, row: dict, now: datetime) -> EntryTextResult:
     if kind_of_row(row) == "wechat":
         return await collector.wechat_text(row, now)
+    if kind_of_row(row) == "journal":
+        row = {**row, "attempts": 0}      # read as a first attempt: the landing page too
     return await enrich(row, fetcher, settings, now=now)
 
 
@@ -116,7 +131,9 @@ async def apply(collector, pool, fetcher, settings, clock, kinds: list[str], *, 
             now = clock()
             line = {"entry_id": row["entry_id"], "source_id": row["source_id"], "kind": kind_of_row(row)}
             try:
-                result = await asyncio.wait_for(read_again(collector, fetcher, settings, row, now), timeout=120)
+                # The journal chain may wait for the browser exit (one page at a time) within its own batch deadline.
+                timeout = 330 if line["kind"] == "journal" else 120
+                result = await asyncio.wait_for(read_again(collector, fetcher, settings, row, now), timeout=timeout)
             except Exception as error:  # noqa: BLE001 - one entry's failure is reported, the run goes on
                 result = EntryTextResult(status="pending", notes=[f"retext_failed:{type(error).__name__}"])
             if result.status == "available" and (result.body_text or result.body_excerpt or result.abstract):
@@ -141,7 +158,7 @@ async def apply(collector, pool, fetcher, settings, clock, kinds: list[str], *, 
 
 def window(argv: list[str], now: datetime) -> tuple[list[str], datetime, datetime, int] | str:
     """``(kinds, since, before, limit)`` from the command's flags, or the message for a flag that is wrong."""
-    kinds, since, before, limit = list(KINDS), now - timedelta(days=DEFAULT_SINCE_DAYS), now, DEFAULT_LIMIT
+    kinds, since, before, limit = list(DEFAULT_KINDS), now - timedelta(days=DEFAULT_SINCE_DAYS), now, DEFAULT_LIMIT
     for flag, value in zip(argv, argv[1:]):
         try:
             if flag == "--kinds":
@@ -161,4 +178,4 @@ def window(argv: list[str], now: datetime) -> tuple[list[str], datetime, datetim
     return kinds, since, before, limit
 
 
-__all__ = ["KINDS", "apply", "candidates", "changed", "report", "window"]
+__all__ = ["DEFAULT_KINDS", "KINDS", "apply", "candidates", "changed", "report", "window"]

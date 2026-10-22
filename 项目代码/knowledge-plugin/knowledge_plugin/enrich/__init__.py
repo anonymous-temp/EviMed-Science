@@ -31,6 +31,13 @@ Order of work (plan 10.3.4), by entry kind:
     or ``openalex``, ``publisher-feed``, ``landing``), else ``excerpt`` (a feed's teaser or a page's standfirst).
     The per-entry steps of a batch run ``ENTRY_CONCURRENCY`` at a time inside ``BATCH_DEADLINE_S``: a landing read
     that cannot finish in time is not started, and the entry is asked again within the hour.
+
+    **A provisional text is upgraded.** A journal feed's teaser or summary (``publisher-feed``) and a page's standfirst
+    (an ``excerpt``) answer at once — the platform publishes with them — but are not the abstract PubMed gives a
+    research article days later (JAMA's feed summary: 200–300 characters; the abstract: ~2,500). Such an answer keeps
+    a 12-hour ``retry_after_s``; the text worker asks the entry again (``store.claim_texts``, the row marked
+    ``upgrade``) until ``TEXT_HORIZON``, with the indexes only (PubMed, Europe PMC, Crossref, OpenAlex), and an abstract
+    they give is stored and the entry delivered again as its next revision, so the platform reads it.
 ``trial`` (a ClinicalTrials.gov entry)
     Phase, status, enrollment, sponsor and the detailed description from the registry.
 ``page`` (news, regulators, societies, feeds, lists)
@@ -94,6 +101,7 @@ from .common import Endpoints, Trace
 from .page import clip_excerpt, page_excerpt, summary_is_full_text
 
 RETRY_NOT_INDEXED_S = 12 * 3600
+INDEX_SOURCES = frozenset({"pubmed", "europepmc", "crossref", "openalex", "elsevier", "europepmc-fulltext"})
 RETRY_TRANSIENT_S = 3600
 TEXT_HORIZON = timedelta(days=14)
 MIN_RETRY_S = 60
@@ -207,6 +215,7 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
     trace = Trace(notes=list(batch_trace.notes), transient=batch_trace.transient)
     doi, pmid = (row.get("doi") or "").lower() or None, row.get("pmid")
     preprint = is_preprint(row)
+    upgrade = bool(row.get("upgrade"))     # a provisional text is there: the indexes only (module docstring)
     enrichment: dict[str, Any] = {}
     found = _Found()
     known = False
@@ -236,19 +245,30 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
             {"crossref-works": "crossref", "biorxiv": None, "arxiv": None}.get(family or "", "unset")
         if source_text != "unset":
             found.abstract, found.abstract_from = row["summary"], source_text
-    if not found.abstract and doi and not preprint:
+    if not found.abstract and doi and not preprint and not upgrade:
         crossref_abstract, journal, crossref_at = await crossref_step.abstract_for(fetcher, endpoints, doi, trace)
         found.take_abstract(crossref_abstract, "crossref", crossref_at)
         if journal:
             enrichment.setdefault("journal", journal)
     if not found.abstract and doi and not preprint:
         found.take_abstract(await elsevier_step.abstract_for(fetcher, endpoints, doi, trace, settings), "elsevier")
-    if doi and not doi.startswith("10.48550/") and (found.abstract or known):
+    if doi and not doi.startswith("10.48550/") and (found.abstract or known) and not upgrade:
         oa_enrichment, location = await unpaywall_step.open_access_details(fetcher, endpoints, doi, trace)
         enrichment.update(oa_enrichment)
         if location.get("license"):
             found.licenses.append(location["license"])
     open_status = enrichment.get("open_access", "unknown")
+    if upgrade and doi and not preprint and not found.abstract:
+        work = await openalex_step.work_for(fetcher, endpoints, doi, trace)
+        found.take_abstract(work.abstract if work else None, "openalex")
+    if upgrade:
+        # A provisional text is there already (module docstring): only an index's abstract replaces it.
+        if found.abstract and found.abstract_from in INDEX_SOURCES:
+            return EntryTextResult(status="available", text_kind="abstract", abstract=found.abstract,
+                                   fetched_from=found.abstract_from, fetched_at=found.fetched_at, enrichment=enrichment,
+                                   notes=trace.notes + ["upgraded"])
+        return EntryTextResult(status="available", enrichment=enrichment, retry_after_s=RETRY_NOT_INDEXED_S,
+                               notes=trace.notes + ["upgrade_not_yet"])
     if doi and not preprint and (not found.abstract or (not found.pmcid and open_status in OPEN_STATUSES)):
         work = await openalex_step.work_for(fetcher, endpoints, doi, trace)
         if work is not None:
@@ -300,13 +320,16 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
         return EntryTextResult(status="available", text_kind="full", abstract=found.abstract, body_text=found.body,
                                body_excerpt=clip_excerpt(found.body), fetched_from=found.body_from,
                                fetched_at=found.fetched_at, enrichment=enrichment, notes=trace.notes)
+    provisional = RETRY_NOT_INDEXED_S if not preprint and doi else None     # asked again for an index's abstract
     if found.abstract:
         return EntryTextResult(status="available", text_kind="abstract", abstract=found.abstract,
                                fetched_from=found.abstract_from, fetched_at=found.fetched_at, enrichment=enrichment,
-                               notes=trace.notes)
+                               notes=trace.notes,
+                               retry_after_s=provisional if found.abstract_from == "publisher-feed" else None)
     if found.excerpt:
         return EntryTextResult(status="available", text_kind="excerpt", body_excerpt=clip_excerpt(found.excerpt),
-                               fetched_from=found.excerpt_from, enrichment=enrichment, notes=trace.notes)
+                               fetched_from=found.excerpt_from, enrichment=enrichment, notes=trace.notes,
+                               retry_after_s=provisional)
     # no abstract yet: pending under the text rule (``apply_text_rule`` decides pending / unavailable)
     return EntryTextResult(status="pending", enrichment=enrichment,
                            retry_after_s=RETRY_TRANSIENT_S if trace.transient else RETRY_NOT_INDEXED_S,
@@ -382,13 +405,15 @@ def _as_datetime(value: Any) -> datetime | None:
 
 
 def apply_text_rule(row: dict, result: EntryTextResult, now: datetime) -> EntryTextResult:
-    """The text rule (module docstring) on one journal-like entry's result; other entries pass unchanged."""
+    """The text rule (module docstring) on one journal-like entry's result; other entries pass unchanged. An available
+    answer keeps a ``retry_after_s`` only when it is provisional and the horizon is not reached (the upgrade)."""
     if not is_journal_like(row):
         return result
-    if result.abstract or result.body_excerpt:
-        return replace(result, status="available", retry_after_s=None)
     first_seen = _as_datetime(row.get("first_seen_at")) or now
     left = (first_seen + TEXT_HORIZON - now).total_seconds()
+    if result.abstract or result.body_excerpt or (row.get("upgrade") and result.status == "available"):
+        upgrade_in = int(max(MIN_RETRY_S, min(result.retry_after_s, left))) if result.retry_after_s and left > 0 else None
+        return replace(result, status="available", retry_after_s=upgrade_in)
     if left <= 0:
         return replace(result, status="unavailable", text_kind="none", retry_after_s=None,
                        notes=result.notes + ["text_horizon_passed"])

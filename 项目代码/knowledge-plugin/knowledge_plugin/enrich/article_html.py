@@ -267,10 +267,10 @@ def abstract_sections(tree: HTMLParser) -> list[Node]:
                 continue
             ranked.append((0 if key in ("abstract", "summary") else 1, len(ranked), node))
     # A page that marks its abstract by its title alone (Frontiers: ``<div id="h1"><h2>Abstract</h2><p>…``): the block
-    # the title opens.
+    # the title opens. "Abstract" only: Frontiers' side panel titled "Summary" holds the keywords, citation and dates.
     for heading in tree.css("h2, h3"):
         parent = heading.parent
-        if parent is None or parent.mem_id in seen or heading_key(heading.text()) not in ("abstract", "summary"):
+        if parent is None or parent.mem_id in seen or heading_key(heading.text()) != "abstract":
             continue
         seen.add(parent.mem_id)
         if len(parent.text(strip=True)) <= ABSTRACT_MAX + 200:
