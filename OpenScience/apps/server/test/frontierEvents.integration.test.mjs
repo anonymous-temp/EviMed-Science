@@ -716,6 +716,8 @@ test("the backfill: the report asks nothing and writes nothing; the run places t
   assert.deepEqual([run.scanned, run.merged, run.joined, run.kept, run.failed, run.stopped], [3, 1, 1, 1, 0, null]);
   assert.equal((await eventOf(database, b.id)).id, ea.id, "B moved to A's event");
   assert.deepEqual(await events.read(eb.public_id), { redirect: ea.public_id }, "B's old event answers 308 for good");
+  assert.equal(new Date((await database.query("SELECT merged_at FROM evimed_frontier.events WHERE id = $1", [eb.id])).rows[0].merged_at).toISOString(),
+    NOW.toISOString(), "the recall reads the days before the item; what is written is written now");
   const moved = (await database.query("SELECT selected, same_event_item_id FROM evimed_frontier.items WHERE id = $1", [b.id])).rows[0];
   assert.deepEqual([moved.selected, String(moved.same_event_item_id)], [false, a.id], "the gate as for a new item");
   assert.deepEqual((await database.query("SELECT from_event_id, to_event_id, relation FROM evimed_frontier.event_links")).rows

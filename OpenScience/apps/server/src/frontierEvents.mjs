@@ -949,15 +949,17 @@ export class FrontierEvents {
         const item = items[index];
         next += 1;
         try {
-          const now = new Date(new Date(item.visible_at).getTime());
+          // The recall's window is the fourteen days before the item; what is written is written now.
+          const recallAt = new Date(new Date(item.visible_at).getTime());
           if (!apply) {
-            const candidates = frontierRecallReading((await this.#recall(item, { now, modelKey, pool, before: true }))
+            const candidates = frontierRecallReading((await this.#recall(item, { now: recallAt, modelKey, pool, before: true }))
               .filter((hit) => hit.eventId !== String(item.event_id)));
             if (candidates.length) { summary.withCandidates += 1; summary.candidateEvents += candidates.length; }
           } else {
             // Read again: an earlier item of this run may have folded its event into another since the window was read.
             const own = (await this.database.query("SELECT event_id FROM evimed_frontier.items WHERE id = $1", [item.id])).rows?.[0]?.event_id;
-            const outcome = own == null ? "skipped" : await this.#clusterOne(item, { now, modelKey, allowModel: true, pool, own: String(own) });
+            const outcome = own == null ? "skipped"
+              : await this.#clusterOne(item, { now: this.now(), recallAt, modelKey, allowModel: true, pool, own: String(own) });
             if (outcome === "deferred") { summary.stopped = "budget"; resume = Math.min(resume, index); break; }
             if (outcome === "kept" || outcome === "joined" || outcome === "merged" || outcome === "skipped") summary[outcome] += 1;
           }
@@ -976,12 +978,15 @@ export class FrontierEvents {
 
   /**
    * Recall, the grouping call and its second looks, then the placement.
-   * @param {any} item @param {{ now: Date, modelKey: string | null, allowModel: boolean, pool: { rows: any[] | null }, own?: string | null }} context
-   *   `own` the item's present event, when it is placed again (`regroupRecent`): never one of its own candidates.
+   * @param {any} item @param {{ now: Date, recallAt?: Date, modelKey: string | null, allowModel: boolean, pool: { rows: any[] | null },
+   *   own?: string | null }} context
+   *   `own` the item's present event, when it is placed again (`regroupRecent`): never one of its own candidates; `recallAt` the
+   *   time the recall's window ends (the item's own publication, then), `now` by default.
    * @returns {Promise<"created" | "joined" | "merged" | "skipped" | "deferred" | "kept">}
    */
-  async #clusterOne(item, { now, modelKey, allowModel, pool, own = null }) {
-    const candidates = frontierRecallReading((await this.#recall(item, { now, modelKey, pool, before: own != null })).filter((hit) => hit.eventId !== own));
+  async #clusterOne(item, { now, recallAt = now, modelKey, allowModel, pool, own = null }) {
+    const candidates = frontierRecallReading((await this.#recall(item, { now: recallAt, modelKey, pool, before: own != null }))
+      .filter((hit) => hit.eventId !== own));
     /** @type {{ yes: string[], related: string[], follows: string | null, selection: { addsValue: boolean, reason: string | null } | null }} */
     let found = { yes: [], related: [], follows: null, selection: null };
     if (candidates.length) {
