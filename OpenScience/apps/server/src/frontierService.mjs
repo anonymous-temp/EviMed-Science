@@ -7,6 +7,7 @@ import { frontierItemTags, frontierItemTopics } from "./frontierTopics.mjs";
 import { issueFrontierExposure } from "./frontierEvolution.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
+import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
 import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
@@ -469,7 +470,7 @@ export class FrontierService {
   /**
    * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, policies?: any, ingest?: any, embedder?: any,
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
-   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, profiles?: any, actions?: any }} options
+   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -477,7 +478,7 @@ export class FrontierService {
    *   `actions` a `FrontierActions` (存入知识库, 中文摘要).
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
-    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, profiles = null, actions = null }) {
+    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -492,6 +493,7 @@ export class FrontierService {
     this.events = events;
     this.daily = daily;
     this.weekly = weekly;
+    this.monthly = monthly;
     this.profiles = profiles;
     this.subscriptions = new FrontierSubscriptions({ database });
     this.actions = actions;
@@ -1127,6 +1129,7 @@ export class FrontierService {
         hot: Boolean(this.events),
         daily: Boolean(this.daily),
         weekly: Boolean(this.weekly),
+        monthly: Boolean(this.monthly),
         // The evidence zones' own switches (flywheel F08, F14): whether a zone has a public page to link to, and whether a card's
         // history and a reader's challenge are offered. A button is never shown for a route that would answer 404.
         evidencePublicPages: this.config.evidencePublicWebEnabled === true,
@@ -1535,6 +1538,46 @@ export class FrontierService {
   }
   /** @param {{id:string}} user @param {string} week */
   async weeklyIssue(user, week) { return this.issue(user, week, true); }
+
+  /** The monthly archive, newest first (2026-10-22). @param {URLSearchParams} params */
+  async monthlies(params) {
+    if (!this.monthly) throw failure(404, "not_found", "Frontier route not found.");
+    const limit = Number(params.get("limit") || 24);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 60) throw failure(400, "frontier_query_invalid", "Invalid issue limit.");
+    return { monthlies: await this.monthly.list(limit) };
+  }
+
+  /**
+   * One month's issue (frontierMonthly.mjs): its overview and section introductions as written, its items read now — a
+   * withdrawn or hidden one leaves — and the Markdown rendered again from what the page shows.
+   * @param {{ id: string }} user @param {string} month
+   */
+  async monthlyIssue(user, month) {
+    if (!this.monthly) throw failure(404, "not_found", "Frontier route not found.");
+    const issue = await this.monthly.read(month);
+    if (!issue) throw failure(404, "frontier_monthly_not_found", "No issue for that month.");
+    const sections = issue.sections.map((/** @type {any} */ section) => ({ lane: String(section?.lane ?? ""), intro: typeof section?.intro === "string" ? section.intro : null,
+      ids: Array.isArray(section?.itemIds) ? section.itemIds.map(String) : [] }));
+    const items = await this.hydrate(user, { publicIds: [...new Set(sections.flatMap((section) => section.ids))] });
+    const muted = await this.subscriptions.mutedPublicIds(user.id, [...items.keys()]);
+    for (const [id, item] of items) if (muted.has(id) || item.state.hidden) items.delete(id);
+    const shown = sections.map((section) => ({ lane: section.lane, laneLabel: this.vocabulary.lanes[section.lane] ?? section.lane, intro: section.intro,
+      items: section.ids.flatMap((id) => (items.has(id) ? [items.get(id)] : [])) })).filter((section) => section.items.length);
+    const leadItem = issue.lead?.itemId ? items.get(String(issue.lead.itemId)) ?? null : null;
+    const markdown = frontierMonthlyMarkdown({ month: issue.month, overview: issue.overview, sections: shown.map((section) => ({ lane: section.lane,
+      intro: section.intro, rows: section.items.map((/** @type {any} */ item) => ({ title_zh: item.titleZh, title_raw: item.titleRaw, summary_zh: item.summary,
+        source_name: item.source.name, canonical_url: item.url })) })) });
+    const all = shown.flatMap((section) => section.items);
+    return {
+      monthly: {
+        month: issue.month, label: issue.label, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt,
+        overview: issue.overview, lead: leadItem ? { item: leadItem } : null, sections: shown, markdown,
+        itemCount: new Set(all.map((item) => item.id)).size,
+        readingMinutes: frontierReadingMinutes([issue.overview, ...shown.map((section) => section.intro), ...all.flatMap((item) => [item.title, item.summary])]),
+        previousMonth: issue.previousMonth, nextMonth: issue.nextMonth,
+      },
+    };
+  }
 
   /** @param {{id:string}} user @param {string} day @param {boolean} weekly */
   async issue(user, day, weekly = false) {

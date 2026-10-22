@@ -414,6 +414,22 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.weeklies (
   generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 
+-- fr-edit 2026-10-22
+-- The monthly report (frontierMonthly.mjs): compiled from the month's dailies, one row per month, written once.
+CREATE TABLE IF NOT EXISTS evimed_frontier.monthlies (
+  month        text PRIMARY KEY CHECK (month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  window_start timestamptz(3) NOT NULL,
+  window_end   timestamptz(3) NOT NULL,
+  lead         jsonb NOT NULL,
+  overview     text,
+  sections     jsonb NOT NULL,
+  markdown     text NOT NULL,
+  item_ids     bigint[] NOT NULL,
+  model        text NOT NULL,
+  written      boolean NOT NULL DEFAULT false,
+  generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_changes (
   seq        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   item_id    bigint NOT NULL,

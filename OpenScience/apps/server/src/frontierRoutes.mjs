@@ -176,6 +176,8 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 1 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklies(url.searchParams));
     if (parts.length === 2 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklyIssue(user, parts[1]));
+    if (parts.length === 1 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlies(url.searchParams));
+    if (parts.length === 2 && parts[0] === "monthlies" && method === "GET") return reply(await service.monthlyIssue(user, parts[1]));
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }

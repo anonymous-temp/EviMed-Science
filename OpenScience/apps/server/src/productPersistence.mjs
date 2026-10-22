@@ -25,7 +25,7 @@ export const PRODUCT_KINDS = Object.freeze([
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay",
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-monthly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
   "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
