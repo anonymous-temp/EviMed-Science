@@ -298,8 +298,8 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
             found.body, found.body_from = body, "europepmc-fulltext"
     landing_due = not found.abstract and int(row.get("attempts") or 0) % LANDING_EVERY == 0
     # An open work's whole text: its page says its licence when no index knows the work yet (a paper published today
-    # is in none of them, and its answer is final once an abstract is found).
-    # Without an abstract the page waits for its turn (``landing_due``); its whole text, when open, comes with that read.
+    # is in none of them, and its answer is final once an abstract is found). Without an abstract the page waits for
+    # its turn (``landing_due``); its whole text, when open, comes with that read.
     wants_body = found.body is None and (found.cc or (bool(found.abstract)
                                                       and enrichment.get("open_access", "unknown") in ("gold", "unknown")))
     if doi and not preprint and (landing_due or wants_body):

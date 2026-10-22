@@ -109,6 +109,14 @@ async def test_a_challenge_moves_to_the_relay_then_the_browser_with_the_site_s_h
     assert result.outcome == "read" and [c["egress"] for c in again.calls[1:]] == ["browser"]
 
 
+async def test_an_exit_that_fails_is_passed_over_not_the_end_of_the_read():
+    fetcher = Scripted({HANDLE: handle(PAGE), (PAGE, "direct"): FetchError("challenge", "cloudflare", status=403),
+                        (PAGE, "relay"): FetchError("blocked", "edge_proxy_unreachable"), (PAGE, "browser"): article_html()})
+    result, trace = await read(fetcher)
+    assert result.outcome == "read" and result.egress == "browser"
+    assert trace.notes == ["landing_challenge:direct", "landing_exit_failed:relay:edge_proxy_unreachable"]
+
+
 async def test_a_challenge_on_every_exit_is_the_answer():
     challenge = FetchError("challenge", "cloudflare", status=403)
     fetcher = Scripted({HANDLE: handle(PAGE), PAGE: challenge})

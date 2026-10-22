@@ -12,7 +12,8 @@ page" from Beijing came back as Crossref JSON (status 200, no abstract), which h
 
 **Which exit.** The source's own exit first, then the Tokyo ``relay``, then the ``browser``, each only when this
 deployment has it, moving on only when the page answered with a challenge (``challenge``), a refusal (401/403) or a shell
-that names no article. A challenge that remains is the answer (``landing_challenge``) — nothing here tries to get round
+that names no article, or when the exit itself failed (the relay or the browser unreachable: this deployment's failure,
+not the page's). A challenge that remains is the answer (``landing_challenge``) — nothing here tries to get round
 one: no other identity, no fingerprint games, no solving. robots.txt refusing the page ends the read
 (``landing_robots``); so does a 404. A timeout or a 5xx is noted and not retried here (the entry is asked again on its
 own schedule). An exit that met a challenge or a refusal at a host is not tried at that host again for
@@ -35,7 +36,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
-from ..model import FetchError
+from ..model import NEUTRAL_DETAILS, FetchError
 from .article_html import ArticlePage, read_article_page
 from .common import Attempt, Endpoints, Trace, get
 
@@ -170,8 +171,7 @@ async def read_landing(fetcher: Any, endpoints: Endpoints, doi: str, *, egress: 
         target = start
         for _ in range(2):                      # the page, and once more for linkinghub's forward
             attempt = await _read(fetcher, target, egress=exit_, source_id=source_id, allowed=site_hosts(*seen))
-            error: FetchError | None = attempt.error
-            if attempt.result is not None and error is None:
+            if attempt.error is None and attempt.result is not None:
                 result = attempt.result
                 if result.final_url and result.final_url not in seen:
                     seen.append(result.final_url)
@@ -190,14 +190,15 @@ async def read_landing(fetcher: Any, endpoints: Endpoints, doi: str, *, egress: 
                     trace.notes.append(f"landing_shell:{exit_}")
                     break
                 return LandingRead("read", page=page, url=result.final_url, egress=exit_)
-            assert error is not None
+            error: FetchError = attempt.error
             if error.final_url and error.final_url not in seen:
                 seen.append(error.final_url)
             if error.outcome == "robots-denied":
                 trace.notes.append("landing_robots")
                 return LandingRead("robots", egress=exit_)
-            if error.detail == "egress_unavailable":
-                break
+            if error.detail in NEUTRAL_DETAILS or error.detail == "relay_upstream_unreachable":
+                trace.notes.append(f"landing_exit_failed:{exit_}:{error.detail}"[:120])
+                break                               # this deployment's exit failed, not the page: the next exit
             if error.outcome == "challenge" or (error.outcome == "blocked" and error.status in (401, 403)):
                 verdicts.record(host, exit_)
                 refusals.append(error.outcome)
