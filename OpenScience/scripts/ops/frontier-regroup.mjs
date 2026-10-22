@@ -34,11 +34,13 @@ import { fileURLToPath } from "node:url";
 const DAY_MS = 24 * 3_600_000;
 const REGROUP_LOCK = "evimed-frontier-regroup";
 /**
- * What one grouping call measured on the 2026-10-20 production day (1,528 items, deepseek-flash): prompt tokens for the
- * instructions (served from the provider's cache after the first call), for the new report, and for each candidate event;
- * output tokens before the decisions and for each decision. A merge below 0.85 cosine adds a second look of about `pair`.
+ * What one grouping call measured on the 2026-10-20 production day (1,528 items; 1,280 grouping calls weighing 7,186
+ * candidate events, 98 second looks; deepseek-flash, 3.50 M prompt tokens of which 1.22 M from the provider's cache, 0.49 M
+ * output; ¥8.55 at the reference price): the prompt tokens served from the cache, those that were not for the instructions'
+ * remainder and the new report, and for each candidate event; the output tokens around and for each decision. A merge below
+ * 0.85 cosine adds a second look of about `pair` prompt tokens.
  */
-export const GROUP_CALL_TOKENS = Object.freeze({ cached: 1_790, report: 520, perCandidate: 210, output: 120, outputPerCandidate: 60, pair: 1_400 });
+export const GROUP_CALL_TOKENS = Object.freeze({ cached: 950, report: 900, perCandidate: 130, output: 100, outputPerCandidate: 48, pair: 1_400 });
 
 /** @param {string[]} argv */
 export function parseArguments(argv) {
