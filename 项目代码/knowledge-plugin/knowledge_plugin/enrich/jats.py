@@ -32,7 +32,7 @@ _NEVER_TEXT = frozenset({"annotation", "annotation-xml", "tex-math", "alt-text",
                          "object-id", "label"})
 _BACK_SEC_TYPES = ("supplementary-material", "coi-statement", "funding", "author-contributions", "data-availability",
                    "ethics-statement", "acknowledgments", "acknowledgements", "conflict", "display-objects",
-                   "supplementary")
+                   "supplementary", "kwd-group")
 
 
 def _local(tag: object) -> str:
@@ -135,6 +135,9 @@ def abstract_paragraphs(abstract: ET.Element) -> list[str]:
             if name == "sec":
                 title_node = next((c for c in child if _local(c.tag) == "title"), None)
                 title = inline_text(title_node) if title_node is not None else ""
+                sec_type = (child.get("sec-type") or "").lower()
+                if (title and is_back_matter(title)) or sec_type.startswith(_BACK_SEC_TYPES):
+                    continue                                  # the keywords, written as a section of the abstract
                 visit(child, title if heading_key(title) not in ("abstract", "summary") else "")
             elif name == "p":
                 text = inline_text(child)

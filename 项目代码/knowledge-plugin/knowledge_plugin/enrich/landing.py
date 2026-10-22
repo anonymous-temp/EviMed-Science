@@ -103,8 +103,11 @@ async def resolve(fetcher: Any, endpoints: Endpoints, doi: str, trace: Trace) ->
     """The landing page's address from the DOI's handle record, else the ``https://doi.org/<doi>`` redirect."""
     fallback = f"{endpoints.doi_resolver}/{quote(doi, safe='/:;()._-')}"
     attempt = await get(fetcher, handle_url(endpoints, doi))
-    if attempt.result is None or attempt.result.status != 200:
+    if attempt.result is None:
         trace.record(attempt, "doi_handle")
+        return fallback
+    if attempt.result.status != 200:
+        trace.notes.append(f"doi_handle_http_{attempt.result.status}")
         return fallback
     try:
         payload = json.loads(attempt.result.body.decode("utf-8", errors="replace"))

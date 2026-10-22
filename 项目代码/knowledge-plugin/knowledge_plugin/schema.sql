@@ -330,6 +330,19 @@ BEGIN
       ('pubmed', 'europepmc', 'crossref', 'page', 'browser', 'relay', 'evimed-api', 'wechat', 'x', 'social'));
   END IF;
 END $$;
+-- Contract 1.5.1 (rt-papers, 2026-10-22): entry_texts.fetched_from gains the paper text chain's sources — 'openalex',
+-- 'landing', 'publisher-feed', 'europepmc-fulltext', 'elsevier' — the same one-time replacement.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'evimed_knowledge.entry_texts'::regclass AND conname = 'entry_texts_fetched_from_check'
+                    AND pg_get_constraintdef(oid) LIKE '%''europepmc-fulltext''%') THEN
+    ALTER TABLE evimed_knowledge.entry_texts DROP CONSTRAINT IF EXISTS entry_texts_fetched_from_check;
+    ALTER TABLE evimed_knowledge.entry_texts ADD CONSTRAINT entry_texts_fetched_from_check CHECK (fetched_from IN
+      ('pubmed', 'europepmc', 'crossref', 'page', 'browser', 'relay', 'evimed-api', 'wechat', 'x', 'social',
+       'openalex', 'landing', 'publisher-feed', 'europepmc-fulltext', 'elsevier'));
+  END IF;
+END $$;
 
 -- The media store's index (the bytes are files under KNOWLEDGE_PLUGIN_MEDIA_DIR, named by their sha256): one row per stored
 -- image, never deleted. Eviction (least recently served first, past the store's cap) removes the file and sets evicted_at;

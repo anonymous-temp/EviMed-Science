@@ -96,7 +96,7 @@ from . import openalex as openalex_step
 from . import pubmed as pubmed_step
 from . import trials as trials_step
 from . import unpaywall as unpaywall_step
-from .article_html import same_text
+from .article_html import fit_body, same_text
 from .common import Endpoints, Trace
 from .page import clip_excerpt, page_excerpt, summary_is_full_text
 
@@ -299,7 +299,9 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
     landing_due = not found.abstract and int(row.get("attempts") or 0) % LANDING_EVERY == 0
     # An open work's whole text: its page says its licence when no index knows the work yet (a paper published today
     # is in none of them, and its answer is final once an abstract is found).
-    wants_body = found.body is None and (found.cc or enrichment.get("open_access", "unknown") in ("gold", "unknown"))
+    # Without an abstract the page waits for its turn (``landing_due``); its whole text, when open, comes with that read.
+    wants_body = found.body is None and (found.cc or (bool(found.abstract)
+                                                      and enrichment.get("open_access", "unknown") in ("gold", "unknown")))
     if doi and not preprint and (landing_due or wants_body):
         read = await landing_step.read_landing(fetcher, endpoints, doi, egress=row.get("source_egress") or "direct",
                                                trace=trace, source_id=row.get("source_id"), deadline=deadline,
@@ -317,9 +319,13 @@ async def _article(row: dict, fetcher: Any, endpoints: Endpoints, pubmed_records
                 found.body, found.body_from = page.body_text, "landing"
     await _trial_facts(row, fetcher, endpoints, trace, enrichment)
     if found.body:
-        return EntryTextResult(status="available", text_kind="full", abstract=found.abstract, body_text=found.body,
-                               body_excerpt=clip_excerpt(found.body), fetched_from=found.body_from,
-                               fetched_at=found.fetched_at, enrichment=enrichment, notes=trace.notes)
+        # Over the contract's 40,000 characters the captions go first; a text still longer is its first part, told as
+        # an excerpt (``text_kind`` full means the article's whole text).
+        body, whole = fit_body(found.body)
+        return EntryTextResult(status="available", text_kind="full" if whole else "excerpt", abstract=found.abstract,
+                               body_text=body, body_excerpt=clip_excerpt(body), fetched_from=found.body_from,
+                               fetched_at=found.fetched_at, enrichment=enrichment,
+                               notes=trace.notes + ([] if whole else ["full_text_over_limit"]))
     provisional = RETRY_NOT_INDEXED_S if not preprint and doi else None     # asked again for an index's abstract
     if found.abstract:
         return EntryTextResult(status="available", text_kind="abstract", abstract=found.abstract,

@@ -14,7 +14,10 @@ article pages answer this crawler with a challenge (OUP, JAMA) or a 403 (the Els
   as the last segment of the item's link (BMJ links ``/content/395/bmj-2026-101102``).
 - The item's description (or content) is the text, its markup read with section titles kept (OUP's ``boxTitle``
   becomes ``Heading: text``, ``structured_abstract``). At least ``article_html.ABSTRACT_MIN`` characters and not cut
-  (``looks_truncated``) is an ``abstract``; shorter or cut is an ``excerpt``; shorter than ``EXCERPT_MIN`` is nothing.
+  (``looks_truncated``) is an ``abstract``; shorter or cut is an ``excerpt``; shorter than ``EXCERPT_MIN`` is nothing,
+  and so is a description that does not end as a sentence does (``SENTENCE_ENDS``): OUP's advance-articles feed gives
+  some items their keywords run together as the description ("anogenital cancerantiretroviral therapy (ART)cancer
+  prevention…"), JAMA Network Open some their subject ("Global Health").
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from .common import Trace, get
 FEED_TTL_S = 2 * 3600
 FAILURE_TTL_S = 30 * 60
 EXCERPT_MIN = 60
+SENTENCE_ENDS = tuple(".!?。！？”\"’'…")
 MAX_FEEDS_PER_ROW = 4
 _BOX_TITLE = re.compile(r"<div\s+class=\"boxTitle\"\s*>(.*?)</div>", re.I | re.S)
 _DOI_FIELDS = ("prism_doi", "dc_identifier", "id", "guid", "link")
@@ -158,6 +162,9 @@ async def feed_text(fetcher: Any, row: dict, doi: str, trace: Trace,
         if item is None:
             continue
         text = item.text
+        if not text.rstrip().endswith(SENTENCE_ENDS):
+            trace.notes.append("feed_item_without_text")
+            return None
         if ABSTRACT_MIN <= len(text) <= ABSTRACT_MAX and not looks_truncated(text):
             return "abstract", text
         if len(text) >= EXCERPT_MIN:

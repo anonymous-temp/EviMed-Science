@@ -16,7 +16,8 @@ challenges, ScienceDirect's 403):
 - **The excerpt**, when there is no abstract: the longest of those, or a news piece's standfirst (Nature's
   ``.c-article-teaser-text``) — what the publisher itself shows of a piece that has no abstract.
 - **The whole text**, when the page carries it: the article body (``BODY_CONTAINERS``), a paragraph per block, a
-  section title a paragraph of its own written ``## Title``, figure and table captions kept, figure files, tables,
+  section title a paragraph of its own written ``## Title``, figure and table captions kept (the first thing given up
+  when the text is over the contract's 40,000 characters: ``fit_body``), figure files, tables,
   formulas, references, acknowledgements, funding, contributions, conflicts, rights and the "about this article" block
   left out (``BACK_MATTER``). The abstract leads it as its own ``## Abstract`` section. It counts as the whole text only
   when the main text, the abstract and the back matter set aside, is at least ``FULL_TEXT_MIN`` characters: a Springer
@@ -35,6 +36,7 @@ from typing import Any, Iterable
 from selectolax.parser import HTMLParser, Node
 
 from ..adapters.common import clean_markup, looks_truncated, structured_abstract
+from ..model import BODY_TEXT_MAX
 
 ABSTRACT_MIN = 200          # shorter is a standfirst or a teaser (BMJ's citation_abstract of a feature: 166)
 ABSTRACT_MAX = 6_000        # longer is not an abstract (Frontiers' citation_abstract of a data report: 25,459)
@@ -143,7 +145,7 @@ def read_article_page(html_text: str, url: str | None = None) -> ArticlePage:
             candidates.append((f"meta:{name}", structured_abstract(value)))
     for value in _jsonld_texts(tree):
         candidates.append(("jsonld", structured_abstract(value)))
-    sections = [structured_abstract(node.html or "") for node in abstract_sections(tree)]
+    sections = [structured_abstract(_abstract_html(node)) for node in abstract_sections(tree)]
     for name in _META_SHORT:
         for value in metas.get(name, []):
             candidates.append(("og", clean_markup(value, keep_paragraphs=True)))
@@ -249,6 +251,19 @@ NOT_THE_ABSTRACT = frozenset({"significance", "significance statement", "graphic
                               "highlights", "key points", "plain language summary", "lay summary", "author summary",
                               "editors summary", "editor s summary", "teaser", "summary for patients", "video abstract",
                               "research in context", "what is already known", "what this study adds"})
+
+
+# What an abstract section embeds that is not its text: NEJM's "Research Summary" and "Quick Take" cards (Atypon digital
+# objects), figures, buttons.
+_ABSTRACT_NOISE = ("figure", "img", "picture", "aside", "button", "nav", "svg", "script", "style", "[role=button]",
+                   "[class*=digital-object]", "[class*=media_item]", "[class*=media-item]")
+
+
+def _abstract_html(node: Node) -> str:
+    for selector in _ABSTRACT_NOISE:
+        for noise in node.css(selector):
+            noise.decompose()
+    return node.html or ""
 
 
 def abstract_sections(tree: HTMLParser) -> list[Node]:
@@ -386,6 +401,7 @@ def _is_furniture(node: Node, text: str) -> bool:
     return bool(linked) and len(linked.replace(" ", "")) >= len(text.replace(" ", "")) - 2
 
 
+_CAPTION = re.compile(r"^(?:fig\.?|figure|table|scheme|box|chart)\s*[a-z]?[0-9]+[a-z]?[.:]?\s", re.I)
 _FIGURE_LABEL = re.compile(r"^(?:fig\.?|figure|table|scheme|box|chart)\s*[a-z]?[0-9]+[a-z]?[.:]?$", re.I)
 
 
@@ -401,6 +417,35 @@ def _drop_empty_sections(paragraphs: list[str]) -> list[str]:
             continue
         out.append(paragraph)
     return out
+
+
+def fit_body(text: str, limit: int = BODY_TEXT_MAX) -> tuple[str, bool]:
+    """``(text, whole)``: the whole text within the contract's ``limit``. Given up first, in order: the leading
+    ``## Abstract`` section (the abstract is its own field), then the figure and table captions; when it is still
+    longer, its paragraphs up to the limit and ``whole`` false (the reader is told it is a part)."""
+    if len(text) <= limit:
+        return text, True
+    paragraphs = text.split("\n\n")
+    if paragraphs and paragraphs[0] == "## Abstract":
+        end = next((i for i, p in enumerate(paragraphs[1:], 1) if p.startswith("## ")), len(paragraphs))
+        paragraphs = paragraphs[end:]
+        joined = "\n\n".join(paragraphs)
+        if len(joined) <= limit:
+            return joined, True
+    kept = [p for p in paragraphs if not _CAPTION.match(p)]
+    joined = "\n\n".join(kept)
+    if len(joined) <= limit:
+        return joined, True
+    out: list[str] = []
+    size = 0
+    for paragraph in kept:
+        if size + len(paragraph) + 2 > limit:
+            break
+        out.append(paragraph)
+        size += len(paragraph) + 2
+    while out and out[-1].startswith("## "):
+        out.pop()
+    return "\n\n".join(out), False
 
 
 __all__ = ["ABSTRACT_MAX", "ABSTRACT_MIN", "ArticlePage", "BACK_MATTER", "FULL_TEXT_MIN", "article_body",
