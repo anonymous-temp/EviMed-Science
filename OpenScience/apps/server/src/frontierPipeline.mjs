@@ -184,9 +184,11 @@ export const FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT = 60;
  * The module's own model money per day, in CNY, when `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` is unset (config.mjs holds the same
  * number; frontierConfig.test.mjs holds them equal). The owner's ruling of 2026-10-22: ¥300, from ¥10. At ¥10 the 80% throttle (¥8)
  * was crossed on 2026-10-20 at ¥8.03 and every non-urgent item that afternoon was published title-only. Production's last fourteen
- * days spent ¥1.4-8.0 a day on 1,200-5,500 calls (about ¥0.0012 a call, ¥0.004 an item); with the reader's translation, 导读 and
- * 推荐理由 (frontierEditor.mjs, FRONTIER_TRANSLATION_LIMITS) the expected day is about ¥15-40 (the handoff's arithmetic), so the
- * throttle at ¥240 is reached only by a runaway day, and then the last ¥60 still edits safety feeds, regulators and the top journals.
+ * days spent ¥1.4-8.0 a day on 1,200-5,500 calls (about ¥0.0012 a call, ¥0.004 an item). The live check of 2026-10-22 (20 real
+ * items, the shipping prompts) measured ¥0.0042 an edit with the 导读, 推荐理由 and tags, and ¥0.0046 a full-text translation
+ * (FRONTIER_TRANSLATION_LIMITS caps one at about ¥0.04); with 1,000-1,850 items a day and 100-200 of them selected or near the
+ * line, the expected day is about ¥6-15 and a heavy one about ¥25, so the throttle at ¥240 is reached only by a runaway day, and
+ * then the last ¥60 still edits safety feeds, regulators and the top journals.
  */
 export const FRONTIER_DAILY_BUDGET_CNY_DEFAULT = 300;
 /** Owed edits cover recent source dates, actual publication, or generated dailies. */

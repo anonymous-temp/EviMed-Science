@@ -24,6 +24,7 @@ import {
   frontierEditorDiagnostics,
   digestNumberSource,
   editNumberSource,
+  frontierEditPolicyCurrent,
   frontierParagraphs,
   isChineseProse,
   isChineseTitle,
@@ -1124,4 +1125,24 @@ test("translateBody stops asking past the item's limit, in calls of bounded size
   const translated = await new FrontierEditor(config, { owner, callModel: post.callModel }).translateBody({ paragraphs: ["@nejm New trial: semaglutide cut events by 20%. #obesity"], post: true });
   assert.equal(post.calls[0].body.messages[0].content, FRONTIER_TRANSLATE_POST_INSTRUCTIONS);
   assert.equal(translated.complete, true);
+});
+
+test("a served edit policy older than the answer's keys is not used: the shipped instructions write the 推荐理由 and the tags", async () => {
+  assert.ok(frontierEditPolicyCurrent(FRONTIER_EDIT_INSTRUCTIONS), "the shipped instructions ask for every key");
+  const older = FRONTIER_EDIT_INSTRUCTIONS.replace('"reason_zh":"","tags":[],', "");
+  assert.equal(frontierEditPolicyCurrent(older), false);
+  const promoted = { async resolve(/** @type {string} */ _module, /** @type {any} */ defaults) { return { revisionId: "evolved:frontier:7", policy: { ...defaults, editInstructions: older } }; } };
+  const { calls, callModel } = stubModel([() => answer({ tags: ["肥胖"] })]);
+  const editor = new FrontierEditor(config, { owner, callModel, policies: promoted });
+  const result = await editor.edit(item());
+  assert.equal(calls[0].body.messages[0].content, FRONTIER_EDIT_INSTRUCTIONS);
+  assert.equal(result.editorVersion, FRONTIER_EDITOR_VERSION, "written by the shipped prompt, keyed as such");
+  assert.equal(editor.counters.outdatedPolicies, 1);
+  // A current promoted policy is used as before.
+  const currentPolicy = { async resolve(/** @type {string} */ _module, /** @type {any} */ defaults) {
+    return { revisionId: "evolved:frontier:8", policy: { ...defaults, editInstructions: `${FRONTIER_EDIT_INSTRUCTIONS}\n补充：只写原文有的。` } }; } };
+  const second = stubModel([() => answer()]);
+  const used = await new FrontierEditor(config, { owner, callModel: second.callModel, policies: currentPolicy }).edit(item());
+  assert.match(second.calls[0].body.messages[0].content, /补充：只写原文有的。$/);
+  assert.equal(used.editorVersion, "evolved:frontier:8");
 });

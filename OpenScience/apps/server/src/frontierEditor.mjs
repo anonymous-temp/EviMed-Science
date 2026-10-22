@@ -174,6 +174,21 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "{\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"tags\":[],\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
 ].join("\n");
 
+/**
+ * The keys an edit answer is asked for, each quoted as the instructions' output shape writes it. A served policy (循证进化 may
+ * promote an edit prompt, `moduleEvolutionPolicies.mjs`) that does not ask for every one was written before one of them existed —
+ * before 2026-10-22, before `reason_zh` and `tags` — and is not used: the shipped instructions are (`frontierEditPolicyCurrent`),
+ * so a reader's 推荐理由 and tags do not silently stop with an older prompt. A closed list of the answer's own keys, read by
+ * code; nothing of the prompt's prose is judged.
+ */
+export const FRONTIER_EDIT_OUTPUT_KEYS = Object.freeze(["title_zh", "summary_zh", "reason_zh", "tags", "lane", "specialties", "evidence_type",
+  "entities", "scores", "flags"]);
+
+/** Whether edit instructions ask for every key the verification reads. @param {unknown} instructions */
+export function frontierEditPolicyCurrent(instructions) {
+  return typeof instructions === "string" && FRONTIER_EDIT_OUTPUT_KEYS.every((key) => instructions.includes(`"${key}"`));
+}
+
 /** The event digest's instructions (plan §6.4: 「先了解这件事」 and 「最新进展」). */
 export const FRONTIER_DIGEST_INSTRUCTIONS = [
   "你是 EviMed「前沿动态」的事件编辑。读者是国内的临床医生、药师和医学研究者。",
@@ -1332,6 +1347,8 @@ export class FrontierEditor {
       sameEventCalls: 0, sameEventFailures: 0, profileCalls: 0, profileFailures: 0, profilePhrasesDropped: 0, abstractCalls: 0,
       // The reader's full-text translation: calls, paragraphs asked and verified, and paragraphs a check refused (or a call lost).
       translateCalls: 0, translateFailures: 0, translatedParagraphs: 0, translateRejectedParagraphs: 0,
+      // Edits a served policy would have written with instructions older than the answer's keys (`frontierEditPolicyCurrent`).
+      outdatedPolicies: 0,
     };
     /** @type {string | null} */
     this.lastError = null;
@@ -1618,7 +1635,10 @@ export class FrontierEditor {
    * @returns {Promise<FrontierEditResult>}
    */
   async edit(item, { singleAttempt = false } = {}) {
-    const policy = await this.policies.resolve("frontier", { editInstructions: FRONTIER_EDIT_INSTRUCTIONS });
+    const resolved = await this.policies.resolve("frontier", { editInstructions: FRONTIER_EDIT_INSTRUCTIONS });
+    const current = frontierEditPolicyCurrent(resolved.policy.editInstructions);
+    if (!current) this.counters.outdatedPolicies += 1;
+    const policy = current ? resolved : { revisionId: "default:outdated-policy", policy: { ...resolved.policy, editInstructions: FRONTIER_EDIT_INSTRUCTIONS } };
     const modelInput = buildModelInput(item, { timeZone: this.timeZone });
     /** @type {FrontierEditResult} */
     const result = {
