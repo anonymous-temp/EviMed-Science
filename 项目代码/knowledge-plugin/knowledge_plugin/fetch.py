@@ -62,7 +62,7 @@ import httpx
 
 from .budget import HostBudget
 from .browser import RENDER_HEADER, RENDER_NO_SELECTOR, RENDER_SELECTOR_FOUND, BrowserFetcher
-from .model import IMPLEMENTED_EGRESSES, FetchError, FetchResult, RequestSpec
+from .model import IMPLEMENTED_EGRESSES, NEUTRAL_DETAILS, FetchError, FetchResult, RequestSpec
 from .robots import RobotsCache
 from .settings import EdgeProxy, Settings
 
@@ -778,6 +778,11 @@ class ProtectedFetcher:
         try:
             result = await self._fetch(spec, egress=egress, allowed_hosts=None, robots_file=True)
         except FetchError as error:
+            # The plugin's own refusal to send (the host's budget) or this deployment's missing or failing exit says
+            # nothing about the site: the page's poll ends with that same name (no failure counted), never as a
+            # refusal by robots — 1,6xx relay sources were "robots-denied" through a relay outage (2026-10-09..19).
+            if error.outcome == "host-budget" or error.detail in NEUTRAL_DETAILS:
+                raise
             if error.status is not None and 400 <= error.status < 500 and error.outcome in ("http-error", "blocked"):
                 return error.status, None
             if error.outcome == "empty-body":
