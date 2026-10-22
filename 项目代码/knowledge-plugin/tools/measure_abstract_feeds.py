@@ -76,13 +76,13 @@ async def run(pairs: list[tuple[str, str]], settings: Settings) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="measure_abstract_feeds", description=__doc__.split("\n\n")[0])
-    parser.add_argument("--candidates", default=None, help="a TSV of <label>\\t<url> lines instead of the registry")
+    parser.add_argument("--candidates", default=None, help="a TSV of <label>\\t<url> lines instead of the registry; - for stdin")
     args = parser.parse_args(argv)
     settings = Settings.from_env({"KNOWLEDGE_PLUGIN_DATABASE_URL": "postgresql://unused.invalid/none",
                                   **{k: v for k, v in os.environ.items() if k.startswith("KNOWLEDGE_PLUGIN_")}})
     if args.candidates:
-        pairs = [tuple(line.split("\t")[:2]) for line in Path(args.candidates).read_text(encoding="utf-8").splitlines()
-                 if line.strip() and not line.startswith("#")]
+        text = sys.stdin.read() if args.candidates == "-" else Path(args.candidates).read_text(encoding="utf-8")
+        pairs = [tuple(line.split("\t")[:2]) for line in text.splitlines() if line.strip() and not line.startswith("#")]
     else:
         pairs = configured(settings)
     asyncio.run(run(pairs, settings))
