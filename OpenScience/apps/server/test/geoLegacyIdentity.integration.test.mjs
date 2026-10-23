@@ -3,11 +3,12 @@ import { createHash } from 'node:crypto';
 import { before, after, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { GeoMeasureStore } from '../src/geoMeasureStore.mjs';
-import { recordErrorsFromFacts, errorFingerprint } from '../src/geoErrors.mjs';
+import { recordErrorsFromFacts, errorFingerprint, noteErrorAction, tickErrors } from '../src/geoErrors.mjs';
 import { createGeoDiagnosisReview } from '../src/geoDiagnosisReview.mjs';
-import { buildJudgeInput, verifyJudgement } from '../src/geoJudge.mjs';
+import { buildJudgeInput, verifyJudgement, factsOf } from '../src/geoJudge.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { seedGeoProject } from './helpers/geoMeasureFixtures.mjs';
+import { brandRegistry } from '../src/geoParse.mjs';
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 const options = { skip: !url && 'An isolated local PostgreSQL database is required' };
 let isolated, database, store;
@@ -163,4 +164,62 @@ test('a legacy-shaped residual wrong remains active after another occurrence is 
   await store.writeFacts({ id: `${f.id}_other`, userId: f.project.userId, geoProjectId: f.id }, { parserVersion: 'legacy', judgedAt: '2026-10-24T03:00:00Z', statements: [legacy] });
   await recheck(f, 'correct'); await record(f);
   const [row] = await errors(f); assert.equal(row.fingerprint, errorFingerprint(canonical)); assert.equal(row.judgment_state, 'active'); assert.equal(row.status, 'acting'); assert.ok(row.notified_at); assert.equal(f.notices.length, 0);
+});
+
+async function addClockSnapshot(f, suffix, at, statements, { verified = false } = {}) {
+  const id = `${f.id}_${suffix}`, answer = statements.map(statement => statement.text).join(' ');
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text)
+    SELECT $2,user_id,geo_project_id,round_id,question_id,engine,'valid',$3,$4 FROM evimed_geo.snapshots WHERE id=$1`, [f.snapshot.id, id, at, answer]);
+  const snapshot = await store.snapshot(id);
+  let facts = { parserVersion: 'legacy', judgedAt: at, statements, checks: { judgementCoverage: { status: 'complete' } } };
+  if (verified) {
+    const input = { owner: { userId: f.project.userId, projectId: f.project.projectId }, product: f.context.project.product, competitors: [], careFlags: [], question: { text: 'Who may use it?' }, answer, claims: [claim] };
+    const judged = verifyJudgement({ assessmentComplete: true, statements: [{ text: answer, claim: 'C1', verdict: 'correct', evidence: claim.quote, topic: 'indication' }] }, buildJudgeInput(input), input);
+    facts = factsOf({ snapshot, judged, registry: brandRegistry(f.context.project.product, []), countedOwned: f.context.owned, at: new Date(at), claims: [claim] }).facts;
+  }
+  await store.writeFacts(snapshot, facts);
+  return { ...f, snapshot };
+}
+async function clockFixture(id, { legacyAggregate = false } = {}) {
+  const f = await fixture(id);
+  const second = await addClockSnapshot(f, 'second', '2026-10-24T02:00:00Z', [legacy]);
+  if (legacyAggregate) {
+    // The historical aggregate already represented A and B before this release.
+    await database.query('UPDATE evimed_geo.errors SET last_snapshot_id=$2 WHERE id=$1', [`${f.id}_error`, second.snapshot.id]);
+  } else await record({ ...second, deps: { ...f.deps, now: () => new Date('2026-10-24T02:02:00Z') } });
+  await noteErrorAction({ ...f.deps, now: () => new Date('2026-10-24T02:03:00Z') }, { geoProjectId: f.id, errorId: `${f.id}_error`, status: 'awaiting_remeasure' });
+  const correct = await addClockSnapshot(f, 'correct', '2026-10-24T03:00:00Z', [{ ...canonical, text: claim.quote, verdict: 'correct' }], { verified: true });
+  return { f, second, correct };
+}
+for (const legacyAggregate of [true, false]) test(`older represented replay preserves the action clock and an already correct remeasurement (${legacyAggregate ? 'first promotion' : 'already promoted'})`, options, async () => {
+  const { f, second, correct } = await clockFixture(`legacy_clock_${legacyAggregate}`, { legacyAggregate });
+  assert.ok((await store.laterJudgedAnswers(`${f.id}_error`)).some(answer => answer.id === correct.snapshot.id));
+  const before = (await errors(f))[0];
+  const replay = await record({ ...f, deps: { ...f.deps, now: () => new Date('2026-10-24T04:00:00Z') } });
+  const [after] = await errors(f);
+  assert.equal(after.updated_at.toISOString(), before.updated_at.toISOString(), 'an older represented occurrence is bookkeeping, not a fresh consumer observation');
+  assert.equal(after.id, before.id); assert.equal(after.last_snapshot_id, second.snapshot.id); assert.equal(after.status, 'awaiting_remeasure'); assert.deepEqual(after.materials, before.materials); assert.equal(after.notified_at.toISOString(), before.notified_at.toISOString());
+  assert.deepEqual(replay, { created: 0, seen: 1, notified: 0 });
+  assert.ok((await store.laterJudgedAnswers(after.id)).some(answer => answer.id === correct.snapshot.id));
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-24T04:01:00Z') });
+  const resolved = await store.error(after.id); assert.equal(resolved.status, 'closed'); assert.equal(resolved.closedSnapshotId, correct.snapshot.id);
+});
+test('a genuinely newer wrong advances the occurrence clock and cannot borrow an earlier correct answer', options, async () => {
+  const { f, correct } = await clockFixture('legacy_clock_new');
+  const latest = await addClockSnapshot(f, 'new_wrong', '2026-10-24T04:00:00Z', [legacy]);
+  await record({ ...latest, deps: { ...f.deps, now: () => new Date('2026-10-24T04:02:00Z') } });
+  const [row] = await errors(f); assert.equal(row.updated_at.toISOString(), '2026-10-24T04:02:00.000Z'); assert.equal(row.last_snapshot_id, latest.snapshot.id); assert.equal(row.status, 'awaiting_remeasure'); assert.equal(row.materials.length, 1);
+  assert.equal((await store.laterJudgedAnswers(row.id)).some(answer => answer.id === correct.snapshot.id), false);
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-24T04:03:00Z') });
+  assert.equal((await store.error(row.id)).status, 'awaiting_remeasure');
+});
+test('a new wrong after verified closure reopens once and its own replay preserves the new clock', options, async () => {
+  const { f, correct } = await clockFixture('legacy_clock_recurrence');
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-24T03:01:00Z') });
+  assert.equal((await store.error(`${f.id}_error`)).closedSnapshotId, correct.snapshot.id);
+  const latest = await addClockSnapshot(f, 'recurring_wrong', '2026-10-24T05:00:00Z', [legacy]);
+  const first = await record({ ...latest, deps: { ...f.deps, now: () => new Date('2026-10-24T05:01:00Z') } });
+  assert.equal(first.notified, 1);
+  await record({ ...latest, deps: { ...f.deps, now: () => new Date('2026-10-24T06:00:00Z') } });
+  const [row] = await errors(f); assert.equal(row.id, `${f.id}_error`); assert.equal(row.status, 'open'); assert.equal(row.closed_snapshot_id, null); assert.equal(row.last_snapshot_id, latest.snapshot.id); assert.equal(row.updated_at.toISOString(), '2026-10-24T05:01:00.000Z'); assert.equal(row.materials.length, 1); assert.equal(f.notices.length, 1);
 });
