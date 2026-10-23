@@ -16,9 +16,9 @@
  *   dosage-form regex is exactly the open-vocabulary pattern principle 5 rules
  *   out, and its own stop-word list is the evidence it never converged.
  * - **Counts do not double.** Aliases overlap (「某某口服液」 contains 「某某」);
- *   occurrences are counted without overlap, the longer alias winning at the
- *   same start — the owner's `_count_and_first`, so a share of voice is not
- *   inflated by the alias list.
+ *   every identity reads one non-overlapping set of exact aliases, the
+ *   longest match winning. A short brand inside a longer rival or generic
+ *   cannot create an extra occurrence or inflate a share of voice.
  * - **Position is rank, not offset**: 1 for the first registered brand the
  *   answer names, 2 for the second. `firstOurs` is rank 1.
  * - **"In a recommendation"** requires the judge to name both a span and the
@@ -157,34 +157,43 @@ export function registryKey(registry, owned) {
 }
 
 /**
- * Non-overlapping occurrences of any alias in a folded text, the longer alias
- * winning at the same start, and where the first one starts.
- * @param {string} folded @param {string[]} aliases  folded aliases
- * @returns {{ count: number, first: number | null }}
+ * One non-overlapping ownership set for literal aliases. Longer exact names
+ * win before shorter contained names; independent occurrences remain. All
+ * consumers (brands, generics, entities and recommendation anchoring) use it.
+ * @param {string} folded @param {string[]} aliases folded aliases
+ * @returns {Array<{ alias: string, start: number, end: number }>}
  */
-export function countMentions(folded, aliases) {
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const alias of aliases) {
+export function matchedMentions(folded, aliases) {
+  const candidates = [];
+  for (const alias of new Set(aliases)) {
     if (!alias) continue;
     let start = 0;
     for (;;) {
       const index = folded.indexOf(alias, start);
       if (index < 0) break;
-      spans.push([index, index + alias.length]);
-      start = index + alias.length;
+      candidates.push({ alias, start: index, end: index + alias.length });
+      start = index + 1;
     }
   }
-  if (!spans.length) return { count: 0, first: null };
-  spans.sort((left, right) => left[0] - right[0] || (right[1] - right[0]) - (left[1] - left[0]));
-  let count = 0;
-  let lastEnd = -1;
-  for (const [begin, end] of spans) {
-    if (begin < lastEnd) continue;
-    count += 1;
-    lastEnd = end;
+  candidates.sort((left, right) => right.alias.length - left.alias.length || left.start - right.start);
+  const occupied = new Uint8Array(folded.length);
+  const found = [];
+  for (const span of candidates) {
+    if (occupied.subarray(span.start, span.end).some((value) => value !== 0)) continue;
+    occupied.fill(1, span.start, span.end);
+    found.push(span);
   }
-  return { count, first: spans[0][0] };
+  return found.sort((left, right) => left.start - right.start);
+}
+
+/**
+ * Count the same exact-alias ownership set used by the answer parser.
+ * @param {string} folded @param {string[]} aliases
+ * @returns {{ count: number, first: number | null }}
+ */
+export function countMentions(folded, aliases) {
+  const spans = matchedMentions(folded, aliases);
+  return { count: spans.length, first: spans[0]?.start ?? null };
 }
 
 // A list item is a format: a numbered or bulleted line. Closed set of markers.
@@ -265,59 +274,50 @@ export function citationRows(searchResults, answer, engine) {
 export function parseAnswer({ answer, citations = [], registry, owned = {}, recommendations = [], entities = [] }) {
   const { body, stripped } = stripPageChrome(answer);
   const folded = foldText(body);
+  const registered = registry.flatMap((brand) => [...brand.aliases, ...(brand.genericAliases ?? [])]);
+  const seen = new Set();
+  const unregistered = entities.map((entity) => String(entity ?? "").trim()).filter((name) => {
+    const key = foldText(name);
+    if (key.length < 2 || seen.has(key) || registered.some((alias) => key.includes(alias) || alias.includes(key))) return false;
+    seen.add(key);
+    return true;
+  });
+  const aliases = [...registered, ...unregistered.map(foldText)];
+  const spans = matchedMentions(folded, aliases);
+  const spansFor = (/** @type {string[]} */ names) => spans.filter((span) => names.includes(span.alias));
   // Old string-only extractions cannot distinguish recommended and negated
   // products co-mentioned in a sentence. Preserve them in history, not counts.
   const compact = compactText(body);
-  const recommending = recommendations.filter((entry) => entry && typeof entry === "object"
-    && compactText(entry.text).length > 0 && compact.includes(compactText(entry.text)));
-  const inRecommendation = (/** @type {string[]} */ aliases) => recommending.some((entry) => {
-    if (typeof entry === "string" || !Array.isArray(entry.entities)) return false;
-    const span = compactText(entry.text);
-    return entry.entities.some((entity) => span.includes(compactText(entity)) && aliases.includes(foldText(entity)));
+  const recommending = recommendations.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || !compactText(entry.text) || !compact.includes(compactText(entry.text)) || !Array.isArray(entry.entities)) return [];
+    const named = new Set(matchedMentions(foldText(entry.text), aliases).map((span) => span.alias));
+    return [entry.entities.map(foldText).filter((name) => named.has(name))];
   });
-
-  const found = registry
-    .map((brand) => ({ brand, ...countMentions(folded, brand.aliases) }))
-    .filter((entry) => entry.count > 0)
-    .sort((left, right) => /** @type {number} */ (left.first) - /** @type {number} */ (right.first));
+  const inRecommendation = (/** @type {string[]} */ names) => recommending.some((recommended) => recommended.some((name) => names.includes(name)));
+  const found = registry.map((brand) => ({ brand, spans: spansFor(brand.aliases) }))
+    .filter((entry) => entry.spans.length > 0).sort((left, right) => left.spans[0].start - right.spans[0].start);
   /** @type {GeoBrandFact[]} */
   const brands = found.map((entry, index) => ({
-    name: entry.brand.name,
-    ours: entry.brand.ours,
-    competitor: entry.brand.competitor,
-    position: index + 1,
-    inRecommendation: inRecommendation(entry.brand.aliases),
-    count: entry.count,
+    name: entry.brand.name, ours: entry.brand.ours, competitor: entry.brand.competitor,
+    position: index + 1, inRecommendation: inRecommendation(entry.brand.aliases), count: entry.spans.length,
   }));
-
-  // Unregistered drug products the judge named: kept only when the name is in
-  // the answer and is not a registered one (or contains one), and counted here.
-  const genericMentions = registry.map((brand) => ({ brand, ...countMentions(folded, brand.genericAliases ?? []) }))
-    .filter((entry) => entry.count > 0).map(({ brand, count }) => ({
-      name: brand.name, ours: brand.ours, competitor: brand.competitor, count,
-      matchedNames: (brand.genericAliases ?? []).filter((name) => folded.includes(name)),
+  const genericMentions = registry.map((brand) => ({ brand, spans: spansFor(brand.genericAliases ?? []) }))
+    .filter((entry) => entry.spans.length > 0).map(({ brand, spans: genericSpans }) => ({
+      name: brand.name, ours: brand.ours, competitor: brand.competitor, count: genericSpans.length,
+      matchedNames: (brand.genericAliases ?? []).filter((name) => genericSpans.some((span) => span.alias === name)),
       productAttributed: brand.singleSource === true,
     }));
-  const registered = registry.flatMap((brand) => [...brand.aliases, ...(brand.genericAliases ?? [])]);
-  const seen = new Set(brands.map((brand) => foldText(brand.name)));
-  for (const entity of entities) {
-    const name = String(entity ?? "").trim();
-    const key = foldText(name);
-    if (key.length < 2 || seen.has(key)) continue;
-    if (registered.some((alias) => key === alias || key.includes(alias) || alias.includes(key))) continue;
-    const { count } = countMentions(folded, [key]);
-    if (!count) continue;
-    seen.add(key);
-    brands.push({ name, ours: false, competitor: false, position: null, inRecommendation: false, count });
+  for (const name of unregistered) {
+    const count = spansFor([foldText(name)]).length;
+    if (count) brands.push({ name, ours: false, competitor: false, position: null, inRecommendation: false, count });
   }
-
   const ours = brands.find((brand) => brand.ours) ?? null;
   const rows = Array.isArray(citations) ? citations : [];
   const ourCitations = rows.filter((citation) => isOurCitation(citation, owned));
   return {
     brands,
     genericMentions,
-    entityMentions: countMentions(folded, [...registered, ...brands.filter((brand) => !brand.ours && !brand.competitor).map((brand) => foldText(brand.name))]).count,
+    entityMentions: spans.length,
     mentionsOurs: Boolean(ours),
     firstOurs: ours?.position === 1,
     recommendedOurs: Boolean(ours?.inRecommendation),

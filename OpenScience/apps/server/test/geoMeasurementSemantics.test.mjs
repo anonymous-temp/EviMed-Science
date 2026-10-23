@@ -96,6 +96,9 @@ test("an own-brand substring inside a recommended rival is not a recommendation 
     recommendations: [{ text: "推荐康舒宁。", entities: ["舒宁"] }] });
   assert.equal(facts.mentionsOurs, true);
   assert.equal(facts.recommendedOurs, false);
+  const input = { ...inputOf("舒宁需要评估。推荐康舒宁。"), product: { brandName: "舒宁" }, competitors: [{ brandName: "康舒宁" }] };
+  const reading = verifyJudgement({ assessmentComplete: true, recommendations: [{ text: "推荐康舒宁。", entities: ["舒宁"] }] }, buildJudgeInput(input), input);
+  assert.deepEqual(reading.recommendations, [], "the judge verifier also enforces registered span ownership");
 });
 
 test("accuracy requires all applicable statements and complete coverage; known wrong takes priority", () => {

@@ -82,7 +82,7 @@ import { GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoV
 import { createHash } from "node:crypto";
 import { GEO_CITATION_SUPPORTS, GEO_STATEMENT_TOPICS } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, parseAnswer, registryKey, stripListItemMarkers } from "./geoParse.mjs";
+import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, matchedMentions, parseAnswer, registryKey, stripListItemMarkers } from "./geoParse.mjs";
 import { stripPageChrome } from "./geoSanity.mjs";
 import { recordErrorsFromFacts } from "./geoErrors.mjs";
 import { geoMeasureState, zonedDayStart } from "./geoProbeQueue.mjs";
@@ -517,7 +517,8 @@ export function verifyJudgement(answer, built, input) {
     if (!present(sentence)) { drop(absent(sentence)); continue; }
     if (typeof raw === "string" || !Array.isArray(raw?.entities)) { drop("entities_missing"); continue; }
     const names = [...new Set(textList(raw.entities, LIMITS.entities))];
-    const anchored = names.filter((entity) => knownEntities.has(foldText(entity)) && compactText(sentence).includes(compactText(entity)));
+    const named = new Set(matchedMentions(foldText(sentence), [...knownEntities]).map((span) => span.alias));
+    const anchored = names.filter((entity) => named.has(foldText(entity)));
     if (anchored.length !== names.length || !anchored.length) { drop("entity_not_in_recommendation"); continue; }
     recommendations.push({ text: sentence, entities: anchored });
   }

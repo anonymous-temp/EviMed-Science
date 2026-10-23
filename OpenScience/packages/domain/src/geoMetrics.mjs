@@ -597,6 +597,11 @@ function prepare(row, ctx) {
   }
 }
 
+/** A refusal stays in a recommendation rate even when no semantic facts were extracted. @param {GeoItem} item */
+function recommendationEligible(item) {
+  return item.judgementCoverage === 'complete' || item.status === 'refusal'
+}
+
 // ------------------------------------------------------------------ one scope
 
 /**
@@ -636,7 +641,7 @@ function scopeMetrics(items, ctx) {
   }
   // A verified error settles correctness without proving every part was read.
   const assessment = { ...semanticAssessment, decidableAnswers: adjudicated }
-  const semantic = valid.filter((item) => item.judgementCoverage === 'complete' || item.status === 'refusal')
+  const semantic = valid.filter(recommendationEligible)
 
   /** @type {number[]} */
   const positions = []
@@ -1279,7 +1284,7 @@ export function noiseBand(noiseRows, { metricId = 'M-01' } = {}) {
   const byRepeat = new Map()
   for (const row of noiseRows) {
     const item = prepare(row, ctx)
-    if (!item || !item.inDenominator || item.inclusion || !item.pool || (metricId === 'M-03' && item.judgementCoverage !== 'complete')) continue
+    if (!item || !item.inDenominator || item.inclusion || !item.pool || (metricId === 'M-03' && !recommendationEligible(item))) continue
     const index = isNumber(row.repeatIndex) ? row.repeatIndex : 0
     const bucket = byRepeat.get(index) ?? []
     bucket.push(item)
