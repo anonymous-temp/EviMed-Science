@@ -1850,7 +1850,7 @@ export class GeoService {
     if (!row) throw failure(404, "geo_cluster_not_found", "Question group not found.");
     const selected = await readGeoSelection(this.store, project, scope);
     const filtered = geoScopeIsFiltered(selected.scope) || Boolean(scope.selectionRef);
-    if (!filtered) return { ...await this.#clusterBase(project, groupId), scope: selected.scope, selection: selected.selection, comparison: selected.comparison };
+    const historical = !filtered ? await this.#clusterBase(project, groupId) : null;
     const listed = await this.#applySelection(project, { groups: [], locked: null, floor: 30 }, selected, "clusters", scope);
     const group = listed.groups.find((/** @type {any} */ entry) => entry.id === groupId);
     if (!group) throw failure(404, "geo_cluster_not_found", "Question group is outside this selection.");
@@ -1859,7 +1859,7 @@ export class GeoService {
     const answers = this.#selectionAnswers(selected).filter((answer) => ids.has(answer.questionId));
     const sources = await this.store.listSources(project.id);
     const errorData = await readGeoSelectionErrors(this.store, project, { ...selected, rows: selected.rows.filter((member) => ids.has(member.questionId)) }, { errorLimit: this.errorListLimit });
-    return { group, scope: selected.scope, selection: selected.selection, comparison: selected.comparison,
+    return { ...historical, group: { ...historical?.group, ...group }, scope: selected.scope, selection: selected.selection, comparison: selected.comparison,
       questions: questions.map((question) => ({ id: question.id, text: question.text, kind: question.kind, isMeasured: question.is_measured,
         platform: question.platform, sourceUrl: question.source_url, collectedAt: iso(question.collected_at),
         answers: selected.rows.filter((member) => member.questionId === question.id).slice(0, GEO_CELL_SNAPSHOT_LIMIT).map((member) => ({
@@ -1871,8 +1871,10 @@ export class GeoService {
         cited: { total: Object.values(entry.byEngine).reduce((sum, count) => sum + count.cited, 0), byEngine: Object.fromEntries(Object.entries(entry.byEngine).map(([engine, count]) => [engine, count.cited])) },
         mentionsOurs: entry.mentionsOurs, wrongOurs: entry.wrongOurs }; }),
       errors: errorData.rows.map(errorView), errorPage: errorData.page,
-      gaps: [], claims: {}, actions: [], articles: [], orders: [], ownedLinks: [],
-      effect: { metricId: "M-01", series: [], events: [], arm: null, kind: "observational" } };
+      gaps: historical?.gaps ?? [], claims: historical?.claims ?? {}, actions: historical?.actions ?? [], articles: historical?.articles ?? [],
+      orders: historical?.orders ?? [], ownedLinks: historical?.ownedLinks ?? [],
+      effect: historical?.effect ? { ...historical.effect, kind: "historical" }
+        : { metricId: "M-01", series: [], events: [], arm: null, kind: "observational" } };
   }
 
   /** @param {any} project @param {string} groupId */
