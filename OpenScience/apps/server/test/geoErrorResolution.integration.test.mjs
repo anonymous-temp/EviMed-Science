@@ -57,3 +57,42 @@ test('only an explicitly verified correct judgment for the same claim/version/ap
     assert.equal(row.closed_snapshot_id, id === 'positive' ? 'resolution_positive' : null, id);
   }
 });
+
+test('origin matching selects the error fingerprint across same-id versions in either order', options, async () => {
+  const secondClaim = { ...claim, version: 2, population: 'Children', elements: { form: 'solution' }, quote: 'Only children may use the solution.' };
+  const wrong2 = { ...wrong, claimVersion: 2, text: 'All ages may use solutions.', applicability: { ...applicability, population: 'Children', elements: { form: 'solution' } }, evidence: secondClaim.quote };
+  await database.query("UPDATE evimed_geo.rounds SET ref=$1::jsonb WHERE id='resolution_round'", [JSON.stringify({ evaluationBasis: { claims: [claim, secondClaim], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
+  for (const [index, originStatements] of [[wrong, wrong2], [wrong2, wrong]].entries()) {
+    const originId = `identity_origin_${index}`, laterId = `identity_later_${index}`, errorId = `identity_error_${index}`;
+    await insertAnswer(originId, 100 + index * 10, originStatements);
+    await database.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,claim_id,statement,evidence_quote,status,confirm,updated_at)
+      VALUES($1,'resolution_owner','resolution_geo',$2,'deepseek','resolution_question',$3,$3,$4,$5,$6,'awaiting_remeasure','{"status":"done"}',$7) ON CONFLICT(geo_project_id,fingerprint,engine) DO UPDATE SET first_snapshot_id=EXCLUDED.first_snapshot_id,last_snapshot_id=EXCLUDED.last_snapshot_id,status='awaiting_remeasure',closed_snapshot_id=null,updated_at=EXCLUDED.updated_at`,
+      [errorId, errorFingerprint(wrong2), originId, claim.id, wrong2.text, wrong2.evidence, new Date(Date.parse('2026-10-24T00:00:00Z') + (101 + index * 10) * 60000)]);
+    await insertAnswer(laterId, 102 + index * 10, [correct, wrong2]);
+    await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
+    const row = (await database.query('SELECT status FROM evimed_geo.errors WHERE fingerprint=$1', [errorFingerprint(wrong2)])).rows[0];
+    assert.equal(row.status, 'awaiting_remeasure', `origin order ${index}`);
+  }
+});
+
+test('a concurrent newer wrong occurrence cannot be overwritten by an observed older correct resolution', options, async () => {
+  const errorId = 'resolution_error';
+  await database.query("UPDATE evimed_geo.errors SET status='awaiting_remeasure',updated_at='2026-10-24T03:00:00Z',first_snapshot_id='resolution_origin',last_snapshot_id='resolution_origin',closed_snapshot_id=null WHERE id=$1", [errorId]);
+  await insertAnswer('race_correct', 200, [correct]);
+  const original = store.projectContext.bind(store);
+  let interleaved = false;
+  store.projectContext = async (...args) => {
+    const context = await original(...args);
+    if (!interleaved) {
+      interleaved = true;
+      await insertAnswer('race_wrong', 201, [wrong]);
+      await store.upsertError({ id: errorId, userId: 'resolution_owner', geoProjectId: 'resolution_geo', fingerprint: errorFingerprint(wrong), engine: 'deepseek', questionId: 'resolution_question', snapshotId: 'race_wrong', statement: wrong.text, errorType: wrong.errorType, severity: wrong.severity, claimId: claim.id, evidenceQuote: claim.quote, confirm: { status: 'done' }, now: new Date('2026-10-24T03:21:00Z'), askedAt: new Date('2026-10-24T03:21:00Z'), verifiedStatement: wrong });
+    }
+    return context;
+  };
+  try {
+    await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
+    const row = (await database.query('SELECT status,last_snapshot_id,closed_snapshot_id FROM evimed_geo.errors WHERE id=$1', [errorId])).rows[0];
+    assert.equal(interleaved, true); assert.equal(row.status, 'awaiting_remeasure'); assert.equal(row.last_snapshot_id, 'race_wrong'); assert.equal(row.closed_snapshot_id, null);
+  } finally { store.projectContext = original; }
+});

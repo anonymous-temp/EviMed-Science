@@ -96,3 +96,20 @@ it("refreshes an older loaded pending feedback after it fails without changing t
     await waitFor(() => expect(cleared).toHaveBeenCalledWith(42));
   } finally { interval.mockRestore(); cleared.mockRestore(); }
 });
+
+it('keeps same-text same-id variants separate and submits the selected full statement identity', async () => {
+  const { geoStatementAssessmentIdentity } = await import('@evimed/domain');
+  const first = { ...statement, claimVersion: 1 };
+  const second = { ...statement, claimVersion: 2, applicability: { ...statement.applicability, population: 'Children', elements: { form: 'solution' } } };
+  client.getGeoDiagnosisReview.mockResolvedValue({ ...saved(), original: { statements: [first, second] }, current: { statements: [{ ...first, verdict: 'correct' }, second] }, history: [] });
+  renderReview();
+  expect(await screen.findAllByText('“An exact answer sentence.”')).toHaveLength(2);
+  expect(screen.getByText(/原判定：讲错 · 当前判定：讲对/)).toBeVisible();
+  expect(screen.getByText(/原判定：讲错 · 当前判定：讲错/)).toBeVisible();
+  const buttons = screen.getAllByRole('button', { name: '反馈并复核判定' });
+  await userEvent.click(buttons[1]);
+  await userEvent.type(screen.getByRole('textbox', { name: '反馈理由与适用条件' }), 'Review the child solution only.');
+  await userEvent.click(screen.getByRole('button', { name: '提交复核' }));
+  await waitFor(() => expect(client.submitGeoDiagnosisFeedback).toHaveBeenCalledTimes(1));
+  expect(client.submitGeoDiagnosisFeedback.mock.calls[0][1].statementIdentity).toBe(geoStatementAssessmentIdentity(second));
+});
