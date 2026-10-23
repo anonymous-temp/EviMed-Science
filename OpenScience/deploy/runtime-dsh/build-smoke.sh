@@ -277,6 +277,17 @@ def call(method, args):
 try:
     session = call("session/create", {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}})
     entries = {entry.get("entryId"): entry for entry in call("pluginInventory/list", {}).get("entries", [])}
+    catalogue = call("evimedSkills/list", {"sessionId": session["sessionId"]})
+    assert catalogue.get("complete") is True, "scoped skill catalogue incomplete"
+    selected = next(item for item in catalogue["items"] if item["name"] == "open-domain-answer")
+    assert selected["source"] == "builtin" and selected["canDuplicate"], "built-in method source unavailable"
+    skill_args = {"sessionId": session["sessionId"], "key": selected["key"]}
+    detail = call("evimedSkills/read", skill_args)
+    snapshot = call("evimedSkills/snapshotBuiltin", skill_args)
+    assert detail["instructions"] and detail["key"] == selected["key"], "skill detail mismatch"
+    assert snapshot["digest"] == detail["digest"], "skill snapshot changed"
+    assert any(item["path"] == "SKILL.md" and item["bytesBase64"] for item in snapshot["entries"]), "skill snapshot bytes absent"
+
 except urllib.error.HTTPError as error:
     print("HTTP %s: %s" % (error.code, error.read().decode("utf-8", "replace")[:800]))
     sys.exit(1)
