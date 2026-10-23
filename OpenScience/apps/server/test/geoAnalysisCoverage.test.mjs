@@ -289,3 +289,10 @@ test('missing imported categories preserve uncategorized data with an explicit i
 test('zero-count empty answer cohorts retain answer units rather than inferring task units from an empty array',()=>{
  const view=presentGeoAnalysis(selected(),{viewId:'V07'},context());const row=view.rows.find(row=>row.dimensions.questionId==='q1'&&row.dimensions.engine==='kimi');assert.equal(row.values.returned.value,0);assert.equal(row.values.returned.unit,'answers');assert.equal(row.values.returned.members.unit,'answers');
 });
+
+test('real V06 metric readings retain their domain null reason through selected export',()=>{
+ const input=selected();input.questions=input.questions.slice(0,1);input.rows=Array.from({length:50},(_,i)=>answer(`m${i}`,'q1','valid',{pool:'P2',roundKind:'baseline',facts:{brands:[{name:'Ours',ours:true,count:1}],statements:[],checks:{judgementCoverage:{status:'complete'}}}}));
+ const view=presentGeoAnalysis(input,{viewId:'V06',metricId:'M-01'},context());const row=view.rows.find(row=>row.dimensions.engine==='deepseek');
+ assert.equal(row.values.metric.value,100);assert.equal(row.values.metric.metric.reason,null);assert.equal(row.values.metric.reason,null);
+ const exported=freezeGeoAnalysisDocument(view);const cell=JSON.parse(exported.typedTable.rows.find(item=>item.key===row.key).cells_metadata).metric;assert.equal(cell.reason,null);assert.equal(exported.canonicalMarkdown.includes('no_selected_readings'),false);
+});

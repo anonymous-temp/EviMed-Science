@@ -186,3 +186,12 @@ test('planned-only new question versions and engines remain context without enla
  assert.ok(coverage.rows.filter(row=>row.dimensions.basis==='observed').every(row=>row.dimensions.engine==='deepseek'));
  const narrowed=await service.analysis(user,project.id,{...scope,viewId:'V07',questionVersion:1});assert.ok(narrowed.rows.every(row=>row.dimensions.questionId!=='planned-v2-q'));
 });
+
+test('V06 valid and empty metric reasons agree across authorized runtime and export',options,async()=>{
+ const view=await service.analysis(user,project.id,{viewId:'V06',round:'r2',metricId:'M-01',engines:['deepseek','doubao'],limit:50});
+ const native=await service.runtimeRead(project,'analysis',{selectionRef:view.selection.reference,...view.view,expectedDigest:view.digest});assert.deepEqual(native.rows,view.rows);
+ const metricCells=view.rows.map(row=>row.values.metric);assert.ok(metricCells.some(cell=>cell.value===100&&cell.reason===null));
+ assert.ok(metricCells.filter(cell=>cell.value===null).every(cell=>cell.reason===cell.metric?.reason));
+ const exports=[];await service.selectedExport(user,project,{selectionRef:view.selection.reference,view:view.view,expectedDigest:view.digest,formats:['csv']},{requestFrozen:async(...args)=>{exports.push(args);return {};}});
+ const frozen=exports[0][1].cover.analysis;assert.equal(frozen.digest,view.digest);assert.ok(exports[0][1].typedTable.rows.some(row=>JSON.parse(row.cells_metadata).metric.reason===null));
+});

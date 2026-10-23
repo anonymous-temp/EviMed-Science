@@ -342,7 +342,7 @@ export function buildGeoCoverageAnalysis(selected, view, context = {}) {
               metric?.status === "ok" ? "known" : (metric?.status ?? "unknown"),
             unit: GEO_METRIC_UNITS[view.metricId] ?? "index",
             memberUnit: "answers",
-            reason: metric?.reason ?? "no_selected_readings",
+            reason: metric ? metric.reason : "no_selected_readings",
             metric: metric ?? null,
             members: null,
             links: [],
