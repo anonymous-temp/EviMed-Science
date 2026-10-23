@@ -187,5 +187,9 @@ describe("editing a page", () => {
     expect((screen.getByLabelText("页面全文") as HTMLTextAreaElement).value).toMatch(/x$/);
     expect(screen.getByLabelText("最新版本")).toHaveValue(newer.markdown);
     expect(screen.getByRole("button", { name: "复制我的修改" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "以我的修改继续编辑" }));
+    mocks.save.mockResolvedValue({ changed: true, writeBack: "written", userBlocks: 1, page: newer });
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenLastCalledWith({ sourceId: newer.sourceId, markdown: `${mine.markdown}x`, baseSha256: newer.sha256 }));
   });
 });
