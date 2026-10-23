@@ -65,12 +65,30 @@ describe("KnowledgeGraphView", () => {
     expect(await screen.findByText(/有 1 处连线没能画出来，不影响其余的内容/)).toBeInTheDocument();
   });
 
+  it("provides keyboard zoom, full view and overview reset without another pane", async () => {
+    view();
+    await screen.findByRole("list", { name: "实体" });
+    const controls = screen.getByRole("group", { name: "图谱视图" });
+    await userEvent.click(within(controls).getByRole("button", { name: "放大图谱" }));
+    expect(mocks.chart.current!.option!.series[0]).toHaveProperty("zoom", 1.25);
+    await userEvent.click(within(controls).getByRole("button", { name: "完整视图" }));
+    expect(within(controls).getByRole("button", { name: "收起视图" })).toBeInTheDocument();
+    await userEvent.click(within(controls).getByRole("button", { name: "回到全图" }));
+    expect(mocks.chart.current!.option!.series[0]).toHaveProperty("zoom", 1);
+  });
+
   it("shows the hits of the search alone in the list", async () => {
     view({ q: "ROCKET" });
     const list = await screen.findByRole("list", { name: "搜索命中的标记" });
     const titles = within(list).getAllByRole("link").map((link) => link.textContent);
     expect(titles.length).toBeGreaterThan(0);
     expect(titles.every((title) => /ROCKET/iu.test(String(title)) || kgNodes.some((node) => node.title === title && /rocket/iu.test(`${node.description} ${(node.aliases ?? []).join(" ")}`)))).toBe(true);
+  });
+
+  it("shows an empty result for an active query with no matches", async () => {
+    view({ q: "a phrase absent from the graph" });
+    expect(await screen.findByText("没有找到相关标记")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "搜索命中的标记" })).queryAllByRole("link")).toHaveLength(0);
   });
 
   it("takes a mark into focus from its menu, shows its neighbourhood with a depth, and lets the focus go", async () => {
@@ -115,6 +133,7 @@ describe("KnowledgeGraphView", () => {
     const panel = await screen.findByRole("region", { name: "连线的依据" });
     expect(within(panel).getByText("依据的资料：")).toBeInTheDocument();
     expect(within(panel).getAllByRole("link").length).toBeGreaterThan(0);
+    expect(within(panel).getByRole("button", { name: "在对话中使用这条关系" })).toBeInTheDocument();
     await userEvent.setup().click(within(panel).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("region", { name: "连线的依据" })).toBeNull();
   });
