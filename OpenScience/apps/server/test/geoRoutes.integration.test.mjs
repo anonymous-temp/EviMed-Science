@@ -1096,3 +1096,13 @@ test("article release carries the version and digest the reviewer observed over 
   const released = await call("POST", route, { body: { expectedResultVersionId: next.versionId, expectedDigest: next.digest } });
   assert.equal(released.status, 200); assert.equal(released.payload.data.safety, "released");
 });
+
+test('plan context creation enforces the ordinary JSON byte limit before staging', options, async () => {
+  const previous = service.planContexts;
+  let staged = 0;
+  service.planContexts = /** @type {any} */ ({ stage: async () => { staged++; return { referenceId: 'unexpected' }; } });
+  try {
+    const response = await call('POST', '/api/geo/projects/context-limit/strategy/context', { body: { note: 'x'.repeat(70_000) } });
+    refused(response, 413, 'body_too_large'); assert.equal(staged, 0);
+  } finally { service.planContexts = previous; }
+});

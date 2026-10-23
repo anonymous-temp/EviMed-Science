@@ -1109,7 +1109,7 @@ function validatedImplementation(given, issues, index) {
   if (range(given.effort) && ["hours", "days"].includes(given.effort.unit) && bounded(given.effort.basis)) effort = { unit: given.effort.unit, low: given.effort.low, high: given.effort.high, basis: given.effort.basis };
   else if (given.effort != null) notice("effort");
   if (range(given.estimate) && given.estimate.currency === "CNY" && Array.isArray(given.estimate.basis) && given.estimate.basis.length > 0 && given.estimate.basis.length <= 20
-    && given.estimate.basis.every(ref => ["source_price", "supplied_quote"].includes(ref.kind) && bounded(ref.id) && (ref.digest == null || /^[a-f0-9]{64}$/.test(ref.digest)))) estimate = { currency: "CNY", low: given.estimate.low, high: given.estimate.high, basis: given.estimate.basis.map(ref => ({kind:ref.kind,id:ref.id,digest:ref.digest ?? null})),
+    && given.estimate.basis.every(ref => isObject(ref) && ["source_price", "supplied_quote"].includes(ref.kind) && bounded(ref.id) && (ref.digest == null || /^[a-f0-9]{64}$/.test(ref.digest)))) estimate = { currency: "CNY", low: given.estimate.low, high: given.estimate.high, basis: given.estimate.basis.map(ref => ({kind:ref.kind,id:ref.id,digest:ref.digest ?? null})),
       assumption: bounded(given.estimate.assumption), observedAt: bounded(given.estimate.observedAt) };
   else if (given.estimate != null) notice("estimate");
   return { work, timing, effort, estimate, sequence: Number.isSafeInteger(given.sequence) && given.sequence >= 0 ? given.sequence : null };

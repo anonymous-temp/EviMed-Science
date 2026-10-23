@@ -342,7 +342,7 @@ export function createGeoRoutes(dependencies) {
     const tab = parts[2];
     if (tab === "strategy" && parts.length === 4 && parts[3] === "context" && method === "POST") {
       if (!service.planContexts) throw UNAVAILABLE();
-      return reply(await service.planContexts.stage(user, id, await readJson(req)));
+      return reply(await service.planContexts.stage(user, id, await readJson(req, maxJsonBytes)));
     }
     // --- members: colleagues and outside agencies, by role (the owner alone manages them) ---
     if (method === "POST" && tab === "questions" && (parts.length === 3 || parts.length === 4 && parts[3] === "preview")) {

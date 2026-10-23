@@ -202,7 +202,7 @@ with `filter.planContextRef` (or the explicit `strategyVersion`). Keep its exact
 groups, source/page focus, question versions and planning targets. Never claim
 that current data were the historical input.
 
-Write the normal `deliverables/<deliverable-id>/strategy.json` and `strategy.md`.
+Write the normal `deliverables/<deliverable-id>/strategy.json` and `geo-strategy.md`.
 The actual producing run imports that file with its consumed input reference.
 A runtime project token cannot attest a particular concurrent tool call, so
 scoped gateway writes of strategy/actions/targets return `geo_plan_file_required`;
