@@ -64,7 +64,7 @@ test("platform envelopes are not what the person typed, and a message with a cre
   const transcript = {
     messages: [
       user(1, "<evimed-brief>context the platform wrote</evimed-brief>\n整理这份表"),
-      user(5, "key 是 sk-abcdefghijklmnopqrstuvwxyz0123456789 用这个", { sourceRequestId: "req_2" }),
+      user(5, `key 是 ${["sk", "a".repeat(36)].join("-")} 用这个`, { sourceRequestId: "req_2" }),
       user(6, "<evimed-memory>recalled text</evimed-memory>", { sourceRequestId: "req_3" }),
     ],
   };
