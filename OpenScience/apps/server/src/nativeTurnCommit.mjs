@@ -1,6 +1,6 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryAdmission.mjs";
-import { recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { recordRuntimeWithoutGateway, recordTurnCommit } from "./nativeMemoryMetrics.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
 
 /**
@@ -70,17 +70,21 @@ export class NativeTurnCommit {
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
+   *   runtimeWithoutGateway?: ((project: any) => boolean) | null,
    *   report?: (line: string) => void,
    * }} dependencies
-   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test.
+   *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test. `runtimeWithoutGateway` says whether the
+   *   project's live runtime was launched without the memory gateway's address, which only counts (D2 of the 2026-10-23 review:
+   *   an account switched to the engine under an open runtime is learned from by nobody, and nothing said so).
    */
-  constructor({ config, researchMemory, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
+  constructor({ config, researchMemory, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, runtimeWithoutGateway = null, report = () => {} }) {
     this.config = config ?? {};
     this.researchMemory = researchMemory;
     this.sessions = sessions;
     this.admission = admission;
     this.conversations = conversations;
     this.commit = commit;
+    this.runtimeWithoutGateway = runtimeWithoutGateway;
     this.setTimer = setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
     this.wait = wait ?? ((ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }));
@@ -124,6 +128,10 @@ export class NativeTurnCommit {
       if (isPlatformStartedRun(run)) { recordTurnCommit("platform_started"); return; }
       // A legacy account is untouched; the answer is one settings read, cached by the store's row.
       if (await this.researchMemory.memoryEngine(String(project.userId)) !== "native") return;
+      // The turn that just ended may have had no memory plugin at all: its runtime was launched before the account moved to
+      // the engine. Counted here for the turns that pass through no dispatch (typed in the kernel's own frame); the next
+      // dispatch replaces such a runtime.
+      if (this.runtimeWithoutGateway?.(project) === true) recordRuntimeWithoutGateway("turn_end");
       this.#arm(project, sessionId);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);

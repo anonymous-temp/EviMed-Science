@@ -27,6 +27,7 @@ import { rebaseRuntimeUiDocument } from "./runtimeUiDocument.mjs";
 import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
 import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
+import { recordRuntimeEngineSwitch, recordRuntimeWithoutGateway } from "./nativeMemoryMetrics.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
@@ -3676,16 +3677,6 @@ export class RuntimeManager {
   }
 
   /**
-   * Let go of this account's idle runtimes that were launched with methods mounted, for the projects whose recall the
-   * researcher has since paused. The methods are mounted at a launch (`syncCapsuleMethods`) and a live runtime keeps them
-   * in its prompt for as long as it lives, so a pause turned on under one would otherwise wait for that runtime's next
-   * launch — up to its idle timeout — with the researcher's methods still in every conversation (2026-10-10 review L-5).
-   * Only a runtime nothing is using goes (`idleVerdict`: no session mid-turn, no run in the ledger; and no open connection,
-   * which `stopIdleRuntime` keeps); the next dispatch starts one that mounts none. A runtime that is working, or tab-held,
-   * keeps its mount until it stops. Returns the ids of the projects released.
-   * @param {string} userId @returns {Promise<string[]>}
-   */
-  /**
    * The memory gateway's base for this project's runtime, or empty: the deployment has the native engine and the account
    * that owns the project is on it.
    * @param {any} project @returns {Promise<string>}
@@ -3712,30 +3703,114 @@ export class RuntimeManager {
   }
 
   /**
-   * Let go of the idle runtimes that were launched for the engine their account is no longer on, so the next dispatch
-   * launches one for the engine it is on now. A runtime mid-turn, or held open by a tab, keeps what it was launched with
-   * until it stops; the gateway withholds from it meanwhile (`memoryAdmission.mjs`).
+   * The memory gateway address a runtime of this project should have been launched with now, or null when that cannot be
+   * said: `memoryGatewayUrlFor` answers "" for an account whose engine could not be read, which is the right thing for a
+   * launch (a conversation never waits on memory) and the wrong thing for replacing a runtime that was launched right.
+   * @param {any} project @returns {Promise<string | null>}
+   */
+  async #wantedMemoryGatewayUrl(project) {
+    const base = memoryGatewayProviderUrl(this.config);
+    if (!base || typeof this.memoryEngineOf !== "function") return "";
+    try { return await this.memoryEngineOf(String(project.userId)) === "native" ? base : ""; }
+    catch { return null; }
+  }
+
+  /**
+   * Whether this project's live runtime was launched without the memory gateway's address although its account is on the
+   * native engine now: its conversations have no memory plugin. Synchronous and cheap (it reads the launch record, not the
+   * account's setting), so the end of every turn can ask; the dispatch and the pass that follows a switch ask the account.
+   * @param {any} project @returns {boolean}
+   */
+  launchedWithoutMemoryGateway(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    return Boolean(runtime && runtime.kind === RUNTIME_KERNEL_NAME && memoryGatewayProviderUrl(this.config) && !String(runtime.memoryGatewayUrl ?? ""));
+  }
+
+  /**
+   * An account's engine changed (the account moved to the native engine or back): every runtime of it that was launched for
+   * the other engine is marked, so that the next dispatch replaces it (`adoptMemoryEngine`), and an idle one is let go at once.
+   * A runtime mid-turn, or held open by a tab, keeps what it was launched with until the next boundary between two runs; the
+   * turn is never stopped for it, and the gateway withholds from a runtime that is not on the account's engine meanwhile
+   * (`memoryAdmission.mjs`). Called by the native worker's pass, every minute, for every account.
    * @param {string | null} [userId] one account, or every account when absent
    * @returns {Promise<string[]>} the projects released
    */
   async releaseMemoryEngineRuntimes(userId = null) {
     /** @type {string[]} */
     const released = [];
-    const base = memoryGatewayProviderUrl(this.config);
     for (const runtime of [...this.runtimes.values()]) {
       const project = runtime?.project;
-      if (!project || (userId !== null && String(project.userId) !== String(userId))) continue;
+      if (!project || runtime.kind !== RUNTIME_KERNEL_NAME || (userId !== null && String(project.userId) !== String(userId))) continue;
       try {
-        const now = await this.memoryGatewayUrlFor(project);
-        const launched = String(runtime.memoryGatewayUrl ?? "");
-        if (launched === now || (!base && !launched)) continue;
+        const wanted = await this.#wantedMemoryGatewayUrl(project);
+        if (wanted === null) continue;
+        if (wanted === String(runtime.memoryGatewayUrl ?? "")) { delete runtime.memoryEngineStale; continue; }
+        if (!runtime.memoryEngineStale) { runtime.memoryEngineStale = true; recordRuntimeEngineSwitch("marked"); }
         if (await this.idleVerdict(project) !== "idle") continue;
-        if (await this.stopIdleRuntime(project, { event: "memory_engine_changed" })) released.push(String(project.id));
+        if (await this.stopIdleRuntime(project, { event: "memory_engine_changed" })) { released.push(String(project.id)); recordRuntimeEngineSwitch("released"); }
       } catch { /* a runtime that cannot be asked about is left to its idle timer */ }
     }
     return released;
   }
 
+  /**
+   * The boundary where a runtime launched for the other memory engine than its account is on is replaced: a dispatch, before
+   * its run is reserved. A runtime held open by a tab is never idle by `releaseMemoryEngineRuntimes`'s rule, and its account
+   * would otherwise be learned from by nobody and remembered for by nobody (the memory plugin is wired by an environment
+   * variable at launch) until the tab was closed. Between two runs it is safe to replace it, the same boundary and the same
+   * fence as a new platform skill generation (`setPlatformSkillScope`): nothing in the kernel is mid-turn, no run in the
+   * ledger is working, no plugin prompt is queued, and the exclusive plugin lock is taken. Anything else leaves the runtime
+   * as it is and says so — a running turn is never killed for memory.
+   * @param {any} project @returns {Promise<{ adopted: boolean, pending?: boolean }>}
+   */
+  async adoptMemoryEngine(project) {
+    const key = this.key(project);
+    const runtime = this.runtimes.get(key);
+    if (!runtime || runtime.kind !== RUNTIME_KERNEL_NAME) return { adopted: false };
+    const wanted = await this.#wantedMemoryGatewayUrl(project);
+    if (wanted === null) return { adopted: false };
+    const launched = String(runtime.memoryGatewayUrl ?? "");
+    if (wanted === launched) { delete runtime.memoryEngineStale; return { adopted: false }; }
+    if (!runtime.memoryEngineStale) { runtime.memoryEngineStale = true; recordRuntimeEngineSwitch("marked"); }
+    if (wanted && !launched) recordRuntimeWithoutGateway("dispatch");
+    const deferred = () => { recordRuntimeEngineSwitch("deferred"); return { adopted: false, pending: true }; };
+    const refresh = async () => {
+      if (this.runtimes.get(key) !== runtime) return { adopted: false };
+      if (this.starts.has(key) || this.runtimeStops.has(key) || this.boundedRuntimeScope(project) || await this.idleVerdict(project) !== "idle") return deferred();
+      if (this.pluginService && await this.pluginService.hasPendingPrompts(project)) return deferred();
+      const guard = async () => this.runtimes.get(key) === runtime && await this.idleVerdict(project) === "idle"
+        && (!this.pluginService || !await this.pluginService.hasPendingPrompts(project));
+      let replaced = false;
+      await this.startAdmitted(project, { replaceRuntime: async () => {
+        replaced = await this.stopIdleRuntime(project, { event: "memory_engine_changed", evenIfConnected: true, guard });
+        return replaced;
+      } });
+      if (!replaced) return deferred();
+      recordRuntimeEngineSwitch("adopted");
+      return { adopted: true };
+    };
+    // The plugin service's exclusive lock, as `setPlatformSkillScope` takes it: a plugin apply or a generation swap in
+    // progress is not raced, and the same project is not replaced twice at once.
+    if (!this.pluginService) return refresh();
+    const operation = () => this.pluginService.database.transaction(async (/** @type {any} */ client) => {
+      const locked = await client.query("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [`plugin-project:${project.userId}:${project.id}`]);
+      if (!locked.rows[0]?.acquired) return deferred();
+      await this.pluginService.scope(project.userId, project, client);
+      return refresh();
+    });
+    return typeof this.pluginService.database.withoutTransactionClient === "function" ? this.pluginService.database.withoutTransactionClient(operation) : operation();
+  }
+
+  /**
+   * Let go of this account's idle runtimes that were launched with methods mounted, for the projects whose recall the
+   * researcher has since paused. The methods are mounted at a launch (`syncCapsuleMethods`) and a live runtime keeps them
+   * in its prompt for as long as it lives, so a pause turned on under one would otherwise wait for that runtime's next
+   * launch — up to its idle timeout — with the researcher's methods still in every conversation (2026-10-10 review L-5).
+   * Only a runtime nothing is using goes (`idleVerdict`: no session mid-turn, no run in the ledger; and no open connection,
+   * which `stopIdleRuntime` keeps); the next dispatch starts one that mounts none. A runtime that is working, or tab-held,
+   * keeps its mount until it stops. Returns the ids of the projects released.
+   * @param {string} userId @returns {Promise<string[]>}
+   */
   async releasePausedMethodRuntimes(userId) {
     /** @type {string[]} */
     const released = [];

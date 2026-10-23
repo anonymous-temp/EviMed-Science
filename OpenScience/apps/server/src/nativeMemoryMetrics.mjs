@@ -43,6 +43,13 @@ export const NATIVE_EXTRACTION_OUTCOMES = Object.freeze(["wrote", "wrote_and_ski
 export const NATIVE_SKIP_REASONS = Object.freeze([
   "memory_type_filtered", "self_memory_disabled", "invalid_ranges", "ambiguous_target", "no_writable_target", "page_id_type_mismatch", "other",
 ]);
+/** Where a native account's turn was found on a runtime that was launched without the memory gateway's address. */
+export const NATIVE_RUNTIME_GATEWAY_PLACES = Object.freeze(["dispatch", "turn_end"]);
+/**
+ * What became of a runtime launched for the other memory engine than its account is on now: let go while idle, marked while
+ * busy (so that the next dispatch replaces it), replaced at a dispatch between two runs, or left because a turn was running.
+ */
+export const NATIVE_RUNTIME_SWITCH_OUTCOMES = Object.freeze(["released", "marked", "adopted", "deferred"]);
 /** What the deterministic after-the-fact checks did, by why. */
 export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line"]);
 /** What the worker wrote besides revisions. */
@@ -66,6 +73,8 @@ const workerCommits = table(NATIVE_COMMIT_OUTCOMES);
 const workerOperations = table(["added", "updated", "deleted"]);
 const extractionOutcomes = table(NATIVE_EXTRACTION_OUTCOMES);
 const skippedOperations = table(NATIVE_SKIP_REASONS);
+const runtimeWithoutGateway = table(NATIVE_RUNTIME_GATEWAY_PLACES);
+const runtimeSwitches = table(NATIVE_RUNTIME_SWITCH_OUTCOMES);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
@@ -109,6 +118,13 @@ export function recordNativeExtraction(operations, { skipped = 0, skipReasons = 
   bump(extractionOutcomes, operations > 0 ? (skippedCount > 0 ? "wrote_and_skipped" : "wrote") : (skippedCount > 0 ? "only_skipped" : "proposed_nothing"));
   for (const [reason, count] of Object.entries(skipReasons)) bump(skippedOperations, skippedOperations.has(reason) ? reason : "other", Number(count) || 0);
 }
+/**
+ * A native account's turn found its runtime launched without the memory gateway's address: that conversation has no memory
+ * plugin, so it reads nothing and learns nothing, and nothing else says so. @param {string} at where it was found
+ */
+export function recordRuntimeWithoutGateway(at) { bump(runtimeWithoutGateway, at); }
+/** What became of a runtime launched for the other engine than its account is on. @param {string} outcome */
+export function recordRuntimeEngineSwitch(outcome) { bump(runtimeSwitches, outcome); }
 /** A memory the deterministic checks deleted or restored, by why. @param {string} reason */
 export function recordNativeCheck(reason) { bump(checkActions, reason); }
 /** @param {string} what */
@@ -118,7 +134,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -130,7 +146,8 @@ export function nativeMemoryCounters() {
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
-    workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
+    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
 
@@ -169,6 +186,10 @@ export function nativeMemoryMetricFamilies() {
       help: "Settled native memory commits by what their extraction came to: wrote something, wrote some and was refused some by the engine, was refused everything it proposed, or proposed nothing. A commit that wrote no file is one of the last two: the model proposed nothing (the templates and the conversation), or the engine refused what it proposed (a policy)." },
     { name: "open_science_native_memory_skipped_operations_total", type: "counter", series: series(skippedOperations, "reason"),
       help: "Operations the engine skipped in settled native memory commits, by the engine's own reason code (memory_type_filtered: a type outside the account's allowlist; self_memory_disabled: learning paused; ambiguous_target, no_writable_target, invalid_ranges, page_id_type_mismatch: the proposal did not name a file it could write); any other code is other." },
+    { name: "open_science_native_memory_runtime_without_gateway_total", type: "counter", series: series(runtimeWithoutGateway, "at"),
+      help: "Times a native account's turn was found on a runtime launched without the memory gateway's address (at a dispatch, or at the end of a turn the person typed in the kernel's own frame). That conversation has no memory plugin: it reads nothing and learns nothing. Any growth is an account whose engine was switched under a runtime that is still open; the next dispatch between two runs replaces it." },
+    { name: "open_science_native_memory_runtime_engine_switch_total", type: "counter", series: series(runtimeSwitches, "outcome"),
+      help: "What became of runtimes launched for the other memory engine than their account is on: released while idle, marked while busy, replaced at a dispatch between two runs (adopted), or left because a turn was running (deferred). A running turn is never stopped for it." },
     { name: "open_science_native_memory_checks_total", type: "counter", series: series(checkActions, "reason"),
       help: "Memories the deterministic after-the-fact checks deleted or restored: an identifier shape, platform-injected text or a platform identifier, or a line the person had removed coming back verbatim." },
     { name: "open_science_native_memory_writes_total", type: "counter", series: series(workerWrites, "what"),

@@ -3618,6 +3618,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
     // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
     setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
+    // Between two runs a runtime launched for the other memory engine than its account is on now is replaced (an account switched under an open tab).
+    adoptRuntimeMemoryEngine: (project) => runtimeManager.adoptMemoryEngine(project),
     onPlatformSkillExecution: (event) => evolution?.onExecution(event),
     onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
@@ -4955,6 +4957,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeTurnCommit = new NativeTurnCommit({
     config, researchMemory, sessions: openVikingSessions, admission: memoryAdmission,
     conversations: { runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId) },
+    // A native account's turn that ran in a runtime launched without the memory gateway had no plugin: counted, never hidden.
+    runtimeWithoutGateway: (project) => runtimeManager.launchedWithoutMemoryGateway(project),
     commit: memoryGatewayHandler.commitSession,
     report: (line) => process.stderr.write(`${line}\n`),
   });
