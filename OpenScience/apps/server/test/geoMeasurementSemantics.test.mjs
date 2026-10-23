@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeGeoMetrics } from "@evimed/domain";
+import { computeGeoMetrics, noiseBand } from "@evimed/domain";
 import { brandRegistry, failureMode, parseAnswer } from "../src/geoParse.mjs";
 import { buildJudgeInput, GEO_JUDGE_ANSWER_CHARS, readQuantities, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
 
@@ -74,6 +74,30 @@ test("single-source generic presence and product attribution never become litera
   assert.equal(shared.entityMentions, 1, "shared generic attribution must not double-count one occurrence");
 });
 
+test("longest registered name owns overlapping spans without absorbing separate occurrences", () => {
+  const overlapping = brandRegistry({ brandName: "舒宁", genericName: "舒宁片" }, [{ brandName: "康舒宁" }]);
+  const rivalOnly = parseAnswer({ answer: "康舒宁。", registry: overlapping });
+  assert.equal(rivalOnly.mentionsOurs, false);
+  assert.deepEqual(rivalOnly.brands.map((entry) => [entry.name, entry.count]), [["康舒宁", 1]]);
+  const cell = metric([row({ ...rivalOnly, checks: { judgementCoverage: complete }, judgeExtract: { entityMentions: rivalOnly.entityMentions } })], "M-04C");
+  assert.deepEqual([cell.numerator, cell.denominator, cell.value], [1, 1, 100]);
+  const separate = parseAnswer({ answer: "舒宁、康舒宁、舒宁。", registry: overlapping });
+  assert.deepEqual(separate.brands.map((entry) => [entry.name, entry.count, entry.position]), [["舒宁", 2, 1], ["康舒宁", 1, 2]]);
+  assert.equal(separate.entityMentions, 3);
+  const generic = parseAnswer({ answer: "舒宁片、康舒宁、舒宁。", registry: overlapping });
+  assert.deepEqual(generic.brands.map((entry) => [entry.name, entry.count, entry.position]), [["康舒宁", 1, 1], ["舒宁", 1, 2]]);
+  assert.deepEqual(generic.genericMentions.map((entry) => [entry.matchedNames, entry.count]), [[["舒宁片"], 1]]);
+  assert.equal(generic.entityMentions, 3);
+});
+
+test("an own-brand substring inside a recommended rival is not a recommendation of a separate own-brand occurrence", () => {
+  const overlapping = brandRegistry({ brandName: "舒宁" }, [{ brandName: "康舒宁" }]);
+  const facts = parseAnswer({ answer: "舒宁需要评估。推荐康舒宁。", registry: overlapping,
+    recommendations: [{ text: "推荐康舒宁。", entities: ["舒宁"] }] });
+  assert.equal(facts.mentionsOurs, true);
+  assert.equal(facts.recommendedOurs, false);
+});
+
 test("accuracy requires all applicable statements and complete coverage; known wrong takes priority", () => {
   const classify = (statements, checks = { judgementCoverage: complete }) => failureMode({ status: "valid", mentionsOurs: true, statements, checks });
   assert.equal(classify([]), "unknown");
@@ -103,6 +127,21 @@ test("a verified wrong answer remains decidable while its unassessed tail remain
     checks: { judgementCoverage: { status: "partial", reasons: ["answer_truncated"], answerChars: 9000, assessedChars: 8000 } } })], "M-06");
   assert.deepEqual([cell.numerator, cell.denominator, cell.value], [0, 1, 0]);
   assert.deepEqual(cell.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 0, partialAnswers: 1, unknownAnswers: 0, decidableAnswers: 1 });
+});
+
+test("recommendation noise uses the same refusal denominator as the metric it calibrates", () => {
+  for (const coverage of ["unknown", "partial"]) {
+    const rows = [
+      { ...row({ recommendedOurs: true, checks: { judgementCoverage: complete } }, 0), roundKind: "noise", repeatIndex: 0 },
+      { ...row({ recommendedOurs: false, checks: { judgementCoverage: { ...complete, status: coverage } } }, 1), status: "refusal", roundKind: "noise", repeatIndex: 0 },
+      { ...row({ recommendedOurs: true, checks: { judgementCoverage: complete } }, 2), roundKind: "noise", repeatIndex: 1 },
+    ];
+    const metricRates = [0, 1].map((repeat) => metric(rows.filter((entry) => entry.repeatIndex === repeat).map((entry) => ({ ...entry, roundKind: "baseline" })), "M-03").value);
+    assert.deepEqual(metricRates, [50, 100]);
+    const noise = noiseBand(rows, { metricId: "M-03" });
+    assert.deepEqual(noise.repeats.map((entry) => entry.value), metricRates, coverage);
+    assert.equal(noise.value, 70.71);
+  }
 });
 
 test("a cut answer retains complete literal counts but cannot claim complete judgement or accuracy", () => {
