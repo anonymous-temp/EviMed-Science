@@ -105,3 +105,54 @@ test('concurrent replays produce one promotion receipt and never lose an already
   const f = await fixture('legacy_concurrent'); await Promise.all([record(f), record(f)]);
   const [row] = await errors(f); assert.equal((await errors(f)).length, 1); assert.equal(row.judgment_history.filter(entry => entry.kind === 'legacy_identity_promoted').length, 1); assert.equal(row.materials.length, 1);
 });
+
+test('missing frozen evidence cannot borrow a live claim identity', options, async () => {
+  const f = await fixture('legacy_missing');
+  await database.query("UPDATE evimed_geo.rounds SET ref='{}'::jsonb WHERE id=$1", [`${f.id}_round`]);
+  await record(f); const [row] = await errors(f); assert.equal(row.fingerprint, legacyHash); assert.equal(row.materials.length, 1); assert.ok(row.judgment_history.some(receipt => receipt.kind === 'legacy_identity_unresolved'));
+});
+test('an exact other genuine wrong occurrence stays active when the original becomes unknown', options, async () => {
+  const f = await fixture('legacy_residual');
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text)
+    SELECT $2,user_id,geo_project_id,round_id,question_id,engine,status,asked_at + interval '1 hour',answer_text FROM evimed_geo.snapshots WHERE id=$1`, [f.snapshot.id, `${f.id}_other`]);
+  await store.writeFacts({ id: `${f.id}_other`, userId: f.project.userId, geoProjectId: f.id }, { parserVersion: 'judge-current', judgedAt: '2026-10-24T03:00:00Z', statements: [canonical] });
+  await recheck(f, 'unverifiable'); await record(f);
+  const [row] = await errors(f); assert.equal(row.fingerprint, errorFingerprint(canonical)); assert.equal(row.judgment_state, 'active'); assert.equal(row.status, 'acting');
+});
+test('a stale wrong writer after unknown supersession cannot reactivate the migrated judgment', options, async () => {
+  const f = await fixture('legacy_stale'); await recheck(f, 'unverifiable'); await record(f);
+  const result = await store.upsertError({ id: 'stale_wrong', userId: f.project.userId, geoProjectId: f.id, fingerprint: legacyHash, engine: 'deepseek', questionId: f.snapshot.questionId, snapshotId: f.snapshot.id, statement: legacy.text, verifiedStatement: legacy, claimId: claim.id, severity: 'S3', errorType: legacy.errorType, now: new Date(), askedAt: new Date(f.snapshot.askedAt) });
+  assert.equal(result.error, null); const [row] = await errors(f); assert.equal(row.judgment_state, 'withdrawn'); assert.equal(row.status, 'acting'); assert.equal((await errors(f)).length, 1);
+});
+test('proof beyond its fixed bound remains unresolved instead of partially migrating', options, async () => {
+  const f = await fixture('legacy_bound');
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text)
+    SELECT $1 || '_' || n,user_id,geo_project_id,round_id,question_id,engine,status,asked_at - n * interval '1 second',answer_text FROM evimed_geo.snapshots CROSS JOIN generate_series(1,101) n WHERE id=$2`, [`${f.id}_old`, f.snapshot.id]);
+  await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,statements,parser_version,judged_at)
+    SELECT id,user_id,geo_project_id,$2::jsonb,'legacy',asked_at FROM evimed_geo.snapshots WHERE geo_project_id=$1 AND id<>$3`, [f.id, JSON.stringify([legacy]), f.snapshot.id]);
+  await record(f); await record(f); const [row] = await errors(f); assert.equal(row.fingerprint, legacyHash);
+  assert.equal(row.judgment_history.filter(receipt => receipt.reason === 'proof_limit').length, 1); assert.equal(row.status, 'acting');
+});
+test('duplicate aliases cannot redirect a material action across project ownership', options, async () => {
+  const a = await fixture('legacy_owner_a'), b = await fixture('legacy_owner_b');
+  await database.query(`UPDATE evimed_geo.errors SET judgment_history=$2::jsonb WHERE id=$1`, [`${a.id}_error`, JSON.stringify([{ kind: 'legacy_identity_duplicate', survivorId: `${b.id}_error` }])]);
+  assert.equal(await store.error(`${a.id}_error`), null);
+  const { noteErrorAction } = await import('../src/geoErrors.mjs');
+  await assert.rejects(noteErrorAction(a.deps, { geoProjectId: a.id, errorId: `${a.id}_error`, materials: [{ text: 'Must not cross owners' }] }), error => error.status === 404);
+  assert.equal((await errors(b))[0].materials.length, 1);
+});
+test('article correction through both original and retired duplicate ids appends only once', options, async () => {
+  const f = await fixture('legacy_article');
+  await database.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,first_snapshot_id,last_snapshot_id,claim_id,created_at,updated_at)
+    SELECT 'article_duplicate',user_id,geo_project_id,$2,engine,first_snapshot_id,last_snapshot_id,claim_id,created_at,created_at FROM evimed_geo.errors WHERE id=$1`, [`${f.id}_error`, errorFingerprint(canonical)]);
+  await record(f); const { GeoStore } = await import('../src/geoStore.mjs'), content = new GeoStore({ database });
+  const material = { articleId: 'canonical_article', path: 'article.md', layer: 'correction', title: 'Correction', runId: null };
+  assert.deepEqual(await content.attachCorrection(f.id, [`${f.id}_error`, 'article_duplicate'], material), [`${f.id}_error`]);
+  assert.deepEqual(await content.attachCorrection(f.id, ['article_duplicate'], material), []);
+  assert.equal((await errors(f)).find(row => row.id === `${f.id}_error`).materials.length, 2);
+});
+test('legacy statements missing their key recover the historically frozen key without splitting the handled row', options, async () => {
+  const f = await fixture('legacy_nokey'); const { claimKey: _key, ...withoutKey } = legacy;
+  await database.query('UPDATE evimed_geo.facts SET statements=$2::jsonb WHERE snapshot_id=$1', [f.snapshot.id, JSON.stringify([withoutKey])]);
+  await record(f); const rows = await errors(f); assert.equal(rows.length, 1); assert.equal(rows[0].id, `${f.id}_error`); assert.equal(rows[0].fingerprint, errorFingerprint(canonical));
+});
