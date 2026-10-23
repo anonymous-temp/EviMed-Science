@@ -1167,3 +1167,37 @@ test("the source card carries the materials ledger beside the parser's coverage,
   const older = projectSourceManifestRecord({ payload: { status: "complete", coverage: { total: 1, accounted: 1, failed: 0 }, analysis: { generation: 1, phase: "indexed", schemaVersion: 1, unitCount: 1 } } });
   assert.equal(older.payload.coverage.materials, undefined, "absent is not extracted, never zero");
 });
+
+test("independent notes with identical bytes retain independent source identities", async () => {
+  const { service } = fixture();
+  const first = await service.register("user-one", upload({ path: "knowledge-base/notes/first.md" }));
+  const second = await service.register("user-one", upload({ path: "knowledge-base/notes/second.md" }));
+  assert.notEqual(first.source.id, second.source.id);
+  assert.equal(second.duplicate, false);
+});
+
+test("a deleted content identity is restored with a fresh generation", async () => {
+  const { service, documents } = fixture();
+  const first = await service.register("user-one", upload());
+  const tombstone = { ...first.source, deletedAt: "2026-09-07T00:00:00Z", revision: 2,
+    payload: { ...first.source.payload, generation: 2, status: "canceled", deletion: { status: "pending" } } };
+  documents.rows.set(documents.key("user-one", "source", first.source.id), tombstone);
+  const get = documents.get.bind(documents);
+  documents.get = async (userId, kind, id, options = {}) => {
+    const row = await get(userId, kind, id);
+    return row?.deletedAt && !options.includeDeleted ? null : row;
+  };
+  documents.restore = async (userId, kind, id, revision) => {
+    const row = await get(userId, kind, id);
+    assert.equal(row.revision, revision);
+    const restored = { ...row, revision: revision + 1, deletedAt: null };
+    documents.rows.set(documents.key(userId, kind, id), restored);
+    return restored;
+  };
+  const again = await service.register("user-one", upload());
+  assert.equal(again.source.id, first.source.id);
+  assert.equal(again.source.deletedAt, null);
+  assert.equal(again.source.payload.generation, 3);
+  assert.equal(again.source.payload.status, "queued");
+  assert.equal(again.source.payload.deletion, null);
+});
