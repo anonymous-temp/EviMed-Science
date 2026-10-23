@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useRoutes } from "react-router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -177,6 +177,22 @@ describe("a document's page", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   describe("its header", () => {
+    it("keeps a compiled-page edit open while the source pipeline is still queued", async () => {
+      vi.useFakeTimers();
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null },
+        { paths: [`knowledge-base/wiki/${knowledgePage.path}`], status: "queued" }, { readable: false });
+      mocks.getSource.mockResolvedValueOnce(wiki).mockRejectedValue(new WebApiError("retired", { status: 404, code: "source_not_found" }));
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderReader(readerAt(knowledgePage.sourceId));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+      fireEvent.change(screen.getByLabelText("页面全文"), { target: { value: "Unsaved research draft" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(screen.getByLabelText("页面全文")).toHaveValue("Unsaved research draft");
+      expect(mocks.getSource).toHaveBeenCalledTimes(1);
+    });
+
     it("is one line: the way back, the title with what the document is, and the three things to do with it", async () => {
       renderReader();
       const heading = await screen.findByRole("heading", { level: 1, name: guideline.display.title });
