@@ -163,7 +163,7 @@ test("a delivery is settled by the product queue: not before its window closes, 
   const claimed = await jobs.claim(["learning-evidence"], `w-${randomUUID()}`);
   assert.equal(claimed?.id, due.id);
   const result = await evidence.settle({ job: claimed });
-  assert.deepEqual(result, { jobCompleted: true, settled: "silent", routine: true });
+  assert.deepEqual(result, { settled: "silent", routine: true });
   await jobs.finish(owner, claimed.id, claimed.leaseToken, result);
   assert.equal(lessons.length, 1);
   assert.deepEqual(lessons[0].payload.peers.map((peer) => [peer.runId, peer.projectId]), [["s_run_a", PROJECT], ["s_run_b", PROJECT]]);

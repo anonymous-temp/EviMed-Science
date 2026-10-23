@@ -243,13 +243,20 @@ const settleJob = (runId = "run_prev") => ({ userId: "u1", projectId: "p1", payl
 
 test("a run nobody reacted to is settled as silent, with the shape of what it left; settling twice is settling once", async () => {
   const run = setup({});
-  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "silent", routine: false });
+  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
   assert.equal(run.ledger.rows.length, 1);
   const [event] = run.ledger.rows;
   assert.deepEqual([event.detail.evidence, event.detail.verdict, event.detail.scope, event.detail.sessionId], ["silent", "none", "conversation", "ses_1"]);
   assert.deepEqual(event.detail.shape, [{ format: "md", labels: ["summary", "findings"] }]);
-  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "silent", routine: false });
+  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
   assert.equal(run.ledger.rows.length, 1);
+});
+
+test("a store that will not take the silence of a settled run fails the job, so the worker retries it, rather than finishing it with nothing written", async () => {
+  const run = setup({});
+  run.ledger.recordLearningEvidence = async () => { throw new Error("database down"); };
+  await assert.rejects(() => run.evidence.settle({ job: settleJob() }), (error) => /** @type {any} */ (error).code === "learning_evidence_record_failed");
+  assert.deepEqual(run.failures, ["record_failed"]);
 });
 
 test("a run that was corrected, by a steer, a follow-up or a result, is not clean: no silence is written and no routine is looked for", async () => {
@@ -260,13 +267,13 @@ test("a run that was corrected, by a steer, a follow-up or a result, is not clea
   ]) {
     const run = setup({});
     await run.ledger.recordLearningEvidence("u1", { runId: "run_prev", projectId: "p1", key: "k", detail: { ...reaction, at: new Date(NOW).toISOString(), scope: "conversation" } });
-    assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "corrected", routine: false }, reaction.evidence);
+    assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "corrected", routine: false }, reaction.evidence);
     assert.equal(run.ledger.rows.length, 1);
   }
   // A follow-up that accepted it is a settlement already: no silence beside it.
   const accepted = setup({});
   await accepted.ledger.recordLearningEvidence("u1", { runId: "run_prev", projectId: "p1", key: "k", detail: { evidence: "follow-up", verdict: "accept", at: new Date(NOW).toISOString(), scope: "conversation" } });
-  assert.deepEqual(await accepted.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "follow-up", routine: false });
+  assert.deepEqual(await accepted.evidence.settle({ job: settleJob() }), { settled: "follow-up", routine: false });
   assert.equal(accepted.ledger.rows.length, 1);
 });
 
@@ -280,7 +287,7 @@ test("the third clean run of one shape in a scope completes a routine; a correct
       detail: { evidence: "silent", verdict: "none", scope: "conversation", shape: [{ format: "md", labels: ["summary", "findings"] }], at } })),
   );
   const result = await settle("run_prev");
-  assert.deepEqual(result, { jobCompleted: true, settled: "silent", routine: true });
+  assert.deepEqual(result, { settled: "silent", routine: true });
   const lesson = run.lessons.find((entry) => entry.trigger === "routine");
   assert.equal(lesson.idempotencyKey, "distill:run_prev:routine");
   assert.deepEqual(lesson.payload.peers, [{ runId: "fam_1", projectId: "p1" }, { runId: "fam_2", projectId: "other" }]);
@@ -293,7 +300,7 @@ test("the third clean run of one shape in a scope completes a routine; a correct
     { id: "b", userId: "u1", projectId: "p1", runId: "fam_2", occurredAt: at, trigger: "learning-evidence", detail: { evidence: "silent", verdict: "none", scope: "conversation", shape: [{ format: "md", labels: [] }], at } },
     { id: "c", userId: "u1", projectId: "p1", runId: "fam_2", occurredAt: at, trigger: "learning-evidence", detail: { evidence: "result-corrected", verdict: "correction", scope: "conversation", at } },
   );
-  assert.deepEqual(await corrected.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "silent", routine: false });
+  assert.deepEqual(await corrected.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
   assert.equal(period > 0, true);
 
   // Another scope's runs, and the gates.
@@ -301,13 +308,13 @@ test("the third clean run of one shape in a scope completes a routine; a correct
   other.ledger.rows.push(...["x", "y"].map((runId, index) => ({ id: `o${index}`, userId: "u1", projectId: "p1", runId, occurredAt: at, trigger: "learning-evidence",
     detail: { evidence: "silent", verdict: "none", scope: "conversation", shape: [{ format: "md", labels: [] }], at } })));
   assert.equal((await other.evidence.settle({ job: settleJob() })).routine, false, "the family is the scope's");
-  assert.deepEqual(await setup({ refusal: "paused" }).evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: null, routine: false, skipped: "paused" });
-  assert.deepEqual(await setup({ runs: [] }).evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: null, routine: false, skipped: "run_unavailable" });
+  assert.deepEqual(await setup({ refusal: "paused" }).evidence.settle({ job: settleJob() }), { settled: null, routine: false, skipped: "paused" });
+  assert.deepEqual(await setup({ runs: [] }).evidence.settle({ job: settleJob() }), { settled: null, routine: false, skipped: "run_unavailable" });
 });
 
 test("a run whose files left no readable shape is settled but never counted towards a routine", async () => {
   const run = setup({ shapes: {} });
-  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: "silent", routine: false });
+  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
   assert.equal(run.ledger.rows[0].detail.shape, undefined);
 });
 
@@ -329,7 +336,7 @@ test("the loop's triggers hand a finished run to the evidence ledger and the evi
   assert.deepEqual(await triggers.afterRun(project, run), { queued: [], skipped: "paused" });
   assert.equal(ledger.rows.length, 0);
   assert.deepEqual(await evidence.onNewTurn(project, { sessionId: "ses_1", text: "继续", requestId: "r" }), { recorded: false, reason: "no_judge" });
-  assert.deepEqual(await evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: null, routine: false, skipped: "paused" });
+  assert.deepEqual(await evidence.settle({ job: settleJob() }), { settled: null, routine: false, skipped: "paused" });
 });
 
 test("a plain 「不对，短一点」 on a native-memory account is one evidence event and a correction lesson through the real triggers: the loop never asks which engine holds the memory", async () => {

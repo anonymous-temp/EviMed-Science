@@ -323,20 +323,21 @@ export class LearningEvidence {
   /**
    * The window for a reaction to a run has closed. If nobody reacted, it was left alone and says so (`silent`, with the shape of what
    * it left); if somebody corrected it, it is not clean and nothing more is done; and a clean run may complete a routine.
-   * Idempotent: every write is keyed on the run, and the routine lesson on the run's id.
+   * Idempotent: every write is keyed on the run, and the routine lesson on the run's id. Returns what it settled, as the job's result; the
+   * worker finishes the job (`jobCompleted` is for a step that finishes its own).
    *
    * @param {{ job: any }} request the `learning-evidence` job
-   * @returns {Promise<{ jobCompleted: true, settled: string | null, routine: boolean, skipped?: string }>}
+   * @returns {Promise<{ settled: string | null, routine: boolean, skipped?: string }>}
    */
   async settle({ job }) {
     const runId = String(job.payload?.runId ?? "");
     const project = this.resolveProject && job.projectId ? await this.resolveProject(job.userId, job.projectId).catch(() => null) : null;
     const run = project ? (await this.agentRuns.list(project).catch(() => [])).find((/** @type {any} */ item) => item?.id === runId) : null;
-    if (!project || !run) return { jobCompleted: true, settled: null, routine: false, skipped: "run_unavailable" };
+    if (!project || !run) return { settled: null, routine: false, skipped: "run_unavailable" };
     const refused = await this.#triggers.refusalFor(project, run);
-    if (refused) return { jobCompleted: true, settled: null, routine: false, skipped: refused };
+    if (refused) return { settled: null, routine: false, skipped: refused };
     const events = await this.feedback.learningEvidenceOf(project.userId, run.id);
-    if (events.some((/** @type {any} */ event) => isLearningCorrection(event.detail))) return { jobCompleted: true, settled: "corrected", routine: false };
+    if (events.some((/** @type {any} */ event) => isLearningCorrection(event.detail))) return { settled: "corrected", routine: false };
     const scope = learningScopeOf(run);
     let settling = events.find((/** @type {any} */ event) => event.detail?.evidence === "silent" || event.detail?.evidence === "follow-up");
     let shape = Array.isArray(settling?.detail?.shape) ? settling.detail.shape : [];
@@ -347,14 +348,15 @@ export class LearningEvidence {
       const recorded = await this.feedback.recordLearningEvidence(project.userId, {
         runId: run.id, projectId: project.id, key: "settled", detail: { evidence: "silent", sessionId: run.sessionId ?? null, at, scope, endedAt: run.finishedAt, ...(shape.length ? { shape } : {}) },
       }).catch(() => null);
-      if (!recorded) { this.#failed("record_failed"); return { jobCompleted: true, settled: null, routine: false, skipped: "record_failed" }; }
+      // A store that would not take the row is the job's failure, retried by the worker: a run settled in silence is evidence, and losing it to a blip is losing it.
+      if (!recorded) { this.#failed("record_failed"); throw Object.assign(new Error("The silence of a settled run could not be recorded."), { code: "learning_evidence_record_failed" }); }
       settling = recorded.event;
       settled = "silent";
     }
-    if (!shape.length) return { jobCompleted: true, settled, routine: false };
+    if (!shape.length) return { settled, routine: false };
     // The clean runs of this scope in this run's period: the family a routine is counted over.
     const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
-    if (!Number.isFinite(period)) return { jobCompleted: true, settled, routine: false };
+    if (!Number.isFinite(period)) return { settled, routine: false };
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
     const family = (await this.feedback.cleanSettledRuns(project.userId, { scope, from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
       // A run that ended before the account reset its memory is no peer of a routine, however recently it was settled (review M-11).
@@ -366,6 +368,6 @@ export class LearningEvidence {
     const guest = job.payload?.guestInfluence === true || await this.#triggers.guestInfluenced?.(project, run).catch(() => false) === true;
     const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest });
     const queued = lesson ? await this.#triggers.queue(project, run, lesson) : false;
-    return { jobCompleted: true, settled, routine: queued };
+    return { settled, routine: queued };
   }
 }

@@ -221,7 +221,7 @@ test("a lesson is not queued for a conversation that ended before the reset, and
       resolveProject: async () => project, readShapes: async () => ({ "deliverables/a/report.md": shape[0] }), now: () => new Date(ms + 10_000),
     });
     const settle = (runId) => evidence.settle({ job: { userId: owner, projectId: project.id, payload: { runId } } });
-    assert.deepEqual(await settle("run_before_1"), { jobCompleted: true, settled: null, routine: false, skipped: "before_reset" }, "a conversation that ended before the reset is not settled for the loop");
+    assert.deepEqual(await settle("run_before_1"), { settled: null, routine: false, skipped: "before_reset" }, "a conversation that ended before the reset is not settled for the loop");
     const first = await settle("run_after_1");
     assert.deepEqual([first.settled, first.routine], ["silent", false]);
     const second = await settle("run_after_2");
