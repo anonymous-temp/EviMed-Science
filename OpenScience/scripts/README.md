@@ -51,12 +51,11 @@ Local development helpers.
   (`pnpm vendor:community-skills`, `pnpm check:community-skills`);
   `try-community-bundles.mjs` installs tool-form community bundles into a scratch kernel
   profile to see whether they compose.
-- `build-tool-graph.mjs`, `collect-executed-edges.mjs` and `generate-briefs.mjs` build the
-  evaluation corpus's per-capability tool graph and brief drafts (`pnpm check:tool-graph`,
-  `pnpm collect:tool-edges`).
-- `open-evolution-pr.mjs` and `open-method-pr.mjs` are run by an operator: they turn a staged
-  proposal into a branch, a commit and a pull-request body, and refuse one that touches more
-  than it owns.
+- `build-tool-graph.mjs` and `collect-executed-edges.mjs` build the evaluation corpus's
+  per-capability tool graph and merge the executed edges of finished runs into it
+  (`pnpm check:tool-graph`, `pnpm collect:tool-edges`).
+- `open-evolution-pr.mjs` is run by an operator: it turns a staged proposal into a branch, a
+  commit and a pull-request body, and refuses one that touches more than it owns.
 - `test_domain_check.py`, `test_large_file_probe.py`, `test_pdf_extract.py` and
   `test_stats_integrity.py` are standard-library `unittest` files for the core skills under
   `runtime/skills/core/`; run each directly with `python`. They are not wired into a

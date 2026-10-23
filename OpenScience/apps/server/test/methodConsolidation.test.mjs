@@ -651,13 +651,13 @@ test("a merge retires its originals when the canonical method has cleared the ha
   // Mounted and never opened says nothing about it (the harm test reads only runs that invoked the method).
   holds(clean(6, { invoked: false }));
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "runs that did not open the method are not evidence");
-  // Three clean runs are not yet a clear test; the sequential test needs four.
-  holds(clean(3));
-  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "three clean runs still leave the test open");
+  // Two clean runs are not yet a clear test; the sequential test needs three (its bounds are the scientific axis's, 2026-10-23).
+  holds(clean(2));
+  assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "two clean runs still leave the test open");
   // A rejected delivery among them keeps it open, and a method the test reads as harmful is never cleared.
   holds([run(1, "rejected"), ...clean(4).slice(1)]);
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "a rejected run among four leaves the test open");
-  holds([run(1, "rejected"), run(2, "rejected"), run(3, "rejected")]);
+  holds([run(1, "rejected"), run(2, "rejected"), run(3, "rejected"), run(4, "rejected")]);
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), [], "a canonical the test reads as harmful retires nobody");
   // Four clean runs of another body (the counters describe text the method no longer holds) count for nothing.
   holds(clean(4), { digest: "sha256:another-body" });

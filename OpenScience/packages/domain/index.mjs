@@ -304,6 +304,7 @@ export {
   MAX_ACTIVE_LEARNED_METHODS,
   HANDBOOK_TEXT_LIMITS,
   METHOD_HARM_TEST,
+  METHOD_MOUNT,
   METHOD_SCIENTIFIC_HARM_TEST,
   METHOD_SIMILARITY_PAIR_FLOOR,
   METHOD_SIMILARITY_TOP_K,
@@ -311,7 +312,6 @@ export {
   METHOD_UNPROVEN_MERGE_MIN_CARRIED,
   METHOD_UNUSED_RETIRE_LOADS,
   MEMORY_RECENCY_GAMMA_PER_HOUR,
-  MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_RERANK_WEIGHTS,
   MEMORY_STRENGTH_TAU_DAYS,
   METHOD_INDUCTION_MIN_TRAJECTORIES,
@@ -818,19 +818,32 @@ export {
   validateMethodSkill,
 } from './src/methodSkill.mjs'
 
+// retiredFeatures — what the platform no longer has, as the literal names a lesson uses for it (a closed list)
+export {
+  RETIRED_FEATURES,
+  methodTextOf,
+  retiredFeaturesIn,
+  retiredFeaturesOfMethod,
+} from './src/retiredFeatures.mjs'
+
 // methodGraph — the lifecycle: counters, promotion, retirement, and the graph
 export {
+  METHOD_APPLIED_OUTCOMES,
   METHOD_COUNT_KINDS,
   METHOD_GRAPH_ISSUE_CODES,
+  METHOD_MOUNT_REASONS,
   METHOD_OBSERVATION_OUTCOMES,
   METHOD_ORIGINS,
   METHOD_RELATION_TYPES,
+  METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_SUCCESS_OUTCOMES,
   computeMethodLevels,
   emptyLearning,
+  foldApplied,
   foldCarried,
   foldDecided,
   foldEligible,
+  foldExplored,
   foldLevel,
   foldObservation,
   foldRead,
@@ -842,7 +855,6 @@ export {
   methodLevel,
   methodStrength,
   promotionVerdict,
-  reflectionDue,
   relationIssues,
   resetLearningForDigest,
   retirementProposal,
@@ -852,6 +864,7 @@ export {
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
+  withoutRetiredLearningKeys,
 } from './src/methodGraph.mjs'
 
 // methodFeedback — what later became of the results a learned method was used for: the scientific axis of a method's
@@ -882,37 +895,15 @@ export {
   scientificOutcomes,
 } from './src/methodFeedback.mjs'
 
-// toolGraphSampling — ToolVerse's dependency graph and unlock sampling
+// toolGraph — ToolVerse's tool dependency graph: validation and the deterministic DAG clean-up
 export {
   TOOL_EDGE_SOURCES,
   TOOL_EDGE_STATE_EFFECTS,
   TOOL_EDGE_TYPES,
   TOOL_GRAPH_ISSUE_CODES,
-  chainSpecs,
-  graphCoverage,
-  sampleableEdges,
   sanitizeToolGraph,
-  seededRandom,
-  seededSample,
-  unlockSchedule,
   validateToolGraph,
-} from './src/toolGraphSampling.mjs'
-
-// experienceBullets — the capability handbook's self-maintained section
-export {
-  BULLET_TAGS,
-  EXPERIENCE_SECTION_HEADING,
-  EXPERIENCE_SECTION_NOTE,
-  EXPERIENCE_SUBSECTIONS,
-  curateBullets,
-  harmfulBullets,
-  nextBulletId,
-  onlyExperienceSectionChanged,
-  parseExperienceSection,
-  renderBullet,
-  renderExperienceSection,
-  replaceExperienceSection,
-} from './src/experienceBullets.mjs'
+} from './src/toolGraph.mjs'
 
 /** @typedef {import('./src/methodSkill.mjs').MethodSkillIssue} MethodSkillIssue */
 /** @typedef {import('./src/methodSkill.mjs').MethodPayload} MethodPayload */
@@ -922,11 +913,9 @@ export {
 /** @typedef {import('./src/methodGraph.mjs').MethodObservation} MethodObservation */
 /** @typedef {import('./src/methodGraph.mjs').MethodRelation} MethodRelation */
 /** @typedef {import('./src/methodGraph.mjs').MethodProvenance} MethodProvenance */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraph} ToolGraph */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphNode} ToolGraphNode */
-/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphEdge} ToolGraphEdge */
-/** @typedef {import('./src/toolGraphSampling.mjs').ChainSpec} ChainSpec */
-/** @typedef {import('./src/experienceBullets.mjs').ExperienceBullet} ExperienceBullet */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraph} ToolGraph */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphNode} ToolGraphNode */
+/** @typedef {import('./src/toolGraph.mjs').ToolGraphEdge} ToolGraphEdge */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
 // sourceUnderstanding — 19 exports

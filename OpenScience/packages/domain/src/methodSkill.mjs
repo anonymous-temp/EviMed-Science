@@ -37,6 +37,7 @@ import { HANDBOOK_TEXT_LIMITS, SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { RUNTIME_SKILL_ROOTS } from './skillRoots.mjs'
 import { unmountedToolReferences, MOUNTED_TOOL_NAMES } from './toolNames.mjs'
 import { hasSensitiveText, sensitiveTextTokens } from './sensitiveText.mjs'
+import { retiredFeaturesOfMethod } from './retiredFeatures.mjs'
 
 /** The `metadata.evimed_schema` value this module understands. */
 export const METHOD_SKILL_SCHEMA = 'method-skill/1'
@@ -188,6 +189,7 @@ export const METHOD_SKILL_ISSUE_CODES = Object.freeze([
   'method_reuse_reference_shape',
   'method_skill_root_leak',
   'method_sensitive_content',
+  'method_stale_feature',
   'method_files_prefix',
   'method_files_path',
   'method_files_too_large',
@@ -966,6 +968,11 @@ export function validateMethodSkill(input) {
     if (hasSensitiveText(body)) {
       issues.push(issue('method_sensitive_content', `The body carries ${sensitiveTextTokens(body).join(', ')}. A method is mounted into every later run of the project; it may not carry credentials or patient identifiers.`))
     }
+  }
+
+  /* a feature the platform no longer has (`retiredFeatures.mjs`): a closed list of names, never a reading of the prose */
+  for (const stale of retiredFeaturesOfMethod({ frontmatter, body, files })) {
+    issues.push(issue('method_stale_feature', `The method names \`${stale.term}\`, which the platform has not had since ${stale.since} (${stale.feature}). A lesson about it tells a run to do something that no longer matters; leave it out, or keep what the researcher did apart from it.`))
   }
 
   /* attached files */

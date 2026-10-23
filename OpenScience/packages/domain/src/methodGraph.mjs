@@ -23,7 +23,10 @@
  *    accepted counts as a success.
  *
  * What a method has to show is its own runs: it takes effect at once and the
- * sequential harm test over the runs that used it retires it (`methodHarmTest`).
+ * sequential harm test over the runs that used it retires it (`methodHarmTest`). A run
+ * that used it counts as a step when its deliverable was judged and when the researcher's
+ * next words were (`foldApplied`): the answer line has no deliverable to judge, and a
+ * correction is the one verdict it does produce.
  * There is no paired on/off evaluation of a method — the owner's ruling of
  * 2026-10-10, after it had never once run — so nothing here depends on one.
  *
@@ -34,9 +37,7 @@
  */
 import {
   MAX_ACTIVE_LEARNED_METHODS,
-  MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_STRENGTH_TAU_DAYS,
-  METHOD_HARM_TEST,
   METHOD_SCIENTIFIC_HARM_TEST,
   METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS,
   METHOD_UNPROVEN_MERGE_MIN_CARRIED,
@@ -75,17 +76,28 @@ export const METHOD_SUCCESS_OUTCOMES = Object.freeze(['accepted', 'repaired'])
 /** Where a method came from, which is what decides whether it needs a gate. */
 export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
 
-/** The six counters, kept apart on purpose: "was available", "was mounted",
+/** The counters, kept apart on purpose: "was available", "was mounted",
  *  "was actually invoked", "was in a run that succeeded", "was read with
- *  nothing to attribute it to" and "was carried as a card by a run the model
- *  answered" are six different claims and collapsing them is how a library of
- *  unused methods looks busy.
+ *  nothing to attribute it to", "was carried as a card by a run the model
+ *  answered" and what the researcher did after a run that opened it are
+ *  different claims and collapsing them is how a library of unused methods
+ *  looks busy.
  *
  *  `carried` is the run-level load: one per finished run whose runtime put the
- *  method's card in front of a model that then answered. `loaded` is the
+ *  method's card in front of a model that then answered, because the method was
+ *  meant for the work (the mount reasons `similarity` and `dependency`,
+ *  `METHOD_RELEVANT_MOUNT_REASONS`). `explored` is the same for a card that was
+ *  exposure only — the exploration slot, a mount with no question to rank by —
+ *  and is never the denominator of "carried and never opened": a method that
+ *  nothing about the question picked was not passed over. `loaded` is the
  *  deliverable-level one (an observation), so it is zero for a method that only
  *  ever rode in runs that delivered nothing — the open-domain answer line — and
  *  cannot say how often a card was weighed and passed over.
+ *
+ *  `appliedCorrected` and `appliedClean` are one per run that opened the method:
+ *  the researcher's next words named it as what they were correcting, or the
+ *  conversation moved on without that (`foldApplied`). They are the harm test's
+ *  steps on the line that has no deliverable to judge.
  *
  *  `read` is the one that carries no outcome. A run that delegates nothing —
  *  the whole open-domain answer line — can still call the `skill` tool and read
@@ -95,7 +107,22 @@ export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
  *  a success rate would move the rate without evidence, in whichever direction
  *  the arithmetic happened to fall. What it does support is the one claim it
  *  is: the method was not passed over. */
-export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read', 'carried'])
+export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read', 'carried', 'explored', 'appliedCorrected', 'appliedClean'])
+
+/**
+ * Why a method's card was in front of a run, written on the mount receipt so a later count can be split by it.
+ *  - `similarity`: among the methods nearest to the conversation's first message.
+ *  - `dependency`: reused by a method that was selected.
+ *  - `explore`: the exploration slot, a method nothing about the question picked.
+ *  - `recent`: no question to rank by (a runtime start, a recall through the API), so the most recently approved.
+ * Only the first two say the method was meant for the work; the other two are exposure, and a card that was exposure is not
+ * counted as passed over (`METHOD_RELEVANT_MOUNT_REASONS`).
+ */
+export const METHOD_MOUNT_REASONS = Object.freeze(['similarity', 'dependency', 'explore', 'recent'])
+export const METHOD_RELEVANT_MOUNT_REASONS = Object.freeze(['similarity', 'dependency'])
+
+/** What the researcher's reaction to a run that opened a method was. */
+export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
 
 /**
  * @typedef {object} MethodObservation
@@ -104,6 +131,8 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {string} outcome  one of METHOD_OBSERVATION_OUTCOMES
  * @property {string} at       ISO timestamp
  * @property {boolean} [invoked]  the run called the method, not merely loaded it
+ * @property {'corrected' | 'clean'} [applied]  set when the step is the researcher's reaction to a run that opened the method
+ *   (`foldApplied`), whose family is `applied:<run id>`: a deliverable's observation never carries it
  */
 
 /**
@@ -118,7 +147,7 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
 /**
  * @typedef {object} MethodLearning
  * @property {string} digest
- * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number, carried?: number}} counts
+ * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number, carried?: number, explored?: number, appliedCorrected?: number, appliedClean?: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
  * @property {number} level  derived from `depends_on` by `computeMethodLevels` and written back by the consolidation pass (`foldLevel`)
@@ -165,6 +194,19 @@ export function emptyLearning(digest) {
     level: 0,
     lastReadAt: null,
   }
+}
+
+/**
+ * A learning payload without the keys it once carried and no reader has: the paired evaluation's `evaluations`, whose
+ * stack was deleted on 2026-10-10 (no paid method on/off study). Records written before then still hold the key; nothing reads
+ * it, so it is dropped on the next write rather than migrated.
+ * @param {MethodLearning} learning
+ * @returns {MethodLearning}
+ */
+export function withoutRetiredLearningKeys(learning) {
+  if (!learning || typeof learning !== 'object' || !('evaluations' in learning)) return learning
+  const { evaluations: _retired, ...rest } = /** @type {any} */ (learning)
+  return rest
 }
 
 /**
@@ -284,6 +326,55 @@ export function foldCarried(learning) {
 }
 
 /**
+ * Count a finished run that carried the method's card to a model that answered as exposure only: the exploration slot, or
+ * a mount that had no question to rank by. Observability, and nothing a verdict is drawn from (`METHOD_COUNT_KINDS`).
+ * @param {MethodLearning | undefined} learning
+ * @returns {MethodLearning}
+ */
+export function foldExplored(learning) {
+  const current = learning ?? emptyLearning('')
+  return { ...current, counts: { ...current.counts, explored: Number(current.counts?.explored ?? 0) + 1 } }
+}
+
+/**
+ * Record what became of one run that opened the method, from the researcher's own next words.
+ *
+ * The harm test could only read a deliverable's verdict, and the line most of the traffic is on — an answer in the
+ * conversation — has no deliverable: a method learned there could ride in every prompt and never be judged. What that line
+ * does produce is the researcher's reaction. `corrected` is a correction, preference or rejection that named this method (at
+ * the body the run read: the caller checks); `clean` is the conversation moving on without one. Each is a step of the harm
+ * test (`corrected` is a rejected step, `clean` an accepted one), under the family `applied:<run id>` so it never collides
+ * with the deliverables of the same run and is one step per run however often it is recorded.
+ *
+ * Idempotent, and a correction is never taken back: a run recorded `clean` and corrected later becomes `corrected`; a run
+ * recorded `corrected` stays so. A run no reaction is known for is not recorded at all: a missing check never reads as clean.
+ *
+ * @param {MethodLearning | undefined} learning
+ * @param {{ runId: string, outcome: 'corrected' | 'clean', at: string }} applied
+ * @returns {MethodLearning}
+ */
+export function foldApplied(learning, applied) {
+  const current = learning ?? emptyLearning('')
+  const runId = String(applied?.runId ?? '')
+  if (!runId || !METHOD_APPLIED_OUTCOMES.includes(/** @type {any} */ (applied?.outcome))) return current
+  const family = `applied:${runId}`
+  const observations = [...(current.observations ?? [])]
+  const existing = observations.findIndex((entry) => entry.family === family)
+  const counts = { ...current.counts }
+  const outcome = applied.outcome === 'corrected' ? 'rejected' : 'accepted'
+  if (existing < 0) {
+    observations.push({ runId, family, outcome, at: String(applied.at ?? ''), invoked: true, applied: applied.outcome })
+  } else {
+    if (observations[existing].applied === applied.outcome || observations[existing].applied === 'corrected') return current
+    observations[existing] = { ...observations[existing], outcome, applied: 'corrected', at: String(applied.at ?? observations[existing].at ?? '') }
+    counts.appliedClean = Math.max(0, Number(counts.appliedClean ?? 0) - 1)
+  }
+  const key = applied.outcome === 'corrected' ? 'appliedCorrected' : 'appliedClean'
+  counts[key] = Number(counts[key] ?? 0) + 1
+  return { ...current, counts, observations }
+}
+
+/**
  * Start the count of loads again, for a method that was stopped for never being opened and has been given back.
  * Everything else measured about the body stays: it is the same body, and only the verdict "carried twenty times and
  * not opened" was already spent on it. Without this the first hourly pass after a restore would stop it again.
@@ -340,11 +431,15 @@ export function foldRelation(learning, relation) {
   return { ...current, relations }
 }
 
-/** Distinct run families whose outcome counts as a success. @param {MethodLearning} learning @returns {string[]} */
+/**
+ * Distinct run families whose outcome counts as a success: the deliveries it was learnt for, so the researcher's reaction to
+ * a run that opened it (`foldApplied`) is not one of them.
+ * @param {MethodLearning} learning @returns {string[]}
+ */
 export function successfulFamilies(learning) {
   const families = new Set()
   for (const observation of learning?.observations ?? []) {
-    if (METHOD_SUCCESS_OUTCOMES.includes(observation.outcome)) families.add(observation.family)
+    if (METHOD_SUCCESS_OUTCOMES.includes(observation.outcome) && !observation.applied) families.add(observation.family)
   }
   return [...families]
 }
@@ -412,17 +507,25 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * whether carrying the text costs anything — and the build spec states it on
  * mounts.
  *
- * This is the production detector of the 2026-09-21 ruling
- * (`METHOD_HARM_TEST`), and it is the only statistic here that retires an
- * inferred method: the runs are real work the researcher already paid for, and
- * a sequential test keeps its false-alarm rate however often it is read.
+ * A step is bad when a deliverable of the run was rejected or the researcher
+ * corrected the method's work in their next words (`foldApplied`), good when a
+ * deliverable was accepted or repaired or the conversation moved on. The bounds
+ * are the scientific axis's (`METHOD_SCIENTIFIC_HARM_TEST`): a researcher asking
+ * for a change to what they were handed is ordinary work, so the delivery
+ * axis's 10% background rate for a rejected package would retire methods for
+ * being read in the course of normal research.
+ *
+ * This is the production detector of the 2026-09-21 ruling, and it is the only
+ * statistic here that retires an inferred method: the runs are real work the
+ * researcher already paid for, and a sequential test keeps its false-alarm rate
+ * however often it is read.
  *
  * @param {MethodLearning} learning
- * @param {Partial<Record<keyof typeof METHOD_HARM_TEST, number>>} [options] the test's bounds; any of them may be replaced
+ * @param {Partial<Record<keyof typeof METHOD_SCIENTIFIC_HARM_TEST, number>>} [options] the test's bounds; any of them may be replaced
  * @returns {{state: 'harm'|'clear'|'watching', reason: 'upper-boundary'|'lower-boundary'|'window-exhausted'|'accumulating', runs: number, bad: number, llr: number}}
  */
 export function methodHarmTest(learning, options = {}) {
-  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = { ...METHOD_HARM_TEST, ...options }
+  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = { ...METHOD_SCIENTIFIC_HARM_TEST, ...options }
   const upper = Math.log((1 - beta) / alpha)
   const lower = Math.log(beta / (1 - alpha))
   const badStep = Math.log(harmRate / baseRate)
@@ -543,19 +646,6 @@ export function libraryEvictions(methods, options = {}) {
       opens: opens(method),
       reason: `the library holds ${active.length} effective methods against a cap of ${cap}, and this one is among the least used (${opens(method)} openings)`,
     }))
-}
-
-/**
- * Whether the recent record is eventful enough to be worth one higher-level
- * reflection. Importance is the caller's, summed by the consolidation job; the
- * threshold is the memory subsystem's, reused so both kinds of reflection fire
- * on the same amount of evidence.
- * @param {number} accumulatedImportance
- * @param {number} [threshold]
- * @returns {boolean}
- */
-export function reflectionDue(accumulatedImportance, threshold = MEMORY_REFLECTION_IMPORTANCE_THRESHOLD) {
-  return Number(accumulatedImportance ?? 0) >= threshold
 }
 
 /* --------------------------------------------------------------- promotion */

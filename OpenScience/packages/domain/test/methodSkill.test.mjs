@@ -247,6 +247,13 @@ test("a method may not name an absent tool, an absolute skill root, or a credent
   assert.ok(has(validate({ body: `${GOOD_BODY}\n\nCall writing_audit() first.` }), "method_unmounted_tool_reference"));
   assert.ok(has(validate({ body: `${GOOD_BODY}\n\nRead /opt/evimed/skills/core/x.` }), "method_skill_root_leak"));
   assert.ok(has(validate({ body: `${GOOD_BODY}\n\nUse api_key sk-live-1.` }), "method_sensitive_content"));
+  // A feature the platform no longer has (`retiredFeatures.mjs`): refused by its literal name, in the body, a metadata value or an attached file.
+  const stale = validate({ body: `${GOOD_BODY}\n\nWrite the search log to Clinical-Evidence-Search.json before you submit.` });
+  assert.ok(has(stale, "method_stale_feature"));
+  assert.match(stale.issues.find((entry) => entry.code === "method_stale_feature")?.message ?? "", /clinical-evidence-search\.json.*2026-09-17/i);
+  assert.ok(has(validate({ body: `${GOOD_BODY}\n\nStay inside the 提交次数 the deployment allows.` }), "method_stale_feature"));
+  assert.ok(!has(validate({ body: `${GOOD_BODY}\n\nKeep a citation-ledger.csv beside the manuscript.` }), "method_stale_feature"),
+    "a file that some capability still writes is no retired feature");
   // The mounted set is what decides, and a caller may narrow it.
   assert.ok(has(validate({ mountedTools: ["read"] }), "method_allowed_tools_unknown"));
 });
