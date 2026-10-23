@@ -1,50 +1,11 @@
 // The conversation titles of a native memory's sources, through the real app: the run ledger of the project the conversation was held
 // in names the conversation, a deleted conversation is dropped from the evidence, and the page serves it all on `GET /api/memory/profile`.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
 
-import { OpenVikingClient } from "../src/openVikingClient.mjs";
-import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
-import { createWebApiApp } from "../src/server.mjs";
-import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
+import { nativeAppIntegration } from "./helpers/nativeAppFixture.mjs";
 
-const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
-if (databaseUrl) {
-  const url = new URL(databaseUrl);
-  assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname));
-  assert.match(url.pathname, /evimed_test/);
-}
-const options = { timeout: 30_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const PASSWORD = "test-only-native-password";
-
-async function fixture(t, extract) {
-  const stub = await startOpenVikingStub(t, { extract });
-  const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
-  const openVikingSessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
-  const dataDir = await mkdtemp(path.join("/tmp", "evimed-native-prov-"));
-  const app = createWebApiApp({
-    dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, ovNativeMemoryEnabled: true, openVikingSessions,
-  });
-  await migrateResearchMemory(app.store.database);
-  const username = `prov${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-  const user = await app.store.createUser(username, PASSWORD, "Provenance fixture");
-  const address = await app.listen(0, "127.0.0.1");
-  const base = `http://127.0.0.1:${address.port}`;
-  t.after(async () => {
-    await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
-    await app.close();
-    await rm(dataDir, { recursive: true, force: true });
-  });
-  const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password: PASSWORD }) });
-  const auth = await login.json();
-  const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
-  return { app, base, headers, user, stub, engineUser: openVikingSessions.engineUser(user.id), sessions: openVikingSessions };
-}
+const { options, fixture } = nativeAppIntegration();
 
 test("the profile names the conversations behind a native memory by the run ledger of the project they were held in", options, async (t) => {
   const { app, base, headers, user, stub, engineUser } = await fixture(t, ({ user: engine, session }) => ({

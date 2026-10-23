@@ -446,13 +446,17 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ holder?: { id: string, name: string } }} [options]
    */
   async profile(userId, { holder = undefined } = {}) {
-    const { titles, records } = await this.#withConversationTitles(userId, await this.records(userId));
+    const files = await this.files(userId);
+    const { titles, records: active } = await this.#withConversationTitles(userId, await this.records(userId, { files }));
+    // What the person forgot rides in the same list as `status: "archived"`, as it does on the other engine: the page's 「已忘记的内容」
+    // reads it from there, and every other reader leaves an archived memory out.
+    const records = [...active, ...await this.forgotten(userId, { files }).catch(() => [])];
     /** @type {Record<string, any[]>} */
     const groups = {};
     for (const kind of new Set(Object.values(LEGACY_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
     return {
-      ...(holder ? { holder } : {}), records, groups, activeCount: records.length, pendingCount: 0, episodeCount: 0,
+      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: 0, episodeCount: 0,
       conversations: titles, usage: {}, engine: "native", pending: await this.pending(userId),
     };
   }
@@ -623,7 +627,16 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} id @param {{ value?: string, sensitive?: boolean, status?: string, expectedVersion: number }} patch
    */
   async update(userId, id, { value = undefined, sensitive = undefined, status = undefined, expectedVersion }) {
-    const { file, line } = await this.#target(userId, id);
+    /** @type {{ file: any, line: any }} */
+    let target;
+    try {
+      target = await this.#target(userId, id);
+    } catch (error) {
+      // A memory the person forgot is not on the page any more, and its restore is the same call as any other change of status.
+      if (status === "active" && value === undefined && sensitive === undefined && /** @type {any} */ (error)?.code === "memory_not_found") return this.#restoreForgotten(userId, id, expectedVersion);
+      throw error;
+    }
+    const { file, line } = target;
     if (versionOfHash(file.hash) !== expectedVersion) throw new HttpError(409, "memory_conflict", "Structured memory changed before this update was applied.");
     if (status !== undefined && status !== "active") {
       if (status !== "archived") throw new HttpError(400, "memory_engine_unsupported", "On this memory engine a memory is kept or forgotten.");
@@ -774,25 +787,7 @@ export class NativeMemoryStore {
     const memoryType = last.memoryType;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
-      // `replace` first, in both branches. A file the engine has written again at this address since the person forgot it is
-      // overwritten by the restore: `create` only refused that on v0.5.0 (409) and is a plain alias of `replace` from v0.5.1,
-      // so the guard cannot be relied on, and the person asked for this text back (the race is accepted, not prevented).
-      // A forgotten file is gone, and v0.5.0's answer to `replace` on a missing file is not recorded for these paths: a 404
-      // is answered with `create`, which v0.5.0 does take. That fallback is dead from v0.5.1.1 and goes with the pin.
-      if (live) await this.#engine(() => this.sessions.replace(userId, uri, String(last.before)));
-      else await this.#engine(async () => {
-        const write = (/** @type {"replace" | "create"} */ mode) => this.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
-          body: { uri, content: String(last.before), mode, wait: true } });
-        try { await write("replace"); } catch (error) {
-          if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
-          await write("create");
-        }
-      });
-      await this.overlay.unreject(userId, memoryType, statements(String(last.before)));
-      await this.overlay.upsertFile({ userId, uri, memoryType, body: String(last.before), projectId: last.projectId ?? undefined });
-      if (last.projectId) await this.#engine(() => this.sessions.setTags(userId, uri, [`project=${last.projectId}`])).catch(() => {});
-      await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason: "undo", before: null, after: String(last.before), projectId: last.projectId });
-      await this.overlay.markUndone(userId, last.id);
+      await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId: last.projectId, revisionId: last.id, reason: "undo", live: Boolean(live) });
       return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
     }
     if (!live) throw new HttpError(404, "memory_not_found", "Memory not found.");
@@ -811,6 +806,122 @@ export class NativeMemoryStore {
     await this.overlay.upsertFile({ userId, uri, memoryType, body: before });
     await this.overlay.markUndone(userId, last.id);
     return { undone: "restored", record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [] };
+  }
+
+  /**
+   * Put a forgotten file's text back as a file, and take the forget off the list of what can be undone. `replace` first, in both
+   * cases. A file the engine has written again at this address since the person forgot it is overwritten by the restore: `create`
+   * only refused that on v0.5.0 (409) and is a plain alias of `replace` from v0.5.1, so the guard cannot be relied on, and the
+   * person asked for this text back (the race is accepted, not prevented). A forgotten file is gone, and v0.5.0's answer to `replace`
+   * on a missing file is not recorded for these paths: a 404 is answered with `create`, which v0.5.0 does take. That fallback is dead
+   * from v0.5.1.1 and goes with the pin. What a restore can give back is the text: the engine's own fields (its type) are not restored
+   * with it, and its later extraction writes beside the file rather than into it.
+   * @param {string} userId
+   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string, live?: boolean }} restore
+   */
+  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason, live = false }) {
+    if (live) await this.#engine(() => this.sessions.replace(userId, uri, text));
+    else await this.#engine(async () => {
+      const write = (/** @type {"replace" | "create"} */ mode) => this.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
+        body: { uri, content: text, mode, wait: true } });
+      try { await write("replace"); } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
+        await write("create");
+      }
+    });
+    await this.overlay.unreject(userId, memoryType, statements(text));
+    await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
+    if (projectId) await this.#engine(() => this.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
+    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason, before: null, after: text, projectId });
+    await this.overlay.markUndone(userId, revisionId);
+  }
+
+  /**
+   * What the person forgot and can bring back, as the records the page's 「已忘记的内容」 lists (`status: "archived"`): the files
+   * whose forget kept their text, and the lines a profile edit took out for the same reason, newest first. The overlay's revisions
+   * are the only record of them — the engine no longer holds the file — and a forget that was undone, a hard delete (no text kept),
+   * and what the platform's own checks removed are not here. A file that is live again at the same address, and a line the document
+   * says again, are not forgotten any more.
+   * @param {string} userId @param {{ files?: any[] }} [options]
+   * @returns {Promise<any[]>}
+   */
+  async forgotten(userId, { files = undefined } = {}) {
+    const live = new Map((files ?? await this.files(userId)).map((file) => [file.uri, file]));
+    const root = this.sessions.memoryRoot(userId);
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    for (const revision of await this.overlay.forgottenRevisions(userId)) {
+      const place = nativeMemoryFile(revision.uri, root);
+      if (!place) continue;
+      const base = { revision, place, scope: PROJECT_MEMORY_TYPES.includes(place.type) && revision.projectId ? "project" : "user", scopeId: PROJECT_MEMORY_TYPES.includes(place.type) ? revision.projectId ?? "" : "" };
+      const kind = /** @type {Record<string, string>} */ (LEGACY_KIND_OF_TYPE)[place.type] ?? "project_fact";
+      const record = (/** @type {Record<string, any>} */ over) => ({
+        scope: base.scope, scopeId: base.scopeId, kind, origin: "explicit", status: "archived", confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 0,
+        createdAt: revision.changedAt, updatedAt: revision.changedAt, lastConfirmedAt: revision.changedAt, expiresAt: null, supersededBy: null, invalidSince: null, validFrom: null,
+        evidence: [], revisions: [], engine: "native", nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...over,
+      });
+      if (revision.change === "deleted") {
+        if (live.has(revision.uri)) continue;
+        const id = nativeFileId(revision.uri);
+        if (!found.has(id)) {
+          const text = String(revision.before ?? "");
+          found.set(id, record({ id, key: place.relPath, value: text, summary: titleOf(place.type, place.relPath, text), version: versionOfHash(contentHash(text)), contentHash: contentHash(text) }));
+        }
+        continue;
+      }
+      // A profile edit that forgot lines: the lines the revision took out, each a record of its own as it was while it lived.
+      const after = new Set(statements(String(revision.after ?? "")).map(lineFingerprint));
+      const present = new Set(statements(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
+      for (const raw of String(revision.before ?? "").split("\n")) {
+        const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
+        if (!text || isLabelLine(raw) || /^#{1,6}\s/.test(raw.trim())) continue;
+        const print = lineFingerprint(text);
+        if (after.has(print) || present.has(print)) continue;
+        const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
+        if (found.has(id)) continue;
+        found.set(id, record({ id, key: `profile.md#${print.slice(0, 12)}`, value: text.replace(AS_OF, "").trim(), summary: "", raw: raw.trim(), version: versionOfHash(contentHash(text)),
+          contentHash: contentHash(text), document: { id: nativeFileId(revision.uri), uri: revision.uri } }));
+      }
+    }
+    return [...found.values()].slice(0, 100).map(({ raw: _raw, ...entry }) => entry);
+  }
+
+  /**
+   * Bring one forgotten memory back: the file written again from the text its forget kept, or the profile line added to the profile
+   * document again, and the forget taken off the list. The version the page sends is the forgotten memory's own, so a list the page
+   * read before something else changed it is a 409 and never a guess.
+   * @param {string} userId @param {string} id @param {number} expectedVersion
+   */
+  async #restoreForgotten(userId, id, expectedVersion) {
+    const files = await this.files(userId);
+    const entry = (await this.forgotten(userId, { files })).find((candidate) => candidate.id === id);
+    if (!entry) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    if (entry.version !== expectedVersion) throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+    this.#touch(userId);
+    const revisions = await this.overlay.revisionsOf(userId, entry.uri, { limit: 200 });
+    const revision = revisions.find((candidate) => candidate.id === entry.forgottenRevision && !candidate.undoneAt);
+    if (!revision) throw new HttpError(404, "memory_not_found", "Memory not found.");
+    const memoryType = entry.nativeType;
+    const projectId = revision.projectId ?? null;
+    if (!entry.document) {
+      // A file: written again from the text its forget kept.
+      await this.#restoreText(userId, { uri: entry.uri, text: String(revision.before), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+      return this.getRecord(userId, nativeFileId(entry.uri));
+    }
+    // A line: the line as the document had it, after the document's own lines.
+    const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")) === lineFingerprint(entry.value));
+    const line = (raw ?? `- ${entry.value}`).trim();
+    const document = files.find((file) => file.uri === entry.uri);
+    if (document) {
+      const body = document.body.replace(/\s+$/, "");
+      await this.#write(userId, document, `${body}\n${line}`, { actor: "user", reason: "restored from forgotten" });
+      await this.overlay.markUndone(userId, revision.id);
+    } else {
+      // The document itself was forgotten since: it comes back with its headings and this one line.
+      const headings = String(revision.before ?? "").split("\n").filter((text) => /^#{1,6}\s/.test(text.trim()));
+      await this.#restoreText(userId, { uri: entry.uri, text: [...headings, line].join("\n"), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+    }
+    return this.getRecord(userId, id).catch(() => this.getRecord(userId, nativeFileId(entry.uri)));
   }
 
   /** @param {string} userId @param {string} fileId */

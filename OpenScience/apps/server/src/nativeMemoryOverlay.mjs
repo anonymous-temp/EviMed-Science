@@ -280,6 +280,20 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicRevision);
   }
 
+  /**
+   * What the person (or a conversation, at the person's word) forgot and can still take back, newest first: a deleted file whose text was
+   * kept for the undo, and a profile edit that took lines out for the same reason. A hard delete keeps no text and is not here, nor is
+   * what the platform's own checks removed, nor a forget that was already undone.
+   * @param {string} userId @param {{ limit?: number }} [options]
+   */
+  async forgottenRevisions(userId, { limit = 300 } = {}) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
+      WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
+        AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL AND reason LIKE 'forgotten on the memory page%'))
+      ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
+    return result.rows.map(publicRevision);
+  }
+
   /** The revisions of many files in one read, newest first per file. @param {string} userId @param {readonly string[]} uris */
   async revisionsOfMany(userId, uris, { perFile = 32 } = {}) {
     /** @type {Map<string, ReturnType<typeof publicRevision>[]>} */
