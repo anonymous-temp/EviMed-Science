@@ -101,10 +101,6 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
     const all = query.getAll(key);
     if (!lists.has(key) && all.length !== 1) throw invalid(`${key} may only be given once.`);
     raw[key] = lists.has(key) ? key === "clientTags" ? all : all.flatMap((value) => value.split(",")) : all[0];
-    if (key === "clientTags" && all.length === 1 && all[0].trim().startsWith("[")) {
-      try { raw[key] = JSON.parse(all[0]); } catch { throw invalid("clientTags must be repeated labels or a JSON array."); }
-      if (!Array.isArray(raw[key])) throw invalid("clientTags must be repeated labels or a JSON array.");
-    }
     if (["questionVersion", "version", "errorLimit", "errorOffset", "limit", "offset", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);

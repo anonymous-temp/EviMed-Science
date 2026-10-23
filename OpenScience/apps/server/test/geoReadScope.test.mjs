@@ -16,9 +16,9 @@ test("scope has closed fields, inclusive local dates and compatible aliases", ()
   assert.deepEqual(geoScopeFromQuery(new URLSearchParams("engines=kimi,deepseek&clientTags=a%2Cb&clientTags=c")).clientTags, ["a,b", "c"]);
 });
 
-test("URL tag lists accept JSON arrays without splitting commas inside labels", () => {
-  assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: JSON.stringify(["a,b", "c"]) })).clientTags, ["a,b", "c"]);
-  assert.throws(() => geoScopeFromQuery(new URLSearchParams({ clientTags: '["broken"' })), (error) => error.status === 400);
+test("URL JSON-looking tags stay literal without splitting commas inside labels", () => {
+  assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: JSON.stringify(["a,b", "c"]) })).clientTags, ['["a,b","c"]']);
+  assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: '["broken"' })).clientTags, ['["broken"']);
 });
 
 test("a provided daily member date is required to be a real nonempty day", () => {
@@ -55,4 +55,13 @@ test("selection computes pooled counts and uses the actual denominator for drill
   assert.equal(mentions.members.unit, "brand_mentions");
   assert.equal(mentions.members.total, 2, "two contributing snapshots can contribute four mentions");
   assert.equal(mentions.denominator, 4);
+});
+
+test("URL tags are repeated literal values regardless of JSON-looking prefixes", () => {
+  const labels = ["[高龄]", '["高龄"]', "逗号,标签", "Line1\nLine2"];
+  for (const tag of labels) assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: tag })).clientTags, [tag]);
+  const query = new URLSearchParams();
+  for (const tag of labels) query.append("clientTags", tag);
+  assert.deepEqual(geoScopeFromQuery(query).clientTags, [...labels].sort());
+  assert.deepEqual(normalizeGeoReadScope({ clientTags: labels }).clientTags, [...labels].sort());
 });

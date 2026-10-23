@@ -337,3 +337,27 @@ test("preview and save share the real round call budget before storing an imposs
   const admitted = await service.previewQuestions(owner, p.id, { ...body, rows: body.rows.slice(0, 125) });
   assert.equal(admitted.plannedCalls, 5000);
 });
+
+test("URL client tags are exact literal labels through PostgreSQL selection and native reads", options, async () => {
+  const { geoScopeFromQuery } = await import("../src/geoReadScope.mjs");
+  const p = await project("literal-url-tags");
+  const labels = ["[高龄]", '["高龄"]', "逗号,标签", "Line1\nLine2"];
+  await service.saveQuestions(owner, p.id, { ...input, rows: labels.map((tag, index) => ({ text: `Tagged question ${index}`, originalId: String(index), clientTags: [tag] })) });
+  const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "literal-tag-round" });
+  const jobs = (await store.query("SELECT * FROM evimed_geo.probe_jobs WHERE round_id=$1 ORDER BY created_at,id", [started.roundId])).rows;
+  for (const job of jobs) await measure.insertSnapshot({ id: `tagged-${job.id}`, userId: owner.id, roundId: started.roundId, geoProjectId: p.id,
+    questionId: job.question_id, engine: "deepseek", askedAt: new Date(), status: "refusal", answerText: "Preserved refusal", answerSha256: null,
+    citations: [], screenshotSha256: null, surface: { mode: "web" }, latencyMs: 1, warnings: [], probeJobId: job.id });
+  for (const [index, tag] of labels.entries()) {
+    const query = new URLSearchParams({ round: started.roundId, clientTags: tag });
+    const filter = geoScopeFromQuery(query);
+    const view = await service.questions(owner, p.id, filter);
+    const questions = view.groups.flatMap((group) => group.questions);
+    assert.deepEqual(filter.clientTags, [tag]);
+    assert.equal(questions.length, 1, tag);
+    assert.equal(questions[0].originalId, String(index));
+    assert.equal(view.selection.counts.snapshots, 1);
+    const native = await service.runtimeRead(await store.getProject(owner.id, p.id), "questions", { round: started.roundId, clientTags: [tag] });
+    assert.equal(native.selection.reference, view.selection.reference);
+  }
+});
