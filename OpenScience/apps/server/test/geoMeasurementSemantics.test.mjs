@@ -68,6 +68,10 @@ test("single-source generic presence and product attribution never become litera
   const both = parseAnswer({ answer: "康舒宁（示例成分片）", registry });
   assert.equal(both.brands[0].count, 1);
   assert.equal(both.genericMentions[0].count, 1);
+  const coverage = metric([row({ ...facts, judgeExtract: { entityMentions: facts.entityMentions } })], "M-04C");
+  assert.deepEqual([coverage.numerator, coverage.denominator, coverage.value], [0, 2, 0], "generics remain identifiable drug entities");
+  const shared = parseAnswer({ answer: "示例成分片。", registry: brandRegistry({ ...product, singleSource: false }, [{ brandName: "竞例牌", genericName: "示例成分片" }]) });
+  assert.equal(shared.entityMentions, 1, "shared generic attribution must not double-count one occurrence");
 });
 
 test("accuracy requires all applicable statements and complete coverage; known wrong takes priority", () => {
@@ -114,9 +118,11 @@ test("dropped statements, missing completeness, or a reached extraction limit ne
 
 test("legacy recommendation booleans and correct statements are preserved as history, never upgraded to new complete facts", () => {
   const old = { answerText: "1. 不推荐康舒宁。", citations: [], status: "valid", statements: [correct], judgeExtract: null,
-    brands: [{ name: "康舒宁", ours: true, inRecommendation: true, count: 1 }] };
+    parserVersion: "geo-parse-1+geo-judge-1.old", brands: [{ name: "康舒宁", ours: true, inRecommendation: true, count: 1 }] };
   const recounted = recountedFacts(old, registry, {});
   assert.equal(recounted.recommendedOurs, false);
   assert.equal(recounted.failureMode, "unknown");
   assert.equal(recounted.checks.judgementCoverage.status, "unknown");
+  assert.equal(recounted.parserVersion, "geo-parse-2+geo-judge-1.old");
+  assert.equal(recounted.judgeExtract.sourceParserVersion, old.parserVersion);
 });
