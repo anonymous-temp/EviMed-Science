@@ -18,8 +18,10 @@
  *
  * What it does not solve, stated plainly because a security note that overstates
  * is worse than none: a recipient who decrypts can forward the plaintext, and no
- * cryptography prevents that — the reshare flag and the provenance stamps only
- * make it traceable afterwards. And the working copy inside our own boundary is
+ * cryptography prevents that — what a pack carries is stamped with who made it
+ * (the card's author and the share record the importer keeps), and a received pack
+ * cannot be exported again under another name (`capsule_share_not_own`), which
+ * only make a forward traceable afterwards. And the working copy inside our own boundary is
  * plaintext, because vector and full-text search cannot run on ciphertext; that
  * is managed by isolation, auditing and least privilege, not by pretending the
  * operator cannot read it.

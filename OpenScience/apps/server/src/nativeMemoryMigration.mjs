@@ -123,6 +123,19 @@ const flat = (text) => String(text ?? "").replace(/[（(]as of \d{4}-\d{2}-\d{2}
   .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
+ * A statement in the form the replay wrote it into a file: masked the way the replay masked it, and flattened. What a file written
+ * by the replay says of a record the person stated is compared to this, so that "the file is the person's own statement" is a fact
+ * of the text and not a guess (`capsuleTransferService.mjs`, the export of an account whose migration is complete).
+ * @param {unknown} value
+ */
+export function replayedForm(value) {
+  return flat(maskIdentifiers(String(value ?? "").replace(/\s+/g, " ").trim().slice(0, RECORD_LIMIT)));
+}
+
+/** A line of a memory file in the form `replayedForm` gives a statement. @param {unknown} line */
+export const flatStatement = flat;
+
+/**
  * Which records the engine wrote verbatim into the files its extraction produced. Containment of the whole statement, nothing
  * looser: whether a paraphrase says the same thing is for the operator reading the report.
  * @param {readonly { id: string, value: string }[]} records @param {readonly string[]} writtenTexts the text of every file the group's diff added or updated

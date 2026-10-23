@@ -169,10 +169,12 @@ test("a shared pack is scanned before it can take effect: closed sets in code, i
   const kept=(await capsules.entries(recipient,imported.id)).items.map(item=>item.payload.content).sort();
   assert.deepEqual(kept,["Grade certainty with GRADE and say why.","Report heterogeneity with I² before pooling."]);
   assert.equal(imported.payload.scan.dropped.length,3,"what was dropped is listed on the pack");
-  // Without a project there is nothing to meter the language check to: the closed sets still hold.
+  // With no project in view the language check is metered to the account's own default project, so it still runs: the entries are
+  // judged, not left unscanned (never mounted) until a later enable from a project (2026-10-23 review S10).
   const bare=new CapsuleTransferService({documents,capsules,identities,dataDir:directory,scanner});
   const unmetered=await bare.preview(recipient,{archive:result.archive,password});
-  assert.equal(unmetered.scan.model,"unavailable");assert.equal(unmetered.scan.dropped.length,2);
+  assert.equal(unmetered.scan.model,"ok");assert.equal(unmetered.scan.dropped.length,3);
+  assert.equal(calls.length,2);assert.equal(calls[1].projectId,"default");assert.equal(calls[1].userId,recipient);
 });
 
 test("a sharer's runtime note never becomes a method in a recipient's runs, and an unjudged entry mounts only once a scan judges it",options,async()=>{

@@ -56,13 +56,15 @@ export const CAPSULE_WORK_STYLE_FACT_KINDS = Object.freeze([
 /**
  * Only approved entries are mounted.
  *
- * An imported pack arrives as candidates on purpose: `capsuleTransferService`
- * writes every received entry with `status: "candidate"`, so that adopting
- * someone else's work style is an act the recipient performs rather than a
- * consequence of opening a file. Mounting a candidate would run a stranger's
- * methods on the strength of the transfer alone. Retired entries are excluded
- * for the mirror-image reason: "was true once" is kept as history, not as
- * instruction.
+ * An imported pack arrives approved, and is in force nowhere: `capsuleTransferService`
+ * writes every entry the automatic scan kept with `status: "approved"` into a capsule that
+ * no activation list names, so adopting someone else's work style is an act the recipient
+ * performs — enabling the pack, in the account or in one project — rather than a
+ * consequence of opening a file (whole-pack trust, 2026-09-19; it was entry-by-entry
+ * candidates before). What the scan could not judge (`unscanned`), what it held back
+ * (`safetyHold`) and an assistant's own note (`origin: "inferred"`) stay context and are
+ * never mounted. Retired entries are excluded because "was true once" is kept as
+ * history, not as instruction.
  */
 const MOUNTABLE_STATUS = "approved";
 
