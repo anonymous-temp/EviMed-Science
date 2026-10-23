@@ -40,3 +40,22 @@ describe('original question import', () => {
     expect(mapQuestionRows(book.sheets[0].rows.slice(0, 3), { text: 1, originalId: 0 }).rows.map(row => row.originalId)).toEqual(['001', '0']);
   });
 });
+it('normalizes typed Excel booleans and dates without guessing formatted regional date strings', async () => {
+  const sheet = XLSX.utils.aoa_to_sheet([['ID','Question','Measured','Date'], [1,'Original',true,new Date(Date.UTC(2026,10,10))], [0,'Other',false,new Date(Date.UTC(2026,9,24))]]);
+  sheet.A2.z = '000'; sheet.D2.z = 'dd/mm/yyyy'; sheet.D3.z = 'dd/mm/yyyy';
+  const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Q');
+  const read = await readQuestionWorkbook(XLSX.write(book, { type: 'array', bookType: 'xlsx' }));
+  const mapped = mapQuestionRows(read.sheets[0].rows, { text: 1, originalId: 0, isMeasured: 2, collectedAt: 3 }, read.sheets[0].typedRows);
+  expect(mapped.rows.map(row => row.isMeasured)).toEqual([true, false]);
+  expect(mapped.rows.map(row => row.collectedAt)).toEqual(['2026-11-10', '2026-10-24']);
+  expect(mapped.rows.map(row => row.originalId)).toEqual(['001', '0']);
+});
+it('counts actual questions after blank rows and rejects scans beyond explicit limits', async () => {
+  const sheet = XLSX.utils.aoa_to_sheet([['Question'], ...Array.from({ length: 200 }, (_, i) => [`Q${i}`]), [], [], ...Array.from({ length: 200 }, (_, i) => [`R${i}`])]);
+  const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Q');
+  const read = await readQuestionWorkbook(XLSX.write(book, { type: 'array', bookType: 'xlsx' }));
+  expect(mapQuestionRows(read.sheets[0].rows, { text: 0 })).toMatchObject({ excludedBlankRows: 2, rows: expect.any(Array) });
+  expect(mapQuestionRows(read.sheets[0].rows, { text: 0 }).rows).toHaveLength(400);
+  sheet['!ref'] = 'A1:A10002';
+  await expect(readQuestionWorkbook(XLSX.write(book, { type: 'array', bookType: 'xlsx' }))).rejects.toThrow(/10000/);
+});

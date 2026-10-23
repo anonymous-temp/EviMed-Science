@@ -166,3 +166,41 @@ it('does not restore an editor request when permissions are revoked during the i
   expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
   expect(client.importGeoQuestions).not.toHaveBeenCalled();
 });
+it('never sends start or recovery mutations while durable storage repeatedly fails', async () => {
+  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+  show();
+  const start = await screen.findByRole('button', { name: '启动第 3 版诊断' });
+  await waitFor(() => expect(start).toBeEnabled());
+  await userEvent.click(start); await screen.findByRole('alert');
+  await userEvent.click(start); expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
+  storage.mockRestore();
+});
+it('continues account initialization after quarantining a corrupt pending record', async () => {
+  localStorage.setItem('geo-question-import:t1:u1:prj_geo_1:g1', '{broken');
+  show();
+  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
+});
+it('does not send selected recovery after repeated storage quota errors', async () => {
+  show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
+  await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ })); await userEvent.click(screen.getByRole('checkbox', { name: /我确认/ }));
+  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+  try {
+    await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' })); await screen.findByRole('alert');
+    await userEvent.click(screen.getByRole('button', { name: '仅恢复所选 1 项' })); await screen.findByRole('alert');
+    expect(client.recoverGeoDiagnosis).not.toHaveBeenCalled();
+  } finally { storage.mockRestore(); }
+});
+it('keeps every editing entry disabled while a preview is pending', async () => {
+  const original: GeoQuestions = { ...data, groups: [{ id: 'g', name: 'G', pool: null, typicalQuestion: '', journeyStage: null, audience: null, weight: null, isControl: false, signal: null, questions: [{ id: 'q', text: 'One original', kind: 'client', platform: null, sourceUrl: null, isMeasured: true }] }] };
+  render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={original} onSaved={vi.fn()} /></MemoryRouter>);
+  await userEvent.click(screen.getByRole('button', { name: '编辑为新版本' }));
+  let complete!: (value: unknown) => void;
+  client.previewGeoQuestions.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  await userEvent.click(screen.getByRole('button', { name: '核对导入预览' }));
+  for (const name of ['调整口径', '编辑为新版本', '导入问句']) expect(screen.getByRole('button', { name })).toBeDisabled();
+  expect(screen.getByLabelText('第 1 题文本')).toBeDisabled();
+  await act(async () => { complete({ rows: [], contract, actualRows: 1, measuredRows: 1, plannedCalls: 1, duplicateCandidates: [] }); });
+  expect(await screen.findByRole('button', { name: '保存为新版本' })).toBeEnabled();
+  expect(screen.getByLabelText('第 1 题文本')).toHaveValue('One original');
+});
