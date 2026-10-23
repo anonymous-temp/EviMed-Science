@@ -1,3 +1,4 @@
+import { freezeGeoAnalysisPages, persistFrozenGeoAnalysisContext } from "./geoAnalysisFrozenPages.mjs";
 import { freezeSelectedGeoAnalysis } from "./geoAnalysis.mjs";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./geoStore.mjs";
@@ -95,14 +96,15 @@ export class GeoPlanContext {
     const id = `gpc_${geoPlanDigest([user.id, project.id, body.requestKey])}`, fingerprint = geoPlanDigest(body);
     const existing = await this.documents.get(project.userId, "geo-plan-context", id);
     if (existing) { if (existing.payload.fingerprint !== fingerprint) throw fail("geo_plan_context_conflict", "This request key already names another selection."); return this.publicOf(existing); }
-    let basis, scopeKey, actions = [];
+    let basis, scopeKey, actions = [], analysisPages = [];
     if (body.mode === "analysis") {
       if (["strategyVersion","sourceId","url","groupIds","errorIds","actionKeys"].some(key => body[key] != null) || !body.selectionRef || !/^[a-f0-9]{64}$/.test(body.expectedDigest ?? "") || !body.view || body.intent != null && !["explain", "compare", "next_steps"].includes(body.intent)
         || body.focus != null && (!body.focus || typeof body.focus !== "object" || Array.isArray(body.focus) || Object.keys(body.focus).some(key => !["rowKey", "columnKey"].includes(key)))) throw fail("geo_plan_context_invalid", "Choose an exact analysis and focus.", 400);
       const analysis = await freezeSelectedGeoAnalysis(this.store, project, { selectionRef: body.selectionRef, view: body.view, expectedDigest: body.expectedDigest });
       if (body.focus && !analysis.rows.some(row => row.key === body.focus.rowKey && Object.hasOwn(row.values, body.focus.columnKey))) throw fail("geo_plan_focus_invalid", "This reading is outside the analysis.", 400);
-      if (Buffer.byteLength(JSON.stringify(analysis)) > 200_000) throw fail("geo_plan_basis_too_large", "Narrow the dates, groups or metric before opening this analysis in conversation.", 422);
-      basis = { schemaVersion: 1, analysis, selection: analysis.selection, scope: analysis.scope, groups: [], focus: body.focus ?? null, intent: body.intent ?? "explain" };
+      const paged = freezeGeoAnalysisPages(analysis, { parentId: id, project, actorId: user.id });
+      analysisPages = paged.pages;
+      basis = { schemaVersion: 1, analysis: paged.analysis, selection: analysis.selection, scope: analysis.scope, groups: [], focus: body.focus ?? null, intent: body.intent ?? "explain" };
       scopeKey = geoPlanScopeKey(analysis.scope);
     } else if (body.mode === "content") {
       if (!Number.isSafeInteger(body.strategyVersion) || body.strategyVersion < 1 || !body.actionKeys?.length) throw fail("geo_plan_context_invalid", "Choose a plan version and its actions.", 400);
@@ -132,7 +134,7 @@ export class GeoPlanContext {
     const payload = { recordType: "geo-plan-context", id, geoId: project.id, actorId: user.id, fingerprint, sessionId: body.sessionId, mode: body.mode,
       strategyVersion: body.strategyVersion ?? null, scopeKey, basis, basisDigest: geoPlanDigest(basis), actions, groupIds: body.groupIds ?? basis.groups.map(group => group.id),
       actionKeys: body.actionKeys ?? [], draft, state: "staged", requestId: null, outputs: [] };
-    try { return this.publicOf(await this.documents.put(project.userId, "geo-plan-context", id, payload, { projectId: project.projectId, expectedRevision: 0 })); }
+    try { return this.publicOf(analysisPages.length ? await persistFrozenGeoAnalysisContext(this.documents, project, id, payload, analysisPages) : await this.documents.put(project.userId, "geo-plan-context", id, payload, { projectId: project.projectId, expectedRevision: 0 })); }
     catch (error) { const row = await this.documents.get(project.userId, "geo-plan-context", id); if (row?.payload.fingerprint === fingerprint) return this.publicOf(row); throw error; }
   }
   publicOf(row) { return { referenceId: row.id, sessionId: row.payload.sessionId, draft: row.payload.draft }; }

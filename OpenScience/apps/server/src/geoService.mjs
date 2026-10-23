@@ -50,7 +50,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadPage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
 import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
@@ -63,6 +63,7 @@ import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
+import { readFrozenGeoAnalysisPage } from "./geoAnalysisFrozenPages.mjs";
 import { readGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
@@ -2347,9 +2348,7 @@ export class GeoService {
       const row = await this.planContexts?.documents.get(project.userId, "geo-plan-context", input.planContextRef);
       if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id || row.payload.mode !== "analysis" || row.payload.state !== "bound") throw new HttpError(404, "geo_plan_context_not_found", "The selected analysis is unavailable.");
       await this.requireProject({ id: row.payload.actorId }, project.id);
-      const frozen = row.payload.basis.analysis;
-      const { limit, offset } = geoReadPage(input);
-      return { ...frozen, rows: frozen.rows.slice(offset, offset + limit), page: { total: frozen.rows.length, shown: frozen.rows.slice(offset, offset + limit).length, nextOffset: offset + limit < frozen.rows.length ? offset + limit : null }, readingsKind: "submitted_input" };
+      return readFrozenGeoAnalysisPage(this.planContexts.documents, project, row, input);
     }
     return readGeoAnalysis(this.store, project, input);
   }
