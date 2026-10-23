@@ -91,7 +91,7 @@ export async function installBudgetFetch({scope,coordinatorUrl,tokenFile,provide
   if(!provider)throw new Error('Evaluation provider bypass refused');
   const request=JSON.parse(init.body);
   if(request.model==='__eval_boundary_probe__')return fetchImpl(`${coordinatorUrl}/__eval/probe`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({scope,processId:process.pid,containerId,nonce:request.nonce})});
-  return fetchImpl(`${coordinatorUrl}/provider`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({provider,scope,request})});
+  return fetchImpl(`${coordinatorUrl}/provider`,{method:'POST',signal:init.signal,headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({provider,scope,request})});
  };
  const origin=Object.keys(providerOrigins)[0];if(!origin)throw new Error('No provider origin admitted');
  const nonce=randomBytes(16).toString('hex');

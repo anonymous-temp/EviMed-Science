@@ -81,3 +81,16 @@ test('bounded operator preflight preserves documented reasoning effort and refus
   assert.equal(calls,0);assert.equal(p.budget.status().pending,0);
  }finally{await p.close();await fs.rm(dir,{recursive:true,force:true});}
 });
+test('client abort is preserved while coordinator-owned provider accounting completes',async()=>{
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');const {createBudgetProxy,installBudgetFetch}=await import('../budget_proxy.mjs');const dir=await fs.mkdtemp(path.join(os.tmpdir(),'budget-abort-')),tokenFile=path.join(dir,'token'),keyFile=path.join(dir,'key');await fs.writeFile(tokenFile,'unit-token');await fs.writeFile(keyFile,'unit-key');const original=globalThis.fetch;
+ let release,started;const barrier=new Promise(r=>{release=r;}),arrived=new Promise(r=>{started=r;});
+ const p=await createBudgetProxy({models:{'deepseek-flash':{input:2,output:8,maxOutput:100}},providers:{deepseek:{url:'https://provider.test/chat/completions',keyFile}},token:'unit-token',ledgerFile:path.join(dir,'ledger'),fetchImpl:async()=>{started();await barrier;return new Response(JSON.stringify({usage:{prompt_tokens:2,completion_tokens:1}}));}});
+ try{
+  let wrapped;const body=JSON.stringify({model:'deepseek-flash',messages:[{role:'user',content:'Unit-only abort'}],max_tokens:10});
+  for(const scope of ['baseline','candidate','openviking']){wrapped=await installBudgetFetch({scope,coordinatorUrl:p.url,tokenFile,providerOrigins:{'https://provider.test':'deepseek'}});await wrapped('https://provider.test/chat/completions',{body});}
+  await armSharedBudget({coordinatorUrl:p.url,tokenFile,sharedBudgetId:p.budget.id},{nativeVerifier:()=>true});
+  const controller=new AbortController();let returned=false;const pending=wrapped('https://provider.test/chat/completions',{body,signal:controller.signal}).then(()=>{returned=true;return 'resolved';},e=>{returned=true;return e.name;});
+  await arrived;assert.equal(p.budget.status().pending,1);controller.abort();await new Promise(r=>setTimeout(r,25));const abortedBeforeProviderReturned=returned;release();assert.equal(await pending,'AbortError');assert.equal(abortedBeforeProviderReturned,true);
+  for(let i=0;i<50&&p.budget.status().pending;i++)await new Promise(r=>setTimeout(r,5));assert.equal(p.budget.status().pending,0);assert.equal(p.budget.status().committedCny,0.000012);assert.equal(p.budget.status().halted,false);
+ }finally{release?.();globalThis.fetch=original;await p.close();await fs.rm(dir,{recursive:true,force:true});}
+});
