@@ -53,3 +53,9 @@ test('an idle instrumented process retains its verified wiring beyond sixty seco
   assert.equal((await armSharedBudget(config,{nativeVerifier:()=>true})).armed,true);
  }finally{globalThis.fetch=originalFetch;await proxy.close();await fs.rm(dir,{recursive:true,force:true});}
 });
+test('native DashScope compatible-mode path reaches the unarmed coordinator and never the provider',async()=>{
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');const {createBudgetProxy}=await import('../budget_proxy.mjs');
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'eval-embedding-path-'));let calls=0;
+ const p=await createBudgetProxy({models:{'qwen3.7-text-embedding':{kind:'embedding',input:0.5,output:0,maxOutput:0}},providers:{dashscope:{url:'https://provider.test/embeddings',keyFile:path.join(dir,'unused')}},token:'unit-token',ledgerFile:path.join(dir,'ledger'),fetchImpl:()=>{calls++;throw new Error('No provider request allowed');}});
+ try{const r=await fetch(p.url+'/scope/openviking/dashscope/compatible-mode/v1/embeddings',{method:'POST',headers:{Authorization:'Bearer unit-token','content-type':'application/json'},body:JSON.stringify({model:'qwen3.7-text-embedding',input:['Unit fixture'],dimensions:1024})});assert.equal(r.status,503);assert.equal(p.wiring.openviking.providerBoundary,true);assert.equal(calls,0);}finally{await p.close();await fs.rm(dir,{recursive:true,force:true});}
+});

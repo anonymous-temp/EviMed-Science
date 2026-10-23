@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -27,7 +28,9 @@ test("a complete pack replaces the installed tree including removed files", asyn
   const { source, target } = await fixture(t);
   await mkdir(path.join(source, "skills", "method"), { recursive: true });
   await writeFile(path.join(source, "skills", "method", "SKILL.md"), "new private method\n");
-  await writeFile(path.join(source, "VENDORED.json"), '{"version":1}\n');
+  const digest = (value) => createHash("sha256").update(value).digest("hex");
+  await writeFile(path.join(source, "VENDORED.json"), JSON.stringify({ package: "geo-skills", files: 1,
+    tree: digest(`skills/method/SKILL.md\0${digest("new private method\n")}\n`) }));
   assert.equal(await refreshGeoPack(source, target), "replaced");
   assert.deepEqual((await readdir(target)).sort(), ["VENDORED.json", "skills"]);
   assert.equal(await readFile(path.join(target, "skills", "method", "SKILL.md"), "utf8"), "new private method\n");
@@ -44,3 +47,24 @@ for (const incomplete of ["skills-only", "receipt-only", "empty-skills", "unexpe
     assert.equal(await readFile(path.join(target, "old.md"), "utf8"), "private base bytes\n");
   });
 }
+
+test("a truncated receipt-bound pack is refused before replacing the base", async (t) => {
+  const { source, target } = await fixture(t);
+  await mkdir(path.join(source, "skills", "method"), { recursive: true });
+  await writeFile(path.join(source, "skills", "method", "SKILL.md"), "truncated method\n");
+  await writeFile(path.join(source, "VENDORED.json"), JSON.stringify({ package: "geo-skills", files: 2, tree: "0".repeat(64) }));
+  await assert.rejects(refreshGeoPack(source, target), /incomplete|partial/i);
+  assert.equal(await readFile(path.join(target, "old.md"), "utf8"), "private base bytes\n");
+});
+
+test("a complete pack can populate a base that predates the private pack", async (t) => {
+  const { source, target } = await fixture(t);
+  await rm(target, { recursive: true });
+  await mkdir(path.join(source, "skills", "method"), { recursive: true });
+  await writeFile(path.join(source, "skills", "method", "SKILL.md"), "new private method\n");
+  const digest = value => createHash("sha256").update(value).digest("hex");
+  await writeFile(path.join(source, "VENDORED.json"), JSON.stringify({ package: "geo-skills", files: 1,
+    tree: digest(`skills/method/SKILL.md\0${digest("new private method\n")}\n`) }));
+  assert.equal(await refreshGeoPack(source, target), "replaced");
+  assert.equal(await readFile(path.join(target, "skills", "method", "SKILL.md"), "utf8"), "new private method\n");
+});

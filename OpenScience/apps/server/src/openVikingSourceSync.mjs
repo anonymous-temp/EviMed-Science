@@ -434,10 +434,13 @@ export class OpenVikingSourceSyncWorker {
 
   status() { return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt }; }
 
-  async close() {
+  pause() {
     if (this.timer) clearInterval(this.timer);
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.timer = null; this.reconcileTimer = null;
-    await Promise.all([this.running, this.reconciling].filter(Boolean));
   }
-}
+
+  async close() {
+    this.pause();
+    await Promise.all([this.running, this.reconciling].filter(Boolean));
+  }}

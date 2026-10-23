@@ -1,5 +1,6 @@
 // Local real PostgreSQL + real HTTP boundary. Mock kernel only: never answer-quality evidence.
 import fs from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { createWebApiApp } from '../../apps/server/src/server.mjs';
@@ -16,10 +17,20 @@ try{
  const addr=await app.listen(0,'127.0.0.1');
  await app.sourceWorker?.close();
  const benchmark=JSON.parse(await fs.readFile(new URL('./cases.json',import.meta.url),'utf8'));
- ctx=await provision({base:`http://127.0.0.1:${addr.port}`,dataDir,privateDir:path.join(dataDir,'credentials'),benchmark});
+ ctx=await provision({base:`http://127.0.0.1:${addr.port}`,dataDir,privateDir:path.join(dataDir,'credentials'),benchmark,runtimeMode:'mock'});
  const report=await runLifecycle(benchmark,ctx);
  report.sourceBindings=Object.keys(ctx.bindings.accounts['account-alpha'].projects['project-alpha'].sourceMap).length;
  report.runtimeMode='mock'; report.modelSpendCny=0;
+ report.originalRoundTrips=[];
+ const owner=ctx.accounts['account-alpha'];owner.api.project=owner.projects['project-alpha'].id;
+ for(const id of ['general-support','general-budget']){
+   const source=benchmark.sources.find(s=>s.id===id),original=owner.projects['project-alpha'].originalFiles[id];
+   const response=await fetch(`${ctx.base}/api/files/download/${encodeURIComponent(original)}?root=${source.originalOnly?'workspace':'base'}`,{headers:{Cookie:owner.api.cookie,'x-open-science-project':owner.api.project}});
+   const bytes=Buffer.from(await response.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+   if(response.status!==200||sha256!==source.sha256)throw new Error('Original PDF/ZIP upload/download integrity failed');
+   report.originalRoundTrips.push({sourceId:id,format:source.originalOnly?'zip-original-only':'pdf',status:response.status,sha256,bytes:bytes.length,parserExecuted:false,qualityClaim:false});
+ }
+
  try {
   const owner=ctx.accounts['account-alpha'];
   await compileExport({api:owner.api,projectId:owner.projects['project-alpha'].id,sourceMap:owner.projects['project-alpha'].sourceMap,outDir:path.join(dataDir,'C-export'),topicId:'af-doac-warfarin',repetition:1,timeoutMs:1000});

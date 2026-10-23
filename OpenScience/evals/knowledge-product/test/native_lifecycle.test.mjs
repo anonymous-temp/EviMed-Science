@@ -18,3 +18,9 @@ test('native transcripts resolve from the project directory rather than workspac
  const {transcriptFile}=await import('../native_probe.mjs');
  assert.equal(transcriptFile({workspace:'/tmp/owned/project/workspace'},'run1'),'/tmp/owned/project/.openscience/transcripts/run1.jsonl');
 });
+test('measured violations remain eligible; missing proof stays inconclusive',()=>{
+ const rows=Array.from({length:30},(_,i)=>({caseId:String(i),status:'pass',nativeProof:{engine:true,runtime:true}}));
+ const options={runtimeMode:'kernel',requiredNativeIds:['0']};
+ assert.equal(lifecycleEligibility(rows.map((r,i)=>i===0?{...r,status:'fail',error:'Measured product violation'}:r),options),true);
+ assert.equal(lifecycleEligibility(rows.map((r,i)=>i===0?{...r,nativeProof:undefined}:r),options),false);
+});

@@ -8398,6 +8398,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    sourceSyncWorker?.pause();
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });

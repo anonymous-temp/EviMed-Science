@@ -7,6 +7,8 @@ import { Api, digestTranscript } from '../general-tasks/runner/cell.mjs';
 import { validateBenchmark } from './scorer.mjs';
 import { collectRetrieval } from './evidence.mjs';
 import { verifyLiveBudgetWiring,armSharedBudget,verifyBoundCollector } from './shared_budget.mjs';
+import { readTranscript } from './native_probe.mjs';
+import { memoryHash,collectIndependentCells,fatalCollectionError } from './protocol.mjs';
 import { contextId } from './coverage.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -37,6 +39,8 @@ async function call(api, method, route, body) {
   return response.json?.data;
 }
 async function execute(c, binding, repetition, arm, out) {
+  const partial={caseId:c.id,arm,repetition,prompt:c.prompt,status:'inconclusive'};
+  try {
   binding.listenerProof=(await verifyBoundCollector(binding.base,arm,binding.sharedBudget)).binding;
   const projectScope = binding.accounts[c.actor]?.projects[c.project];
   const scope = c.evaluation && projectScope?.contexts ? projectScope.contexts[contextId(c.evaluation)] : projectScope;
@@ -51,29 +55,39 @@ async function execute(c, binding, repetition, arm, out) {
   const sessionId = `knowledge_eval_${c.id.replaceAll('-', '_')}_${repetition}_${Date.now()}`;
   await call(api, 'PUT', `/api/research-sessions/${sessionId}`, { mode: 'open-domain' });
   const actions = [];
+  if(scope.memoryFreeze){
+    const settings=await call(api,'GET','/api/memory/settings');
+    const profile=await call(api,'GET','/api/memory/profile');
+    if(settings.learningPaused!==true||settings.recallPaused!==false||profile.pending?.length||memoryHash(profile)!==scope.memoryFreeze.hash)throw new Error('Frozen memory identity changed before question');
+  }
   const memoryInventoryBefore = c.evaluation?.substrate !== 'knowledge' ? await call(api,'GET','/api/memory/records?pageSize=100') : null;
   binding.listenerProof=(await verifyBoundCollector(binding.base,arm,binding.sharedBudget)).binding;
-  const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: sessionId, text: c.prompt });
+  const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: sessionId, automated:true, text: c.prompt });
   if (dispatched.status !== 202) throw new Error(`Dispatch HTTP ${dispatched.status}`);
-  let run = dispatched.json.data;
+  let run = dispatched.json.data;partial.run=run;
   const deadline = Date.now() + 180_000;
   while (['queued','running','planned','dispatching','starting','waiting'].includes(run.status)) {
     if (Date.now() >= deadline) { await api.call('POST', `/api/agent-runs/${run.id}/cancel`, {}); throw new Error('Real DSH run timed out'); }
     await new Promise(resolve => setTimeout(resolve, 1000));
     const runs = await call(api, 'GET', '/api/agent-runs');
-    run = (Array.isArray(runs) ? runs : runs.items ?? runs.runs ?? []).find(r => r.id === run.id) ?? run;
+    run = (Array.isArray(runs) ? runs : runs.items ?? runs.runs ?? []).find(r => r.id === run.id) ?? run;partial.run=run;
   }
-  const transcriptPath = path.join(scope.workspace, '.openscience/transcripts', `${run.id}.jsonl`);
-  const transcript = await fs.readFile(transcriptPath, 'utf8');
+  const transcript = await readTranscript(scope,run.id);
   const transcriptLines = transcript.split('\n').filter(Boolean).map(line => JSON.parse(line));
   const digest = digestTranscript(transcriptLines);
   const retrieval = collectRetrieval(transcriptLines);
-  if (run.status !== 'succeeded') throw new Error(`Real product run ended ${run.status}`);
+  partial.run=run;
   const filename = `${arm}-${c.id}-${repetition}.json`;
-  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},evaluation:c.evaluation,documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
+  const evidence = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, arm, repetition, run, digest, retrieval, actions, sourceMap,collectorBinding:binding.listenerProof,memoryInventoryBefore,actualUserId:scope.userId??binding.accounts[c.actor].userId, originalFiles:scope.originalFiles??{},originalTexts:scope.originalTexts??{},memoryFreeze:scope.memoryFreeze??null,evaluation:c.evaluation,documentCount:scope.documentCount,runtime: binding.runtimeEvidence, transcriptSha256: sha(transcript) };
+  if(scope.memoryFreeze){const after=await call(api,'GET','/api/memory/profile');evidence.memoryAfterHash=memoryHash(after);evidence.memoryVerified=!after.pending?.length&&evidence.memoryAfterHash===scope.memoryFreeze.hash;}
   await fs.writeFile(path.join(out, filename), JSON.stringify(evidence, null, 2));
   await fs.writeFile(path.join(out, `${filename}.transcript.jsonl`), transcript);
+  if(scope.memoryFreeze&&!evidence.memoryVerified)throw new Error('Frozen memory identity changed after question');
+  if(run.status!=='succeeded')throw new Error(`Real product run ended ${run.status}`);
   return evidence;
+  } catch(error) {
+    const file=`${arm}-${c.id}-${repetition}.failure.json`;await fs.writeFile(path.join(out,file),JSON.stringify({...partial,reason:error.message,fatal:fatalCollectionError(error)},null,2));error.partialFile=file;throw error;
+  }
 }
 export async function main() {
   const b = JSON.parse(await fs.readFile(path.join(root, 'cases.json'), 'utf8'));
@@ -87,7 +101,8 @@ export async function main() {
   if (missing.length) { console.log(JSON.stringify(protocol)); return; }
   // Scoring is a separate explicit review stage; raw runs never imply quality pass.
   if (!process.argv.includes('--execute')) { console.log('Preflight ready. Use --execute to collect real runs.'); return; }
-  await armSharedBudget(bindings.sharedBudget); // Recheck immediately before provisioning can start paid background work.
+  await armSharedBudget(bindings.sharedBudget);
+  delete protocol.spendCny;protocol.status='collecting';await fs.writeFile(path.join(out,'execution.json'),JSON.stringify(protocol,null,2)); // Recheck immediately before provisioning can start paid background work.
   const { provision, runLifecycle } = await import('./provision.mjs');
   const os = await import('node:os');
   const privateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'knowledge-eval-private-'));
@@ -96,20 +111,26 @@ export async function main() {
     for (const arm of ['baseline','candidate']) {
       if (!bindings[arm].dataDir) throw new Error(`${arm}: isolated product dataDir is required for automatic fixture setup`);
       bindings[arm].listenerProof=(await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget)).binding;
-      const ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,sharedBudget:bindings.sharedBudget});
-      contexts[arm] = ctx;
+      const ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,sharedBudget:bindings.sharedBudget,runtimeMode:'kernel',runtimeEvidence:bindings[arm].runtimeEvidence,databaseBindingsFile:bindings[arm].databaseBindingsFile});
+      contexts[arm] = ctx;ctx.evidenceDir=path.join(out,arm,'lifecycle-native');
       bindings[arm].accounts = ctx.bindings.accounts;
       for (const repetition of [1,2,3]) {
         const lifecycle = await runLifecycle(b,ctx);
         await fs.writeFile(path.join(out,`${arm}-lifecycle-${repetition}.json`),JSON.stringify(lifecycle,null,2));
       }
     }
-    for (const c of b.cases.filter(c=>c.stratum !== 'lifecycle')) for (const arm of ['baseline','candidate']) for (const repetition of [1,2,3]) { await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget); await execute(c, bindings[arm], repetition, arm, out); }
+    const cells=b.cases.filter(c=>c.stratum!=='lifecycle').flatMap(c=>['baseline','candidate'].flatMap(arm=>[1,2,3].map(repetition=>({caseId:c.id,arm,repetition}))));
+    const outcomes=await collectIndependentCells(cells,cell=>execute(b.cases.find(c=>c.id===cell.caseId),bindings[cell.arm],cell.repetition,cell.arm,out),row=>fs.appendFile(path.join(out,'cell-outcomes.jsonl'),JSON.stringify(row)+'\n'));
+    protocol.inconclusiveCells=outcomes.filter(r=>r.status==='inconclusive').length;
+    const {reviewDirectory}=await import('./automatic_judge.mjs');
+    protocol.review=await reviewDirectory(out,{benchmark:b,sharedBudget:bindings.sharedBudget});
+  } catch(error) {
+    protocol.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';protocol.error=error.message;delete protocol.spendCny;await fs.writeFile(path.join(out,'execution.json'),JSON.stringify(protocol,null,2));throw error;
   } finally {
     for (const ctx of Object.values(contexts)) await ctx.cleanup();
     await fs.rm(privateDir,{recursive:true,force:true});
   }
-  protocol.status = 'collected-awaiting-scoring';
+  protocol.status = protocol.inconclusiveCells?'collected-with-inconclusive-cells':'collected-and-automatically-reviewed';
   delete protocol.spendCny; // Real spend must be imported from the control-plane usage ledger, never estimated as zero.
   await fs.writeFile(path.join(out, 'execution.json'), JSON.stringify(protocol, null, 2));
 }

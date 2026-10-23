@@ -1,5 +1,5 @@
 {
-  "benchmarkSha256": "43bef6bb5a02fa9b20a8b2b7fce57eb64290dde2ff8725065e6910050f73eca9",
+  "benchmarkSha256": "58fb42e7a53f576ed2c5842ce84e015fe7ae78580509469d6cbcb0a7320e4180",
   "budgetCny": 50,
   "expectedCells": 540,
   "lifecycleDenominator": 30,

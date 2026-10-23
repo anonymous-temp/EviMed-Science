@@ -15,7 +15,7 @@ export async function createBudgetProxy({models,providers,token,capCny=50,ledger
   if(req.headers.authorization!==`Bearer ${token}`)return send(401,{error:'unauthorized'});
   const url=new URL(req.url,'http://localhost');
   if(req.method==='GET'&&url.pathname==='/__eval/status')return send(200,{...budget.status(),nonce:url.searchParams.get('nonce'),wiring,armed});
-  const direct=/^\/scope\/(baseline|candidate|openviking|C)\/([a-z0-9-]+)\/v1\/(?:chat\/completions|embeddings)$/.exec(url.pathname);
+  const direct=/^\/scope\/(baseline|candidate|openviking|C)\/([a-z0-9-]+)\/(?:compatible-mode\/)?v1\/(?:chat\/completions|embeddings)$/.exec(url.pathname);
   if(req.method!=='POST'||(!['/__eval/probe','/__eval/arm','/provider'].includes(url.pathname)&&!direct))return send(404,{error:'route'});
   let raw='';try{for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2000000)throw new Error('Request too large');}
    const parsed=JSON.parse(raw);
@@ -51,7 +51,8 @@ export async function createBudgetProxy({models,providers,token,capCny=50,ledger
    if(!upstream.ok||!result?.usage)throw new Error('Provider accounting unavailable; full reservation retained');
    if(result.model&&target.responseModel&&result.model!==target.responseModel)throw new Error('Provider model identity mismatch; reservation retained');
    budget.settle(reservation,{inputTokens:result.usage.prompt_tokens??result.usage.total_tokens??result.usage.input_tokens,outputTokens:embedding?0:result.usage.completion_tokens});
-   res.writeHead(upstream.status,{'content-type':streaming?'text/event-stream':'application/json'});return res.end(providerRaw);
+   const rate=models[request.model],accountedCost=(Math.ceil((result.usage.prompt_tokens??result.usage.total_tokens??result.usage.input_tokens)*rate.input+(embedding?0:result.usage.completion_tokens)*rate.output))/1000000;
+   res.writeHead(upstream.status,{'content-type':streaming?'text/event-stream':'application/json','x-evimed-eval-budget-id':budget.id,'x-evimed-eval-accounted-cny':String(accountedCost)});return res.end(providerRaw);
   }catch{ return send(503,{error:'Shared budget admission or provider accounting failed; any reservation is retained'}); }
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
