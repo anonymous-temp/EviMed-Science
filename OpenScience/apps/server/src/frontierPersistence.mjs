@@ -771,7 +771,10 @@ async function seedFrontierTags(client) {
   await client.query(`INSERT INTO evimed_frontier.tag_aliases (key, tag_id, alias, origin)
     SELECT r.key, t.id, r.alias, r.origin FROM jsonb_to_recordset($1::jsonb) AS r(key text, slug text, alias text, origin text)
     JOIN evimed_frontier.tags t ON t.slug = r.slug ON CONFLICT (key) DO NOTHING`, [JSON.stringify([...aliases.values()])]);
-  await bumpFrontierVersion(client, FRONTIER_META_KEYS.tagsVersion);
+  // The tree moved: every process's vocabulary reloads (written without reading the answer back, as the rest of the migration is).
+  await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, '1'::jsonb, clock_timestamp())
+    ON CONFLICT (key) DO UPDATE SET value = to_jsonb(CASE WHEN jsonb_typeof(evimed_frontier.meta.value) = 'number'
+      THEN (evimed_frontier.meta.value #>> '{}')::bigint ELSE 0 END + 1), updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.tagsVersion]);
 }
 
 /**
