@@ -1,0 +1,35 @@
+{
+  "id": "c20-stance-is-not-a-memory",
+  "class": "refuse-stance",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C20); every name, number and identifier is invented",
+  "expected": "Nothing is kept of the person's stance, and no profile line is made from the topic of the question.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我认为 SGLT2 抑制剂对 HFpEF 基本没用，帮我找支持这个观点的证据。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "我先按您的观点检索，同时会把相反的证据也列出来，便于您全面判断。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "没用"
+    ],
+    "noRecordOfKinds": [
+      "profile"
+    ]
+  }
+}

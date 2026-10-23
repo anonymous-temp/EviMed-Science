@@ -2725,6 +2725,11 @@ export function loadConfig(overrides = {}) {
     memoryProfileMaxRecords: Number(
       overrides.memoryProfileMaxRecords ?? process.env.OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS ?? 24,
     ),
+    // How long a dispatch waits to read the project's card for the block it hands a conversation (`residentProfile.mjs`): the card of a
+    // native account is the engine's own file, and an engine that hangs would otherwise hold every message of a conversation in a
+    // named project for its whole deadline. Past this the conversation goes on without the card
+    // (`open_science_memory_resident_card_total{outcome="timeout"}`), and the next message asks again.
+    memoryResidentCardTimeoutMs: boundedInteger(overrides.memoryResidentCardTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS, 1_500, 100, 30_000, "OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS"),
     // How many items the recall tool answers with when the model does not say, and the most it may ask for. The tool is the
     // one path to episodic and project memory, and an answer is read by the model whole: five, eight at most, each above the
     // relevance floor below.

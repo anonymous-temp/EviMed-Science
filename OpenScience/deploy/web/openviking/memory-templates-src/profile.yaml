@@ -2,12 +2,13 @@ memory_type: profile
 description: |
   __LANGUAGE__
   # Role and objective
-  Maintain a compact description of the USER'S OWN durable current state: who they are
-  professionally and what they work on. profile.md holds one H1 for the user and bullets
-  below it. Use the same language as the user's conversation. Extract only what the user
-  explicitly stated or confirmed about themselves in a user-role message. Never infer an
-  attribute from assistant text, from a question, from a document or tool result, from
-  jokes, hypotheticals or role-play.
+  Maintain a compact description of the USER'S OWN durable current state: who they are, what they
+  do, how to address them, and the standing context that makes later help fit them. profile.md
+  holds one H1 for the user and bullets below it. Use the same language as the user's
+  conversation. Write what the user stated or confirmed about themselves in a user-role message,
+  in the first conversation it appears in. Never infer an attribute from assistant text, from a
+  question, from a document or tool result, from jokes, hypotheticals or role-play, or from the
+  kind of task they asked for.
 
   # What belongs in the profile
   - Professional identity: role or title, profession, discipline or specialty, the kind of
@@ -16,22 +17,30 @@ description: |
   - Their standing line of work or research direction ("主要做房颤抗凝的真实世界研究",
     "负责报表模块").
   - Current education state when stated (degree in progress, field).
-  - How they want to be addressed (a name or nickname they gave), their working language,
-    and a city or time zone when stated as standing context for the work.
-  - One fact about themselves that they explicitly asked to be remembered (see the
-    exception in the never-kept rules below), as one bullet in their own words.
+  - How they want to be addressed (a name or nickname they gave), their working language and the
+    language they want output in, their locale (units, currency, date format), a city or time
+    zone, and their level in a language when it matters for translation or teaching ("英语 B1").
+  - Standing context they give for everyday tasks, as the fact only, without the private reason
+    and without details of other people ("在成都", "晚饭多半自己做", "平时地铁通勤").
+  - A goal they are working toward ("在准备职称评审") as one line when it has no project of its
+    own; a goal with material, steps or a deadline is a project -> PROJECT_CONTEXT.
+  - One fact from the keep-only-on-request list in the never-kept rules below, when a message of
+    theirs asks for it to be remembered, as one bullet in their own words.
 
   # Route everything else away from the profile
-  - How they want work done (methods, statistics, formats, tools, tone, language of the
-    output) -> PREFERENCES.
+  - How they want work done (methods, statistics, formats, tools, tone, length, language of the
+    output), or a habit or interest they state for everyday help (a diet preference) -> PREFERENCES.
   - One particular project, study, product or case of theirs: what it is for, its
     material, its decisions, its open items -> PROJECT_CONTEXT.
-  - Something they told the assistant it got wrong -> CORRECTIONS.
+  - Something they told the assistant it got wrong, how they reshaped what the assistant
+    produced, or an approach they confirmed -> CORRECTIONS.
   - An organisation, product, system, dataset or standard -> ENTITIES.
-  - A question they asked, a personality judgement, a mood, the task at hand, anything
-    inferred -> discard.
+  - A question they asked, a stance on a contested question, a personality judgement, a mood,
+    the task at hand, anything inferred -> discard.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 
   # Incremental update
   When an existing profile is provided:
@@ -58,7 +67,7 @@ fields:
   - name: content
     type: string
     description: |
-      Complete Markdown profile of the user's durable professional state:
+      Complete Markdown profile of the user's durable current state:
 
       # <name the user gave, or the word for "user" in {{ language }}>
       - <current stable fact> (as of YYYY-MM-DD)

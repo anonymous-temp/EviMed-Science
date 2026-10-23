@@ -96,6 +96,15 @@ services:
       # Every switch below is this shape's default, and .env still moves it
       # (a lever written as a literal is one .env can no longer reach).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ${OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:-true}
+      # The CDSS's accounts — the institution's and every doctor's, made on the first write — are on the platform's own records,
+      # not on OpenViking's native memory engine. The base file leaves this lever value-less, so with OpenViking in the stack
+      # (it is, above) every new account would take the engine's default, and the agent-memory API's reads, its dashboard and its
+      # acts would be a different memory from the one its episodes write (2026-10-23 review: `/episodes` answered 202 over
+      # nothing). The API now follows each account's engine (docs/AGENT_MEMORY_API.md, "Which engine"), but an episode, a
+      # pending record and the confirm step exist only on the platform's own records, which is what this integration is built on:
+      # so the default here is the engine that has them. Set it to true in .env to take a new deployment to the native engine
+      # (accounts that already exist keep the engine they were made on; `scripts/ops/memory-engine.mjs` moves one).
+      OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: ${OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED:-false}
       # The kernel's own browser application, which only a runtime serves.
       OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-false}
       OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ${OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:-false}

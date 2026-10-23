@@ -123,7 +123,7 @@ test("a habit is new for fourteen days, says it was learned from prescription ed
 
 test("a subject with no memory yet reads an empty dashboard and nothing is created", async () => {
   const board = await memoryBoard({ researchMemory: { settings() { throw new Error("must not read"); } } }, null);
-  assert.deepEqual(board, { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] });
+  assert.deepEqual(board, { engine: "legacy", switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] });
 });
 
 test("confirming makes a proposal the person's own, forgetting archives it, and each act is remembered for the extractor", async () => {

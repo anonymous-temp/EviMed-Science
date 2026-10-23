@@ -348,6 +348,37 @@ test("all of a capsule's notes are read, past the first page, newest first, in f
   assert.deepEqual((await service.mine(USER, { limit: 3 })).entries.map((entry) => entry.payload.content), ["偏好 5", "偏好 4", "偏好 3"], "bounded, newest kept");
 });
 
+test("a note an outside agent proposed is listed apart as waiting for the researcher, recalled by nobody until confirmed, and joins the notes in force when it is", async () => {
+  // The agent-memory API's `/note` writes with `review: true`: the platform's own notes take effect at once, a third party's wait.
+  // They were stored and shown nowhere (2026-10-23): `mine` listed only what was approved.
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const own = await service.ownCapsule(USER, { create: true });
+  const stated = await service.addEntry(USER, own.id, { factKind: "preference", layer: "profile", content: "抗凝证据先看指南" });
+  const proposed = await service.note(USER, "project_1", { factKind: "preference", content: "抗凝报告先给结论", review: true });
+  assert.equal(proposed.payload.status, "candidate");
+
+  const before = await service.mine(USER);
+  assert.deepEqual(before.entries.map((entry) => entry.id), [stated.id], "what counts the notes in force counts no proposal");
+  assert.deepEqual(before.candidates.map((entry) => [entry.id, entry.payload.status]), [[proposed.id, "candidate"]]);
+  assert.deepEqual(before.forgotten, []);
+  assert.deepEqual((await service.recall(USER, { query: "抗凝报告", projectId: "project_1" })).items.map((item) => item.id), [], "a proposal is no memory yet");
+
+  // 确认: the entry's own status path, and it is in force.
+  await service.updateEntry(USER, proposed.payload.capsuleId, proposed.id, { status: "approved", expectedRevision: proposed.revision });
+  const after = await service.mine(USER);
+  assert.deepEqual(after.entries.map((entry) => entry.id).sort(), [proposed.id, stated.id].sort());
+  assert.deepEqual(after.candidates, []);
+  assert.deepEqual((await service.recall(USER, { query: "抗凝报告", projectId: "project_1" })).items.map((item) => item.id), [proposed.id]);
+
+  // 不要: retired, which 已忘记的内容 lists and restores.
+  const second = await service.note(USER, "project_1", { factKind: "preference", content: "抗凝报告全用英文", review: true });
+  await service.updateEntry(USER, second.payload.capsuleId, second.id, { status: "retired", expectedRevision: second.revision });
+  const refused = await service.mine(USER);
+  assert.deepEqual(refused.candidates, []);
+  assert.deepEqual(refused.forgotten.map((entry) => entry.id), [second.id]);
+});
+
 // 2026-10-10 review C-3: a received pack's title, author label and entries were put into the trial block raw, so a
 // pack could close <evimed-capsule-trial> early and speak outside it, or open a platform block of its own.
 test("a received pack's text cannot close the trial block or open a platform block", async () => {

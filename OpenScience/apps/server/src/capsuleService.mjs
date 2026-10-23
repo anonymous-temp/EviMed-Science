@@ -162,8 +162,10 @@ export class CapsuleService {
    * Everything in the researcher's own capsules, as one: the account capsule,
    * the notes each project's runs wrote, and any capsule made by hand before
    * there was only one. Borrowed capsules are not in it — they are the
-   * received shelf. `entries` are the ones in force; `forgotten` the ones the
-   * researcher retired, which 「已忘记的内容」 lists and restores.
+   * received shelf. `entries` are the ones in force; `candidates` the ones an
+   * outside agent proposed and the researcher has not confirmed (2026-10-23: they
+   * were stored and shown nowhere); `forgotten` the ones the researcher retired,
+   * which 「已忘记的内容」 lists and restores.
    *
    * What a knowledge-base document yielded is not a memory the page lists
    * (2026-09-24): it belongs to its document and is shown there, and it is
@@ -207,6 +209,11 @@ export class CapsuleService {
       capsule,
       capsules: own.map((/** @type {any} */ item) => ({ id: item.id, title: item.payload.title, projectId: item.projectId ?? null, revision: item.revision })),
       entries: await read("approved"),
+      // Notes an outside agent proposed through the agent-memory API's `/note` (`note(..., { review: true })`): not in force until the
+      // researcher confirms them, and nowhere else visible to them. The memory page lists them with 待确认 and 确认 / 不要 — the
+      // entry's own status paths (`updateEntry`: approved, retired). Apart from `entries` so that whatever counts the notes in
+      // force (the map, the growth card) is not counting a proposal.
+      candidates: await read("candidate"),
       forgotten: await read("retired"),
     };
   }

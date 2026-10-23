@@ -1,0 +1,43 @@
+{
+  "id": "c18-assistant-proposal-not-adopted",
+  "class": "refuse-assistant-proposal",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C18); every name, number and identifier is invented",
+  "expected": "Nothing is filed: the assistant's offer was not taken up in the person's own reply.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "帮我润色这篇综述的引言。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "已润色，主要调整了第二段的逻辑衔接。要不要我每周自动汇总文献？也可以顺便建一个引文库。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "先把这篇改完。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "好的，这篇我继续改完。"
+      }
+    ]
+  },
+  "expect": {
+    "noRecordOfKinds": [
+      "follow_up",
+      "preference"
+    ]
+  }
+}

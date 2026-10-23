@@ -159,7 +159,7 @@ import { createLearningRoutes } from "./learningRoutes.mjs";
 import { HandbookLibrary } from "./handbookLibrary.mjs";
 import { createHandbookRoutes } from "./handbookRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
-import { capabilityUse, projectWorks } from "./projectOverview.mjs";
+import { capabilityUse, projectCard as projectCardOf, projectWorks } from "./projectOverview.mjs";
 import { memoryMetricFamilies, recordExtractionEmpty, recordMethodsRetired } from "./memoryMetrics.mjs";
 import { resetLearnedMemory } from "./memoryReset.mjs";
 import { ResidentProfiles } from "./residentProfile.mjs";
@@ -403,7 +403,7 @@ import { createMediaMarketClient } from "./mediaMarketClient.mjs";
 import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
-import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
+import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { dispatchedRequestIdsOf } from "./memoryDispatch.mjs";
@@ -1636,7 +1636,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
-  const residentProfiles = new ResidentProfiles({ config, store: researchMemory, capsules: capsuleService });
+  const residentProfiles = new ResidentProfiles({
+    config, store: researchMemory, capsules: capsuleService,
+    // The project's card, read as the memory page's 项目 tab reads it: the engine's own project-context file for a native account,
+    // the project's card records for a legacy one. Handed to a conversation a person is in (`ResidentProfiles.forDispatch`).
+    projectCard: async (userId, projectId, engine) => engine === "native"
+      ? nativeMemory.projectCard(userId, projectId)
+      : projectCardOf(typeof researchMemory.listAllRecords === "function"
+        ? await researchMemory.listAllRecords(userId, { scopes: ["project"], kinds: ["project_fact", "decision"], statuses: ["active"], scopeId: projectId })
+        : await researchMemory.listRecords(userId, { scopes: ["project"], kinds: ["project_fact", "decision"], statuses: ["active"], scopeId: projectId })),
+  });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     nativeMemory: config.ovNativeMemoryEnabled ? nativeMemory : null, memoryEngine: (userId) => researchMemory.memoryEngine(userId),
     maxLiveSnapshots: config.capsuleMaxLiveSnapshots,
@@ -3076,6 +3085,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // goes through. There is no route that writes a record directly.
   const agentMemoryRoutes = createAgentMemoryRoutes({
     config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
+    // An account on the native engine is read and acted on through the store the memory page uses (`agentMemoryRoutes.mjs`, rule 4).
+    nativeMemory: config.ovNativeMemoryEnabled ? nativeMemory : null,
     // The methods recall returns: the account's own learned library.
     learning: learningService,
     // The dashboard: the rejections the extractor must respect, forgetting
@@ -5004,9 +5015,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
     clinicalContext: vcrPrivacyStore ? (userId, projectId, runs) => vcrPrivacyStore.hasClinicalContext(userId, projectId, runs) : null,
   });
+  // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
+  const recallSubscriptions = zoneSubscriptions?.enabled && frontier
+    ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
+    // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
+    capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions }) : null,
     // The conversation's `forget` tool is the page's own deletion, by URI: the file, its revision, the rejection that keeps it away.
     memoryTool: nativeMemory,
   });
@@ -5025,9 +5041,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryEngine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId),
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
-    // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
-    subscriptions: zoneSubscriptions?.enabled && frontier
-      ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null,
+    subscriptions: recallSubscriptions,
     clinicalContext: vcrPrivacyStore ? (identity, runs) => vcrPrivacyStore.hasClinicalContext(identity.userId, identity.projectId,
       runs.map(run => ({ sessionId: run.sessionId, runId: run.id }))) : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
@@ -6085,7 +6099,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (options.beforeSend) await options.beforeSend(dispatchedRun);
         let resident;
         try {
-          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId });
+          // A question that arrived through a messaging channel is one a person asked and waits for.
+          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId, attended: true });
         } catch (error) {
           throw memoryRecallRejection(error);
         }
@@ -7227,6 +7242,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             resident = await residentProfiles.forDispatch(ctx.user.id, {
               projectId: ctx.project.id,
               sessionId: session.sessionId,
+              // The project's card is for a turn a person is in; a probe, an audit or an evaluation harness is watched by nobody.
+              attended: !automated,
             });
           } catch (error) {
             // A read that throws is the authoritative store being unreachable — it

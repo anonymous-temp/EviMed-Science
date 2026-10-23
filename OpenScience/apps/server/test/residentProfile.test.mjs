@@ -11,7 +11,7 @@ import { CAPSULE_PROFILE_MAX_TOKENS } from "../src/capsuleProfile.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
 import { estimatePromptTokens } from "../src/modelGateway.mjs";
 import { renderMemoryContext } from "../src/researchContext.mjs";
-import { ResidentProfiles, lookupLine, renderResidentProfile } from "../src/residentProfile.mjs";
+import { PROJECT_CARD_MAX_CHARS, ResidentProfiles, lookupLine, projectCardMemo, renderResidentProfile } from "../src/residentProfile.mjs";
 
 beforeEach(() => resetMemoryMetrics());
 
@@ -246,4 +246,166 @@ test("the cap on entries is the configured one, and the rest is a lookup away", 
   assert.equal(capped.memories.length, 5);
   assert.equal(capped.omitted, 0, "the store was asked for five, so five is all it counted");
   assert.deepEqual(stored.asked.filter((item) => item === "records"), ["records"], "the profile is read once per dispatch");
+});
+
+// ---- The project's card is resident inside a project; a native account is handed the capsule's half (2026-10-23) ----
+
+const cardRows = [
+  { slot: "field", text: "心血管流行病学", updatedAt: "2026-10-20T00:00:00Z" },
+  { slot: "goal", label: "目标", text: "比较 SGLT2 抑制剂与 DPP-4 抑制剂的心衰住院风险", updatedAt: "2026-10-21T00:00:00Z" },
+  { slot: "constraints", text: "周五前出初稿；引用用 AMA 格式", updatedAt: "2026-10-19T00:00:00Z" },
+];
+
+test("the card is one memo: a line per slot in the card's own words and order, newest change as its date, cut at a whole line within its budget", () => {
+  const memo = projectCardMemo("proj_1", cardRows);
+  assert.equal(memo.id, "card:proj_1");
+  assert.deepEqual([memo.memoryType, memo.kind, memo.scope, memo.origin], ["project_card", "project_fact", "project", "explicit"]);
+  assert.equal(memo.content, "领域：心血管流行病学\n目标：比较 SGLT2 抑制剂与 DPP-4 抑制剂的心衰住院风险\n约束：周五前出初稿；引用用 AMA 格式");
+  assert.equal(memo.updatedAt, "2026-10-21T00:00:00Z");
+  assert.equal(projectCardMemo("p", []), null);
+  assert.equal(projectCardMemo("p", [{ slot: "goal", text: "   " }]), null, "a card that says nothing is no card");
+  // The budget is characters, and a line that does not fit ends the card rather than letting a later, shorter one pass it.
+  const long = [{ slot: "goal", text: "目".repeat(1_400) }, { slot: "stage", text: "阶".repeat(300) }, { slot: "constraints", text: "短" }];
+  const cut = projectCardMemo("p", long);
+  assert.ok([...cut.content].length <= PROJECT_CARD_MAX_CHARS, `${[...cut.content].length} characters`);
+  assert.match(cut.content, /^目标：目{1,}/);
+  assert.match(cut.content, /…$/);
+  assert.doesNotMatch(cut.content, /约束/);
+  assert.ok(cut.content.includes("\n阶段：阶"), "the second line was cut where it ran out, not dropped whole");
+});
+
+test("the card leads the block, outside the entry cap and with room of its own, so it is never what crowds the profile out", () => {
+  const card = projectCardMemo("proj_1", cardRows);
+  const records = Array.from({ length: 24 }, (_, index) => record({ id: `record:p${index}`, content: `偏好 ${index}` }));
+  const block = renderResidentProfile({ records, card, maxRecords: 24 });
+  assert.equal(block.memos[0].id, "card:proj_1");
+  assert.equal(block.memos.length, 25, "the card, and all twenty-four entries the cap allows");
+  assert.equal(block.omitted, 0);
+  assert.ok(block.profile.indexOf("心血管流行病学") < block.profile.indexOf("偏好 0"));
+  // With a long card the entries still have the whole profile budget, because the card's tokens are added to it.
+  const heavy = projectCardMemo("proj_1", [{ slot: "goal", text: "目".repeat(1_400) }]);
+  const withCard = renderResidentProfile({ records, card: heavy, maxRecords: 24 });
+  const without = renderResidentProfile({ records, maxRecords: 24 });
+  assert.equal(withCard.memos.length - 1, without.memos.length, "the same entries are kept with and without the card");
+  // No card, no change: the block is the one it always was.
+  assert.equal(renderResidentProfile({ records, card: null, maxRecords: 24 }).text, without.text);
+});
+
+/** A card reader that records what it was asked. @param {any[]} rows */
+function cardReader(rows = cardRows) {
+  /** @type {any[][]} */ const asked = [];
+  const read = async (/** @type {string} */ user, /** @type {string} */ project, /** @type {string} */ engine) => { asked.push([user, project, engine]); return rows; };
+  return { asked, read };
+}
+
+test("inside a named project a person is in, the card is handed over once per conversation, and again when it changed", async () => {
+  const memory = store();
+  const reader = cardReader();
+  const profiles = new ResidentProfiles({ config: {}, store: memory, projectCard: reader.read });
+  const first = await profiles.forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.equal(first.due, true);
+  assert.deepEqual(reader.asked[0], ["u1", "proj_1", "legacy"]);
+  assert.match(first.text, /领域：心血管流行病学/);
+  assert.match(first.text, /先给结论，再给依据/, "the person's profile is still there, after the card");
+  assert.deepEqual(first.memories.map((memo) => memo.id), ["card:proj_1", "record:p1"]);
+  await first.delivered();
+  const second = await profiles.forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.deepEqual([second.due, second.reason], [false, "unchanged"], "a follow-up adds nothing to the context");
+  // The card moves on (a decision, a new stage): the conversation is handed the block again.
+  const moved = await new ResidentProfiles({ config: {}, store: memory, projectCard: cardReader([...cardRows, { slot: "stage", text: "数据清洗完成，进入分析" }]).read })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.deepEqual([moved.due, moved.reason], [true, "changed"]);
+  assert.match(moved.text, /阶段：数据清洗完成，进入分析/);
+});
+
+test("no card for the catch-all project, a project of the platform's own, a turn nobody is in, or a project with an empty card", async () => {
+  for (const [scopeOf, why] of [
+    [{ projectId: "default", sessionId: "ses_1", attended: true }, "the catch-all has no single subject"],
+    [{ projectId: "evimed-learning", sessionId: "ses_1", attended: true }, "a platform project is nobody's work"],
+    [{ projectId: "proj_1", sessionId: "ses_1", attended: false }, "a scheduled task, an episode or a module's step"],
+    [{ projectId: "proj_1", sessionId: "ses_1" }, "a caller that does not say is not a person"],
+  ]) {
+    const reader = cardReader();
+    const out = await new ResidentProfiles({ config: {}, store: store(), projectCard: reader.read }).forDispatch("u1", scopeOf);
+    assert.deepEqual(reader.asked, [], `${why}: the card is not even read`);
+    assert.doesNotMatch(out.text, /领域/, why);
+    assert.match(out.text, /先给结论，再给依据/, `${why}: the profile is as it was`);
+  }
+  const empty = await new ResidentProfiles({ config: {}, store: store(), projectCard: cardReader([]).read }).forDispatch("u1", { projectId: "proj_1", sessionId: "s", attended: true });
+  assert.deepEqual(empty.memories.map((memo) => memo.id), ["record:p1"]);
+});
+
+test("a card that cannot be read is no reason to fail a dispatch, and a deployment with no reader hands none", async () => {
+  const broken = async () => { throw Object.assign(new Error("engine down"), { code: "memory_engine_unavailable" }); };
+  const degraded = await new ResidentProfiles({ config: {}, store: store(), projectCard: broken }).forDispatch("u1", { projectId: "proj_1", sessionId: "s", attended: true });
+  assert.equal(degraded.due, true);
+  assert.deepEqual(degraded.memories.map((memo) => memo.id), ["record:p1"]);
+  const none = await new ResidentProfiles({ config: {}, store: store() }).forDispatch("u1", { projectId: "proj_1", sessionId: "s", attended: true });
+  assert.deepEqual(none.memories.map((memo) => memo.id), ["record:p1"]);
+  // The researcher's pause is the pause of the card too.
+  const paused = await new ResidentProfiles({ config: {}, store: store({ settings: { pausedProjects: ["proj_1"] } }), projectCard: cardReader().read })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "s", attended: true });
+  assert.deepEqual([paused.text, paused.reason], ["", "paused"]);
+});
+
+const cardOutcome = (/** @type {string} */ label) => memoryMetricFamilies().find((family) => family.name === "open_science_memory_resident_card_total")
+  ?.series.find((item) => item.labels?.outcome === label)?.value;
+
+test("a dispatch does not wait on a card the engine is slow to give: past the deadline the conversation goes on without it, and the counter says so", async () => {
+  // A native account's card is a read of the engine, and an engine that hangs would hold every message of a project's conversation.
+  const hung = () => new Promise(() => {});
+  const out = await new ResidentProfiles({ config: { memoryResidentCardTimeoutMs: 100 }, store: store(), projectCard: hung })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.deepEqual(out.memories.map((memo) => memo.id), ["record:p1"], "the profile is handed, the card is not");
+  assert.equal(cardOutcome("timeout"), 1);
+  const failing = await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => { throw new Error("engine down"); } })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "ses_2", attended: true });
+  assert.deepEqual(failing.memories.map((memo) => memo.id), ["record:p1"]);
+  assert.equal(cardOutcome("unread"), 1);
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => [] }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_3", attended: true });
+  assert.equal(cardOutcome("empty"), 1);
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => cardRows }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_4", attended: true });
+  assert.equal(cardOutcome("read"), 1);
+  // A turn that is not asked for a card counts nothing, and the deadline is the configured one (a floor of 100 ms).
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => cardRows }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_5" });
+  assert.equal(cardOutcome("read"), 1);
+});
+
+/** A store of an account on the native engine: its records are the engine's, so this store must not be asked for them. */
+function nativeStore(options = {}) {
+  const double = store(options);
+  double.memoryEngine = async () => "native";
+  const records = double.residentRecords;
+  double.residentRecords = async (...args) => { double.asked.push("records-asked-of-a-native-account"); return records(...args); };
+  return double;
+}
+
+test("a native account is handed the capsule's profile entries and the project's card, and none of the records the engine's plugin hands over itself", async () => {
+  const memory = nativeStore();
+  const capsules = {
+    async profileFacts() { return [{ id: "n1", factKind: "preference", content: "引用一律用 AMA 格式", updatedAt: "2026-10-22T00:00:00Z", origin: "inferred" }]; },
+    async lookupCount() { return 7; },
+  };
+  const reader = cardReader();
+  const profiles = new ResidentProfiles({ config: {}, store: memory, capsules, projectCard: reader.read });
+  const out = await profiles.forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.deepEqual(reader.asked[0], ["u1", "proj_1", "native"], "the card is the engine's project-context file");
+  assert.deepEqual(out.memories.map((memo) => memo.id), ["card:proj_1", "fact:n1"]);
+  assert.match(out.text, /引用一律用 AMA 格式/);
+  assert.ok(!memory.asked.includes("records-asked-of-a-native-account") && !memory.asked.includes("counts"), "one account, one path: the records and their counts are the engine's");
+  assert.doesNotMatch(out.text, /可查（/, "the lookup line names a tool a native conversation does not have");
+  assert.deepEqual([out.due, out.reason], [true, "first"]);
+  await out.delivered();
+  assert.equal((await profiles.forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true })).due, false, "digest-gated like the legacy profile");
+});
+
+test("a native account with nothing of the capsule's and no card is handed nothing, as before, and the pause holds for it too", async () => {
+  const bare = await new ResidentProfiles({ config: {}, store: nativeStore(), capsules: { async profileFacts() { return []; } } }).forDispatch("u1", scope);
+  assert.deepEqual([bare.text, bare.due, bare.reason], ["", false, "native"]);
+  assert.equal(outcome("native"), 1);
+  // A fact of a capsule that is not in force, or was retired, is not among profileFacts: what the service returns is what is handed.
+  const paused = await new ResidentProfiles({ config: {}, store: nativeStore({ settings: { recallPaused: true } }), capsules: { async profileFacts() { throw new Error("must not be asked"); } } }).forDispatch("u1", scope);
+  assert.equal(paused.reason, "paused");
+  const trial = await new ResidentProfiles({ config: {}, store: nativeStore({ settings: { trial: true } }), capsules: { async profileFacts() { throw new Error("must not be asked"); } } }).forDispatch("u1", scope);
+  assert.equal(trial.reason, "paused", "a conversation trying someone else's capsule reads none of the person's own");
 });

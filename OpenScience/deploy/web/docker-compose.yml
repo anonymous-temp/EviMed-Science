@@ -613,6 +613,8 @@ services:
       # answer size (review M6); value-less so the code defaults (24, 5, 8) apply when
       # unset.
       OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS:
+      # How long a dispatch waits to read the project's card for that profile (the code default, 1.5 s, applies when unset).
+      OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS:
       OPEN_SCIENCE_MEMORY_RECALL_TOOL_LIMIT:
       OPEN_SCIENCE_MEMORY_RECALL_TOOL_MAX_LIMIT:
       # The memory gateway between a runtime's memory plugin and the native engine,

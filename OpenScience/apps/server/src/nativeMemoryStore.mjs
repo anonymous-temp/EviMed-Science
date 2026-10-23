@@ -38,7 +38,8 @@ import { HttpError } from "./security.mjs";
  * @typedef {(userId: string, refs: { projectId: string, sessionId: string }[]) => Promise<Record<string, string | null>>} ConversationTitles
  */
 
-/** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. */
+/** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. A file's type is where it lives
+ *  (`nativeMemoryFile`): the corrections template writes under `preferences/corrections/`, and that is `corrections` here. */
 export const LEGACY_KIND_OF_TYPE = Object.freeze({
   profile: "profile",
   preferences: "preference",

@@ -1,21 +1,28 @@
 memory_type: corrections
 description: |
   __LANGUAGE__
-  Corrections: what the user told the assistant it said or did wrong, kept as the rule to
-  follow next time.
-  Whenever a user-role message says that the assistant's answer, wording, reading, method or
-  format was wrong ("不对…", "你把 A 写成了 B", "这不是一回事") ALWAYS record it here,
-  written as a standing rule in the imperative ("引用研究结果时写明终点定义，不要笼统说成死亡").
+  Corrections and confirmed approaches: what the user told the assistant it did wrong, how they
+  reshaped what it produced, and approaches they adopted, each kept as the rule to follow next
+  time, written as an imperative ("引用研究结果时写明终点定义，不要笼统说成死亡").
+  Write one whenever a user-role message:
+  - says the assistant's answer, wording, reading, method or format was wrong ("不对…",
+    "你把 A 写成了 B", "这不是一回事");
+  - reshapes what the assistant produced because its form missed ("太长", "别用被动",
+    "先给结论再给依据"), the rule applying to the kind of thing it was said about;
+  - adopts an approach by name ("好，就按这个三栏表来，其他材料也这样", "对，用 IPTW"). A bare
+    "不错" or "谢谢" is not the approval of an approach.
   The rule is what is kept. The numbers, names and conclusions of the study, case, document
   or product that was being discussed are not part of it.
-  One file per subject of correction; a later correction on the same subject updates that
-  file. The never-kept rule about document content does not stop a correction from being
-  recorded.
+  One file per subject; a later correction on the same subject updates that file. The
+  never-kept rule about document content does not stop a correction from being recorded.
   Not a correction: the user changing their own preference ("以后改用 AMA 格式" -> PREFERENCES)
-  or changing a decision about their project (-> PROJECT_CONTEXT or DECISIONS).
+  or changing a decision about their project (-> PROJECT_CONTEXT or DECISIONS), and fixing a
+  number or a sentence in this one draft ("第二条数字错了，应该是 37%").
 
   __NEVER_KEEP__
-directory: "viking://user/{{ user_space }}/memories/corrections"
+
+  __DECIDE__
+directory: "viking://user/{{ user_space }}/memories/preferences/corrections"
 filename_template: "{{ topic|lower }}.md"
 enabled: true
 embedding_template: |-

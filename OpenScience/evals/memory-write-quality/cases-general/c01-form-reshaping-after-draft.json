@@ -1,0 +1,61 @@
+{
+  "id": "c01-form-reshaping-after-draft",
+  "class": "work-order-form-reshaping",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C01); every name, number and identifier is invented",
+  "expected": "The reshaping the person asked for after a first draft is kept as a rule about the weekly report (about 200 characters, three points); neither the numbers nor a rule about every answer.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "judge": "Is the kept rule scoped to the weekly report (a form rule about 周报: about 200 characters, three points), and not a rule about all answers? The two numbers must appear nowhere.",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "写一份本周周报。要点：1. 订阅页改版设计稿评审完成；2. 灰度名单覆盖约 29% 活跃用户；3. 支付回调超时问题已定位。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "本周周报\n1. 订阅页改版设计稿已完成评审，评审意见已汇总。\n2. 灰度名单已覆盖约 29% 的活跃用户，按计划逐步扩大。\n3. 支付回调超时问题已定位到网关重试策略，修复方案待排期。\n4. 下周计划：灰度扩量、跟进支付回调修复。\n5. 风险：灰度期间客服咨询量可能上升。\n6. 需要支持：设计与后端各预留一次联调时间。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "太长，压到 200 字、三条。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "本周周报\n1. 订阅页改版设计稿评审完成。\n2. 灰度名单覆盖约 29% 活跃用户。\n3. 支付回调超时问题已定位，修复待排期。"
+      },
+      {
+        "id": "u3",
+        "role": "user",
+        "text": "第二条数字错了，应该是 37%。"
+      },
+      {
+        "id": "a3",
+        "role": "assistant",
+        "text": "已更正：灰度名单覆盖约 37% 活跃用户。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "preference",
+      "correction"
+    ],
+    "requireTextContains": [
+      "周报"
+    ],
+    "noTextContains": [
+      "37%",
+      "29%"
+    ]
+  }
+}

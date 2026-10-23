@@ -233,6 +233,14 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
     if (result.undone === "removed") onClose();
   }, productErrorMessage);
 
+  // A note an outside agent proposed (the agent-memory API's `/note`) waits for the researcher like a pending memory does: the same
+  // tag, 确认 to take it, 不要 to put it away (retired, so 已忘记的内容 can bring it back).
+  const candidate = entry?.payload.status === "candidate";
+  const confirmEntry = () => run(async () => {
+    if (!entry) return;
+    await updateCapsuleEntry(capsuleId, entry.id, { status: "approved", expectedRevision: entry.revision });
+    toast.success("已确认");
+  }, productErrorMessage);
   const since = formatDay(record?.createdAt ?? entry?.createdAt ?? null);
   const former = record?.status === "superseded";
   const pending = record?.status === "pending";
@@ -305,11 +313,13 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
 
           {record && <ValidityBar span={validitySpan(record)} />}
 
-          {(pending || badges.length > 0) && (
+          {(pending || candidate || badges.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
-              {pending && <Tag>待确认</Tag>}
+              {(pending || candidate) && <Tag>待确认</Tag>}
               {badges.map((badge) => <Tag key={badge}>{badge}</Tag>)}
               {pending && <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>}
+              {candidate && <Button size="sm" variant="secondary" loading={busy} onClick={() => void confirmEntry()}>确认</Button>}
+              {candidate && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void forgetEntry()}>不要</Button>}
             </div>
           )}
 

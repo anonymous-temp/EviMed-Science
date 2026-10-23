@@ -148,5 +148,66 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(answer["result"]["isError"])
 
 
+    def test_the_kinds_are_the_services_own_and_a_recall_can_ask_for_every_one(self):
+        # The enum carried `method`, `constraint` and `background`, which the service refuses: a recall for "method" answered 400.
+        # The node test `agentMemoryMcp.test.mjs` holds this tuple equal to the domain's, in order.
+        self.assertEqual(len(server.FACT_KINDS), 14)
+        for kind in ("method", "constraint", "background"):
+            self.assertNotIn(kind, server.FACT_KINDS)
+        for kind in ("profile", "method_preference", "writing_style", "tooling", "tension"):
+            self.assertIn(kind, server.FACT_KINDS)
+        recall, note = server.TOOLS
+        self.assertEqual(recall["inputSchema"]["properties"]["factKinds"]["items"]["enum"], list(server.FACT_KINDS))
+        self.assertEqual(recall["inputSchema"]["properties"]["factKinds"]["maxItems"], len(server.FACT_KINDS))
+        self.assertEqual(note["inputSchema"]["properties"]["factKind"]["enum"], list(server.FACT_KINDS))
+
+    def test_a_recall_names_capsules_and_methods_and_the_person_it_is_for(self):
+        seen = {}
+
+        def opener(request, timeout=None):
+            seen["body"] = json.loads(request.data.decode("utf-8"))
+            seen["subject"] = request.headers.get("X-subject")
+            return Response({"data": {"items": [], "methods": []}})
+
+        arguments = {"query": "同病异治", "capsuleIds": ["cap_a", "cap_b"], "methods": "capsules", "subject": "doctor-17"}
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            server.call_tool("memory_recall", arguments, opener)
+        self.assertEqual(seen["body"], {"query": "同病异治", "capsuleIds": ["cap_a", "cap_b"], "methods": "capsules"})
+        self.assertEqual(seen["subject"], "doctor-17", "the person is a header, never a field of the body")
+        properties = server.TOOLS[0]["inputSchema"]["properties"]
+        self.assertEqual(properties["capsuleIds"]["maxItems"], 8)
+        self.assertEqual(properties["methods"]["enum"], ["all", "own", "capsules", "none"])
+        self.assertIn("subject", properties)
+        self.assertIn("subject", server.TOOLS[1]["inputSchema"]["properties"])
+
+    def test_the_subject_is_the_calls_own_or_the_processes_default_or_none(self):
+        seen = []
+
+        def opener(request, timeout=None):
+            seen.append(request.headers.get("X-subject"))
+            return Response({"data": {"entry": {"id": "e1"}, "reviewRequired": True}})
+
+        note = {"factKind": "preference", "content": "处方先看舌脉"}
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            server.call_tool("memory_note", note, opener)
+        with mock.patch.dict(server.os.environ, {**CONFIGURED, "EVIMED_MEMORY_SUBJECT": "doctor-default"}, clear=True):
+            server.call_tool("memory_note", note, opener)
+            server.call_tool("memory_note", {**note, "subject": "doctor-own"}, opener)
+            server.call_tool("memory_note", {**note, "subject": "  "}, opener)
+        self.assertEqual(seen, [None, "doctor-default", "doctor-own", "doctor-default"])
+
+    def test_the_adapter_still_holds_no_policy_about_the_subject(self):
+        # A refusal of the named person (a key that may not name one, an identifier that is none) is the service's, and arrives as its own code.
+        def opener(_request, timeout=None):
+            raise urllib.error.HTTPError(
+                "https://evimed.example", 400, "Bad Request", {},
+                __import__("io").BytesIO(json.dumps({"error": {"code": "agent_key_subject_unsupported", "message": "Only an integration key may name a subject."}}).encode("utf-8")),
+            )
+
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            result = server.call_tool("memory_recall", {"query": "x", "subject": "doctor-1"}, opener)
+        self.assertEqual(result["code"], "agent_key_subject_unsupported")
+
+
 if __name__ == "__main__":
     unittest.main()
