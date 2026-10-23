@@ -295,6 +295,18 @@ describe("记忆胶囊", () => {
     expect(screen.queryByRole("group", { name: "筛选记忆" })).toBeNull();
   });
 
+  it("lists the notes an outside agent proposed with the ones in force, and its drawer asks to confirm them", async () => {
+    const user = userEvent.setup();
+    const proposed = entry({ id: "entry_proposed", payload: { ...entry().payload, content: "报告先给结论，再给依据。", status: "candidate", origin: "inferred", factKind: "preference" } });
+    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [entry()], candidates: [proposed], forgotten: [] });
+    open();
+    await user.click(await screen.findByRole("button", { name: /报告先给结论，再给依据/ }));
+    const drawer = await screen.findByRole("dialog", { name: "偏好" });
+    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "确认" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "不要" })).toBeInTheDocument();
+  });
+
   it("opens on the first tab that has something in it, once: an empty 关于你 gives way to 项目, then 做法", async () => {
     const user = userEvent.setup();
     // Nothing about the person yet; the shell's own project has facts.

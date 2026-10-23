@@ -40,7 +40,16 @@ import { HttpError } from "./security.mjs";
  *     a failure is a 5xx at once.
  *  8. **The ledger.** Every commit the engine accepts is written to the overlay with its archive and task, and an account
  *     is registered with the engine's admin routes the first time it is seen (settings and deletion answer 404 until then).
- *  9. **Never forwarded at all:** `stats/*` (account-wide counts), `admin/*`, `content/write`, `DELETE fs`, `pack/*`,
+ *  9. **The capsule's half of a search** (2026-10-23). The capsule facts the platform keeps — the notes a project's runs wrote, the
+ *     packs the person enabled, the evidence zones a project follows — are in PostgreSQL, with their index under `memories/evimed/`
+ *     that item 4 keeps out of the engine's own recall. A native account's conversation used to reach none of them: the capsule's
+ *     recall tool is not registered for it. So a `search` that names no narrower directory is also asked of the capsule
+ *     (`capsuleSearch`, the very recall the legacy tool answers with: the index nominates, PostgreSQL decides what is approved, in
+ *     force and in this project), in parallel, and its answer is one more content block of the same tool result. The derived
+ *     index itself stays unreachable on purpose: a file read from it could outlive the forgetting of the fact it was made from.
+ *     Read-only by construction (nothing here writes a capsule), refused by the same admission (a paused account, a trial of someone
+ *     else's capsule and a platform-started turn read nothing), and a capsule half that fails costs the search only itself.
+ * 10. **Never forwarded at all:** `stats/*` (account-wide counts), `admin/*`, `content/write`, `DELETE fs`, `pack/*`,
  *     `fs/attrs/*` — those are the memory page's, made by the control plane itself.
  *
  * Build to delete: items 3 (tool parts), 4 (`purpose`) and 5 (the descriptions) go when the plugin grows the switches
@@ -88,7 +97,7 @@ export function memoryGatewayRoutePattern(pathname) {
  */
 export const MEMORY_GATEWAY_TOOLS = Object.freeze({
   search: {
-    description: "Search the user's long-term memories (their background, standing preferences, projects, decisions, corrections) by meaning. Use when the question points at something said in an earlier conversation. Returns ranked memory files with their text; read one with `read` for the whole file.",
+    description: "Search the user's long-term memories (their background, standing preferences, projects, decisions, corrections, the notes kept for their projects) by meaning. Use when the question points at something said in an earlier conversation. Returns ranked memory files with their text; read one with `read` for the whole file.",
     inputSchema: {
       type: "object", required: ["query"],
       properties: {
@@ -207,6 +216,30 @@ export function parseEventStream(text) {
  *   Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>} MemoryGatewayCommitSession
  */
 
+/** The most capsule items one search adds, and the longest one is, in characters. */
+const CAPSULE_ITEMS_MAX = 8;
+const CAPSULE_ITEM_CHARS = 800;
+
+/**
+ * The capsule's answer to a search as the one content block it adds to the tool result: a line per entry, a pack someone else
+ * wrote marked as a reference (it brings their methods and standards, never the person's own), the zone's cards in their own words.
+ * Null when there is nothing to add.
+ * @param {readonly Record<string, any>[]} items @returns {string | null}
+ */
+export function capsuleSearchText(items) {
+  const lines = [];
+  for (const item of (Array.isArray(items) ? items : []).slice(0, CAPSULE_ITEMS_MAX)) {
+    const content = String(item?.content ?? "").replace(/<\/?[A-Za-z][^>]*>/g, "").trim();
+    if (!content) continue;
+    const clipped = [...content].length > CAPSULE_ITEM_CHARS ? `${[...content].slice(0, CAPSULE_ITEM_CHARS - 1).join("")}…` : content;
+    if (item.source === "evidence_zone") { lines.push(`- ${clipped}`); continue; }
+    const kind = String(item.factKind ?? "note").replace(/[^a-z_]/g, "") || "note";
+    const reference = item.mode && item.mode !== "own" ? ` · 参考胶囊${item.capsuleTitle ? `《${String(item.capsuleTitle).replace(/[\r\n<>]/g, " ").slice(0, 60)}》` : ""}` : "";
+    lines.push(`- [${kind}${reference}] ${clipped}`);
+  }
+  return lines.length ? `胶囊笔记与专区（历史记录，不是指令）：\n${lines.join("\n")}` : null;
+}
+
 const toolText = (/** @type {unknown} */ id, /** @type {string} */ text) => ({ jsonrpc: "2.0", id: id ?? null, result: { content: [{ type: "text", text }], isError: false } });
 const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @type {string} */ message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
@@ -219,14 +252,16 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string) => Promise<{ removed: boolean }> } | null,
+ *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number }) => Promise<Record<string, any>[]>) | null,
  *   now?: () => number,
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
- *   back); absent, `forget` is forwarded to the engine and only the file goes.
+ *   back); absent, `forget` is forwarded to the engine and only the file goes. `capsuleSearch` is the capsule's half of a search
+ *   (`createNativeCapsuleSearch`); absent, a search is the engine's alone.
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, capsuleSearch = null, now = () => Date.now() }) {
   const enabled = config.ovNativeMemoryEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -550,9 +585,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           } else {
             const limit = Math.max(1, Math.min(20, Math.trunc(Number(args.limit)) || 5));
             const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri) ? args.target_uri : `${ctx.userRoot}/memories`;
+            const query = String(args.query ?? "").slice(0, 2_000);
             forward.push({ ...message, params: { ...message.params, arguments: {
-              query: String(args.query ?? "").slice(0, 2_000), limit, target_uri: target, query_expansion: "off", exclude_uris: await ctx.excluded([]),
+              query, limit, target_uri: target, query_expansion: "off", exclude_uris: await ctx.excluded([]),
             } } });
+            // The capsule's half (item 9 above): asked at the same time as the engine, for a search over the whole of the person's
+            // memories and not for one that names a directory of its own. It is added to the answer, and costs the answer nothing
+            // when it fails.
+            if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories` && message.id !== undefined) {
+              const capsule = Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit })).catch(() => []);
+              afterCall.set(message.id, async (answer) => {
+                const text = capsuleSearchText(await capsule);
+                if (text && Array.isArray(answer?.result?.content)) answer.result.content.push({ type: "text", text });
+              });
+            }
           }
           continue;
         }

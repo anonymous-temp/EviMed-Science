@@ -114,6 +114,8 @@ export interface MyCapsule {
   capsules: { id: string; title: string; projectId: string | null; revision: number }[];
   /** The notes in force. */
   entries: OwnCapsuleEntry[];
+  /** The notes an outside agent proposed (the agent-memory API's `/note`) that wait for the researcher: 待确认, with 确认 and 不要. */
+  candidates?: OwnCapsuleEntry[];
   /** The notes the researcher forgot: 已忘记的内容 lists them, each with 恢复. */
   forgotten: OwnCapsuleEntry[];
 }

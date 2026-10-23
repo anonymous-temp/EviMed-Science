@@ -162,7 +162,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const knownProjects = useMemo(() => new Set(projects.map((project) => project.id)), [projects]);
 
   const records = useMemo(() => data.profile?.records ?? [], [data.profile]);
-  const entries = useMemo(() => data.mine?.entries ?? [], [data.mine]);
+  // The notes in force and, among them, the ones an outside agent proposed that wait for the researcher (待确认 in their drawer).
+  const entries = useMemo(() => [...(data.mine?.entries ?? []), ...(data.mine?.candidates ?? [])], [data.mine]);
   const facts = useMemo(() => factItems(found ?? records, entries, { query }), [found, records, entries, query]);
   const everyPractice = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? []), [data.methods, data.handbooks]);
   const practices = useMemo(() => practiceItems(data.methods ?? [], data.handbooks ?? [], { query }), [data.methods, data.handbooks, query]);
