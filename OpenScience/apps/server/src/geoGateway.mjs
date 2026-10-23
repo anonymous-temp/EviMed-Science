@@ -40,7 +40,7 @@ import {
   GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
-import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters } from "./geoReadScope.mjs";
+import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SELECTION_MAX_ROWS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters } from "./geoReadScope.mjs";
 import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
@@ -152,8 +152,8 @@ function readRequest(body) {
     filter.limit = raw.limit;
   }
   if (raw.offset != null) {
-    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > 10_000) {
-      throw gatewayError(400, "geo_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
+    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > GEO_SELECTION_MAX_ROWS) {
+      throw gatewayError(400, "geo_read_filter_invalid", `filter.offset must be a whole number from 0 to ${GEO_SELECTION_MAX_ROWS}.`);
     }
     filter.offset = raw.offset;
   }

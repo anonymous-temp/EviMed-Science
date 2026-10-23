@@ -131,7 +131,7 @@ def tool_definitions():
                             "questionId": ID,
                             "key": {"type": "string", "minLength": 1, "maxLength": ACTION_KEY_MAX},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
-                            "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
+                            "offset": {"type": "integer", "minimum": 0, "maximum": 20000},
                         },
                         "additionalProperties": False,
                     },
