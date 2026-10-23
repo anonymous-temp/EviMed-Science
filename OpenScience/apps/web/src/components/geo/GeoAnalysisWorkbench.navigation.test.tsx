@@ -1,0 +1,32 @@
+import {act,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {MemoryRouter,useLocation} from 'react-router';
+import {it,expect,vi} from 'vitest';
+import {GeoAnalysisWorkbench} from '@/components/geo/GeoAnalysisWorkbench';
+import {useProjectStore} from '@/lib/projects';
+const mocks=vi.hoisted(()=>({stage:vi.fn(),current:vi.fn(),listWebProjects:vi.fn(),fetchWebMe:vi.fn()}));
+vi.mock('@/lib/apiClient',async original=>({...await original<typeof import('@/lib/apiClient')>(),hasWebApi:true,listWebProjects:mocks.listWebProjects,fetchWebMe:mocks.fetchWebMe}));
+vi.mock('@/lib/runtimeWarm',()=>({warmWebRuntime:vi.fn()}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:mocks.current,stageGeoPlanContext:mocks.stage}));
+vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:async()=>({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null}})}));
+vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:()=>null}));
+vi.mock('@/components/geo/geoFrame',()=>({useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>null}));
+function Probe(){return <pre data-testid="path">{useLocation().pathname}</pre>}
+it('keeps the current route when selected-analysis staging finishes after unmount',async()=>{
+ const projects=[{id:'default',name:'Default'},{id:'control',name:'GEO'}];
+ window.localStorage.clear();window.sessionStorage.clear();useProjectStore.getState().clear();
+ mocks.listWebProjects.mockResolvedValue(projects);
+ mocks.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string})=>({user:{id:'u',name:'u'},project:{id:projectId,name:'x'},projects}));
+ mocks.current.mockResolvedValue({id:'geo',projectId:'control',sessionId:'session'});
+ let resolveStage!: (value:unknown)=>void;
+ mocks.stage.mockReturnValue(new Promise(resolve=>{resolveStage=resolve;}));
+ const renderTree=(show:boolean)=><MemoryRouter initialEntries={['/app/geo/geo/overview']}>{show&&<GeoAnalysisWorkbench geoId="geo" project={{projectId:'control',sessionId:'session'} as never}/>}<Probe/></MemoryRouter>;
+ const mounted=render(renderTree(true));fireEvent.click(screen.getByText('所选数据分析'));
+ fireEvent.click(await screen.findByRole('button',{name:'在对话中解释'}));
+ await waitFor(()=>expect(mocks.stage).toHaveBeenCalledTimes(1));
+ mounted.rerender(renderTree(false));
+ expect(screen.getByTestId('path').textContent).toBe('/app/geo/geo/overview');
+ await act(async()=>{resolveStage({referenceId:'gpc_old',sessionId:'session',draft:'Old analysis'});});
+ expect(screen.getByTestId('path').textContent).toBe('/app/geo/geo/overview');
+ expect(mocks.current).toHaveBeenCalledTimes(1);
+ expect(mocks.fetchWebMe).not.toHaveBeenCalled();
+});

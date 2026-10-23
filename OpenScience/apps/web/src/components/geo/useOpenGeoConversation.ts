@@ -42,15 +42,17 @@ export function useOpenGeoConversation() {
   const arrival = useRef(location.key);
   arrival.current = location.key;
   const generation = useRef(0);
-  useEffect(() => () => { generation.current += 1; }, []);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; generation.current += 1; }; }, []);
   return useCallback(async (target: GeoConversationTarget, draft?: string): Promise<boolean> => {
+    if (!live.current || arrival.current !== location.key) return false;
     const request = ++generation.current;
-    const from = arrival.current;
+    const from = location.key;
     let superseded = false;
     const unsubscribe = useProjectStore.subscribe((state, previous) => {
       if (state.currentId !== previous.currentId || state.switching !== previous.switching) superseded = true;
     });
-    const current = () => !superseded && generation.current === request && arrival.current === from;
+    const current = () => live.current && !superseded && generation.current === request && arrival.current === from;
     try {
       const store = useProjectStore.getState();
       if (!store.projects.some((project) => project.id === target.projectId)) await store.load();
@@ -88,5 +90,5 @@ export function useOpenGeoConversation() {
       toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" }));
       return false;
     } finally { unsubscribe(); }
-  }, [navigate, location.pathname, location.search]);
+  }, [navigate, location.key, location.pathname, location.search]);
 }

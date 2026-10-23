@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -168,4 +168,18 @@ it("keeps the actual addressed native conversation ahead of a stale project defa
   await userEvent.click(screen.getByRole("button",{name:"open"}));
   await waitFor(()=>expect(probe().path).toBe("/app/geo/geo_new/chat/actual-native-session"));
   expect(probe().intent).toMatchObject({sessionId:"actual-native-session",draft:"Selected plan remains unsent"});
+});
+
+it('refuses an old callback invoked after the caller moved to another selection', async () => {
+  let original: ReturnType<typeof useOpenGeoConversation> | null = null;
+  function Capture() {
+    const open = useOpenGeoConversation(), navigate = useNavigate();
+    if (!original) original = open;
+    return <button onClick={() => navigate('/app/geo/geo_new/overview?round=new')}>Change selection</button>;
+  }
+  render(<MemoryRouter initialEntries={['/app/geo/geo_new/overview?round=old']}><Capture /><Probe /></MemoryRouter>);
+  await userEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+  await act(async () => { expect(await original!({ projectId: 'p-new', geoId: 'geo_new', sessionId: 'old-session' }, 'Old selection')).toBe(false); });
+  expect(mocks.getGeoProject).not.toHaveBeenCalled(); expect(mocks.listWebProjects).not.toHaveBeenCalled();
+  expect(probe().path).toBe('/app/geo/geo_new/overview');
 });
