@@ -157,6 +157,21 @@ test("a diagnosis keeps its error page on the selection snapshot during a concur
   }
 });
 
+test("default cluster detail answers belong to the same round as its selection", options, async () => {
+  await store.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, user_id, version) VALUES ($1,$2,1)`, [project.id, user.id]);
+  await store.query("UPDATE evimed_geo.snapshots SET asked_at = '2026-10-23T00:00:00Z' WHERE id = 'r1-q1-deepseek'");
+  try {
+    const result = await service.cluster(user, project.id, "g1");
+    assert.deepEqual(result.selection.roundIds, ["r2"]);
+    const answers = result.questions.flatMap((question) => question.answers);
+    assert.ok(answers.length > 0);
+    assert.ok(answers.every((answer) => answer.snapshotId.startsWith("r2-")), "a newer timestamp on an old round must not escape the selected round");
+    assert.ok(answers.every((answer) => answer.engine !== "doubao"), "paused engines cannot reappear in detail");
+  } finally {
+    await store.query("UPDATE evimed_geo.snapshots SET asked_at = '2026-10-01T00:00:00Z' WHERE id = 'r1-q1-deepseek'");
+  }
+});
+
 test("source history includes every round selected by an explicit date range", options, async () => {
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at)
     SELECT 'history-' || n,$1,$2,'weekly','done',1,'{deepseek}',date '2026-10-03' + n,date '2026-10-03' + n
