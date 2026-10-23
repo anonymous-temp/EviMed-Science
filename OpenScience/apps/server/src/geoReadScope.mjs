@@ -242,46 +242,102 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     expectedRevision = String(saved.data_revision);
   }
   const params = [project.id, project.userId, ROUND_KINDS, scope.timeZone];
+  // Shared predicates use stable parameter positions; each query binds only the positions it actually references.
+  const selectionQuery = (/** @type {string} */ sql) => {
+    /** @type {Map<number, number>} */ const positions = new Map();
+    /** @type {any[]} */ const bound = [];
+    const statement = sql.replace(/\$(\d+)\b/gu, (_token, number) => {
+      const index = Number(number);
+      if (!positions.has(index)) { bound.push(params[index - 1]); positions.set(index, bound.length); }
+      return `$${positions.get(index)}`;
+    });
+    return store.query(statement, bound);
+  };
   const where = ["r.geo_project_id = $1", "r.user_id = $2", "r.kind = ANY($3::text[])"];
-  const add = (/** @type {string} */ clause, /** @type {any} */ value) => { params.push(value); where.push(clause.replace("?", `$${params.length}`)); };
-  if (frozenRoundIds) add("r.id = ANY(?::text[])", frozenRoundIds);
-  else if (scope.round) add("r.id = ?", scope.round);
-  if (scope.from) add("coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) >= ?::date", scope.from);
-  if (scope.to) add("coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) <= ?::date", scope.to);
-  if (scope.questionVersion) add("r.set_version = ?", scope.questionVersion);
-  const ranged = Boolean(history || frozenRoundIds || scope.round || scope.from || scope.to);
-  // A context preview selects its actual rounds before the observation cap. Explicit and frozen scopes are never truncated.
-  const contextLimit = history && !frozenRoundIds && !scope.round && !scope.from && !scope.to ? historyLimit : null;
+  const add = (/** @type {string[]} */ clauses, /** @type {string} */ clause, /** @type {any} */ value) => { params.push(value); clauses.push(clause.replace("?", `$${params.length}`)); };
+  if (scope.round) add(where, "r.id = ?", scope.round);
+  if (scope.questionVersion) add(where, "r.set_version = ?", scope.questionVersion);
+  const contextRoundWhere = [...where];
+  if (frozenRoundIds) add(where, "r.id = ANY(?::text[])", frozenRoundIds);
+  const baseRoundWhere = [...where];
+  const observed = ["s.geo_project_id = $1", "s.user_id = $2", "s.round_id = r.id"];
+  if (scope.engines.length) add(observed, "s.engine = ANY(?::text[])", scope.engines);
+  if (scope.questionVersion) add(observed, "q.set_version = ?", scope.questionVersion);
+  if (scope.groupIds.length) add(observed, "q.group_id = ANY(?::text[])", scope.groupIds);
+  if (scope.pools.length) add(observed, "coalesce(q.pool, g.pool) = ANY(?::text[])", scope.pools);
+  if (scope.clientTags.length) add(observed, "jsonb_exists_any(to_jsonb(q)->'client_tags', ?::text[])", scope.clientTags);
+  if (subset) {
+    add(observed, "jsonb_build_array(s.question_id, s.engine, coalesce(s.surface, '{\"mode\":\"web\"}'::jsonb)->>'mode') IN (SELECT value FROM jsonb_array_elements(?::jsonb))", JSON.stringify(subset.keys.map((key) => JSON.parse(key))));
+    if (subset.eligibleOnly) observed.push("(s.status = 'refusal' OR s.status = 'valid' AND f.snapshot_id IS NOT NULL AND (f.judged_at IS NOT NULL OR s.surface->>'mode' = 'inclusion'))");
+  }
+  const beforeDates = [...observed];
+  const dated = Boolean(scope.from || scope.to);
+  const planned = [...contextRoundWhere];
+  if (scope.from) {
+    params.push(scope.from); const dateParam = `$${params.length}`;
+    observed.push(`(s.asked_at AT TIME ZONE $4)::date >= ${dateParam}::date`);
+    planned.push(`coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) >= ${dateParam}::date`);
+  }
+  if (scope.to) {
+    params.push(scope.to); const dateParam = `$${params.length}`;
+    observed.push(`(s.asked_at AT TIME ZONE $4)::date <= ${dateParam}::date`);
+    planned.push(`coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) <= ${dateParam}::date`);
+  }
+  const joins = `LEFT JOIN evimed_geo.questions q ON q.id = s.question_id AND q.geo_project_id = s.geo_project_id AND q.user_id = s.user_id
+    LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = s.geo_project_id AND g.user_id = s.user_id
+    LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id`;
+  const paused = `EXISTS (SELECT 1 FROM evimed_geo.probe_jobs skipped WHERE skipped.round_id = r.id AND skipped.engine = s.engine
+    AND skipped.geo_project_id = $1 AND skipped.user_id = $2 AND skipped.status = 'skipped' AND skipped.error_code IN ('engine_paused', 'engine_unavailable'))`;
+  if (dated) where.push(`EXISTS (SELECT 1 FROM evimed_geo.snapshots s ${joins} WHERE ${observed.join(" AND ")} AND NOT ${paused})`);
+  const ranged = Boolean(history || frozenRoundIds || scope.round || dated);
+  // Context previews choose their actual rounds before observation admission. Explicit and frozen scopes are never truncated.
+  const contextLimit = history && !frozenRoundIds && !scope.round && !dated ? historyLimit : null;
   if (contextLimit != null && (!Number.isSafeInteger(contextLimit) || contextLimit < 1 || contextLimit > GEO_SELECTION_MAX_ROUNDS)) throw invalid("Invalid history context limit.");
-  const rounds = (await store.query(`SELECT r.*, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date AS observation_date FROM evimed_geo.rounds r WHERE ${where.join(" AND ")}
+  const rounds = (await selectionQuery(`SELECT r.*, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date::text AS observation_date FROM evimed_geo.rounds r WHERE ${where.join(" AND ")}
     ORDER BY (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC, r.id DESC
-    LIMIT ${contextLimit ?? (ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1)}`, params)).rows;
+    LIMIT ${contextLimit ?? (ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1)}`)).rows;
   if (rounds.length > GEO_SELECTION_MAX_ROUNDS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROUNDS} rounds can be analyzed together.`, 422);
-  if (scope.round && !rounds.length) throw new HttpError(404, "geo_round_not_found", "The round is not a full measurement of this project.");
+  if (scope.round && !rounds.length) {
+    const exists = (await selectionQuery(`SELECT 1 FROM evimed_geo.rounds r WHERE ${baseRoundWhere.join(" AND ")} LIMIT 1`)).rows.length;
+    if (!exists) throw new HttpError(404, "geo_round_not_found", "The round is not a full measurement of this project.");
+  }
   const roundIds = rounds.map((round) => String(round.id));
-  const rowsCount = Number((await store.query(`SELECT count(*)::integer AS n FROM evimed_geo.snapshots s
-    WHERE s.geo_project_id = $1 AND s.user_id = $2 AND s.round_id = ANY($3::text[])`, [project.id, project.userId, roundIds])).rows[0]?.n ?? 0);
-  if (rowsCount > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: this read has ${rowsCount} observations; the limit is ${GEO_SELECTION_MAX_ROWS}.`, 422);
+  const roundParam = `$${params.push(roundIds)}`;
+  const selectedRounds = `r.id = ANY(${roundParam}::text[])`;
+  const from = `FROM evimed_geo.rounds r JOIN evimed_geo.snapshots s ON s.round_id = r.id ${joins}`;
+  const admitted = (await selectionQuery(`SELECT s.id, s.round_id, (s.asked_at AT TIME ZONE $4)::date::text AS observation_date ${from}
+    WHERE ${selectedRounds} AND ${observed.join(" AND ")} AND NOT ${paused} ORDER BY s.asked_at, s.id LIMIT ${GEO_SELECTION_MAX_ROWS + 1}`)).rows;
+  if (admitted.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a narrower scope: more than ${GEO_SELECTION_MAX_ROWS} selected observations exceed the read limit; use a shorter date range or fewer engines or question groups.`, 422);
+  /** @type {Map<string, string[]>} */ const admittedIds = new Map();
+  for (const entry of admitted) {
+    const ids = admittedIds.get(entry.round_id) ?? []; ids.push(entry.id); admittedIds.set(entry.round_id, ids);
+  }
+  const coverageRows = (await selectionQuery(`SELECT count(*) FILTER (WHERE s.asked_at IS NULL)::integer AS unknown_time
+    ${from} WHERE ${dated ? contextRoundWhere.join(" AND ") : selectedRounds} AND ${beforeDates.join(" AND ")} AND NOT ${paused}`)).rows[0];
+  const skippedAnswers = Number((await selectionQuery(`SELECT count(*)::integer AS n ${from}
+    WHERE ${selectedRounds} AND ${observed.join(" AND ")} AND ${paused}`)).rows[0]?.n ?? 0);
+  const plannedRounds = dated ? Number((await selectionQuery(`SELECT count(*)::integer AS n FROM evimed_geo.rounds r WHERE ${planned.join(" AND ")}`)).rows[0]?.n ?? 0) : rounds.length;
+  const observationDays = admitted.map((entry) => entry.observation_date).filter(Boolean).sort();
+  const timeCoverage = { basis: "answer_asked_at", from: scope.from, to: scope.to, timeZone: scope.timeZone,
+    observedFrom: observationDays[0] ?? null, observedTo: observationDays.at(-1) ?? null, unknownTime: Number(coverageRows?.unknown_time ?? 0),
+    unknownTimeScope: dated ? "matching_filters_without_dates" : "selected_rounds", plannedRounds, plannedBasis: "round_schedule" };
+  if (dated) for (const round of rounds) {
+    const days = admitted.filter((entry) => entry.round_id === round.id).map((entry) => entry.observation_date).filter(Boolean).sort();
+    round.selection_date = days[0] ?? null;
+  }
   const [batches, skipBatches, questions, context, contaminated] = await Promise.all([
-    Promise.all(roundIds.map((id) => measure.roundFactRows(id, project.id, project.userId))),
+    Promise.all(roundIds.map((id) => measure.roundFactRows(id, project.id, project.userId, admittedIds.get(id) ?? []))),
     Promise.all(roundIds.map((id) => measure.roundSkippedEngines(id))),
     store.query(`SELECT q.*, to_jsonb(q)->'client_tags' AS scope_client_tags FROM evimed_geo.questions q WHERE q.geo_project_id = $1 AND q.user_id = $2`, [project.id, project.userId]),
     roundIds.length ? measure.projectContext(project.id) : null,
     measure.contaminatedControlGroups(project.id),
   ]);
-  const questionMap = new Map(questions.rows.map((question) => [String(question.id), question]));
   const roundVersions = new Set(rounds.map((round) => Number(round.set_version)).filter((version) => version > 0));
   const selectedQuestions = questions.rows.filter((question) => (!roundVersions.size || roundVersions.has(Number(question.set_version))) && (!scope.questionVersion || Number(question.set_version) === scope.questionVersion)
     && (!scope.groupIds.length || scope.groupIds.includes(String(question.group_id))) && (!scope.pools.length || scope.pools.includes(String(question.pool)))
     && (!scope.clientTags.length || Array.isArray(question.scope_client_tags) && question.scope_client_tags.some((/** @type {string} */ tag) => scope.clientTags.includes(tag))));
-  const questionIds = new Set(selectedQuestions.map((question) => String(question.id)));
-  const skipped = new Map(roundIds.map((id, index) => [id, new Set(skipBatches[index])]));
-  const filtered = batches.flat().filter((row) => (!scope.engines.length || scope.engines.includes(row.engine))
-    && (!scope.questionVersion || Number(questionMap.get(String(row.questionId))?.set_version) === scope.questionVersion)
-    && (!scope.groupIds.length && !scope.pools.length && !scope.clientTags.length || questionIds.has(String(row.questionId))));
-  const subsetKeys = subset ? new Set(subset.keys) : null;
-  const rows = filtered.filter((row) => !skipped.get(row.roundId)?.has(row.engine)
-    && (!subsetKeys || subsetKeys.has(comparisonKey(row)) && (!subset?.eligibleOnly || comparableAnswer(row))));
+  // Admission already applied every deterministic observation predicate before the bounded fact read.
+  const rows = batches.flat();
   if (rows.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROWS} observations can be analyzed together.`, 422);
   const engines = scope.engines.length ? scope.engines : rounds.length ? [...new Set(rounds.flatMap((round) => Array.isArray(round.engines) && round.engines.length ? round.engines : project.engines))] : project.engines;
   const groups = [...new Map(rows.filter((row) => row.groupId).map((row) => [row.groupId, row.isControl])).entries()];
@@ -304,7 +360,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const comparison = comparisonSelection ? await compareGeoSelections(store, measure, project, { rows, scope, roundIds }, comparisonSelection, scope.comparisonMode) : null;
   const memberDigest = digest(/** @type {any[]} */ (computed.balance.deduped).map((row) => row.snapshotId));
   const dataRevision = digest({ methodVersion: GEO_MEASUREMENT_METHOD_VERSION, rows, skipped: skipBatches, rounds: rounds.map((round) => [round.id, round.status, round.set_version, round.surface]),
-    errorRevision, answerRevision, subset, metricOptions, questions: selectedQuestions, comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
+    errorRevision, answerRevision, subset, timeCoverage, metricOptions, questions: selectedQuestions, comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
   if (expectedRevision && expectedRevision !== dataRevision) throw invalid("The saved selection changed after measurement. Refresh the view and use its new selection reference.", 409);
   const scopeSaved = { ...scope, selectionRef: null };
   const reference = `gsel_${digest([project.userId, project.id, scopeSaved, roundIds, dataRevision]).slice(0, 40)}`;
@@ -313,13 +369,13 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     suspect: rows.filter((row) => row.status === "suspect").length, unjudged: rows.filter((row) => row.status === "valid" && !row.facts).length,
     partial: rows.filter((row) => row.facts && geoJudgementCoverage(row.facts) === "partial").length,
     balancedOut: computed.balance.deduped.length - computed.balance.rows.length, duplicateAnswers: rows.length - computed.balance.deduped.length,
-    skippedEngineAnswers: filtered.length - rows.length, questions: new Set(rows.map((row) => row.questionId).filter(Boolean)).size,
+    skippedEngineAnswers: skippedAnswers, questions: new Set(rows.map((row) => row.questionId).filter(Boolean)).size,
     observations: computed.balance.observations, balancedObservations: computed.balance.kept };
   const methods = [...new Set(rounds.map((round) => round.ref?.balance?.methodVersion ?? null))];
   const modes = [...new Set(rows.map((row) => row.surface?.mode ?? null))];
   const versions = [...new Set(rounds.map((round) => round.set_version == null ? null : Number(round.set_version)))];
   const selection = { version: 1, reference, dataRevision, memberDigest, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, roundIds,
-    counts, engines, pools: [...new Set(rows.map((row) => row.pool).filter(Boolean))].sort(), questionIds: [...new Set(rows.map((row) => row.questionId).filter(Boolean))].sort(),
+    counts, timeCoverage, engines, pools: [...new Set(rows.map((row) => row.pool).filter(Boolean))].sort(), questionIds: [...new Set(rows.map((row) => row.questionId).filter(Boolean))].sort(),
     exclusions: { skippedEngines: roundIds.flatMap((id, index) => skipBatches[index].map((engine) => ({ roundId: id, engine }))), clientTagsUnknown: scope.clientTags.length > 0 && !questions.rows.some((question) => Array.isArray(question.scope_client_tags)) },
     comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, consumerModelVersion: "unknown" },
     coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };

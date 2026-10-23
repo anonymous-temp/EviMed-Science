@@ -193,7 +193,7 @@ function dayIn(date, timeZone) {
 /** Prefer the round's local observation day; old stored metrics without that provenance retain their computation day.
  * @param {any} row @param {string} timeZone */
 function rowDay(row, timeZone) {
-  const localDay = row.sample_date ?? row.observation_date;
+  const localDay = row.selection_date ?? row.sample_date ?? row.observation_date;
   if (localDay) {
     if (typeof localDay === "string") return localDay.slice(0, 10);
     // pg represents DATE as a Date at host-local midnight. Its civil components are already the requested day, not an instant to re-zone.

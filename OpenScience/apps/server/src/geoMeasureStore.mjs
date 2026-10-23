@@ -1062,9 +1062,9 @@ export class GeoMeasureStore {
    * One round's rows in the shape `computeGeoMetrics` reads (`GeoFactRow`).
    * A valid answer whose facts were never judged is passed without facts, so
    * the metrics leave it out as unparsed rather than read it as saying nothing.
-   * @param {string} roundId @param {string | null} [geoProjectId] @param {string | null} [userId]
+   * @param {string} roundId @param {string | null} [geoProjectId] @param {string | null} [userId] @param {string[] | null} [snapshotIds]
    */
-  async roundFactRows(roundId, geoProjectId = null, userId = null) {
+  async roundFactRows(roundId, geoProjectId = null, userId = null, snapshotIds = null) {
     const result = await this.query(`SELECT s.id, s.question_id, s.engine, s.round_id, s.asked_at, s.status, s.surface, s.citations,
         r.kind AS round_kind, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
@@ -1077,7 +1077,7 @@ export class GeoMeasureStore {
         LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id AND g.geo_project_id = s.geo_project_id AND g.user_id = s.user_id
         LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id AND f.geo_project_id = s.geo_project_id AND f.user_id = s.user_id
       WHERE s.round_id = $1 AND ($2::text IS NULL OR s.geo_project_id = $2) AND ($3::text IS NULL OR s.user_id = $3)
-        ORDER BY s.asked_at, s.id`, [roundId, geoProjectId, userId]);
+        AND ($4::text[] IS NULL OR s.id = ANY($4::text[])) ORDER BY s.asked_at, s.id`, [roundId, geoProjectId, userId, snapshotIds]);
     return result.rows.map((row) => {
       const inclusion = row.surface?.mode === "inclusion";
       const usable = row.has_facts && (row.judged_at != null || inclusion);
