@@ -564,3 +564,12 @@ test("a delete of something already gone is told from one that deleted, by the c
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), false);
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true, "an answer with no count is a delete that happened, as it always was");
 });
+
+ test("write wait deadline belongs to HTTP transport, never a removed request-body timeout", async () => {
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: {} } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 });
+  const body = JSON.parse(fetchImpl.calls[0].options.body);
+  assert.equal(body.wait, true);
+  assert.equal(Object.hasOwn(body, "timeout"), false);
+});
