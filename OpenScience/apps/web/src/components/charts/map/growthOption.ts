@@ -4,7 +4,7 @@ import { escapeTooltip } from "../echartsBase";
 import { heatStep } from "./activityOption";
 import { weekLabels } from "./changeWeeks";
 import type { MapPalette } from "./palette";
-import { dayEndMs, dayStartMs } from "./zone";
+import { dayEndMs, dayIn, dayStartMs } from "./zone";
 
 /**
  * The growth strip of the overview: what the capsule gained, on one axis — the only canvas of the page.
@@ -96,7 +96,9 @@ export function growthOption({ growth, events, timeZone, palette, formatDay }: G
       tooltip: { confine: true, formatter: (params: { data?: { event?: number } }) => { const event = typeof params.data?.event === "number" ? events[params.data.event] : undefined; return event ? dotTooltip(event, formatDay) : ""; } },
       xAxis: {
         type: "time", min, max, minInterval: growth.axis === "days" ? 86_400_000 : 7 * 86_400_000,
-        axisLine: { lineStyle: { color: palette.grid } }, splitLine: { show: false }, axisLabel: { color: palette.textFaint, hideOverlap: true },
+        axisLine: { lineStyle: { color: palette.grid } }, splitLine: { show: false },
+        // A tick says its day the way the page does (「9月22日」), not the library's English month or a bare day number.
+        axisLabel: { color: palette.textFaint, hideOverlap: true, formatter: (value: number) => formatDay(dayIn(value, timeZone)) },
       },
       yAxis: rowAxis,
       series: growth.lanes.map((lane) => ({

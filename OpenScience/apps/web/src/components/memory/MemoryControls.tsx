@@ -86,7 +86,9 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
 
   return (
     <>
-      {onRemember && <Button size="sm" variant="secondary" onClick={onRemember}>记住这一条</Button>}
+      {/* `text`, not `secondary`: a filled 28 px button is a look of its own, and on the map and the overview — held to the data page's ten kinds of
+          control — one more look is the page over budget (measured: the map was at ten, and ten with this button as it was it was eleven). */}
+      {onRemember && <Button size="sm" variant="text" onClick={onRemember}>记住这一条</Button>}
       {failed
         ? <span className="text-caption text-text-3">记忆开关暂时读取不到</span>
         : settings && (

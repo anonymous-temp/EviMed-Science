@@ -35,6 +35,7 @@ vi.mock("@/lib/apiClient", async () => ({
   updateMemorySettings: (...args: unknown[]) => updateMemorySettings(...args),
 }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: () => Promise.resolve([]) }));
+vi.mock("@/lib/handbooksClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")), listAllHandbooks: () => Promise.resolve([]) }));
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({
   id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", at: "2026-09-10T00:00:00.000Z",
@@ -145,6 +146,31 @@ describe("the landing's header: the verbs of a capsule are on the map too", () =
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_2"] }));
     useProjectStore.setState({ projects: [], currentId: "default" });
+  });
+
+  it("opens 已忘记的内容 from the landing's 「⋯」, reading what it lists when it opens — and says so when it cannot read it", async () => {
+    const user = userEvent.setup();
+    fetchMemoryProfile.mockResolvedValue({ records: [{ ...record("gone"), status: "archived", summary: "一条被忘记的偏好", value: "一条被忘记的偏好" }], groups: {}, activeCount: 0, pendingCount: 0 });
+    open();
+    await screen.findByRole("switch", { name: "记忆" });
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
+    const dialog = await screen.findByRole("dialog", { name: "已忘记的内容" });
+    expect(await within(dialog).findByText("一条被忘记的偏好")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /关闭|close/iu }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fetchMyCapsule.mockRejectedValue(new Error("down"));
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
+    expect(await within(await screen.findByRole("dialog", { name: "已忘记的内容" })).findByRole("alert")).toHaveTextContent("暂时读不到已忘记的内容");
+  });
+
+  it("pauses nothing for a map narrowed to the 「其他」 mark of projects the account no longer has: the item is off", async () => {
+    const user = userEvent.setup();
+    open("?project=__other");
+    await screen.findByRole("switch", { name: "记忆" });
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    expect(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" })).toBeDisabled();
   });
 
   it("says what the capsule holds when it holds documents and no memory, not that nothing is remembered", async () => {

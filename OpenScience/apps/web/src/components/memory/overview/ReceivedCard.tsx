@@ -95,9 +95,7 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
                 ))}
               </List>
               {content.more > 0 && (
-                <p className="mt-2 text-caption text-text-3">
-                  <button type="button" onClick={onImport} className="rounded text-link hover:underline hover:underline-offset-4">全部 {content.count} 个</button>
-                </p>
+                <div className="mt-2"><Button size="sm" variant="text" onClick={onImport}>{`全部 ${content.count} 个`}</Button></div>
               )}
             </>
           )}
@@ -109,13 +107,11 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
           {workStyle.state === "content" && workStyle.style.total > 0 && (
             <>
               <WorkStyleCard style={workStyle.style} label="我能交出去的" />
-              <p className="mt-2 text-caption text-text-3">
-                <button type="button" onClick={onShare} className="rounded text-link hover:underline hover:underline-offset-4">分享与导入</button>
-              </p>
+              <div className="mt-2"><Button size="sm" variant="text" onClick={onShare}>分享与导入</Button></div>
             </>
           )}
           {workStyle.state === "content" && workStyle.style.total === 0 && (
-            <Note action={<Button size="sm" variant="secondary" onClick={onShare}>分享与导入</Button>}>你的做法、标准和背景积累起来，就能交给别人。</Note>
+            <Note action={<Button size="sm" variant="text" onClick={onShare}>分享与导入</Button>}>你的做法、标准和背景积累起来，就能交给别人。</Note>
           )}
         </div>
       </div>

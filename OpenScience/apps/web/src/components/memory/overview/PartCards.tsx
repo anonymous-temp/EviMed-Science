@@ -117,7 +117,7 @@ export function ProjectsCardView({ state, card, onRetry, onChat, errorMessage }:
       {content && content.shape === "single" && content.single && <SingleProject row={content.single} />}
       {content && content.shape === "table" && (
         <div>
-          <DataTable label="各个项目" columns={columns} rows={content.rows} rowKey={(row) => row.id} minWidth="min-w-0" ground="surface" />
+          <DataTable label="各个项目" columns={columns} rows={content.rows} rowKey={(row) => row.id} ground="surface" />
           {content.more > 0 && (
             <p className="mt-2 text-caption text-text-3">
               <Link to="/app/memory?tab=project" className="rounded text-link hover:underline hover:underline-offset-4">全部 {content.count} 个</Link>

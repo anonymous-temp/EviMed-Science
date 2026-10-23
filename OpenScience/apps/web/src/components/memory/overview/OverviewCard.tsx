@@ -77,9 +77,13 @@ export function Recipe({ children, action }: { children: ReactNode; action: Reac
   return <Note action={action}>{children}</Note>;
 }
 
-/** The recipe's button, the one quiet kind of control a recipe has. */
+/**
+ * The recipe's button, the one quiet kind of control a recipe has. A `text` button, the look the sidebar's own 28 px controls and the header's
+ * 「⋯」 already have: a data page is held to ten kinds of control, and a filled button on a card that is only sometimes a recipe is the eleventh.
+ */
 export function RecipeButton({ onPress, children }: { onPress: () => void; children: ReactNode }) {
-  return <Button size="sm" variant="secondary" onClick={onPress}>{children}</Button>;
+  // The link colour says it is pressed (a `text` button is the page's grey otherwise), and it is a colour the page already has: the sentence's numbers.
+  return <Button size="sm" variant="text" className="text-link hover:text-link" onClick={onPress}>{children}</Button>;
 }
 
 /** What a row says under its title: the kind of mark and the day it began. */
