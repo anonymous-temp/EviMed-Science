@@ -28,3 +28,15 @@ test('the judge retains equal answer sentences judged against different applicab
   assert.equal(result.statements.length, 2);
   assert.deepEqual(result.statements.map(row => row.applicability.population), ['Adults', 'Children']);
 });
+
+test('same-word judgments retain distinct claim ids, versions and every applicability field', async () => {
+  const { buildJudgeInput, verifyJudgement } = await import('../src/geoJudge.mjs');
+  const base = { id: 'base', key: 'shared', version: 1, population: 'Adults', elements: { form: 'tablet' }, inLabel: true, validUntil: '2026-12-31', evidenceLevel: 'label', quote: 'Use only for adults.', statement: 'Adults only.' };
+  const text = 'Everyone can use it.';
+  const claims = [base, { ...base, id: 'other' }, { ...base, version: 2 }, { ...base, inLabel: false }, { ...base, validUntil: '2025-12-31' }, { ...base, evidenceLevel: 'trial' }];
+  const input = { owner: { userId: 'u', projectId: 'p' }, product: {}, competitors: [], careFlags: [], question: { text: 'Who?' }, answer: text, claims };
+  const result = verifyJudgement({ assessmentComplete: true, statements: claims.map((_, index) => ({ text, claim: `C${index + 1}`, verdict: 'wrong', evidence: base.quote, errorType: 'dropped_condition', severity: 'S3' })) }, buildJudgeInput(input), input);
+  assert.equal(result.statements.length, claims.length);
+  assert.equal(result.dropped.length, 0, 'distinct claims cannot disappear without a recorded reason');
+  assert.equal(new Set(result.statements.map(errorFingerprint)).size, claims.length);
+});

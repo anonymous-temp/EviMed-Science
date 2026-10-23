@@ -73,3 +73,19 @@ it("does not merge equal sentence text across distinct applicable populations", 
   ] }, errors: [error({ id: "adult-error", statement: text, claimId: "adult", applicability: applicability("Adults") }), error({ id: "child-error", statement: text, claimId: "child", applicability: applicability("Children") })] });
   expect(answerFindings(data).findings.map(row => row.error?.id)).toEqual(["adult-error", "child-error"]);
 });
+
+it.each(["correct", "unverifiable"] as const)("keeps a historical error apart when the current same-claim sentence is %s", verdict => {
+  const current = { ...answerFilled.facts!.statements[0], verdict };
+  const old = error({ firstSnapshotId: "snap_old", snapshotId: "snap_now", status: "awaiting_remeasure" });
+  const result = answerFindings(answer({ facts: { ...answerFilled.facts!, statements: [current] }, errors: [old] }));
+  expect(result.findings).toEqual([]);
+  expect(result.elsewhere).toEqual([old]);
+  expect(result.elsewhere[0].status).toBe("awaiting_remeasure");
+});
+
+it("does not deduplicate a wrong current finding with equal wording for a different claim version", () => {
+  const first = { ...answerFilled.facts!.statements[0], claimVersion: 1 };
+  const second = { ...first, claimVersion: 2 };
+  const result = answerFindings(answer({ facts: { ...answerFilled.facts!, statements: [first, second] }, errors: [] }));
+  expect(result.findings.map(row => row.statement?.claimVersion)).toEqual([1, 2]);
+});
