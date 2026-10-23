@@ -73,9 +73,6 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
   PRIMARY KEY (user_id, candidate_id, candidate_revision),
   UNIQUE (user_id, engine_session)
 );
-ALTER TABLE evimed_memory.native_admissions DROP CONSTRAINT IF EXISTS native_admissions_state_check;
-ALTER TABLE evimed_memory.native_admissions ADD CONSTRAINT native_admissions_state_check
-  CHECK (state IN ('queued','submitting','pending','completed','failed','uncertain','suspended','cancelled'));
 CREATE INDEX IF NOT EXISTS native_admissions_open_idx ON evimed_memory.native_admissions (user_id,state)
   WHERE state <> 'completed';
 CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
