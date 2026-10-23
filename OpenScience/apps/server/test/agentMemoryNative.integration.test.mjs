@@ -23,9 +23,9 @@ function fixture({ nativeMemory = null } = {}) {
     capsules: { async note(_user, _project, input) { calls.push(["note", input]); return { id: "candidate", revision: 1, payload: input }; } },
     memoryIntelligence: { async recordRun() { calls.push("legacy-extract"); return { skipped: true }; } },
   });
-  async function call(path, body) {
+  async function call(path, body, method = body ? "POST" : "GET") {
     const res = { status: 0, json: null, writeHead(status) { this.status = status; }, end(text) { this.json = JSON.parse(text); } };
-    const req = { url: `${AGENT_MEMORY_PATH}/${path}`, method: body ? "POST" : "GET", headers: { authorization: "Bearer key" },
+    const req = { url: `${AGENT_MEMORY_PATH}/${path}`, method, headers: { authorization: "Bearer key" },
       async *[Symbol.asyncIterator]() { if (body) yield Buffer.from(JSON.stringify(body)); } };
     await routes(req, res);
     return res;
@@ -122,14 +122,22 @@ async function nativeFixture(t) {
   const overlay = new NativeMemoryOverlay({ database });
   const config = { ovNativeMemoryEnabled: true };
   const researchMemory = new ResearchMemoryStore(config, { database });
+  await researchMemory.memoryEngine(userId);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576) ON CONFLICT DO NOTHING", [userId]);
+  const seedCandidate = async (candidate) => {
+    const { ProductDocuments } = await import("../src/productStore.mjs");
+    return new ProductDocuments(database).put(userId,"fact",candidate.candidateId, { capsuleId: "test", factKind: "preference", layer: "knowledge",
+      content: candidate.text, status: "candidate", origin: "inferred", contextOnly: true }, { expectedRevision: 0, projectId: candidate.projectId });
+  };
   const store = new NativeMemoryStore({ sessions, overlay });
   const worker = new NativeMemoryWorker({ config, sessions, overlay, researchMemory, nativeMemory: store });
-  return { userId, database, stub, sessions, overlay, store, worker };
+  return { userId, database, stub, sessions, overlay, store, worker, seedCandidate };
 }
 
 test("durable native admission survives a new store, settles multiple records and rejects deleted-account work", pgOptions, async t => {
   const f = await nativeFixture(t);
   const candidate = { candidateId: "external-note", revision: 1, projectId: "default", text: "Prefer concise replies and numbered references." };
+  await f.seedCandidate(candidate);
   const [first, concurrent] = await Promise.all([f.store.admitCandidate(f.userId, candidate), f.store.admitCandidate(f.userId, candidate)]);
   assert.ok(["queued", "submitting", "pending"].includes(concurrent.state));
   assert.equal(first.state, "pending");
@@ -152,6 +160,7 @@ test("durable native admission survives a new store, settles multiple records an
 test("an uncertain native message append is inspected and never appended twice", pgOptions, async t => {
   const f = await nativeFixture(t);
   const candidate = { candidateId: "uncertain-note", revision: 1, projectId: "default", text: "Prefer concise replies." };
+  await f.seedCandidate(candidate);
   const add = f.sessions.addMessage.bind(f.sessions);
   f.sessions.addMessage = async (...args) => { await add(...args); throw Object.assign(new Error("response lost"), { code: "memory_index_timeout" }); };
   const uncertain = await f.store.admitCandidate(f.userId, candidate);
@@ -167,16 +176,16 @@ test("native API episode and both existing confirmation routes keep legacy rows 
   const [{ ProductDocuments }, { CapsuleService }, { ResearchMemoryStore }] = await Promise.all([
     import("../src/productStore.mjs"), import("../src/capsuleService.mjs"), import("../src/researchMemory.mjs"),
   ]);
-  await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576)", [f.userId]);
+  await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576) ON CONFLICT DO NOTHING", [f.userId]);
   const researchMemory = new ResearchMemoryStore({ ovNativeMemoryEnabled: true }, { database: f.database });
   const capsules = new CapsuleService(new ProductDocuments(f.database));
   const routes = createAgentMemoryRoutes({ config: { agentMemoryApiEnabled: true }, capsules, researchMemory, nativeMemory: f.store,
     apiKeys: { async resolve() { return { userId: f.userId, keyId: "key", scopes: ["memory.read", "memory.write", "memory.manage"], projectId: "default" }; } },
     store: { async userById(id) { return { id }; }, async requireProject(_user, id) { return { id }; } },
   });
-  const call = async (path, body) => {
+  const call = async (path, body, method = body ? "POST" : "GET") => {
     const res = { json: null, writeHead() {}, end(text) { this.json = JSON.parse(text); } };
-    await routes({ url: `${AGENT_MEMORY_PATH}/${path}`, method: body ? "POST" : "GET", headers: { authorization: "Bearer key" },
+    await routes({ url: `${AGENT_MEMORY_PATH}/${path}`, method, headers: { authorization: "Bearer key" },
       async *[Symbol.asyncIterator]() { if (body) yield Buffer.from(JSON.stringify(body)); } }, res);
     return res.json.data;
   };
@@ -189,7 +198,13 @@ test("native API episode and both existing confirmation routes keep legacy rows 
   assert.equal(second.admission.taskId, first.admission.taskId);
   assert.equal(f.stub.requests.filter(row => row.path.endsWith("/messages")).length, 1);
   const record = await researchMemory.upsertRecord(f.userId, { scope: "project", scopeId: "default", kind: "preference", key: "format", value: "Concise replies", summary: "Concise", origin: "inferred", status: "pending", confidence: .8, importance: .5, sensitive: false }, null);
-  const admitted = await call(`records/${record.id}/confirm`, { expectedVersion: record.version });
+  const edited = await call(`records/${record.id}`, { expectedVersion: record.version, value: "Concise corrected replies" }, "PATCH");
+  assert.equal(edited.status, "pending");
+  const forgotten = await call(`records/${record.id}/forget`, { expectedVersion: edited.version });
+  assert.equal(forgotten.status, "archived");
+  const undone = await call(`records/${record.id}/undo`, { expectedVersion: forgotten.version });
+  assert.equal(undone.status, "pending");
+  const admitted = await call(`records/${record.id}/confirm`, { expectedVersion: undone.version });
   assert.equal(admitted.admission.state, "pending");
   assert.equal((await researchMemory.getRecord(f.userId, record.id)).status, "pending");
   assert.equal((await capsules.documents.get(f.userId, "fact", episode.candidateId)).payload.status, "candidate");
@@ -263,4 +278,48 @@ test("failed native admission never resumes after project pause or candidate rej
     const receipt = await f.overlay.admission(f.userId, note.id, note.revision);
     assert.equal(receipt.state, reason === "pause" ? "suspended" : "cancelled");
   }
+});
+
+test("native extraction replay retains candidate authorization after rejection", pgOptions, async t => {
+  const f = await nativeFixture(t);
+  f.stub.extract = () => "fail";
+  const candidate = { candidateId: "reject-before-replay", revision: 1, projectId: "default", text: "Prefer concise replies." };
+  const note = await f.seedCandidate(candidate);
+  const receipt = await f.store.admitCandidate(f.userId, candidate);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal((await f.overlay.commit(f.userId, receipt.archiveUri)).state, "failed");
+  const { ProductDocuments } = await import("../src/productStore.mjs");
+  await new ProductDocuments(f.database).put(f.userId,"fact",note.id,{ ...note.payload, status: "retired" },{ expectedRevision: note.revision, projectId: "default" });
+  const mutationsBefore = f.stub.requests.filter(row => row.method === "POST").length;
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(f.stub.requests.filter(row => row.method === "POST").length, mutationsBefore);
+  assert.equal((await f.overlay.admission(f.userId, note.id, note.revision)).state, "cancelled");
+  assert.equal((await f.overlay.commit(f.userId, receipt.archiveUri)).state, "abandoned");
+});
+
+test("pause at the final append guard resumes the known-unattempted message exactly once", pgOptions, async t => {
+  const f = await nativeFixture(t);
+  const candidate = { candidateId: "pause-final-append", revision: 1, projectId: "default", text: "Prefer concise replies." };
+  await f.seedCandidate(candidate);
+  const update = f.overlay.updateAdmission.bind(f.overlay);
+  let pauseOnce = true;
+  f.overlay.updateAdmission = async (...args) => {
+    const result = await update(...args);
+    if (pauseOnce && args[3].phase === "message_submitting") {
+      pauseOnce = false;
+      await f.database.query("UPDATE evimed_memory.settings SET paused_projects=ARRAY['default']::text[] WHERE user_id=$1", [f.userId]);
+    }
+    return result;
+  };
+  const suspended = await f.store.admitCandidate(f.userId, candidate);
+  assert.equal(suspended.state, "suspended");
+  assert.equal(f.stub.requests.filter(row => row.path.endsWith("/messages") || row.path.endsWith("/commit")).length, 0);
+  await f.database.query("UPDATE evimed_memory.settings SET paused_projects='{}'::text[] WHERE user_id=$1", [f.userId]);
+  const resumed = await f.store.admitCandidate(f.userId, candidate);
+  assert.equal(resumed.state, "pending");
+  assert.equal(f.stub.requests.filter(row => row.path.endsWith("/messages")).length, 1);
+  assert.equal(f.stub.requests.filter(row => row.path.endsWith("/commit")).length, 1);
+  assert.equal((await f.store.admitCandidate(f.userId, candidate)).taskId, resumed.taskId);
+  assert.equal(f.stub.requests.filter(row => row.path.endsWith("/messages")).length, 1);
+  assert.equal(f.stub.requests.filter(row => row.path.endsWith("/commit")).length, 1);
 });
