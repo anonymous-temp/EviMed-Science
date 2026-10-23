@@ -190,10 +190,12 @@ function dayIn(date, timeZone) {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
-/** A metric row's day: its round's sample date, else the day it was computed in the module's zone. @param {any} row @param {string} timeZone */
+/** Prefer the round's local observation day; old stored metrics without that provenance retain their computation day.
+ * @param {any} row @param {string} timeZone */
 function rowDay(row, timeZone) {
-  if (row.sample_date) return typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : dayIn(new Date(row.sample_date), timeZone);
-  return dayIn(new Date(row.computed_at), timeZone);
+  const localDay = row.sample_date ?? row.observation_date;
+  if (localDay) return typeof localDay === "string" ? localDay.slice(0, 10) : dayIn(new Date(localDay), timeZone);
+  return dayIn(new Date(row.observed_at ?? row.started_at ?? row.created_at ?? row.computed_at), timeZone);
 }
 
 /** @param {unknown} value @param {number} max */
@@ -1424,8 +1426,8 @@ export class GeoService {
     const source = geoSourceFromRow(row);
     const domain = source.domain.toLowerCase();
     const historySelection = !selected.scope.round && !selected.scope.from && !selected.scope.to && !input.selectionRef
-      ? await readGeoSelection(this.store, project, { ...selected.scope, compareFrom: null, compareTo: null }, { history: true, persist: false }) : selected;
-    const rounds = historySelection === selected ? selected.rounds : historySelection.rounds.slice(0, 6);
+      ? await readGeoSelection(this.store, project, { ...selected.scope, compareFrom: null, compareTo: null }, { history: true, historyLimit: 6, persist: false }) : selected;
+    const rounds = historySelection.rounds;
     const round = selected.rounds[0] ?? null;
     // Each round's answers are read once, and the latest round's are the list: the history's last point IS the detail's counts.
     const allAnswers = this.#selectionAnswers(historySelection);
@@ -2063,7 +2065,9 @@ export class GeoService {
           FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id = ANY($2::text[])
           ORDER BY scope, metric_id, coalesce(pool, ''), coalesce(engine, ''), coalesce(group_id, ''), coalesce(arm, ''), coalesce(variant, ''), coalesce(rival, ''), computed_at DESC, id DESC`,
         [project.id, selected.selection.roundIds])).rows;
-        const historic = stored.length && stored.every((row) => row.method_version == null) && !selected.rows.some((row) => row.facts);
+        const fullRound = selected.rounds.length === 1 && !selected.subset
+          && ![selected.scope.engines, selected.scope.pools, selected.scope.groupIds, selected.scope.clientTags].some((values) => values.length);
+        const historic = fullRound && stored.length && stored.every((row) => row.method_version == null) && !selected.rows.some((row) => row.facts);
         const values = historic ? stored.map((row) => metricView(row, this.metricName)) : selected.computed.cells.map((entry) => ({
           metricId: entry.metricId, name: this.metricName(entry.metricId), scope: entry.scope, engine: entry.engine, pool: entry.pool, groupId: entry.groupId,
           arm: entry.arm, variant: entry.variant, rival: entry.rival, roundId: selected.rounds.length === 1 ? selected.rounds[0].id : null, computedAt: null, cell: entry }));

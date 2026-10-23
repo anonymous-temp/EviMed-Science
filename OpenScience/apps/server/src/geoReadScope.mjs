@@ -212,7 +212,7 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
 
 /** Read under an already authorized project. The reference contains no authority and resolves only within that owner/project.
  * @param {import('./geoStore.mjs').GeoStore} store @param {any} project @param {any} [input]
- * @param {{ history?: boolean, frozenRoundIds?: string[], persist?: boolean, subset?: { keys: string[], eligibleOnly: boolean } | null }} [options]
+ * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], persist?: boolean, subset?: { keys: string[], eligibleOnly: boolean } | null }} [options]
  * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any, subset: any}>}
  */
 export async function readGeoSelection(store, project, input = {}, options = {}) {
@@ -224,9 +224,9 @@ export async function readGeoSelection(store, project, input = {}, options = {})
 }
 
 /** @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project @param {any} input
- * @param {{ history?: boolean, frozenRoundIds?: string[], subset?: { keys: string[], eligibleOnly: boolean } | null }} options @returns {ReturnType<typeof readGeoSelection>}
+ * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], subset?: { keys: string[], eligibleOnly: boolean } | null }} options @returns {ReturnType<typeof readGeoSelection>}
  */
-async function selectGeoRows(store, measure, project, input, { history = false, frozenRoundIds, subset = null } = {}) {
+async function selectGeoRows(store, measure, project, input, { history = false, historyLimit, frozenRoundIds, subset = null } = {}) {
   let scope = normalizeGeoReadScope(geoReadScopeInput(input));
   let expectedRevision = null;
   if (scope.selectionRef) {
@@ -250,9 +250,12 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   if (scope.to) add("coalesce(r.sample_date, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date) <= ?::date", scope.to);
   if (scope.questionVersion) add("r.set_version = ?", scope.questionVersion);
   const ranged = Boolean(history || frozenRoundIds || scope.round || scope.from || scope.to);
+  // A context preview selects its actual rounds before the observation cap. Explicit and frozen scopes are never truncated.
+  const contextLimit = history && !frozenRoundIds && !scope.round && !scope.from && !scope.to ? historyLimit : null;
+  if (contextLimit != null && (!Number.isSafeInteger(contextLimit) || contextLimit < 1 || contextLimit > GEO_SELECTION_MAX_ROUNDS)) throw invalid("Invalid history context limit.");
   const rounds = (await store.query(`SELECT r.*, (coalesce(r.started_at, r.created_at) AT TIME ZONE $4)::date AS observation_date FROM evimed_geo.rounds r WHERE ${where.join(" AND ")}
     ORDER BY (r.status IN ('done', 'partial')) DESC, CASE WHEN r.status IN ('done', 'partial') THEN r.finished_at END DESC NULLS LAST, r.created_at DESC, r.id DESC
-    LIMIT ${ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1}`, params)).rows;
+    LIMIT ${contextLimit ?? (ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1)}`, params)).rows;
   if (rounds.length > GEO_SELECTION_MAX_ROUNDS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROUNDS} rounds can be analyzed together.`, 422);
   if (scope.round && !rounds.length) throw new HttpError(404, "geo_round_not_found", "The round is not a full measurement of this project.");
   const roundIds = rounds.map((round) => String(round.id));
