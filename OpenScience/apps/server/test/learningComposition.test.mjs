@@ -97,13 +97,13 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
     "a deployment without a memory store still learns from its runs");
   // The first occurrence of this guard belongs to the inbox; the one that keeps the platform's own projects out of memory and
   // lessons is the last, below the transcript branch.
-  const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) return;");
+  const internalGuard = hook.lastIndexOf("if (internalFor(project.userId, project.id)) {");
   assert.ok(internalGuard > 0 && internalGuard < noMemory,
     "any run in an internal project (an evaluation harness's among them) never queues a lesson or seeds memory");
   // A conversation that read a clinical source is checked like any other (the reply check is a notice that holds nothing back,
   // B1-reply) and seeds neither memory nor lessons: its guard sits below the reply check and above both.
   const replyCheck = hook.indexOf("review.service.considerReply(");
-  const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) return;", replyCheck);
+  const clinicalGuard = hook.indexOf("if (!reusableClinicalContext) {", replyCheck);
   assert.ok(replyCheck > internalGuard && clinicalGuard > replyCheck && clinicalGuard < noMemory && clinicalGuard < afterMemory,
     "a clinical conversation's reply is checked, and the same conversation never queues a lesson or seeds memory");
 });
@@ -372,6 +372,14 @@ test("a new turn of a conversation is read once as the answer to the run before 
   assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
   // The loop's own evidence is not a researcher-feedback signal of the evolution module.
   assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
+});
+
+test("the gates that turn a finished run away before the loop is asked are counted too, by their reason", () => {
+  // A refusal nobody counts looks like a loop with nothing to learn (2026-10-12 to 10-23, eleven days of it). The run-finished hook returns before
+  // `afterRun` for the platform's own projects, its own capabilities and a conversation that read clinical context; each says which, on the counter.
+  for (const reason of ["internal_project", "internal_agent", "clinical_context"]) {
+    assert.match(serverSource, new RegExp(`\\{ learningMetrics\\.observeTriggerRefused\\("${reason}"\\); return; \\}`), reason);
+  }
 });
 
 test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop, its denominator, and the repair sample", () => {

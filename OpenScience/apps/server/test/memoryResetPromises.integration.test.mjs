@@ -77,6 +77,7 @@ test("a reset cancels the account's queued and running learning jobs and deletes
   const queuedDistill = await seedJob(alice, "distill", "q-distill");
   const runningDistill = await seedJob(alice, "distill", "r-distill", "running");
   const queuedConsolidate = await seedJob(alice, "consolidate", "q-consolidate");
+  const queuedSettle = await seedJob(alice, "learning-evidence", "q-settle");
   // Not learning: the index outbox carries a withdrawal the reset itself owes, and a notice is not a lesson.
   const outbox = await seedJob(alice, "memory-record-index", "outbox");
   const notice = await seedJob(alice, "notify", "notice");
@@ -86,10 +87,10 @@ test("a reset cancels the account's queued and running learning jobs and deletes
   const bobsFeedback = await seedFeedback(bob);
 
   const removed = await resetLearnedMemory(database, alice);
-  assert.equal(removed.jobs, 3);
+  assert.equal(removed.jobs, 4);
   assert.equal(removed.feedback, 2);
 
-  for (const job of [queuedDistill, runningDistill, queuedConsolidate]) {
+  for (const job of [queuedDistill, runningDistill, queuedConsolidate, queuedSettle]) {
     const row = await jobStatus(job.id);
     assert.equal(row.status, "canceled", `${job.id} is cancelled`);
     assert.equal(row.lease_token, null, "and a worker that holds it loses the lease, so it cannot finish it");

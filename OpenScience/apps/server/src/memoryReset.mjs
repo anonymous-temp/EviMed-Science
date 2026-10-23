@@ -4,7 +4,8 @@ import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./le
 import { migrateProductStore } from "./productPersistence.mjs";
 
 /** The job kinds that belong to the learning loop (`learningPreservation.mjs` names the same two). */
-const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate"]);
+// `learning-evidence` settles a run thirty minutes after it ended (`learningEvidence.mjs`): a run the account asked to forget is not settled.
+const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-evidence"]);
 
 /**
  * 「重置记忆」, the half that is not a memory record.

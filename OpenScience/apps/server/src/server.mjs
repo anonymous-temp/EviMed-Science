@@ -4078,14 +4078,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       })());
       // The platform's own projects (an evaluation harness's among them) must not
       // recursively distil benchmark answers or seed the researcher's memory.
-      if (internalFor(project.userId, project.id)) return;
+      if (internalFor(project.userId, project.id)) { learningMetrics.observeTriggerRefused("internal_project"); return; }
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
       // re-read what was already extracted (the first live distillation,
       // 2026-09-21: 206 messages read, an empty-extraction notice on the run).
       const agentId = String(run.effectiveAgentId ?? run.agentId ?? "");
-      if (agentId && (await agentRegistry)?.get?.(agentId)?.visibility === "internal") return;
+      if (agentId && (await agentRegistry)?.get?.(agentId)?.visibility === "internal") { learningMetrics.observeTriggerRefused("internal_agent"); return; }
       // The reply check (L1, reviewService.mjs): a finished answer that cites or
       // names a medicine is checked after it was shown — never held, never
       // rewritten — off the transcript persisted above. Queued, not awaited: a
@@ -4103,7 +4103,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
       }
       // A conversation that read a clinical source seeds neither research memory nor lessons: its text is the study's, not the account's.
-      if (!reusableClinicalContext) return;
+      // Counted, like every other refusal of the loop: a gate nobody counts looks like a loop with nothing to learn.
+      if (!reusableClinicalContext) { learningMetrics.observeTriggerRefused("clinical_context"); return; }
       // Queue the lessons this run is evidence for — a finished delivery, a
       // correction, a repeated routine (learningTriggers.mjs). After the
       // memory write when there is one, because the extractor is what says the

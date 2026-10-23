@@ -124,7 +124,7 @@ test("a correction on the next turn is one evidence event, a correction lesson a
   assert.equal(event.runId, "run_prev");
   assert.deepEqual({ ...event.detail, at: undefined }, {
     evidence: "follow-up", verdict: "correction", rule: "周报每一节只写三行", quote: "不对，每节只要三行",
-    concerns: [{ id: "method:learned:weekly-report", digest: "sha256:aaa" }], sessionId: "ses_1", at: undefined, scope: "conversation",
+    concerns: [{ id: "method:learned:weekly-report", digest: "sha256:aaa" }], sessionId: "ses_1", at: undefined, scope: "conversation", endedAt: finished().finishedAt,
   }, "a corrected run carries no shape: it is in no routine's family");
   assert.equal(run.lessons.length, 1, "the correction lesson is queued through the triggers' gates");
   assert.equal(run.lessons[0].runId, "run_prev");
@@ -330,4 +330,29 @@ test("the loop's triggers hand a finished run to the evidence ledger and the evi
   assert.equal(ledger.rows.length, 0);
   assert.deepEqual(await evidence.onNewTurn(project, { sessionId: "ses_1", text: "继续", requestId: "r" }), { recorded: false, reason: "no_judge" });
   assert.deepEqual(await evidence.settle({ job: settleJob() }), { jobCompleted: true, settled: null, routine: false, skipped: "paused" });
+});
+
+test("a plain 「不对，短一点」 on a native-memory account is one evidence event and a correction lesson through the real triggers: the loop never asks which engine holds the memory", async () => {
+  const previous = finished({ id: "run_prev" });
+  const ledger = memoryLedger();
+  /** @type {any[]} */ const queued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { queued.push({ kind, payload, options }); return { id: "job" }; }, bringForward: async () => true };
+  // The account's memory is the engine's own: the legacy extractor never runs for it, which is why no correction ever reached the loop.
+  const native = { configured: true, settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [], engine: "native" }), resetInstant: async () => null };
+  /** @type {any} */ let triggers = null;
+  const evidence = new LearningEvidence({
+    feedback: ledger, jobs, agentRuns: { list: async () => [previous] }, triggers: () => triggers,
+    judge: /** @type {any} */ ({ available: true, read: async () => JSON.stringify({ verdict: "correction", rule: "回答写得更短", quote: "不对，短一点", concerns: [] }) }),
+    resolveProject: async () => project, readShapes: async () => ({}), now: () => new Date(NOW),
+  });
+  triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => [previous], runWorkflowProjection: async () => null }, evidence, memory: native });
+  const result = await evidence.onNewTurn(project, { sessionId: "ses_1", text: "不对，短一点", requestId: "req_native" });
+  assert.deepEqual(result, { recorded: true, verdict: "correction", runId: "run_prev", queued: ["correction"] });
+  assert.equal(ledger.rows.length, 1, "one learning-evidence event");
+  assert.deepEqual([ledger.rows[0].detail.evidence, ledger.rows[0].detail.verdict, ledger.rows[0].detail.quote], ["follow-up", "correction", "不对，短一点"]);
+  const lesson = queued.find((entry) => entry.kind === "distill");
+  assert.equal(lesson?.payload.trigger, "correction");
+  assert.equal(lesson?.payload.runId, "run_prev");
+  assert.deepEqual(lesson?.payload.feedbackEventIds, [ledger.rows[0].id]);
+  assert.equal(lesson?.payload.feedback[0].detail.quote, "不对，短一点", "the distillation is handed the researcher's own words");
 });
