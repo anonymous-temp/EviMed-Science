@@ -204,3 +204,19 @@ it('keeps every editing entry disabled while a preview is pending', async () => 
   expect(await screen.findByRole('button', { name: '保存为新版本' })).toBeEnabled();
   expect(screen.getByLabelText('第 1 题文本')).toHaveValue('One original');
 });
+
+it('does not navigate after a pending save resolves on an unmounted workbench', async () => {
+  const scope = 'geo-question-import:t1:u1:prj_geo_1:g1';
+  const input = { rows: [{ text: 'Retained original', kind: 'client', isMeasured: true }], contract, requestKey: 'retained-after-leaving' };
+  localStorage.setItem(scope, JSON.stringify({ input }));
+  let complete!: (value: { version: number }) => void;
+  client.importGeoQuestions.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const onSaved = vi.fn();
+  const shown = render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={data} onSaved={onSaved} /></MemoryRouter>);
+  await userEvent.click(await screen.findByRole('button', { name: '保存为新版本' }));
+  await waitFor(() => expect(client.importGeoQuestions).toHaveBeenCalledTimes(1));
+  shown.unmount();
+  await act(async () => { complete({ version: 4 }); });
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(JSON.parse(localStorage.getItem(scope)!).input).toEqual(input);
+});

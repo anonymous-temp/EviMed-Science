@@ -72,7 +72,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
         }
       } catch { setError('浏览器暂时无法读取保存记录；请检查本地存储可用空间后重试。'); }
     }).catch(() => { if (live) setError('账户或上次保存记录无法读取，请刷新后重试。'); });
-    return () => { live = false; };
+    return () => { live = false; identityGeneration.current++; };
   }, [geoId, project.projectId, identityVersion, canEdit]);
   const pendingStart = useRef<{ version: number; requestKey: string } | null>(null);
   useEffect(() => { pendingStart.current = null; }, [storageScope]);
