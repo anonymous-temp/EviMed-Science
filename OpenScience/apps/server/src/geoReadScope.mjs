@@ -90,7 +90,9 @@ export function normalizeGeoReadScope(input = {}) {
     clientTags: values(raw.clientTags, "clientTags", null, true), selectionRef: raw.selectionRef ?? null };
 }
 
-/** @param {URLSearchParams} query @param {readonly string[]} [extra] */
+/** @param {URLSearchParams} query @param {readonly string[]} [extra]
+ * @returns {ReturnType<typeof normalizeGeoReadScope> & Record<string, any>}
+ */
 export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
   /** @type {Record<string, any>} */ const raw = {};
   const lists = new Set(["engines", "pools", "groupIds", "clientTags", "errorStatuses", "errorSeverities", "errorTypes"]);

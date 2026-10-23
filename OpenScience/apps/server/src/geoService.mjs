@@ -901,7 +901,7 @@ export class GeoService {
       const ordered = [...selected.rounds].sort((a, b) => rowDay(a, scope.timeZone).localeCompare(rowDay(b, scope.timeZone)) || String(a.id).localeCompare(String(b.id)));
       const readings = scope.from || scope.to ? geoDailyReadings(selected) : ordered.map((entry) => ({
         date: rowDay(entry, scope.timeZone), roundIds: [entry.id], version: entry.set_version == null ? null : Number(entry.set_version),
-        result: computeGeoSelection(selected.rows.filter((row) => row.roundId === entry.id), selected.metricOptions) }));
+        result: selected.rounds.length === 1 ? selected.computed : computeGeoSelection(selected.rows.filter((row) => row.roundId === entry.id), selected.metricOptions) }));
       const history = (/** @type {string} */ metricId, /** @type {string | null} */ engine = null, /** @type {string | null} */ variant = null) => readings.map(({ date, roundIds, version, result }) => {
         const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && candidate.variant === variant && !candidate.rival);
         return { date, roundId: roundIds.length === 1 ? roundIds[0] : null, roundIds, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
