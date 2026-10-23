@@ -317,14 +317,38 @@ test("default source context selects its six rounds before enforcing history res
 test("view dates use the observation day when a selected round has no sample date", options, async () => {
   const undated = await store.createProject({ userId: user.id, projectId: "undated-view-project", engines: ["deepseek"], coverageDays: 90 });
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,started_at,created_at,finished_at)
-    VALUES ('undated-view-round',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T16:00:00Z','2026-10-01T17:00:00Z')`, [user.id, undated.id]);
-  const scope = { from: "2026-10-02", to: "2026-10-02" };
-  const overview = await service.projectView(user, undated.id, scope);
-  assert.equal(overview.overview.metrics[0].trend[0].date, "2026-10-02");
-  const diagnosis = await service.diagnosis(user, undated.id, scope);
-  assert.equal(diagnosis.round.sampleDate, "2026-10-02");
-  const monitoring = await service.monitoring(user, undated.id, scope);
-  assert.equal(monitoring.series[0].points[0].date, "2026-10-02");
+    VALUES ('undated-view-round',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T14:00:00Z','2026-10-01T17:00:00Z')`, [user.id, undated.id]);
+  for (const [timeZone, date] of [["Asia/Shanghai", "2026-10-02"], ["America/New_York", "2026-10-01"]]) {
+    const scope = { from: date, to: date, timeZone };
+    const overview = await service.projectView(user, undated.id, scope);
+    assert.equal(overview.overview.metrics[0].trend[0].date, date);
+    const diagnosis = await service.diagnosis(user, undated.id, scope);
+    assert.equal(diagnosis.round.sampleDate, date);
+    const monitoring = await service.monitoring(user, undated.id, scope);
+    assert.equal(monitoring.series[0].points[0].date, date);
+  }
+});
+
+test("sample dates retain their civil day in every requested time zone", options, async () => {
+  for (const timeZone of ["Asia/Shanghai", "America/New_York"]) {
+    const scope = { round: "r1", timeZone };
+    const diagnosis = await service.diagnosis(user, project.id, scope);
+    assert.equal(diagnosis.round.sampleDate, "2026-10-01");
+    const monitoring = await service.monitoring(user, project.id, scope);
+    assert.equal(monitoring.series[0].points[0].date, "2026-10-01");
+  }
+});
+
+test("unfiltered histories use the observation start day after a cross-day queue wait", options, async () => {
+  const queued = await store.createProject({ userId: user.id, projectId: "queued-date-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,started_at,created_at,finished_at)
+    VALUES ('queued-date-round',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T14:00:00Z','2026-10-01T17:00:00Z')`, [user.id, queued.id]);
+  await store.query(`INSERT INTO evimed_geo.metrics (id,user_id,geo_project_id,round_id,scope,metric_id,rival,status,value,computed_at)
+    VALUES ('queued-date-mention',$1,$2,'queued-date-round','project','M-01S',NULL,'ok',50,'2026-10-04'),
+      ('queued-date-rival',$1,$2,'queued-date-round','project','M-16','Other','ok',50,'2026-10-04')`, [user.id, queued.id]);
+  const view = await service.monitoring(user, queued.id);
+  assert.equal(view.series.find((entry) => entry.key === "mention").points[0].date, "2026-10-02");
+  assert.equal(view.rivals[0].points[0].date, "2026-10-02");
 });
 
 test("GVI comparisons reject a changed measurable component basis even for identical answers", options, async () => {
