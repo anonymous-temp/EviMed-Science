@@ -156,3 +156,11 @@ test('legacy statements missing their key recover the historically frozen key wi
   await database.query('UPDATE evimed_geo.facts SET statements=$2::jsonb WHERE snapshot_id=$1', [f.snapshot.id, JSON.stringify([withoutKey])]);
   await record(f); const rows = await errors(f); assert.equal(rows.length, 1); assert.equal(rows[0].id, `${f.id}_error`); assert.equal(rows[0].fingerprint, errorFingerprint(canonical));
 });
+test('a legacy-shaped residual wrong remains active after another occurrence is verified correct', options, async () => {
+  const f = await fixture('legacy_residual_correct'); await record(f);
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text)
+    SELECT $2,user_id,geo_project_id,round_id,question_id,engine,status,asked_at + interval '1 hour',answer_text FROM evimed_geo.snapshots WHERE id=$1`, [f.snapshot.id, `${f.id}_other`]);
+  await store.writeFacts({ id: `${f.id}_other`, userId: f.project.userId, geoProjectId: f.id }, { parserVersion: 'legacy', judgedAt: '2026-10-24T03:00:00Z', statements: [legacy] });
+  await recheck(f, 'correct'); await record(f);
+  const [row] = await errors(f); assert.equal(row.fingerprint, errorFingerprint(canonical)); assert.equal(row.judgment_state, 'active'); assert.equal(row.status, 'acting'); assert.ok(row.notified_at); assert.equal(f.notices.length, 0);
+});
