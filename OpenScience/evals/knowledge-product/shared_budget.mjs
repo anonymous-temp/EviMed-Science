@@ -22,6 +22,7 @@ export class SharedBudget {
     const id=randomBytes(12).toString('hex');const row={scope,model,inputTokens,maxOutputTokens,amount};
     this.record({type:'reserved',id,...row});this.pending.set(id,row);return id;
   }
+  holdUncertain(id){if(!this.pending.has(id))throw new Error('Unknown uncertainty reservation');this.halted=true;this.record({type:'uncertain-halted',id});}
   settle(id,{inputTokens,outputTokens}) {
     const r=this.pending.get(id);if(!r)throw new Error('Unknown or already settled reservation');
     if(!Number.isSafeInteger(inputTokens)||inputTokens<0||inputTokens>r.inputTokens||!Number.isSafeInteger(outputTokens)||outputTokens<0||outputTokens>r.maxOutputTokens){this.halted=true;this.record({type:'halted',id});throw new Error('Usage exceeds reserved token bound; budget halted');}
@@ -30,10 +31,16 @@ export class SharedBudget {
   }
   status(){return {id:this.id,capCny:this.cap/1e6,committedCny:this.committed/1e6,reservedCny:[...this.pending.values()].reduce((s,r)=>s+r.amount,0)/1e6,halted:this.halted,pending:this.pending.size};}
 }
+export function nativeConfigBinding(command,environment,file){
+ return /openviking[-\s]+(serve|server)|python.*openviking/i.test(command)&&(command.includes(file)||environment.OPENVIKING_CONFIG_FILE===file);
+}
 export function verifyNativeConfiguration(config) {
   if(!config.nativeConfigFile||!Number.isSafeInteger(config.nativeProcessId))throw new Error('Native OpenViking live config/process wiring missing');
   const command=spawnSync('ps',['-p',String(config.nativeProcessId),'-o','command='],{encoding:'utf8'});
-  if(command.status!==0||!command.stdout.includes(config.nativeConfigFile)||!/openviking\s+(serve|server)|python.*openviking/i.test(command.stdout))throw new Error('Native config is not bound to the running engine process');
+  const nativeEnv=Object.fromEntries(fs.readFileSync(`/proc/${config.nativeProcessId}/environ`,'utf8').split('\0').filter(Boolean).map(pair=>{const at=pair.indexOf('=');return [pair.slice(0,at),pair.slice(at+1)];}));
+  if(command.status!==0||!nativeConfigBinding(command.stdout,nativeEnv,config.nativeConfigFile))throw new Error('Native config is not bound to the running engine process');
+  const mountedConfig=fs.readFileSync(`/proc/${config.nativeProcessId}/root/${config.nativeConfigFile.replace(/^\/+/,'')}`);
+  if(!mountedConfig.equals(fs.readFileSync(config.nativeConfigFile)))throw new Error('Native mounted config differs from operator config');
   const native=JSON.parse(fs.readFileSync(config.nativeConfigFile,'utf8'));
   const origin=new URL(config.coordinatorUrl).origin;
   const token=fs.readFileSync(config.tokenFile,'utf8').trim();
@@ -52,11 +59,18 @@ export function processStartedAt(pid) {
   if(result.status!==0||!start)throw new Error('Instrumented process is not alive');
   return start;
 }
+export function listenerOwnersForAddress(output,endpoint){
+ const host=endpoint.hostname.replace(/^\[|\]$/g,''),port=endpoint.port||(endpoint.protocol==='https:'?'443':'80');
+ const admitted=host==='localhost'?[`127.0.0.1:${port}`,`[::1]:${port}`]:[host==='::1'?`[::1]:${port}`:`${host}:${port}`];
+ const owners=[];let pid;
+ for(const line of output.split('\n')){if(line.startsWith('p'))pid=Number(line.slice(1));else if(line.startsWith('n')&&admitted.includes(line.slice(1))&&Number.isSafeInteger(pid))owners.push(pid);}
+ return [...new Set(owners)];
+}
 export function loopbackListenerOwners(endpoint) {
   const port=endpoint.port||(endpoint.protocol==='https:'?'443':'80');
-  const result=spawnSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN','-t'],{encoding:'utf8'});
+  const result=spawnSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN','-Fpn'],{encoding:'utf8'});
   if(result.status!==0)return [];
-  return result.stdout.trim().split(/\s+/).map(Number).filter(Number.isSafeInteger);
+  return listenerOwnersForAddress(result.stdout,endpoint);
 }
 export async function verifyBoundCollector(base,scope,config,{liveVerifier=verifyLiveBudgetWiring,listenerOwners=loopbackListenerOwners}={}) {
   const endpoint=new URL(base);
@@ -66,6 +80,10 @@ export async function verifyBoundCollector(base,scope,config,{liveVerifier=verif
   const proof=status.wiring?.[scope];
   if(!proof||proof.budgetId!==status.id||!listenerOwners(endpoint).includes(proof.processId))throw new Error(`Collector listener is not the instrumented ${scope} process on the shared coordinator`);
   return {...status,binding:{scope,base:endpoint.origin,processId:proof.processId,budgetId:status.id,processStart:proof.processStart}};
+}
+export function verifyGatewayListeners(origins,wiring,{owners=loopbackListenerOwners}={}){
+ for(const origin of origins){const endpoint=new URL(origin),listeners=owners(endpoint);if(!['baseline','candidate'].some(scope=>listeners.includes(wiring[scope]?.processId)))throw new Error('Native gateway listener is not the exact loopback instrumented control plane');}
+ return true;
 }
 export async function verifyLiveBudgetWiring(config,{fetchImpl=fetch,nativeVerifier=verifyNativeConfiguration}={}) {
   if(!config?.coordinatorUrl||!config?.tokenFile||!config?.sharedBudgetId)throw new Error('Live shared budget wiring missing');
@@ -79,12 +97,7 @@ export async function verifyLiveBudgetWiring(config,{fetchImpl=fetch,nativeVerif
   if(status.nonce!==nonce||status.id!==config.sharedBudgetId||status.halted||!(status.capCny>0&&status.capCny<=50)||!Number.isFinite(status.committedCny)||!Number.isFinite(status.reservedCny))throw new Error('Live aggregate budget accounting identity mismatch');
   for(const scope of REQUIRED_PROVIDER_SCOPES){const p=status.wiring?.[scope];if(!p?.providerBoundary||!p.processId||!p.processStart||processStartedAt(p.processId)!==p.processStart||p.budgetId!==status.id)throw new Error(`Unverified provider wiring: ${scope}`);}
   for(const scope of ['baseline','candidate'])try{process.kill(status.wiring[scope].processId,0);}catch{throw new Error('Instrumented control-plane process is not alive');}
-  if(nativeVerifier===verifyNativeConfiguration)for(const origin of config.instrumentedGatewayOrigins??[]){
-    const endpoint=new URL(origin),port=endpoint.port||(endpoint.protocol==='https:'?'443':'80');
-    const result=spawnSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN','-t'],{encoding:'utf8'});
-    const owners=result.stdout.trim().split(/\s+/).map(Number);
-    if(!['baseline','candidate'].some(s=>owners.includes(status.wiring[s].processId)))throw new Error('Native gateway listener is not an instrumented control plane');
-  }
+  if(nativeVerifier===verifyNativeConfiguration)verifyGatewayListeners(config.instrumentedGatewayOrigins??[],status.wiring);
   return status;
 }
 

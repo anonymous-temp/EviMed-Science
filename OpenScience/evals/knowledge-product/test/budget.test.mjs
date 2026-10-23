@@ -57,5 +57,9 @@ test('native DashScope compatible-mode path reaches the unarmed coordinator and 
  const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');const {createBudgetProxy}=await import('../budget_proxy.mjs');
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'eval-embedding-path-'));let calls=0;
  const p=await createBudgetProxy({models:{'qwen3.7-text-embedding':{kind:'embedding',input:0.5,output:0,maxOutput:0}},providers:{dashscope:{url:'https://provider.test/embeddings',keyFile:path.join(dir,'unused')}},token:'unit-token',ledgerFile:path.join(dir,'ledger'),fetchImpl:()=>{calls++;throw new Error('No provider request allowed');}});
+ await fetch(p.url+'/__eval/probe',{method:'POST',headers:{Authorization:'Bearer unit-token','content-type':'application/json'},body:JSON.stringify({scope:'openviking',processId:process.pid,nonce:'unit-native'})});
  try{const r=await fetch(p.url+'/scope/openviking/dashscope/compatible-mode/v1/embeddings',{method:'POST',headers:{Authorization:'Bearer unit-token','content-type':'application/json'},body:JSON.stringify({model:'qwen3.7-text-embedding',input:['Unit fixture'],dimensions:1024})});assert.equal(r.status,503);assert.equal(p.wiring.openviking.providerBoundary,true);assert.equal(calls,0);}finally{await p.close();await fs.rm(dir,{recursive:true,force:true});}
+});
+test('unknown provider accounting retains reservation and halts further admission',()=>{
+ const b=new SharedBudget({capCny:50,models:{flash:{input:2,output:8,maxOutput:100}}});const id=b.reserve({scope:'baseline',model:'flash',inputTokens:10,maxOutputTokens:10});b.holdUncertain(id);assert.equal(b.status().pending,1);assert.equal(b.status().halted,true);assert.throws(()=>b.reserve({scope:'candidate',model:'flash',inputTokens:1,maxOutputTokens:1}),/halted/);
 });
