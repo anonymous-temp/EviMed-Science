@@ -98,6 +98,13 @@ test("M-06 counts answers rather than statements and does not inflate mixed know
   assert.equal(onlyMixed.reason, "not_adjudicated");
 });
 
+test("a verified wrong answer remains decidable while its unassessed tail remains partial coverage", () => {
+  const cell = metric([row({ statements: [{ text: "Known error.", verdict: "wrong" }],
+    checks: { judgementCoverage: { status: "partial", reasons: ["answer_truncated"], answerChars: 9000, assessedChars: 8000 } } })], "M-06");
+  assert.deepEqual([cell.numerator, cell.denominator, cell.value], [0, 1, 0]);
+  assert.deepEqual(cell.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 0, partialAnswers: 1, unknownAnswers: 0, decidableAnswers: 1 });
+});
+
 test("a cut answer retains complete literal counts but cannot claim complete judgement or accuracy", () => {
   const answer = `${correct.text}${"正文。".repeat(GEO_JUDGE_ANSWER_CHARS)}康舒安可用于所有人。`;
   const reading = judged(answer, { statements: [correct] });
