@@ -158,8 +158,8 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       const question = snapshot.questionId ? (await store.questions(project.id, { ids: [snapshot.questionId] }))[0] : null;
       const input = /** @type {import("./geoJudge.mjs").GeoJudgeInput} */ (judgeInputOf(context, question, snapshot));
       const targetClaim = geoClaimForStatement(context.claims, p.original);
-      if (!targetClaim) throw conflict();
-      input.reviewFeedback = { statement: p.statement, note: p.note, claim: `C${context.claims.indexOf(targetClaim) + 1}`, statementIdentity: p.statementIdentity ?? geoStatementAssessmentIdentity(p.original) };
+      if (p.original.claimId != null && !targetClaim) throw conflict();
+      input.reviewFeedback = { statement: p.statement, note: p.note, ...(targetClaim ? { claim: `C${context.claims.indexOf(targetClaim) + 1}` } : {}), statementIdentity: p.statementIdentity ?? geoStatementAssessmentIdentity(p.original) };
       const judged = await evaluator.judge(input);
       const priorCitations = current.payload.assessment.checks?.citations ?? [];
       for (const prior of priorCitations) {
