@@ -58,6 +58,8 @@ export function useGeoDrawerAddress() {
       copy.delete(GEO_ACTION_PARAM);
       copy.delete(GEO_ERROR_PARAM);
       copy.delete(GEO_DRAWER_ENGINE_PARAM);
+      copy.delete('order');
+      copy.delete('publication');
       if (next.engine) copy.set(GEO_DRAWER_ENGINE_PARAM, next.engine);
       if (next.group) copy.set(GEO_GROUP_PARAM, next.group);
       if (next.action) copy.set(GEO_ACTION_PARAM, next.action);

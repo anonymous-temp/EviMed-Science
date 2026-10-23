@@ -1,6 +1,6 @@
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { DistributionWorkbench } from './DistributionWorkbench';
 import { firstPublishedDay } from '../spine/ActionsParts';
@@ -19,6 +19,21 @@ const order = (extra = {}): GeoExecutionOrder => ({ id: 'order-a', articleId: 'a
 const details = (entry = order()) => ({ order: entry, events: { items: [{ id: 'event-a', at: entry.publishedAt, fromState: 'accepted', toState: 'published', phase: null, amountCny: null }], nextCursor: null, total: 1 } });
 beforeEach(() => { vi.clearAllMocks(); api.getGeoExecutionOrders.mockResolvedValue({ items: [order()], nextCursor: null, total: 1 }); api.getGeoOrderDetail.mockResolvedValue(details()); api.select.mockResolvedValue(undefined); api.open.mockReturnValue(true); });
 const mount = (project = geoProject()) => render(<MemoryRouter><DistributionWorkbench geoId="geo_1" project={project} /></MemoryRouter>);
+
+function NavigationProbe() {
+  const location = useLocation(), navigate = useNavigate();
+  return <><output aria-label="address">{location.search}</output><button onClick={() => navigate(-1)}>Browser back</button></>;
+}
+it('a direct order address restores detail and browser back returns to the preceding selection', async () => {
+  render(<MemoryRouter initialEntries={['/actions?step=distribution&engines=kimi&order=order-a']}><DistributionWorkbench geoId="geo_1" project={geoProject()} /><NavigationProbe /></MemoryRouter>);
+  await screen.findByRole('list', { name: '订单时间线' });
+  expect(api.getGeoOrderDetail).toHaveBeenCalledWith('geo_1', 'order-a', { cursor: null, limit: 30 });
+  const user = userEvent.setup(); await user.click(screen.getByRole('button', { name: /关闭/ }));
+  await waitFor(() => expect(screen.queryByRole('list', { name: '订单时间线' })).not.toBeInTheDocument());
+  expect(screen.getByLabelText('address')).toHaveTextContent('engines=kimi');
+  await user.click(screen.getByRole('button', { name: 'Browser back' }));
+  await screen.findByRole('list', { name: '订单时间线' });
+});
 
 it('orders page independently with complete totals and authoritative cancellation for the actual member', async () => {
   api.getGeoExecutionOrders.mockResolvedValueOnce({ items: [order()], nextCursor: 'page-2', total: 31 }).mockResolvedValueOnce({ items: [order({ id: 'last', articleTitle: 'Last article' })], nextCursor: null, total: 31 });
