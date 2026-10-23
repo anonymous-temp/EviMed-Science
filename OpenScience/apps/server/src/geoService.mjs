@@ -239,6 +239,8 @@ function errorView(row) {
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
     evidenceQuote: text(row.evidence_quote),
+    applicability: row.applicability ?? null,
+    claimVersion: row.claim_version == null ? null : Number(row.claim_version),
     createdAt: iso(row.created_at),
   };
 }
@@ -358,6 +360,8 @@ export class GeoService {
     this.config = config;
     /** @type {any} The same deployment adapter the measurement worker uses. */
     this.inclusion = null;
+    /** @type {ReturnType<typeof import("./geoDiagnosisReview.mjs").createGeoDiagnosisReview> | null} */
+    this.diagnosisReview = null;
     this.social = social;
     this.cards = cards;
     this.now = now;
@@ -806,7 +810,7 @@ export class GeoService {
       const scopeErrors = await readGeoSelectionErrors(this.store, project, selected, { errorLimit: 1 });
       view.scopeErrorSummary = scopeErrors.summary;
       view.errors = errors; view.byClaim = geoErrorsByClaim(errorData.claimRows.map(errorView));
-      view.byClaimPage = { total: view.byClaim.length, shown: view.byClaim.length, more: false, nextOffset: null };
+      view.byClaimPage = { ...errorData.page, total: null, shown: view.byClaim.length, unit: "page_claims", partial: errorData.page.more || errorData.page.offset > 0 };
       view.errorCounts = errorData.counts; view.errorSummary = errorData.summary; view.errorPage = errorData.page;
       view.errorFilters = errorData.filter;
       view.byEngine = selection.engines.map((engine) => {
@@ -880,6 +884,7 @@ export class GeoService {
       const context = clusterContext ?? await this.#scopedClusterContext(project, selected, groups);
       const complete = this.spine.clusters(context.spine, context.derived);
       view.locked = complete.locked;
+      view.errorWorkCoverage = { partial: context.errorPage.more, shown: context.errorPage.shown, total: context.errorPage.total };
       const completeById = new Map(complete.groups.map((group) => [group.id, group]));
       view.groups = groups.filter((group) => completeById.has(group.id) && (!scope.groupIds.length || scope.groupIds.includes(group.id)) && (!scope.pools.length || scope.pools.includes(group.pool))
         && (!scope.clientTags.length || selected.questions.some((question) => question.group_id === group.id))).map((group) => {
@@ -890,7 +895,7 @@ export class GeoService {
         const historicalMention = !filtered && !selected.rows.some((row) => row.facts) && legacy?.roundId === roundView?.id
           ? { ...geoGroupReading({ k: legacy.k, n: legacy.n }), roundId: legacy.roundId, date: legacy.date, coverage: legacy.coverage } : null;
         const mention = historicalMention ?? cell("M-01", { scope: "group", pool: group.pool, groupId: group.id });
-        return { ...old, id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
+        return { ...old, errors: context.errorSummary.byGroup[group.id] ?? { total: 0, open: 0, severe: 0 }, id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
           weight: num(group.weight), isControl: group.is_control, signal: group.signal, questionCount: questions.length,
           measuredCount: questions.filter((question) => question.is_measured && !question.retired_at).length, realCount: questions.filter((question) => question.kind === "real").length,
           realPhrasings: old?.realPhrasings ?? [], mention: historicalMention ? { ...mention, members: { exact: false, basis: "historical_unknown" } } : { ...geoGroupReading({ k: mention.numerator, n: mention.denominator }), snapshotIds: mention.snapshotIds, members: mention.members, roundId: roundView?.id ?? null, coverage: selection.coverage },
@@ -1214,6 +1219,21 @@ export class GeoService {
     // and only when none has finished, the newest one begun.
     return (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
       ORDER BY (status IN ('done', 'partial')) DESC, CASE WHEN status IN ('done', 'partial') THEN finished_at END DESC NULLS LAST, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {string} snapshotId */
+  async readDiagnosisReview(user, id, snapshotId) {
+    const project = await this.requireProject(user, id);
+    if (!this.diagnosisReview) throw failure(503, "geo_review_unavailable", "Judgment review is unavailable.");
+    return this.diagnosisReview.read(project, snapshotId);
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {any} input */
+  async submitDiagnosisFeedback(user, id, input) {
+    const project = await this.requireProject(user, id, "edit");
+    await this.requireProject(user, id, "run");
+    if (!this.diagnosisReview) throw failure(503, "geo_review_unavailable", "Judgment review is unavailable.");
+    return this.diagnosisReview.submit({ ...project, actorId: user.id }, input);
   }
 
   /**
@@ -1982,7 +2002,7 @@ export class GeoService {
    * @param {any} project @param {Awaited<ReturnType<typeof readGeoSelection>>} selected @param {any[]} groups */
   async #scopedClusterContext(project, selected, groups) {
     const base = await this.spine.load(project, { answers: false });
-    const errors = await readGeoSelectionErrors(this.store, project, selected, { errorLimit: 1 });
+    const errors = await readGeoSelectionErrors(this.store, project, selected, { errorLimit: 500 });
     const snapshotGroups = new Map(selected.rows.map((row) => [row.snapshotId, row.groupId]));
     const questionGroups = new Map(selected.questions.map((question) => [String(question.id), String(question.group_id)]));
     const answers = this.#selectionAnswers(selected);
@@ -2010,7 +2030,7 @@ export class GeoService {
         k: entry.numerator, n: entry.denominator, value: entry.value, status: entry.status, roundId })),
       arms: {},
     };
-    return { spine: scoped, derived: await this.spine.actions(scoped), legacyReadings: base.readings, selected };
+    return { spine: scoped, errorSummary: errors.summary, errorPage: errors.page, derived: await this.spine.actions(scoped), legacyReadings: base.readings, selected };
   }
 
   /** `GET …/:id/clusters`. @param {{ id: string }} user @param {string} id */

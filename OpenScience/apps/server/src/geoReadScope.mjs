@@ -9,7 +9,7 @@ import { HttpError } from "./security.mjs";
 
 export const GEO_SCOPE_FIELDS = Object.freeze(["round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
   "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef"]);
-export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset", "questionId"]);
+export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset", "questionId", "errorTrace"]);
 export const GEO_SOURCE_PAGE_FIELDS = Object.freeze(["answerLimit", "answerOffset"]);
 export const GEO_SELECTION_MAX_ROWS = 20_000;
 export const GEO_SELECTION_MAX_ROUNDS = 120;
@@ -120,8 +120,9 @@ export function geoErrorFilters(input = {}) {
   const search = input.errorSearch ?? "";
   if (input.questionId != null && (typeof input.questionId !== "string" || !idShape.test(input.questionId))) throw invalid("questionId must be an identifier.");
   if (typeof search !== "string" || search.length > 240 || hasControls(search)) throw invalid("errorSearch must be short text.");
-  return { statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
-    types: values(input.errorTypes, "errorTypes", GEO_ERROR_TYPES), questionId: input.questionId ?? null, search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
+  if (input.errorTrace != null && !["traced", "unattributable", "noRetrieval"].includes(input.errorTrace)) throw invalid("errorTrace is unsupported.");
+  return { trace: input.errorTrace ?? null, statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
+    types: values(input.errorTypes, "errorTypes", [...GEO_ERROR_TYPES, "unknown"]), questionId: input.questionId ?? null, search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
 }
 
 /** @param {any} input */
@@ -232,31 +233,46 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   if (filter.questionId) add("e.question_id = ?", filter.questionId);
   if (filter.statuses.length) add("e.status = ANY(?::text[])", filter.statuses);
   if (filter.severities.length) add("e.severity = ANY(?::text[])", filter.severities);
-  if (filter.types.length) add("e.error_type = ANY(?::text[])", filter.types);
+  if (filter.types.length) add("coalesce(e.error_type, 'unknown') = ANY(?::text[])", filter.types);
   if (filter.search) add("strpos(lower(concat_ws(' ', e.statement, e.evidence_quote, e.cited_source ->> 'domain', e.cited_source ->> 'url')), lower(?)) > 0", filter.search);
-  const aggregate = (await store.query(`SELECT e.status, e.severity, e.error_type, e.engine, count(*)::integer AS n,
+  const traceSql = `CASE WHEN e.cited_source->>'basis'='inline_marker' THEN 'traced'
+    WHEN e.cited_source->>'basis'='no_retrieval' THEN 'noRetrieval'
+    WHEN e.cited_source->>'basis'='not_attributable' THEN 'unattributable'
+    WHEN e.cited_source->>'attribute'='none' THEN 'noRetrieval'
+    WHEN e.cited_source->>'domain' IS NOT NULL THEN 'traced' ELSE 'unattributable' END`;
+  if (filter.trace) add(`${traceSql} = ?`, filter.trace);
+  const aggregate = (await store.query(`SELECT ${traceSql} AS trace, e.status, e.severity, e.error_type, e.engine, coalesce(q.group_id,sq.group_id) AS group_id, count(*)::integer AS n,
       count(*) FILTER (WHERE e.status <> 'closed' AND e.cited_source IS NOT NULL)::integer AS sourced_open
-    FROM evimed_geo.errors e WHERE ${where.join(" AND ")} GROUP BY e.status, e.severity, e.error_type, e.engine`, params)).rows;
+    FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id=e.question_id
+    LEFT JOIN evimed_geo.snapshots es ON es.id=coalesce(e.last_snapshot_id,e.first_snapshot_id,e.closed_snapshot_id)
+    LEFT JOIN evimed_geo.questions sq ON sq.id=es.question_id
+    WHERE ${where.join(" AND ")} GROUP BY e.status, e.severity, e.error_type, e.engine, trace, coalesce(q.group_id,sq.group_id)`, params)).rows;
   /** @type {Record<string, number>} */ const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0 };
-  /** @type {Record<string, Record<string, number>>} */ const breakdown = { byType: {}, bySeverity: {}, byEngine: {}, byStatus: {} };
+  /** @type {Record<string, Record<string, number>>} */ const breakdown = { byType: {}, bySeverity: {}, byEngine: {}, byStatus: {}, byTrace: {}, byEngineSeverity: {} };
+  /** @type {Record<string, { total: number, open: number, severe: number }>} */ const byGroup = {};
   let sourcedOpen = 0;
   for (const row of aggregate) {
     const n = Number(row.n); counts.total += n; counts[row.status] = (counts[row.status] ?? 0) + n;
     if (row.status !== "closed" && ["S3", "S4"].includes(row.severity)) counts.severe += n;
     sourcedOpen += Number(row.sourced_open);
-    for (const [key, value] of [["byType", row.error_type], ["bySeverity", row.severity], ["byEngine", row.engine], ["byStatus", row.status]]) {
+    if (row.group_id) {
+      const group = byGroup[row.group_id] ??= { total: 0, open: 0, severe: 0 };
+      group.total += n; if (row.status !== "closed") group.open += n;
+      if (row.status !== "closed" && ["S3", "S4"].includes(row.severity)) group.severe += n;
+    }
+    for (const [key, value] of [["byTrace", row.trace], ["byEngineSeverity", `${row.engine}:${row.severity ?? "unknown"}`], ["byType", row.error_type], ["bySeverity", row.severity], ["byEngine", row.engine], ["byStatus", row.status]]) {
       const name = String(value ?? "unknown"); breakdown[key][name] = (breakdown[key][name] ?? 0) + n;
     }
   }
   const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
     WHERE ${where.join(" AND ")} AND e.status <> 'closed'`, params)).rows;
-  const claimRows = (await store.query(`SELECT e.id, e.fingerprint, e.claim_id, e.statement, e.engine, e.severity, e.status, e.question_id, e.error_type, e.materials, e.created_at, e.last_snapshot_id, e.closed_snapshot_id,
-    e.first_snapshot_id, e.cited_source, e.action FROM evimed_geo.errors e WHERE ${where.join(" AND ")} ORDER BY e.id`, params)).rows;
   params.push(filter.limit, filter.offset);
-  const rows = (await store.query(`SELECT e.* FROM evimed_geo.errors e WHERE ${where.join(" AND ")}
+  const rows = (await store.query(`SELECT e.*, c.version AS claim_version,
+    CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object('population',c.population,'elements',c.elements,'inLabel',c.in_label,'validUntil',c.valid_until,'evidenceLevel',c.evidence_level) END AS applicability
+    FROM evimed_geo.errors e LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id WHERE ${where.join(" AND ")}
     ORDER BY (e.status = 'closed'), e.severity DESC NULLS LAST, e.updated_at DESC, e.id
     LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
-  return { rows, live, claimRows, counts, summary: { total: counts.total, ...breakdown, sourcedOpen },
+  return { rows, live, claimRows: rows, counts, summary: { unit: "error_rows", total: counts.total, byGroup, ...breakdown, sourcedOpen },
     page: { offset: filter.offset, limit: filter.limit, total: counts.total, shown: rows.length, more: filter.offset + rows.length < counts.total,
       nextOffset: filter.offset + rows.length < counts.total ? filter.offset + rows.length : null }, filter };
 }

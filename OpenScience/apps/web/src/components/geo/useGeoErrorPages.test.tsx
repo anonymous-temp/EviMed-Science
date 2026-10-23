@@ -1,0 +1,41 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
+import type { GeoDiagnosis, GeoErrorRow } from "@/lib/geoClient";
+import { appendErrorPage, useGeoErrorPages } from "./useGeoErrorPages";
+const client = vi.hoisted(() => ({ getGeoDiagnosis: vi.fn() }));
+vi.mock("@/lib/geoClient", async original => ({ ...await original<typeof import("@/lib/geoClient")>(), ...client }));
+const row = (id: string) => ({ id, statement: id }) as GeoErrorRow;
+const page = (ids: string[], offset = 0, more = false, reference = "frozen") => ({ errors: ids.map(row), scope: { round: "old" }, selection: { reference }, errorPage: { offset, limit: 20, total: 21, shown: ids.length, more, nextOffset: more ? 20 : null } }) as GeoDiagnosis;
+beforeEach(() => { client.getGeoDiagnosis.mockReset(); });
+it("fetches the next page on the exact frozen selection, and repeated pages never duplicate rows", async () => {
+  client.getGeoDiagnosis.mockResolvedValueOnce(page(["first"], 0, true)).mockResolvedValueOnce(page(["first", "only-after-page-one"], 20));
+  const initial = page(["capped"]);
+  const { result } = renderHook(() => useGeoErrorPages("geo", initial, {}, vi.fn()));
+  await waitFor(() => expect(result.current.data?.errors[0].id).toBe("first"));
+  act(() => result.current.more());
+  await waitFor(() => expect(result.current.data?.errors.map(row => row.id)).toEqual(["first", "only-after-page-one"]));
+  expect(client.getGeoDiagnosis.mock.calls[1][1]).toMatchObject({ round: "old", selectionRef: "frozen" });
+  expect(client.getGeoDiagnosis.mock.calls[1][2]).toMatchObject({ errorOffset: 20 });
+  expect(appendErrorPage([row("first")], page(["first"]), "frozen")).toHaveLength(1);
+  expect(() => appendErrorPage([], page(["wrong-round"], 0, false, "latest"), "frozen")).toThrow(/范围已变化/);
+});
+it("resets offsets on search and requests the server even when the matching error is beyond the initial cap", async () => {
+  client.getGeoDiagnosis.mockResolvedValue(page(["first"], 0, true));
+  const initial = page(["capped"]);
+  const { result, rerender } = renderHook(({ search }) => useGeoErrorPages("geo", initial, { errorSearch: search }, vi.fn()), { initialProps: { search: "" } });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  client.getGeoDiagnosis.mockResolvedValue(page(["matching-beyond-cap"]));
+  rerender({ search: "needle" });
+  await waitFor(() => expect(result.current.data?.errors[0].id).toBe("matching-beyond-cap"));
+  expect(client.getGeoDiagnosis.mock.lastCall?.[2]).toMatchObject({ errorSearch: "needle", errorOffset: 0 });
+});
+it("a changed assessment exposes refresh without appending a new latest round to the old selection", async () => {
+  client.getGeoDiagnosis.mockRejectedValue(new WebApiError("Changed", { status: 409, code: "geo_read_filter_invalid" }));
+  const refresh = vi.fn(), initial = page([]);
+  const { result } = renderHook(() => useGeoErrorPages("geo", initial, {}, refresh));
+  await waitFor(() => expect(result.current.stale).toBe(true));
+  expect(result.current.data).toBeNull();
+  act(() => result.current.retry());
+  expect(refresh).toHaveBeenCalledTimes(1);
+});

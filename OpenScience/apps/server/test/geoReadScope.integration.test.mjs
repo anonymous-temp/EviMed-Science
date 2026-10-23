@@ -147,7 +147,7 @@ test("a diagnosis keeps its error page on the selection snapshot during a concur
   const original = store.query.bind(store);
   let corrected = false;
   store.query = async (sql, params) => {
-    if (!corrected && sql.includes("SELECT e.status, e.severity")) {
+    if (!corrected && sql.includes("AS trace, e.status, e.severity")) {
       corrected = true;
       await database.pool.query("UPDATE evimed_geo.errors SET statement = 'Concurrent correction' WHERE id = 'e2'");
     }
@@ -273,10 +273,18 @@ test("native project and group reads retain comparison DTOs", options, async () 
   for (const what of ["project", "clusters"]) assert.ok((await service.runtimeRead(project, what, scope)).comparison);
 });
 
-test("claim aggregates include all matching errors before the independent error page", options, async () => {
+test("claim rows remain page bounded while the full summary counts every matching error", options, async () => {
   const view = await service.diagnosis(user, project.id, { round: "r2", errorLimit: 1 });
   assert.equal(view.errors.length, 1);
-  assert.equal(view.byClaim.reduce((sum, claim) => sum + claim.count, 0), 2);
+  assert.equal(view.byClaim.reduce((sum, claim) => sum + claim.count, 0), 1);
+  assert.equal(view.byClaimPage.partial, true);
+  assert.equal(view.byClaimPage.total, null);
+  assert.equal(view.errorSummary.total, 2);
+  const next = await service.diagnosis(user, project.id, { selectionRef: view.selection.reference, errorLimit: 1, errorOffset: view.errorPage.nextOffset });
+  assert.equal(next.errorSummary.total, 2);
+  assert.notEqual(next.errors[0].id, view.errors[0].id);
+  const searched = await service.diagnosis(user, project.id, { selectionRef: view.selection.reference, errorSearch: next.errors[0].statement });
+  assert.equal(searched.errors[0].id, next.errors[0].id);
 });
 
 test("raw citation coverage distinguishes question subsets without depending on judgement", options, async () => {

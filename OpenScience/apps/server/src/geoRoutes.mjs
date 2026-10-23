@@ -345,6 +345,13 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["rows", "contract", "requestKey", "note"]);
       return reply(parts.length === 4 ? await service.previewQuestions(user, id, body) : await service.saveQuestions(user, id, body));
     }
+    if (tab === "diagnosis" && parts.length === 4 && parts[3] === "feedback" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["snapshotId", "statement", "claimId", "assessmentVersion", "note", "requestKey", "selectionRef"]);
+      return reply(await service.submitDiagnosisFeedback(user, id, body), 202);
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[3] === "reviews" && method === "GET") {
+      return reply(await service.readDiagnosisReview(user, id, parts[4]));
+    }
     if (method === "POST" && tab === "diagnosis" && parts.length === 4 && parts[3] === "start") {
       const body = await bodyOf(req, maxJsonBytes, ["version", "requestKey"]);
       return reply(await service.startDiagnosis(user, id, body));

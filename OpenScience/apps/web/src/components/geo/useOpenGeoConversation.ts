@@ -60,14 +60,15 @@ export function useOpenGeoConversation() {
       const project = await getGeoProject(geoId);
       if (!current()) return false;
       if (project.projectId !== target.projectId) throw new Error("GEO project mismatch");
-      const sessionId = target.sessionId ?? project.sessionId ?? undefined;
+      const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
+      const selectedSession = sameProject ? new URLSearchParams(location.search).get("session") : null;
+      const sessionId = selectedSession || target.sessionId || project.sessionId || undefined;
       unsubscribe();
       let opened = false;
       await useProjectStore.getState().select(target.projectId, () => {
         opened = true;
         const intent = newRuntimeUiIntent(draft, sessionId);
         if (target.resultRevision) { intent.kind = "open"; intent.resultRevision = target.resultRevision; }
-        const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
         const params = new URLSearchParams(sameProject ? location.search : "");
         if (sameProject && !location.pathname.includes("/chat")) {
           const part = location.pathname.split("/")[4];

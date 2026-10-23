@@ -204,7 +204,7 @@ describe("one answer", () => {
     expect(record).toHaveTextContent("它需要每天注射一次");
     expect(record.querySelector("[data-geo-error-basis]")).toHaveTextContent("依据：玛仕度肽注射液说明书（国家药监局 2025）");
     expect(record.querySelector("[data-geo-error-source='baike.baidu.com']")).not.toBeNull();
-    expect(record).toHaveTextContent("修改百科词条");
+    expect(record).toHaveTextContent("baike.baidu.com");
     // the engines' words are the way to the answers; the one on this page leads back here
     expect(within(record).getByRole("link", { name: /它需要每天注射一次/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
   });
@@ -226,7 +226,7 @@ describe("one answer", () => {
     await userEvent.click(await screen.findByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
-    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: null });
+    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: "ses_geo_1" });
     expect(brief).toContain("它需要每天注射一次");
   });
 

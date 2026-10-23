@@ -1041,13 +1041,13 @@ export class GeoMeasureStore {
    * @param {string} errorId
    */
   async laterJudgedAnswers(errorId) {
-    const result = await this.query(`SELECT s.id, s.status, s.asked_at, f.statements FROM evimed_geo.errors e
+    const result = await this.query(`SELECT s.id, s.round_id, s.status, s.asked_at, f.statements FROM evimed_geo.errors e
         JOIN evimed_geo.snapshots s ON s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine
           AND s.asked_at > e.updated_at
         JOIN evimed_geo.facts f ON f.snapshot_id = s.id
       WHERE e.id = $1 AND f.judged_at IS NOT NULL
       ORDER BY s.asked_at DESC LIMIT 20`, [errorId]);
-    return result.rows.map((row) => ({ id: String(row.id), status: String(row.status), askedAt: iso(row.asked_at), statements: list(row.statements) }));
+    return result.rows.map((row) => ({ id: String(row.id), roundId: row.round_id ?? null, status: String(row.status), askedAt: iso(row.asked_at), statements: list(row.statements) }));
   }
 
   /** Open errors whose cited source is not attributed yet. @param {number} limit */

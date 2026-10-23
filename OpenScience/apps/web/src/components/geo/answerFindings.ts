@@ -33,7 +33,7 @@ const rank = (error: GeoErrorRow) => RANK[error.severity] ?? -1;
 const same = (left: string | null | undefined, right: string | null | undefined) => !!left && !!right && left.trim() === right.trim();
 
 /** The key of a claim: its id, else the sentence it was first seen as. */
-const claimKey = (error: GeoErrorRow) => error.claimId || `sentence:${error.statement.trim()}`;
+const claimKey = (error: GeoErrorRow) => error.fingerprint || error.claimId || `sentence:${error.statement.trim()}`;
 
 export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "errors">): AnswerFindings {
   const text = data.snapshot.answerText ?? "";
@@ -48,8 +48,10 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
   const findings: AnswerFinding[] = [];
   const spoken = new Set<string>();
   for (const statement of statements) {
-    if (findings.some((finding) => same(finding.sentence, statement.text))) continue;
-    const candidates = rows.filter((row) => (statement.claimId && row.claimId === statement.claimId) || same(row.statement, statement.text));
+    if (findings.some((finding) => same(finding.sentence, statement.text) && JSON.stringify(finding.statement?.applicability ?? null) === JSON.stringify(statement.applicability ?? null))) continue;
+    const candidates = rows.filter(row => ((statement.claimId && row.claimId === statement.claimId) || ((!statement.claimId || !row.claimId) && same(row.statement, statement.text)))
+      && (statement.claimVersion == null || row.claimVersion == null || statement.claimVersion === row.claimVersion)
+      && (!statement.applicability || !row.applicability || JSON.stringify(statement.applicability) === JSON.stringify(row.applicability)));
     const error = best(candidates);
     for (const row of candidates) spoken.add(claimKey(row));
     findings.push({ sentence: statement.text.trim(), statement, error });

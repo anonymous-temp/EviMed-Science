@@ -390,3 +390,21 @@ test("the service renames the owner's project for an editor, after the GEO row i
   await assert.rejects(geo.updateProject({ id: "owner" }, "geo_mine", { name: "x" }), { status: 503, code: "geo_unavailable" });
   assert.equal(calls.length, 1, "a refusal wrote nothing more");
 });
+
+test('structured judgment feedback keeps its exact fields and review history stays on the authorized service boundary', async () => {
+  const calls = [];
+  const service = {
+    allows: () => true,
+    submitDiagnosisFeedback: async (user, id, input) => { calls.push({ user, id, input }); return { id: 'feedback', jobId: 'job' }; },
+    readDiagnosisReview: async (user, id, snapshotId) => { calls.push({ user, id, snapshotId }); return { feedback: [] }; },
+  };
+  const { routes } = fixture({ service });
+  const body = { snapshotId: 'snap1', statement: 'Original sentence', claimId: 'claim1', assessmentVersion: 'a'.repeat(64), note: 'Different conditions', requestKey: 'request_123' };
+  const post = response();
+  await routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', body), post);
+  assert.equal(post.status, 202); assert.deepEqual(calls[0].input, body);
+  const get = response();
+  await routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1'), get);
+  assert.equal(calls[1].snapshotId, 'snap1');
+  await assert.rejects(routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', { ...body, resolved: true }), response()), { status: 400 });
+});

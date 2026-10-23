@@ -1,4 +1,4 @@
-import { GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
+import { canonicalJson, GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -295,7 +295,7 @@ export function quantityTokens(value) {
  * @property {{ userId: string, projectId: string }} owner   the GEO project's account and control-plane project, charged for the call
  * @property {Record<string, any>} product
  * @property {Array<Record<string, any>>} competitors
- * @property {Array<{ id: string, key?: string | null, statement: string, quote: string, sourceRef?: string, sourceKind?: string | null,
+ * @property {Array<{ id: string, version?: number | null, key?: string | null, statement: string, quote: string, sourceRef?: string, sourceKind?: string | null,
  *   inLabel?: boolean | null, cardId?: string | null, cardClaimId?: string | null, cardRevision?: number | null, population?: string | null, elements?: Record<string, any>,
  *   evidenceLevel?: string | null, validUntil?: string | null }>} claims
  *   the verified claims of the project's cards when it has any, else its claim table
@@ -305,6 +305,7 @@ export function quantityTokens(value) {
  * @property {{ text: string, pool?: string | null, journeyStage?: string | null }} question
  * @property {"geo" | "evolution"} [purpose]
  * @property {string} [missionId]
+ * @property {{ statement: string, note: string }} [reviewFeedback]
  * @property {string} answer   the stored answer text
  */
 
@@ -338,7 +339,7 @@ export function buildJudgeInput(input) {
   const { body } = stripPageChrome(input.answer);
   const shown = body.length > GEO_JUDGE_ANSWER_CHARS ? body.slice(0, GEO_JUDGE_ANSWER_CHARS) : body;
   const links = (input.links ?? []).filter((link) => link?.url).slice(0, LINKS_SHOWN).map((link, index) => ({ id: `L${index + 1}`, url: String(link.url), title: String(link.title ?? "").slice(0, 200) }));
-  const item = { question: input.question.text, pool: input.question.pool ?? null, journeyStage: input.question.journeyStage ?? null, answer: shown, links };
+  const item = { question: input.question.text, pool: input.question.pool ?? null, journeyStage: input.question.journeyStage ?? null, answer: shown, links, ...(input.reviewFeedback ? { reviewFeedback: input.reviewFeedback } : {}) };
   return {
     claims,
     links,
@@ -432,15 +433,16 @@ export function verifyJudgement(answer, built, input) {
     const text = String(raw?.text ?? "").trim();
     const drop = (/** @type {string} */ reason) => dropped.push({ what: "statement", reason, text: text.slice(0, 300) });
     if (!text || !present(text)) { drop(`statement_${absent(text)}`); continue; }
-    const key = compactText(text);
+    const wordingKey = compactText(text);
     const verdict = String(raw?.verdict ?? "");
     if (!GEO_STATEMENT_VERDICTS.includes(verdict)) { drop("verdict_invalid"); continue; }
     const alias = raw?.claim == null ? "" : String(raw.claim).trim();
     const claim = alias ? claimsByAlias.get(alias) ?? null : null;
+    const key = wordingKey + canonicalJson([claim?.population ?? null, claim?.elements ?? null]);
     // The topic is a closed word; anything else is 其他, which counts in the overall accuracy and not in the specified information's.
     const topic = GEO_STATEMENT_TOPICS.includes(String(raw?.topic ?? "")) ? String(raw.topic) : "other";
     // Which version of which card claim the verdict was judged against is the claim's, filled here and never typed by the model.
-    const judgedAgainst = { topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
+    const judgedAgainst = { claimVersion: claim?.version ?? null, applicability: claim ? { population: claim.population ?? null, elements: claim.elements ?? null, inLabel: claim.inLabel ?? null, validUntil: claim.validUntil ?? null, evidenceLevel: claim.evidenceLevel ?? null } : null, topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
     if (verdict === "unverifiable") {
       keep(key, { text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
       continue;
@@ -781,7 +783,7 @@ export const GEO_REJUDGE_MAX_AGE_MS = 14 * 86_400_000;
  * @param {{ answerText: string | null, citations: any[] }} snapshot
  * @returns {GeoJudgeInput}
  */
-function judgeInputOf(context, question, snapshot) {
+export function judgeInputOf(context, question, snapshot) {
   return {
     owner: { userId: context.project.userId, projectId: context.project.projectId },
     product: context.judgeProduct ?? context.project.product,
@@ -802,7 +804,7 @@ function judgeInputOf(context, question, snapshot) {
  *   registry: ReturnType<typeof brandRegistry>, countedOwned: { domains?: string[], urls?: string[] }, at: Date,
  *   claims?: GeoJudgeInput['claims'] }} input
  */
-function factsOf({ snapshot, judged, registry, countedOwned, at, claims = [] }) {
+export function factsOf({ snapshot, judged, registry, countedOwned, at, claims = [] }) {
   const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
     valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
   const code = parseAnswer({

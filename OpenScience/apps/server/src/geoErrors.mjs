@@ -4,8 +4,8 @@
  *
  * Hidden knowledge:
  *
- * - **One error per fact per engine.** The fingerprint is the claim the
- *   statement contradicts (its `claim_key`, stable across claim versions),
+ * - **One error per fact version and applicability per engine.** The fingerprint is the claim the
+ *   statement contradicts, its version and its recorded clinical conditions,
  *   not the statement's wording: an engine phrases the same mistake
  *   differently every time it is asked, and a wording fingerprint would turn
  *   one error into ten rows and make the confirmation round below never see
@@ -39,7 +39,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { GEO_METRICS, geoConstant, isOurCitation } from "@evimed/domain";
+import { GEO_METRICS, geoConstant, isOurCitation, canonicalJson } from "@evimed/domain";
 import { compactText } from "./geoParse.mjs";
 import { enqueueRound, measurableEngines } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -70,13 +70,14 @@ const ROUTES = Object.freeze({
 });
 
 /**
- * The error's fingerprint: the contradicted claim's key, or (only without
- * one) the statement's folded wording.
- * @param {{ claimKey?: string | null, text?: string | null }} statement
+ * The error's identity retains the actual claim version and applicability.
+ * Historical rows without these fields keep their legacy identity.
+ * @param {{ claimKey?: string | null, text?: string | null, claimVersion?: number | null, applicability?: any }} statement
  */
 export function errorFingerprint(statement) {
   const basis = statement.claimKey ? `claim:${statement.claimKey}` : `text:${compactText(statement.text)}`;
-  return createHash("sha256").update(basis).digest("hex").slice(0, 32);
+  const conditions = statement.applicability === undefined && statement.claimVersion === undefined ? "" : canonicalJson({ version: statement.claimVersion ?? null, applicability: statement.applicability ?? null });
+  return createHash("sha256").update(basis + conditions).digest("hex").slice(0, 32);
 }
 
 const MARKERS = [/\[(\d{1,2})\]/gu, /\[\^(\d{1,2})\]/gu, /【(\d{1,2})】/gu, /\[citation:(\d{1,2})\]/gu, /\^(\d{1,2})\^/gu, /［(\d{1,2})］/gu];
@@ -259,7 +260,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
     const trace = await traceError(deps.store, snapshot, String(statement.text), context.owned, now);
     const { error, created } = await deps.store.upsertError({
       id: randomId("ge_"), userId: snapshot.userId, geoProjectId: snapshot.geoProjectId,
-      fingerprint: errorFingerprint({ claimKey: statement.claimKey ?? claim?.key ?? null, text: statement.text }),
+      fingerprint: errorFingerprint({ ...statement, claimKey: statement.claimKey ?? claim?.key ?? null }),
       engine: snapshot.engine, questionId: snapshot.questionId, snapshotId: snapshot.id, statement: String(statement.text).slice(0, 1_000),
       errorType: statement.errorType, severity: statement.severity, claimId: statement.claimId, evidenceQuote: statement.evidence ?? null,
       confirm: null, citedSource: trace.citedSource, action: trace.action, responsible: trace.responsible,
@@ -289,7 +290,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
 
 /** Whether a set of statements repeats an error. @param {Array<Record<string, any>>} statements @param {string} fingerprint */
 function repeatsError(statements, fingerprint) {
-  return statements.some((statement) => statement?.verdict === "wrong" && errorFingerprint({ claimKey: statement.claimKey ?? null, text: statement.text }) === fingerprint);
+  return statements.some((statement) => statement?.verdict === "wrong" && (errorFingerprint(statement) === fingerprint || errorFingerprint({ claimKey: statement.claimKey, text: statement.text }) === fingerprint));
 }
 
 /**
@@ -446,6 +447,14 @@ export async function tickErrors(deps) {
     const later = await store.laterJudgedAnswers(error.id);
     const latest = later.find((answer) => answer.status === "valid");
     if (!latest || repeatsError(latest.statements, error.fingerprint)) continue;
+    const originalStatements = (await store.query("SELECT statements FROM evimed_geo.facts WHERE snapshot_id=$1", [error.firstSnapshotId])).rows[0]?.statements ?? [];
+    const original = originalStatements.find(statement => statement.claimId === error.claimId && errorFingerprint(statement) === error.fingerprint);
+    // A later answer under another claim version or another population cannot establish this error's disappearance.
+    if (original?.claimVersion != null && !latest.statements.some(statement => statement.claimId === original.claimId
+      && statement.claimVersion === original.claimVersion && canonicalJson(statement.applicability ?? null) === canonicalJson(original.applicability ?? null))) {
+      const basis = latest.roundId ? (await store.round(latest.roundId))?.ref?.evaluationBasis?.claims ?? [] : [];
+      if (!basis.some(claim => claim.id === original.claimId && claim.version === original.claimVersion)) continue;
+    }
     await store.updateError(error.id, { status: "closed", closed_snapshot_id: latest.id, updated_at: now });
     counts.closed += 1;
   }

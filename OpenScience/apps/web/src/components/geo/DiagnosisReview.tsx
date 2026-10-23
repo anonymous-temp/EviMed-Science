@@ -1,0 +1,94 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router";
+import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction } from "@/lib/geoClient";
+import { safeWebHref } from "@/lib/readPages";
+import { webErrorMessage } from "@/lib/apiClient";
+import { Button } from "@/components/ui/Button";
+import { Textarea } from "@/components/ui/Input";
+import { Section } from "@/components/ui/Section";
+import { Note } from "@/components/ui/Note";
+import { useGeoLoad } from "./geoProjectData";
+import { useOpenGeoConversation } from "./useOpenGeoConversation";
+import { ErrorCorrections } from "./spine/ErrorDrawer";
+import { claimRows, correctionBrief } from "./spine/errorModel";
+import { answerPath } from "./tabs/geoTabText";
+import { useGeoPath } from "./useGeoPath";
+
+const verdictWords: Record<string, string> = { wrong: "讲错", correct: "讲对", unverifiable: "尚无法判定" };
+const statusWords: Record<string, string> = { queued: "等待复核", running: "正在复核", succeeded: "复核完成", failed: "复核暂未完成" };
+
+/** Full review remains alongside the original answer. Feedback never hides or resolves an error. */
+export function DiagnosisReview({ geoId, data, project, actions }: { geoId: string; data: GeoAnswer; project: GeoProject; actions: readonly GeoAction[] }) {
+  const review = useGeoLoad(`judgment-review:${geoId}:${data.snapshot.id}`, () => getGeoDiagnosisReview(geoId, data.snapshot.id));
+  const open = useOpenGeoConversation();
+  const path = useGeoPath();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+  const ready = review.state.kind === "ready" ? review.state.data : null;
+  const pending = ready?.feedback.some(row => row.status === "queued" || row.status === "running");
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(review.reload, 5000);
+    return () => window.clearInterval(timer);
+  }, [pending, review.reload]);
+  if (review.state.kind === "error") return <Note action={<Button variant="secondary" size="sm" onClick={review.reload}>重试</Button>}>无法读取复核记录。</Note>;
+  if (!ready) return <Note action={null}>正在读取逐句核查与复核记录。</Note>;
+  const canEdit = !project.access?.abilities || project.access.abilities.includes("edit");
+  const canRun = !project.access?.abilities || project.access.abilities.includes("run");
+  const original = ready.original?.statements ?? ready.history.at(-1)?.assessment?.statements ?? ready.current?.statements ?? data.facts?.statements ?? [];
+  const statements = [...new Map([...original, ...(ready.current?.statements ?? [])].map(row => [`${row.claimId}:${row.text}`, row])).values()];
+  const product = project.product?.brandName || project.product?.genericName || project.name;
+  const send = async (statement: GeoStatementFact) => {
+    if (!ready.assessmentVersion || !note.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await submitGeoDiagnosisFeedback(geoId, { snapshotId: data.snapshot.id, statement: statement.text, claimId: statement.claimId,
+        assessmentVersion: ready.assessmentVersion, note, requestKey, selectionRef: project.selection?.reference ?? null });
+      setEditing(null); setNote(""); setRequestKey(crypto.randomUUID()); review.reload();
+    } catch (cause) {
+      setError(webErrorMessage(cause, { fallback: "无法提交反馈，请刷新判定后重试。" }));
+      review.reload();
+    } finally { setBusy(false); }
+  };
+  const act = (statement: GeoStatementFact, action: "conclusion" | "treatment") => {
+    const rows = data.errors.filter(row => row.claimId === statement.claimId);
+    const claim = claimRows(rows)[0] ?? { engines: [data.snapshot.engine], statement: statement.text, evidenceQuote: statement.evidence, rows };
+    const linked = actions.filter(action => action.need.errorIds.some(id => rows.some(row => row.id === id)));
+    const context = { actionKeys: linked.map(action => action.key), articleIds: [...new Set(linked.flatMap(action => action.articleIds))], snapshotId: data.snapshot.id, questionId: data.question?.id ?? null, question: data.question?.text ?? null,
+      assessmentVersion: ready.assessmentVersion, claimId: statement.claimId, statement: statement.text, selectionRef: project.selection?.reference ?? null };
+    void open({ projectId: project.projectId, sessionId: project.sessionId }, `${correctionBrief(claim, product, action)}\n当前复核上下文：${JSON.stringify(context)}`);
+  };
+  return <Section title="逐句诊断与反馈" level="section">
+    <div className="flex flex-col gap-6">
+      {statements.map(statement => {
+        const prior = original.find(row => row.text === statement.text && row.claimId === statement.claimId);
+        const current = (ready.current?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId);
+        const claimDetail = ready.claimDetails?.find(row => row.id === statement.claimId);
+        const applicable = claimDetail ?? (statement as GeoStatementFact & { applicability?: { population?: string | null; elements?: Record<string, unknown> | null } }).applicability;
+        const feedback = ready.feedback.filter(row => row.statement === statement.text && row.original.claimId === statement.claimId);
+        const statementKey = `${statement.claimId}:${statement.text}`;
+        return <section key={`${statement.claimId}:${statement.text}`} className="flex flex-col gap-3 border-b border-border pb-4">
+          <p className="text-body text-text">“{statement.text}”</p>
+          <p className="text-ui text-text-2">原判定：{verdictWords[prior?.verdict ?? statement.verdict]} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
+          <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
+          {claimDetail && <p className="text-ui text-text-2">依据：{safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据"} · 正确说法：{claimDetail.statement}</p>}
+          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核验引文"}</p>
+          {canEdit && canRun && ready.assessmentVersion && current && <Button variant="secondary" size="sm" onClick={() => { setEditing(statementKey); setNote(""); setRequestKey(crypto.randomUUID()); }}>反馈并复核判定</Button>}
+          {editing === statementKey && <div className="flex flex-col gap-2">
+            <Textarea label="反馈理由与适用条件" value={note} maxLength={4000} onChange={event => setNote(event.target.value)} />
+            <div className="flex gap-2"><Button size="sm" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>提交复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
+          </div>}
+          {canRun && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" onClick={() => act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
+          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && row.claimId === statement.claimId)))} canRun={canRun} onAsk={() => act(statement, "conclusion")} />
+          {ready.history.length > 1 && <div className="text-caption text-text-3">{ready.history.slice().reverse().map((entry, index) => { const item = (entry.assessment?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId); return <p key={entry.version}>第 {index + 1} 次判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
+          {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => item.text === row.statement && item.claimId === row.original.claimId)?.verdict ?? "unverifiable"]}</p>}</div>)}
+        </section>;
+      })}
+      {error && <Note action={<Button variant="secondary" size="sm" onClick={review.reload}>刷新判定</Button>}>{error}</Note>}
+      {data.errors.filter(row => row.firstSnapshotId && row.firstSnapshotId !== data.snapshot.id).map(row => <Link key={row.id} to={path(answerPath(geoId, row.firstSnapshotId!))} className="text-link">相近错误的原始回答：{row.statement}</Link>)}
+    </div>
+  </Section>;
+}

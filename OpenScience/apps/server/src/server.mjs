@@ -388,6 +388,7 @@ import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { createGeoDiagnosisReview } from "./geoDiagnosisReview.mjs";
 import { createGeoLearningSignals } from "./geoLearningSignals.mjs";
 import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
 import { tickParse as tickGeoParse } from "./geoJudge.mjs";
@@ -5302,6 +5303,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       } : null,
     };
+    geoParts.service.diagnosisReview = createGeoDiagnosisReview({ database: productDatabase, store: measureDeps.store, config, usageLedger, learning: geoLearning });
     geoParts.measureState = measureDeps.state;
     // The market's read-only ranking beside an action: the function the market places by, over the same rows (nothing is ordered by asking).
     geoParts.service.spine.placementPreview = (/** @type {any} */ input) => previewGeoOutlets(marketDeps, input);
@@ -5371,7 +5373,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       claimDay: (loop, day) => running.claimDay(loop, day),
       loops: {
         probe: () => tickGeoProbe(measureDeps),
-        parse: () => tickGeoParse(measureDeps),
+        parse: async () => {
+          await geoParts.service.diagnosisReview?.tick();
+          return tickGeoParse(measureDeps);
+        },
         metrics: () => tickGeoMetrics(measureDeps),
         errors: () => tickGeoErrors(measureDeps),
         ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),

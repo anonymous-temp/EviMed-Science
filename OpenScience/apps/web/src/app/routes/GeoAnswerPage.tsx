@@ -19,6 +19,7 @@ import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DiagnosisReview } from "@/components/geo/DiagnosisReview";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
 import { useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
 import { useGeoEvidence } from "@/components/geo/geoProjectData";
@@ -217,8 +218,7 @@ function Answer({
     const draft = lead
       ? correctionBrief(lead, productName)
       : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
-    // A request about one answer opens a fresh conversation: the project's latest may be a strategy run's own session.
-    void open({ projectId: target.projectId, sessionId: null }, draft).finally(() => setAsking(false));
+    void open({ projectId: target.projectId, sessionId: target.sessionId }, draft).finally(() => setAsking(false));
   };
   const groupMap = useMemo(() => questionGroupIndex(groups), [groups]);
   const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;
@@ -265,6 +265,7 @@ function Answer({
           <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} onOpen={(key) => drawer.open({ error: key })} />
           <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
+          {project && <DiagnosisReview geoId={geoId} data={data} project={project} actions={actions} />}
           <Elsewhere geoId={geoId} current={snapshot.id} errors={found.elsewhere} unplaced={marked.unplaced} findings={found.findings} />
         </article>
       </div>

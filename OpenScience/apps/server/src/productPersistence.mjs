@@ -34,7 +34,7 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
   "wiki-compile",
   // One document's copy in OpenViking made to agree with PostgreSQL (`openVikingSourceSync.mjs`).
-  "ov-resource-sync"]);
+  "ov-resource-sync", "geo-judgment-recheck"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -376,6 +376,15 @@ BEGIN
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
   END IF;
 END $programme_job_kind$;
+DO $geo_review_job_kind$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+    AND c.conname='product_jobs_kind_check' AND position('''geo-judgment-recheck''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $geo_review_job_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
 -- deployment (the availability projection's evidence). One row per subject and exact version, folded

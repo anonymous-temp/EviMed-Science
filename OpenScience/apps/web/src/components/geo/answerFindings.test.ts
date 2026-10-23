@@ -63,3 +63,13 @@ describe("what is wrong in an answer", () => {
     expect(answerFindings({ snapshot: { ...answerFilled.snapshot, answerText: null }, facts: null, errors: [] })).toEqual({ findings: [], elsewhere: [] });
   });
 });
+
+it("does not merge equal sentence text across distinct applicable populations", () => {
+  const text = "同一句原始回答";
+  const applicability = (population: string) => ({ population, elements: { form: "tablet" }, inLabel: true, evidenceLevel: null, validUntil: null });
+  const data = answer({ answerText: text, facts: { ...answerFilled.facts!, statements: [
+    { ...answerFilled.facts!.statements[0], text, claimId: "adult", applicability: applicability("Adults") },
+    { ...answerFilled.facts!.statements[0], text, claimId: "child", applicability: applicability("Children") },
+  ] }, errors: [error({ id: "adult-error", statement: text, claimId: "adult", applicability: applicability("Adults") }), error({ id: "child-error", statement: text, claimId: "child", applicability: applicability("Children") })] });
+  expect(answerFindings(data).findings.map(row => row.error?.id)).toEqual(["adult-error", "child-error"]);
+});

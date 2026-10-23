@@ -1,8 +1,9 @@
 import { useGeoPath } from "../useGeoPath";
 import { useGeoDestinationPath } from "../useGeoPath";
+import { Link } from "react-router";
+import { clusterName } from "./clusterModel";
 import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
-import { Link } from "react-router";
 import { getGeoArticles, type GeoAction, type GeoArticle, type GeoProject } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
@@ -13,19 +14,17 @@ import { SeverityBadge, SEVERITY_WORDS } from "@/components/ui/SeverityBadge";
 import { useGeoLoad } from "../geoProjectData";
 import {
   engineName,
-  GEO_ERROR_ACTION_WORDS,
   GEO_ERROR_STATUS_WORDS,
   GEO_ERROR_TYPE_WORDS,
   GEO_STABILITY_WORDS,
 } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
-import { answerPath, CITED_ATTRIBUTE_WORDS } from "../tabs/geoTabText";
+import { answerPath } from "../tabs/geoTabText";
 import { articleMeta, articleStatusLine, whatToDo } from "./actionModel";
 import { ClusterLink } from "./ClusterLink";
-import { clusterName } from "./clusterModel";
 import { StatusMark } from "./ActionRow";
 import { GEO_ACTION_PARAM, GEO_SOURCE_PARAM } from "./drawerParams";
-import { correctionBrief, ERROR_TRACE_WORDS, errorTrace, type ClaimRow } from "./errorModel";
+import { correctionBrief, errorTrace, ERROR_TRACE_WORDS, type ClaimRow } from "./errorModel";
 import { useArticleActions } from "./useArticleActions";
 
 /** The question group a question belongs to, from the question set. */
@@ -59,27 +58,17 @@ export function ErrorDrawer({
   onClose: () => void;
 }) {
   const path = useGeoPath();
-  const geoDestinationPath = useGeoDestinationPath();
+  const destination = useGeoDestinationPath();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const abilities = project.access?.abilities;
   const canRun = !abilities || abilities.includes("run");
   const corrections = useMemo(() => actions.filter((action) => action.need.errorIds.some((id) => claim.rows.some((row) => row.id === id))), [actions, claim.rows]);
-  const groups = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const row of claim.rows) {
-      const group = row.questionId ? groupOf.get(row.questionId) : undefined;
-      if (group) seen.set(group.id, group.name);
-    }
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
-  }, [claim.rows, groupOf]);
 
   const correct = () => {
     setBusy(true);
-    // A request about one wrong statement opens a fresh conversation: the project's latest may be a strategy run's own session
-    // (r19-geos hand-off §9.5c).
-    void open({ projectId: project.projectId, sessionId: null }, correctionBrief(claim, product)).finally(() => setBusy(false));
+    void open({ projectId: project.projectId, sessionId: project.sessionId }, correctionBrief(claim, product)).finally(() => setBusy(false));
   };
 
   return (
@@ -114,7 +103,7 @@ export function ErrorDrawer({
 
         <Section title="各引擎怎么说" count={`${claim.rows.length} 条`} level="sub">
           <List label="各引擎的原话" divided>
-            {claim.rows.map((row) => {
+            {claim.rows.slice(0, 3).map((row) => {
               const answer = row.firstSnapshotId ?? row.snapshotId;
               const group = row.questionId ? groupOf.get(row.questionId) : undefined;
               return (
@@ -137,51 +126,17 @@ export function ErrorDrawer({
           </List>
         </Section>
 
-        <Section title="它是从哪里来的" level="sub">
-          <List label="每个引擎引用的出处" divided>
-            {claim.rows.map((row) => {
-              const trace = errorTrace(row);
-              const cited = row.citedSource;
-              const attribute = cited?.attribute ? CITED_ATTRIBUTE_WORDS[cited.attribute] ?? null : null;
-              const handling = row.action ? GEO_ERROR_ACTION_WORDS[row.action] : null;
-              return (
-                <li key={row.id} data-geo-error-trace={trace} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-ui text-text">
-                  <span className="w-16 shrink-0 text-text-2">{engineName(row.engine)}</span>
-                  <span className="min-w-0 flex-1">
-                    {trace === "traced" && cited?.domain ? (
-                      <>
-                        <Link
-                          to={geoDestinationPath(geoId, { tab: "sources" }, { [GEO_SOURCE_PARAM]: cited.domain })}
-                          data-geo-error-source={cited.domain}
-                          className="rounded text-link hover:underline hover:underline-offset-4"
-                        >
-                          {cited.domain}
-                        </Link>
-                        {attribute && <span className="text-text-3">{`（${attribute}）`}</span>}
-                      </>
-                    ) : <span className="text-text-2">{ERROR_TRACE_WORDS[trace]}</span>}
-                  </span>
-                  {handling && <span className="shrink-0 text-caption text-text-3">{handling}</span>}
-                </li>
-              );
-            })}
-          </List>
-          {groups.length > 0 && (
-            <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-ui text-text-2">
-              <span>在这些问题群的回答里出现</span>
-              {groups.map((group) => <ClusterLink key={group.id} groupId={group.id}>{clusterName(group)}</ClusterLink>)}
-            </p>
-          )}
-        </Section>
-
-        <Corrections geoId={geoId} project={project} corrections={corrections} canRun={canRun} onAsk={correct} />
+        <div className="flex flex-col gap-2 text-ui text-text-2">
+          {claim.rows.slice(0, 3).map(row => row.citedSource?.domain ? <Link key={row.id} data-geo-error-source={row.citedSource.domain} to={destination(geoId, { tab: "sources" }, { [GEO_SOURCE_PARAM]: row.citedSource.domain })} className="text-link">{row.citedSource.domain}</Link> : <span key={row.id} data-geo-error-trace={errorTrace(row)}>{ERROR_TRACE_WORDS[errorTrace(row)]}</span>)}
+        </div>
+        <ErrorCorrections geoId={geoId} project={project} corrections={corrections.slice(0, 1)} canRun={false} onAsk={correct} />
       </div>
     </Drawer>
   );
 }
 
 /** What is being done about the claim: the actions that name it, and the articles they wrote. */
-function Corrections({
+export function ErrorCorrections({
   geoId,
   project,
   corrections,

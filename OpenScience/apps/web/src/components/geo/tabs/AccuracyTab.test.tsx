@@ -209,9 +209,9 @@ describe("准确与安全: the list is by claim", () => {
     await userEvent.click(within(bare).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
-    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: null });
+    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: "ses_geo_1" });
     expect(brief).toContain("哺乳期可以正常使用信尔美");
-    expect(brief).toContain("说明书：哺乳期妇女不得使用本品。");
+    expect(brief).toContain("原文：哺乳期妇女不得使用本品。");
     expect(screen.queryByRole("button", { name: "问 AI" })).toBeNull();
   });
 
@@ -234,7 +234,7 @@ describe("准确与安全: the list is by claim", () => {
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
     // Five on the first screen: the two pictures above carry rows of their own, and a data page's first screen holds twenty.
     expect(claimKeys()).toHaveLength(5);
-    expect(screen.getByText("这里列出了 30 条讲错，还有 74 条没有列出。")).toBeInTheDocument();
+    expect(client.getGeoDiagnosis).toHaveBeenCalledWith("geo_1", expect.any(Object), expect.objectContaining({ errorLimit: 20, errorOffset: 0 }));
     await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 25 条说法" }));
     expect(claimKeys()).toHaveLength(15);
     await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 15 条说法" }));
@@ -367,7 +367,7 @@ describe("准确与安全: a claim's drawer", () => {
     await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: /哺乳期可以正常使用信尔美/ }));
     const record = (await screen.findByRole("dialog")).querySelector("[data-geo-error-drawer]") as HTMLElement;
     expect(within(record).getByText("这条说法还没有纠错稿。")).toBeInTheDocument();
-    await userEvent.click(within(record).getByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
   });
 

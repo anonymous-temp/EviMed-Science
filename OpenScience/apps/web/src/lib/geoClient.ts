@@ -361,6 +361,8 @@ export interface GeoErrorRow {
   firstSnapshotId?: string | null;
   /** Present on the answer page's rows: the claim's quote the statement contradicts. */
   evidenceQuote?: string | null;
+  claimVersion?: number | null;
+  applicability?: { population: string | null; elements: Record<string, unknown> | null; inLabel: boolean | null; validUntil: string | null; evidenceLevel: string | null } | null;
   claimId?: string | null;
   questionId?: string | null;
   /** The claim's fingerprint: every engine that tells the same wrong claim carries the same one (the key the list is grouped by). */
@@ -409,7 +411,22 @@ export interface GeoErrorCounts {
   closed: number;
   severe: number;
 }
+export interface GeoErrorSummary {
+  unit: "error_rows";
+  total: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  byEngine: Record<string, number>;
+  byStatus: Record<string, number>;
+  byTrace: Record<string, number>;
+  byEngineSeverity: Record<string, number>;
+}
+export interface GeoErrorPage { offset: number; limit: number; total: number; shown: number; more: boolean; nextOffset: number | null }
+export interface GeoErrorFilters { errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
 export interface GeoDiagnosis extends GeoScopedView {
+  errorSummary?: GeoErrorSummary;
+  scopeErrorSummary?: GeoErrorSummary;
+  errorPage?: GeoErrorPage;
   round: (GeoRoundRef & {
     surface: Record<string, unknown> | null;
     planned: number | null;
@@ -451,6 +468,8 @@ export interface GeoBrandFact {
   count: number;
 }
 export interface GeoStatementFact {
+  claimVersion?: number | null;
+  applicability?: GeoErrorRow["applicability"];
   text: string;
   verdict: "correct" | "wrong" | "unverifiable";
   claimId: string | null;
@@ -1249,9 +1268,26 @@ export function unmeasureGeoQuestion(geoId: string, questionId: string) {
   return productRequest<{ version: number }>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
 }
 
-export function getGeoDiagnosis(geoId: string, scope?: GeoReadScope | string | null) {
-  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${geoReadScopeQuery(typeof scope === "string" ? { round: scope } : scope)}`);
+export function getGeoDiagnosis(geoId: string, scope?: GeoReadScope | string | null, filters?: GeoErrorFilters) {
+  const query = new URLSearchParams(geoReadScopeQuery(typeof scope === "string" ? { round: scope } : scope));
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    if (Array.isArray(value)) for (const item of value) query.append(key, item);
+    else if (value != null) query.set(key, String(value));
+  }
+  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${query.size ? `?${query}` : ""}`);
 }
+
+export interface GeoDiagnosisReview {
+  claimDetails?: Array<{ id: string; version: number; population: string | null; elements: Record<string, unknown>; sourceRef: string; sourceLabel: string | null; statement: string; quote: string }>;
+  original?: { statements: GeoStatementFact[] } | null;
+  assessmentVersion: string | null;
+  state: string;
+  current: { statements: GeoStatementFact[] } | null;
+  history: Array<{ version: string; state: string; assessment: { statements: GeoStatementFact[] } }>;
+  feedback: Array<{ id: string; statement: string; note: string; assessmentVersion: string; original: GeoStatementFact; status: string; result: { statements: GeoStatementFact[] } | null; error: { code: string } | null; createdAt: string }>;
+}
+export const getGeoDiagnosisReview = (geoId: string, snapshotId: string) => productRequest<GeoDiagnosisReview>(`${project(geoId)}/diagnosis/reviews/${encodeURIComponent(snapshotId)}`);
+export const submitGeoDiagnosisFeedback = (geoId: string, input: { snapshotId: string; statement: string; claimId: string | null; assessmentVersion: string; note: string; requestKey: string; selectionRef?: string | null }) => productRequest<{ id: string; jobId: string }>(`${project(geoId)}/diagnosis/feedback`, "POST", input);
 
 export function getGeoAnswer(geoId: string, snapshotId: string) {
   return productRequest<GeoAnswer>(`${project(geoId)}/answers/${id(snapshotId)}`);

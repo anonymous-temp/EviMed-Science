@@ -1654,6 +1654,14 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
+  "geo_review_unavailable",
+  "geo_assessment_changed",
+  "geo_review_basis_unavailable",
+  "geo_feedback_invalid",
+  "geo_feedback_request_conflict",
+  "geo_feedback_not_found",
+  "geo_review_failed",
+
   'geo_question_import_invalid', 'geo_diagnosis_invalid', 'geo_contract_missing',
   'geo_recovery_invalid', 'geo_recovery_exhausted', 'geo_recovery_acknowledgment_required',
   'geo_not_enabled',
@@ -2104,6 +2112,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
   geo_card_producer_required: '先在项目里写明由谁出品（企业或医生），才能生成产品专区的证据卡；结论库里的结论都还在。',
   geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
+  geo_review_unavailable: '暂时无法复核判定，请稍后重试。',
+  geo_assessment_changed: '判定已经更新，请刷新后提交反馈。',
+  geo_review_basis_unavailable: '原始判定依据暂不可用，已保留原判定和反馈。',
+  geo_feedback_invalid: '请选定具体原句并填写反馈理由。',
+  geo_feedback_request_conflict: '这次请求已有不同反馈，请刷新后重试。',
+  geo_feedback_not_found: '未找到这条反馈。',
+  geo_review_failed: '复核暂未完成，请稍后查看。',
   geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
   geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
   geo_article_review_invalid: '请重新打开稿件后再放行。',

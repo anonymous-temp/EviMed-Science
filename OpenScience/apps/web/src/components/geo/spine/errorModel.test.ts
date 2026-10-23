@@ -153,7 +153,7 @@ describe("corrections", () => {
     const [claim] = claimRows([row({ id: "a1", engine: "doubao" }), row({ id: "a2", engine: "kimi" })]);
     const brief = correctionBrief(claim, "信尔美");
     expect(brief).toContain("“每天注射一次”");
-    expect(brief).toContain("信尔美的说明书不一致");
-    expect(brief).toContain("说明书：每周一次。");
+    expect(brief).toContain("信尔美的相关依据");
+    expect(brief).toContain("原文：每周一次。");
   });
 });
