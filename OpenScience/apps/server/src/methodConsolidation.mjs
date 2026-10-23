@@ -1107,7 +1107,16 @@ export class MethodConsolidation {
 function inheritedProvenance(sources) {
   /** @param {string} field */
   const union = (field) => [...new Set(sources.flatMap((source) => (Array.isArray(source.payload?.provenance?.[field]) ? source.payload.provenance[field] : []).map((/** @type {any} */ item) => JSON.stringify(item))))].map((item) => JSON.parse(item));
-  const evidence = storedEvidenceQuotes({ evidence: union("evidence") });
+  // Each entry as its source stored it (the run and span beside the quotation), once per quotation, and only the ones that read as quotations.
+  /** @type {any[]} */
+  const evidence = [];
+  const seen = new Set();
+  for (const entry of union("evidence")) {
+    const [quote] = storedEvidenceQuotes({ evidence: [entry] });
+    if (!quote || seen.has(quote) || evidence.length >= 20) continue;
+    seen.add(quote);
+    evidence.push(entry);
+  }
   const feedbackEventIds = union("feedbackEventIds").filter((/** @type {unknown} */ id) => typeof id === "string").slice(0, 50);
   const results = union("results").slice(0, 40);
   return {

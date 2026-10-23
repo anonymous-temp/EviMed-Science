@@ -366,7 +366,7 @@ test("a merge that drops a quotation its sources store is not created, and the r
   const built = await second.sleep("job_2");
   assert.equal(built.builds, 1);
   const merged = await second.learning.getMethod("u1", learnedMethodId("merged-a"));
-  assert.deepEqual(merged.payload.provenance.evidence, [quote]);
+  assert.deepEqual(merged.payload.provenance.evidence, [{ runId: "run_1", seqRange: [1, 3], quote }], "the run and span travel with the quotation");
   assert.deepEqual(merged.payload.provenance.feedbackEventIds.sort(), ["fb_1", "fb_2"]);
   assert.deepEqual(merged.payload.provenance.mergedFrom.map((/** @type {any} */ source) => source.methodId).sort(), [learnedMethodId("span-a-one"), learnedMethodId("span-a-two")]);
 });
