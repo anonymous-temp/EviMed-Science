@@ -1,0 +1,46 @@
+{
+  "id": "c06-approval-names-the-approach",
+  "class": "work-order-confirmed-approach",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C06); every name, number and identifier is invented",
+  "expected": "The approach the person confirmed by name is kept: reports and other materials in three columns (background / method / conclusion).",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "把这个季度的项目复盘整理成一份报告。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "报告我用三栏表（背景 / 方法 / 结论）呈现。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "好，就按这个三栏表来，其他材料也这样。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "好的，之后的报告和其他材料都按“背景 / 方法 / 结论”三栏表呈现。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "correction",
+      "preference"
+    ],
+    "requireTextContains": [
+      "三栏"
+    ]
+  }
+}

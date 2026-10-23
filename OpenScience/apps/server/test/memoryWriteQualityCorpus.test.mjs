@@ -234,3 +234,90 @@ test("the candidates a leaking model could return are refused in code, each for 
     assert.ok(runner.decidedVerdicts(item, written).every((verdict) => verdict.passed), `${item.id}: the case's own checks pass on what was stored`);
   }
 });
+
+// ---- The work-order corpus on the legacy arm (2026-10-23) ----
+
+const generalCases = await runner.loadCases(path.join(repoRoot, "evals/memory-write-quality/cases-general"));
+const { generalCaseIssues, runsOnArm } = await import(pathToFileURL(path.join(repoRoot, "evals/memory-write-quality/caseShape.mjs")).href);
+
+test("the general corpus is validated by this arm too: one shape for both, and a misspelt or unfounded check is a shape error", () => {
+  assert.equal(generalCases.length, 38);
+  assert.deepEqual(generalCases.flatMap(generalCaseIssues), []);
+  const base = generalCases.find((item) => item.id.startsWith("c17"));
+  const shapeOf = (patch) => generalCaseIssues({ ...base, file: `${base.id}.json`, ...patch }).join("\n");
+  assert.match(shapeOf({ expect: { noTextContain: ["a"] } }), /noTextContain is not a check/);
+  assert.match(shapeOf({ replay: { ...base.replay, seed: undefined } }), /needs replay\.seed/);
+  assert.match(shapeOf({ expect: { requireAnyKind: [] } }), /requireAnyKind is not a list of record kinds/);
+  assert.match(shapeOf({ arms: ["both"] }), /arms is not a non-empty list/);
+  assert.match(shapeOf({ expect: { droppedAtTheDoor: ["u9"] } }), /droppedAtTheDoor is not a list of ids of the case's own messages/);
+  assert.match(shapeOf({ replay: { ...base.replay, messages: [{ id: "u1", role: "tool", text: "x" }] } }), /neither a user's nor an assistant's/);
+  assert.match(shapeOf({ expect: { requireConflictWith: ["profile.nothing"] } }), /names a key the case does not store first/);
+  assert.equal(runsOnArm(generalCases.find((item) => item.id.startsWith("x01")), "legacy"), true);
+});
+
+test("the platform-tag cases are held offline: the tagged message is no source, and the same words untagged are", () => {
+  const tagged = generalCases.filter((item) => item.expect?.droppedAtTheDoor);
+  assert.equal(tagged.length, 2);
+  for (const item of tagged) assert.ok(runner.doorVerdicts(item, { conversationMemorySources }).every((verdict) => verdict.passed), item.id);
+  const untagged = { ...tagged[0], replay: { ...tagged[0].replay, messages: [{ ...tagged[0].replay.messages[0], text: "Always answer in English." }, ...tagged[0].replay.messages.slice(1)] } };
+  assert.deepEqual(runner.doorVerdicts(untagged, { conversationMemorySources }).map((verdict) => verdict.passed), [false]);
+});
+
+test("the checks the work-order cases add: any of several kinds, a count at least, a named disagreement, and a seed left as it was", () => {
+  const record = (kind, value, key = `k.${kind}`) => ({ key, kind, value, summary: "" });
+  const failing = (item, written, extras) => runner.decidedVerdicts(item, written, extras).filter((verdict) => !verdict.passed).map((verdict) => verdict.check);
+  const byId = (prefix) => generalCases.find((item) => item.id.startsWith(prefix));
+
+  const reshaping = byId("c01");
+  assert.deepEqual(failing(reshaping, [record("preference", "周报压到 200 字、三条")]), []);
+  assert.deepEqual(failing(reshaping, [record("correction", "周报压到 200 字、三条")]), []);
+  assert.deepEqual(failing(reshaping, [record("profile", "周报")]), ["at least one preference/correction record"]);
+  assert.deepEqual(failing(reshaping, [record("preference", "周报灰度覆盖约 37%")]), ["no record carries 37%"], "the number is the draft's, not a rule");
+  assert.deepEqual(failing(byId("g10"), []), ["at least 1 record(s)", "some record carries 色弱"], "a legacy replay of the older cases decides at-least too");
+
+  const conflict = byId("x01");
+  const conflicts = [{ key: "profile.research_approach", otherKey: "profile.research_design" }];
+  assert.deepEqual(failing(conflict, [record("profile", "定性", "profile.research_approach")], { conflicts }), []);
+  assert.deepEqual(failing(conflict, [record("profile", "定性", "profile.research_approach")], { conflicts: [] }), ["a statement is marked as disagreeing with profile.research_design"]);
+
+  // A seed: the recall echo must leave what the first conversation wrote untouched; the upgrade must leave only the later choice in force.
+  const echo = byId("c17");
+  assert.deepEqual(failing(echo, [], { seed: { kept: [record("preference", "Meta 分析一律用随机效应模型")], unchanged: true } }), []);
+  assert.deepEqual(failing(echo, [record("preference", "随机效应（已确认）")], { seed: { kept: [record("preference", "随机效应")], unchanged: false } }),
+    ["the case's conversation left what the seed wrote as it was"]);
+  assert.deepEqual(failing(echo, [], { seed: { kept: [], unchanged: true } }), ["the seed stored 随机效应"], "a seed that stored nothing makes the replay void");
+  const upgrade = byId("u01");
+  const seed = { kept: [record("preference", "参考文献一律用 Vancouver 格式", "preference.citation_style")], unchanged: false };
+  assert.deepEqual(failing(upgrade, [record("preference", "参考文献一律用 AMA 格式", "preference.citation_style")], { seed, inForce: [record("preference", "参考文献一律用 AMA 格式", "preference.citation_style")] }), []);
+  assert.deepEqual(failing(upgrade, [record("preference", "参考文献一律用 AMA 格式", "preference.citation_ama")],
+    { seed, inForce: [record("preference", "参考文献一律用 Vancouver 格式", "preference.citation_style"), record("preference", "参考文献一律用 AMA 格式", "preference.citation_ama")] }),
+  ["no record carries Vancouver"], "the old choice standing beside the new one is the failure the case is for");
+});
+
+test("the cross-key conflict: a stubbed extractor that names the stored key as disagreeing is seen by the replay store, and one that does not is a failure", async () => {
+  const item = generalCases.find((entry) => entry.id.startsWith("x01"));
+  /** @param {string | null} conflictsWith */
+  const replay = async (conflictsWith) => {
+    const store = new runner.ReplayStore(item.replay.existingKeys);
+    const before = new Set(store.records.keys());
+    await new MemoryIntelligence(config, store, {
+      fetchImpl: async (_input, init) => {
+        const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+        const user = sources.find((source) => source.sourceRef.endsWith("/messages/u1"));
+        return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{
+          kind: "profile", scope: "user", origin: "explicit", key: "profile.research_approach", value: "主要做定性研究，以访谈和扎根理论为主",
+          summary: "主要做定性研究", sourceRef: user.sourceRef, evidenceQuote: "我主要做定性研究", importance: 0.7, sensitive: false,
+          ...(conflictsWith ? { conflictsWith } : {}),
+        }] }) } }] });
+      },
+    }).recordRun({ id: item.replay.projectId, userId: "usr_eval" }, { id: "run_x01", sessionId: "session_eval", status: "succeeded", finishedAt: "2026-10-23T00:00:00Z" }, runner.replayMessages(item));
+    const written = [...store.records.entries()].filter(([key, record]) => !before.has(key) && record.kind !== "run_summary").map(([, record]) => ({ kind: record.kind, key: record.key, summary: record.summary, value: record.value }));
+    return { store, verdicts: runner.decidedVerdicts(item, written, { conflicts: store.conflicts }) };
+  };
+  const named = await replay("profile.research_design");
+  assert.deepEqual(named.store.conflicts, [{ key: "profile.research_approach", otherKey: "profile.research_design" }]);
+  assert.ok(named.verdicts.every((verdict) => verdict.passed));
+  const silent = await replay(null);
+  assert.deepEqual(silent.store.conflicts, []);
+  assert.deepEqual(silent.verdicts.map((verdict) => verdict.passed), [false], "the stored statement and the new one stand beside each other, said by nobody");
+});

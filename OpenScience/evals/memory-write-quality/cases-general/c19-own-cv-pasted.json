@@ -1,0 +1,31 @@
+{
+  "id": "c19-own-cv-pasted",
+  "class": "refuse-own-cv-pasted",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C19); every name, number and identifier is invented",
+  "expected": "Nothing is written: what a pasted CV says is the document's; polishing it states nothing about the person.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "judge": "Is any line about the person's role, employer or publication count written from the pasted CV? None may be (owner decision: the CV is not the person's statement).",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "这是我的简历，帮我润色一下：毕业于某医科大学，现任心内科主治医师，发表 SCI 论文 8 篇。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "润色后的版本：毕业于某医科大学，现任心内科主治医师，已发表 SCI 论文 8 篇，研究方向集中在心血管疾病的临床诊疗。"
+      }
+    ]
+  },
+  "expect": {
+    "atMostRecords": 0
+  }
+}

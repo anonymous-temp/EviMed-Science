@@ -1,0 +1,40 @@
+{
+  "id": "x01-cross-key-conflict",
+  "class": "keep-cross-key-conflict",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, T1.13); every name, number and identifier is invented",
+  "expected": "The later statement that the person mainly does qualitative research is related to the stored one that they do quantitative cohort studies: the extractor names it as a disagreement (conflictsWith) and neither is silently overwritten.",
+  "decidable": true,
+  "arms": [
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "existingKeys": [
+      {
+        "scope": "user",
+        "kind": "profile",
+        "key": "profile.research_design",
+        "value": "我做定量的队列研究",
+        "summary": "做定量的队列研究"
+      }
+    ],
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我主要做定性研究，访谈和扎根理论为主。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，我会按定性研究的思路来协助您。"
+      }
+    ]
+  },
+  "expect": {
+    "requireConflictWith": [
+      "profile.research_design"
+    ]
+  }
+}

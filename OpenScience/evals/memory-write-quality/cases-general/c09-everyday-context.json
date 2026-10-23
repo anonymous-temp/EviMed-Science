@@ -1,0 +1,40 @@
+{
+  "id": "c09-everyday-context",
+  "class": "work-order-everyday-context",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C09); every name, number and identifier is invented",
+  "expected": "Ordinary life context is kept like any other fact: Chengdu, commutes by metro, cooks dinner at home, vegetarian; the two servings of this one request are not.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "我在成都，平时地铁通勤，晚饭多半自己做，吃素。帮我排一周晚餐，两人份。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，下面是两人份的一周素食晚餐安排：周一 麻婆豆腐配杂粮饭；周二 番茄菌菇汤；周三 干煸四季豆；周四 香菇青菜面；周五 豆腐蔬菜煲；周六 地三鲜；周日 清炒时蔬配南瓜粥。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "profile",
+      "preference"
+    ],
+    "requireTextContains": [
+      "成都",
+      "素"
+    ],
+    "noTextContains": [
+      "两人份"
+    ]
+  }
+}

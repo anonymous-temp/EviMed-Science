@@ -1,0 +1,39 @@
+{
+  "id": "c23-tool-result-narrated",
+  "class": "refuse-tool-result-narrated",
+  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C23); every name, number and identifier is invented",
+  "expected": "Nothing is written: a version the assistant read from a web page is not a fact about the person, and asking about Node.js does not make them a Node.js user.",
+  "decidable": true,
+  "arms": [
+    "native",
+    "legacy"
+  ],
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "Node.js 现在的 LTS 是哪个版本？"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "根据官网，当前 LTS 为 22.x。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "好的。"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "Node",
+      "22"
+    ],
+    "atMostRecords": 0
+  }
+}

@@ -129,3 +129,42 @@ test("an identifier has the shape of one whether or not its check digit adds up,
   assert.equal(maskIdentifiers("密码是abc"), "密码是abc", "too short to be one");
   assert.deepEqual(identifierShapesIn("我的数据库密码是 Xk9#mPq2Lz，帮我写"), ["credential"]);
 });
+
+test("a long run of the key alphabet is a secret by its shape and not by its length: names and commits stay, keys go (2026-10-23)", () => {
+  // The three that were deleted from a memory file with no message, and a commit: all runs of the key alphabet, none a secret.
+  for (const name of [
+    "数据文件命名规则：NOAC_AF_cohort_2018_2024_main_analysis_v2_final_cleaned，一律这样命名",
+    "文件夹用 pneumonia-associated-with-mechanical-ventilation-in-icu-patients 命名",
+    "报告文件一律叫 Quarterly_Sales_Report_FY2024_Final_Reviewed_V3_Approved_by_Finance",
+    "分支按 feature/payment-callback-timeout-fix-for-gateway-retry-strategy-v2 的写法",
+    "回退到提交 a94a8fe5ccb19ba61c4c0873d391e987982fbbd3",
+  ]) {
+    assert.deepEqual(identifierShapesIn(name), [], name);
+    assert.equal(maskIdentifiers(name), name, `${name} is not blanked`);
+  }
+  // What a key looks like is still one: random and dense, or a provider's own format, or a digest of something private.
+  for (const secret of [
+    "dGhpcyBpcyBhIHNlY3JldCB0b2tlbiB2YWx1ZSBmb3IgdGVzdGluZw0123456789",
+    "Xk9mP2vLq8wZr4NtYb7CdEfGhJkQs3UaVxWy5Z1o6",
+    "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    ["sk", "live", "51HxAbCdEfGhIjKlMnOpQrStUv"].join("_"),
+    "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "AKIAIOSFODNN7EXAMPLE",
+    ["xoxb", "1234567890123", "1234567890123", "AbCdEfGhIjKlMnOpQrStUvWx"].join("-"),
+    "d41d8cd98f00b204e9800998ecf8427e",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  ]) {
+    assert.deepEqual(identifierShapesIn(`备份用的是 ${secret} 这一串`), ["credential"], secret);
+    assert.equal(maskIdentifiers(`备份用的是 ${secret} 这一串`), "备份用的是 [已省略] 这一串", secret);
+  }
+  // A commit is exactly forty hex characters: one more or fewer is a key's length again, and a labelled one is caught by its label.
+  assert.deepEqual(identifierShapesIn("a94a8fe5ccb19ba61c4c0873d391e987982fbbd30"), ["credential"]);
+  assert.deepEqual(identifierShapesIn("password: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"), ["credential"]);
+});
+
+test("the kernel's own reminder envelope is machine text like the platform's, so the door in front of the engine drops it", () => {
+  const entry = PLATFORM_CONTEXT_TAGS.find((item) => item.tag === "system-reminder");
+  assert.ok(entry && entry.role === "injected" && entry.upstream && entry.emitters.length === 0, "named, injected, upstream");
+  assert.equal(carriesPlatformContext("<system-reminder>\nA skill is a reusable set of task-specific instructions.\n</system-reminder>"), true);
+  assert.equal(stripPlatformTags("<system-reminder>目录</system-reminder>你好"), "目录你好", "the envelope goes, as for any other tag");
+});
