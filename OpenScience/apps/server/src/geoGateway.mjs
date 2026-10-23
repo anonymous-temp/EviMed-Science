@@ -40,8 +40,7 @@ import {
   GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
-import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SOURCE_PAGE_FIELDS, GEO_SELECTION_MAX_ROWS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters, geoSourcePage } from "./geoReadScope.mjs";
-import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
+import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters, geoSourcePage } from "./geoReadScope.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
 
@@ -145,34 +144,15 @@ function readRequest(body) {
     if (!GEO_POOLS.includes(raw.pool)) throw gatewayError(400, "geo_read_filter_invalid", `filter.pool must be one of: ${GEO_POOLS.join(", ")}.`);
     filter.pool = raw.pool;
   }
-  if (raw.limit != null) {
-    if (!Number.isSafeInteger(raw.limit) || raw.limit < 1 || raw.limit > GEO_READ_MAX_ITEMS) {
-      throw gatewayError(400, "geo_read_filter_invalid", `filter.limit must be a whole number from 1 to ${GEO_READ_MAX_ITEMS}.`);
-    }
-    filter.limit = raw.limit;
-  }
-  if (raw.offset != null) {
-    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > GEO_SELECTION_MAX_ROWS) {
-      throw gatewayError(400, "geo_read_filter_invalid", `filter.offset must be a whole number from 0 to ${GEO_SELECTION_MAX_ROWS}.`);
-    }
-    filter.offset = raw.offset;
-  }
+  geoReadPage(raw);
+  if (raw.limit != null) filter.limit = raw.limit;
+  if (raw.offset != null) filter.offset = raw.offset;
   normalizeGeoReadScope(geoReadScopeInput(raw));
   geoErrorFilters(raw);
   geoSourcePage(raw);
   for (const name of GEO_SOURCE_PAGE_FIELDS) if (raw[name] != null) filter[name] = raw[name];
   for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
-  if (raw.member != null) {
-    const member = raw.member;
-    const fields = ["metricId", "scope", "engine", "pool", "groupId", "arm", "variant", "rival"];
-    if (!member || typeof member !== "object" || Array.isArray(member) || Object.keys(member).some((name) => !fields.includes(name))
-      || typeof member.metricId !== "string" || !/^M-[0-9]{2}[A-Z]?$/u.test(member.metricId)
-      || !["project", "pool", "engine", "pool_engine", "group", "arm"].includes(member.scope)
-      || Object.values(member).some((value) => value !== null && (typeof value !== "string" || value.length > 120))) {
-      throw gatewayError(400, "geo_read_filter_invalid", "member must name a metric returned by this selection.");
-    }
-    filter.member = member;
-  }
+  if (raw.member != null) filter.member = normalizeGeoMember(raw.member);
   return { what: body.what, filter };
 }
 

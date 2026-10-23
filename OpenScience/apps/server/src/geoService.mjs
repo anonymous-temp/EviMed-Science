@@ -48,7 +48,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { geoDailyReadings, geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
 import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
@@ -72,7 +72,7 @@ export const GEO_ABSENT_CELL = Object.freeze({ value: null, numerator: null, den
 /** Snapshot text handed to a run, per item (spec §4). */
 export const GEO_ANSWER_TEXT_LIMIT = 4_000;
 /** Items one runtime read returns at most (spec §4). */
-export const GEO_READ_MAX_ITEMS = 50;
+export const GEO_READ_MAX_ITEMS = GEO_READ_PAGE_LIMIT;
 
 /** The name a new GEO project's control-plane project gets when no brand is given yet. */
 export const GEO_DEFAULT_PROJECT_NAME = "新循证 GEO 项目";

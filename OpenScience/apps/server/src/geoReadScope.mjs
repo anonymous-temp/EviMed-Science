@@ -14,6 +14,7 @@ export const GEO_SOURCE_PAGE_FIELDS = Object.freeze(["answerLimit", "answerOffse
 export const GEO_SELECTION_MAX_ROWS = 20_000;
 export const GEO_SELECTION_MAX_ROUNDS = 120;
 export const GEO_MEMBER_PREVIEW_LIMIT = 200;
+export const GEO_READ_PAGE_LIMIT = 50;
 const ROUND_KINDS = ["baseline", "weekly", "single_step"];
 const hasControls = (/** @type {string} */ value) => [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
 const idShape = /^[A-Za-z0-9_-]{1,80}$/u;
@@ -102,7 +103,7 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
       try { raw[key] = JSON.parse(all[0]); } catch { throw invalid("clientTags must be repeated labels or a JSON array."); }
       if (!Array.isArray(raw[key])) throw invalid("clientTags must be repeated labels or a JSON array.");
     }
-    if (["questionVersion", "version", "errorLimit", "errorOffset", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
+    if (["questionVersion", "version", "errorLimit", "errorOffset", "limit", "offset", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);
     }
@@ -132,6 +133,31 @@ export function geoSourcePage(input = {}) {
     throw invalid("answerLimit must be 1–500 and answerOffset 0–20000.");
   }
   return { limit, offset };
+}
+
+/** @param {any} input */
+export function geoReadPage(input = {}) {
+  const limit = input.limit ?? 20, offset = input.offset ?? 0;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > GEO_READ_PAGE_LIMIT || !Number.isSafeInteger(offset) || offset < 0 || offset > GEO_SELECTION_MAX_ROWS) {
+    throw invalid(`limit must be 1–${GEO_READ_PAGE_LIMIT} and offset 0–${GEO_SELECTION_MAX_ROWS}.`);
+  }
+  return { limit, offset };
+}
+
+/** The same closed member selector crosses the HTTP and native boundaries. @param {any} member */
+export function normalizeGeoMember(member) {
+  const fields = ["metricId", "scope", "engine", "pool", "groupId", "arm", "variant", "rival", "observationDate"];
+  if (!member || typeof member !== "object" || Array.isArray(member) || Object.keys(member).some((name) => !fields.includes(name))
+    || typeof member.metricId !== "string" || !/^M-[0-9]{2}[A-Z]?$/u.test(member.metricId)
+    || !["project", "pool", "engine", "pool_engine", "group", "arm"].includes(member.scope)
+    || Object.values(member).some((value) => value !== null && (typeof value !== "string" || value.length > 120))) {
+    throw invalid("member must name a metric returned by this selection.");
+  }
+  if ("observationDate" in member) {
+    if (typeof member.observationDate !== "string") throw invalid("observationDate must be a date.");
+    normalizeGeoReadScope({ from: member.observationDate });
+  }
+  return { ...member };
 }
 
 /** Scope fields only, so list filters and pagination cannot alter the observation universe. @param {any} input */

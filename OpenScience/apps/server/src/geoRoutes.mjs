@@ -1,4 +1,4 @@
-import { GEO_SOURCE_PAGE_FIELDS, geoScopeFromQuery } from "./geoReadScope.mjs";
+import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -62,7 +62,7 @@ export function geoRoutePattern(pathname) {
   if (parts[0] !== "projects") return "/api/geo/:route";
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
-  const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
+  const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
     "orders", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
@@ -378,6 +378,18 @@ export function createGeoRoutes(dependencies) {
         return reply(await service.questions(user, id, version));
       }
       if (tab === "diagnosis") return reply(await service.diagnosis(user, id, geoScopeFromQuery(url.searchParams)));
+      if (tab === "snapshots") {
+        const project = await service.requireProject(user, id);
+        const filter = geoScopeFromQuery(url.searchParams, ["limit", "offset", "member"]);
+        const page = geoReadPage(filter);
+        let member;
+        if (filter.member != null) {
+          try { member = JSON.parse(filter.member); }
+          catch { throw new HttpError(400, "geo_read_filter_invalid", "member must be a JSON metric selector."); }
+          member = normalizeGeoMember(member);
+        }
+        return reply(await service.runtimeRead(project, "snapshots", { ...filter, ...page, ...(member ? { member } : {}) }));
+      }
       if (tab === "sources") return reply(await service.sources(user, id, geoScopeFromQuery(url.searchParams, [])));
       // The question group as the spine (rectification 2026-10-14): the groups with what the engines say, the actions by group, and the
       // strategy page's one read.

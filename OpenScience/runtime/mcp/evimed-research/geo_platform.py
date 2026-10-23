@@ -122,6 +122,7 @@ def tool_definitions():
                             "member": {
                                 "type": "object", "description": "Copy members.metric from a cell to page its exact contributing snapshots.",
                                 "properties": {"metricId": {"type": "string"}, "scope": {"type": "string", "enum": ["project", "pool", "engine", "pool_engine", "group", "arm"]},
+                                               "observationDate": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
                                                **{key: {"type": ["string", "null"]} for key in ["engine", "pool", "groupId", "arm", "variant", "rival"]}},
                                 "required": ["metricId", "scope"], "additionalProperties": False,
                             },
