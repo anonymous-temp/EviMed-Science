@@ -94,6 +94,7 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
   return (
     <PageShell
       title={author?.author.name ?? "作者"}
+      className="frontier-theme"
       meta={author?.author.platform ? <Tag>平台出版方</Tag> : undefined}
       back={<FrontierBack to={from?.to} label={from?.label} />}
       // The author's three views and the card search are the page's one row of controls, over what they switch.

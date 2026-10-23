@@ -150,6 +150,7 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
   return (
     <PageShell
       title={title}
+      className="frontier-theme"
       documentTitle={`${title} · 前沿动态`}
       titleVariant="document"
       width="read"

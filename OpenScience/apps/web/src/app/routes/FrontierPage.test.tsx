@@ -569,10 +569,10 @@ describe("the actions on a card", () => {
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
     await userEvent.click(within(card).getByRole("button", { name: "收藏" }));
     expect(client.starFrontierItem).toHaveBeenCalledWith("today-1");
-    expect(within(card).getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(card).getByRole("button", { name: "取消收藏" })).toHaveAttribute("aria-pressed", "true");
     client.unstarFrontierItem.mockRejectedValue(new WebApiError("down", { status: 503, code: null }));
-    await userEvent.click(within(card).getByRole("button", { name: "收藏" }));
-    await waitFor(() => expect(within(card).getByRole("button", { name: "收藏" })).toHaveAttribute("aria-pressed", "true"));
+    await userEvent.click(within(card).getByRole("button", { name: "取消收藏" }));
+    await waitFor(() => expect(within(card).getByRole("button", { name: "取消收藏" })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("hides an item with a toast that can undo it", async () => {
@@ -614,12 +614,14 @@ describe("the actions on a card", () => {
     expect(screen.queryByRole("menuitem", { name: "存入知识库" })).not.toBeInTheDocument();
   });
 
-  it("greys the title of an item once its original was opened", async () => {
+  it("greys the title after the original is opened from its details", async () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
     const title = () => within(within(card).getByRole("heading", { level: 3 })).getByRole("link");
     expect(title()).toHaveClass("text-text");
     await userEvent.click(title());
+    const details = await screen.findByRole("dialog", { name: "今天的一条 RCT" });
+    await userEvent.click(within(details).getByRole("link", { name: "原文" }));
     expect(client.markFrontierItemRead).toHaveBeenCalledWith("today-1");
     expect(title()).toHaveClass("text-text-2");
   });
@@ -627,7 +629,7 @@ describe("the actions on a card", () => {
   it("shows the editorial total and never a dimension's number", async () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
-    expect(within(card).getByRole("img", { name: "编辑评分 86" })).toHaveTextContent("86");
+    expect(within(card).getByLabelText("编辑评分 86")).toHaveTextContent("编辑评分 86");
     // The fixture carries scoreTotal 87 and scores 29 / 17 / 13, which the contract never sends.
     for (const number of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(number);
   });
@@ -739,8 +741,8 @@ describe("日报", () => {
     const sections = screen.getAllByRole("list").filter((list) => list.tagName === "OL");
     expect(sections[0]).toBe(safety);
     expect(within(safety).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^01I 级召回：葡萄糖注射液含不锈钢颗粒FDA详情$/),
-      expect.stringMatching(/^02氯巴占口服混悬液条形码错误英国 MHRA详情$/),
+      expect.stringMatching(/^01I 级召回：葡萄糖注射液含不锈钢颗粒FDA查看详情$/),
+      expect.stringMatching(/^02氯巴占口服混悬液条形码错误英国 MHRA查看详情$/),
     ]);
     expect(document.body.textContent).not.toMatch(/API|openFDA/);
     for (const list of sections) {
@@ -1007,7 +1009,7 @@ it("shows the aggregate following feed before opening its management drawer", as
 });
 it("lets the reader expand a cut summary and read details without replacing the original title link", async () => {
   // jsdom lays nothing out: a summary is cut where the test says its text overflows.
-  const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("line-clamp-3") ? 120 : 60; });
+  const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("line-clamp-2") ? 120 : 60; });
   const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(60);
   try {
     renderPage();
@@ -1017,7 +1019,7 @@ it("lets the reader expand a cut summary and read details without replacing the 
     await userEvent.click(expand);
     expect(expand).toHaveAttribute("aria-expanded", "true");
     expect(title).toHaveAttribute("target", "_blank");
-    await userEvent.click(within(card).getByRole("button", { name: "详情" }));
+    await userEvent.click(title);
     expect(await screen.findByRole("dialog", { name: "今天的一条 RCT" })).toBeInTheDocument();
   } finally {
     scrollHeight.mockRestore();

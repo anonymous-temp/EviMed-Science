@@ -82,29 +82,27 @@ describe("a card", () => {
     for (const score of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(score);
   });
 
-  it("puts the editorial score at the top right, a grey number after a dot in its band's colour, and names it for assistive technology", () => {
+  it("names the editorial score beside its value at the top right", () => {
     renderCard(scored());
-    // Review L-9: a dot and a number with no name of their own. The visible number stays a bare number; what it is is its name.
-    const score = screen.getByRole("img", { name: "编辑评分 86" });
+    const score = screen.getByLabelText("编辑评分 86");
     expect(score).toHaveAccessibleDescription("编辑评分 · 满分 100");
-    expect(score).toHaveTextContent(/^86$/);
+    expect(score).toHaveTextContent("编辑评分 86");
     expect(score).toHaveClass("tabular-nums", "text-text-3");
-    expect(score.querySelector("[data-band]")).toHaveClass("bg-accent");
   });
 
   it.each([
     ["medium", 68, "bg-text-2"],
     ["low", 42, "bg-text-3"],
-  ])("dots a %s score in its own grey", (band, value, dot) => {
+  ])("labels a %s score in words", (band, value) => {
     renderCard(scored({ score: value, scoreBand: band }));
-    expect(screen.getByRole("img", { name: `编辑评分 ${value}` }).querySelector("[data-band]")).toHaveClass(dot);
+    expect(screen.getByLabelText(`编辑评分 ${value}`)).toHaveTextContent(`编辑评分 ${value}`);
   });
 
   it("scores no safety notice, and says 安全警示 first", () => {
     renderCard(frontierItem({ score: 90, scoreBand: "high", safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告",
       sourceType: "regulator", sourceTypeLabel: "监管", source: { id: "fda-recalls", name: "FDA" } }));
     const card = screen.getByRole("article");
-    expect(screen.queryByRole("img", { name: /编辑评分/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/编辑评分/)).not.toBeInTheDocument();
     expect(card.textContent?.indexOf("安全警示")).toBe(0);
     expect(within(card).getByText("安全警示")).toHaveClass("bg-danger-soft");
     // The safety tag already says what the evidence type would.
@@ -136,10 +134,24 @@ describe("its actions", () => {
   it("stars with a pressed star", async () => {
     const item = frontierItem({ state: { starred: true, hidden: false, read: false } });
     const handlers = renderCard(item);
-    const star = screen.getByRole("button", { name: "收藏" });
+    const star = screen.getByRole("button", { name: "取消收藏" });
     expect(star).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(star);
     expect(handlers.onStar).toHaveBeenCalledWith(item);
+  });
+
+  it("allows only one star request while the current one is pending", async () => {
+    let finish!: () => void;
+    const onStar = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderCard(frontierItem(), { onStar });
+    const star = screen.getByRole("button", { name: "收藏" });
+    await userEvent.click(star);
+    expect(star).toBeDisabled();
+    expect(star).toHaveAttribute("aria-busy", "true");
+    await userEvent.click(star);
+    expect(onStar).toHaveBeenCalledOnce();
+    finish();
+    await waitFor(() => expect(star).toBeEnabled());
   });
 
   it("shows its star, 深入研究 and 「⋯」 without a pointer over it, and no second 原文 control", () => {
@@ -152,7 +164,7 @@ describe("its actions", () => {
     expect(within(card).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("opens the original from its title, in a new tab, and records the reading", async () => {
+  it("opens details from its title while preserving the original address", async () => {
     const item = frontierItem();
     const handlers = renderCard(item);
     const original = within(screen.getByRole("heading", { level: 3 })).getByRole("link", { name: item.title });
@@ -160,12 +172,16 @@ describe("its actions", () => {
     expect(original).toHaveAttribute("target", "_blank");
     expect(original).toHaveAttribute("rel", "noopener noreferrer");
     await userEvent.click(original);
-    expect(handlers.onOpened).toHaveBeenCalledWith(item);
+    expect(await screen.findByRole("dialog", { name: item.title })).toBeInTheDocument();
+    expect(handlers.onOpened).not.toHaveBeenCalled();
   });
 
   it("opens a new conversation with the draft in the composer at once, and sends nothing", async () => {
+    const leaving = vi.fn();
+    window.addEventListener("evimed:frontier-leaving", leaving, { once: true });
     renderCard();
     await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    expect(leaving).toHaveBeenCalledOnce();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     const probe = await screen.findByTestId("probe");
     expect(probe.textContent?.startsWith("/app/chat|create|这项研究可靠吗？")).toBe(true);
@@ -267,7 +283,7 @@ describe("the card's footer", () => {
     ["a free full text", { openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }],
   ])("offers 「详情」 for %s", async (_name, overrides) => {
     renderCard(plain(overrides));
-    await userEvent.click(within(screen.getByRole("article")).getByRole("button", { name: "详情" }));
+    await userEvent.click(within(screen.getByRole("heading", { level: 3 })).getByRole("link"));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 

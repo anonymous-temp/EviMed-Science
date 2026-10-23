@@ -101,6 +101,7 @@ export function frontierToolbar({
   }
   return {
     label: "动态筛选与搜索",
+    className: "frontier-toolbar",
     views: {
       label: "动态视图",
       items: VIEWS,

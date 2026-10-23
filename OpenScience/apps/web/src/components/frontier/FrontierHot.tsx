@@ -1,6 +1,6 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { Link } from "react-router";
-import { Flame } from "lucide-react";
+import { ChevronRight, Flame } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -33,11 +33,12 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
   if (top.length === 0) return null;
   return (
     <Card
+      className="frontier-hot-card"
       padding="p-3"
       header={(
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-body font-semibold leading-6 text-text">当前热点</h2>
-          <button type="button" onClick={onOpenAll} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-accent")}>完整热榜 ›</button>
+          <button type="button" aria-label="完整热榜 ›" onClick={onOpenAll} className={cn(INLINE_ACTION, "frontier-hot-action -mr-1 px-1 text-accent")}>完整热榜<ChevronRight size={16} aria-hidden="true" /></button>
         </div>
       )}
     >
@@ -46,7 +47,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
           const change = rankChangeLabel(event.rankChange);
           return (
             <li key={event.id} className={index > 0 ? "max-sm:hidden" : undefined}>
-              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
+              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-8 items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
                 <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
@@ -123,15 +124,16 @@ export function HotBoard({ state, onRetry }: {
 function HotRow({ event }: { event: FrontierHotEvent }) {
   const origin = useFrontierOrigin();
   return (
-    <li className="flex gap-3 border-b border-border py-4">
+    <li className="frontier-hot-row flex gap-3 rounded-card border-b border-border px-3 py-4 transition-all duration-normal">
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). After it, not
             before: a badge in front moved the title of the rows that have one off the left edge of the titles of those that do not. */}
         <div className="flex min-h-control min-w-0 items-center gap-1.5">
           <Tooltip content={event.title} kind="label" whenTruncated>
-            <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
+            <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center gap-1 rounded text-ui">
               <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
+              <ChevronRight size={16} className="frontier-hot-chevron shrink-0 text-text-3" aria-hidden="true" />
             </Link>
           </Tooltip>
           {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}

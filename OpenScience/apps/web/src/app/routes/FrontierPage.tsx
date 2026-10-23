@@ -610,7 +610,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       expanded={expanded.includes(item.id)}
       onExpand={() => setExpanded((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
       markSelected={view !== "selected"}
-      onStar={(target) => void toggleStar(target)}
+      onStar={toggleStar}
       onHide={hide}
       onSave={saveOffered ? (target) => void save(target) : undefined}
       saving={savingId === item.id}
@@ -712,6 +712,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
+      className="frontier-theme"
+      width="wide"
       actions={<Link to="/app/frontier/zones" className={buttonClasses({ variant: "secondary" })}>证据专区<ChevronRight size={16} aria-hidden="true" /></Link>}
       toolbar={toolbar}
     >

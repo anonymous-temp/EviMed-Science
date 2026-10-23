@@ -192,13 +192,13 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
   return (
     <article aria-labelledby="frontier-daily-title">
-      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border pb-2">
+      <header className="frontier-brief-header flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-card border border-border bg-surface p-4">
         <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? weekRange(issue.day) : shortDate(issue.day)}</h2>
         <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
       </header>
 
       {issue.lead && (
-        <section aria-label="头条" className="mt-5">
+        <section aria-label="头条" className="frontier-brief-lead mt-5 rounded-panel border border-border bg-surface p-5">
           {/* The title is the way to the original, as on the feed's card and on every row below (§12.3): one kind of 「原文」 entry on the page. */}
           <h3 className="max-w-measure-body text-title font-semibold text-text"><a href={issue.lead.item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{issue.lead.item.title}</a></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
@@ -222,7 +222,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
 
       {issue.aiMinute && (
-        <section aria-labelledby="daily-ai-minute" className="mt-8">
+        <section aria-labelledby="daily-ai-minute" className="frontier-ai-minute mt-8 rounded-card border border-border bg-accent-soft p-4">
           <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
           <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
@@ -244,7 +244,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit }: { state:
  */
 function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
   return (
-    <section aria-labelledby="daily-followed-zones" className="mt-8">
+    <section aria-labelledby="daily-followed-zones" className="frontier-daily-section mt-8 rounded-card border border-border bg-surface p-4">
       <h3 id="daily-followed-zones" className="text-ui font-semibold text-text">你关注的专区</h3>
       {zones.map((zone) => (
         <div key={zone.zoneId} className="mt-2">
@@ -276,18 +276,35 @@ function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
  */
 function DailySection({ id, title, items, safety = false, limit }: { id: string; title: string; items: FrontierItem[]; safety?: boolean; limit?: number }) {
   const [all, setAll] = useState(false);
-  const shown = limit !== undefined && !all ? items.slice(0, limit) : items;
-  const rest = items.length - shown.length;
+  const splitAt = limit !== undefined ? Math.min(limit, items.length) : items.length;
+  const shown = items.slice(0, splitAt);
+  const hidden = items.slice(splitAt);
+  const expandId = `daily-${id}-extra`;
   return (
-    <section aria-labelledby={`daily-${id}`} className="mt-8">
+    <section aria-labelledby={`daily-${id}`} className={cn("frontier-daily-section mt-8 rounded-card border border-border bg-surface p-4", safety && "frontier-daily-safety")}>
       <h3 id={`daily-${id}`} className="flex scroll-mt-24 items-baseline gap-2">
         <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
         <span className="text-caption tabular-nums text-text-3">{items.length}</span>
       </h3>
-      <ol aria-label={title} className="mt-1">
+      <ol id={hidden.length > 0 ? expandId : undefined} aria-label={title} className="mt-1">
         {shown.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
+        {hidden.map((item, index) => <DailyRow key={item.id} item={item} number={splitAt + index + 1} safety={safety} extraOpen={all} />)}
       </ol>
-      {rest > 0 && <Button variant="text" size="sm" className="-ml-2 mt-1" onClick={() => setAll(true)}>展开其余 {rest} 条</Button>}
+      {hidden.length > 0 && (
+        <>
+          <Button
+            variant="text"
+            size="sm"
+            className="frontier-daily-toggle -ml-2 mt-1"
+            aria-controls={expandId}
+            aria-expanded={all}
+            onClick={() => setAll((value) => !value)}
+          >
+            <ChevronDown size={16} className={cn("transition-transform duration-normal", all && "rotate-180")} aria-hidden="true" />
+            {all ? "收起" : `展开其余 ${hidden.length} 条`}
+          </Button>
+        </>
+      )}
     </section>
   );
 }
@@ -298,10 +315,15 @@ function DailySection({ id, title, items, safety = false, limit }: { id: string;
  * institution — FDA, 英国 MHRA, never the interface it was read through — with 「详情」 where the
  * drawer holds more than the row does.
  */
-function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
+function DailyRow({ item, number, safety, extraOpen }: { item: FrontierItem; number: number; safety: boolean; extraOpen?: boolean }) {
   const [details, setDetails] = useState(false);
   return (
-    <li className="flex gap-2 border-b border-border py-3">
+    <li
+      id={extraOpen !== undefined ? `${item.id}-daily-extra` : undefined}
+      aria-hidden={extraOpen === false || undefined}
+      className={cn("flex gap-2 border-b border-border py-3", extraOpen !== undefined && "frontier-daily-extra")}
+      data-open={extraOpen === undefined ? undefined : extraOpen ? "true" : "false"}
+    >
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
         <p data-row-title className="text-body font-semibold leading-6 text-text"><a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
@@ -309,7 +331,7 @@ function DailyRow({ item, number, safety }: { item: FrontierItem; number: number
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
           {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
-          {frontierDetailsOffered(item) && <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
+          {frontierDetailsOffered(item) && <button type="button" aria-label="详情" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "frontier-details-action px-3")}><span className="text-caption font-semibold">查看详情</span></button>}
         </div>
       </div>
       {details && <FrontierDetails item={item} onClose={() => setDetails(false)} />}

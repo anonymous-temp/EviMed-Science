@@ -31,9 +31,9 @@ export function FrontierDetails({ item, onClose, onOpened }: { item: FrontierIte
   ];
   return (
     <Drawer title={item.title} onClose={onClose}>
-      <div className="space-y-6">
-        {item.summary && <p className="max-w-measure text-ui text-text">{item.summary}</p>}
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-ui">
+      <div className="frontier-details space-y-6">
+        {item.summary && <p className="frontier-details-summary max-w-measure rounded-card border border-border bg-accent-soft p-4 text-ui leading-6 text-text">{item.summary}</p>}
+        <dl className="frontier-facts grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-card border border-border bg-surface p-4 text-ui">
           {rows.map(([label, value, lang]) => (
             <div key={label} className="contents">
               <dt className="text-text-3">{label}</dt>

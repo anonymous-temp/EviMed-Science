@@ -61,7 +61,11 @@
   ],
   "communitySkills": [
     "dsh-ppt@9ab3c88e8ed8992b1771434f9f59b4f1ae767630",
-    "deep-structural-analysis@07b5ad8564cbbb352ad93e8a733ca835e43a448e"
+    "deep-structural-analysis@07b5ad8564cbbb352ad93e8a733ca835e43a448e",
+    "flowchart@5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+    "card-theater@5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+    "stacked-data-cards@5fbca49153a5cc4380a2c796e5ef624ab809ce3c",
+    "frontend-design@dbd4588f9e1033efb41dad4bef2f7947c8993d44"
   ],
   "communityToolBundles": [
     {

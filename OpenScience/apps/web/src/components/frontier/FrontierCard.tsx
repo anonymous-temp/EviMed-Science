@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
-import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -19,19 +19,11 @@ import {
   evidenceTag,
   itemMarkdown,
   researchDraft,
-  scoreBand,
   timeColumn,
   type CardTag,
 } from "./frontierText";
 
 const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
-
-/**
- * The editorial score's dot by band (plan §6.2): the accent at or above the
- * selection line, the secondary grey from 60 to it, the faint grey below 60.
- * The number itself stays grey, as every number on the card does.
- */
-const BAND_DOT = { high: "bg-accent", medium: "bg-text-2", low: "bg-text-3" } as const;
 
 export interface FrontierCardProps {
   item: FrontierItem;
@@ -41,7 +33,7 @@ export interface FrontierCardProps {
   grouped?: boolean;
   /** Where not every item is 精选 (全部, a search), say which are — the dot, and words for a screen reader. */
   markSelected?: boolean;
-  onStar: (item: FrontierItem) => void;
+  onStar: (item: FrontierItem) => void | Promise<void>;
   onHide: (item: FrontierItem) => void;
   /** 「存入知识库」; absent where this server cannot save yet. */
   onSave?: (item: FrontierItem) => void;
@@ -55,18 +47,16 @@ export interface FrontierCardProps {
 /**
  * One item (plan 2026-09-23 §6.2, §6.3): a time column and a dot, who said it
  * and how hard the evidence is, the editorial score, the title, what it says
- * in at most three lines, and a footer — 「另有 N 家报道 ›」 and its #tags on
+ * in at most two lines, and a footer — 「另有 N 家报道 ›」 and its #tags on
  * the left, the card's three actions on the right: the star, 「深入研究」 and
  * 「⋯」, always shown (owner, 2026-09-24: actions that appear only under the
  * pointer read as missing).
  *
- * The footer says only what it can do: 「展开摘要」 where the summary is cut at three lines, 「详情」
- * where the drawer holds something the card does not (an abstract, the facts, the original title, a
- * free full text), and the star, 「深入研究」 and 「⋯」; the details stay in 「⋯ › 详情」 either way.
+ * The footer says only what it can do: 「展开摘要」 where the summary is cut, then the star,
+ * 「深入研究」 and 「⋯」. The title opens the details drawer where one exists.
  *
- * The title is the way to the original, as a headline is in every reader
- * (owner, 2026-09-24: 「看原文，应该是点题目就能进去」); there is no second
- * 「原文」 control. 「深入研究」 opens a new conversation with a draft question
+ * The title opens the details drawer, whose explicit original link leaves the product; a plain item
+ * with nothing to add still opens the original. 「深入研究」 opens a new conversation with a draft question
  * about the item in the composer, to send or rewrite — no menu of prepared
  * questions to choose from first.
  *
@@ -84,6 +74,7 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
   const [details, setDetails] = useState(false);
+  const [starPending, setStarPending] = useState(false);
   // A summary that fits in its three lines has nothing to expand: measure the clamp, not the text.
   const summary = useRef<HTMLParagraphElement>(null);
   const [clamped, setClamped] = useState(false);
@@ -99,7 +90,6 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
   }, [expanded, item.summary]);
   const evidence = evidenceTag(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
-  const band = scoreBand(item);
   const tags = cardTags(item);
   const starred = item.state.starred;
   const also = item.alsoReportedCount;
@@ -129,7 +119,16 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
     ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
     ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),
   ];
-  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
+  const research = () => {
+    rememberFrontierPosition();
+    navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
+  };
+  const toggleStar = async () => {
+    if (starPending) return;
+    setStarPending(true);
+    try { await onStar(item); }
+    finally { setStarPending(false); }
+  };
   const reports: MenuEntry[] = [
     ...item.alsoReportedBy.map((mention) => ({
       label: mention.sourceName,
@@ -142,43 +141,46 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
   ];
 
   return (
-    <li data-frontier-item={item.id} className="flex">
-      <div className="mt-4 flex h-6 w-14 shrink-0 items-center justify-between pr-2">
+    <li
+      data-frontier-item={item.id}
+      data-read={item.state.read ? "true" : "false"}
+      className="frontier-feed-card -mx-2 flex rounded-card px-2 transition-all duration-normal hover:bg-surface focus-within:bg-surface max-sm:block"
+    >
+      <div className="mt-4 flex h-6 w-14 shrink-0 items-center justify-between pr-2 max-sm:mb-1 max-sm:mt-3 max-sm:h-auto max-sm:w-auto max-sm:justify-start max-sm:gap-2 max-sm:pr-0">
         <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{timeColumn(item, grouped)}</time>
         <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
         {markSelected && item.selected && <span className="sr-only">精选</span>}
       </div>
-      <article aria-labelledby={titleId} className="min-w-0 flex-1 border-b border-border pb-5 pt-4">
+      <article aria-labelledby={titleId} className="min-w-0 flex-1 border-b border-border pb-5 pt-4 max-sm:pt-0">
         <div className="flex min-h-6 items-center gap-2 text-caption text-text-3">
           {item.safetyAlert && <Tag tone="safety">安全警示</Tag>}
-          <span className="min-w-0 truncate">{item.source.name}</span>
+          <span className="min-w-0 truncate font-medium text-text-2">{item.source.name}</span>
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
           {evidence && <Tag>{evidence}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
-          {/* The dot and the number are one picture with a name of its own (review L-9); the number stays a bare grey number. */}
-          {band && (
+          {item.score !== null && (
             <Tooltip content="编辑评分 · 满分 100">
-              <span role="img" aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
-                <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
-                {item.score}
+              <span aria-label={`编辑评分 ${item.score}`} className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption tabular-nums text-text-3">
+                编辑评分 <strong className="font-semibold text-text-2">{item.score}</strong>
               </span>
             </Tooltip>
           )}
         </div>
 
         <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
-          <a href={item.url} {...EXTERNAL} onClick={() => onOpened?.(item)}
-            className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
+          <a href={item.url} {...EXTERNAL} onClick={(event) => {
+            if (frontierDetailsOffered(item)) { event.preventDefault(); setDetails(true); }
+            else onOpened?.(item);
+          }} className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
             {item.title}
           </a>
         </h3>
-        {item.summary && <p ref={summary} className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
+        {item.summary && <p ref={summary} className={cn("mt-1.5 max-w-measure whitespace-pre-line text-ui leading-6 text-text-2", !expanded && "line-clamp-2")}>{item.summary}</p>}
 
-        <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
+        <div className="-ml-1 mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 text-ui text-text-3">
           {item.summary && onExpand && (clamped || expanded) && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
-          {frontierDetailsOffered(item) && <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">详情</span></button>}
           {also > 0 && (
             <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
               <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
@@ -193,18 +195,20 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
               </button>
             </Tooltip>
           ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
-          <div className="ml-auto flex items-center gap-1">
-            <IconButton
-              icon={Star}
+          <div className="ml-auto flex items-center gap-1 max-sm:w-full max-sm:justify-end">
+            <Button
+              variant="text"
               size="sm"
-              label="收藏"
+              aria-label={starred ? "取消收藏" : "收藏"}
               aria-pressed={starred}
-              className={starred ? "text-accent [&_svg]:fill-current" : undefined}
-              onClick={() => onStar(item)}
-            />
-            <button type="button" onClick={research} className={cn(INLINE_ACTION, "px-1.5 text-text-2 hover:text-text")}>
-              <span className="text-caption">深入研究</span>
-            </button>
+              aria-busy={starPending}
+              disabled={starPending}
+              className={cn("frontier-star-action", starred && "text-accent [&_svg]:fill-current")}
+              onClick={() => void toggleStar()}
+            >
+              <Star size={16} aria-hidden="true" />
+            </Button>
+            <Button variant="secondary" size="sm" className="frontier-research-action" onClick={research}>深入研究</Button>
             <Menu label="更多操作" items={more} />
           </div>
         </div>

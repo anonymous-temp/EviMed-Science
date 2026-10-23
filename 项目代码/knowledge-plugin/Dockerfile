@@ -26,6 +26,7 @@ RUN groupadd --system --gid 10002 knowledge \
 
 WORKDIR /build
 COPY requirements.txt ./
+ARG PIP_DEFAULT_TIMEOUT=120
 RUN pip install --index-url "${PIP_INDEX_URL}" -r requirements.txt
 
 COPY pyproject.toml README.md ./

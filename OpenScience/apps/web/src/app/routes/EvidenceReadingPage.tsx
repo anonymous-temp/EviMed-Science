@@ -183,6 +183,7 @@ function EvidenceReadingContent({
   return (
     <PageShell
       title={question ?? "证据卡"}
+      className="frontier-theme frontier-reader"
       titleVariant="document"
       width="page"
       back={<FrontierBack trail={[{ label: zone?.title || "专区", to: zonePath }]} />}

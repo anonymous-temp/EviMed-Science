@@ -211,6 +211,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   return (
     <PageShell
       title={zone?.title ?? "证据专区"}
+      className="frontier-theme"
       meta={metaParts.length > 0 ? metaParts.join(" · ") : undefined}
       back={
         <FrontierBack

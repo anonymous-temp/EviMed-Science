@@ -1,6 +1,6 @@
 {
   "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under — by what the skill is for, never by where it came from. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
-  "groups": ["通用", "办公文档", "科研分析", "写作与核查", "长任务", "循证 GEO"],
+  "groups": ["通用", "视觉与网页", "办公文档", "科研分析", "写作与核查", "长任务", "循证 GEO"],
   "geoGroup": "循证 GEO",
   "loopxGroup": "长任务",
   "skills": {
@@ -345,6 +345,30 @@
       "title": "多视角结构分析",
       "use": "对复杂的社会、经济、哲学和系统性问题做多视角分析，结论分层，并标明依据的强弱。",
       "when": "你要对一个复杂问题做深入分析、多角度探讨，或套用具体分析框架时。"
+    },
+    "flowchart": {
+      "group": "视觉与网页",
+      "title": "动画流程图",
+      "use": "生成可直接打开的单文件 HTML，用动画节点、流动连线和高亮交互解释流程、概念与模型。",
+      "when": "你要把技术原理、研究流程或复杂概念做成直观、可交互的网页图示时。"
+    },
+    "card-theater": {
+      "group": "视觉与网页",
+      "title": "3D 卡片剧场",
+      "use": "生成侧边叙事与 3D 卡片轮播结合的单文件 HTML，支持点击、滚轮和键盘切换。",
+      "when": "你要分步骤讲产品特性、协议流程或方案内容，并希望页面有明确的可点击交互时。"
+    },
+    "stacked-data-cards": {
+      "group": "视觉与网页",
+      "title": "动态数据卡片",
+      "use": "把研究结论和关键数字做成自动播放的叠放卡片网页，图表、数字和对比内容依次入场。",
+      "when": "你要用有节奏的网页动画展示数据论点、研究发现或证据摘要时。"
+    },
+    "frontend-design": {
+      "group": "视觉与网页",
+      "title": "前端 UI 设计",
+      "use": "设计或重塑产品级网页界面，统一视觉方向、字体、色彩、布局和交互动效，并检查响应式与可访问性。",
+      "when": "你要新建 React 或网页界面，或者改进现有页面、组件、弹窗、表单和导航的 UI/UX 时。"
     }
   }
 }

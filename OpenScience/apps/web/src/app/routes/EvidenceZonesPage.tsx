@@ -199,6 +199,7 @@ export function EvidenceZonesPage() {
   return (
     <PageShell
       title={fromItem ? "选择证据专区" : "证据专区"}
+      className="frontier-theme"
       back={<FrontierBack />}
       actions={canCreate ? <Menu label="更多操作" items={[{ label: "新建专区", onSelect: () => setCreating((value) => !value) }]} /> : undefined}
       toolbar={{
