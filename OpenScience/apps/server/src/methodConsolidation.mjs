@@ -33,6 +33,17 @@
  * writes over an effective method, and nothing here deletes: retirement is a
  * status and a notice with a rollback target.
  *
+ * The pass says what it did, and when it did nothing says why (2026-10-23). It
+ * ran hourly for eleven days on production and returned `groups: 1, builds: 0,
+ * relations: 0` every time, as a success: one merge nobody had opened held its
+ * whole group, the group counted as formed, and nothing in the result or in a
+ * metric said it had been skipped. Now a group is decided only when it changed
+ * (`groupKey`, stamped on its members), a merge nobody has proven blocks only the
+ * build of the group it is in and expires on its own (`retirementProposal`), all six
+ * relation types are recorded, the shortlist is by embedding when one is
+ * available (`methodSimilarity.mjs`), and every stage that did nothing is
+ * counted by reason (`onNoop`).
+ *
  * @module methodConsolidation
  */
 
@@ -42,16 +53,24 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
+  METHOD_SIMILARITY_PAIR_FLOOR,
   RUNTIME_ROOM_REFUSAL_CODES,
+  bodyPreservation,
   cleanMethodDisplay,
+  isUnprovenMerge,
   methodHarmTest,
   parseSkillFrontmatter,
   preservedSectionsIntact,
+  storedEvidenceQuotes,
   validateMethodGraph,
 } from "@evimed/domain";
 import { learnedMethodId, methodRecordFrom, methodStepsOf } from "./learningService.mjs";
 import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
+import { candidatePairs } from "./methodSimilarity.mjs";
+
+// The lexical shortlist lives with the similarity module (it is that module's fallback); it is still this pass's too.
+export { candidatePairs };
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
  *  are a DDL CHECK constraint, and `consolidate` was already one of them. */
@@ -95,6 +114,8 @@ for (const action of ["screen", "decide", "build"]) {
 /** Bounds for one night, so a library that grows does not turn into a bill. */
 export const CONSOLIDATION_LIMITS = Object.freeze({
   maxMethods: 100,
+  // How many groups one pass reads and builds on (DECIDE and BUILD are the model steps). Groups that did not change are
+  // skipped and do not count against it, so a library whose first six groups are settled still reaches the seventh.
   maxGroups: 6,
   maxGroupSize: 8,
   minGroupSize: 2,
@@ -112,38 +133,58 @@ export const CONSOLIDATION_LIMITS = Object.freeze({
 const shortDigest = (value) => createHash("sha256").update(value, "utf8").digest("hex").slice(0, 32);
 
 /**
- * Candidate pairs worth showing SCREEN.
- *
- * Deterministic and free: shared tokens between names and descriptions. It is
- * not the screen — the model does that — it is the bound on how much the model
- * is asked to look at, because handing an LLM a hundred methods and asking for
- * groups costs a hundred methods of context and returns groups it invented to
- * fill the answer.
- * @param {readonly any[]} methods
- * @returns {{a: string, b: string, overlap: number}[]}
+ * The version of what DECIDE answers. 2 added the direction of the two directed relations (`WIDER` for `subset`, `REPLACES`
+ * for `supersedes`); a group decided under 1 has no direction to record, so it is read again once, and its dispatch id
+ * names the version so that an answer stored before it is not adopted in place of a new one.
  */
-export function candidatePairs(methods) {
-  /** @param {any} method @returns {Set<string>} */
-  const tokens = (method) => {
-    const text = `${method.payload?.frontmatter?.name ?? ""} ${method.payload?.frontmatter?.description ?? ""}`.toLowerCase();
-    const result = new Set(text.split(/[^a-z0-9]+/).filter((word) => word.length > 3));
-    for (const span of text.match(/\p{Script=Han}+/gu) ?? []) {
-      const characters = [...span];
-      for (let index = 0; index + 1 < characters.length; index++) result.add(characters[index] + characters[index + 1]);
-    }
-    return result;
-  };
-  const indexed = methods.map((method) => ({ id: method.id, tokens: tokens(method) }));
-  /** @type {{a: string, b: string, overlap: number}[]} */
-  const pairs = [];
-  for (let left = 0; left < indexed.length; left += 1) {
-    for (let right = left + 1; right < indexed.length; right += 1) {
-      let overlap = 0;
-      for (const token of indexed[left].tokens) if (indexed[right].tokens.has(token)) overlap += 1;
-      if (overlap >= 2) pairs.push({ a: indexed[left].id, b: indexed[right].id, overlap });
-    }
+export const DECIDE_VERSION = 2;
+
+/**
+ * The identity of a group of methods as the pass reads it: the sha256 of its sorted `id@digest`. The same members at the
+ * same bodies are the same question, whatever order a listing returned them in, and one amended member is a new one.
+ * @param {readonly any[]} members @returns {string}
+ */
+export function groupKey(members) {
+  const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
+  return createHash("sha256").update(keys.join(" "), "utf8").digest("hex");
+}
+
+/** Whether every member holds this group's key at the current decide version: the group has been read and built on already.
+ *  @param {readonly any[]} members @param {string} key @returns {boolean} */
+function groupDecided(members, key) {
+  return members.length > 0 && members.every((member) => {
+    const decided = member.payload?.learning?.decided;
+    return decided?.key === key && decided?.version === DECIDE_VERSION;
+  });
+}
+
+/**
+ * The analyser's assignments with every method they name resolved to a member of the group.
+ *
+ * `SKILLS`, `WIDER` and `REPLACES` name members by `id`, the way the input lists them; the name is accepted as well, because
+ * the capability's own text used to say "by name" and an answer in either form is the same fact. A closed join on identifiers
+ * the group holds, not a reading of prose. An assignment that names a method the group does not hold has `skills: null` and is
+ * recorded and built on by nobody.
+ * @param {readonly any[]} members @param {readonly any[] | undefined} assignments
+ * @returns {{entry: any, skills: string[] | null, wider: string | null, replaces: string | null}[]}
+ */
+export function resolveAssignments(members, assignments) {
+  /** @type {Map<string, string>} */
+  const lookup = new Map();
+  for (const member of members) lookup.set(String(member.id), member.id);
+  for (const member of members) {
+    const name = member.payload?.frontmatter?.name;
+    if (name && !lookup.has(String(name))) lookup.set(String(name), member.id);
   }
-  return pairs.sort((one, two) => two.overlap - one.overlap || one.a.localeCompare(two.a));
+  /** @param {unknown} token @returns {string | null} */
+  const resolve = (token) => (typeof token === "string" ? lookup.get(token) ?? null : null);
+  return (assignments ?? []).filter((entry) => METHOD_RELATION_TYPES.includes(entry?.RELATION_TYPE)).map((entry) => {
+    const named = Array.isArray(entry.SKILLS) ? entry.SKILLS.map(resolve) : [];
+    const skills = named.length && named.every(Boolean) ? [...new Set(/** @type {string[]} */ (named))] : null;
+    const wider = resolve(entry.WIDER);
+    const replaces = resolve(entry.REPLACES);
+    return { entry, skills, wider: wider && skills?.includes(wider) ? wider : null, replaces: replaces && skills?.includes(replaces) ? replaces : null };
+  });
 }
 
 /** Original SCREEN semantics, bounded to one control-plane request for sampled drift.
@@ -272,15 +313,18 @@ function mergeCleared(method) {
 
 /**
  * A method a consolidation pass wrote, rather than one a run taught it or one a pass amended, that has not cleared the harm
- * test yet. Its originals stay in force beside it (`mergeCleared`), so building on it again only adds another version of the
- * same lesson: on production between 2026-10-07 and 10-12 the hourly pass built 27 such methods out of three taught ones —
- * 「从记录中读取带范围的值」 five times, 「就地修改已有文件」 three — none of them used once, every one shown on the 做法 page and
- * packed into a share.
- * @param {any} method
+ * test yet (`isUnprovenMerge`, the domain's one reading of it). Its originals stay in force beside it (`mergeCleared`), so
+ * building on it again only adds another version of the same lesson: on production between 2026-10-07 and 10-12 the hourly
+ * pass built 27 such methods out of three taught ones — 「从记录中读取带范围的值」 five times, 「就地修改已有文件」 three —
+ * none of them used once, every one shown on the 做法 page and packed into a share.
+ *
+ * It blocks the build of the group it is in, and nothing else: the guard that stopped those 27 also stopped every relation,
+ * every other group and the dedup for eleven days. It no longer waits to be proven for ever either: a merge its runs never
+ * opened expires (`retirementProposal`, code `unproven_merge_expired`).
+ * @param {any} method a method document
  */
 export function unprovenMerge(method) {
-  const provenance = method?.payload?.provenance ?? {};
-  return String(provenance.consolidatedBy ?? "").startsWith("consolidate:") && !provenance.runId && !mergeCleared(method);
+  return isUnprovenMerge(methodRecordFrom(method));
 }
 
 export class MethodConsolidation {
@@ -292,6 +336,8 @@ export class MethodConsolidation {
    *          jobs?: any, judgeService?: any, screenBaseline?: any, handbookConsolidation?: any, platformTools?: () => Promise<any[]>,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
+   *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
+   *          onNoop?: ((reason: string, count?: number) => void) | null, onRelation?: ((type: string, count?: number) => void) | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
    */
@@ -299,7 +345,7 @@ export class MethodConsolidation {
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, handbookConsolidation = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
-    unusedAfterLoads = undefined, onRetirement = null,
+    unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -331,6 +377,11 @@ export class MethodConsolidation {
     // undefined is the domain's own default. `onRetirement` is told the branch (`retirementProposal`'s code) of each method this pass stopped.
     this.unusedAfterLoads = unusedAfterLoads;
     this.onRetirement = onRetirement;
+    // Optional, and the pass is the same without it: the shortlist is by embedding when this answers (`methodSimilarity.mjs`) and
+    // by shared words otherwise, and `onNoop` / `onRelation` are counters, told and never asked.
+    this.similarity = similarity;
+    this.onNoop = onNoop;
+    this.onRelation = onRelation;
   }
 
   /**
@@ -387,13 +438,22 @@ export class MethodConsolidation {
    * One pass over a researcher's whole library — every project's methods,
    * because they follow the researcher (`selectLearnedMethods`). The job's
    * project is only where its model steps run.
+   *
+   * The result names what the pass did, and when it did nothing, why: `groupsFormed` is what the shortlist grouped,
+   * `groups` the ones that were read (decided, or failed to be), and the rest of them are accounted for as
+   * `skippedUnchanged` (read before, and not changed since), `blockedUnproven` (read, but their build waits for a merge
+   * nobody has proven) and `noGroups`. The same reasons are counted (`onNoop`). A pass that says `groups: 1` and nothing
+   * else is what ran on production for eleven days.
    * @param {{job: any}} request
    */
   async sleep({ job }) {
     const notRetired = (/** @type {any} */ page) => (page.items ?? []).filter((/** @type {any} */ item) => item.payload?.status !== "retired");
-    let methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
+    const readLibrary = async () => notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
+    let methods = await readLibrary();
     if (methods.length === 0) {
-      return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [] };
+      this.#noop("no_methods");
+      return { action: "sleep", methods: 0, groupsFormed: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [],
+        shortlist: { mode: "none", pairs: 0, topScore: null }, noGroups: false, noMethods: true, noop: ["no_methods"] };
     }
     // Two methods is the floor for *comparing* them, and nothing else. It used
     // to return here, which also skipped promotion, evaluation queueing and
@@ -401,6 +461,11 @@ export class MethodConsolidation {
     // with learning on by default the nightly job returned at this line every
     // night for every user who had one. The comparison is what is conditional.
     const comparable = methods.length >= CONSOLIDATION_LIMITS.minGroupSize;
+    /** @type {string[]} */
+    const noop = [];
+    /** @param {string} reason @param {number} [count] */
+    const said = (reason, count = 1) => { if (count > 0) { this.#noop(reason, count); if (!noop.includes(reason)) noop.push(reason); } };
+    if (!comparable) said("too_few_methods");
 
     // First, and again at the end: approval asks no model, and it used to come only after every model step, so a pass that was deferred (a busy
     // runtime, the learning budget), timed out or threw ended before it, and each amended method, which goes back to `candidate`, stayed out of
@@ -408,37 +473,46 @@ export class MethodConsolidation {
     // counterpart retired), which is what the second look is for; this one is best effort, and the second is where a real failure surfaces.
     const early = await this.approveCandidates(job, methods, { strict: false });
     // An approval is a write, so the steps below, which amend and retire against the revisions they hold, read the library again.
-    if (early.length) methods = notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
+    if (early.length) methods = await readLibrary();
 
+    const shortlist = comparable ? await this.#shortlist(methods) : { pairs: [], mode: "none" };
     const screen = comparable
-      ? await this.screenPairs(job, candidatePairs(methods), methods)
+      ? await this.screenPairs(job, shortlist.pairs, methods)
       : { pairs: [], screened: false, dropped: 0 };
-    const groups = comparable ? groupPairs(screen.pairs) : [];
+    // Every group the shortlist forms, not the first few: a group that is settled is skipped and costs nothing, so the
+    // budget below counts the groups that were *read*, and a library whose first six are settled still reaches its seventh.
+    const groups = comparable ? groupPairs(screen.pairs, { maxGroups: CONSOLIDATION_LIMITS.maxMethods }) : [];
+    if (comparable && groups.length === 0) said("no_groups");
     const byId = new Map(methods.map((method) => [method.id, method]));
-    let relationCount = 0;
-    let builds = 0;
+    const outcome = { groups: 0, skippedUnchanged: 0, blockedUnproven: 0, decideFailed: 0, decidedNothing: 0, deferredGroups: 0, builds: 0, relations: 0,
+      /** @type {Record<string, number>} */ relationTypes: {}, /** @type {any[]} */ refusals: [] };
     for (const group of groups) {
       const members = group.map((id) => byId.get(id)).filter(Boolean);
       if (members.length < CONSOLIDATION_LIMITS.minGroupSize) continue;
-      // A merge nobody has used yet is not a base for another (`unprovenMerge`): the group waits until it has cleared or gone.
-      if (members.some(unprovenMerge)) continue;
+      if (outcome.groups >= CONSOLIDATION_LIMITS.maxGroups && !groupDecided(members, groupKey(members))) { outcome.deferredGroups += 1; continue; }
       // One group's failure is not the pass's, but a step that could not start
       // is not a failure: the worker defers the job and the pass resumes,
-      // adopting the steps it already ran.
-      const decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
-      if (!decided) continue;
-      relationCount += await this.applyRelations(job, members, decided);
-      if (builds < CONSOLIDATION_LIMITS.maxBuilds) {
-        const built = await this.buildGroup(job, members, decided).catch((error) => { if (deferred(error)) throw error; return null; });
-        if (built?.applied) builds += 1;
-      }
+      // adopting the steps it already ran (`processGroup` lets those through).
+      const done = await this.#processGroup(job, members, { buildAllowed: outcome.builds < CONSOLIDATION_LIMITS.maxBuilds });
+      if (done.status === "skipped_unchanged") { outcome.skippedUnchanged += 1; continue; }
+      outcome.groups += 1;
+      if (done.status === "decide_failed") { outcome.decideFailed += 1; continue; }
+      outcome.relations += done.relations;
+      for (const [type, count] of Object.entries(done.relationTypes)) outcome.relationTypes[type] = (outcome.relationTypes[type] ?? 0) + count;
+      if (done.decidedNothing) outcome.decidedNothing += 1;
+      if (done.blockedUnproven) outcome.blockedUnproven += 1;
+      outcome.builds += done.builds;
+      outcome.refusals.push(...done.refusals);
     }
+    said("skipped_unchanged", outcome.skippedUnchanged);
+    said("blocked_unproven", outcome.blockedUnproven);
+    said("decide_failed", outcome.decideFailed);
+    said("decided_nothing", outcome.decidedNothing);
+    said("merge_refused", outcome.refusals.length);
 
     // Levels are recomputed after the builder has had its turn, because the
     // builder is the only thing that adds a dependency.
     const refreshed = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
-    const records = refreshed.map(methodRecordFrom);
-    const graph = validateMethodGraph(records);
 
     const promoted = [...early, ...await this.approveCandidates(job, refreshed, { strict: true })];
     // No paired evaluation is queued here (ruling of 2026-09-21), and none exists
@@ -449,14 +523,17 @@ export class MethodConsolidation {
     // cells, would have retired about one harmless method in six. The detector is
     // the method's own runs (`methodHarmTest`, read by `retirementProposal` below).
 
-    // A proposal that is not immediate stays a proposal: it rides on this
-    // pass's result (`retirements`), and nothing is posted to the inbox — the
-    // library's housekeeping used to arrive there as quiet records, in
-    // engineering words, under the 「自动运行」 fold (plan 2026-09-23 §5.8).
+    // Every branch that has evidence acts at once on a method the system inferred, and is restored in one click; one the
+    // researcher stated is a proposal, and rides on this pass's result (`retirements`) with nothing posted to the inbox — the
+    // library's housekeeping used to arrive there as quiet records, in engineering words, under the 「自动运行」 fold
+    // (plan 2026-09-23 §5.8). There is no other kind of proposal: the contribution and cap proposals that were computed
+    // every hour and read by nobody are gone.
     const retirements = await this.learning.retirementProposals(job.userId, {
       nowMs: this.now().getTime(),
       ...(this.unusedAfterLoads !== undefined ? { unusedAfterLoads: this.unusedAfterLoads } : {}),
     });
+    /** @type {{id: string, code: string}[]} */
+    const stopped = [];
     for (const entry of retirements) {
       if (!entry.proposal.immediate) continue;
       // The results produced under the body it holds were found wrong more often than its predecessors': the answer is
@@ -464,14 +541,14 @@ export class MethodConsolidation {
       // link that says why stays on the record either way.
       if (entry.proposal.code === "scientific_regression") {
         const applied = await this.learning.applyRegression(job.userId, entry.document, entry.proposal, { retire: retirementSentence(entry.proposal) }).catch(() => null);
-        if (applied) this.#told(entry.proposal.code);
+        if (applied) { this.#told(entry.proposal.code); stopped.push({ id: entry.document.id, code: entry.proposal.code }); }
         continue;
       }
-      const stopped = await this.learning.retire(job.userId, entry.document.id, {
+      const done = await this.learning.retire(job.userId, entry.document.id, {
         expectedRevision: entry.document.revision,
         reason: retirementSentence(entry.proposal),
       }).catch(() => null);
-      if (stopped) this.#told(entry.proposal.code);
+      if (done) { this.#told(entry.proposal.code); stopped.push({ id: entry.document.id, code: entry.proposal.code }); }
     }
 
     // Last, so no write above races these revisions: every method a researcher
@@ -494,25 +571,139 @@ export class MethodConsolidation {
       }
     }
 
+    // The very end, after everything that moves a dependency or a status: the level of each method in the library as
+    // `validateMethodGraph` derives it, written back where it differs. It was computed and returned as `graphIssues` and
+    // never stored, so every method read level 0 (the page reads `learning.level`, the mount ignores it).
+    const final = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+    const graph = validateMethodGraph(final.map((document) => methodRecordFrom(document)));
+    const levels = await this.#writeLevels(job, final, graph.levels);
+
     return {
       action: "sleep",
       mergedRetirements,
       methods: refreshed.length,
-      groups: groups.length,
-      relations: relationCount,
-      builds,
+      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length, topScore: shortlist.topScore ?? null },
+      groupsFormed: groups.length,
+      groups: outcome.groups,
+      skippedUnchanged: outcome.skippedUnchanged,
+      blockedUnproven: outcome.blockedUnproven,
+      decideFailed: outcome.decideFailed,
+      decidedNothing: outcome.decidedNothing,
+      deferredGroups: outcome.deferredGroups,
+      noGroups: comparable && groups.length === 0,
+      relations: outcome.relations,
+      relationTypes: outcome.relationTypes,
+      builds: outcome.builds,
+      refusals: outcome.refusals.slice(0, 20),
       screened: screen.screened,
       screenDropped: screen.dropped,
       promoted,
       retirements: retirements.map((entry) => entry.document.id),
+      stopped,
+      levels,
       graphIssues: graph.issues.map((issue) => issue.code),
       described,
+      noop,
     };
   }
 
   /** A counter is told, never asked. @param {unknown} code */
   #told(code) {
     try { this.onRetirement?.(String(code ?? "")); } catch { /* a counter never decides what is stopped */ }
+  }
+
+  /** @param {string} reason @param {number} [count] */
+  #noop(reason, count = 1) {
+    try { this.onNoop?.(reason, count); } catch { /* a counter never decides what is done */ }
+  }
+
+  /** The shortlist of pairs a pass groups from: by embedding when the similarity module answers, by shared words otherwise.
+   *  `topScore` is the highest cosine between any two methods, below the floor or not, so the provisional floor can be read against a real library.
+   *  @param {readonly any[]} methods
+   *  @returns {Promise<{pairs: {a: string, b: string, overlap: number, score?: number}[], mode: string, topScore?: number | null}>} */
+  async #shortlist(methods) {
+    if (this.similarity) {
+      const pairs = await this.similarity.pairs(methods).catch(() => null);
+      if (pairs) return { pairs, mode: /** @type {any} */ (pairs).mode ?? "embedding", topScore: /** @type {any} */ (pairs).topScore ?? null };
+    }
+    return { pairs: candidatePairs(methods), mode: "lexical", topScore: null };
+  }
+
+  /**
+   * Store each method's level, where it differs from the one on the record. A write that fails is that method's own: the level
+   * is derived, so the next pass derives it again.
+   * @param {any} job @param {readonly any[]} documents @param {Map<string, number>} levels
+   * @returns {Promise<{written: number, max: number}>}
+   */
+  async #writeLevels(job, documents, levels) {
+    let written = 0;
+    let max = 0;
+    for (const document of documents) {
+      const level = levels.get(document.payload?.frontmatter?.name) ?? 0;
+      max = Math.max(max, level);
+      if (Number(document.payload?.learning?.level ?? 0) === level || typeof this.learning.recordLevel !== "function") continue;
+      if (await this.learning.recordLevel(job.userId, document.id, level).catch(() => null)) written += 1;
+    }
+    return { written, max };
+  }
+
+  /**
+   * One group: read it if it changed, record what DECIDE found, build on it unless a merge nobody has proven is in it, and stamp
+   * it as read.
+   *
+   * `buildTypes` narrows what is built (the incremental pass builds `shared_part` and `subset` only); every relation is
+   * recorded whatever is built. The stamp (`learning.decided`) is written only when the group has been dealt with: a group
+   * whose build is blocked by an unproven merge, or left for the next pass by the build limit, is read again next time, and
+   * the answer it already paid for is adopted rather than bought (the dispatch id is what the step reads).
+   * @param {any} job @param {readonly any[]} members
+   * @param {{buildAllowed?: boolean, buildTypes?: readonly string[] | null}} [options]
+   * @returns {Promise<{status: "skipped_unchanged" | "decide_failed" | "decided", relations: number, relationTypes: Record<string, number>, builds: number,
+   *   blockedUnproven: boolean, decidedNothing: boolean, refusals: any[]}>}
+   */
+  async #processGroup(job, members, { buildAllowed = true, buildTypes = null } = {}) {
+    const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, refusals: [] };
+    const key = groupKey(members);
+    if (groupDecided(members, key)) return { status: "skipped_unchanged", ...empty };
+    const decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
+    if (!decided) return { status: "decide_failed", ...empty };
+    /** @type {Record<string, number>} */
+    const relationTypes = {};
+    const relations = await this.applyRelations(job, members, decided, relationTypes);
+    const assignments = resolveAssignments(members, decided.assignments);
+    // `supersedes` builds nothing (the replaced method is stopped by the library's own rules once it is unused), so a group that
+    // holds only that is recorded and not sent to the builder.
+    // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
+    const buildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && (entry.RELATION_TYPE !== "subset" || wider) && (!buildTypes || buildTypes.includes(entry.RELATION_TYPE)));
+    const decidedNothing = assignments.length === 0;
+    // A merge nobody has proven blocks the build of this group, and nothing else: DECIDE and the relations above have run.
+    const blockedUnproven = buildable.length > 0 && members.some(unprovenMerge);
+    let builds = 0;
+    /** @type {any[]} */
+    let refusals = [];
+    let limited = false;
+    if (buildable.length && !blockedUnproven) {
+      if (buildAllowed) {
+        const built = await this.buildGroup(job, members, { ...decided, assignments: buildable.map(({ entry }) => entry) })
+          .catch((error) => { if (deferred(error)) throw error; return null; });
+        if (built?.applied) builds = 1;
+        refusals = built?.refusals ?? [];
+      } else {
+        limited = true;
+      }
+    }
+    if (limited) this.#noop("build_limit");
+    if (!blockedUnproven && !limited) await this.#stamp(job, members, key);
+    return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, refusals };
+  }
+
+  /** Mark every member of a group as read at its current bodies. A stamp is a convenience: one that cannot be written means the
+   *  group is read again, and an answer already bought is adopted, so it never fails a pass.
+   *  @param {any} job @param {readonly any[]} members @param {string} key */
+  async #stamp(job, members, key) {
+    if (typeof this.learning.recordDecided !== "function") return;
+    const decided = { key, at: this.now().toISOString(), version: DECIDE_VERSION };
+    for (const member of members) await this.learning.recordDecided(job.userId, member.id, decided, member.payload?.contentDigest).catch(() => null);
   }
 
   /**
@@ -542,7 +733,18 @@ export class MethodConsolidation {
 
   /**
    * The incremental pass a new candidate triggers: its bounded neighbourhood
-   * only, never the whole library. SkillPyramid's incremental update.
+   * only, never the whole library. SkillPyramid's incremental update: the new
+   * method is the query, its nearest methods (by embedding when there is one,
+   * by shared words otherwise) are the group, and DECIDE reads that group.
+   *
+   * It records every relation DECIDE finds and builds the two that need no
+   * second opinion about wording — `shared_part` (the shared operation becomes
+   * its own method) and `subset` (the wider method now points at the narrower one)
+   * — under the same guard as the hourly pass: a group holding a merge nobody has
+   * proven is related and not built on. Merges and abstract patterns wait for the
+   * hourly pass, which sees the whole library. It used to record relations and
+   * build nothing, so a new method was never factored until that pass, which was
+   * the one that did nothing.
    * @param {{job: any}} request
    */
   async integrate({ job }) {
@@ -551,16 +753,36 @@ export class MethodConsolidation {
     const subject = await this.learning.getMethod(job.userId, methodId);
     const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
     const neighbours = (page.items ?? []).filter((item) => item.id !== methodId && item.payload?.status !== "retired");
-    const pairs = candidatePairs([subject, ...neighbours]).filter((pair) => pair.a === methodId || pair.b === methodId);
-    const group = [subject, ...pairs.slice(0, CONSOLIDATION_LIMITS.maxGroupSize - 1)
-      .map((pair) => neighbours.find((item) => item.id === (pair.a === methodId ? pair.b : pair.a)))
-      .filter(Boolean)];
+    const nearest = await this.#nearestTo(subject, neighbours);
+    const group = [subject, ...nearest];
     if (group.length < CONSOLIDATION_LIMITS.minGroupSize) {
-      return { action: "integrate", methodId, neighbours: 0, relations: 0 };
+      this.#noop("no_groups");
+      return { action: "integrate", methodId, neighbours: 0, relations: 0, builds: 0, noop: ["no_groups"] };
     }
-    const decided = await this.decideGroup(job, group);
-    const relations = decided ? await this.applyRelations(job, group, decided) : 0;
-    return { action: "integrate", methodId, neighbours: group.length - 1, relations };
+    const done = await this.#processGroup(job, group, { buildTypes: ["shared_part", "subset"], buildAllowed: true });
+    /** @type {string[]} */
+    const noop = [];
+    if (done.status === "skipped_unchanged") noop.push("skipped_unchanged");
+    if (done.status === "decide_failed") noop.push("decide_failed");
+    if (done.blockedUnproven) noop.push("blocked_unproven");
+    if (done.decidedNothing) noop.push("decided_nothing");
+    if (done.refusals.length) noop.push("merge_refused");
+    for (const reason of noop) this.#noop(reason);
+    return { action: "integrate", methodId, neighbours: group.length - 1, relations: done.relations, relationTypes: done.relationTypes, builds: done.builds,
+      refusals: done.refusals, noop };
+  }
+
+  /** The methods most like this one, at most a group's worth less itself: by embedding when the similarity module answers,
+   *  by shared words (`candidatePairs`) otherwise.
+   *  @param {any} subject @param {readonly any[]} neighbours @returns {Promise<any[]>} */
+  async #nearestTo(subject, neighbours) {
+    const limit = CONSOLIDATION_LIMITS.maxGroupSize - 1;
+    if (this.similarity) {
+      const found = await this.similarity.nearest(this.similarity.methodText(subject), neighbours, { limit, minScore: METHOD_SIMILARITY_PAIR_FLOOR }).catch(() => null);
+      if (found) return found.map((/** @type {any} */ entry) => entry.method);
+    }
+    const pairs = candidatePairs([subject, ...neighbours]).filter((pair) => pair.a === subject.id || pair.b === subject.id);
+    return pairs.slice(0, limit).map((pair) => neighbours.find((item) => item.id === (pair.a === subject.id ? pair.b : pair.a))).filter(Boolean);
   }
 
   /**
@@ -574,26 +796,77 @@ export class MethodConsolidation {
   }
 
   /**
-   * Record the relations one DECIDE run proposed.
+   * Record the relations one DECIDE run proposed — all six types.
+   *
+   * Four are symmetric and every member records the others: `shared_part`, `merge`, `abstract_pattern`, `conflicts_with`.
+   * Two have a direction that the assignment names, and each is recorded once, on the lesser method, pointing at the other
+   * (`METHOD_RELATION_TYPES`): `subset` on each narrower method, naming the `WIDER` one it is a part of; `supersedes` on each
+   * method the `REPLACES` one replaces, naming the replacement — its forwarding address, which `retirementProposal` reads to
+   * stop it once it is unused. `subset` and `supersedes` were skipped here ("no direction") and the second therefore never
+   * fired; a directed assignment that names no direction is recorded by nobody, and the contract asks for it.
+   *
+   * Only a relation the method does not hold already is new: a pass that reads a group again does not count the same fact
+   * twice. `tally` receives the count per type, `onRelation` the counter.
    * @param {any} job @param {readonly any[]} members @param {any} decided
-   * @returns {Promise<number>}
+   * @param {Record<string, number>} [tally]
+   * @returns {Promise<number>} how many relations were new
    */
-  async applyRelations(job, members, decided) {
+  async applyRelations(job, members, decided, tally = {}) {
     const byId = new Map(members.map((member) => [member.id, member]));
     let count = 0;
-    for (const assignment of decided?.assignments ?? []) {
-      if (!METHOD_RELATION_TYPES.includes(assignment.RELATION_TYPE) || !Array.isArray(assignment.SKILLS)) continue;
-      // Group assignments carry no direction. Only symmetric relations can be recorded without inventing one.
-      if (!["shared_part", "merge", "abstract_pattern", "conflicts_with"].includes(assignment.RELATION_TYPE)) continue;
-      const skills = assignment.SKILLS.filter((/** @type {string} */ id) => byId.has(id));
-      if (skills.length !== assignment.SKILLS.length) continue;
-      for (const source of skills) {
-        const relations = skills.filter((/** @type {string} */ id) => id !== source).map((/** @type {string} */ target) => ({ type: assignment.RELATION_TYPE, target, evidence: assignment.REASON ?? "", proposedBy: `consolidate:${job.id}` }));
-        const written = await this.learning.recordRelations(job.userId, source, relations, (id) => byId.has(id)).catch(() => null);
-        if (written) count += relations.length;
+    for (const { entry, skills, wider, replaces } of resolveAssignments(members, decided?.assignments)) {
+      if (!skills) continue;
+      const type = entry.RELATION_TYPE;
+      /** @type {{source: string, target: string}[]} */
+      let links;
+      if (type === "subset" || type === "supersedes") {
+        const head = type === "subset" ? wider : replaces;
+        if (!head) continue;
+        links = skills.filter((id) => id !== head).map((source) => ({ source, target: head }));
+      } else {
+        links = skills.flatMap((source) => skills.filter((id) => id !== source).map((target) => ({ source, target })));
+      }
+      for (const source of [...new Set(links.map((link) => link.source))]) {
+        // What the method holds now, not what the pass listed it with: a pass that reads a group again must not count a fact twice.
+        const held = (await this.learning.getMethod(job.userId, source).catch(() => null))?.payload?.learning?.relations ?? byId.get(source)?.payload?.learning?.relations ?? [];
+        const relations = links.filter((link) => link.source === source)
+          .map((link) => ({ type, target: link.target, evidence: entry.REASON ?? "", proposedBy: `consolidate:${job.id}` }));
+        const written = await this.learning.recordRelations(job.userId, source, relations, (/** @type {string} */ id) => byId.has(id)).catch(() => null);
+        if (!written) continue;
+        const added = relations.filter((relation) => !held.some((/** @type {any} */ before) => before.type === relation.type && before.target === relation.target)).length;
+        if (!added) continue;
+        count += added;
+        tally[type] = (tally[type] ?? 0) + added;
+        try { this.onRelation?.(type, added); } catch { /* a counter never decides what is recorded */ }
       }
     }
     return count;
+  }
+
+  /**
+   * A fresh read of a member just before it is written, or null when it is not the method the pass decided about any more.
+   * Recording a relation or a stamp is a write that moves a method's revision, so the revision the pass listed with is stale by the
+   * time a build amends or retires it, and the conflict used to be swallowed with the rewrite lost.
+   * @param {any} job @param {any} member
+   */
+  async #fresh(job, member) {
+    const current = await this.learning.getMethod(job.userId, member.id).catch(() => null);
+    return current && current.payload?.contentDigest === member.payload?.contentDigest && current.payload?.status !== "retired" ? current : null;
+  }
+
+  /**
+   * Stop a method a merge replaced, leaving its forwarding address on the record: a `supersedes` relation naming the
+   * replacement, which is what the library reads as "replaced". It used to pass a link the store refuses (only regressions have
+   * one), so the retirement was swallowed whole and no merge ever stopped its originals.
+   * @param {any} job @param {any} original @param {string} replacementId @param {string} proposedBy @param {string} reason
+   * @returns {Promise<boolean>}
+   */
+  async #retireReplaced(job, original, replacementId, proposedBy, reason) {
+    await this.learning.recordRelations?.(job.userId, original.id,
+      [{ type: "supersedes", target: replacementId, evidence: "A merged method now carries it.", proposedBy }], (/** @type {string} */ id) => id === replacementId).catch(() => null);
+    const current = await this.learning.getMethod(job.userId, original.id).catch(() => null);
+    if (!current || current.payload?.status === "retired") return false;
+    return Boolean(await this.learning.retire(job.userId, original.id, { expectedRevision: current.revision, reason }).catch(() => null));
   }
 
   /** Retire pinned originals once the canonical method has cleared the harm test on its own runs (`mergeCleared`); until then they stay in force beside it.
@@ -608,10 +881,8 @@ export class MethodConsolidation {
         const original = await this.learning.getMethod(job.userId, pending.methodId).catch(() => null);
         if (!original || original.payload.status === "retired" || original.payload.contentDigest !== pending.baseDigest
           || !preservedSectionsIntact(original.payload.body, canonical.payload.body).ok) continue;
-        const result = await this.learning.retire(job.userId, original.id, { expectedRevision: original.revision,
-          reason: "合并后的做法在你的研究里用过，没有变差；原做法保留历史并转向合并版本。",
-          link: { supersededBy: canonical.id, proposedBy: canonical.payload.provenance.consolidatedBy } }).catch(() => null);
-        if (result) retired.push(original.id);
+        if (await this.#retireReplaced(job, original, canonical.id, canonical.payload.provenance.consolidatedBy,
+          "合并后的做法在你的研究里用过，没有变差；原做法保留历史并转向合并版本。")) retired.push(original.id);
       }
     }
     return retired;
@@ -672,7 +943,7 @@ export class MethodConsolidation {
   async decideGroup(job, members) {
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
     const result = await this.#step(job, {
-      dispatchId: `method-relations-${shortDigest(keys.join(" "))}`,
+      dispatchId: `method-relations-v${DECIDE_VERSION}-${shortDigest(keys.join(" "))}`,
       input: {
         schemaVersion: 1,
         action: "decide",
@@ -687,7 +958,8 @@ export class MethodConsolidation {
         })),
       },
       question: "Decide how the methods in method-relations-input.json relate, using the method-relations capability with action `decide`. "
-        + "Return ASSIGNMENT, SKILLS, RELATION_TYPE and REASON for each group you find. "
+        + "Return ASSIGNMENT, SKILLS, RELATION_TYPE and REASON for each group you find, naming methods by the id the input gives them. "
+        + "For subset also return WIDER, the id of the method that does everything the other does; for supersedes also return REPLACES, the id of the method that replaces the other. "
         + "shared_part is for a concrete shared sub-capability, never for vague topical similarity. "
         + "Say nothing rather than inventing a relation; an empty answer is correct when the methods are unrelated.",
     });
@@ -700,12 +972,24 @@ export class MethodConsolidation {
    * prose. "Preserve the source skill's procedures, constraints, edge cases and
    * verification checks" is a judgement when written that way and a decidable
    * property when written as "the set of items under Verification and
-   * Constraints may gain members and may not lose them".
+   * Constraints may gain members and may not lose them", and so is "keep the
+   * evidence it rests on": a quotation a source's record stores and its own body
+   * carries is still in the rewrite (`bodyPreservation`). A rewrite that fails either is
+   * not written, and the result says which and why (`refusals`).
+   *
+   * What each assignment may change is the capability's own rule, held here by code:
+   * `subset` touches only the `WIDER` method; `conflicts_with` and `supersedes` touch nothing
+   * (the second is retired by the library's own rules once it is unused).
    * @param {any} job @param {readonly any[]} members @param {any} decided
+   * @returns {Promise<{applied: number, pendingRetirements?: any[], refusals: {assignment: string, methodId: string, code: string, dropped: number, quotesDropped: number}[]}>}
    */
   async buildGroup(job, members, decided) {
-    const assignments = (decided?.assignments ?? []).filter((entry) => METHOD_RELATION_TYPES.includes(entry?.RELATION_TYPE));
-    if (!assignments.length) return { applied: 0 };
+    const assignments = (decided?.assignments ?? []).filter((/** @type {any} */ entry) => METHOD_RELATION_TYPES.includes(entry?.RELATION_TYPE));
+    /** @type {{assignment: string, methodId: string, code: string, dropped: number, quotesDropped: number}[]} */
+    const refusals = [];
+    if (!assignments.length) return { applied: 0, refusals };
+    // What each assignment names, resolved to the group's own ids (`resolveAssignments`), by the identifier the builder echoes.
+    const resolved = new Map(resolveAssignments(members, assignments).map((item) => [String(item.entry.ASSIGNMENT), item]));
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
     const result = await this.#step(job, {
       dispatchId: `method-relations-build-${shortDigest(`${keys.join(" ")}\n${JSON.stringify(assignments)}`)}`,
@@ -727,42 +1011,58 @@ export class MethodConsolidation {
         + "Add reuse references only near the passages they affect. Invent no tools, scripts, files or dependencies. "
         + "Each rewritten method must still read as a standalone SKILL.md.",
     });
-    if (!result) return { applied: 0 };
+    if (!result) return { applied: 0, refusals };
     let applied = 0;
     const revisions = result.output?.revisions ?? [];
     const created = new Map();
     const pendingRetirements = [];
+    /** @param {any} assignment @param {string} methodId @param {ReturnType<typeof bodyPreservation>} kept @param {string} event */
+    const refuse = async (assignment, methodId, kept, event) => {
+      refusals.push({ assignment: String(assignment?.entry?.ASSIGNMENT ?? ""), methodId, code: "preservation", dropped: kept.dropped.length, quotesDropped: kept.quotesDropped.length });
+      await this.audit?.(job, event, { methodId, dropped: kept.dropped.length, ...(kept.quotesDropped.length ? { quotesDropped: kept.quotesDropped.length } : {}) });
+    };
     // Create dependencies first so later amendments can resolve their exact digests.
     for (const rewrite of revisions.filter((/** @type {any} */ item) => item.operation === "create")) {
-      const assignment = assignments.find(entry => entry.ASSIGNMENT === rewrite.assignment);
-      if (!assignment || !["shared_part", "merge", "abstract_pattern"].includes(assignment.RELATION_TYPE) || rewrite.baseDigest != null) continue;
+      const assignment = resolved.get(String(rewrite.assignment));
+      const type = assignment?.entry.RELATION_TYPE;
+      if (!assignment || !assignment.skills || !["shared_part", "merge", "abstract_pattern"].includes(type) || rewrite.baseDigest != null) continue;
       const parsed = parseSkillFrontmatter(String(rewrite.skill ?? ""));
       if (parsed.issues.length || typeof parsed.frontmatter.name !== "string" || rewrite.methodId !== learnedMethodId(parsed.frontmatter.name)) continue;
-      if (assignment.RELATION_TYPE === "merge" && !members.filter(member => assignment.SKILLS.includes(member.id)).every(member => preservedSectionsIntact(member.payload.body, parsed.body).ok)) continue;
+      const sources = members.filter((member) => assignment.skills?.includes(member.id));
+      if (type === "merge") {
+        // A merge folds its sources into one: whatever any of them stored — its checks, its constraints, the evidence it was
+        // learnt from — the canonical method keeps. One that does not is not created.
+        const lost = sources.map((member) => ({ member, kept: bodyPreservation({ body: member.payload.body, provenance: member.payload.provenance }, parsed.body) })).find((item) => !item.kept.ok);
+        if (lost) { await refuse(assignment, lost.member.id, lost.kept, "method.merge.refused"); continue; }
+      }
       // A model may create a new candidate, never overwrite another method by name.
-      const prior = await this.learning.getMethod(job.userId, rewrite.methodId).catch(error => { if (error?.code === "method_not_found") return null; throw error; });
+      const prior = await this.learning.getMethod(job.userId, rewrite.methodId).catch((/** @type {any} */ error) => { if (error?.code === "method_not_found") return null; throw error; });
       if (prior) {
         if (prior.payload.provenance?.consolidatedBy === `consolidate:${job.id}` && prior.payload.body === parsed.body) created.set(rewrite.methodId, prior);
         continue;
       }
       const candidate = await this.learning.createCandidate(job.userId, { projectId: job.projectId, frontmatter: parsed.frontmatter, body: parsed.body,
-        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, pendingRetirements: revisions.filter(item => item.operation === "retire" && item.assignment === rewrite.assignment && item.supersededBy === rewrite.methodId && members.some(member => member.id === item.methodId && member.payload.contentDigest === item.baseDigest)).map(item => ({ methodId: item.methodId, baseDigest: item.baseDigest, assignment: item.assignment })) } }).catch(() => null);
+        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, ...(type === "merge" ? inheritedProvenance(sources) : {}),
+          pendingRetirements: revisions.filter((/** @type {any} */ item) => item.operation === "retire" && item.assignment === rewrite.assignment && item.supersededBy === rewrite.methodId && sources.some(member => member.id === item.methodId && member.payload.contentDigest === item.baseDigest)).map((/** @type {any} */ item) => ({ methodId: item.methodId, baseDigest: item.baseDigest, assignment: item.assignment })) } }).catch(() => null);
       if (candidate) { created.set(rewrite.methodId, candidate); applied += 1; }
     }
     for (const rewrite of revisions) {
       const target = members.find((member) => member.id === rewrite.methodId);
-      const assignment = assignments.find(entry => entry.ASSIGNMENT === rewrite.assignment && entry.SKILLS?.includes(target?.id));
-      if (!target || !assignment || rewrite.baseDigest !== target.payload.contentDigest || assignment.RELATION_TYPE === "conflicts_with") continue;
+      const assignment = resolved.get(String(rewrite.assignment));
+      const type = assignment?.entry.RELATION_TYPE;
+      if (!target || !assignment?.skills?.includes(target.id) || rewrite.baseDigest !== target.payload.contentDigest || type === "conflicts_with" || type === "supersedes") continue;
+      // "Change only the wider method": the narrower is not touched at all, and a subset that names no wider one touches neither.
+      if (type === "subset" && assignment.wider !== target.id) continue;
       if (rewrite.operation === "retire") {
         const replacement = created.get(rewrite.supersededBy);
-        if (assignment.RELATION_TYPE !== "merge" || !replacement || rewrite.skill != null
+        if (type !== "merge" || !replacement || rewrite.skill != null
           || !revisions.some((/** @type {any} */ item) => item.methodId === rewrite.supersededBy && item.assignment === rewrite.assignment && item.operation === "create")) continue;
         if (!mergeCleared(replacement)) {
           pendingRetirements.push({ methodId: target.id, baseDigest: rewrite.baseDigest, supersededBy: replacement.id, assignment: rewrite.assignment });
           continue;
         }
-        const retired = await this.learning.retire(job.userId, target.id, { expectedRevision: target.revision, reason: "方法合并后保留历史并转向新候选。", link: { supersededBy: replacement.id, proposedBy: `consolidate:${job.id}` } }).catch(() => null);
-        if (retired) applied += 1;
+        const fresh = await this.#fresh(job, target);
+        if (fresh && await this.#retireReplaced(job, fresh, replacement.id, `consolidate:${job.id}`, "方法合并后保留历史并转向新候选。")) applied += 1;
         continue;
       }
       if (rewrite.operation !== "amend") continue;
@@ -772,16 +1072,20 @@ export class MethodConsolidation {
       // deferred pass resumes — is not another revision.
       if (parsed.body === target.payload.body
         && JSON.stringify(parsed.frontmatter) === JSON.stringify(target.payload.frontmatter)) continue;
-      const preserved = preservedSectionsIntact(target.payload.body, parsed.body);
+      const preserved = bodyPreservation({ body: target.payload.body, provenance: target.payload.provenance }, parsed.body);
       if (!preserved.ok) {
         // The builder dropped a check. The paper asks the model not to; this
         // asks the record, and the refusal goes to the operator's audit line —
         // it used to be an English notice in the researcher's inbox.
-        await this.audit?.(job, "method.rewrite.refused", { methodId: target.id, dropped: preserved.dropped.length });
+        await refuse(assignment, target.id, preserved, "method.rewrite.refused");
         continue;
       }
+      // Recording a relation or a stamp moved the revision this pass listed the method at; the write is made against the
+      // one it holds now, and a method that is no longer the body this was computed against is left alone.
+      const fresh = await this.#fresh(job, target);
+      if (!fresh) continue;
       const amended = await this.learning.amendMethod(job.userId, target.id, {
-        expectedRevision: target.revision,
+        expectedRevision: fresh.revision,
         frontmatter: parsed.frontmatter,
         body: parsed.body,
         dependencies: rewrite.dependencies ?? target.payload.dependencies ?? [],
@@ -789,9 +1093,38 @@ export class MethodConsolidation {
       }).catch(() => null);
       if (amended) applied += 1;
     }
-    return { applied, pendingRetirements };
+    return { applied, pendingRetirements, refusals };
   }
 
+}
+
+/**
+ * What a merged method inherits of the evidence its sources rest on, so that folding methods together does not fold the trail
+ * they were learnt from away: the quotations they store, the feedback events and result versions they came from, and which methods
+ * the merge replaced. Bounded as the store bounds each of them; a source that stores none contributes none.
+ * @param {readonly any[]} sources
+ */
+function inheritedProvenance(sources) {
+  /** @param {string} field */
+  const union = (field) => [...new Set(sources.flatMap((source) => (Array.isArray(source.payload?.provenance?.[field]) ? source.payload.provenance[field] : []).map((/** @type {any} */ item) => JSON.stringify(item))))].map((item) => JSON.parse(item));
+  // Each entry as its source stored it (the run and span beside the quotation), once per quotation, and only the ones that read as quotations.
+  /** @type {any[]} */
+  const evidence = [];
+  const seen = new Set();
+  for (const entry of union("evidence")) {
+    const [quote] = storedEvidenceQuotes({ evidence: [entry] });
+    if (!quote || seen.has(quote) || evidence.length >= 20) continue;
+    seen.add(quote);
+    evidence.push(entry);
+  }
+  const feedbackEventIds = union("feedbackEventIds").filter((/** @type {unknown} */ id) => typeof id === "string").slice(0, 50);
+  const results = union("results").slice(0, 40);
+  return {
+    mergedFrom: sources.map((source) => ({ methodId: source.id, digest: source.payload?.contentDigest })),
+    ...(evidence.length ? { evidence } : {}),
+    ...(feedbackEventIds.length ? { feedbackEventIds } : {}),
+    ...(results.length ? { results } : {}),
+  };
 }
 
 /**
@@ -808,9 +1141,10 @@ export function retirementSentence(proposal) {
     incident: "它牵涉到一起已确认的问题",
     harm: `用上它的 ${proposal.runs ?? "几"} 次研究里有 ${proposal.rejected ?? "多"} 次交付被退回，明显多于平常`,
     scientific_regression: `用上它后做出的 ${proposal.runs ?? "几"} 个结果里，有 ${proposal.rejected ?? "多"} 个没能被重算复现或被你改正过，明显多于它之前的版本（只说明相伴出现，不证明因果）`,
-    contribution: `用上它的 ${proposal.runs ?? "多"} 次研究，整体结果偏差`,
     never_opened: `它跟着你做了 ${proposal.runs ?? "多"} 次研究，一次也没被用上`,
     superseded: "它已经很久没被用到，而且已有新的做法取代它",
+    unproven_merge_expired: "它是整理做法时合并出来的，一直没有被用上，原来的做法都还在",
+    library_cap: "在用的做法已经超过上限，它是其中用得最少的",
   }[String(proposal.code ?? "")] ?? "它最近没有帮上忙";
   return proposal.immediate
     ? `${why}，已先停用。觉得不对，可以在「记忆胶囊」里这条做法上点「回到上一版」恢复。`

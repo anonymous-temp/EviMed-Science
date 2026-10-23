@@ -58,7 +58,9 @@ import {
   cleanMethodSteps,
   emptyLearning,
   foldCarried,
+  foldDecided,
   foldEligible,
+  foldLevel,
   foldMethodFeedback,
   foldObservation,
   foldRead,
@@ -235,6 +237,8 @@ export function methodRecordFrom(document, { revisions = undefined } = {}) {
     dependencies: payload.dependencies ?? [],
     learning: payload.learning ?? emptyLearning(payload.contentDigest ?? ""),
     provenance: payload.provenance ?? { origin: "inferred" },
+    // When the body it holds now was written, for the rules that read an age (a merge nobody has used expires).
+    since: payload.bodyUpdatedAt ?? payload.createdAt ?? document?.createdAt ?? null,
     // What later became of the results produced under each revision (N14), and — only where a caller needed the lifecycle
     // to answer which earlier body to return to — every body the method has held, newest first.
     ...(payload.scientific ? { scientific: payload.scientific } : {}),
@@ -959,6 +963,48 @@ export class LearningService {
   }
 
   /**
+   * Stamp a method with the group it was last decided in (`foldDecided`), so the consolidation pass reads an unchanged group
+   * once. Telemetry like the counters, and made again on the fresh record when it loses a race to another counter write.
+   * `expectedDigest` is the body the pass decided about: a method amended since is left unstamped, because the stamp would
+   * claim a reading of text it no longer holds.
+   * @param {string} userId @param {string} methodId @param {{key: string, at: string, version?: number}} decided @param {string} [expectedDigest]
+   */
+  async recordDecided(userId, methodId, decided, expectedDigest) {
+    return this.#foldLearning(userId, methodId, (document) => {
+      if (expectedDigest && document.payload.contentDigest !== expectedDigest) return document.payload.learning;
+      return foldDecided(document.payload.learning, decided);
+    });
+  }
+
+  /**
+   * Store a method's level in the library (`foldLevel`): derived from `depends_on`, so it is written back when it differs and
+   * never decided here. Telemetry, like the counters.
+   * @param {string} userId @param {string} methodId @param {number} level
+   */
+  async recordLevel(userId, methodId, level) {
+    return this.#foldLearning(userId, methodId, (document) => foldLevel(document.payload.learning, level));
+  }
+
+  /**
+   * Fold something into a method's learning payload, on the record as it is now; a write that lost a race to another counter
+   * write is made again, and nothing is written when the fold changes nothing.
+   * @param {string} userId @param {string} methodId @param {(document: any) => any} fold
+   */
+  async #foldLearning(userId, methodId, fold) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      const learning = fold(document);
+      if (learning === document.payload.learning) return document;
+      try {
+        return await this.#saveLearning(userId, methodId, document, learning);
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method counters did not settle.");
+  }
+
+  /**
    * @param {string} userId @param {string} methodId @param {any[]} relations
    * @param {(id: string) => boolean} [exists]
    */
@@ -1105,8 +1151,9 @@ export class LearningService {
   }
 
   /**
-   * Which effective methods should be proposed for retirement tonight.
-   * A proposal, not an action: the caller sends a notice with a rollback target.
+   * Which effective methods a branch of the lifecycle wants stopped, with the branch (`code`) that decided and whether it acts
+   * at once (`immediate`: a method the system inferred) or only proposes (one the researcher stated). The caller acts on the
+   * first kind and reports the second; a stop is a status the researcher restores with one click.
    * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number}} [options]
    */
   async retirementProposals(userId, options = {}) {
@@ -1139,12 +1186,13 @@ export class LearningService {
     // — which is the failure mode the published work names, and its symptom is
     // silence: the wrong method gets injected and the run says nothing. So the
     // cap is applied to what is left after the per-method proposals, and it
-    // proposes the lowest contributions until the library is back under it.
+    // stops the least-used until the library is back under it: the same status
+    // and the same one click as every other stop, never a deletion.
     const proposed = new Set(proposals.map((entry) => entry.document.id));
     const remaining = items.filter((document) => document.payload.status === "approved" && !proposed.has(document.id));
     for (const eviction of libraryEvictions(remaining.map((document) => records.get(document.id)), { cap: options.cap })) {
       const document = remaining.find((entry) => entry.id === eviction.id);
-      if (document) proposals.push({ document, proposal: { propose: true, immediate: false, reason: eviction.reason, strength: 0, contribution: eviction.contribution } });
+      if (document) proposals.push({ document, proposal: { propose: true, immediate: eviction.immediate, code: "library_cap", reason: eviction.reason, strength: 0 } });
     }
     return proposals;
   }

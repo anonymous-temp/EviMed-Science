@@ -32,10 +32,16 @@ Read every body in `group` in full. Then emit one assignment per relation you
 find, in exactly this shape and with exactly these field names:
 
 - `ASSIGNMENT` — a stable identifier for this decision, unique within the job.
-- `SKILLS` — the methods the relation holds between, by name. Two or more; for
-  `abstract_pattern`, three or more.
+- `SKILLS` — the methods the relation holds between, by `id` exactly as the input
+  lists them (a method's `name` is accepted too, but use one form throughout the
+  assignment). Two or more; for `abstract_pattern`, three or more.
 - `RELATION_TYPE` — one of the six below, and nothing else.
 - `REASON` — why, citing the passages in the bodies that show it.
+- `WIDER` — only for `subset`: the one of `SKILLS` that does everything the others
+  do and adds its own. Without it the library cannot tell which method to change.
+- `REPLACES` — only for `supersedes`: the one of `SKILLS` that replaces the others,
+  the later and more complete treatment. Without it the library cannot tell which
+  method is the replaced one.
 
 A group may yield several assignments, one, or none. None is a real answer: it
 means the screen was wrong about that group, and saying so is what keeps the
@@ -54,7 +60,8 @@ over-applied, and every wrong use of it costs a real method its content.
 
 **`subset`** — one method is strictly a sub-method of the other. The wider one
 does everything the narrower one does and adds workflow, constraints or context
-of its own. If both add something the other lacks, this is not `subset`.
+of its own. If both add something the other lacks, this is not `subset`. Name the
+wider one in `WIDER`.
 
 **`merge`** — trigger, inputs, workflow and output are near-equivalent. The two
 are one method that was written down twice.
@@ -69,7 +76,9 @@ Say which situation and quote both prescriptions. Do not rank them, do not
 reconcile them, and do not choose.
 
 **`supersedes`** — one method is a later, more complete treatment of the same
-situation as the other, with nothing of the earlier one lost.
+situation as the other, with nothing of the earlier one lost. Name the replacing
+one in `REPLACES`. The library records it and stops the replaced method itself
+once nothing uses it; you do not rewrite either.
 
 ## Action `build`
 
@@ -98,9 +107,9 @@ What each relation type builds:
   must be narrower than every source method, plus one `amend` revision per source
   method: the shared passage becomes a reuse reference to the atomic method and
   `depends_on` gains its digest. The sources keep everything else.
-- `subset` → change only the wider method. Replace its duplicated implementation
-  with a reference to the narrower one and pin the narrower one in `depends_on`.
-  The narrower method is not touched at all.
+- `subset` → change only the wider method (the one `WIDER` names). Replace its
+  duplicated implementation with a reference to the narrower one and pin the
+  narrower one in `depends_on`. The narrower method is not touched at all.
 - `merge` → one canonical candidate that keeps every useful, non-conflicting
   detail from every source and keeps no duplicate variant of the same step. Each
   source method gets a `retire` revision naming the canonical method in
@@ -110,6 +119,7 @@ What each relation type builds:
   `depends_on`, it does not merge them and it does not replace them.
 - `conflicts_with` → no revision at all. Write the relation and the notice; both
   methods stay exactly as they are until the researcher decides.
+- `supersedes` → no revision at all; it is never given to you to build.
 
 Every revision you emit is a candidate on a new revision of the method. The
 current revision is not modified and nothing is deleted, so a wrong build costs a
@@ -124,7 +134,8 @@ review, not a method.
  "screened": {"selected": [{"group": "g1", "methods": ["a", "b"], "reason": "..."}],
               "rejected": [{"method": "c", "reason": "..."}]},
  "assignments": [{"ASSIGNMENT": "A1", "SKILLS": ["a", "b"],
-                  "RELATION_TYPE": "shared_part", "REASON": "..."}],
+                  "RELATION_TYPE": "shared_part", "REASON": "...",
+                  "WIDER": "only for subset", "REPLACES": "only for supersedes"}],
  "revisions": [{"assignment": "A1", "methodId": "...", "name": "...",
                 "operation": "create|amend|retire", "baseDigest": "sha256:...",
                 "supersededBy": "...", "skill": "---\nname: ...\n---\n## Purpose\n..."}],

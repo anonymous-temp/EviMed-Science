@@ -143,7 +143,7 @@ test("a rewrite that drops a verification item is refused, and the refusal is an
       status: "succeeded",
       output: identity.dispatchId.includes("build")
         ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), shrunk) }] }
-        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"], WIDER: "m1" }] },
     }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
@@ -164,7 +164,7 @@ test("a rewrite that only grows the checks is accepted", async () => {
       status: "succeeded",
       output: identity.dispatchId.includes("build")
         ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
-        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"], WIDER: "m1" }] },
     }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
@@ -413,7 +413,7 @@ test("a step whose run is still working is waited for, not counted as having no 
       const seen = (reads.get(identity.dispatchId) ?? 0) + 1;
       reads.set(identity.dispatchId, seen);
       if (seen < 3) return { status: seen === 1 ? "pending" : "running" };
-      return { status: "succeeded", output: { assignments: [{ ASSIGNMENT: "A1", SKILLS: ["m1", "m2"], RELATION_TYPE: "shared_part", REASON: "Both resolve a span." }] } };
+      return { status: "succeeded", output: { assignments: [{ ASSIGNMENT: "A1", SKILLS: ["m1", "m2"], RELATION_TYPE: "merge", REASON: "Both resolve a span." }] } };
     },
     pollMs: 7,
     wait: async (ms) => { waits.push(ms); },
@@ -519,7 +519,7 @@ test("what the steps rewrite is written against the revision the approvals left,
       status: "succeeded",
       output: identity.dispatchId.includes("build")
         ? { revisions: [{ methodId: "m1", operation: "amend", assignment: "g1", baseDigest: items[0].payload.contentDigest, skill: renderMethodSkill(frontmatter("resolve-claim-span"), grown) }] }
-        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"] }] },
+        : { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "subset", SKILLS: ["m1", "m2"], WIDER: "m1" }] },
     }),
   });
   const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
@@ -619,11 +619,14 @@ test("a merge retires its originals when the canonical method has cleared the ha
   const members = [source, doc("other", "other-method")];
   const rows = new Map(members.map(member => [member.id, member]));
   const retirements = [];
+  /** @type {any[]} */
+  const recorded = [];
   const learning = { listMethods: async () => ({ items: [...rows.values()] }), getMethod: async (user, id) => {
     if (!rows.has(id)) throw Object.assign(new Error("Missing"), { code: "method_not_found" }); return rows.get(id);
   }, createCandidate: async (user, input) => {
     const canonical = doc(canonicalId, input.frontmatter.name, { ...input, status: "approved" }); rows.set(canonicalId, canonical); return canonical;
-  }, retire: async (user, id, input) => { retirements.push({ id, input }); rows.get(id).payload.status = "retired"; return rows.get(id); } };
+  }, recordRelations: async (user, id, relations) => { recorded.push({ id, relations }); return rows.get(id); },
+  retire: async (user, id, input) => { retirements.push({ id, input }); rows.get(id).payload.status = "retired"; return rows.get(id); } };
   const output = { schemaVersion: 1, action: "build", assignments, revisions: [
     { assignment: "A1", methodId: canonicalId, name: "canonical-method", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("canonical-method"), SECTIONS()) },
     { assignment: "A1", methodId: source.id, name: "source-method", operation: "retire", baseDigest: source.payload.contentDigest, supersededBy: canonicalId },
@@ -668,7 +671,10 @@ test("a merge retires its originals when the canonical method has cleared the ha
   // Four clean runs that invoked the body it holds: the test reads clear, and the original is retired, once.
   holds(clean(4));
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), ["source"]);
-  assert.equal(retirements[0].input.link.supersededBy, canonicalId);
+  // The forwarding address is a `supersedes` relation on the original naming the canonical method; the store refuses any other
+  // link on a retirement (only a regression has one), so passing one swallowed the whole retirement and no merge ever stopped its originals.
+  assert.deepEqual(recorded.map((entry) => [entry.id, entry.relations[0].type, entry.relations[0].target]), [["source", "supersedes", canonicalId]]);
+  assert.equal("link" in retirements[0].input, false);
   assert.match(retirements[0].input.reason, /合并/);
   assert.equal(rows.get("source").payload.status, "retired");
   assert.deepEqual(await service.completePendingMerges({ userId: "user" }), []);
@@ -686,8 +692,9 @@ test("a merge nobody has used yet is not built on again: the hourly pass made on
     : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", RELATION_TYPE: "merge", SKILLS: ["m1", "m2"] }] } });
   const blocked = consolidation({ learning: fakeLearning([taught, merged]), readResult: answer });
   const result = await blocked.instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
-  assert.deepEqual(blocked.dispatched.map((call) => call.input.action), [], "neither decided nor rebuilt");
-  assert.equal(result.builds, 0);
+  // It used to stop the whole group, DECIDE included, and for eleven days stopped everything: now it stops the build and nothing else.
+  assert.deepEqual(blocked.dispatched.map((call) => call.input.action), ["decide"], "decided, and its relations recorded, but never rebuilt");
+  assert.deepEqual([result.builds, result.blockedUnproven, result.relations], [0, 1, 2]);
 
   // Once it has cleared the harm test on runs that invoked it, it is a method like any other and may be grouped again.
   const runs = Array.from({ length: 4 }, (_, index) => ({ runId: `run-${index}`, family: `family-${index}`, outcome: "accepted", invoked: true, at: `2026-09-0${index + 1}T00:00:00.000Z` }));

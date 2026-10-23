@@ -1,6 +1,6 @@
 {
   "id": "method-relations",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Method Relations",
   "description": "Screen methods into candidate groups, decide which relation holds inside one group, and rewrite the affected methods under that decision without losing any of them.",
   "whenToUse": "Use for a consolidate job that supplies a frozen method-relations-input.json and names exactly one action - screen, decide or build.",
