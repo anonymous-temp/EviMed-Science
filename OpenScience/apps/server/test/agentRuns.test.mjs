@@ -34,7 +34,7 @@ import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.
 import { HttpError } from "../src/security.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
-import { learningTriggersFor } from "../src/learningTriggers.mjs";
+import { learningRefusal, learningTriggersFor } from "../src/learningTriggers.mjs";
 import { persistRunTranscript } from "../src/runTranscripts.mjs";
 
 /** Bind synthetic legacy fixture state to the actual platform-created run, never an inferred owner. */
@@ -106,7 +106,9 @@ test("specialist dispatch preserves managed GEO provenance for learning and rele
     assert.deepEqual(await store.researcherRuns(project), []);
     assert.equal(await store.lastSessionId(project), null, "background work does not take over the last open conversation");
     const completed = { ...persisted, status: "succeeded", artifacts: ["report.md"], transcript: { completeness: "complete" } };
-    assert.deepEqual(learningTriggersFor({ run: completed, runs: [completed], project }).map((lesson) => lesson.trigger), ["delivered"]);
+    // Researcher-owned: no gate refuses it, so what the researcher corrects in it is a lesson (a clean delivery is read when the run is settled).
+    assert.equal(learningRefusal({ run: completed, runs: [completed], project }), null);
+    assert.deepEqual(learningTriggersFor({ run: { ...completed, corrections: 1 }, runs: [{ ...completed, corrections: 1 }], project }).map((lesson) => lesson.trigger), ["correction"]);
   } finally {
     await store.cancelSession(project, binding.sessionId);
     await store.closeProject(project);

@@ -102,6 +102,7 @@ test("artifacts carry the format and the shape that was read, and only a shape o
 });
 
 test("the digest is bounded", () => {
+  /** @type {any[]} */
   const messages = [user(1, "q")];
   for (let index = 0; index < 200; index += 1) messages.push(call(100 + index, `tool_${index}`));
   const digest = trajectoryDigest({ messages }, { ...run, artifacts: Array.from({ length: 40 }, (_, index) => `f${index}.md`) });

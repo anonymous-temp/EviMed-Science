@@ -3106,10 +3106,6 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
-    // The share of finished deliveries that queue a distillation (owner decision 8, 2026-10-10; review L-15). Every successful run with artifacts used to cost a
-    // distillation run, and "no change" is the common answer. The share is chosen by a hash of the run id (`runSampling.mjs`), so a run is in or out for good;
-    // corrections and routines are explicit signals and are not sampled. 1 is every delivery, as before; 0 distils none from a clean delivery.
-    learningDistillSampleShare: shareSetting(overrides, "learningDistillSampleShare", "OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE", 0.33),
     // How many answered runs may carry a learned method's card without one of them opening the method before it is stopped, with the
     // count written on it as the reason (owner ruling of 2026-10-12, live audit §4: eight cards in a run on average, one run in fifty
     // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
@@ -3119,7 +3115,8 @@ export function loadConfig(overrides = {}) {
     // researcher's research methods from their corrections and edits, not how to pass the delivery gate). Since 2026-09-17 a verdict of the
     // gate withholds nothing, so what a run repaired inside its turn is the platform's own bookkeeping, and 21 of the 28 lessons the loop
     // had read by 2026-10-12 were of that kind, filed as account handbooks that 14 of 17 platform candidates then failed on length.
-    // Chosen by a hash of the run id like the delivery sample, independent of it; 1 restores every repaired delivery.
+    // Chosen by a hash of the run id (`runSampling.mjs`); 1 restores every repaired delivery. (The share of clean deliveries that queued a lesson, a third, was removed
+    // on 2026-10-23: what it read is the settled run and the routine over three of them, `learningEvidence.mjs`.)
     learningRepairDistillShare: shareSetting(overrides, "learningRepairDistillShare", "OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE", 0),
     // Who sees the operations page.
     //

@@ -112,6 +112,7 @@ import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneR
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { MethodFeedbackService } from "./methodFeedback.mjs";
+import { FollowUpJudge, LearningEvidence } from "./learningEvidence.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
 import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
@@ -1413,7 +1414,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const feedbackEvents = productDatabase
     ? new FeedbackEvents({ evolutionSignals, database: productDatabase, jobs: config.learningEnabled ? productJobs : null,
       onRecorded: async event => {
-        if (!config.evolutionEnabled || !evolution || !event.runId || !event.projectId) return;
+        // The learning loop's own evidence (a row per run reacted to, `learningEvidence.mjs`) is not a researcher-feedback signal of the evolution module.
+        if (!config.evolutionEnabled || !evolution || !event.runId || !event.projectId || event.trigger === "learning-evidence") return;
         try {
           await evolution.service.ingestEvent({ id: `feedback:${event.id}`, type: "researcher-feedback", userId: event.userId,
             projectId: event.projectId, runId: event.runId, sourceFeedbackId: event.id, trigger: event.trigger,
@@ -1611,6 +1613,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** What queues a lesson when a run finishes (learningTriggers.mjs). */
   /** @type {LearningTriggers | null} */
   let learningTriggers = null;
+  /** What the researcher did to a run, kept as evidence and settled when its window closes (learningEvidence.mjs). */
+  /** @type {LearningEvidence | null} */
+  let learningEvidence = null;
   // Strictness reaches the capsules too. An operator who asked for a failing
   // index to be visible must not be given the lexical fallback in silence on
   // one of the two recall paths.
@@ -3228,8 +3233,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
       const run = await agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
-        routeTurn: async (text, input) => (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text))
-          ?? routeAdoptedInput(full, sessionId, text),
+        routeTurn: async (text, input) => {
+          // A new turn of a conversation is the researcher's answer to the run before it: read once for what it says about that run,
+          // beside the adoption and never in front of it (learningEvidence.mjs).
+          void learningEvidence?.onNewTurn(full, { sessionId, text, requestId: input?.requestIds?.[0] ?? "" }).catch(() => null);
+          return (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text)) ?? routeAdoptedInput(full, sessionId, text);
+        },
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
       await recordNativeSessionHandbooks(full, sessionId);
@@ -4332,6 +4341,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     const dispatchLearningRun = (request) => learningRuntime.dispatch(request);
     const readLearningResult = (identity) => learningRuntime.readResult(identity);
+    // What a learned method is close to, by the meaning of its text: the knowledge base's own embedder (one key, one price, the same pin) with the
+    // shared words as the fallback when it is not configured or does not answer (`methodSimilarity.mjs`). Method text is the same data class as memory.
+    const methodEmbedder = new KbEmbedder({
+      apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+      apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
+    }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
+    const methodSimilarity = overrides.methodSimilarity ?? createMethodSimilarity({
+      embed: overrides.methodEmbed ?? (methodEmbedder.configured ? (texts) => methodEmbedder.embedDocuments(texts) : null),
+      logger: { warn: (message) => process.stderr.write(`${message}\n`) },
+    });
     const distillation = new MethodDistillationRuns({
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
@@ -4354,6 +4373,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       // A lesson from a conversation that was over before the account's last memory reset is not written (review M-11).
       resetInstant: researchMemory.configured ? (userId) => researchMemory.resetInstant(userId) : null,
+      // The related methods are the nearest to the lesson by meaning, and a routine's peer is digested from its own ledger record.
+      similarity: methodSimilarity,
+      resolveRun: async (peerProject, runId) => (await agentRuns.list(peerProject).catch(() => [])).find((item) => item?.id === runId) ?? null,
+      onEvidence: ({ kept, dropped }) => learningMetrics.observeEvidenceQuotes(kept, dropped),
     });
     const handbookConsolidation = agentRegistry.then((registry) => new HandbookConsolidation({
       learning: learningService, jobs: productJobs, registry,
@@ -4363,16 +4386,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
       onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
-    // What a learned method is close to, by the meaning of its text: the knowledge base's own embedder (one key, one price, the same pin) with the
-    // shared words as the fallback when it is not configured or does not answer (`methodSimilarity.mjs`). Method text is the same data class as memory.
-    const methodEmbedder = new KbEmbedder({
-      apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
-      apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
-    }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
-    const methodSimilarity = overrides.methodSimilarity ?? createMethodSimilarity({
-      embed: overrides.methodEmbed ?? (methodEmbedder.configured ? (texts) => methodEmbedder.embedDocuments(texts) : null),
-      logger: { warn: (message) => process.stderr.write(`${message}\n`) },
-    });
     const consolidation = new MethodConsolidation({
       // A card carried this many answered runs and never opened is stopped, with the count as the reason (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
       // each stop is counted by the branch that decided.
@@ -4398,11 +4411,31 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         detail: `method=${detail?.methodId ?? ""}`,
       }),
     });
+    // What the researcher did to a run is evidence: a steer, a follow-up read once on the next turn, a result corrected, or silence once the window
+    // closes — and a routine is three clean runs of one scope and one shape (learningEvidence.mjs). Switched off with the loop; without the feedback
+    // ledger (no database) there is nowhere to keep it.
+    if (feedbackEvents) {
+      learningEvidence = new LearningEvidence({
+        feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
+        judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
+        // The learned methods the previous run opened, by title and when they apply: what a follow-up can be about.
+        methodsOpened: methodFeedback ? async (project, run) => (await methodFeedback.usedBy(project, run)).methods.map((method) => ({
+          id: method.id, digest: method.digest,
+          title: String(method.document?.payload?.display?.title ?? method.name),
+          whenToUse: String(method.document?.payload?.frontmatter?.whenToUse ?? method.document?.payload?.frontmatter?.description ?? ""),
+        })) : null,
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        report: (reason) => learningMetrics.observeEvidenceFailure(reason),
+        periodDays: config.transcriptRetentionDays,
+      });
+    }
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun, canReuseRuns,
-      // A third of the finished deliveries are read for a lesson, by a hash of the run id (`OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE`); counted either way.
-      deliveryShare: config.learningDistillSampleShare, onDeliverySample: (distilled) => learningMetrics.observeDeliverySample(distilled),
-      // And none of the deliveries that needed repairs inside their run (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`, 0): the gate's own bookkeeping is not the researcher's method.
+      evidence: learningEvidence, onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
+      // The deliveries that needed repairs inside their run (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`, 0): the gate's own bookkeeping is not the researcher's method.
       repairShare: config.learningRepairDistillShare, onRepairSample: (distilled) => learningMetrics.observeRepairSample(distilled),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
@@ -4417,20 +4450,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // grading its own homework.
       internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
-      // A routine is counted across the researcher's own projects, never
-      // anyone else's: the account's list, less what is archived and what the
-      // platform keeps for itself. The period is the transcript retention, so
-      // no peer is older than the transcript an induction reads.
-      projects: async (userId) => {
-        const user = await store.userById(userId);
-        if (!user) return [];
-        const own = [];
-        for (const entry of await store.listProjects(user)) {
-          if (entry.archivedAt || internalFor(user.id, entry.id)) continue;
-          own.push(await store.requireProject(user, entry.id));
-        }
-        return own;
-      },
+      // The routine's period is the transcript retention, so no peer is older than the transcript an induction reads. Its family is read from the
+      // feedback ledger (`learningEvidence.settle`), which holds only the runs of this researcher.
       routinePeriodDays: config.transcriptRetentionDays,
     });
     // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
@@ -4446,7 +4467,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     }
     learningWorker = new LearningWorker({
-      jobs: productJobs, distillation, consolidation,
+      jobs: productJobs, distillation, consolidation, evidence: learningEvidence,
       enabled: config.learningEnabled,
       window: config.learningWindow,
       windowTimeZone: config.learningWindowTimeZone,
@@ -6121,7 +6142,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const run = (await agentRuns.list(project)).find((item) => item.id === runId);
     if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
     const correctionRequestId = randomId("req_");
-    const updated = await agentRuns.recordCorrection(project, runId, correctionRequestId);
+    const updated = await agentRuns.recordCorrection(project, runId, correctionRequestId, String(text));
     await runtimeManager.dispatchPrompt(project, run.sessionId, {
       recordPromptActor: request => recordExtensionPromptActor(user, project, request),
       text: `<evimed-correction>${String(text).slice(0, 4000)}</evimed-correction>`,
@@ -7281,7 +7302,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const correctionRequestId = randomId("req_");
         // Recorded before the kernel is told, like the repair path: a request
         // id the ledger has not seen cannot be matched to the run it belongs to.
-        const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId);
+        const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId, text);
         await runtimeManager.dispatchPrompt(ctx.project, run.sessionId, {
           recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
           // Marked, so a compaction can carry it as a handle rather than

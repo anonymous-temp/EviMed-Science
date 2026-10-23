@@ -254,7 +254,7 @@ test("the learning loop is on by default, and every spend it can reach is still 
   assert.match(config, /learningDailyLimitCny: Number\(overrides\.learningDailyLimitCny/, "a lesson per delivery needs a daily ceiling");
   assert.match(config, /learningWeeklyLimitCny: Number\(overrides\.learningWeeklyLimitCny/);
   const triggers = await readFile(new URL("../src/learningTriggers.mjs", import.meta.url), "utf8");
-  assert.match(triggers, /if \(ledgerRun\.transcript\?\.completeness !== "complete"\) return \[\];/,
+  assert.match(triggers, /if \(ledgerRun\.transcript\?\.completeness !== "complete"\) return "transcript_incomplete";/,
     "a lesson from a partial transcript would be paid for and then refused by the promotion rule");
 });
 
@@ -326,19 +326,18 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   assert.match(serverSource, /readCorrections: researchMemory\.configured/);
 });
 
-test("a routine is counted across the researcher's own projects, and its peers are read where they ran", () => {
-  // E7 (2026-09-28): the family was one project's ledger, so a researcher who
-  // kept one question per project never reached a routine. The rules are
-  // tested in learningTriggers.test.mjs against the ledgers this hands them;
-  // this asserts the composition root hands them the account's projects, and
-  // only the account's own.
+test("a routine's peers are read where they ran, and the evidence a routine is counted from is fed by the runs it is told of", () => {
+  // The family is the feedback ledger's clean settled runs of one scope (learningEvidence.mjs), each with the project its transcript is in; the
+  // rules are tested in learningTriggers.test.mjs and learningEvidence.test.mjs. This asserts the composition root hands the parts what they read.
   const triggers = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
   assert.ok(triggers.length > 0, "the trigger construction is gone; this test now checks nothing");
-  assert.match(triggers, /projects: async \(userId\) => \{\s*const user = await store\.userById\(userId\);/);
-  assert.match(triggers, /for \(const entry of await store\.listProjects\(user\)\) \{\s*if \(entry\.archivedAt \|\| internalFor\(user\.id, entry\.id\)\) continue;\s*own\.push\(await store\.requireProject\(user, entry\.id\)\);/);
+  assert.match(triggers, /evidence: learningEvidence, onRefused: \(reason\) => learningMetrics\.observeTriggerRefused\(reason\)/);
   assert.match(triggers, /routinePeriodDays: config\.transcriptRetentionDays/, "a peer is never older than the transcript an induction reads");
   const distillation = serverSource.slice(serverSource.indexOf("const distillation = new MethodDistillationRuns({"), serverSource.indexOf("const consolidation = new MethodConsolidation({"));
   assert.match(distillation, /resolveProject: async \(userId, projectId\) => \{\s*const user = await store\.userById\(userId\);\s*return user \? store\.requireProject\(user, projectId\) : null;/);
+  assert.match(distillation, /similarity: methodSimilarity,/, "the related methods are the nearest by meaning");
+  assert.match(distillation, /resolveRun: async \(peerProject, runId\)/, "a peer is digested from its own ledger record");
+  assert.match(serverSource, /learningWorker = new LearningWorker\(\{\s*jobs: productJobs, distillation, consolidation, evidence: learningEvidence,/);
 });
 
 test("what later became of a result has its producers: a correction and a recalculation reach the join, and a lesson is told what the run read", () => {
@@ -364,10 +363,15 @@ test("the platform handbook path is handed the independent-family harm check and
   assert.match(call, /audit: \(event, detail\) => securityAudit\(config, event, "recorded", detail\),/);
 });
 
-test("the composition root hands the lesson queue the configured delivery share and a counter for what the sample leaves out", () => {
-  // Constructed with neither, every delivery would queue a lesson at the default of one and nothing would count the others (review L-15).
-  const call = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
-  assert.match(call, /deliveryShare: config\.learningDistillSampleShare, onDeliverySample: \(distilled\) => learningMetrics\.observeDeliverySample\(distilled\),/);
+test("a new turn of a conversation is read once as the answer to the run before it, beside the adoption and never in front of it", () => {
+  // Constructed is not fed: the follow-up judgement exists only if the adoption of a native turn calls it, and a call that waited would hold the turn.
+  assert.match(serverSource, /void learningEvidence\?\.onNewTurn\(full, \{ sessionId, text, requestId: input\?\.requestIds\?\.\[0\] \?\? "" \}\)\.catch\(\(\) => null\);/);
+  const call = serverSource.slice(serverSource.indexOf("learningEvidence = new LearningEvidence({"), serverSource.indexOf("learningTriggers = new LearningTriggers({"));
+  assert.match(call, /judge: new FollowUpJudge\(config, \{ usageLedger,/);
+  assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
+  assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
+  // The loop's own evidence is not a researcher-feedback signal of the evolution module.
+  assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
 });
 
 test("the 2026-10-12 learning levers reach the parts that read them: the unused-method stop, its denominator, and the repair sample", () => {

@@ -339,7 +339,7 @@ test("a feedback event refuses a vocabulary it does not know", async () => {
   const { feedback } = fixture();
   await assert.rejects(() => feedback.record("user_1", { trigger: "user-was-happy", subject: SUBJECT }),
     (error) => error.status === 400 && error.code === "feedback_event_invalid");
-  await assert.rejects(() => feedback.record("user_1", { trigger: "deliverable-adopted", subject: { type: "run", id: "x" } }),
+  await assert.rejects(() => feedback.record("user_1", { trigger: "deliverable-adopted", subject: { type: "transcript", id: "x" } }),
     (error) => error.status === 400 && error.code === "feedback_event_invalid");
   await assert.rejects(() => feedback.record("user_1", { trigger: "deliverable-adopted", subject: { type: "deliverable", id: "" } }),
     (error) => error.status === 400 && error.code === "feedback_event_invalid");

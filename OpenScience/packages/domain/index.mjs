@@ -476,6 +476,19 @@ export {
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
 
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent)
+export {
+  LEARNING_CORRECTION_VERDICTS,
+  LEARNING_EVIDENCE_KINDS,
+  LEARNING_EVIDENCE_LIMITS,
+  LEARNING_EVIDENCE_SUBJECT_TYPE,
+  LEARNING_EVIDENCE_TRIGGER,
+  LEARNING_EVIDENCE_VERDICTS,
+  LEARNING_FOLLOW_UP_WINDOW_MS,
+  cleanLearningEvidence,
+  isLearningCorrection,
+} from './src/learningEvidence.mjs'
+
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
 // record, and whether the deployment can supply what it needs (read as a label by the availability projection)
 export {
@@ -783,6 +796,9 @@ export {
 /** @typedef {import('./src/receipt.mjs').DeliveryReceipt} DeliveryReceipt */
 /** @typedef {import('./src/receipt.mjs').DeliveryReceiptEntry} DeliveryReceiptEntry */
 /** @typedef {import('./src/receipt.mjs').ReceiptFile} ReceiptFile */
+/** @typedef {import('./src/artifactShape.mjs').ArtifactShape} ArtifactShape */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryReaction} TrajectoryReaction */
+/** @typedef {import('./src/trajectoryDigest.mjs').TrajectoryDigest} TrajectoryDigest */
 /** @typedef {import('./src/runTranscript.mjs').RunEvent} RunEvent */
 /** @typedef {import('./src/runTranscript.mjs').RunTranscript} RunTranscript */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptMessage} TranscriptMessage */
