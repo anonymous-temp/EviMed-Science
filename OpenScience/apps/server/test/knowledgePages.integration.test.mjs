@@ -153,6 +153,14 @@ test("documents are pushed, compiled by the engine, mirrored, read, edited and k
     let status = await api(`/api/knowledge-pages?projectId=${project.id}`);
     assert.equal(status.status, 200);
     assert.deepEqual([status.body.data.enabled, status.body.data.state, status.body.data.pending, status.body.data.readable, status.body.data.pageLimit], [true, "queued", 3, 3, 100]);
+    const reconcileProject = app.sourceSync.reconcileProject.bind(app.sourceSync);
+    app.sourceSync.reconcileProject = async (...args) => ({ ...(await reconcileProject(...args)), failed: [{ sourceId: ids["alpha.md"], code: "one_copy_failed" }] });
+    try {
+      const waiting = await app.knowledgePagesWorker.tick();
+      assert.equal(waiting?.defer?.code, "knowledge_source_sync_pending", "a partial sync must not start Compile");
+      assert.equal(compiles.length, 0);
+      assert.equal((await api(`/api/knowledge-pages?projectId=${project.id}`)).body.data.pending, 3);
+    } finally { app.sourceSync.reconcileProject = reconcileProject; }
     const first = await compileRound();
     assert.equal(first.wiki.status, "completed");
     assert.deepEqual([first.wiki.created, first.wiki.typed, first.kg.created, first.kg.typed], [3, 3, 3, 2]);
