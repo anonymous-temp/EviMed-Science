@@ -85,15 +85,12 @@ test("registry recount preserves judgment and updates identity provenance", opti
   assert.equal(row.judge_extract.sourceParserVersion, facts.parserVersion);
 });
 
-test("a measured wrong statement reaches the existing evolution intake with the project owner", options, async () => {
+test("measurement retries the durable assessment outbox instead of opening a missing-method scout lead", options, async () => {
   await writeAssessment("assessment_wrong", { statements: [{ text: "错误的适用条件", verdict: "wrong", severity: 2 }] });
   /** @type {any[]} */
-  const events = [];
-  await measureRound({ store, now: () => at, evolution: { communication: { offer: async (/** @type {any} */ event) => { events.push(event); } } } }, "assessment_round");
-  assert.equal(events.length, 1);
-  assert.equal(events[0].sourceEventId, "geo-round:assessment_round");
-  assert.equal(events[0].userId, "assessment_user");
-  assert.equal(events[0].projectId, "assessment_project");
+  const ticks = [];
+  await measureRound({ store, now: () => at, learning: { tick: async () => { ticks.push(true); } } }, "assessment_round");
+  assert.equal(ticks.length, 1);
 });
 
 test("restarting an existing schema permits explicit unknown and partial assessments without changing its facts", options, async () => {

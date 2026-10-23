@@ -3,6 +3,8 @@ import { geoValueCanonical } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
+import { migrateProductStore } from "./productPersistence.mjs";
+import { preserveGeoAssessment } from "./geoLearningSignals.mjs";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -195,6 +197,7 @@ export class GeoMeasureStore {
     if (cached) return cached;
     const attempt = (async () => {
       await migrateGeo(this.database);
+      await migrateProductStore(this.database);
       await this.database.transaction(async (/** @type {any} */ client) => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-measure-v1'))");
         await client.query(ENSURE_COLUMNS);
@@ -742,6 +745,7 @@ export class GeoMeasureStore {
         (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), facts.rejudgeAfter ?? null]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
+      await preserveGeoAssessment({ database: this.database, client, snapshotId: snapshot.id, facts });
       return true;
     });
   }
@@ -785,6 +789,7 @@ export class GeoMeasureStore {
         (facts.statements ?? []).some((/** @type {any} */ statement) => statement?.verdict === "wrong"), at.toISOString()]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
+      await preserveGeoAssessment({ database: this.database, client, snapshotId: snapshot.id, facts });
       return true;
     });
   }

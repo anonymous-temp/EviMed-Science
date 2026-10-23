@@ -126,6 +126,9 @@ export const GEO_TABLES_FOR_TESTS = ["metrics", "errors", "facts", "snapshots", 
  *   claims?: Array<{ key: string, statement: string, quote: string }>, ownedDomains?: string[], careNodes?: any[] }} seed
  */
 export async function seedGeoProject(db, seed) {
+  // GEO assessment provenance uses the shared owner/project revision ledger.
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'GEO test','development') ON CONFLICT DO NOTHING", [seed.userId]);
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'GEO test',1048576) ON CONFLICT DO NOTHING", [seed.userId, seed.projectId]);
   await db.query(`INSERT INTO evimed_geo.projects (id, user_id, project_id, product, competitors, engines) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::text[])`,
     [seed.id, seed.userId, seed.projectId, JSON.stringify(seed.product ?? { brandName: "玛仕度肽", aliases: ["信尔美"], genericName: "玛仕度肽注射液" }),
       JSON.stringify(seed.competitors ?? [{ brandName: "诺和泰", genericName: "司美格鲁肽" }]), seed.engines]);

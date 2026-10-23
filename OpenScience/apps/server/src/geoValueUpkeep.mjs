@@ -187,11 +187,11 @@ const WATCH_TURN = `SELECT p.id, p.user_id FROM evimed_geo.projects p
  * The upkeep as one worker loop: a tick prunes, then watches. Each pass is isolated — one that throws is counted and reported and does not stop the next.
  * @param {{ store: any, sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
  *   entityVocabulary?: { frontierItemsMatching?: (query: any) => Promise<any[]> } | null, config?: Record<string, any>,
- *   now?: () => Date, report?: (code: string) => void }} dependencies
+ *   now?: () => Date, report?: (code: string) => void, learning?: { tick: () => Promise<any> } | null }} dependencies
  *   `sourceChanges` is the platform's record of what was published about a work (`sourceChanges.mjs`) and `entityVocabulary` reads the frontier feed's
  *   items by identifier; without both the watch has nothing to ask and does not run.
  */
-export function createGeoValueUpkeep({ store, sourceChanges = null, entityVocabulary = null, config = {}, now = () => new Date(), report = () => {} }) {
+export function createGeoValueUpkeep({ store, sourceChanges = null, entityVocabulary = null, learning = null, config = {}, now = () => new Date(), report = () => {} }) {
   if (!store) throw new TypeError("The value upkeep needs the GEO store.");
   const keep = Number.isSafeInteger(config.geoValueKeepVersions) && config.geoValueKeepVersions >= 1 ? config.geoValueKeepVersions : 20;
   const perTick = Number.isSafeInteger(config.geoValuePrunePerTick) && config.geoValuePrunePerTick >= 1 ? config.geoValuePrunePerTick : 200;
@@ -354,6 +354,9 @@ export function createGeoValueUpkeep({ store, sourceChanges = null, entityVocabu
       let watched = { projects: 0, flagged: 0 };
       try { watched = await watch(); }
       catch (error) { counters.failures += 1; report(`watch:${codeOf(error)}`); }
+      // Assessment dependencies remain relevant even without a value profile or active findings.
+      if (learning) try { await learning.tick(); }
+      catch (error) { counters.failures += 1; report(`learning:${codeOf(error)}`); }
       return { projectsChecked: pruned.checked, versionsPruned: pruned.pruned, projectsPruned: pruned.projects,
         watchProjects: watched.projects, changesFlagged: watched.flagged };
     },

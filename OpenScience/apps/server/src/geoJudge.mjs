@@ -799,9 +799,10 @@ function judgeInputOf(context, question, snapshot) {
  * The facts row of one answer: what code counts of it under the basis its round froze, and what the judge made of it (nothing, when it
  * gave none: the row is then written unjudged, counted for what code can count, and left out of every rate that rests on a judgement).
  * @param {{ snapshot: { status: string, answerText: string | null, citations: any[] }, judged: (GeoJudgement & { truncated?: boolean }) | null,
- *   registry: ReturnType<typeof brandRegistry>, countedOwned: { domains?: string[], urls?: string[] }, at: Date }} input
+ *   registry: ReturnType<typeof brandRegistry>, countedOwned: { domains?: string[], urls?: string[] }, at: Date,
+ *   claims?: GeoJudgeInput['claims'] }} input
  */
-function factsOf({ snapshot, judged, registry, countedOwned, at }) {
+function factsOf({ snapshot, judged, registry, countedOwned, at, claims = [] }) {
   const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [],
     valueCoverage: judged?.valueCoverage ?? [], valueBasisVersion: judged?.valueBasisVersion ?? 0, rubricVersion: GEO_JUDGE_VERSION };
   const code = parseAnswer({
@@ -817,6 +818,7 @@ function factsOf({ snapshot, judged, registry, countedOwned, at }) {
     : { judgementCoverage: { status: "unknown", reasons: ["not_judged"], answerChars: String(snapshot.answerText ?? "").length, assessedChars: 0 } };
   const facts = {
     ...code,
+    assessmentBasis: claims.filter(claim => statements.some(statement => statement.claimId === claim.id)),
     careHint: judged ? judged.careHint : null,
     statements,
     failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements, checks, judgedAt: judged ? at.toISOString() : null }),
@@ -934,7 +936,7 @@ export async function tickParse(deps) {
         owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
     }
 
-    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned, at: now() });
+    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned, at: now(), claims: context.claims });
     const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() });
     if (!written) continue;
     counts.parsed += 1;
@@ -1018,7 +1020,7 @@ async function rejudgeUnjudged(deps, judge, counts) {
     await checkCitationLinks({ checks: judged.checks, judge: /** @type {any} */ (judge), linkChecker: deps.linkChecker ?? null,
       owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
     const registry = brandRegistry(context.judgeProduct ?? context.project.product, context.judgeCompetitors ?? context.project.competitors);
-    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned: context.judgeOwned ?? context.owned, at: now() });
+    const { facts, status, statements } = factsOf({ snapshot, judged, registry, countedOwned: context.judgeOwned ?? context.owned, at: now(), claims: context.claims });
     if (!await store.rejudgeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() })) continue;
     counts.rejudged += 1;
     if (status === "refusal") counts.refusals += 1;

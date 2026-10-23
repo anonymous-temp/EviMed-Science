@@ -1,5 +1,6 @@
 import {policyPriority,EVOLUTION_STAGNANT_ROUNDS} from './evolutionPolicy.mjs';
 import {evolutionOpportunitySource} from './evolutionGrowth.mjs';
+import {evolutionSignalTrigger, evolutionTriggersCurrent} from './evolutionSignalTriggers.mjs';
 import { createHash } from 'node:crypto';
 import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionProposalIssues, evolutionNormalizeProposal, evolutionMechanismLimit, evolutionProposalDescriptionLength, EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT, EVOLUTION_PROPOSAL_FIELD_BUDGET, selectEvolutionParent } from '@evimed/domain';
 import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
@@ -114,7 +115,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       const previous = await service.get(id), P = (await policy.current()).policy;
       const features = input.features ?? {};
       const breakdown = evolutionPriorityBreakdown(features, P.weights);
-      const signature = digest([input.evidenceRoots ?? [], input.prerequisites ?? [], features]);
+      const signature = digest([input.evidenceRoots ?? [], input.triggerRefs ?? [], input.prerequisites ?? [], features]);
       if (previous?.payload.resourceSignature === signature) return previous;
       // A new signature reopens a dossier, and ends a deferral (`defer`); a review input waiting for a person, or work a person adopted, is not made void by new evidence.
       return service.save('dossier', id, { ...previous?.payload, ...input, resourceSignature: signature, opportunity: true,
@@ -218,8 +219,9 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     if (config.evolutionSearchPaused) return { paused: true };
     for (const signal of await signals.aggregate()) {
       const p = signal.payload;
+      if (p.state === 'inactive') continue;
       await opportunity({ moduleId: p.moduleId, sources: [evolutionOpportunitySource(p.kind)],
-        taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: p.occurrences,
+        taskFamily: p.codes, mechanismFamily: p.kind, evidenceRoots: [signal.id], triggerRefs: [evolutionSignalTrigger(signal)], features: { distinctAccounts: p.distinctAccounts, runtimeFailures: p.occurrences,
           ...(p.accountClass === 'operator' ? { accountClass: 'operator', demandFloor: (signals.floors ?? evolutionAccountFloors(config)).operator } : {}),
           coverageGap: p.kind === 'unmet-demand' }, cheapestNextStep: 'reproduce-on-public-analogue', failureHypotheses: ['private-demand-may-not-transfer'] });
     }
@@ -230,8 +232,11 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
     const thisWeek = all.filter(row => row.payload.week === week);
     // Published, impossible and answered-by-a-review-input (`run`) opportunities are done, whether the operator has answered the input or not
     // (`adopted` is work to implement, `declined` is closed until what it rests on changes); a deferred one waits for its wake conditions.
-    const dossiers = (await service.dossiers())
-      .filter(row => row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status) && !row.payload.deferred);
+    const dossiers = [];
+    for (const row of await service.dossiers()) {
+      if (row.payload.opportunity === true && !['published', 'impossible', 'review', 'adopted', 'declined'].includes(row.payload.status)
+        && !row.payload.deferred && await evolutionTriggersCurrent(service, row.payload)) dossiers.push(row);
+    }
     const created = [];
     const busy = new Set(all.filter(row => !TERMINAL.has(row.payload.status)).map(row => `${row.payload.moduleId}:${row.payload.opportunityId}`));
     // The modules' weekly missions are paid out of the loops' reserve of the day (`budgetRoom`), shared out evenly: with every module enabled each can be funded
@@ -259,6 +264,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
         cycle: `${week}:${selected?.revision ?? 0}`, kind: pending ? 'acquire-resource' : selected ? 'research' : 'baseline-audit',
         category: pending ? 'exploration' : selected ? 'research' : 'maintenance', borrowUnused: true, budgetCny: weeklyBudget,
         taskFamily: selected?.payload.taskFamily ?? null, mechanismFamily:selected?.payload.mechanismFamily??null,sources: selected?.payload.sources ?? [],
+        triggerRefs: selected?.payload.triggerRefs ?? [],
         wakeConditions: pending ? [] : selected?.payload.wakeConditions ?? [], prerequisites: selected?.payload.prerequisites ?? [],
         cheapestNextStep: selected?.payload.cheapestNextStep, baseline: await service.get(`evolution-module-policy-${moduleId}`) });
       if (row.id) { created.push(row.id); await queue(row); }
@@ -356,6 +362,15 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
   async function run({ missionId }, context = {}) {
     let mission = await service.get(missionId);
     if (!mission || TERMINAL.has(mission.payload.status)) return mission;
+    const triggerDossier = mission.payload.opportunityId ? await service.get(mission.payload.opportunityId) : null;
+    const triggerBasis = { ...triggerDossier?.payload, ...(mission.payload.triggerRefs?.length ? { triggerRefs: mission.payload.triggerRefs } : {}) };
+    if (!await evolutionTriggersCurrent(service, triggerBasis)) {
+      const receipt = mission.payload.failureReproductionReceiptId ? await service.get(mission.payload.failureReproductionReceiptId) : null;
+      const baseline = mission.payload.preparedCandidateState?.baseline ?? mission.payload.baseline;
+      if (!validEvolutionFailureReproduction(receipt?.payload, { missionId, moduleId: mission.payload.moduleId, baseline })) {
+        return update(mission, { status: 'waiting_resource', reason: 'source-trigger-withdrawn' });
+      }
+    }
     if(config.evolutionSearchPaused)return update(mission,{status:'paused',resumeStatus:mission.payload.status});
     if(mission.payload.status==='paused')mission=await update(mission,{status:mission.payload.resumeStatus??'ready'});
     mission=await fund(mission);

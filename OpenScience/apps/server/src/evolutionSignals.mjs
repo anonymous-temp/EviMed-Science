@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GEO_ERROR_TYPES, GEO_STATEMENT_TOPICS } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { isInternalProject } from './internalProjects.mjs';
@@ -38,6 +39,10 @@ export function createEvolutionSignals({ service, capabilityIds, operatorIds = (
       operation: EVOLUTION_OPERATIONS.includes(input.operation) ? input.operation : 'unknown',
       dataShape: EVOLUTION_DATA_SHAPES.includes(input.dataShape) ? input.dataShape : 'unknown',
       reason: EVOLUTION_DEMAND_REASONS.includes(input.reason) ? input.reason : 'unsupported' };
+    if (input.kind === 'geo-misconception') Object.assign(codes, {
+      errorType: GEO_ERROR_TYPES.includes(input.errorType) ? input.errorType : 'unknown',
+      topic: GEO_STATEMENT_TOPICS.includes(input.topic) ? input.topic : 'other',
+    });
     const id = signalId(input);
     return service.withLock(`signal:${input.userId}:${id}`,async()=>{
     const previous = await service.get(id, input.userId);

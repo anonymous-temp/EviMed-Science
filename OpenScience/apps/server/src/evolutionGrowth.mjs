@@ -2,6 +2,7 @@ import {evolutionKey} from './evolutionService.mjs';
 import {evolutionTaskFamily} from './evolutionCapabilityMap.mjs';
 import {EVOLUTION_MODULE_IDS} from './evolutionUsage.mjs';
 import {evolutionAccountClass,evolutionAccountFloors} from './evolutionAccountClasses.mjs';
+import {evolutionSignalTrigger} from './evolutionSignalTriggers.mjs';
 
 /** Signal vocabularies identify growth and contradiction opportunities as well as repairs. @param {string} kind */
 export function evolutionOpportunitySource(kind){
@@ -35,7 +36,7 @@ export function createEvolutionGrowth({service,opportunity,database,floors=evolu
    const p=row.payload,accountClass=evolutionAccountClass(p.accountClass);if(p.state==='inactive'||!Number.isFinite(p.distinctAccounts)||p.distinctAccounts<floors[accountClass])continue;
    const source=evolutionOpportunitySource(p.kind);
    await resource(`evolution-demand-resource-${evolutionKey(row.id)}`,['demand'],{sourceRoot:row.id,use:'opportunity-prioritisation',closedCodes:p.codes,occurrences:p.occurrences,distinctAccounts:p.distinctAccounts});
-   await opportunity({moduleId:p.moduleId,sources:[source],taskFamily:p.codes,mechanismFamily:p.kind,evidenceRoots:[row.id],features:{distinctAccounts:p.distinctAccounts,...(accountClass==='operator'?{accountClass,demandFloor:floors.operator}:{}),coverageGap:source==='demand',runtimeFailures:source==='repair'?p.occurrences:0},cheapestNextStep:source==='data'?'test-public-shape-analogue':'reproduce-on-public-analogue',failureHypotheses:['private-shape-may-not-transfer']});
+   await opportunity({moduleId:p.moduleId,sources:[source],taskFamily:p.codes,mechanismFamily:p.kind,evidenceRoots:[row.id],triggerRefs:[evolutionSignalTrigger(row)],features:{distinctAccounts:p.distinctAccounts,...(accountClass==='operator'?{accountClass,demandFloor:floors.operator}:{}),coverageGap:source==='demand',runtimeFailures:source==='repair'?p.occurrences:0},cheapestNextStep:source==='data'?'test-public-shape-analogue':'reproduce-on-public-analogue',failureHypotheses:['private-shape-may-not-transfer']});
   }
   for(const row of await service.list('module-observation')){
    const p=row.payload;if(!EVOLUTION_MODULE_IDS.includes(p.moduleId))continue;

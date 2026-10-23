@@ -27,7 +27,12 @@ const input = { requestKey: "original-file", contract, rows: [
   { text: "  Original question?\n", originalId: "001", originalGroup: "Buying", clientTags: ["  Client group  ", "Line1\nLine2"], pool: "P2" },
   { text: "Original question?", originalId: "002" },
 ] };
-async function project(suffix) { return store.createProject({ userId: owner.id, projectId: `import-${suffix}`, engines: ["deepseek"], coverageDays: 90 }); }
+async function project(suffix) {
+  await measure.ready();
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'GEO test','development') ON CONFLICT DO NOTHING", [owner.id]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'GEO test',1048576) ON CONFLICT DO NOTHING", [owner.id, `import-${suffix}`]);
+  return store.createProject({ userId: owner.id, projectId: `import-${suffix}`, engines: ["deepseek"], coverageDays: 90 });
+}
 test("immutable originals, concurrent save/start retries, runtime parity and member authorization", options, async () => {
   const p = await project("versions");
   const preview = await service.previewQuestions(owner, p.id, input);

@@ -1502,9 +1502,15 @@ export class GeoOrchestrator {
       if (!["running"].includes(current.steps[step]?.status)) current = await this.#step(current, step, { status: "queued" });
     }
     try {
-      const policy = await this.policies.resolve("geo", { supplements: [] });
-      const supplements = policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text);
-      const brief = supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policy.revisionId}):\n${supplements.join("\n")}` : spec.brief;
+      let policyContext = mark.detail?.policyContext;
+      if (policyContext?.dispatchId !== mark.dispatch_id || policyContext?.capabilityId !== spec.capabilityId) {
+        const policy = await this.policies.resolve("geo", { supplements: [] });
+        policyContext = { dispatchId: mark.dispatch_id, capabilityId: spec.capabilityId, revisionId: policy.revisionId,
+          supplements: policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text) };
+        if (!await this.#update(project.id, spec.key, { detail: { policyContext,
+          policyRevisionId: policyContext.supplements.length ? policyContext.revisionId : null } }, ["claimed"])) return { busy: true };
+      }
+      const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
       const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
         dispatchId: String(mark.dispatch_id), reason: spec.reason, brief, question: spec.question,

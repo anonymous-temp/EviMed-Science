@@ -388,6 +388,7 @@ import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { createGeoLearningSignals } from "./geoLearningSignals.mjs";
 import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
 import { tickParse as tickGeoParse } from "./geoJudge.mjs";
 import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
@@ -5279,10 +5280,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     };
     /** @type {GeoOrchestrator | null} */
     let orchestrator = null;
+    const geoLearning = createGeoLearningSignals({ database: productDatabase, signals: () => evolution?.loops.signals, sourceChanges });
     const measureDeps = {
       judgeService,
       store: new GeoMeasureStore(productDatabase, {policies:evolutionModulePolicies}), config, usageLedger, inclusion, state: geoMeasureState(),
-      evolution:{communication:{offer:input=>/** @type {any} */ (evolutionLeadSources)?.communication?.offer(input)}},
+      learning: geoLearning,
       notify: (/** @type {any} */ event) => notifier.measurement(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
       // A measured round moves its project on now rather than at the next tick.
@@ -5313,7 +5315,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
     // The value profiles' upkeep (geoValueUpkeep.mjs): the module's own loop, always composed with it.
-    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
+    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, learning: geoLearning, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,

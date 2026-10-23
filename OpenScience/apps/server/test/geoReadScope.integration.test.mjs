@@ -19,6 +19,8 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   store = new GeoStore({ database }); measure = new GeoMeasureStore(database);
   await measure.ready(); await store.ready();
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'GEO test','development')", [user.id]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'scope-project','GEO test',1048576)", [user.id]);
   project = await store.createProject({ userId: user.id, projectId: "scope-project", engines: ["deepseek", "kimi", "doubao"], coverageDays: 90, product: { brandName: "Ours" } });
   service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } });
   await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ('g1',$1,$2,1,'P2','Group one'),('g2',$1,$2,1,'P3','Group two')`, [user.id, project.id]);
@@ -528,6 +530,7 @@ test("inherited question pools retain selected metadata and invalidate edited qu
 });
 
 test("historical clusters retain complete rows, selected errors and linked work after a new import", options, async () => {
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'historic-cluster-contract','GEO test',1048576)", [user.id]);
   const p = await store.createProject({ userId: user.id, projectId: "historic-cluster-contract", engines: ["deepseek"], coverageDays: 90 });
   const contract = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
   await service.saveQuestions(user, p.id, { requestKey: "old", contract, rows: [{ text: "Original wording", originalGroup: "Original group", pool: "P2", journeyStage: "Decision", clientTags: ["original"], kind: "real", sourceUrl: "https://example.com/original", collectedAt: "2026-10-23" }] });

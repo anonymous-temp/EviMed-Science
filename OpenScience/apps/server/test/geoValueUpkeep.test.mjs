@@ -12,6 +12,7 @@ test("every file that records which version of a value profile something stood o
   // this list, with the object that holds it).
   const accounted = {
     "geoJudge.mjs": "facts.judge_extract.valueBasisVersion: the version an answer was judged against",
+    "geoLearningSignals.mjs": "reads only evaluationBasis.claims; its assessment preserves those claims without retaining a value-profile version pointer",
     "geoMeasureStore.mjs": "rounds.ref.evaluationBasis.value.version: the profile a round froze when it started",
     "geoOrchestrator.mjs": "schedule_marks.detail.basisVersion: the version a research request was made on",
     "geoService.mjs": "the value read, which reports the basis version of the observations it counts",

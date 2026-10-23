@@ -2,6 +2,7 @@ import {evolutionMonthlyObservations} from './evolutionMonthlyObservations.mjs';
 import {createEvolutionPairedAudit} from './evolutionPairedAudit.mjs';
 import {withEvolutionUsage} from './evolutionUsage.mjs';
 import {createEvolutionGrowth, evolutionRecordedFailures} from './evolutionGrowth.mjs';
+import {evolutionTriggersCurrent} from './evolutionSignalTriggers.mjs';
 import {calibrateModuleSourceJudge} from './moduleEvolutionCalibration.mjs';
 import {createModuleEvolutionPreparation} from './moduleEvolutionPreparation.mjs';
 import {createModuleEvolutionOfflineEvaluators} from './moduleEvolutionOfflineEvaluators.mjs';
@@ -14,7 +15,7 @@ import { createEvolutionSignals } from './evolutionSignals.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 import { createEvolutionCapabilityMap } from './evolutionCapabilityMap.mjs';
 import { createEvolutionTaskPool } from './evolutionTaskPool.mjs';
-import { createEvolutionMissions, evolutionFailureReproductionHash, EVOLUTION_OBSERVED_FAILURE_KINDS } from './evolutionMissions.mjs';
+import { createEvolutionMissions, evolutionFailureReproductionHash, validEvolutionFailureReproduction, EVOLUTION_OBSERVED_FAILURE_KINDS } from './evolutionMissions.mjs';
 import { createEvolutionTransfer } from './evolutionTransfer.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
 import { createModuleEvolutionAdapters, moduleProposalWithFacts } from './moduleEvolutionAdapters.mjs';
@@ -124,7 +125,11 @@ export function createEvolutionLoops({ service, config, database, registry, mode
     // aggregate of a repair signal): the platform's own check saw it, the model does not get to say so. The count is the one `collect` opened the opportunity by.
     const recordedModuleFailure = async (/** @type {any} */ mission) => {
       if (!(mission?.sources ?? []).includes('repair') || !mission.opportunityId) return false;
+      const receipt = mission.failureReproductionReceiptId ? await service.get(mission.failureReproductionReceiptId) : null;
+      if (validEvolutionFailureReproduction(receipt?.payload, { missionId: mission.id, moduleId: mission.moduleId,
+        baseline: mission.preparedCandidateState?.baseline ?? mission.baseline })) return true;
       const dossier = await service.get(mission.opportunityId);
+      if (!await evolutionTriggersCurrent(service, { ...dossier?.payload, ...(mission.triggerRefs?.length ? { triggerRefs: mission.triggerRefs } : {}) })) return false;
       for (const root of dossier?.payload?.evidenceRoots ?? []) {
         const row = await service.get(root);
         if (row?.payload?.moduleId === mission.moduleId && evolutionRecordedFailures(row.payload) > 0) return true;

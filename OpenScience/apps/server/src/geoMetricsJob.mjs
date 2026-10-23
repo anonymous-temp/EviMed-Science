@@ -64,7 +64,7 @@ const SOURCE_ROUND_KINDS = new Set(["baseline", "weekly", "single_step"]);
  * @property {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @property {() => Date} [now]
  * @property {number} [maxRounds]   rounds per tick (default 3)
- * @property {any} [evolution]
+ * @property {{ tick: () => Promise<any> }} [learning]
  * @property {(round: { id: string, geoProjectId: string, kind: string }) => unknown} [onRoundMeasured]
  */
 
@@ -262,11 +262,10 @@ export async function measureRound(deps, roundId) {
   // otherwise give its question fewer valid answers than the rest, and the
   // domain withdraws the whole pool's rates as uneven_denominators.
   const { cells, balance, denominators } = computeRoundCells(kept, options);
-  const communication = deps.evolution?.communication;
-  if (communication && kept.some((row) => row.facts?.statements?.some((statement) => statement.verdict === "wrong"))) {
-    try { await communication.offer({ sourceEventId: `geo-round:${round.id}`, userId: project.userId, projectId: project.projectId, entityKeys: project.entityKeys ?? [] }); } catch { /* Module intake must not affect measurement. */ }
-  }
   await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
+  // The durable assessment outbox is retried by upkeep if learning is temporarily unavailable.
+  if (deps.learning) try { await deps.learning.tick(); }
+  catch { process.stderr.write("geo assessment learning: reconciliation_pending\n"); }
   await store.noteRoundBalance(roundId, { questions: balance.questions, kept: balance.kept, dropped: balance.dropped.length,
     droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines, arms: options.arms, denominators });
   out.cells = cells.length;
