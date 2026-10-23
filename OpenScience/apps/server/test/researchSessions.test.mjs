@@ -317,3 +317,15 @@ test("the source-scope route refuses what it cannot check, and clears with an em
     assert.equal((await listBindings(base)).body.data.find((entry) => entry.sessionId === "ses_route").sourceScope, null);
   });
 });
+
+test("explicit selected-empty scope survives persistence and project mode clears it", async () => {
+  const { ResearchSessionStore } = await import("../src/researchSessions.mjs");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-selected-empty-"));
+  const project = { id: "default", metaDir: dataDir };
+  try {
+    const sessions = new ResearchSessionStore();
+    assert.deepEqual((await sessions.setSourceScope(project, "ses_empty", [], "selected")).sourceScope, []);
+    assert.deepEqual((await sessions.get(project, "ses_empty")).sourceScope, []);
+    assert.equal((await sessions.setSourceScope(project, "ses_empty", [], "project")).sourceScope, null);
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
