@@ -951,11 +951,11 @@ export class GeoMeasureStore {
         notified_at = CASE WHEN errors.judgment_state='withdrawn' THEN NULL WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
           THEN NULL ELSE errors.notified_at END,
-        updated_at = $17
+        updated_at = CASE WHEN $20::boolean THEN errors.updated_at ELSE $17 END
       RETURNING *, (xmax = 0) AS inserted`,
     [row.id, row.userId, row.geoProjectId, prepared.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
       row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
-      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
+      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId }), prepared.preserveOccurrenceClock ?? false]);
     const out = result.rows[0];
     return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
     });

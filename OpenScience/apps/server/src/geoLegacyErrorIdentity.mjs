@@ -110,5 +110,5 @@ export async function prepareGeoLegacyError(client, snapshot, statement, { recon
       await client.query(`UPDATE evimed_geo.errors SET judgment_state='withdrawn',judgment_correction=$2::jsonb,judgment_history=judgment_history || jsonb_build_array($2::jsonb) WHERE id=$1`, [survivor.id, JSON.stringify(receipt)]);
     }
   }
-  return { fingerprint: newKey };
+  return { fingerprint: newKey, preserveOccurrenceClock: survivor.last_snapshot_id === snapshotId };
 }
