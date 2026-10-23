@@ -26,8 +26,8 @@ for (const [uri, changes] of [
 });
 
 test('failed mirror switches once; commands stay bounded and cleanup runs', () => {
-  const script = readFileSync(new URL('../ci-system-deps.sh', import.meta.url), 'utf8');
-  const prefix = script.slice(0, script.indexOf('\nattempt apt-get'));
+  const script = readFileSync(new URL('../../ops/ci-apt.sh', import.meta.url), 'utf8');
+  const prefix = script.slice(0, script.indexOf('\n# Known runner'));
   const root = mkdtempSync(join(tmpdir(), 'ci-apt-command-test-'));
   try {
     const program = `${prefix}\ncount=0\nsudo() {\n  count=$((count + 1))\n  printf '%s\\n' "$*" >> "$TEST_ROOT/commands"\n  [ "$count" -gt 1 ]\n}\nsleep() { :; }\nprepare_fallback() {\n  apt_fallback_dir="$TEST_ROOT/fallback"\n  mkdir -p "$apt_fallback_dir"\n  apt_sources=(-o "Dir::Etc::sourcelist=$apt_fallback_dir/sources.list")\n}\nattempt apt-get update\n[ "$count" = 2 ]\n`;
@@ -40,5 +40,37 @@ test('failed mirror switches once; commands stay bounded and cleanup runs', () =
     assert.equal(spawnSync('test', ['-e', join(root, 'fallback')]).status, 1);
     const guarded = spawnSync('bash', ['-c', `${prefix}\nprepare_fallback`], { env: { ...process.env, GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'self-hosted' } });
     assert.equal(guarded.status, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const format of ['list', 'sources']) test(`GitHub mirror+file ${format} preserves signatures and original`, () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-apt-mirror-test-'));
+  try {
+    const source = join(root, 'original');
+    mkdirSync(join(source, 'sources.list.d'), { recursive: true });
+    const declaration = format === 'list'
+      ? 'deb [signed-by=/usr/share/keyrings/ubuntu.gpg] mirror+file:/etc/apt/apt-mirrors.txt noble main\n'
+      : 'Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt https://example.org/ubuntu/\nSuites: noble\nSigned-By: /usr/share/keyrings/ubuntu.gpg\n';
+    const file = `sources.list.d/ubuntu.${format}`;
+    writeFileSync(join(source, file), declaration);
+    writeFileSync(join(source, 'apt-mirrors.txt'), 'http://azure.archive.ubuntu.com/ubuntu/\n');
+    const copy = join(root, 'copy');
+    assert.equal(spawnSync('python3', [helper, source, copy]).status, 0);
+    assert.equal(readFileSync(join(source, file), 'utf8'), declaration);
+    assert.equal(readFileSync(join(source, 'apt-mirrors.txt'), 'utf8'), 'http://azure.archive.ubuntu.com/ubuntu/\n');
+    assert.equal(readFileSync(join(copy, file), 'utf8'), declaration.replace('mirror+file:/etc/apt/apt-mirrors.txt', `mirror+file:${copy}/apt-mirrors.txt`));
+    assert.equal(readFileSync(join(copy, 'apt-mirrors.txt'), 'utf8'), 'https://archive.ubuntu.com/ubuntu/\n');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const uri of ['mirror+file:/tmp/apt-mirrors.txt', 'mirror+file:/etc/apt/../apt-mirrors.txt', 'mirror+file:/etc/apt/apt-mirrors.txt.evil']) test(`untrusted mirror reference untouched: ${uri}`, () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-apt-outside-test-'));
+  try {
+    const source = join(root, 'original');
+    mkdirSync(join(source, 'sources.list.d'), { recursive: true });
+    const declaration = `deb ${uri} noble main\n`;
+    writeFileSync(join(source, 'sources.list'), declaration);
+    assert.equal(spawnSync('python3', [helper, source, join(root, 'copy')]).status, 1);
+    assert.equal(readFileSync(join(root, 'copy/sources.list'), 'utf8'), declaration);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

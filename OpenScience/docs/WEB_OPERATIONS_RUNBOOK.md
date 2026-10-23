@@ -222,6 +222,35 @@ opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
 
+For the owner-authorized test-stage cutover without rollback retention, a first
+import may instead use the verified private loopback registry. This bootstrap is
+separate from `release-images.mjs`'s measured-pull procedure: a new image cannot
+have a previous target-engine peak or target-host smoke result. Keep that
+command's evidence requirements unchanged. Bind the successful CI artifact to
+its exact source, config and ordered layers. Any private skill overlay must be
+assembled outside the serving host, limited to the approved data paths and seed
+seal, with unchanged execution configuration and a recorded base-to-final digest
+chain. Pull only the final single-platform manifest digest.
+
+Before this bootstrap, derive a conservative storage upper bound from verified
+blob sizes, expanded layer entries, block allocation and metadata, the actual
+storage driver, retained compressed content, concurrent downloads and unpacking
+or snapshot copies. Include bounded smoke/log writes and an explicit growth
+reserve. Each physical filesystem must retain at least **5 GiB plus that growth
+reserve**, matching the existing hard minimum; this explicitly replaces the
+archive path's 10 GiB floor for this scoped procedure. Missing bounds or capacity
+refuse the operation. Authorized old-runtime removal may precede the import
+after baseline evidence is saved; count only actually reclaimed space.
+
+Monitor the owned digest pull and subsequent smoke from before their first
+writes through completion. Unreadable capacity/identity probes or a breached
+reserve stop the owned operation; confirm daemon work stopped before retrying.
+After import, verify the exact native image config, platform and ordered rootfs,
+then run the original smoke, relocated seed/seal and effective private-skill
+catalogue checks before activation. Record admission **upper bounds** separately
+from sampled observations of this transfer; neither is fabricated prior peak
+evidence. Preserve all tenant data and unrelated services.
+
 The knowledge-source plugin is a separate thirteenth image: the Web workflow's
 full twelve-image archive does not include `docker-compose.knowledge.yml`.
 The independent `knowledge-plugin` workflow tests it against disposable
