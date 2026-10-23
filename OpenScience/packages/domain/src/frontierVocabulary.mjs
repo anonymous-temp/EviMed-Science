@@ -119,57 +119,147 @@ export const FRONTIER_EVIDENCE_TYPE_LABELS_ZH = /** @type {Readonly<Record<Front
   other: '其他',
 }))
 
-/** The specialties an item may carry (at most three). */
+/**
+ * The specialties a reader files an item under (owner, 2026-10-23: thirty, after 医脉通's 32 科室 and 丁香园's 29 频道, named
+ * after 《医疗机构诊疗科目名录》's second-level 科目), in the order the 「专科」 panel lists them, group by group
+ * (`FRONTIER_SPECIALTY_GROUPS`). 公共卫生 is a lane only; 老年 is a population tag; 外科与麻醉 was split. A key once
+ * published keeps its meaning: `critical-care` reads 急诊与重症 and `general-practice` 全科与基层, and a retired key is
+ * read through `FRONTIER_SPECIALTY_RETIRED`.
+ */
 export const FRONTIER_SPECIALTIES = Object.freeze([
   'cardiology',
-  'oncology',
+  'respiratory',
+  'gastroenterology',
   'endocrinology',
+  'nephrology',
+  'hematology',
+  'rheumatology',
+  'infectious-disease',
   'neurology',
   'psychiatry',
-  'infectious-disease',
-  'respiratory',
-  'critical-care',
-  'gastroenterology',
-  'nephrology',
-  'rheumatology',
-  'hematology',
-  'pediatrics',
+  'oncology',
+  'general-surgery',
+  'orthopedics',
+  'cardiothoracic-surgery',
+  'neurosurgery',
+  'urology',
   'obstetrics-gynecology',
-  'geriatrics',
-  'surgery-anesthesia',
+  'pediatrics',
+  'ophthalmology',
+  'otolaryngology',
+  'stomatology',
+  'dermatology',
+  'critical-care',
+  'anesthesiology',
   'radiology',
+  'laboratory-pathology',
   'pharmacy',
-  'tcm',
-  'public-health',
   'general-practice',
+  'tcm',
+  'rare-disease',
 ])
 
 export const FRONTIER_SPECIALTY_LABELS_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
   cardiology: '心血管',
-  oncology: '肿瘤',
-  endocrinology: '内分泌代谢',
-  neurology: '神经',
-  psychiatry: '精神',
-  'infectious-disease': '感染',
   respiratory: '呼吸',
-  'critical-care': '重症',
   gastroenterology: '消化与肝病',
+  endocrinology: '内分泌代谢',
   nephrology: '肾脏',
-  rheumatology: '风湿免疫',
   hematology: '血液',
-  pediatrics: '儿科',
+  rheumatology: '风湿免疫',
+  'infectious-disease': '感染',
+  neurology: '神经',
+  psychiatry: '精神心理',
+  oncology: '肿瘤',
+  'general-surgery': '普通外科',
+  orthopedics: '骨科',
+  'cardiothoracic-surgery': '心胸外科',
+  neurosurgery: '神经外科',
+  urology: '泌尿外科',
   'obstetrics-gynecology': '妇产',
-  geriatrics: '老年',
-  'surgery-anesthesia': '外科与麻醉',
+  pediatrics: '儿科',
+  ophthalmology: '眼科',
+  otolaryngology: '耳鼻咽喉',
+  stomatology: '口腔',
+  dermatology: '皮肤',
+  'critical-care': '急诊与重症',
+  anesthesiology: '麻醉与疼痛',
   radiology: '影像',
+  'laboratory-pathology': '检验与病理',
   pharmacy: '药学',
+  'general-practice': '全科与基层',
   tcm: '中医药',
-  'public-health': '公共卫生',
-  'general-practice': '全科',
+  'rare-disease': '罕见病',
 }))
 
-/** The most specialties one item carries. */
-export const FRONTIER_MAX_SPECIALTIES = 3
+/**
+ * The 「专科」 panel's groups, in order (医脉通's 内科 / 外科 / 其他, with 妇儿 and 五官与皮肤 apart as 丁香园 has them); every
+ * specialty is in exactly one, and the groups list them in `FRONTIER_SPECIALTIES` order.
+ */
+export const FRONTIER_SPECIALTY_GROUPS = Object.freeze([
+  Object.freeze({ key: 'internal', label: '内科', specialties: Object.freeze(['cardiology', 'respiratory', 'gastroenterology', 'endocrinology', 'nephrology', 'hematology', 'rheumatology', 'infectious-disease', 'neurology', 'psychiatry', 'oncology']) }),
+  Object.freeze({ key: 'surgery', label: '外科', specialties: Object.freeze(['general-surgery', 'orthopedics', 'cardiothoracic-surgery', 'neurosurgery', 'urology']) }),
+  Object.freeze({ key: 'women-children', label: '妇儿', specialties: Object.freeze(['obstetrics-gynecology', 'pediatrics']) }),
+  Object.freeze({ key: 'senses-skin', label: '五官与皮肤', specialties: Object.freeze(['ophthalmology', 'otolaryngology', 'stomatology', 'dermatology']) }),
+  Object.freeze({ key: 'other', label: '医技与其他', specialties: Object.freeze(['critical-care', 'anesthesiology', 'radiology', 'laboratory-pathology', 'pharmacy', 'general-practice', 'tcm', 'rare-disease']) }),
+])
+
+/**
+ * What each specialty takes, as the editor is told (2026-10-23: 全科 and 药学 had become catch-alls — 4,450 and 3,898 of
+ * 25,855 items in thirty days — so each says what it is not).
+ */
+export const FRONTIER_SPECIALTY_SCOPES_ZH = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
+  cardiology: '冠心病、心衰、心律失常、高血压、血脂、结构性心脏病与心血管介入',
+  respiratory: '慢阻肺、哮喘、肺部感染、肺栓塞、间质性肺病、睡眠呼吸',
+  gastroenterology: '消化道疾病、肝病（病毒性肝炎、脂肪肝、肝硬化）、胰腺、内镜',
+  endocrinology: '糖尿病、肥胖、甲状腺、骨质疏松、代谢与内分泌疾病',
+  nephrology: '慢性肾病、透析、肾小球疾病、急性肾损伤',
+  hematology: '贫血、出凝血、血栓、良性血液病；血液肿瘤同时标肿瘤',
+  rheumatology: '类风湿、狼疮、强直、痛风、血管炎等自身免疫病',
+  'infectious-disease': '传染病、细菌与病毒感染、耐药、疫苗与疫情',
+  neurology: '卒中、癫痫、痴呆、帕金森、头痛、神经免疫病',
+  psychiatry: '抑郁、焦虑、精神分裂、成瘾、睡眠与心理健康',
+  oncology: '实体瘤与血液肿瘤的筛查、诊断、治疗和新药',
+  'general-surgery': '肝胆胰、胃肠、甲乳、疝与减重手术、外科围手术期',
+  orthopedics: '骨折、关节、脊柱、运动医学',
+  'cardiothoracic-surgery': '心脏外科、胸外科与肺部手术',
+  neurosurgery: '颅脑与脊髓手术、脑肿瘤手术、神经介入',
+  urology: '前列腺、泌尿系结石、肾与膀胱手术、男科',
+  'obstetrics-gynecology': '妊娠与分娩、妇科疾病、生殖与避孕',
+  pediatrics: '新生儿与儿童青少年的疾病与健康',
+  ophthalmology: '眼病与视力',
+  otolaryngology: '耳鼻咽喉与头颈',
+  stomatology: '口腔与牙科',
+  dermatology: '皮肤病与性病、医学美容',
+  'critical-care': '急诊、重症监护、脓毒症、休克、复苏',
+  anesthesiology: '麻醉、镇痛、慢性疼痛与围术期管理',
+  radiology: '影像检查与影像诊断、介入放射、核医学',
+  'laboratory-pathology': '检验、病理、分子诊断与生物标志物检测',
+  pharmacy: '药学实践本身：用药安全与合理用药、药物相互作用、处方审核、药物经济学；只是写到某个药不算',
+  'general-practice': '基层与社区诊疗、家庭医学、慢病管理、全科医生的工作；不是某个专科的内容不往这里放',
+  tcm: '中医药、中成药、针灸与中西医结合',
+  'rare-disease': '罕见病的诊断、治疗与政策',
+}))
+
+/**
+ * A specialty key that is no longer offered, and what reads it now (2026-10-23): a link, a follow or a stored item that names one
+ * is read as its successor, or as nothing — 公共卫生 is a lane, 老年 a population tag.
+ */
+export const FRONTIER_SPECIALTY_RETIRED = /** @type {Readonly<Record<string, string | null>>} */ (Object.freeze({
+  'surgery-anesthesia': 'general-surgery',
+  geriatrics: null,
+  'public-health': null,
+}))
+
+/** A specialty key as this build reads it: itself, its successor, or null. @param {unknown} key @returns {string | null} */
+export function frontierSpecialtyKey(key) {
+  if (typeof key !== 'string') return null
+  if (FRONTIER_SPECIALTIES.includes(key)) return key
+  return Object.hasOwn(FRONTIER_SPECIALTY_RETIRED, key) ? FRONTIER_SPECIALTY_RETIRED[key] : null
+}
+
+/** The most specialties one item carries (two since 2026-10-23: a third was most often a catch-all). */
+export const FRONTIER_MAX_SPECIALTIES = 2
 
 /** Where a request leaves from (the plugin's implementation detail, shown on
  *  the public sources page). */

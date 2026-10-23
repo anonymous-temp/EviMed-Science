@@ -299,6 +299,8 @@ import { FrontierIngest } from "./frontierIngest.mjs";
 import { FrontierMonthly } from "./frontierMonthly.mjs";
 import { FrontierEditor } from "./frontierEditor.mjs";
 import { FrontierPipeline } from "./frontierPipeline.mjs";
+import { FrontierTagStore } from "./frontierTags.mjs";
+import { FrontierTagUpkeep } from "./frontierTagUpkeep.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
   frontierReadiness } from "./frontierService.mjs";
 import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
@@ -2085,12 +2087,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { judgeService, usageLedger, policies:evolutionModulePolicies, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
-    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.loops.observe(event)},
+    // The tag tree (frontierTags.mjs, 2026-10-23): one store the pipeline writes, the service reads and the upkeep grows.
+    const tagStore = new FrontierTagStore({ database: productDatabase });
+    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, tags: tagStore, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.loops.observe(event)},
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-"),
       // An open-access PDF the plugin could not read (2026-10-22): read through the platform's own web reader, when it runs.
       webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) } });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
+    const tagUpkeep = new FrontierTagUpkeep({ database: productDatabase, editor, tags: tagStore, ...(budget ? { budget } : {}) });
     // The second wave (build spec D): events and the hot list, the daily and
     // its push, 与你相关, and the two reader actions — every model call the
     // editor's, under the pipeline's budget; the worker's compose hook ticks them.
@@ -2127,7 +2132,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder, policies:evolutionModulePolicies,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions });
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, monthly, profiles, actions, tags: tagStore, tagUpkeep });
     const composer = new FrontierComposer({ events, daily, weekly, monthly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
@@ -2145,7 +2150,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ensureProject:(/** @type {string} */ userId)=>ensureEvidenceProject(store,userId),
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, evidence:evidenceEditorial, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;

@@ -54,10 +54,11 @@ TIMEOUT_SECONDS = 15
 # schema and holds these copies equal to the domain's.
 LANES = ("evidence", "guideline", "regulatory", "safety", "pipeline", "public-health", "research", "ai")
 SPECIALTIES = (
-    "cardiology", "oncology", "endocrinology", "neurology", "psychiatry", "infectious-disease", "respiratory",
-    "critical-care", "gastroenterology", "nephrology", "rheumatology", "hematology", "pediatrics",
-    "obstetrics-gynecology", "geriatrics", "surgery-anesthesia", "radiology", "pharmacy", "tcm", "public-health",
-    "general-practice",
+    "cardiology", "respiratory", "gastroenterology", "endocrinology", "nephrology", "hematology", "rheumatology",
+    "infectious-disease", "neurology", "psychiatry", "oncology", "general-surgery", "orthopedics",
+    "cardiothoracic-surgery", "neurosurgery", "urology", "obstetrics-gynecology", "pediatrics", "ophthalmology",
+    "otolaryngology", "stomatology", "dermatology", "critical-care", "anesthesiology", "radiology",
+    "laboratory-pathology", "pharmacy", "general-practice", "tcm", "rare-disease",
 )
 WINDOWS = ("24h", "3d", "7d", "30d")
 MODES = ("selected", "all")

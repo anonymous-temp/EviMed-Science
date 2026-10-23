@@ -11,6 +11,7 @@ import { FRONTIER_EDITOR_VERSION } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierPipeline } from "../src/frontierPipeline.mjs";
+import { FrontierTagStore } from "../src/frontierTags.mjs";
 import { createFrontierRoutes } from "../src/frontierRoutes.mjs";
 import { FRONTIER_CHANNEL_FILTERS, FrontierService, frontierItemChannel, frontierVocabularyView } from "../src/frontierService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
@@ -86,13 +87,16 @@ async function set(id, columns, texts = {}) {
   }
 }
 
-test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text and its Chinese, pictures, quoted post, counts, topics, tags", options, async () => {
+test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text and its Chinese, pictures, quoted post, counts, the tree's tags", options, async () => {
   const paper = await insertItem(database, { title: "Semaglutide in obesity", titleZh: "司美格鲁肽用于肥胖", summaryZh: "导读第一句。导读第二句。",
     reasonZh: "肥胖但无糖尿病的心血管高危患者，可据此评估加用司美格鲁肽的获益与胃肠道耐受。", selected: true, selectedRule: "threshold",
     specialties: ["cardiology"], entities: { drugs: ["司美格鲁肽"], trials: ["SELECT"], orgs: [], diseases: ["肥胖"] }, evidenceType: "rct" });
   await set(paper.id, { score_total: 86, tags: ["GLP-1 受体激动剂", "心血管预防"] },
     { abstract_raw: "Background one.\n\nResults: 20% fewer events.", body_zh: "背景一。\n\n结果：事件减少 20%。", body_zh_kind: "translation",
       body_zh_source: "abstract", body_complete: true });
+  // The tags a reader sees are the tree's (frontierTags.mjs): a name the seed knows is shown, one it does not is a hidden candidate.
+  const tags = new FrontierTagStore({ database });
+  await database.transaction((client) => tags.link(client, paper.id, ["GLP-1 受体激动剂", "心血管预防", "肥胖"], { origin: "edit", specialties: ["cardiology"] }));
   const service = serviceFor();
   const { item } = (await service.getItem(reader, paper.publicId)).body;
   assert.equal(item.lead, "导读第一句。导读第二句。");
@@ -101,8 +105,9 @@ test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text
   assert.equal(item.score, 86);
   assert.deepEqual(item.body, { zh: "背景一。\n\n结果：事件减少 20%。", original: "Background one.\n\nResults: 20% fewer events.", zhKind: "translation", complete: true,
     source: "abstract" });
-  assert.deepEqual(item.tags, ["GLP-1 受体激动剂", "心血管预防", "RCT"]);
-  assert.deepEqual(item.topics.map((topic) => topic.slug), ["cardiology", "obesity", "glp1", "rct"]);
+  assert.deepEqual(item.tags.map((tag) => tag.name), ["GLP-1 受体激动剂", "肥胖"], "the candidate 心血管预防 is not shown");
+  assert.ok(item.tags.every((tag) => /^[a-z0-9][a-z0-9-]+$/.test(tag.slug)));
+  assert.equal(item.topics, undefined, "「主题」 is gone: 专科 and 标签 are the two layers");
   assert.equal(item.channel, "journal", "an item before contract 1.4.0 has its source type's channel");
   assert.deepEqual([item.platform, item.author, item.media, item.quoted, item.metrics, item.sameEvent, item.followups, item.thumb],
     [null, null, [], null, null, null, null, null], "what was never stored is null or empty, never made up");
@@ -130,7 +135,7 @@ test("the detail is contract B: 导读, gated 推荐理由, AI 评分, full text
   assert.deepEqual(detail.metrics, { likes: 12, reposts: 3, replies: null, views: 900 });
   assert.deepEqual(detail.body, { zh: "FDA 批准药物 X。\n第二行。", original: "FDA approves drug X.\nLine two.", zhKind: "translation", complete: true, source: "body" });
   assert.deepEqual([detail.channel, detail.platform], ["x", "x"]);
-  assert.ok(detail.topics.some((topic) => topic.slug === "approvals"));
+  assert.deepEqual(detail.tags, [], "nothing tagged, nothing made up from the item's lane or flags");
 
   const chinese = await insertItem(database, { sourceId: "stat", sourceType: "media", title: "国家药监局批准一款新药" });
   await set(chinese.id, {}, { body_excerpt: "国家药监局今日批准一款新药上市。\n\n适应证为成人 2 型糖尿病。" });

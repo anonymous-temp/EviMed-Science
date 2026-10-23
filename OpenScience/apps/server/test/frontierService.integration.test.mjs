@@ -396,21 +396,23 @@ test("the sources list names each feed and its institution, with its selected it
   assert.deepEqual([nejm.displayName, nejm.selected30d], ["NEJM Journal", 0], "an institution the table does not name keeps the registry's name");
 });
 
-test("a card carries the editorial total and its band against the selection line; a safety alert carries neither", options, async () => {
+test("a card carries the AI 评分, its tier (85 / 70, owner 2026-10-23) and its four parts; a safety alert carries none of them", options, async () => {
   const scored = async (title, total, overrides = {}) => {
     const row = await insertItem(database, { title, selected: true, ...overrides });
     await database.query("UPDATE evimed_frontier.items SET score_total = $2 WHERE id = $1", [row.id, total]);
     return row;
   };
-  await scored("Top", 86, { timelineAt: "2026-09-22T03:00:00Z" });
-  await scored("Middle", 64, { timelineAt: "2026-09-22T02:00:00Z" });
-  await scored("Low", 41, { timelineAt: "2026-09-22T01:00:00Z" });
+  const top = await scored("Top", 86, { timelineAt: "2026-09-22T03:00:00Z" });
+  await database.query("UPDATE evimed_frontier.items SET score_authority = 30, score_impact = 26, score_novelty = 18, score_relevance = 12 WHERE id = $1", [top.id]);
+  await scored("Middle", 74, { timelineAt: "2026-09-22T02:00:00Z" });
+  await scored("Low", 64, { timelineAt: "2026-09-22T01:00:00Z" });
   await scored("Alert", 90, { timelineAt: "2026-09-22T00:30:00Z", safetyAlert: true, selectedRule: "safety-bypass" });
-  const cards = async (config) => Object.fromEntries((await serviceFor({ config }).listItems(reader, params({ view: "all" }))).body.items
-    .map((item) => [item.titleRaw, [item.score, item.scoreBand]]));
-  assert.deepEqual(await cards({}), { Top: [86, "high"], Middle: [64, "medium"], Low: [41, "low"], Alert: [null, null] },
-    "at or above the line (70 unless set) is high, from 60 medium, below low");
-  assert.deepEqual((await cards({ frontierSelectThreshold: 90 })).Top, [86, "medium"], "the band reads the deployment's own line");
+  const listed = (await serviceFor({ config: { frontierSelectThreshold: 90 } }).listItems(reader, params({ view: "all" }))).body.items;
+  const cards = Object.fromEntries(listed.map((item) => [item.titleRaw, [item.score, item.scoreBand]]));
+  assert.deepEqual(cards, { Top: [86, "high"], Middle: [74, "medium"], Low: [64, "low"], Alert: [null, null] },
+    "the tiers are fixed, whatever the deployment's selection line");
+  assert.deepEqual(listed.find((item) => item.titleRaw === "Top").scoreParts, { authority: 30, impact: 26, novelty: 18, relevance: 12 });
+  assert.equal(listed.find((item) => item.titleRaw === "Alert").scoreParts, null);
 });
 
 test("a source reaches a reader by its institution: the card, and 「另有 N 家」 counted by institution, never a feed of the card's own", options, async () => {

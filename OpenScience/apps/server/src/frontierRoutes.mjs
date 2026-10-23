@@ -182,6 +182,20 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }
+    // The tag tree (2026-10-23): a specialty's 热门标签 or the search box's suggestions, one tag, and the operators' view of the tree.
+    if (parts.length === 1 && parts[0] === "tags" && method === "GET") return reply(await service.tagList(url.searchParams));
+    if (parts.length === 2 && parts[0] === "tags" && method === "GET") return reply(await service.tagDetail(parts[1]));
+    if (parts.length === 2 && parts[0] === "ops" && parts[1] === "tags" && method === "GET") {
+      requireOperator();
+      return reply(await service.tagOverview());
+    }
+    if (parts.length === 5 && parts[0] === "ops" && parts[1] === "tags" && parts[2] === "changes" && parts[4] === "undo" && method === "POST") {
+      requireOperator();
+      await bodyOf(req, maxJsonBytes, []);
+      const result = await service.undoTagChange(parts[3]);
+      await audit("frontier.tag.undo", "completed", { userId: user.id, code: parts[3], detail: "" });
+      return reply(result);
+    }
     if (parts.length === 1 && parts[0] === "follows") {
       if (method === "GET") return reply(await service.listFollows(user));
       if (method === "POST") return reply(await service.createFollow(user, await bodyOf(req, maxJsonBytes, ["kind", "key", "label", "muted"])));

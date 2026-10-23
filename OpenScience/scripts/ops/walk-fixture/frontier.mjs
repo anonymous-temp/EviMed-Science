@@ -44,7 +44,7 @@ const ITEMS = [
   ["example-health-news", 22, "evidence", "rct", ["cardiology"], false, false, "NCT90000002", "心衰新药试验：哪些患者获益更大", "亚组分析提示合并糖尿病的患者获益更明显。"],
   ["example-journal-oncology", 31, "evidence", "rct", ["oncology"], true, false, "NCT90000003", "免疫联合化疗一线治疗晚期肺癌：总生存延长 4.1 个月", "中位总生存 19.6 个月对 15.5 个月，三级以上不良事件发生率相近。"],
   ["example-health-news", 29, "evidence", "rct", ["oncology"], false, false, "NCT90000003", "晚期肺癌一线联合方案的最新生存数据", "报道称联合组中位总生存延长 4.1 个月。"],
-  ["example-journal-medicine", 36, "evidence", "rct", ["neurology", "geriatrics"], true, false, "NCT90000004", "早期阿尔茨海默病抗体治疗 18 个月：认知下降减缓 27%", "试验纳入 1,800 名早期患者，认知量表评分下降幅度减少 27%，影像异常的发生率增加。"],
+  ["example-journal-medicine", 36, "evidence", "rct", ["neurology"], true, false, "NCT90000004", "早期阿尔茨海默病抗体治疗 18 个月：认知下降减缓 27%", "试验纳入 1,800 名早期患者，认知量表评分下降幅度减少 27%，影像异常的发生率增加。"],
   ["example-health-news", 33, "evidence", "rct", ["neurology"], false, false, "NCT90000004", "阿尔茨海默病抗体药：获益与影像异常需要一起看", "解读强调需要监测影像学异常。"],
   ["example-journal-cardiology", 40, "evidence", "rct", ["cardiology"], true, false, "NCT90000005", "整群随机试验：社区房颤筛查使卒中发生率降低 14%", "整群随机试验覆盖 7.2 万人，筛查组卒中发生率降低 14%。"],
   ["example-health-news", 38, "evidence", "rct", ["cardiology"], false, false, "NCT90000005", "社区筛查房颤值得做吗：新试验给出答案", "筛查可以发现更多无症状房颤，抗凝治疗比例上升。"],
@@ -59,8 +59,8 @@ const ITEMS = [
   ["example-pharma-news", 28, "pipeline", "press-release", ["oncology"], false, false, "NCT90000007", "III 期肿瘤试验启动：行业观察", "行业观察认为该靶点竞争激烈。"],
   ["example-ai-medicine", 19, "ai", "review-opinion", ["radiology"], true, false, "NCT90000008", "大模型辅助读片的前瞻性评估：漏诊率下降，用时缩短", "前瞻性评估纳入 3 家医院，漏诊率下降 18%，平均阅片用时缩短 22%。"],
   ["example-ai-medicine", 18, "ai", "review-opinion", ["radiology"], false, false, "NCT90000008", "AI 辅助读片进入医院：评估结果怎么看", "评论提示评估人群来自三甲医院，外推需要谨慎。"],
-  ["example-ai-medicine", 32, "ai", "review-opinion", ["surgery-anesthesia"], false, false, null, "手术室里的预测模型：术中低血压预警", "回顾性研究提示预警模型可提前 5 分钟发现低血压。"],
-  ["example-health-news", 45, "public-health", "review-opinion", ["public-health"], false, false, null, "季节性流感疫苗接种率回升", "接种率较上一季度回升 3 个百分点。"],
+  ["example-ai-medicine", 32, "ai", "review-opinion", ["anesthesiology"], false, false, null, "手术室里的预测模型：术中低血压预警", "回顾性研究提示预警模型可提前 5 分钟发现低血压。"],
+  ["example-health-news", 45, "public-health", "review-opinion", ["infectious-disease"], false, false, null, "季节性流感疫苗接种率回升", "接种率较上一季度回升 3 个百分点。"],
   ["example-evidence-body", 50, "research", "review-opinion", ["pharmacy"], false, false, null, "本年度临床研究基金申报指南发布", "指南强调真实世界证据与方法学质量。"],
   ["example-journal-medicine", 52, "evidence", "systematic-review", ["nephrology"], false, false, null, "慢性肾脏病降压目标的网状 Meta 分析", "纳入 31 项试验，更低的收缩压目标与心血管事件减少相关。"],
   ["example-journal-oncology", 55, "evidence", "observational", ["oncology"], false, false, null, "癌症幸存者的心血管风险：一项全国队列研究", "队列包含 12 万名幸存者，心血管风险在治疗后十年内持续升高。"],
@@ -98,8 +98,14 @@ export async function furnishFrontier(app, user, { log }) {
   }
   const now = Date.now();
   const hoursAgo = (/** @type {number} */ hours) => new Date(now - hours * 3_600_000).toISOString();
+  // Tags of the tree (frontierTags.mjs) by the item's specialty, so the walk sees cards and readers with 标签 as production has them.
+  const { FrontierTagStore } = await load("src", "frontierTags.mjs");
+  const tagStore = new FrontierTagStore({ database });
+  /** @type {Record<string, string[]>} */
+  const TAGS = { endocrinology: ["2型糖尿病"], cardiology: ["心力衰竭", "SGLT2 抑制剂"], oncology: ["非小细胞肺癌", "免疫检查点抑制剂"],
+    neurology: ["阿尔茨海默病"], anesthesiology: ["低血压", "人工智能"], "infectious-disease": ["流感", "疫苗"] };
   for (const [index, [sourceId, hours, lane, evidenceType, specialties, selected, safety, registry, titleZh, summaryZh]] of ITEMS.entries()) {
-    await insertComposedItem(database, {
+    const row = await insertComposedItem(database, {
       sourceId, title: `Report ${index + 1}: ${registry ?? "no registry number"}`, titleZh, summaryZh,
       reasonZh: selected ? "一手证据，样本量大，对临床决策有直接影响。" : null, lane, sourceType: SOURCES.find((entry) => entry[0] === sourceId)?.[3] ?? "media",
       evidenceType, evidenceBasis: "pubmed-types", specialties, selected, selectedRule: selected ? "score" : null, safetyAlert: safety,
@@ -108,6 +114,8 @@ export async function furnishFrontier(app, user, { log }) {
       entityKeys: specialties.map((specialty) => `specialty:${specialty}`), registryIds: registry ? [registry] : [], identityKey: `walk:${sha(`${index}:${titleZh}`).slice(0, 24)}`,
       abstract: summaryZh, mentions: [],
     });
+    const names = specialties.flatMap((/** @type {string} */ key) => TAGS[key] ?? []);
+    if (names.length) await database.transaction((/** @type {any} */ client) => tagStore.link(client, row.id, names, { origin: "edit", specialties }));
   }
   log(`frontier: ${SOURCES.length} sources, ${ITEMS.length} items`);
 

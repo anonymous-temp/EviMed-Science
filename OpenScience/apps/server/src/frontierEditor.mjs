@@ -75,10 +75,11 @@ import {
   FRONTIER_SCORE_MAXIMA,
   FRONTIER_SPECIALTIES,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  FRONTIER_SPECIALTY_SCOPES_ZH,
   agendaLocalDate,
 } from "@evimed/domain";
 import { checkNumbers } from "./frontierNumbers.mjs";
-import { frontierTopicTagNames } from "./frontierTopics.mjs";
+import { FRONTIER_ITEM_TAG_LIMIT, frontierTagNameRefusal, tagKey, tagName } from "./frontierTags.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
 /** Entries per screening call (plan §10.3.5). */
@@ -99,7 +100,7 @@ export const FRONTIER_MODEL_INPUT_CHARS = 6_000;
  * The 导读 grew from 140 to 220 on 2026-10-22 (contract B: AIHOT's answer-first
  * summary of two or three sentences, which the reader shows whole).
  */
-export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 220, reason: 90, reasonMin: 20, tags: 7, tagChars: 16,
+export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 220, reason: 90, reasonMin: 20, tags: 4, tagChars: 16,
   entitiesPerKind: 5, entityChars: 60 });
 
 const SCREEN_TIMEOUT_MS = 60_000;
@@ -111,9 +112,9 @@ const EDIT_MAX_TOKENS = 1_800;
 
 const LANE_LINE = FRONTIER_LANES.map((lane) => `${lane} ${FRONTIER_LANE_LABELS_ZH[lane]}`).join("；");
 const SPECIALTY_LINE = FRONTIER_SPECIALTIES.map((key) => `${key} ${FRONTIER_SPECIALTY_LABELS_ZH[key]}`).join("；");
+// What each specialty takes, for the edit (2026-10-23: 全科 and 药学 had become catch-alls).
+const SPECIALTY_SCOPE_LINE = FRONTIER_SPECIALTIES.map((key) => `${key} ${FRONTIER_SPECIALTY_LABELS_ZH[key]}（${FRONTIER_SPECIALTY_SCOPES_ZH[key]}）`).join("；");
 const EVIDENCE_LINE = FRONTIER_EVIDENCE_TYPES.map((key) => `${key} ${FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key]}`).join("；");
-// The tag names the reader's topics are matched by (frontierTopics.json): offered, never required.
-const TOPIC_TAG_LINE = frontierTopicTagNames().join("、");
 
 /** The screening instructions: the stable prefix of every screening call. */
 export const FRONTIER_SCREEN_INSTRUCTIONS = [
@@ -123,7 +124,7 @@ export const FRONTIER_SCREEN_INSTRUCTIONS = [
   "1. medical：这条是否与医学、药学、公共卫生、医学科研或医学相关的 AI 有关。与健康无关的商业、科技、体育、娱乐和一般时政填 false。",
   "2. news：这条是否是一条值得读者知道的新消息：新研究、新证据、新指南或共识、监管决定、安全警示、研发与产业进展、公共卫生动态、科研政策与基金、医学 AI 进展。以下一律填 false：勘误与更正声明、读者来信与回复、封面、目录、编委会、本期导读、招聘、广告、会议通知、征稿启事、讣告、活动预告、网站公告。",
   "3. lane：从该条目的 lanes 里选一个最合适的栏目；lanes 只有一个值时就填这个值。",
-  "4. specialties：从专科词表里选 0 到 3 个最相关的专科，按相关程度排列；没有明确的专科就给空数组。",
+  "4. specialties：从专科词表里选 0 到 2 个最相关的专科，按相关程度排列；没有明确的专科就给空数组。",
   "5. language：条目文字的语言，中文填 \"zh\"，英文填 \"en\"，其他语言填 ISO 639-1 的两字母代码。",
   "6. digest：这条是不是一篇把多件事放在一起讲的汇总——日报、周报、每日专栏、多条简讯的合集、股市/行业动态综述。只讲一件事（一项研究、一个决定、一份文件、一起事件）的报道填 false。",
   "",
@@ -156,9 +157,9 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- summary_zh：导读，两三句，不超过 200 个字，答案前置：第一句直接说清这条消息的核心——谁做了什么、主要结果或决定是什么，不先铺背景，不用「研究显示」「本文介绍」之类的转述套话开头；后面只补一到两个最重要的事实或数字及其不确定性；只写原文有的内容，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。",
   // The reason follows AIHOT's editorialJudgment rule in content-understanding.md (MIT, KKKKhazix/AIHOT 47531fa), for clinicians.
   "- reason_zh：推荐理由，一句话，45 到 70 个字，写给临床医生、药师或研究者：读了这条可以拿它做什么——调整哪类处方、用药监测或患者沟通，借鉴哪种研究设计或方法，关注哪个人群或安全问题。只写原文支持的一层阅读价值（背景、比较、影响、可借鉴的方法四选一），不重复导读里的事实。不写为什么入选、为什么推荐或值不值得读，不评价本平台，不用命令语气，不用「必读」「重磅」「颠覆」「首次」「这意味着」「值得注意的是」这类词，不用冒号和破折号。原文只有标题、宣传口号，或支持不了具体的阅读价值时给空字符串。",
-  "- tags：0 到 6 个中文标签，每个 2 到 12 个字，是这条消息涉及的疾病、药物或药物类别、治疗手段、研究方法、人群或技术；主题词表里有对应名称时用词表里的写法；不写专科、机构和证据类型；没有就给空数组。",
+  "- tags：0 到 4 个中文标签，按重要程度排列，是这条消息主要讲的疾病、药物或药物类别、治疗手段、技术、研究方法、生物学或临床概念、人群或卫生政策；每个 2 到 16 个字。条目给了「候选标签」时，意思相同的必须原样照抄候选里的写法；候选里没有的重要概念自己写，用国内临床和指南常用的规范名（如 非小细胞肺癌、2型糖尿病、司美格鲁肽、CAR-T 细胞治疗）。只标主要讲的，顺带提到的不标。不写专科、栏目、证据类型和研究设计（如 随机对照试验、Meta 分析、队列研究），不写机构、公司、国家或地区，不写医学、治疗、研究这类泛词；没有就给空数组。",
   "- lane：从条目的「允许的栏目」里选一个。",
-  "- specialties：0 到 3 个专科键，按相关程度排列。",
+  "- specialties：0 到 2 个专科键，按相关程度排列。按专科说明选：药学只给药学实践本身（合理用药、相互作用、处方审核等），全科与基层只给基层与家庭医学的内容，写到某个药、某种常见病不等于药学或全科。",
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。研究设计不在词表里的（卫生经济学评价、决策分析、建模、方法学研究、问卷调查、病例报告）一律填 other，不要套用最接近的设计。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
   "- scores：impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。都给整数。",
@@ -167,12 +168,69 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   `栏目词表：${LANE_LINE}。`,
   "栏目说明：safety 药物安全只收药品、疫苗、生物制品、医疗器械和膳食补充剂的安全信息（不良反应、警示、召回、说明书安全性修订）；普通食品的召回和过敏原未标注属于 public-health 公共卫生。",
   `证据类型词表：${EVIDENCE_LINE}。`,
-  `专科词表：${SPECIALTY_LINE}。`,
-  `主题词表：${TOPIC_TAG_LINE}。`,
+  `专科词表：${SPECIALTY_SCOPE_LINE}。`,
   "",
   "输出格式（键名固定）：",
   "{\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"tags\":[],\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
 ].join("\n");
+
+/**
+ * The tagging of an item already published (2026-10-23, the tag tree): its specialties and tags again, from what was written about
+ * it, several items to a call. The same rules as the edit's, said the same way.
+ */
+export const FRONTIER_RETAG_INSTRUCTIONS = [
+  "你是 EviMed「前沿动态」的标签编辑。读者是国内的临床医生、药师和医学研究者。",
+  "你会收到若干条已经发布的医学消息，每条有编号 n、标题、导读、抽取的疾病和药物，可能附「候选标签」。请逐条给出专科和标签，只输出一个 JSON 对象。",
+  "",
+  "- specialties：0 到 2 个专科键，按相关程度排列。按专科说明选：药学只给药学实践本身（合理用药、相互作用、处方审核等），全科与基层只给基层与家庭医学的内容，写到某个药、某种常见病不等于药学或全科；没有明确的专科就给空数组。",
+  "- tags：0 到 4 个中文标签，按重要程度排列，是这条消息主要讲的疾病、药物或药物类别、治疗手段、技术、研究方法、生物学或临床概念、人群或卫生政策；每个 2 到 16 个字。条目给了「候选标签」时，意思相同的必须原样照抄候选里的写法；候选里没有的重要概念自己写，用国内临床和指南常用的规范名（如 非小细胞肺癌、2型糖尿病、司美格鲁肽、CAR-T 细胞治疗）。只标主要讲的，顺带提到的不标。不写专科、栏目、证据类型和研究设计（如 随机对照试验、Meta 分析、队列研究），不写机构、公司、国家或地区，不写医学、治疗、研究这类泛词；没有就给空数组。",
+  "",
+  `专科词表：${SPECIALTY_SCOPE_LINE}。`,
+  "",
+  "输出格式（键名固定）：{\"items\":[{\"n\":1,\"specialties\":[],\"tags\":[]}]}",
+  "每条输入恰好一行，n 原样照抄；只能使用专科词表里的英文键；不要输出任何解释。",
+].join("\n");
+
+/** Items one tagging call is given. */
+export const FRONTIER_RETAG_BATCH = 8;
+const RETAG_MAX_TOKENS = 1_600;
+const RETAG_TIMEOUT_MS = 60_000;
+
+/**
+ * @typedef {{ titleZh: string | null, titleRaw: string, summaryZh: string | null, diseases: string[], drugs: string[],
+ *   tagCandidates: string[] }} FrontierRetagItem
+ */
+
+/** What one tagging call shows for its items: numbered labelled lines. @param {readonly FrontierRetagItem[]} items */
+export function buildRetagInput(items) {
+  return items.map((item, index) => [
+    `[${index + 1}]`,
+    `标题：${clip(item.titleZh || item.titleRaw, 300)}`,
+    ...(item.titleZh && item.titleRaw !== item.titleZh ? [`原标题：${clip(item.titleRaw, 300)}`] : []),
+    ...(item.summaryZh ? [`导读：${clip(item.summaryZh, 400)}`] : []),
+    ...(item.diseases.length ? [`疾病：${item.diseases.slice(0, 5).map((name) => clip(name, 40)).join("、")}`] : []),
+    ...(item.drugs.length ? [`药物：${item.drugs.slice(0, 5).map((name) => clip(name, 40)).join("、")}`] : []),
+    ...(item.tagCandidates.length ? [`候选标签：${item.tagCandidates.slice(0, 20).map((name) => clip(name, 40)).join("、")}`] : []),
+  ].join("\n")).join("\n\n");
+}
+
+/**
+ * A tagging answer, checked item by item: its specialties (known keys, at most two) and tags (`verifyTagNames`, numbers against the
+ * item's own words). An item the answer leaves out, or answers malformed, gets null and is asked again later.
+ * @param {readonly FrontierRetagItem[]} items @param {any} answer
+ * @returns {Array<{ specialties: string[], tags: string[] } | null>}
+ */
+export function verifyRetag(items, answer) {
+  const rows = Array.isArray(answer?.items) ? answer.items : [];
+  return items.map((item, index) => {
+    const row = rows.find((/** @type {any} */ entry) => Number(entry?.n) === index + 1);
+    if (!row || !Array.isArray(row.specialties) || !Array.isArray(row.tags)) return null;
+    const specialties = [...new Set(/** @type {unknown[]} */ (row.specialties))]
+      .filter((key) => FRONTIER_SPECIALTIES.includes(/** @type {any} */ (key))).map(String).slice(0, FRONTIER_MAX_SPECIALTIES);
+    const source = [item.titleRaw, item.titleZh, item.summaryZh, ...item.diseases, ...item.drugs].filter(Boolean).join("\n");
+    return { specialties, tags: verifyTagNames(row.tags, source, item.tagCandidates) };
+  });
+}
 
 /**
  * The keys an edit answer is asked for, each quoted as the instructions' output shape writes it. A served policy (循证进化 may
@@ -613,6 +671,7 @@ function clip(value, max) {
  * @property {{ phase?: string, status?: string, enrollment?: number, sponsor?: string } | null} [trialFacts]
  * @property {Array<{ kind: string, termEn: string, termZh: string, keepOriginal: boolean, origin?: string }>} [glossary]
  * @property {{ lane?: string | null, specialties?: string[] }} [defaults]  the screening verdict
+ * @property {string[]} [tagCandidates]   the tree's tags the text names (`FrontierTagVocabulary#candidatesFor`), 「候选标签」
  */
 
 /**
@@ -798,6 +857,33 @@ export function trimToWholeSentences(text, limit) {
  *             scores: { impact: number, novelty: number, relevance: number } | null, flags: string[] }} FrontierEditOutput
  */
 
+/** A name that is another dimension — a specialty, a lane, an evidence type — never a tag. */
+const REFUSED_TAG_NAME = frontierTagNameRefusal([...Object.values(FRONTIER_SPECIALTY_LABELS_ZH), ...Object.values(FRONTIER_LANE_LABELS_ZH),
+  ...Object.values(FRONTIER_EVIDENCE_TYPE_LABELS_ZH), "随机对照试验", "Meta分析", "系统评价", "队列研究", "横断面研究", "病例对照研究"]);
+
+/**
+ * An answer's tags, each kept or dropped alone (a format slip is not a claim), in the model's order, at most
+ * `FRONTIER_ITEM_TAG_LIMIT`: a usable name (`tagName`), not another dimension's, and — unless it is one of the tree's candidates
+ * the item was shown, which are the vocabulary's words and not the model's — no number the source does not state.
+ * @param {unknown} value @param {string} numberSource @param {readonly string[]} candidates
+ * @returns {string[]}
+ */
+export function verifyTagNames(value, numberSource, candidates) {
+  const offered = new Set(candidates.map(tagKey));
+  /** @type {string[]} */
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(value) ? value : []) {
+    const name = tagName(raw);
+    if (!name || REFUSED_TAG_NAME(name) || seen.has(tagKey(name))) continue;
+    if (!offered.has(tagKey(name)) && checkNumbers({ tag: name }, numberSource).missing.length) continue;
+    seen.add(tagKey(name));
+    out.push(name);
+    if (out.length >= FRONTIER_ITEM_TAG_LIMIT) break;
+  }
+  return out;
+}
+
 /**
  * What one edit answer says, checked field by field. `issues` are the
  * specific problems in Chinese, for the rewrite and the log; `failed` names
@@ -890,13 +976,7 @@ export function verifyEdit(answer, item, modelInput) {
     if (reasonIssues.length) reasonZh = null;
   }
 
-  // Tags: short names, each kept or dropped alone (a format slip is not a claim), the first seven in the model's order.
-  const numberSource = editNumberSource(modelInput);
-  const tags = [...new Set((Array.isArray(value.tags) ? value.tags : [])
-    .map((/** @type {unknown} */ tag) => (typeof tag === "string" ? tag.replace(/\s+/g, " ").trim().replace(/^#+/, "") : ""))
-    .filter((/** @type {string} */ tag) => codePoints(tag) >= 2 && codePoints(tag) <= FRONTIER_TEXT_LIMITS.tagChars && !LINK.test(tag)
-      && !/[，。；：！？,;:!?]/u.test(tag) && !checkNumbers({ tag }, numberSource).missing.length))]
-    .slice(0, FRONTIER_TEXT_LIMITS.tags);
+  const tags = verifyTagNames(value.tags, editNumberSource(modelInput), item.tagCandidates ?? []);
 
   const allowed = item.allowedLanes?.length ? item.allowedLanes : [...FRONTIER_LANES];
   const lane = typeof value.lane === "string" && allowed.includes(value.lane) ? value.lane : null;
@@ -1680,9 +1760,12 @@ export class FrontierEditor {
       verification: "pending", output: null, modelInput, modelInputSha256: sha256(modelInput), attempts: 0,
       issues: [], fieldDiagnostics: { title_zh: ["not_checked"], summary_zh: item.abstract || item.summary || item.bodyExcerpt ? ["not_checked"] : ["source_missing"] }, numbers: null, error: null, model: this.model, editorVersion: policy.revisionId.startsWith("default:") ? FRONTIER_EDITOR_VERSION : policy.revisionId,
     };
+    // The tree's candidates ride after the input and outside it: the input's hash is the source's identity (a new revision, an
+    // obsolete claim), and a tag promoted overnight is not a change of the source.
+    const candidates = (item.tagCandidates ?? []).slice(0, 30).map((name) => clip(name, 40));
     const messages = [
       { role: "system", content: policy.policy.editInstructions },
-      { role: "user", content: modelInput },
+      { role: "user", content: candidates.length ? `${modelInput}\n候选标签：${candidates.join("、")}` : modelInput },
     ];
     /** @param {Array<{ role: string, content: string }>} conversation */
     const ask = async (conversation) => {
@@ -2138,6 +2221,17 @@ export class FrontierEditor {
    */
   async writeJson(instructions, input, maxTokens, { verify, timeoutMs = WRITING_TIMEOUT_MS }) {
     return this.#write(instructions, input, {}, maxTokens, { verify, timeoutMs });
+  }
+
+  /**
+   * Tag items already published (`FRONTIER_RETAG_INSTRUCTIONS`): one call for up to `FRONTIER_RETAG_BATCH` items, checked by
+   * `verifyRetag`. Throws with a named code when the call fails.
+   * @param {readonly FrontierRetagItem[]} items
+   */
+  async retag(items) {
+    const answer = await this.#call([{ role: "system", content: FRONTIER_RETAG_INSTRUCTIONS }, { role: "user", content: buildRetagInput(items) }],
+      RETAG_MAX_TOKENS, RETAG_TIMEOUT_MS);
+    return verifyRetag(items, answer);
   }
 
   status() {

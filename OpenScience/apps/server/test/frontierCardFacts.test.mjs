@@ -19,14 +19,14 @@ test("a card's facts: every enrichment key but the ones another part of the card
   assert.equal(Object.keys(frontierCardFacts(Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`k_${index}`, index])))).length, 12);
 });
 
-test("a card's score band: at or above the selection line high, from 60 medium, below low; no score, no band", () => {
-  assert.equal(frontierScoreBand(86, 75), "high");
-  assert.equal(frontierScoreBand(75, 75), "high", "the line itself is selected");
-  assert.equal(frontierScoreBand(74, 75), "medium");
-  assert.equal(frontierScoreBand(60, 75), "medium");
-  assert.equal(frontierScoreBand(59, 75), "low");
-  assert.equal(frontierScoreBand("81", 70), "high", "a number the database sent as text");
-  for (const nothing of [null, undefined, "", "n/a"]) assert.equal(frontierScoreBand(nothing, 70), null, String(nothing));
+test("a card's AI 评分 tier (owner, 2026-10-23): high from 85, medium from 70, low below; no score, no tier", () => {
+  assert.equal(frontierScoreBand(86), "high");
+  assert.equal(frontierScoreBand(85), "high", "the line itself is the higher tier");
+  assert.equal(frontierScoreBand(84), "medium");
+  assert.equal(frontierScoreBand(70), "medium");
+  assert.equal(frontierScoreBand(69), "low");
+  assert.equal(frontierScoreBand("91"), "high", "a number the database sent as text");
+  for (const nothing of [null, undefined, "", "n/a"]) assert.equal(frontierScoreBand(nothing), null, String(nothing));
 });
 
 test("the selection line is the config's, the calibrated default when it says nothing", () => {

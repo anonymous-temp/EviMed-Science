@@ -76,11 +76,13 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
+import { FRONTIER_RETAG_BATCH } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
+import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { frontierWriteLead } from "./frontierLead.mjs";
 import { FRONTIER_INSIGHT_LIMITS, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight } from "./frontierInsight.mjs";
@@ -90,7 +92,10 @@ import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
 
 const MINUTE = 60_000;
+/** Tagging calls one batch makes side by side (`#retag`). */
+const FRONTIER_RETAG_CALLS = 3;
 const HOUR = 60 * MINUTE;
+const DAY_MS = 24 * HOUR;
 const DAY = 24 * HOUR;
 
 /**
@@ -722,14 +727,14 @@ function orderedFlags(flags) {
 /**
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
- *             preprintLane: number, translated: number, tidied: number, tidyDropped: number, leads: number, insights: number }} FrontierBatchSummary
+ *             preprintLane: number, translated: number, tidied: number, tidyDropped: number, leads: number, insights: number, retagged: number }} FrontierBatchSummary
  */
 
 export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
    *           sourceChanges?: any, policies?: any, evolution?: any, webReader?: { read: (url: string, options?: any) => Promise<any> } | null,
-   *           now?: () => Date, workerId?: string }} options
+   *           tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
    *   project, and the budget is read for it); `plugin` offers `text(entryId)`
    *   (`KnowledgePluginClient`); `embedder` a `KbEmbedder` or null; `glossary`
@@ -738,7 +743,7 @@ export class FrontierPipeline {
    *   (`sourceChanges.mjs`), which each retraction, correction, concern or
    *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -753,6 +758,8 @@ export class FrontierPipeline {
     this.config = config ?? {};
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
+    /** The tag tree (frontierTags.mjs): what an edit is offered and where its tags are written. */
+    this.tags = tags ?? new FrontierTagStore({ database, now });
     this.glossaryStore = glossary instanceof FrontierGlossary ? { current: async () => glossary }
       : glossary && typeof glossary.current === "function" ? glossary : new FrontierGlossaryStore({ database });
     this.leaseMs = Math.max(MINUTE, Number(this.config.frontierLeaseMs) || 10 * MINUTE);
@@ -779,6 +786,8 @@ export class FrontierPipeline {
       leads: 0, leadsEmpty: 0, leadsDropped: 0, insights: 0, insightsEmpty: 0, insightsAsked: 0,
       // Open-access PDFs read for a full text (`#fullText`): read and kept, read and too short or unreadable.
       fullTexts: 0, fullTextsMissed: 0, fullTextsRefused: 0,
+      // The tag tree (`#retag`, `#score`): items tagged again, answers left without a usable row, calls that failed, candidates made.
+      retagged: 0, retagSkipped: 0, retagFailures: 0, tagCandidatesCreated: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
@@ -856,13 +865,15 @@ export class FrontierPipeline {
     this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
-      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0 };
+      waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, retagged: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
       const now = this.now();
       const budget = await this.budget(now);
       const glossary = await this.glossaryStore.current();
-      const context = { now, budget, capabilities, glossary, summary };
+      // A tree that cannot be read leaves the edits without candidates; it never stops a batch.
+      const tags = await this.tags.vocabulary().catch(() => null);
+      const context = { now, budget, capabilities, glossary, tags, summary };
       await this.#processEntries(context);
       await this.#processItems(context);
       await this.#processOwedEdits(context);
@@ -875,6 +886,7 @@ export class FrontierPipeline {
       await this.#lead(context);
       await this.#insight(context);
       summary.translated += await this.#translate(context);
+      summary.retagged += await this.#retag(context);
       summary.embedded += await this.#embed(context);
       this.counters.batches += 1;
       for (const key of /** @type {Array<keyof FrontierBatchSummary>} */ (Object.keys(summary))) {
@@ -1680,6 +1692,17 @@ export class FrontierPipeline {
   }
 
   /**
+   * An edit's input with the tree's tags its text names (「候选标签」, frontierTags.mjs) — added for the call only, never part of the
+   * input's identity (`#editItem`).
+   * @param {any} editItem @param {import("./frontierTags.mjs").FrontierTagVocabulary | null} vocabulary
+   */
+  #withTagCandidates(editItem, vocabulary) {
+    if (!vocabulary) return editItem;
+    const text = [editItem.abstract ?? editItem.summary ?? "", editItem.bodyExcerpt ? String(editItem.bodyExcerpt).slice(0, 4_000) : ""].join("\n");
+    return { ...editItem, tagCandidates: vocabulary.candidatesFor({ title: editItem.titleRaw, text }).map((tag) => tag.name) };
+  }
+
+  /**
    * Everything an item's processing reads, in one place.
    * @param {any} item @param {any} [database]
    */
@@ -1820,7 +1843,7 @@ export class FrontierPipeline {
           const decision = frontierEditDecision({ source, budget: context.budget, offpeak: this.offpeak, now, available });
           let result = null;
           if (decision.edit) {
-            result = await this.#editWithDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary));
+            result = await this.#editWithDiagnostics(item, this.#withTagCandidates(this.#editItem(item, texts, entry, source, context.glossary), context.tags));
             if (frontierProviderUnavailable({...result,code:result.error})) {
               await this.#waitItem(item,this.#pauseForProvider(now,result.error),result.error);
               summary.deferred += 1;
@@ -1867,7 +1890,7 @@ export class FrontierPipeline {
           await this.#waitItem(item, this.#providerPause(now), this.providerPauseReason ?? "provider-refused");
           continue;
         }
-        const result = await this.#editWithDiagnostics(item, this.#editItem(item, texts, entry, source, context.glossary));
+        const result = await this.#editWithDiagnostics(item, this.#withTagCandidates(this.#editItem(item, texts, entry, source, context.glossary), context.tags));
         if (frontierProviderUnavailable({...result,code:result.error})) {
           await this.#waitItem(item, this.#pauseForProvider(now, result.error), result.error);
           summary.deferred += 1;
@@ -1996,6 +2019,8 @@ export class FrontierPipeline {
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
           [item.id, result.modelInput, result.modelInputSha256]);
+        const linked = await this.tags.link(client, item.id, fields.tags, { origin: "edit", specialties: fields.specialties });
+        this.counters.tagCandidatesCreated += linked.created;
       }
       if (item.state === "published") {
         await client.query(`UPDATE evimed_frontier.items SET lexemes = $2::tsvector WHERE id = $1`,
@@ -2652,6 +2677,71 @@ export class FrontierPipeline {
       }
     }
     return written;
+  }
+
+  /**
+   * Tag again what was published before the tag tree, or under an older tagging (`items.tag_version` below `FRONTIER_TAG_VERSION`):
+   * newest first, `FRONTIER_RETAG_CALLS` calls of `FRONTIER_RETAG_BATCH` items side by side per batch, each item's specialties and
+   * tags judged again from what was written about it (`FrontierEditor#retag`) and its tags linked to the tree. Only while the day's
+   * budget is untouched by the 80% line and the provider is not paused: new items come first. An item claimed and not answered waits
+   * out its claim; one the model answers malformed waits a day; nothing here fails a batch.
+   * @param {any} context @returns {Promise<number>}
+   */
+  async #retag(context) {
+    const { now, budget, tags } = context;
+    if (!tags || !this.editor.available || typeof this.editor.retag !== "function" || budget.state !== "ok" || this.#providerPause(now)) return 0;
+    const claimed = await this.database.query(`UPDATE evimed_frontier.items i SET tag_claim_until = $2
+      WHERE i.id IN (SELECT id FROM evimed_frontier.items WHERE state = 'published' AND tag_version IS NULL
+          AND (tag_claim_until IS NULL OR tag_claim_until < $1) ORDER BY timeline_at DESC LIMIT $3 FOR UPDATE SKIP LOCKED)
+      RETURNING i.id, i.title_raw, i.title_zh, i.summary_zh, i.entities, i.specialties, i.tags, i.timeline_at`,
+    [now, new Date(now.getTime() + 10 * MINUTE), FRONTIER_RETAG_BATCH * FRONTIER_RETAG_CALLS]);
+    if (!claimed.rowCount) return 0;
+    // RETURNING keeps no order: newest first again.
+    const rows = [...claimed.rows].sort((left, right) => new Date(right.timeline_at).getTime() - new Date(left.timeline_at).getTime() || Number(right.id) - Number(left.id));
+    const groups = [];
+    for (let start = 0; start < rows.length; start += FRONTIER_RETAG_BATCH) groups.push(rows.slice(start, start + FRONTIER_RETAG_BATCH));
+    const done = await Promise.all(groups.map(async (group) => {
+      const input = group.map((row) => {
+        const entities = row.entities && typeof row.entities === "object" ? row.entities : {};
+        const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value.filter((name) => typeof name === "string") : []);
+        return {
+          titleZh: row.title_zh ?? null, titleRaw: row.title_raw, summaryZh: row.summary_zh ?? null,
+          diseases: list(entities.diseases), drugs: list(entities.drugs),
+          tagCandidates: tags.candidatesFor({ title: row.title_raw, text: [row.title_zh, row.summary_zh, ...list(entities.diseases), ...list(entities.drugs)].filter(Boolean).join("\n") }).map((/** @type {any} */ tag) => tag.name),
+        };
+      });
+      let answers;
+      try {
+        answers = await this.editor.retag(input);
+      } catch (error) {
+        this.counters.retagFailures += 1;
+        this.lastError = codeOf(error);
+        if (frontierProviderUnavailable(error)) this.#pauseForProvider(this.now(), codeOf(error));
+        return 0;
+      }
+      let count = 0;
+      await this.database.transaction(async (/** @type {any} */ client) => {
+        for (const [index, row] of group.entries()) {
+          const answer = answers[index];
+          if (!answer) {
+            this.counters.retagSkipped += 1;
+            await client.query("UPDATE evimed_frontier.items SET tag_claim_until = $2 WHERE id = $1", [row.id, new Date(now.getTime() + DAY_MS)]);
+            continue;
+          }
+          await client.query(`UPDATE evimed_frontier.items SET specialties = $2, tags = $3, lexemes = $4::tsvector, updated_at = clock_timestamp() WHERE id = $1`,
+            [row.id, answer.specialties, answer.tags, tsvectorLiteral(this.#lexemeText({ ...row, tags: answer.tags }))]);
+          const linked = await this.tags.link(client, row.id, answer.tags, { origin: "retag", specialties: answer.specialties });
+          this.counters.tagCandidatesCreated += linked.created;
+          await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'retagged')", [row.id]);
+          count += 1;
+        }
+        if (count) await bumpFrontierVersion(client);
+      });
+      return count;
+    }));
+    const total = done.reduce((sum, value) => sum + value, 0);
+    this.counters.retagged += total;
+    return total;
   }
 
   /**

@@ -3,7 +3,6 @@ import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
 import { FRONTIER_MEDIA_ID, fetchFrontierMedia, frontierMediaList } from "./frontierMedia.mjs";
-import { frontierItemTags, frontierItemTopics } from "./frontierTopics.mjs";
 import { issueFrontierExposure } from "./frontierEvolution.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
@@ -12,18 +11,19 @@ import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
-  FRONTIER_SPECIALTY_LABELS_ZH, frontierScoreLevel, frontierSourceDisplayName,
+  FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, frontierScoreLevel, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
 import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
-import { FRONTIER_LANE_FLOOR_SCORE, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
-import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscriptions.mjs";
+import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
+import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
 
 /**
  * What a reader of 「前沿动态」 is served (plan §7.3, §10.5).
@@ -61,13 +61,14 @@ import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscr
  *   embedder exist — fifty candidates each, fused by reciprocal rank (k = 60,
  *   as `kbIndex.mjs`). `mode` says which ran. Searching 精选 searches 全部 and
  *   marks what was selected (§4.2).
- * - A card carries the editorial total, `score` (0–100), and the band it reads
- *   in, `scoreBand` (plan 2026-09-23 §6.2 编辑评分: `high` at or above the
- *   selection line, `medium` from 60, `low` below); a safety alert carries
- *   neither — it is selected whatever it scored. The four dimensions stay
- *   internal: `levels` are their display bands, never their numbers, banded by
- *   the domain's `frontierScoreLevel` (two thirds of a dimension's maximum or
- *   above is `high`, one third or above `medium`, below that `low`).
+ * - A card carries the AI score, `score` (0–100), the tier it is drawn in,
+ *   `scoreBand` (`high` from 85, `medium` from 70, `low` below — owner
+ *   2026-10-23, after AIHOT's pill), and its four parts, `scoreParts` (out of
+ *   `FRONTIER_SCORE_MAXIMA`: a lone number told a reader nothing); a safety
+ *   alert carries none of them — it is selected whatever it scored. `levels`
+ *   stay as the parts' bands for older clients.
+ * - A card's tags are the tag tree's (frontierTags.mjs): active tags, resolved
+ *   through merges, read in the same query as the card (`tag_refs`).
  * - A source reaches a reader by its institution's name, never the feed it is
  *   read through (`frontierSourceDisplayName`, plan 2026-09-23 §6.5 #5): the
  *   card, 「另有 N 家报道」, the event page, the daily and its Markdown. 「另有
@@ -126,7 +127,7 @@ const AXES = Object.freeze(["timeline", "published"]);
 const SORTS = Object.freeze(["relevance", "time"]);
 /** The hot rankings a reader may ask for (`GET /hot?window=`). */
 export const FRONTIER_HOT_WINDOWS = Object.freeze(["current", ...Object.keys(FRONTIER_HOT_PERIODS)]);
-const FOLLOW_KINDS = Object.freeze(["topic", "specialty", "drug", "source", "event"]);
+const FOLLOW_KINDS = Object.freeze(["topic", "specialty", "drug", "source", "event", "tag"]);
 
 /** An item's channel (contract 1.4.0), the plugin's vocabulary. */
 export const FRONTIER_CHANNELS = Object.freeze(["journal", "preprint", "news", "regulator", "registry", "guideline", "blog", "x", "wechat", "social"]);
@@ -183,17 +184,21 @@ export function frontierAuthor(value) {
   return { name, handle, url, role };
 }
 
+/** The tiers the 「AI 评分」 pill is drawn in (owner, 2026-10-23, after AIHOT's `Score`): from 85, from 70, below. */
+export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 85, medium: 70 });
+
 /**
- * The band an editorial score reads in (plan 2026-09-23 §6.2): `high` at or
- * above the selection line, `medium` from the lane floor (60) up to it, `low`
- * below; null without a score.
- * @param {unknown} score @param {number} threshold @returns {"high" | "medium" | "low" | null}
+ * The tier an AI score reads in: `high` from 85, `medium` from 70, `low` below; null without a score.
+ * @param {unknown} score @returns {"high" | "medium" | "low" | null}
  */
-export function frontierScoreBand(score, threshold) {
+export function frontierScoreBand(score) {
   if (score == null || score === "" || !Number.isFinite(Number(score))) return null;
   const value = Number(score);
-  return value >= threshold ? "high" : value >= FRONTIER_LANE_FLOOR_SCORE ? "medium" : "low";
+  return value >= FRONTIER_SCORE_TIERS.high ? "high" : value >= FRONTIER_SCORE_TIERS.medium ? "medium" : "low";
 }
+
+/** A score part as a number, or null. @param {unknown} value */
+const scorePart = (value) => (value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value));
 
 /**
  * Whether this account sees the module at all: on, and either open to every
@@ -323,8 +328,25 @@ export function normalizeItemsQuery(params, vocabulary) {
   const lane = params.get("lane") || null;
   // A reader's lanes are the eight: `mixed` is a source's, never an item's.
   if (lane && (!FRONTIER_LANES.includes(/** @type {any} */ (lane)) || !Object.hasOwn(vocabulary.lanes, lane))) throw invalid("lane");
-  const specialty = params.get("specialty") || null;
-  if (specialty && !Object.hasOwn(vocabulary.specialties, specialty)) throw invalid("specialty");
+  // One or more of the thirty, any of them (2026-10-23); a retired key reads as its successor, or as no filter.
+  const specialtyValues = (params.get("specialty") || "").split(",").map((key) => key.trim()).filter(Boolean);
+  if (specialtyValues.length > FRONTIER_SPECIALTIES.length) throw invalid("specialty");
+  /** @type {string[]} */
+  const specialties = [];
+  for (const value of specialtyValues) {
+    const key = Object.hasOwn(vocabulary.specialties, value) ? value : Object.hasOwn(FRONTIER_SPECIALTY_RETIRED, value) ? frontierSpecialtyKey(value) : undefined;
+    if (key === undefined) throw invalid("specialty");
+    if (key && !specialties.includes(key)) specialties.push(key);
+  }
+  specialties.sort();
+  const specialty = specialties.length ? specialties.join(",") : null;
+  // A tag of the tree, by its address (frontierTags.mjs); whether the tree has it is the service's to say.
+  const tag = params.get("tag") || null;
+  if (tag && !/^[a-z0-9][a-z0-9-]{1,79}$/.test(tag)) throw invalid("tag");
+  const evidence = params.get("evidence") || null;
+  if (evidence && !Object.hasOwn(vocabulary.evidenceTypes, evidence)) throw invalid("evidence");
+  const unreadValue = params.get("unread");
+  if (unreadValue != null && !["1", "0", ""].includes(unreadValue)) throw invalid("unread");
   const window = params.get("window") || null;
   if (window && !Object.hasOwn(FRONTIER_WINDOWS, window)) throw invalid("window");
   const rawQuery = (params.get("q") ?? "").trim().replace(/\s+/g, " ");
@@ -349,7 +371,8 @@ export function normalizeItemsQuery(params, vocabulary) {
   const channelValue = params.get("channel") || "all";
   if (channelValue !== "all" && !Object.hasOwn(FRONTIER_CHANNEL_FILTERS, channelValue)) throw invalid("channel");
   const channel = channelValue === "all" ? null : /** @type {keyof typeof FRONTIER_CHANNEL_FILTERS} */ (channelValue);
-  return { view, by, lane, specialty, window, follow, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit, sort, channel };
+  return { view, by, lane, specialty, specialties, tag, evidence, unread: unreadValue === "1", window, follow, q: rawQuery || null, starred: starredValue === "1",
+    safety: safetyValue === "1", cursor, limit, sort, channel };
 }
 
 /** @typedef {ReturnType<typeof normalizeItemsQuery> & { readerKey?: string,
@@ -357,7 +380,8 @@ export function normalizeItemsQuery(params, vocabulary) {
 
 /** The filters a cursor was minted under, as a short fingerprint. @param {ItemsQuery} query */
 const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety,
-  query.q ? query.sort : "relevance", query.follow, query.readerKey ?? null, ...(query.channel ? [query.channel] : [])]));
+  query.q ? query.sort : "relevance", query.follow, query.readerKey ?? null, ...(query.channel ? [query.channel] : []),
+  ...(query.tag || query.evidence || query.unread ? [query.tag, query.evidence, query.unread] : [])]));
 
 /** @param {Record<string, unknown>} value */
 const encodeCursor = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -456,7 +480,11 @@ const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, 
                     ORDER BY ms.owner_entity, im.published_at DESC NULLS LAST, im.source_id) d
             ORDER BY d.published_at DESC NULLS LAST, d.source_id LIMIT 5) r) AS mentions,
   (SELECT count(DISTINCT ms.owner_entity)::integer FROM evimed_frontier.item_mentions im JOIN evimed_frontier.sources ms ON ms.id = im.source_id
-    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled AND NOT ms.platform_produced) AS mention_count`;
+    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled AND NOT ms.platform_produced) AS mention_count,
+  (SELECT coalesce(jsonb_agg(jsonb_build_object('slug', x.slug, 'name', x.name) ORDER BY x.rank), '[]'::jsonb)
+     FROM (SELECT DISTINCT ON (r.id) r.slug, r.name, it.rank FROM evimed_frontier.item_tags it
+             JOIN evimed_frontier.tags tg ON tg.id = it.tag_id JOIN evimed_frontier.tags r ON r.id = coalesce(tg.merged_into, tg.id)
+            WHERE it.item_id = i.id AND r.state = 'active' ORDER BY r.id, it.rank) x) AS tag_refs`;
 
 const ITEM_FROM = `evimed_frontier.items i
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -470,7 +498,8 @@ export class FrontierService {
   /**
    * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, policies?: any, ingest?: any, embedder?: any,
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
-   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any }} options
+   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, monthly?: any, profiles?: any, actions?: any,
+   *   tags?: import("./frontierTags.mjs").FrontierTagStore | null, tagUpkeep?: import("./frontierTagUpkeep.mjs").FrontierTagUpkeep | null }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -478,7 +507,8 @@ export class FrontierService {
    *   `actions` a `FrontierActions` (存入知识库, 中文摘要).
    */
   constructor({ database, config, vocabulary, policies = createModuleEvolutionPolicies(), ingest = null, embedder = null, budget = null, now = () => new Date(),
-    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null }) {
+    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, monthly = null, profiles = null, actions = null,
+    tags = null, tagUpkeep = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.policies = policies;
     this.database = database;
@@ -497,6 +527,9 @@ export class FrontierService {
     this.profiles = profiles;
     this.subscriptions = new FrontierSubscriptions({ database });
     this.actions = actions;
+    /** The tag tree (frontierTags.mjs) a filter, a follow and the 专科 panel read; and its upkeep, for the operators' view. */
+    this.tags = tags ?? new FrontierTagStore({ database, now });
+    this.tagUpkeep = tagUpkeep;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -613,7 +646,15 @@ export class FrontierService {
       editorDiagnostics: frontierEditorDiagnostics(row.editor_diagnostics),
       // The editorial total and its band; a safety alert is not scored for a reader.
       score: row.safety_alert === true || row.score_total == null ? null : Number(row.score_total),
-      scoreBand: row.safety_alert === true ? null : frontierScoreBand(row.score_total, this.selectThreshold),
+      scoreBand: row.safety_alert === true ? null : frontierScoreBand(row.score_total),
+      // The four parts behind the total (owner, 2026-10-23: a lone number told the reader nothing): shown beside it, out of
+      // FRONTIER_SCORE_MAXIMA.
+      scoreParts: row.safety_alert === true || row.score_total == null ? null
+        : { authority: scorePart(row.score_authority) ?? 0, impact: scorePart(row.score_impact) ?? 0, novelty: scorePart(row.score_novelty) ?? 0,
+          relevance: scorePart(row.score_relevance) ?? 0 },
+      // The tree's tags (frontierTags.mjs): active, resolved through merges, in the item's order.
+      tags: (Array.isArray(row.tag_refs) ? row.tag_refs : []).slice(0, FRONTIER_ITEM_TAG_LIMIT)
+        .map((/** @type {any} */ tag) => ({ slug: String(tag.slug), name: String(tag.name) })),
       levels: {
         authority: frontierScoreLevel("authority", row.score_authority),
         impact: frontierScoreLevel("impact", row.score_impact),
@@ -653,7 +694,12 @@ export class FrontierService {
     // Searching the selected view searches everything and marks the selected.
     if (query.view === "selected" && !search) where.push("i.selected");
     if (query.lane) where.push(`i.lane = ${param(query.lane)}`);
-    if (query.specialty) where.push(`i.specialties @> ARRAY[${param(query.specialty)}]::text[]`);
+    if (query.specialties?.length) where.push(`i.specialties && ${param(query.specialties)}::text[]`);
+    if (query.tag) where.push(frontierTagPredicate(param(query.tag)));
+    if (query.evidence) where.push(`i.evidence_type = ${param(query.evidence)}`);
+    if (query.unread) {
+      where.push(`NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state us WHERE us.user_id = ${param(userId)} AND us.item_id = i.id AND us.read_at IS NOT NULL)`);
+    }
     if (query.safety) where.push("i.safety_alert");
     if (query.channel) where.push(channelPredicate(query.channel));
     if (query.window) where.push(`${axis} >= ${param(new Date(this.now().getTime() - FRONTIER_WINDOWS[query.window]).toISOString())}::timestamptz`);
@@ -773,7 +819,7 @@ export class FrontierService {
    * @returns {Promise<{ ids: string[], mode: "keyword" | "hybrid" }>}
    */
   async #byTime(ranking, query, version, clock) {
-    const key = query.starred || query.readerKey ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel]);
+    const key = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
     const cached = key ? this.#cached(key, version) : null;
     if (cached) return cached;
     const candidates = ranking.lexical.length ? ranking.lexical : ranking.ids;
@@ -816,6 +862,12 @@ export class FrontierService {
   async listItems(user, params, ifNoneMatch = null) {
     const query = /** @type {ItemsQuery} */ (normalizeItemsQuery(params, this.vocabulary));
     this.counters.lists += 1;
+    if (query.tag) {
+      // The address of a tag folded into another lists as that one; one the tree does not show is not a filter anybody can mean.
+      const found = this.tags ? await this.tags.filter(query.tag) : null;
+      if (!found) throw failure(404, "frontier_tag_not_found", "This tag does not exist.");
+      query.tag = found.tag.slug;
+    }
     const versions = await this.#transaction((client) => this.#versions(client, user.id));
     query.subscriptions = await this.subscriptions.read(user.id, query.follow);
     if (query.follow || query.subscriptions.muted.length) query.readerKey = `${user.id}:${versions.state}`;
@@ -846,14 +898,14 @@ export class FrontierService {
       }
     }
     // Public content is shared by every reader; "only my stars" is not.
-    const cacheKey = query.starred || query.readerKey ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
-      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null, query.readerKey ?? null, query.channel]);
+    const cacheKey = query.starred || query.unread || query.readerKey ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
+      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
     let page = cacheKey ? this.#cached(cacheKey, versions.content) : null;
     if (!page) {
       if (search) {
         // The fused ranking is kept for the next pages of the same search: a
         // second page must not embed the question and run three legs again.
-        const rankingKey = query.starred || query.readerKey ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel]);
+        const rankingKey = query.starred || query.unread || query.readerKey ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null, query.channel, query.tag, query.evidence]);
         let ranking = rankingKey ? this.#cached(rankingKey, versions.content) : null;
         if (!ranking) {
           this.counters.searches += 1;
@@ -918,7 +970,7 @@ export class FrontierService {
         body: {
           item: {
             ...card,
-            ...(await this.#reader(client, row, card)),
+            ...(await this.#reader(client, row)),
             state: marks.get(String(row.id)) ?? { starred: false, hidden: false, read: false },
             abstract: row.abstract_raw ?? null,
             abstractZh: row.abstract_zh ?? null,
@@ -966,9 +1018,9 @@ export class FrontierService {
    * What the reader adds to a card (contract B, 2026-10-22): the 导读, the full text and its Chinese, the post's pictures, the post
    * it quotes and its counts, the topics and tags, the item it stands beside in its event, and the event's follow-ups. Every
    * field is what was stored; one the server cannot fill is null (or empty), and the reader omits its block.
-   * @param {any} client @param {Record<string, any>} row @param {{ source: { name: string } }} card the row's card (`#item`)
+   * @param {any} client @param {Record<string, any>} row
    */
-  async #reader(client, row, card) {
+  async #reader(client, row) {
     const post = row.platform === "x";
     const translated = row.body_zh_kind === "translation" && typeof row.body_zh === "string" && row.body_zh.trim() ? row.body_zh : null;
     // The 原文 a translation was made from, or the best text there is (frontierReaderText), as the paragraphs the translation has.
@@ -980,7 +1032,6 @@ export class FrontierService {
     const count = (value) => (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null);
     const metrics = row.metrics && typeof row.metrics === "object"
       ? { likes: count(row.metrics.likes), reposts: count(row.metrics.reposts), replies: count(row.metrics.replies), views: count(row.metrics.views) } : null;
-    const evidenceLabel = row.evidence_type && row.evidence_type !== "other" ? this.vocabulary.evidenceTypes[row.evidence_type] ?? null : null;
     const sameEventId = /^\d{1,19}$/.test(String(row.same_event_item_id ?? "")) ? String(row.same_event_item_id) : null;
     const same = sameEventId ? (await client.query(`SELECT public_id, coalesce(title_zh, title_raw) AS title FROM evimed_frontier.items
       WHERE id = $1 AND state = 'published' AND id <> $2`, [sameEventId, row.id])).rows[0] ?? null : null;
@@ -1004,9 +1055,6 @@ export class FrontierService {
         url: typeof quoted.url === "string" && /^https?:\/\//.test(quoted.url) ? quoted.url.slice(0, 2048) : null,
       } : null,
       metrics: metrics && Object.values(metrics).some((value) => value !== null) ? metrics : null,
-      topics: frontierItemTopics({ specialties: row.specialties, entities: row.entities, tags: row.tags, evidenceType: row.evidence_type,
-        lane: row.lane, flags: row.flags, sourceName: card.source.name }),
-      tags: frontierItemTags({ tags: row.tags, evidenceTypeLabel: evidenceLabel }),
       sameEvent: same ? { itemId: same.public_id, title: same.title } : null,
       followups: await this.#followups(client, row.id),
     };
@@ -1299,6 +1347,55 @@ export class FrontierService {
   }
 
   /**
+   * The tree's tags for the 「专科」 panel (`?specialty=a,b`: those specialties' active tags by items of thirty days) or for the search
+   * box (`?q=`: active tags a spelling of which contains the words).
+   * @param {URLSearchParams} params
+   */
+  async tagList(params) {
+    const invalid = () => failure(400, "frontier_query_invalid", "The tag query is invalid.");
+    const limitValue = params.get("limit");
+    const limit = limitValue == null || limitValue === "" ? 24 : Number(limitValue);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 60) throw invalid();
+    await this.ready();
+    const q = (params.get("q") ?? "").trim();
+    if (q) {
+      if (q.length > 40) throw invalid();
+      return { tags: await this.tags.suggest(q, Math.min(limit, 20)) };
+    }
+    const specialties = (params.get("specialty") ?? "").split(",").map((key) => key.trim()).filter(Boolean)
+      .map((key) => (Object.hasOwn(this.vocabulary.specialties, key) ? key : frontierSpecialtyKey(key)));
+    if (specialties.some((key) => !key)) throw invalid();
+    return { tags: await this.tags.hot(/** @type {string[]} */ (specialties), limit) };
+  }
+
+  /** One tag, as its address names it; a folded address answers as the tag that stands for it. @param {string} slug */
+  async tagDetail(slug) {
+    if (!/^[a-z0-9][a-z0-9-]{1,79}$/.test(String(slug))) throw failure(404, "frontier_tag_not_found", "This tag does not exist.");
+    await this.ready();
+    const found = await this.tags.detail(slug);
+    if (!found) throw failure(404, "frontier_tag_not_found", "This tag does not exist.");
+    const { tag, mergedFrom } = found;
+    return { tag: { ...tag, specialties: tag.specialties.filter((key) => Object.hasOwn(this.vocabulary.specialties, key)).map((key) => ({ key, label: this.vocabulary.specialties[key] })) },
+      ...(mergedFrom ? { mergedFrom } : {}) };
+  }
+
+  /** The operators' view of the tree (`FrontierTagUpkeep#overview`). */
+  async tagOverview() {
+    if (!this.tagUpkeep) throw failure(404, "frontier_tags_unavailable", "The tag tree's upkeep is not running here.");
+    await this.ready();
+    return this.tagUpkeep.overview();
+  }
+
+  /** Take back one change of the tree. @param {string} id */
+  async undoTagChange(id) {
+    if (!this.tagUpkeep) throw failure(404, "frontier_tags_unavailable", "The tag tree's upkeep is not running here.");
+    if (!/^\d{1,18}$/.test(String(id))) throw failure(404, "frontier_tag_change_not_found", "No such change.");
+    await this.ready();
+    if (!(await this.tagUpkeep.undo(id))) throw failure(409, "frontier_tag_change_not_undoable", "This change can no longer be taken back.");
+    return { ok: true };
+  }
+
+  /**
    * Follow (or mute) a topic, specialty, drug, source or event. Upserts by
    * (kind, key): following again changes the label or the mute, never adds a row.
    * @param {{ id: string }} user @param {{ kind?: unknown, key?: unknown, label?: unknown, muted?: unknown }} body
@@ -1310,6 +1407,10 @@ export class FrontierService {
     let key;
     if (kind === "specialty") {
       key = typeof body.key === "string" && Object.hasOwn(this.vocabulary.specialties, body.key) ? body.key : null;
+    } else if (kind === "tag") {
+      // A tag of the tree, kept by the address that stands for it now.
+      const found = typeof body.key === "string" && /^[a-z0-9][a-z0-9-]{1,79}$/.test(body.key) ? (await this.ready(), await this.tags.filter(body.key)) : null;
+      key = found?.tag.slug ?? null;
     } else if (kind === "event") {
       key = typeof body.key === "string" && PUBLIC_ID.test(body.key) ? body.key : null;
     } else if (kind === "source") {

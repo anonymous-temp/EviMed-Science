@@ -5,6 +5,9 @@ import { FRONTIER_EVIDENCE_TYPES } from "@evimed/domain";
 import {
   FRONTIER_AI_MINUTE_INSTRUCTIONS,
   FRONTIER_DIGEST_INSTRUCTIONS,
+  FRONTIER_RETAG_INSTRUCTIONS,
+  buildRetagInput,
+  verifyRetag,
   FRONTIER_EDITOR_VERSION,
   FRONTIER_EDIT_INSTRUCTIONS,
   FRONTIER_MODEL_INPUT_CHARS,
@@ -106,7 +109,7 @@ test("a screening answer that is not one valid verdict per entry is asked again 
   assert.equal(calls.length, 5);
   assert.deepEqual([...result.verdicts.keys()], ["e1", "e3"]);
   assert.equal(result.errors.get("e2"), "frontier_screen_invalid", "an unknown specialty is not a verdict");
-  assert.deepEqual(result.verdicts.get("e3")?.specialties, ["oncology", "hematology", "pharmacy"], "ordered by relevance, the first three kept");
+  assert.deepEqual(result.verdicts.get("e3")?.specialties, ["oncology", "hematology"], "ordered by relevance, the first two kept");
   assert.equal(editor.counters.screenRetries, 1);
   assert.equal(editor.counters.screenSingles, 3);
 });
@@ -224,9 +227,12 @@ test("the edit asks for an answer-first 导读 and a 推荐理由 that says what
   assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /为什么值得看/);
   assert.match(FRONTIER_EDIT_INSTRUCTIONS, /支持不了具体的阅读价值时给空字符串/, "an empty reason is an answer");
   assert.match(FRONTIER_EDIT_INSTRUCTIONS, /"reason_zh":"","tags":\[\]/, "both keys are in the output shape");
-  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /主题词表：糖尿病、2型糖尿病/, "the topics' tags are offered in the stable prefix");
+  // The tag tree (2026-10-23): the tree's spellings ride with each item as 「候选标签」, and the prompt says to copy them.
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /条目给了「候选标签」时，意思相同的必须原样照抄候选里的写法/);
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /主题词表/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /pharmacy 药学（药学实践本身/, "every specialty says what it takes");
   assert.equal(FRONTIER_TEXT_LIMITS.summary, 220);
-  assert.deepEqual([FRONTIER_TEXT_LIMITS.reasonMin, FRONTIER_TEXT_LIMITS.reason, FRONTIER_TEXT_LIMITS.tags], [20, 90, 7]);
+  assert.deepEqual([FRONTIER_TEXT_LIMITS.reasonMin, FRONTIER_TEXT_LIMITS.reason, FRONTIER_TEXT_LIMITS.tags], [20, 90, 4]);
 });
 
 test("the 推荐理由 is checked on its own: a failed reason is dropped, the answer is not sent back for it, and it rides along when the answer is", async () => {
@@ -262,13 +268,18 @@ test("the 推荐理由 is checked on its own: a failed reason is dropped, the an
   assert.equal(repaired.output?.reasonZh, good);
 });
 
-test("tags are short names kept or dropped one by one: no sentence, no link, no number the source lacks, seven at most", () => {
+test("tags are short names kept or dropped one by one: no sentence, no link, no number the source lacks, no other dimension, four at most", () => {
   const modelInput = buildModelInput(item());
-  const tags = (/** @type {unknown} */ value) => verifyEdit(answer({ tags: value }), item(), modelInput);
+  const tags = (/** @type {unknown} */ value, /** @type {string[]} */ candidates = []) => verifyEdit(answer({ tags: value }), item({ tagCandidates: candidates }), modelInput);
   assert.deepEqual(tags(["GLP-1 受体激动剂", "肥胖", "#心血管预防"]).output.tags, ["GLP-1 受体激动剂", "肥胖", "心血管预防"]);
   assert.deepEqual(tags(["肥胖", "肥胖", "见 www.nejm.org", "降低了心血管事件，效果明显", "降低 35%", "甲", "司".repeat(17)]).output.tags, ["肥胖"]);
   assert.deepEqual(tags(["随访 39.8 个月"]).output.tags, ["随访 39.8 个月"], "a number the source states may stand");
-  assert.deepEqual(tags(["一", "二二", "三三", "四四", "五五", "六六", "七七", "八八", "九九"].slice(1)).output.tags.length, 7);
+  assert.deepEqual(tags(["一", "二二", "三三", "四四", "五五", "六六", "七七", "八八", "九九"].slice(1)).output.tags.length, 4);
+  // A specialty, a lane, an evidence type or a study design is another dimension of the item, never a tag.
+  assert.deepEqual(tags(["肿瘤", "药物安全", "随机对照试验", "Meta分析", "肿瘤微环境"]).output.tags, ["肿瘤微环境"]);
+  // A tag of the tree the item was offered is the vocabulary's word: its number need not be the source's.
+  assert.deepEqual(tags(["4型糖尿病"]).output.tags, [], "a number the source lacks, in the model's own word");
+  assert.deepEqual(tags(["4型糖尿病"], ["4型糖尿病"]).output.tags, ["4型糖尿病"], "the same word, offered by the tree");
   assert.deepEqual(tags("肥胖").output.tags, [], "not an array: no tags, and no failure");
   assert.deepEqual(tags("肥胖").issues, []);
 });
@@ -1213,4 +1224,38 @@ test("a served edit policy older than the answer's keys is not used: the shipped
   const used = await new FrontierEditor(config, { owner, callModel: second.callModel, policies: currentPolicy }).edit(item());
   assert.match(second.calls[0].body.messages[0].content, /补充：只写原文有的。$/);
   assert.equal(used.editorVersion, "evolved:frontier:8");
+});
+
+test("the tree's candidates ride with the edit call after its input, and the input — the source's identity — stays without them", async () => {
+  const { calls, callModel } = stubModel([() => answer({ tags: ["GLP-1 受体激动剂", "肥胖"] })]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item({ tagCandidates: ["GLP-1 受体激动剂", "肥胖", "心血管疾病"] }));
+  const sent = calls[0].body.messages[1].content;
+  assert.ok(sent.startsWith(result.modelInput), "the input first, as it is stored");
+  assert.ok(sent.endsWith("\n候选标签：GLP-1 受体激动剂、肥胖、心血管疾病"));
+  assert.doesNotMatch(result.modelInput, /候选标签/);
+  assert.equal(result.modelInputSha256, (await new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel }).edit(item())).modelInputSha256,
+    "a tag promoted overnight is not a change of the source");
+  assert.deepEqual(result.output?.tags, ["GLP-1 受体激动剂", "肥胖"]);
+});
+
+test("tagging again: several items a call, each answered by its number; specialties known and two at most, tags checked as an edit's", () => {
+  assert.match(FRONTIER_RETAG_INSTRUCTIONS, /"items":\[\{"n":1,"specialties":\[\],"tags":\[\]\}\]/);
+  assert.match(FRONTIER_RETAG_INSTRUCTIONS, /意思相同的必须原样照抄候选里的写法/);
+  const items = [
+    { titleZh: "司美格鲁肽减重 3 期试验", titleRaw: "Semaglutide phase 3", summaryZh: null, diseases: ["肥胖"], drugs: ["司美格鲁肽"], tagCandidates: ["肥胖", "4型糖尿病"] },
+    { titleZh: null, titleRaw: "A paper", summaryZh: "导读。", diseases: [], drugs: [], tagCandidates: [] },
+    { titleZh: null, titleRaw: "Another", summaryZh: null, diseases: [], drugs: [], tagCandidates: [] },
+  ];
+  const input = buildRetagInput(items);
+  assert.match(input, /^\[1\]\n标题：司美格鲁肽减重 3 期试验\n原标题：Semaglutide phase 3\n疾病：肥胖\n药物：司美格鲁肽\n候选标签：肥胖、4型糖尿病/);
+  assert.match(input, /\n\n\[2\]\n标题：A paper\n导读：导读。/);
+  const verified = verifyRetag(items, { items: [
+    { n: 1, specialties: ["endocrinology", "pharmacy", "astrology"], tags: ["肥胖", "4型糖尿病", "5期试验", "内分泌代谢"] },
+    { n: 2, specialties: "endocrinology", tags: [] },
+  ] });
+  assert.deepEqual(verified[0], { specialties: ["endocrinology", "pharmacy"], tags: ["肥胖", "4型糖尿病"] },
+    "an offered tag's number is the tree's; a number of the model's own the item lacks is dropped; a specialty name is not a tag");
+  assert.equal(verified[1], null, "malformed: asked again later");
+  assert.equal(verified[2], null, "left out: asked again later");
 });

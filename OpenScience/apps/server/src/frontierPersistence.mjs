@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { EVIDENCE_ZONE_SQL } from "./evidenceZonePersistence.mjs";
 import { FRONTIER_EVENT_READING_SQL } from "./frontierEventReading.mjs";
+import { frontierTagSeedRows, tagKey } from "./frontierTags.mjs";
 
 /**
  * The frontier feed's own schema, `evimed_frontier` (「前沿动态」, plan §10.4).
@@ -69,11 +71,13 @@ export const FRONTIER_META_KEYS = Object.freeze({
   pluginCursor: "plugin_cursor",
   /** The last manifest the plugin served, with its compatibility verdict. */
   pluginManifest: "plugin_manifest",
+  /** Bumped by every change of the tag tree (a promotion, a merge, a sleep): the in-memory vocabulary reloads on it. */
+  tagsVersion: "tags_version",
 });
 
 /** The keys `bumpFrontierVersion` moves; the cursor and the manifest are not versions.
  *  @type {ReadonlySet<string>} */
-const VERSION_KEYS = new Set([FRONTIER_META_KEYS.contentVersion, FRONTIER_META_KEYS.hotVersion, FRONTIER_META_KEYS.dailyVersion]);
+const VERSION_KEYS = new Set([FRONTIER_META_KEYS.contentVersion, FRONTIER_META_KEYS.hotVersion, FRONTIER_META_KEYS.dailyVersion, FRONTIER_META_KEYS.tagsVersion]);
 
 /** The tables every deployment has. The trigram index and the vector table
  *  follow below, only where their extension exists. */
@@ -547,7 +551,7 @@ ${FRONTIER_EVENT_READING_SQL}
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_follows (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event')),
+  kind       text NOT NULL CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag')),
   key        text NOT NULL,
   label      text NOT NULL,
   muted      boolean NOT NULL DEFAULT false,
@@ -580,6 +584,83 @@ ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS inputs_versio
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS computed_inputs_version bigint NOT NULL DEFAULT 0;
 ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS memory_mark text;
 ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS for_you_seen_at timestamptz(3);
+
+-- 2026-10-23: a reader may follow a tag. The kind list was an inline CHECK, which ADD/CREATE ... IF NOT EXISTS never changes on
+-- a deployed database: it is replaced where it does not name the new kind yet.
+DO $frontier_follow_kinds$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'evimed_frontier.user_follows'::regclass AND conname = 'user_follows_kind_check'
+             AND pg_get_constraintdef(oid) NOT LIKE '%''tag''%') THEN
+    ALTER TABLE evimed_frontier.user_follows DROP CONSTRAINT user_follows_kind_check;
+    ALTER TABLE evimed_frontier.user_follows ADD CONSTRAINT user_follows_kind_check
+      CHECK (kind IN ('topic', 'specialty', 'drug', 'source', 'event', 'tag'));
+  END IF;
+END
+$frontier_follow_kinds$;
+
+-- The tag tree (frontierTags.mjs, owner 2026-10-23). A merged tag keeps its rows and links; merged_into names the tag that stands
+-- for it. Kinds and states are closed here because nothing outside this module writes them.
+CREATE TABLE IF NOT EXISTS evimed_frontier.tags (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  slug         text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,79}$'),
+  name         text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 40),
+  name_en      text CHECK (name_en IS NULL OR char_length(name_en) <= 200),
+  kind         text CHECK (kind IS NULL OR kind IN ('disease', 'drug', 'drug-class', 'therapy', 'technology', 'method', 'concept', 'population', 'policy')),
+  specialties  text[] NOT NULL DEFAULT '{}',
+  broader_id   bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  mesh_ui      text,
+  state        text NOT NULL CHECK (state IN ('candidate', 'active', 'dormant', 'merged', 'rejected')),
+  merged_into  bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  origin       text NOT NULL CHECK (origin IN ('seed', 'model', 'split')),
+  created_at   timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  state_at     timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  judged_at    timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS frontier_tags_state_idx ON evimed_frontier.tags (state);
+CREATE INDEX IF NOT EXISTS frontier_tags_merged_idx ON evimed_frontier.tags (merged_into) WHERE merged_into IS NOT NULL;
+CREATE TABLE IF NOT EXISTS evimed_frontier.tag_aliases (
+  key     text PRIMARY KEY,
+  tag_id  bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  alias   text NOT NULL CHECK (char_length(alias) <= 200),
+  origin  text NOT NULL CHECK (origin IN ('seed', 'model', 'mesh', 'merge', 'judge'))
+);
+CREATE INDEX IF NOT EXISTS frontier_tag_aliases_tag_idx ON evimed_frontier.tag_aliases (tag_id);
+CREATE TABLE IF NOT EXISTS evimed_frontier.item_tags (
+  item_id  bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+  tag_id   bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  rank     smallint NOT NULL,
+  origin   text NOT NULL CHECK (origin IN ('edit', 'retag', 'split')),
+  PRIMARY KEY (item_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_item_tags_tag_idx ON evimed_frontier.item_tags (tag_id, item_id);
+CREATE TABLE IF NOT EXISTS evimed_frontier.tag_changes (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  at         timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  action     text NOT NULL CHECK (action IN ('promote', 'merge', 'reject', 'dormant', 'wake', 'split', 'undo')),
+  tag_id     bigint NOT NULL REFERENCES evimed_frontier.tags(id) ON DELETE CASCADE,
+  other_id   bigint REFERENCES evimed_frontier.tags(id) ON DELETE SET NULL,
+  before     jsonb,
+  after      jsonb,
+  reason     text,
+  undone_at  timestamptz(3)
+);
+CREATE INDEX IF NOT EXISTS frontier_tag_changes_at_idx ON evimed_frontier.tag_changes (at DESC);
+-- tag_version: the tagging the item has (frontierTags FRONTIER_TAG_VERSION); null = tagged before the tree, so tagged again.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tag_version smallint;
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS tag_claim_until timestamptz(3);
+CREATE INDEX IF NOT EXISTS frontier_items_untagged_idx ON evimed_frontier.items (timeline_at DESC)
+  WHERE state = 'published' AND tag_version IS NULL;
+
+-- 2026-10-23: thirty specialties. A retired key is read as its successor or as nothing (@evimed/domain FRONTIER_SPECIALTY_RETIRED);
+-- what is stored is moved once, so no reader, filter or follow meets one.
+UPDATE evimed_frontier.items SET specialties = array_remove(array_remove(array_replace(specialties, 'surgery-anesthesia', 'general-surgery'), 'geriatrics'), 'public-health')
+  WHERE specialties && ARRAY['surgery-anesthesia', 'geriatrics', 'public-health']::text[];
+UPDATE evimed_frontier.user_profiles SET specialties = array_remove(array_remove(array_replace(specialties, 'surgery-anesthesia', 'general-surgery'), 'geriatrics'), 'public-health')
+  WHERE specialties && ARRAY['surgery-anesthesia', 'geriatrics', 'public-health']::text[];
+DELETE FROM evimed_frontier.user_follows f WHERE f.kind = 'specialty' AND f.key = 'surgery-anesthesia'
+  AND EXISTS (SELECT 1 FROM evimed_frontier.user_follows g WHERE g.user_id = f.user_id AND g.kind = 'specialty' AND g.key = 'general-surgery');
+UPDATE evimed_frontier.user_follows SET key = 'general-surgery', label = '普通外科' WHERE kind = 'specialty' AND key = 'surgery-anesthesia';
+DELETE FROM evimed_frontier.user_follows WHERE kind = 'specialty' AND key IN ('geriatrics', 'public-health');
 `;
 }
 
@@ -657,6 +738,42 @@ async function ensureVectorTable(client, dimension, halfvecSupported) {
   return type;
 }
 
+/** The seed of the tag tree (frontierTags.mjs), read once per process when the table is empty. */
+let tagSeed = /** @type {ReturnType<typeof frontierTagSeedRows> | null} */ (null);
+
+/**
+ * Load the tag tree's seed into an empty `tags` table, in the migration's transaction: once, on the first start of a release that
+ * has the tree — a table with any row (a seed already loaded, or tags grown since) is never touched again.
+ * @param {any} client
+ */
+async function seedFrontierTags(client) {
+  const present = await client.query("SELECT EXISTS (SELECT 1 FROM evimed_frontier.tags) AS present");
+  if (present.rows[0]?.present) return;
+  tagSeed ??= frontierTagSeedRows(JSON.parse(readFileSync(new URL("./frontierTagSeed.json", import.meta.url), "utf8")));
+  const rows = tagSeed;
+  await client.query(`INSERT INTO evimed_frontier.tags (slug, name, name_en, kind, specialties, mesh_ui, state, origin)
+    SELECT r.slug, r.name, r.name_en, r.kind, r.specialties, r.mesh_ui, r.state, 'seed'
+    FROM jsonb_to_recordset($1::jsonb) AS r(slug text, name text, name_en text, kind text, specialties text[], mesh_ui text, state text)`,
+  [JSON.stringify(rows.map((row) => ({ slug: row.slug, name: row.name, name_en: row.nameEn, kind: row.kind, specialties: row.specialties,
+    mesh_ui: row.meshUi, state: row.state })))]);
+  await client.query(`UPDATE evimed_frontier.tags t SET broader_id = b.id
+    FROM jsonb_to_recordset($1::jsonb) AS r(slug text, broader text) JOIN evimed_frontier.tags b ON b.slug = r.broader
+    WHERE t.slug = r.slug`, [JSON.stringify(rows.filter((row) => row.broader).map((row) => ({ slug: row.slug, broader: row.broader })))]);
+  // Every spelling once: the name, the English name, then the aliases; the first tag to claim a key keeps it.
+  const aliases = new Map();
+  for (const row of rows) {
+    for (const [alias, origin] of /** @type {Array<[string | null, string]>} */ ([[row.name, "seed"], [row.nameEn, "mesh"], ...row.aliases.map((spelling) => /** @type {[string, string]} */ ([spelling, /[\p{Script=Han}]/u.test(spelling) ? "seed" : "mesh"]))])) {
+      if (!alias) continue;
+      const key = tagKey(alias);
+      if (key && !aliases.has(key)) aliases.set(key, { key, slug: row.slug, alias: alias.slice(0, 200), origin });
+    }
+  }
+  await client.query(`INSERT INTO evimed_frontier.tag_aliases (key, tag_id, alias, origin)
+    SELECT r.key, t.id, r.alias, r.origin FROM jsonb_to_recordset($1::jsonb) AS r(key text, slug text, alias text, origin text)
+    JOIN evimed_frontier.tags t ON t.slug = r.slug ON CONFLICT (key) DO NOTHING`, [JSON.stringify([...aliases.values()])]);
+  await bumpFrontierVersion(client, FRONTIER_META_KEYS.tagsVersion);
+}
+
 /**
  * Create or bring up to date the frontier schema, and say which search legs it
  * supports.
@@ -676,6 +793,7 @@ export async function migrateFrontier(database, { dimension }) {
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-v1'))");
     await client.query(sql());
+    await seedFrontierTags(client);
     await client.query(EVIDENCE_ZONE_SQL);
     const trigramVersion = await ensureExtension(client, "pg_trgm");
     if (trigramVersion) {

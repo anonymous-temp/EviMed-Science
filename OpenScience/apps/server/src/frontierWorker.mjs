@@ -49,11 +49,13 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 /** Rows one retention statement removes at most. */
 const RETENTION_BATCH = 5_000;
-const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "cleanup"]);
+const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "cleanup"]);
+/** How often the tag tree's upkeep looks whether its daily or weekly part is due (frontierTagUpkeep.mjs). */
+const TAGS_CHECK_MS = 15 * 60_000;
 /** What one `processBatch()` reports (package E's pipeline), summed per worker
  *  for the status and the metrics. A key it does not report stays 0. */
 export const PIPELINE_OUTCOMES = Object.freeze(["claimed", "promoted", "published", "merged", "screenedOut", "held", "failed",
-  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "translated", "tidied", "tidyDropped", "leads", "insights"]);
+  "dropped", "waiting", "deferred", "edited", "rescored", "embedded", "preprintLane", "translated", "tidied", "tidyDropped", "leads", "insights", "retagged"]);
 
 /**
  * The internal project the feed's model calls are billed to, under the first
@@ -87,11 +89,11 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 export class FrontierWorker {
   /**
-   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
+   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
    *   pollMs?: number, leaseMs?: number, pluginPollMs?: number, mirrorMs?: number, cleanupMs?: number, concurrency?: number,
    *   canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void }} dependencies
    */
-  constructor({ ingest, pipeline = null, composer = null, evidence = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
+  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
     pluginPollMs = 60_000, mirrorMs = HOUR_MS, cleanupMs = HOUR_MS, concurrency = 2, canRun = () => true,
     now = () => new Date(), report = () => {} }) {
     if (!ingest || !database) throw new TypeError("The frontier worker needs the ingest and the product database.");
@@ -111,6 +113,8 @@ export class FrontierWorker {
     this.composeLoops = typeof composer?.tickChain === "function" ? (composer.chains ?? []).map((/** @type {string} */ chain) => ({ chain, loop: `compose-${chain}` })) : [];
     const loopNames = [...LOOPS.filter((loop) => loop !== "compose" || !this.composeLoops.length), ...this.composeLoops.map(({ loop }) => loop)];
     this.evidence = evidence;
+    /** The tag tree's upkeep (`FrontierTagUpkeep`): its daily and weekly parts, when due; null runs none. */
+    this.tags = tags && typeof tags.tick === "function" ? tags : null;
     this.database = database;
     this.ensureOwner = ensureOwner;
     this.pollMs = pollMs;
@@ -132,7 +136,7 @@ export class FrontierWorker {
     /** @type {Record<string, { startedAt: number | null, lastRunAt: string | null, lastOkAt: string | null, lastError: string | null, runs: number, failures: number }>} */
     this.loops = Object.fromEntries(loopNames.map((loop) => [loop, { startedAt: null, lastRunAt: null, lastOkAt: null, lastError: null, runs: 0, failures: 0 }]));
     /** When each periodic loop last started (epoch ms); 0 = due now. */
-    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0 };
+    this.lastStarted = { mirror: 0, pull: 0, cleanup: 0, tags: 0 };
     /** What the pipeline's batches have done since start (plan §10.3.1's outcomes). */
     this.pipelineTotals = Object.fromEntries([["batches", 0], ...PIPELINE_OUTCOMES.map((key) => [key, 0])]);
     this.retentionTotals = { entries: 0, itemChanges: 0, hotSnapshots: 0, exposures: 0 };
@@ -182,7 +186,7 @@ export class FrontierWorker {
     return running;
   }
 
-  /** @param {"mirror" | "pull" | "cleanup"} loop @param {number} interval */
+  /** @param {"mirror" | "pull" | "cleanup" | "tags"} loop @param {number} interval */
   #due(loop, interval) {
     const at = this.now().getTime();
     if (this.lastStarted[loop] && at - this.lastStarted[loop] < interval) return false;
@@ -224,6 +228,10 @@ export class FrontierWorker {
       if (!this.composeLoops.length && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
     }
     if (this.evidence && !this.running.evidence) started.push(this.#run("evidence", () => this.evidence.tick()));
+    // The tag tree's upkeep spends model money under the owner's project, like processing.
+    if (this.tags && (this.owner || !this.ensureOwner) && !this.running.tags && this.#due("tags", TAGS_CHECK_MS)) {
+      started.push(this.#run("tags", () => /** @type {any} */ (this.tags).tick()));
+    }
     if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
       started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
     }

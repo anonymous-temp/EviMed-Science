@@ -82,10 +82,11 @@ test(
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
     // 24 feed/reader tables (the monthlies of 2026-10-22 among them), seventeen native evidence/editorial tables (the topic
-    // requests' related links among them) and two exposure attribution tables, plus the optional vector table.
+    // requests' related links among them), two exposure attribution tables and the tag tree's four (2026-10-23), plus the
+    // optional vector table.
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 44 : 43,
+      capabilities.vector ? 48 : 47,
       created.tables.join(),
     );
     for (const table of [
@@ -129,6 +130,10 @@ test(
       "evidence_change_log",
       "evidence_challenges",
       "evidence_upkeep_state",
+      "tags",
+      "tag_aliases",
+      "item_tags",
+      "tag_changes",
     ]) {
       assert.ok(created.tables.includes(table), `${table} was not created`);
     }
