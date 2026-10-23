@@ -9,7 +9,8 @@ import { HttpError } from "./security.mjs";
 
 export const GEO_SCOPE_FIELDS = Object.freeze(["round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
   "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef"]);
-export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset"]);
+export const GEO_ERROR_FILTER_FIELDS = Object.freeze(["errorStatuses", "errorSeverities", "errorTypes", "errorSearch", "errorLimit", "errorOffset", "questionId"]);
+export const GEO_SOURCE_PAGE_FIELDS = Object.freeze(["answerLimit", "answerOffset"]);
 export const GEO_SELECTION_MAX_ROWS = 20_000;
 export const GEO_SELECTION_MAX_ROUNDS = 120;
 export const GEO_MEMBER_PREVIEW_LIMIT = 200;
@@ -18,6 +19,8 @@ const hasControls = (/** @type {string} */ value) => [...value].some((character)
 const idShape = /^[A-Za-z0-9_-]{1,80}$/u;
 const digest = (/** @type {unknown} */ value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const invalid = (/** @type {string} */ message, status = 400) => new HttpError(status, "geo_read_filter_invalid", message);
+const comparisonKey = (/** @type {any} */ row) => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
+const comparableAnswer = (/** @type {any} */ row) => Boolean(row.questionId) && (row.status === "refusal" || row.status === "valid" && Boolean(row.facts));
 const readTransactions = new AsyncLocalStorage();
 
 /** @param {import('./geoStore.mjs').GeoStore} store */
@@ -37,9 +40,9 @@ export async function withGeoReadTransaction(store, operation) {
     await client.query("SET LOCAL statement_timeout = '5s'");
     return database.withTransactionClient(client, () => readTransactions.run({ database, references }, operation));
   });
-  for (const { selected, project } of references.values()) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision)
-    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6) ON CONFLICT (id) DO NOTHING`,
-  [selected.selection.reference, project.userId, project.id, JSON.stringify(selected.scope), JSON.stringify(selected.selection.roundIds), selected.selection.dataRevision]);
+  for (const { selected, project } of references.values()) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision, subset)
+    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb) ON CONFLICT (id) DO NOTHING`,
+  [selected.selection.reference, project.userId, project.id, JSON.stringify(selected.scope), JSON.stringify(selected.selection.roundIds), selected.selection.dataRevision, JSON.stringify(selected.subset)]);
   return result;
 }
 
@@ -99,7 +102,7 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
       try { raw[key] = JSON.parse(all[0]); } catch { throw invalid("clientTags must be repeated labels or a JSON array."); }
       if (!Array.isArray(raw[key])) throw invalid("clientTags must be repeated labels or a JSON array.");
     }
-    if (["questionVersion", "version", "errorLimit", "errorOffset"].includes(key)) {
+    if (["questionVersion", "version", "errorLimit", "errorOffset", ...GEO_SOURCE_PAGE_FIELDS].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);
     }
@@ -116,9 +119,19 @@ export function geoErrorFilters(input = {}) {
     return n;
   };
   const search = input.errorSearch ?? "";
+  if (input.questionId != null && (typeof input.questionId !== "string" || !idShape.test(input.questionId))) throw invalid("questionId must be an identifier.");
   if (typeof search !== "string" || search.length > 240 || hasControls(search)) throw invalid("errorSearch must be short text.");
   return { statuses: values(input.errorStatuses, "errorStatuses", GEO_ERROR_STATUSES), severities: values(input.errorSeverities, "errorSeverities", GEO_SEVERITIES),
-    types: values(input.errorTypes, "errorTypes", GEO_ERROR_TYPES), search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
+    types: values(input.errorTypes, "errorTypes", GEO_ERROR_TYPES), questionId: input.questionId ?? null, search: search.trim(), limit: integer("errorLimit", 100, 500), offset: integer("errorOffset") };
+}
+
+/** @param {any} input */
+export function geoSourcePage(input = {}) {
+  const limit = input.answerLimit ?? 200, offset = input.answerOffset ?? 0;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500 || !Number.isSafeInteger(offset) || offset < 0 || offset > GEO_SELECTION_MAX_ROWS) {
+    throw invalid("answerLimit must be 1–500 and answerOffset 0–20000.");
+  }
+  return { limit, offset };
 }
 
 /** Scope fields only, so list filters and pagination cannot alter the observation universe. @param {any} input */
@@ -165,6 +178,7 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   const params = [project.id, project.userId, selected.rows.map((row) => row.snapshotId)];
   const where = ["e.geo_project_id = $1", "e.user_id = $2", "(e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))"];
   const add = (/** @type {string} */ sql, /** @type {any} */ value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`)); };
+  if (filter.questionId) add("e.question_id = ?", filter.questionId);
   if (filter.statuses.length) add("e.status = ANY(?::text[])", filter.statuses);
   if (filter.severities.length) add("e.severity = ANY(?::text[])", filter.severities);
   if (filter.types.length) add("e.error_type = ANY(?::text[])", filter.types);
@@ -185,19 +199,21 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   }
   const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
     WHERE ${where.join(" AND ")} AND e.status <> 'closed'`, params)).rows;
+  const claimRows = (await store.query(`SELECT e.id, e.fingerprint, e.claim_id, e.statement, e.engine, e.severity, e.status,
+    e.first_snapshot_id, e.cited_source, e.action FROM evimed_geo.errors e WHERE ${where.join(" AND ")} ORDER BY e.id`, params)).rows;
   params.push(filter.limit, filter.offset);
   const rows = (await store.query(`SELECT e.* FROM evimed_geo.errors e WHERE ${where.join(" AND ")}
     ORDER BY (e.status = 'closed'), e.severity DESC NULLS LAST, e.updated_at DESC, e.id
     LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
-  return { rows, live, counts, summary: { total: counts.total, ...breakdown, sourcedOpen },
+  return { rows, live, claimRows, counts, summary: { total: counts.total, ...breakdown, sourcedOpen },
     page: { offset: filter.offset, limit: filter.limit, total: counts.total, shown: rows.length, more: filter.offset + rows.length < counts.total,
       nextOffset: filter.offset + rows.length < counts.total ? filter.offset + rows.length : null }, filter };
 }
 
 /** Read under an already authorized project. The reference contains no authority and resolves only within that owner/project.
  * @param {import('./geoStore.mjs').GeoStore} store @param {any} project @param {any} [input]
- * @param {{ history?: boolean, frozenRoundIds?: string[], persist?: boolean }} [options]
- * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any}>}
+ * @param {{ history?: boolean, frozenRoundIds?: string[], persist?: boolean, subset?: { keys: string[], eligibleOnly: boolean } | null }} [options]
+ * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any, subset: any}>}
  */
 export async function readGeoSelection(store, project, input = {}, options = {}) {
   return withGeoReadTransaction(store, async () => {
@@ -208,13 +224,13 @@ export async function readGeoSelection(store, project, input = {}, options = {})
 }
 
 /** @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project @param {any} input
- * @param {{ history?: boolean, frozenRoundIds?: string[] }} options @returns {ReturnType<typeof readGeoSelection>}
+ * @param {{ history?: boolean, frozenRoundIds?: string[], subset?: { keys: string[], eligibleOnly: boolean } | null }} options @returns {ReturnType<typeof readGeoSelection>}
  */
-async function selectGeoRows(store, measure, project, input, { history = false, frozenRoundIds } = {}) {
+async function selectGeoRows(store, measure, project, input, { history = false, frozenRoundIds, subset = null } = {}) {
   let scope = normalizeGeoReadScope(geoReadScopeInput(input));
   let expectedRevision = null;
   if (scope.selectionRef) {
-    const saved = (await store.query(`SELECT scope, round_ids, data_revision FROM evimed_geo.read_selections
+    const saved = (await store.query(`SELECT scope, round_ids, data_revision, subset FROM evimed_geo.read_selections
       WHERE id = $1 AND geo_project_id = $2 AND user_id = $3`, [scope.selectionRef, project.id, project.userId])).rows[0];
     if (!saved) throw invalid("This selection reference is unavailable in this project.", 404);
     if (Object.entries(scope).some(([key, value]) => !["selectionRef", "timeZone", "comparisonMode"].includes(key) && (Array.isArray(value) ? value.length : value != null))) {
@@ -222,6 +238,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     }
     scope = normalizeGeoReadScope(saved.scope);
     frozenRoundIds = saved.round_ids;
+    subset = saved.subset ?? null;
     expectedRevision = String(saved.data_revision);
   }
   const params = [project.id, project.userId, ROUND_KINDS, scope.timeZone];
@@ -259,7 +276,9 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const filtered = batches.flat().filter((row) => (!scope.engines.length || scope.engines.includes(row.engine))
     && (!scope.questionVersion || Number(questionMap.get(String(row.questionId))?.set_version) === scope.questionVersion)
     && (!scope.groupIds.length && !scope.pools.length && !scope.clientTags.length || questionIds.has(String(row.questionId))));
-  const rows = filtered.filter((row) => !skipped.get(row.roundId)?.has(row.engine));
+  const subsetKeys = subset ? new Set(subset.keys) : null;
+  const rows = filtered.filter((row) => !skipped.get(row.roundId)?.has(row.engine)
+    && (!subsetKeys || subsetKeys.has(comparisonKey(row)) && (!subset?.eligibleOnly || comparableAnswer(row))));
   if (rows.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROWS} observations can be analyzed together.`, 422);
   const engines = scope.engines.length ? scope.engines : rounds.length ? [...new Set(rounds.flatMap((round) => Array.isArray(round.engines) && round.engines.length ? round.engines : project.engines))] : project.engines;
   const groups = [...new Map(rows.filter((row) => row.groupId).map((row) => [row.groupId, row.isControl])).entries()];
@@ -274,12 +293,15 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.user_id = $2
     AND (e.first_snapshot_id = ANY($3::text[]) OR e.last_snapshot_id = ANY($3::text[]) OR e.closed_snapshot_id = ANY($3::text[]))`,
   [project.id, project.userId, rows.map((row) => row.snapshotId)])).rows[0]?.digest ?? null;
+  const answerRevision = (await store.query(`SELECT md5(coalesce(string_agg(md5(to_jsonb(s)::text), '' ORDER BY s.id), '')) AS digest
+    FROM evimed_geo.snapshots s WHERE s.geo_project_id = $1 AND s.user_id = $2 AND s.id = ANY($3::text[])`,
+  [project.id, project.userId, rows.map((row) => row.snapshotId)])).rows[0]?.digest ?? null;
   const comparisonSelection = scope.compareFrom && scope.compareTo ? await selectGeoRows(store, measure, project,
     { ...scope, round: null, from: scope.compareFrom, to: scope.compareTo, compareFrom: null, compareTo: null, selectionRef: null }, {}) : null;
-  const comparison = comparisonSelection ? compareGeoSelections({ rows, metricOptions }, comparisonSelection, scope.comparisonMode) : null;
+  const comparison = comparisonSelection ? await compareGeoSelections(store, measure, project, { rows, scope, roundIds }, comparisonSelection, scope.comparisonMode) : null;
   const memberDigest = digest(/** @type {any[]} */ (computed.balance.deduped).map((row) => row.snapshotId));
   const dataRevision = digest({ methodVersion: GEO_MEASUREMENT_METHOD_VERSION, rows, skipped: skipBatches, rounds: rounds.map((round) => [round.id, round.status, round.set_version, round.surface]),
-    errorRevision, metricOptions, questions: selectedQuestions.map((question) => [question.id, question.scope_client_tags]), comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
+    errorRevision, answerRevision, subset, metricOptions, questions: selectedQuestions, comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
   if (expectedRevision && expectedRevision !== dataRevision) throw invalid("The saved selection changed after measurement. Refresh the view and use its new selection reference.", 409);
   const scopeSaved = { ...scope, selectionRef: null };
   const reference = `gsel_${digest([project.userId, project.id, scopeSaved, roundIds, dataRevision]).slice(0, 40)}`;
@@ -300,28 +322,36 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };
   for (const cell of computed.cells) Object.assign(cell.members, { selectionRef: reference, metric: { metricId: cell.metricId, scope: cell.scope, engine: cell.engine,
     pool: cell.pool, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival } });
-  return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison };
+  return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison, subset };
 }
 
 /** Observed comparisons use the same immutable question, engine and mode. Consumer model versions are disclosed, not invented.
- * @param {{rows: any[], metricOptions: any}} current @param {{rows: any[], metricOptions: any, selection: any}} previous @param {string} mode
+ * @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project
+ * @param {{rows: any[], scope: any, roundIds: string[]}} current @param {Awaited<ReturnType<typeof readGeoSelection>>} previous @param {string} mode
  */
-function compareGeoSelections(current, previous, mode) {
-  const key = (/** @type {any} */ row) => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
-  const a = new Set(current.rows.map(key)), b = new Set(previous.rows.map(key));
+async function compareGeoSelections(store, measure, project, current, previous, mode) {
+  const a = new Set(current.rows.filter(comparableAnswer).map(comparisonKey)), b = new Set(previous.rows.filter(comparableAnswer).map(comparisonKey));
   const common = new Set([...a].filter((id) => b.has(id)));
-  const left = mode === "separate" ? current.rows : current.rows.filter((row) => common.has(key(row)));
-  const right = mode === "separate" ? previous.rows : previous.rows.filter((row) => common.has(key(row)));
-  const currentCells = computeGeoSelection(left, current.metricOptions).cells;
-  const previousCells = computeGeoSelection(right, previous.metricOptions).cells;
+  const subset = mode === "common" ? { keys: [...common].sort(), eligibleOnly: true } : null;
+  const left = await selectGeoRows(store, measure, project, { ...current.scope, compareFrom: null, compareTo: null }, { frozenRoundIds: current.roundIds, subset });
+  const right = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds, subset });
+  for (const selected of [left, right]) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
+  const currentCells = left.computed.cells, previousCells = right.computed.cells;
   const cellKey = (/** @type {any} */ cell) => JSON.stringify([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
   const before = new Map(previousCells.map((cell) => [cellKey(cell), cell]));
   return { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
     comparable: mode === "common" && common.size > 0, commonQuestionEngineModes: common.size,
-    excluded: { current: current.rows.length - left.length, previous: previous.rows.length - right.length },
-    previousSelection: previous.selection,
-    cells: currentCells.map((cell) => { const old = before.get(cellKey(cell)); return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
+    excluded: { current: current.rows.length - left.rows.length, previous: previous.rows.length - right.rows.length },
+    currentSelection: left.selection, previousSelection: right.selection,
+    cells: currentCells.map((cell) => { const old = before.get(cellKey(cell));
+      const memberKeys = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
+        if (!metric) return [];
+        const input = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? selected.computed.balance.deduped : selected.computed.balance.rows;
+        return [...new Set(geoMetricMembers(/** @type {any[]} */ (input), metric, selected.metricOptions).rows.map(comparisonKey))].sort();
+      };
+      const comparable = mode === "common" && common.size > 0 && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
+      return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
       engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival,
-      current: cell, previous: old ?? null, delta: mode === "common" && common.size && cell.status === "ok" && old?.status === "ok"
+      current: cell, previous: old ?? null, comparable, delta: comparable && cell.status === "ok" && old?.status === "ok"
         && cell.value != null && old.value != null ? Math.round((cell.value - old.value) * 100) / 100 : null }; }) };
 }

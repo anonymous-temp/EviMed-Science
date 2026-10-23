@@ -49,7 +49,8 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { createHash } from "node:crypto";
 import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
@@ -309,6 +310,7 @@ function metricView(row, name) {
 
 /** The plain cell of a metric: not a top1/top3 variant, not one rival's row, not a group's. */
 const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL";
+const engineMetricDescriptors = () => [...GEO_METRIC_IDS.map((metricId) => ({ metricId, variant: null })), { metricId: "M-20", variant: "refusal" }];
 
 /**
  * An action as the runtime reads it when it asks for one (`geo_read actions` with a `key` or a `groupId`): every number the page's
@@ -438,15 +440,15 @@ export class GeoService {
     const byProject = new Map();
     if (!geoIds.length) return byProject;
     const result = await this.store.query(`SELECT * FROM (
-        SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""})
+        SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant)
           m.*, r.sample_date, r.created_at AS observed_at
         FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($4::text[])
-        WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${PLAIN_ROW}
-        ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.computed_at DESC
+        WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${scope === "engine" ? "m.rival IS NULL AND m.group_id IS NULL" : PLAIN_ROW}
+        ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant, m.computed_at DESC
       ) latest ORDER BY coalesce(sample_date::timestamp, observed_at), observed_at, round_id`, [geoIds, [...metricIds], scope, [...GEO_HEADLINE_ROUND_KINDS]]);
     const coverages = coverage ? await roundCoverages(this.store, result.rows.map((/** @type {any} */ row) => String(row.round_id ?? ""))) : null;
     for (const row of result.rows) {
-      const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}` : String(row.metric_id);
+      const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}${row.variant ? `\u0000${row.variant}` : ""}` : String(row.metric_id);
       const map = byProject.get(row.geo_project_id) ?? new Map();
       const points = map.get(key) ?? [];
       points.push({
@@ -795,7 +797,8 @@ export class GeoService {
       const errors = errorData.rows.map(errorView);
       const scopeErrors = await readGeoSelectionErrors(this.store, project, selected, { errorLimit: 1 });
       view.scopeErrorSummary = scopeErrors.summary;
-      view.errors = errors; view.byClaim = geoErrorsByClaim(errors); view.byClaimPage = errorData.page;
+      view.errors = errors; view.byClaim = geoErrorsByClaim(errorData.claimRows.map(errorView));
+      view.byClaimPage = { total: view.byClaim.length, shown: view.byClaim.length, more: false, nextOffset: null };
       view.errorCounts = errorData.counts; view.errorSummary = errorData.summary; view.errorPage = errorData.page;
       view.errorFilters = errorData.filter;
       view.byEngine = selection.engines.map((engine) => {
@@ -871,11 +874,12 @@ export class GeoService {
         const old = view.groups.find((/** @type {any} */ entry) => entry.id === group.id);
         const questions = selected.questions.filter((question) => question.group_id === group.id);
         const members = answers.filter((answer) => questions.some((question) => question.id === answer.questionId));
-        const mention = !filtered && old?.mention ? old.mention : cell("M-01", { scope: "group", pool: group.pool, groupId: group.id });
+        const historicalMention = !filtered && !selected.rows.some((row) => row.facts) && old?.mention?.roundId === roundView?.id ? old.mention : null;
+        const mention = historicalMention ?? cell("M-01", { scope: "group", pool: group.pool, groupId: group.id });
         return { ...(old ?? {}), id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
           weight: num(group.weight), isControl: group.is_control, signal: group.signal, questionCount: questions.length,
           measuredCount: questions.filter((question) => question.is_measured && !question.retired_at).length, realCount: questions.filter((question) => question.kind === "real").length,
-          realPhrasings: old?.realPhrasings ?? [], mention: !filtered && old?.mention ? { ...mention, members: { exact: false, basis: "historical_unknown" } } : { ...geoGroupReading({ k: mention.numerator, n: mention.denominator }), snapshotIds: mention.snapshotIds, members: mention.members, roundId: roundView?.id ?? null, coverage: selection.coverage },
+          realPhrasings: old?.realPhrasings ?? [], mention: historicalMention ? { ...mention, members: { exact: false, basis: "historical_unknown" } } : { ...geoGroupReading({ k: mention.numerator, n: mention.denominator }), snapshotIds: mention.snapshotIds, members: mention.members, roundId: roundView?.id ?? null, coverage: selection.coverage },
           byEngine: Object.fromEntries(selection.engines.map((engine) => { const matches = members.filter((answer) => answer.engine === engine);
             return [engine, { answered: matches.length, mentioned: matches.filter((answer) => answer.mentionsOurs).length, wrong: matches.filter((answer) => answer.wrongOurs).length }]; })),
           actions: old?.actions ?? { total: 0, byStatus: {} }, articles: old?.articles ?? { total: 0, byStatus: {} } };
@@ -890,8 +894,8 @@ export class GeoService {
     if (filtered && (kind === "project" || kind === "monitoring")) {
       const ordered = [...selected.rounds].sort((a, b) => rowDay(a, scope.timeZone).localeCompare(rowDay(b, scope.timeZone)) || String(a.id).localeCompare(String(b.id)));
       const perRound = ordered.map((entry) => ({ round: entry, result: computeGeoSelection(selected.rows.filter((row) => row.roundId === entry.id), selected.metricOptions) }));
-      const history = (/** @type {string} */ metricId, /** @type {string | null} */ engine = null) => perRound.map(({ round: entry, result }) => {
-        const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && !candidate.variant && !candidate.rival);
+      const history = (/** @type {string} */ metricId, /** @type {string | null} */ engine = null, /** @type {string | null} */ variant = null) => perRound.map(({ round: entry, result }) => {
+        const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && candidate.variant === variant && !candidate.rival);
         return { date: rowDay(entry, scope.timeZone), roundId: entry.id, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
           methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), entry.set_version == null ? null : Number(entry.set_version), engine) };
       });
@@ -900,7 +904,7 @@ export class GeoService {
       if (kind === "monitoring") {
         view.series = GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({ key, points: history(metricId) }));
         view.byEngine = selection.engines.map((engine) => ({ engine, points: history(GEO_VIEW_METRIC_IDS.mention, engine),
-          metrics: GEO_METRIC_IDS.map((metricId) => ({ metricId, points: history(metricId, engine) })) }));
+          metrics: engineMetricDescriptors().map(({ metricId, variant }) => ({ metricId, variant, points: history(metricId, engine, variant) })) }));
         view.arms = { pilot: [], control: [], netEffect: { ...GEO_ABSENT_CELL, reason: "observational_selection" } };
         view.rivals = [];
       }
@@ -1408,9 +1412,12 @@ export class GeoService {
    * last), each with the coverage key of its round (N-4) — the page compares two of them only when the keys are equal.
    * @param {{ id: string }} user @param {string} id @param {string} sourceId @param {any} [input]
    */
-  async source(user, id, sourceId, input = {}) {
-    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.source(user, id, sourceId, input));
-    const project = await this.requireProject(user, id);
+  async source(user, id, sourceId, input = {}) { return this.sourceOf(await this.requireProject(user, id), sourceId, input); }
+
+  /** @param {any} project @param {string} sourceId @param {any} [input] */
+  async sourceOf(project, sourceId, input = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.sourceOf(project, sourceId, input));
+    const answerPage = geoSourcePage(input);
     const selected = await readGeoSelection(this.store, project, input);
     const engine = selected.scope.engines.length === 1 ? selected.scope.engines[0] : null;
     const row = (await this.store.query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 AND id = $2`, [project.id, sourceId])).rows[0];
@@ -1427,8 +1434,10 @@ export class GeoService {
     const citing = answersCiting(this.#selectionAnswers(selected), domain, engine);
     const sourceCoverage = (/** @type {any} */ entry) => {
       const observations = historySelection.rows.filter((member) => member.roundId === entry.id && (!engine || member.engine === engine) && ["valid", "refusal"].includes(member.status));
-      return geoCoverageKey({ setVersion: entry.set_version == null ? null : Number(entry.set_version), pools: observations.map((member) => member.pool),
+      const coverage = geoCoverageKey({ setVersion: entry.set_version == null ? null : Number(entry.set_version), pools: observations.map((member) => member.pool),
         engines: observations.map((member) => member.engine), surface: entry.surface });
+      const questions = createHash("sha256").update(JSON.stringify([...new Set(observations.map((member) => member.questionId))].sort())).digest("hex").slice(0, 24);
+      return coverage ? `${coverage};questions=${questions}` : null;
     };
     const cited = pagesCited(citing, domain);
     const detail = new Map((citing.length === 0 ? [] : (await this.store.query(`SELECT s.id, q.text AS question_text,
@@ -1459,10 +1468,11 @@ export class GeoService {
       },
       round: round ? { id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null } : null,
       engine,
-      scope: selected.scope, selection: selected.selection,
+      scope: selected.scope, selection: selected.selection, comparison: selected.comparison,
       counts: countsOf(citing, domain),
-      answers: answers.slice(0, GEO_CELL_SNAPSHOT_LIMIT),
-      answerPage: { total: answers.length, shown: Math.min(answers.length, GEO_CELL_SNAPSHOT_LIMIT), more: answers.length > GEO_CELL_SNAPSHOT_LIMIT, nextOffset: answers.length > GEO_CELL_SNAPSHOT_LIMIT ? GEO_CELL_SNAPSHOT_LIMIT : null },
+      answers: answers.slice(answerPage.offset, answerPage.offset + answerPage.limit),
+      answerPage: { ...answerPage, total: answers.length, shown: Math.max(0, Math.min(answers.length - answerPage.offset, answerPage.limit)),
+        more: answerPage.offset + answerPage.limit < answers.length, nextOffset: answerPage.offset + answerPage.limit < answers.length ? answerPage.offset + answerPage.limit : null },
       pages: cited.pages,
       pagesTotal: cited.total,
       history: rounds.map((entry, index) => ({
@@ -1766,7 +1776,7 @@ export class GeoService {
           noiseMeasured: netRow?.noise_band != null ? netRow.noise_measured === true : null },
       },
       byEngine: project.engines.map((engine) => ({
-        engine, metrics: GEO_METRIC_IDS.map((metricId) => ({ metricId, points: engineSeries.get(`${metricId}\u0000${engine}`) ?? [] })),
+        engine, metrics: engineMetricDescriptors().map(({ metricId, variant }) => ({ metricId, variant, points: engineSeries.get(`${metricId}\u0000${engine}${variant ? `\u0000${variant}` : ""}`) ?? [] })),
         points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value, coverage }) => ({ date, value, coverage })),
       })),
       rivals,
@@ -2024,7 +2034,7 @@ export class GeoService {
       case "project": {
         const view = await this.projectViewOf(project, geoReadScopeInput(filter));
         return { project: { id: view.id, name: view.name, product: view.product, competitors: view.competitors, coverageDays: view.coverageDays,
-          engines: view.engines, tier: view.tier, status: view.status, steps: view.steps }, overview: view.overview, scope: view.scope, selection: view.selection };
+          engines: view.engines, tier: view.tier, status: view.status, steps: view.steps }, overview: view.overview, scope: view.scope, selection: view.selection, comparison: view.comparison };
       }
       case "claims": {
         const evidence = await this.evidenceOf(project);
@@ -2106,6 +2116,7 @@ export class GeoService {
           total: errorData.page.total, more: errorData.page.more, page: errorData.page, summary: errorData.summary };
       }
       case "sources": {
+        if (filter.sourceId) return this.sourceOf(project, filter.sourceId, filter);
         const view = await this.sourcesOf(project, geoReadScopeInput(filter));
         const sources = page(view.sources);
         return { ...view, sources: sources.items, total: sources.total, more: sources.more };
@@ -2138,7 +2149,7 @@ export class GeoService {
       case "clusters": {
         const view = await this.clustersOf(project, geoReadScopeInput(filter));
         const groups = page(view.groups.filter((group) => (!filter.pool || group.pool === filter.pool) && (!filter.groupId || group.id === filter.groupId)));
-        return { scope: view.scope, selection: view.selection, version: view.version, round: view.round, floor: view.floor, engines: view.engines, groups: groups.items, total: groups.total, more: groups.more };
+        return { scope: view.scope, selection: view.selection, comparison: view.comparison, version: view.version, round: view.round, floor: view.floor, engines: view.engines, groups: groups.items, total: groups.total, more: groups.more };
       }
       // A list is read lean: a row per action with every number and none of the run's long words, under a character budget, and the
       // sums (`counts`, whole project) are the platform's — the model quotes them and adds nothing up. One action (`key`), or a group's

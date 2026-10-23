@@ -1,4 +1,4 @@
-import { geoScopeFromQuery } from "./geoReadScope.mjs";
+import { GEO_SOURCE_PAGE_FIELDS, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -459,7 +459,7 @@ export function createGeoRoutes(dependencies) {
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {
       if (!ID.test(parts[3])) throw new HttpError(404, "geo_source_not_found", "Source not found.");
-      return reply(await service.source(user, id, parts[3], geoScopeFromQuery(url.searchParams, [])));
+      return reply(await service.source(user, id, parts[3], geoScopeFromQuery(url.searchParams, GEO_SOURCE_PAGE_FIELDS)));
     }
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
       const file = await service.screenshotPath(user, id, parts[3]);

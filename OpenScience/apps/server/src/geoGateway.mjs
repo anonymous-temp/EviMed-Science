@@ -40,7 +40,7 @@ import {
   GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
-import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SELECTION_MAX_ROWS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters } from "./geoReadScope.mjs";
+import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SOURCE_PAGE_FIELDS, GEO_SELECTION_MAX_ROWS, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters, geoSourcePage } from "./geoReadScope.mjs";
 import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
@@ -52,7 +52,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, "audience", "questionId", "key", "limit", "offset", "member"]);
+const readFilterFields = Object.freeze([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "key", "limit", "offset", "member"]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
@@ -122,7 +122,7 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
-  for (const key of ["round", "groupId", "questionId"]) {
+  for (const key of ["round", "groupId", "questionId", "sourceId"]) {
     if (raw[key] == null) continue;
     if (!geoRowIdShape(raw[key])) throw gatewayError(400, "geo_read_filter_invalid", `filter.${key} is not an id.`);
     /** @type {any} */ (filter)[key] = raw[key];
@@ -159,6 +159,8 @@ function readRequest(body) {
   }
   normalizeGeoReadScope(geoReadScopeInput(raw));
   geoErrorFilters(raw);
+  geoSourcePage(raw);
+  for (const name of GEO_SOURCE_PAGE_FIELDS) if (raw[name] != null) filter[name] = raw[name];
   for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
   if (raw.member != null) {
     const member = raw.member;

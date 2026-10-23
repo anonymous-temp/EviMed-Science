@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.read_selections (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_read_selections_project_idx ON evimed_geo.read_selections (geo_project_id, user_id);
+ALTER TABLE evimed_geo.read_selections ADD COLUMN IF NOT EXISTS subset jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_geo.question_groups (
   id               text PRIMARY KEY,

@@ -247,7 +247,8 @@ test("common comparison does not turn a failed engine into an apparent visibilit
     const view = await readGeoSelection(store, project, { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01", pools: ["P2"] });
     const mention = view.comparison.cells.find((cell) => cell.scope === "project" && cell.metricId === "M-01S" && cell.variant === null);
     assert.deepEqual([mention.current.denominator, mention.previous.denominator], [1, 1]);
-    assert.equal(mention.delta, 0);
+    assert.equal(mention.current.value, mention.previous.value);
+    assert.equal(mention.delta, null, "the tiny fixture remains insufficient for a displayed delta");
   } finally { await store.query("UPDATE evimed_geo.snapshots SET status = 'valid' WHERE id = 'r2-q1-kimi'"); }
 });
 
