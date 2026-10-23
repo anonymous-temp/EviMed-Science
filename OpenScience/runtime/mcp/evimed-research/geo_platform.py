@@ -282,13 +282,18 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
-    if data.get("more") is True:
+    page, offset_field = data, "offset"
+    page_key = {"errors": "page", "diagnosis": "errorPage", "sources": "answerPage"}.get(what)
+    if page_key and isinstance(data.get(page_key), dict):
+        page = data[page_key]
+        offset_field = "answerOffset" if page_key == "answerPage" else "errorOffset"
+    if page.get("more") is True:
         warnings.append("More items exist than this answer holds.")
-        next_offset = data.get("nextOffset")
+        next_offset = page.get("nextOffset")
         if isinstance(next_offset, int) and not isinstance(next_offset, bool):
-            next_actions.append("Call again with filter.offset=%d to read the next page, or narrow the filter." % next_offset)
+            next_actions.append("Call again with filter.%s=%d to read the next page, or narrow the filter." % (offset_field, next_offset))
         else:
-            next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
+            next_actions.append("Call again with filter.%s to read the next page, or narrow the filter." % offset_field)
     if what == "actions" and data.get("detail") == "lean":
         next_actions.append("Rows are lean; filter.key (or filter.groupId) reads an action whole: its judgment, expected points, why each source.")
     return {
