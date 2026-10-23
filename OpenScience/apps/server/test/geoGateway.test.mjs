@@ -89,6 +89,9 @@ test("exact member continuation can reach every observation in a bounded selecti
   assert.equal((await post("read", { what: "snapshots", filter })).status, 200);
   assert.deepEqual(calls[0][3], filter);
   assert.equal((await post("read", { what: "snapshots", filter: { ...filter, offset: 20_001 } })).status, 400);
+  const sourceFilter = { selectionRef: "gsel_one", sourceId: "source_one", answerLimit: 1, answerOffset: 200 };
+  assert.equal((await post("read", { what: "sources", filter: sourceFilter })).status, 200);
+  assert.deepEqual(calls[1][3], sourceFilter);
 });
 
 test("the gateway address is the model gateway's server, and only when the module is on", () => {

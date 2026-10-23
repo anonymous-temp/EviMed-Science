@@ -4,13 +4,12 @@
  *
  * Hidden knowledge:
  *
- * - **Numbers are read, never computed here.** Every rate, index and interval
- *   on a page is a row of `evimed_geo.metrics` the measurement package wrote,
- *   with its numerator, denominator, interval, status and data type. A cell
- *   no row speaks for is `absent` (「未测」), never zero; the counts shown
- *   beside a table (failure modes, the most-mentioned competitor) are tallies
- *   of fact rows, not metrics. So the pages and the weekly report can never
- *   disagree about a number: they read the same row.
+ * - **Metric formulas belong to the domain.** Scoped views call the same
+ *   measurement computation through `geoReadScope` over one repeatable-read
+ *   observation selection. Cells retain their counts, interval, status and
+ *   exact member reference; historical stored readings retain their method
+ *   identity. A missing reading is `absent` (「未测」), never zero. Table
+ *   counts are tallies over that selection, not a second metric formula.
  * - **Which row is which** is `GEO_VIEW_METRIC_IDS` in the domain: the
  *   overview's four blocks read `M-19` (the index), `M-01S` (mention over P2
  *   and P3 only), `M-06` and `M-08`; 诊断 reads the engine- and pool-scoped

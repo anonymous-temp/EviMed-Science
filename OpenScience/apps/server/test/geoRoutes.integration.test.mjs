@@ -802,6 +802,11 @@ test("a source's detail lists the answers its row counts: the three numbers are 
   assert.deepEqual([sourceRow(listed, "idle.example.org").wrongOurs, sourceRow(listed, "idle.example.org").cited], [0, {}], "a site the round did not cite has nothing counted");
 
   const detail = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}`)).payload.data;
+  const page = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}?selectionRef=${detail.selection.reference}&answerLimit=1`)).payload.data;
+  assert.equal(page.answers.length, 1);
+  assert.equal(page.answerPage.total, detail.answers.length);
+  const next = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}?selectionRef=${detail.selection.reference}&answerLimit=1&answerOffset=${page.answerPage.nextOffset}`)).payload.data;
+  assert.notEqual(next.answers[0].snapshotId, page.answers[0].snapshotId);
   assert.equal(detail.source.domain, "news.example.org");
   assert.deepEqual(detail.round, { id: `new-${id}`, kind: "weekly", sampleDate: "2026-09-21" });
   assert.deepEqual(detail.counts, { cited: 3, wrongOurs: row.wrongOurs, mentionsOurs: row.mentionsOurs }, "the detail's numbers are the row's");
