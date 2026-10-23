@@ -294,7 +294,10 @@ test("legacy metric preservation never substitutes full-round aggregates for a f
     assert.equal(view.total, 2, "a whole historical round remains available with its unknown method");
     assert.ok(view.items.every((entry) => entry.cell.value === 50 && entry.cell.methodVersion === null));
   }
-  for (const filter of [{ engines: ["deepseek"] }, { pools: ["P4"] }, { groupIds: ["missing-group"] }, { clientTags: ["missing-tag"] }]) {
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+    VALUES ('legacy-day-one',$1,$2,'legacy-scope-round','deepseek','failed','2026-10-01T00:00Z'),
+    ('legacy-day-two',$1,$2,'legacy-scope-round','kimi','failed','2026-10-02T00:00Z')`, [user.id, legacy.id]);
+  for (const filter of [{ engines: ["deepseek"] }, { pools: ["P4"] }, { groupIds: ["missing-group"] }, { clientTags: ["missing-tag"] }, { from: "2026-10-01", to: "2026-10-01" }]) {
     const view = await service.runtimeRead(legacy, "metrics", { ...filter, limit: 50 });
     assert.ok(view.items.every((entry) => entry.cell.value !== 50), "unavailable scoped observations cannot inherit a stored whole-round value");
     if (filter.engines) assert.ok(view.items.every((entry) => entry.engine == null || entry.engine === "deepseek"));
