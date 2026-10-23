@@ -395,7 +395,7 @@ test("the loop's counters are kept for a conversation that read a clinical sourc
 });
 
 test("a method that changed or was stopped, and a conversation that is about to begin, reach the runtime that is up", () => {
-  assert.match(serverSource, /learningService\.onMountChange = \(userId\) => runtimeManager\.refreshCapsuleMethods\(\{ userId, reuse: true \}\)/);
+  assert.match(serverSource, /learningService\.onMountChange = \(userId\) => runtimeManager\.refreshCapsuleMethods\(\{ userId \}\)/);
   assert.match(serverSource, /runtimeManager\.methodSimilarity = methodSimilarity;/, "the mount ranks the library by the consolidation's own reading of close");
   const native = serverSource.slice(serverSource.indexOf("preparePrompt: nativeHandbookContext || learningService"), serverSource.indexOf("authorizeMutation: maintenanceService"));
   assert.match(native, /request\?\.mode !== "steer"/, "a steer is the same conversation");

@@ -606,7 +606,7 @@ test("the steps in the researcher's language are kept beside the method and show
 test("a lesson the platform's reviewer taught is kept for the handbook, never as the researcher's method", async () => {
   // Both methods production learnt in September came from the reviewer's
   // findings alone and read as 「我的做法」 (audit 2026-09-26, L-G3).
-  const { learning } = realisticService();
+  const { documents, learning } = realisticService();
   const kept = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: BODY,
     provenance: { origin: "inferred", runId: "run_1", signal: "reviewer" }, capabilityId: "meta-analysis" });
   assert.equal(kept.payload.recordType, HANDBOOK_CANDIDATE_RECORD_TYPE);
@@ -615,11 +615,17 @@ test("a lesson the platform's reviewer taught is kept for the handbook, never as
   assert.equal(kept.payload.capabilityId, "meta-analysis");
   assert.deepEqual((await learning.listMethods("u1")).items, [], "not in the researcher's list");
   assert.deepEqual(await learning.approvedMethods("u1"), [], "never mounted");
+  // Once the handbook loop has applied it the active handbook is its one copy: the candidate is still no row of 「我的做法」, whatever
+  // its disposition (the list reads the learned-method record type and nothing else), so the 做法 list shows each lesson once.
+  await documents.put("u1", "method", kept.id, { ...kept.payload, dispositions: { [kept.payload.contentDigest]: { disposition: "applied", at: "2026-09-27T00:00:00.000Z" } } }, { expectedRevision: kept.revision });
+  assert.deepEqual((await learning.listMethods("u1")).items, [], "an applied candidate is not listed either");
+  assert.deepEqual((await learning.listMethods("u1", { status: "approved" })).items, []);
+  const refreshed = await documents.get("u1", "method", kept.id);
   // The same lesson again replaces it rather than piling up.
   const again = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: `${BODY}\n\nRefined.`,
     provenance: { origin: "inferred", runId: "run_2" }, capabilityId: "meta-analysis" });
   assert.equal(again.id, kept.id);
-  assert.equal(again.revision, kept.revision + 1);
+  assert.equal(again.revision, refreshed.revision + 1);
 });
 
 test("each earlier version of a method can be read, and the runs that taught each body are named newest first", async () => {

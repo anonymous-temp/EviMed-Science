@@ -287,7 +287,10 @@ export class LearningService {
    * mounted read-only into a container, and the check that it names no absent
    * tool and carries no credential is worth more at the boundary than in the
    * caller that happens to be trusted today.
-   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[]}} input
+   * `allowStale` lets a text that names a feature the platform no longer has pass (`method_stale_feature`): a record that was put
+   * away for it (`scripts/ops/learning-sweep.mjs`) is given back by saving its earlier state forward, and what is written now is
+   * held to the list while what was written before it is not.
+   * @param {{frontmatter: any, body: string, files?: any, requireProvenance?: boolean, resolveDigest?: (d: any) => boolean, mountedTools?: readonly string[], allowStale?: boolean}} input
    */
   #validated(input) {
     const verdict = validateMethodSkill({
@@ -299,8 +302,9 @@ export class LearningService {
       resolveDigest: input.resolveDigest,
       ...(input.mountedTools ? { mountedTools: input.mountedTools } : {}),
     });
-    if (!verdict.ok) {
-      throw new HttpError(422, "method_invalid", verdict.issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
+    const issues = input.allowStale ? verdict.issues.filter((issue) => issue.code !== "method_stale_feature") : verdict.issues;
+    if (issues.length) {
+      throw new HttpError(422, "method_invalid", issues.slice(0, 4).map((issue) => `${issue.code}: ${issue.message}`).join(" "));
     }
     return methodContentDigest({ frontmatter: input.frontmatter, body: input.body, files: input.files }, sha256);
   }
@@ -418,9 +422,10 @@ export class LearningService {
    * Recheck a handbook with the same body, dependency and provenance rules as a method.
    * @param {string} userId
    * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
+   * @param {{ allowStale?: boolean }} [options] see `#validated`: a record being given back may name what was true when it was written
    */
-  async validateHandbook(userId, input) {
-    return this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+  async validateHandbook(userId, input, { allowStale = false } = {}) {
+    return this.#validated({ ...input, allowStale, resolveDigest: await this.#digestResolver(userId) });
   }
 
   /** Queue exactly one application per owner, capability and reviewed content.

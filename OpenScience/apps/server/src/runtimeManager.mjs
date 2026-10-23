@@ -3947,13 +3947,14 @@ export class RuntimeManager {
    * Never an error: a runtime that cannot be refreshed keeps what it has, and says why. A runtime that is not a container on
    * this host (a remote session has its methods installed once) is left as it is.
    *
-   * `reuse`: rewrite for the conversation the runtime was last rewritten for (a method changed; nobody is starting a conversation).
+   * Called with no `query`, `scopeId` or `sessionId` (a method changed, a capsule was enabled; nobody is starting a conversation) it rewrites
+   * for the conversation the runtime was last rewritten for, so what an open conversation was shown is not undone by the change.
    *
-   * @param {{ userId: string, projectId?: string | null, query?: string | null, scopeId?: string | null, sessionId?: string | null, force?: boolean, reuse?: boolean }} input
+   * @param {{ userId: string, projectId?: string | null, query?: string | null, scopeId?: string | null, sessionId?: string | null, force?: boolean }} input
    *   `projectId` absent: every live runtime of the account
    * @returns {Promise<{ refreshed: number, skipped: string[] }>}
    */
-  async refreshCapsuleMethods({ userId, projectId = null, query = null, scopeId = undefined, sessionId = null, force = false, reuse = false }) {
+  async refreshCapsuleMethods({ userId, projectId = null, query = null, scopeId = undefined, sessionId = null, force = false }) {
     /** @type {string[]} */
     const skipped = [];
     let refreshed = 0;
@@ -3977,7 +3978,7 @@ export class RuntimeManager {
         // What this runtime was given before stays readable while it is approved: a conversation that began earlier was shown cards
         // naming those files, and another beginning now must not take them from it.
         const served = (runtime.servedMethodDirectories ??= new Set());
-        const wanted = reuse && query === null && scopeId === undefined ? runtime.methodMountFor ?? { query: null, scopeId: undefined } : { query, scopeId };
+        const wanted = query === null && scopeId === undefined && !sessionId ? runtime.methodMountFor ?? { query: null, scopeId: undefined } : { query, scopeId };
         if (query !== null || scopeId !== undefined) runtime.methodMountFor = { query, scopeId };
         const mounted = await this.syncCapsuleMethods(project, { ...wanted, launch: false, keep: served });
         for (const method of mounted.learned ?? []) served.add(learnedMethodDirectoryName(method.id));

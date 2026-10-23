@@ -188,3 +188,21 @@ test("what a runtime was given stays readable while it is approved, so a convers
     assert.ok(existsSync(path.join(f.directory, dir("grade-first"))));
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
+
+test("a refresh that names no conversation (a method changed, a capsule was enabled) is for the conversation the runtime was last rewritten for", async () => {
+  const f = await fixture({ documents: [
+    learned("grade-first", "Report GRADE certainty of evidence before effect sizes"),
+    learned("slide-titles", "Write slide titles as full sentences stating the conclusion"),
+    learned("kayak-notes", "Kayak river rafting weekend notes"),
+  ] });
+  try {
+    const dir = (/** @type {string} */ name) => learnedMethodDirectoryName(`method:learned:${name}`);
+    const listed = async () => JSON.parse(await readFile(path.join(f.directory, SELECTION_FILE), "utf8")).methods.map((/** @type {any} */ entry) => entry.directory);
+    await f.manager.refreshCapsuleMethods({ userId: "alice", projectId: "paper1", sessionId: "s1", scopeId: "conversation", query: "Write slide titles as full sentences stating the conclusion" });
+    const before = await listed();
+    assert.equal(before[0], dir("slide-titles"));
+    f.learning.documents = [...f.learning.documents, learned("another", "Something else entirely")];
+    await f.manager.refreshCapsuleMethods({ userId: "alice" });
+    assert.equal((await listed())[0], dir("slide-titles"), "the nearest to the last question is still first: a method arriving does not take the conversation's selection from it");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});

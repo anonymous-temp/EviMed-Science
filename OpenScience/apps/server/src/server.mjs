@@ -3442,7 +3442,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // A method that took effect, was amended or stopped is in the runtimes of the account that is up without a restart (`RuntimeManager.refreshCapsuleMethods`):
   // told, never asked, so a runtime that cannot be refreshed keeps what it has. It is rewritten for the conversation it was last rewritten for,
   // so what an open conversation was shown is not taken from it by a method changing.
-  if (learningService) learningService.onMountChange = (userId) => runtimeManager.refreshCapsuleMethods({ userId, reuse: true });
+  if (learningService) learningService.onMountChange = (userId) => runtimeManager.refreshCapsuleMethods({ userId });
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
   // The researcher's own 「记忆」 switches, which the memory page promises over everything a run is handed — the learned and
