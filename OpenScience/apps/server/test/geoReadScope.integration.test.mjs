@@ -129,6 +129,11 @@ test("date-only bounds include the local final day and oversized computation ask
   const other = await store.createProject({ userId: user.id, projectId: "bounded-project", engines: ["deepseek"], coverageDays: 90 });
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,created_at,started_at,finished_at)
     VALUES ('r-bounded',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T16:30:00Z','2026-10-01T17:00:00Z')`, [user.id,other.id]);
+  const planned = await readGeoSelection(store, other, { from: "2026-10-02", to: "2026-10-02" });
+  assert.equal(planned.rounds.length, 0, "a planned round without observations is not a dated measurement");
+  assert.equal(planned.selection.timeCoverage.plannedRounds, 1);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+    VALUES ('bounded-dated',$1,$2,'r-bounded','deepseek','failed','2026-10-01T16:30:00Z')`, [user.id, other.id]);
   assert.equal((await readGeoSelection(store, other, { from: "2026-10-02", to: "2026-10-02" })).rounds.length, 1);
   assert.equal((await readGeoSelection(store, other, { from: "2026-10-01", to: "2026-10-01" })).rounds.length, 0);
   await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
@@ -182,6 +187,9 @@ test("default group readings expose the same exact membership as the selected me
 test("source history includes every round selected by an explicit date range", options, async () => {
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at)
     SELECT 'history-' || n,$1,$2,'weekly','done',1,'{deepseek}',date '2026-10-03' + n,date '2026-10-03' + n
+    FROM generate_series(0,4) n`, [user.id, project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+    SELECT 'history-observation-' || n,$1,$2,'history-' || n,'deepseek','failed',date '2026-10-03' + n
     FROM generate_series(0,4) n`, [user.id, project.id]);
   const result = await service.source(user, project.id, "source1", { from: "2026-10-01", to: "2026-10-07" });
   assert.equal(result.selection.roundIds.length, 7);
@@ -303,8 +311,11 @@ test("default source context selects its six rounds before enforcing history res
     await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,sample_date,finished_at)
       SELECT $1 || n,$2,$3,'weekly','done',date '2026-01-01' + n,date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
     [`history-limit-${roundCount}-`, user.id, historic.id, roundCount - 1]);
-    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
-      SELECT $1 || n,$2,$3,$4,'deepseek','failed' FROM generate_series(1,20001) n`,
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+      SELECT 'context-' || $1 || n,$2,$3,$1 || n,'deepseek','failed',date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
+    [`history-limit-${roundCount}-`, user.id, historic.id, roundCount - 1]);
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+      SELECT $1 || n,$2,$3,$4,'deepseek','failed','2026-01-01' FROM generate_series(1,20001) n`,
     [`old-history-${roundCount}-`, user.id, historic.id, `history-limit-${roundCount}-0`]);
     const detail = await service.source(user, historic.id, sourceId);
     assert.equal(detail.history.length, 6);
@@ -318,6 +329,8 @@ test("view dates use the observation day when a selected round has no sample dat
   const undated = await store.createProject({ userId: user.id, projectId: "undated-view-project", engines: ["deepseek"], coverageDays: 90 });
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,started_at,created_at,finished_at)
     VALUES ('undated-view-round',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T14:00:00Z','2026-10-01T17:00:00Z')`, [user.id, undated.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+    VALUES ('undated-view-observation',$1,$2,'undated-view-round','deepseek','failed','2026-10-01T16:30:00Z')`, [user.id, undated.id]);
   for (const [timeZone, date] of [["Asia/Shanghai", "2026-10-02"], ["America/New_York", "2026-10-01"]]) {
     const scope = { from: date, to: date, timeZone };
     const overview = await service.projectView(user, undated.id, scope);
@@ -400,6 +413,15 @@ test("date ranges select actual answer occurrences across midnight without datin
   assert.equal(whole.selection.timeCoverage.unknownTime, 1);
   const ny = await readGeoSelection(store, timed, { from: "2026-10-01", to: "2026-10-01", timeZone: "America/New_York" });
   assert.equal(ny.rows.length, 2);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,sample_date)
+    VALUES ('occurrence-unplaced-round',$1,$2,'baseline','done','2026-10-01')`, [user.id, timed.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
+    VALUES ('occurrence-unplaced',$1,$2,'occurrence-unplaced-round','deepseek','failed')`, [user.id, timed.id]);
+  const withContext = await readGeoSelection(store, timed, { from: "2026-10-01", to: "2026-10-01" });
+  assert.equal(withContext.selection.timeCoverage.unknownTime, 2);
+  assert.equal(withContext.selection.timeCoverage.plannedRounds, 2);
+  const replayed = await readGeoSelection(store, timed, { selectionRef: withContext.selection.reference });
+  assert.equal(replayed.selection.dataRevision, withContext.selection.dataRevision, "unplaced schedule context must be stable when the observed rounds are frozen");
 });
 
 test("observation caps apply after engine and question-dimension filters", options, async () => {

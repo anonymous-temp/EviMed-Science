@@ -265,7 +265,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   if (scope.questionVersion) add(observed, "q.set_version = ?", scope.questionVersion);
   if (scope.groupIds.length) add(observed, "q.group_id = ANY(?::text[])", scope.groupIds);
   if (scope.pools.length) add(observed, "coalesce(q.pool, g.pool) = ANY(?::text[])", scope.pools);
-  if (scope.clientTags.length) add(observed, "jsonb_exists_any(to_jsonb(q)->'client_tags', ?::text[])", scope.clientTags);
+  if (scope.clientTags.length) add(observed, "(jsonb_typeof(to_jsonb(q)->'client_tags') = 'array' AND jsonb_exists_any(to_jsonb(q)->'client_tags', ?::text[]))", scope.clientTags);
   if (subset) {
     add(observed, "jsonb_build_array(s.question_id, s.engine, coalesce(s.surface, '{\"mode\":\"web\"}'::jsonb)->>'mode') IN (SELECT value FROM jsonb_array_elements(?::jsonb))", JSON.stringify(subset.keys.map((key) => JSON.parse(key))));
     if (subset.eligibleOnly) observed.push("(s.status = 'refusal' OR s.status = 'valid' AND f.snapshot_id IS NOT NULL AND (f.judged_at IS NOT NULL OR s.surface->>'mode' = 'inclusion'))");
@@ -312,8 +312,8 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   for (const entry of admitted) {
     const ids = admittedIds.get(entry.round_id) ?? []; ids.push(entry.id); admittedIds.set(entry.round_id, ids);
   }
-  const coverageRows = (await selectionQuery(`SELECT count(*) FILTER (WHERE s.asked_at IS NULL)::integer AS unknown_time
-    ${from} WHERE ${dated ? contextRoundWhere.join(" AND ") : selectedRounds} AND ${beforeDates.join(" AND ")} AND NOT ${paused}`)).rows[0];
+  const coverageRows = (await selectionQuery(`SELECT count(*)::integer AS unknown_time
+    ${from} WHERE ${dated ? contextRoundWhere.join(" AND ") : selectedRounds} AND ${beforeDates.join(" AND ")} AND s.asked_at IS NULL AND NOT ${paused}`)).rows[0];
   const skippedAnswers = Number((await selectionQuery(`SELECT count(*)::integer AS n ${from}
     WHERE ${selectedRounds} AND ${observed.join(" AND ")} AND ${paused}`)).rows[0]?.n ?? 0);
   const plannedRounds = dated ? Number((await selectionQuery(`SELECT count(*)::integer AS n FROM evimed_geo.rounds r WHERE ${planned.join(" AND ")}`)).rows[0]?.n ?? 0) : rounds.length;
@@ -336,6 +336,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const selectedQuestions = questions.rows.filter((question) => (!roundVersions.size || roundVersions.has(Number(question.set_version))) && (!scope.questionVersion || Number(question.set_version) === scope.questionVersion)
     && (!scope.groupIds.length || scope.groupIds.includes(String(question.group_id))) && (!scope.pools.length || scope.pools.includes(String(question.pool)))
     && (!scope.clientTags.length || Array.isArray(question.scope_client_tags) && question.scope_client_tags.some((/** @type {string} */ tag) => scope.clientTags.includes(tag))));
+  const questionIds = new Set(selectedQuestions.map((question) => String(question.id)));
   // Admission already applied every deterministic observation predicate before the bounded fact read.
   const rows = batches.flat();
   if (rows.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROWS} observations can be analyzed together.`, 422);
