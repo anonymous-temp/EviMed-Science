@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CapsuleSharePanel, recipientsOf } from "./CapsuleSharePanel";
 
 const client = vi.hoisted(() => ({
-  createShareLink: vi.fn(), deliverCapsule: vi.fn(), downloadMethodPack: vi.fn(), listSentDeliveries: vi.fn(), listShareLinks: vi.fn(), revokeShareLink: vi.fn(),
+  createShareLink: vi.fn(), deliverCapsule: vi.fn(), listSentDeliveries: vi.fn(), listShareLinks: vi.fn(), revokeShareLink: vi.fn(),
 }));
 vi.mock("@/lib/capsuleShareClient", () => client);
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: (error: { message?: string }) => error?.message ?? "操作未完成，请重试。" }));
@@ -98,22 +98,29 @@ describe("分享给平台里的人", () => {
     await waitFor(() => expect(client.revokeShareLink).toHaveBeenCalledWith("cap-1", "l1"));
   });
 
-  it("exports the method pack, and does not assure the researcher what the file holds", async () => {
-    client.downloadMethodPack.mockResolvedValue(undefined);
-    const { container } = render(<CapsuleSharePanel capsuleId="cap-1" />);
-    // The button says what it does; nothing explains the format before it is pressed.
-    expect(container.textContent).not.toMatch(/通用的技能格式/);
-    await userEvent.click(screen.getByRole("button", { name: "导出做法" }));
-    await waitFor(() => expect(client.downloadMethodPack).toHaveBeenCalledWith("cap-1"));
-    expect(await screen.findByText("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。")).toBeInTheDocument();
-    // The mechanism assurances are the back office's (owner ruling 2026-10-10).
-    expect(container.textContent).not.toMatch(/只含文字|不含脚本|脚本不会/);
+  it("hands over what the sender unticked, to a delivery and to a link, and sends nothing extra when nothing was", async () => {
+    client.deliverCapsule.mockResolvedValue({ delivered: 1, notDelivered: 0, snapshot: null });
+    client.createShareLink.mockResolvedValue({ token: "t".repeat(32), path: `/app/memory/shared/${"t".repeat(32)}`, link: {}, snapshot: {} });
+    const { rerender } = render(<CapsuleSharePanel capsuleId="cap-1" excludeEntryIds={["fact:one"]} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Alice Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenCalledWith("cap-1", { recipients: ["Alice Reader"], excludeEntryIds: ["fact:one"] }));
+    await userEvent.click(screen.getByRole("button", { name: "创建分享链接" }));
+    await waitFor(() => expect(client.createShareLink).toHaveBeenCalledWith("cap-1", { excludeEntryIds: ["fact:one"] }));
+    rerender(<CapsuleSharePanel capsuleId="cap-1" excludeEntryIds={[]} />);
+    await userEvent.type(screen.getByLabelText("发给平台内的账号"), "Bob Reader");
+    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(client.deliverCapsule).toHaveBeenLastCalledWith("cap-1", { recipients: ["Bob Reader"] }));
+  });
+
+  it("is not where the method pack is: that is no share between accounts, and works with sharing off", () => {
+    render(<CapsuleSharePanel capsuleId="cap-1" />);
+    expect(screen.queryByRole("button", { name: "导出做法" })).not.toBeInTheDocument();
   });
 
   it("does nothing without a capsule", () => {
     render(<CapsuleSharePanel capsuleId={null} />);
     expect(screen.getByRole("button", { name: "创建分享链接" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "导出做法" })).toBeDisabled();
     expect(client.listSentDeliveries).not.toHaveBeenCalled();
   });
 });

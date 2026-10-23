@@ -11,8 +11,8 @@ import { Note } from "@/components/ui/Note";
 import { Tabs } from "@/components/ui/Tabs";
 import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
 import { getWebProjectId } from "@/lib/apiClient";
-import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryPreview, fromSender, takenEntries } from "@/lib/capsuleText";
-import { takeDownSnapshot } from "@/lib/capsuleShareClient";
+import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryPreview, fromSender, recipientsOf, takenEntries } from "@/lib/capsuleText";
+import { downloadMethodPack, takeDownSnapshot } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged, ensureMyCapsule } from "@/lib/memoryClient";
@@ -20,7 +20,7 @@ import { labelFor } from "@/lib/statusLabel";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleExport, previewCapsuleImport,
   productErrorMessage, revokeCapsuleExport, saveCapsuleDownload,
-  type CapsuleExportPreview, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
+  type CapsuleCard, type CapsuleExportInput, type CapsuleExportPreview, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
 } from "@/lib/productClient";
 
 const SCOPE_LABELS: Record<string, string> = { workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" };
@@ -62,10 +62,20 @@ function useAction() {
  * irreversible things. What cannot be taken back is said in that confirmation,
  * and nowhere else.
  *
- * 署名 (2026-10-10 review C4c) is the one optional field above the three ways of
+ * 署名 (2026-10-10 review C4c) is the one optional field above the ways of
  * sharing: the name this share is signed with, which every recipient sees. It
  * arrives filled in with the name the account already has, and a share is made
  * with a signature of its own only when the field holds a different one.
+ *
+ * What the sender sees is what the recipient will: every entry that would go is
+ * listed with a tick (an unticked one stays out of the file, the delivery and the
+ * link alike) and, under the list, one sentence per reason for what the platform
+ * leaves out (2026-10-23: a person who remembers saying something and cannot find
+ * it in the list is told why, and an export was empty with no word of it). A file
+ * may be sealed for named accounts of this platform as a delivery names them, so
+ * they open it without a password; the title and the summary the recipient reads
+ * first can be written (the generated ones are the placeholders), and an update
+ * says what changed in the sender's own words.
  */
 export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [password, setPassword] = useState("");
@@ -73,11 +83,17 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [knowledge, setKnowledge] = useState(false);
   /** 「对方会看到什么」 for the scopes chosen; null until read, or when it cannot be. */
   const [outgoing, setOutgoing] = useState<CapsuleExportPreview | null>(null);
+  /** The entries the sender unticked, by the ids the preview gave them. */
+  const [unticked, setUnticked] = useState<string[]>([]);
+  /** The accounts of this platform a file is to be sealed for, as typed; the title and the summary the recipient reads first. */
+  const [names, setNames] = useState("");
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
   const [history, setHistory] = useState<CapsuleExportSnapshot[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
-  /** The version being updated, and the password typed beside its button. */
-  const [updating, setUpdating] = useState<{ id: string; password: string } | null>(null);
+  /** The version being updated, the password typed beside its button and what the sender says changed. */
+  const [updating, setUpdating] = useState<{ id: string; password: string; changelog: string } | null>(null);
   /** The version a researcher asked to withdraw, held until they confirm. */
   const [withdrawing, setWithdrawing] = useState<CapsuleExportSnapshot | null>(null);
   // Sharing between accounts has its own switch: its panel, and the copies a withdrawal also stops, exist only where the server says so.
@@ -95,9 +111,21 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const scopes = ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])];
   const accountSignature = outgoing?.card?.author ?? "";
   useEffect(() => { if (!signatureTyped.current && accountSignature) setSignature(accountSignature); }, [accountSignature]);
-  /** The card a share is signed with: the signature typed, unless it is the name the account has (or nothing), which the server fills in itself. */
+  /**
+   * The card a share is signed with: the signature typed, unless it is the name the account has (or nothing), which the server fills in
+   * itself, and the title and summary the sender wrote — the server writes the ones left blank.
+   */
   const typedSignature = signature.trim();
-  const signedCard = typedSignature && typedSignature !== accountSignature ? { author: typedSignature } : undefined;
+  const signedCard: CapsuleCard | undefined = (() => {
+    const card: CapsuleCard = {};
+    if (typedSignature && typedSignature !== accountSignature) card.author = typedSignature;
+    if (title.trim()) card.title = title.trim();
+    if (summary.trim()) card.summary = summary.trim();
+    return Object.keys(card).length ? card : undefined;
+  })();
+  const recipientNames = recipientsOf(names);
+  const listed = outgoing?.entries ?? [];
+  const includedCount = listed.filter(entry => entry.included !== false).length;
 
   useEffect(() => {
     let active = true; setHistory([]); setHistoryCursor(null);
@@ -116,18 +144,38 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     if (!capsuleId) return;
     void (async () => {
       try {
-        const result = await previewCapsuleExport(capsuleId, { scopes: ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])] });
+        const result = await previewCapsuleExport(capsuleId, { scopes: ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])],
+          ...(unticked.length ? { excludeEntryIds: unticked } : {}) });
         if (active) setOutgoing(result ?? null);
       } catch { /* the export itself still says why it cannot run */ }
     })();
     return () => { active = false; };
-  }, [capsuleId, profile, knowledge, refresh]);
+  }, [capsuleId, profile, knowledge, refresh, unticked]);
 
-  const createExport = (secret: string, supersedes?: string, savedScopes?: string[]) => perform(async () => {
-    if (!capsuleId || !secret) return;
-    const result = await exportCapsule(capsuleId, { password: secret, scopes: savedScopes ?? scopes, ...(supersedes ? { supersedes } : {}), ...(signedCard ? { card: signedCard } : {}) });
+  /** A file, sealed with `secret`, for the names typed, or both; an update also says in the sender's words what changed. */
+  const createExport = (secret: string, supersedes?: string, savedScopes?: string[], changelog = "") => perform(async () => {
+    if (!capsuleId || (!secret && recipientNames.length === 0)) return;
+    const card: CapsuleCard | undefined = changelog.trim() ? { ...signedCard, changelog: changelog.trim() } : signedCard;
+    const input: CapsuleExportInput = { scopes: savedScopes ?? scopes, ...(secret ? { password: secret } : {}), ...(recipientNames.length ? { recipientNames } : {}),
+      ...(supersedes ? { supersedes } : {}), ...(card ? { card } : {}), ...(unticked.length ? { excludeEntryIds: unticked } : {}) };
+    const result = await exportCapsule(capsuleId, input);
     saveCapsuleDownload(result.archive, result.filename);
-    if (mounted.current) { setPassword(""); setUpdating(null); setRefresh(value => value + 1); setNotice("已下载"); }
+    if (mounted.current) {
+      setPassword(""); setUpdating(null); setRefresh(value => value + 1);
+      // How many of the names the file opens for — the count, never which: the same words a delivery uses.
+      const reached = result.reached;
+      setNotice(!reached ? "已下载"
+        : reached.sealed === 0 ? "已下载，名字没有对上，只能用密码打开"
+          : reached.sealed === reached.requested ? `已下载，${reached.sealed} 位不用密码就能打开`
+            : `已下载，${reached.sealed} 位不用密码就能打开；其余 ${reached.requested - reached.sealed} 个名字没有对上，或对方不能接收。`);
+    }
+  });
+
+  /** 导出做法: the approved methods as a folder each, for other tools. It hands nothing to anyone on this platform, so it needs no sharing switch. */
+  const exportMethods = () => perform(async () => {
+    if (!capsuleId) return;
+    await downloadMethodPack(capsuleId);
+    if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。");
   });
 
   /** 撤回: the version stops being importable here and, where sharing is on, the copies others took stop working. */
@@ -178,28 +226,55 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
         <Note action={<Button size="sm" variant="secondary" onClick={() => speak("我的工作方式是：\n\n我常做的事：\n我偏好的写作和回答方式：", [])}>说说你的工作方式</Button>}>
           还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。
         </Note>
-      ) : outgoing?.card?.summary ? (
-        <Disclosure summary={`对方会看到：${outgoing.card.summary}`}>
+      ) : listed.length > 0 ? (
+        <Disclosure summary={includedCount > 0 && outgoing?.card?.summary ? `对方会看到：${outgoing.card.summary}` : "对方会看到的内容"}>
           <ul className="space-y-2">
-            {outgoing.entries.map((entry, index) => { const shown = capsuleEntryPreview(entry); return (
-              <li key={index} className="text-ui">
-                <span className="text-text-3">{shown.summary}</span>
-                {shown.text && <p className="max-w-measure whitespace-pre-wrap text-text">{shown.text}</p>}
+            {listed.map((entry, index) => { const shown = capsuleEntryPreview(entry); return (
+              <li key={entry.id ?? index} className="text-ui">
+                <label className="flex items-start gap-2">
+                  {entry.id
+                    ? <input type="checkbox" className="mt-1" checked={entry.included !== false} disabled={busy} aria-label={`分享这一条：${shown.summary}${shown.text ? `，${shown.text.slice(0, 40)}` : ""}`}
+                      onChange={event => setUnticked(current => event.target.checked ? current.filter(id => id !== entry.id) : [...current, entry.id as string])} />
+                    : null}
+                  <span className="min-w-0">
+                    <span className="text-text-3">{shown.summary}</span>
+                    {shown.text && <span className={entry.included === false ? "block max-w-measure whitespace-pre-wrap text-text-3 line-through" : "block max-w-measure whitespace-pre-wrap text-text"}>{shown.text}</span>}
+                  </span>
+                </label>
               </li>
             ); })}
           </ul>
         </Disclosure>
       ) : null}
+      {/* Why something the person remembers saying is not in the list: one plain sentence for each reason, with its count. */}
+      {outgoing && (outgoing.excluded?.length ?? 0) > 0 && <ul aria-label="没有放进来的内容" className="space-y-1 text-ui text-text-3">
+        {outgoing.excluded?.map(item => <li key={item.reason}>{item.text}</li>)}
+      </ul>}
+      <Disclosure summary="写标题和摘要">
+        <div className="max-w-measure space-y-3">
+          <Input label="标题" value={title} disabled={busy || !capsuleId} maxLength={150} placeholder={outgoing?.card?.title ?? ""} onChange={event => setTitle(event.target.value)} />
+          <Input label="摘要" value={summary} disabled={busy || !capsuleId} maxLength={500} placeholder={outgoing?.card?.summary ?? ""} onChange={event => setSummary(event.target.value)} />
+        </div>
+      </Disclosure>
+      <div className="max-w-measure">
+        <Input label="发给平台里的账号（选填）" placeholder="账号名或账号 ID，完全一致；多个用逗号隔开" value={names} disabled={busy || !capsuleId}
+          hint="写了名字，对方不用密码就能打开。" onChange={event => setNames(event.target.value)} maxLength={2000} />
+      </div>
       {/* The password and the button that needs it, in one row. */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48 flex-1">
           <Input label="文件密码" type="password" autoComplete="new-password" value={password} disabled={busy || !capsuleId} onChange={event => setPassword(event.target.value)} maxLength={1024} />
         </div>
-        <Button disabled={busy || !capsuleId || !password || outgoing?.empty === true} loading={busy} onClick={() => void createExport(password)}>加密导出</Button>
+        <Button disabled={busy || !capsuleId || (!password && recipientNames.length === 0) || outgoing?.empty === true || (outgoing !== null && includedCount === 0)} loading={busy} onClick={() => void createExport(password)}>加密导出</Button>
       </div>
     </section>
 
-    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} />}
+    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} excludeEntryIds={unticked} />}
+
+    {/* Not a share between accounts, so not behind its switch: the approved methods as a folder each, for other tools. */}
+    <section className="space-y-2" aria-label="导出做法">
+      <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void exportMethods()}>导出做法</Button>
+    </section>
 
     {capsuleId && <section className="space-y-2" aria-label="导出的版本">
       <h3 className="text-ui font-semibold text-text">导出的版本</h3>
@@ -210,16 +285,23 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
             actions={<>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
-                onClick={() => setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "" })}>更新</Button>
+                onClick={() => setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "", changelog: "" })}>更新</Button>
               <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
             </>}
             meta={updating?.id === snapshot.id ? (
-              <div className="flex flex-wrap items-end gap-2 pt-2">
-                <div className="min-w-48 flex-1">
-                  <Input label="文件密码" type="password" autoComplete="new-password" value={updating.password} disabled={busy} maxLength={1024}
-                    onChange={event => setUpdating({ id: snapshot.id, password: event.target.value })} />
+              <div className="space-y-2 pt-2">
+                <div className="max-w-measure">
+                  <Input label="更新说明" value={updating.changelog} disabled={busy} maxLength={2000} placeholder="这一版改了什么（不写就由系统数出新增和移除的条数）"
+                    onChange={event => setUpdating({ ...updating, changelog: event.target.value })} />
                 </div>
-                <Button disabled={busy || !updating.password} loading={busy} onClick={() => void createExport(updating.password, snapshot.id, snapshot.scopes)}>更新并下载</Button>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-48 flex-1">
+                    <Input label="文件密码" type="password" autoComplete="new-password" value={updating.password} disabled={busy} maxLength={1024}
+                      onChange={event => setUpdating({ ...updating, password: event.target.value })} />
+                  </div>
+                  <Button disabled={busy || (!updating.password && recipientNames.length === 0)} loading={busy}
+                    onClick={() => void createExport(updating.password, snapshot.id, snapshot.scopes, updating.changelog)}>更新并下载</Button>
+                </div>
               </div>
             ) : undefined} />)}
         </List>

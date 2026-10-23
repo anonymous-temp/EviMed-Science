@@ -5,9 +5,10 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import {
-  createShareLink, deliverCapsule, downloadMethodPack, listSentDeliveries, listShareLinks, revokeShareLink,
+  createShareLink, deliverCapsule, listSentDeliveries, listShareLinks, revokeShareLink,
   type DeliveryState, type SentDelivery, type ShareLink,
 } from "@/lib/capsuleShareClient";
+import { recipientsOf } from "@/lib/capsuleText";
 import { formatDateTime } from "@/lib/format";
 import { productErrorMessage, type CapsuleCard } from "@/lib/productClient";
 
@@ -20,19 +21,17 @@ function when(value: string) {
   return formatDateTime(value, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-/** The names a person typed, one per line or separated by commas: exact account ids or exact display names. */
-export function recipientsOf(text: string): string[] {
-  return [...new Set(text.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 32);
-}
+export { recipientsOf };
 
 /**
  * 「分享给平台里的人」, inside 分享与导入 (evidence-flywheel F17, 2026-10-05): hand the capsule to named accounts of this platform in
- * one step, make a link only signed-in accounts can open, and take the approved methods out as a folder each, in the open Agent Skills format. What
- * travels between people is text only. Nothing here lists accounts: a name is typed in full, and the answer to a delivery is how many
- * arrived, the same whatever kept the others from arriving. `card` is what the sender signs these shares with (the 署名 of the dialog it
- * sits in); without one the shares are signed as the account always was.
+ * one step, and make a link only signed-in accounts can open. What travels between people is text only. Nothing here lists accounts:
+ * a name is typed in full, and the answer to a delivery is how many arrived, the same whatever kept the others from arriving. `card`
+ * is what the sender signs these shares with (the 署名, and a title and summary if they wrote them, of the dialog it sits in);
+ * without one the shares are signed as the account always was. `excludeEntryIds` are the entries the sender unticked in the preview.
+ * The method pack (a folder of methods for other tools) is not a share between accounts and is the export tab's own.
  */
-export function CapsuleSharePanel({ capsuleId, card }: { capsuleId: string | null; card?: CapsuleCard }) {
+export function CapsuleSharePanel({ capsuleId, card, excludeEntryIds }: { capsuleId: string | null; card?: CapsuleCard; excludeEntryIds?: string[] }) {
   const [names, setNames] = useState("");
   const [sent, setSent] = useState<SentDelivery[]>([]);
   const [links, setLinks] = useState<ShareLink[]>([]);
@@ -86,7 +85,7 @@ export function CapsuleSharePanel({ capsuleId, card }: { capsuleId: string | nul
         onChange={(event) => setNames(event.target.value)} maxLength={2000} />
       <Button disabled={busy || !capsuleId || recipients.length === 0} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const result = await deliverCapsule(capsuleId, { recipients, ...(card ? { card } : {}) });
+        const result = await deliverCapsule(capsuleId, { recipients, ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}) });
         if (!mounted.current) return;
         setNames(""); setRefresh((value) => value + 1);
         setNotice(result.delivered === 0 ? "没有送达任何人：名字没有对上，或对方现在不能接收。"
@@ -103,7 +102,8 @@ export function CapsuleSharePanel({ capsuleId, card }: { capsuleId: string | nul
     <div className="space-y-2">
       <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const made = await (card ? createShareLink(capsuleId, { card }) : createShareLink(capsuleId));
+        const options = { ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}) };
+        const made = await (Object.keys(options).length ? createShareLink(capsuleId, options) : createShareLink(capsuleId));
         if (mounted.current) { setCreated(`${window.location.origin}${made.path}`); setRefresh((value) => value + 1); }
       })}>创建分享链接</Button>
       {created && <div className="space-y-1">
@@ -120,14 +120,6 @@ export function CapsuleSharePanel({ capsuleId, card }: { capsuleId: string | nul
             actions={link.state === "active" ? <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setRevoking(link)}>撤回</Button> : undefined} />)}
         </List>
       </Disclosure>}
-    </div>
-
-    <div className="space-y-2">
-      <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
-        if (!capsuleId) return;
-        await downloadMethodPack(capsuleId);
-        if (mounted.current) setNotice("已下载。每个做法一个文件夹，带署名和来源，可以放进其他支持技能的工具。");
-      })}>导出做法</Button>
     </div>
   </section>;
 }
