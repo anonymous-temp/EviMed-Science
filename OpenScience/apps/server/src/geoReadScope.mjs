@@ -250,7 +250,7 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   }
   const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
     WHERE ${where.join(" AND ")} AND e.status <> 'closed'`, params)).rows;
-  const claimRows = (await store.query(`SELECT e.id, e.fingerprint, e.claim_id, e.statement, e.engine, e.severity, e.status,
+  const claimRows = (await store.query(`SELECT e.id, e.fingerprint, e.claim_id, e.statement, e.engine, e.severity, e.status, e.question_id, e.error_type, e.materials, e.created_at, e.last_snapshot_id, e.closed_snapshot_id,
     e.first_snapshot_id, e.cited_source, e.action FROM evimed_geo.errors e WHERE ${where.join(" AND ")} ORDER BY e.id`, params)).rows;
   params.push(filter.limit, filter.offset);
   const rows = (await store.query(`SELECT e.* FROM evimed_geo.errors e WHERE ${where.join(" AND ")}

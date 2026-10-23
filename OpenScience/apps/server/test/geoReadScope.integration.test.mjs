@@ -526,3 +526,62 @@ test("inherited question pools retain selected metadata and invalidate edited qu
   await store.query("UPDATE evimed_geo.questions SET text = 'Changed question?' WHERE id = 'inherited-q'");
   await assert.rejects(readGeoSelection(store, inherited, { selectionRef: selected.selection.reference }), (error) => error.status === 409);
 });
+
+test("historical clusters retain complete rows, selected errors and linked work after a new import", options, async () => {
+  const p = await store.createProject({ userId: user.id, projectId: "historic-cluster-contract", engines: ["deepseek"], coverageDays: 90 });
+  const contract = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await service.saveQuestions(user, p.id, { requestKey: "old", contract, rows: [{ text: "Original wording", originalGroup: "Original group", pool: "P2", journeyStage: "Decision", clientTags: ["original"], kind: "real", sourceUrl: "https://example.com/original", collectedAt: "2026-10-23" }] });
+  const old = (await store.questionMap(p.id, 1))[0];
+  await store.query("UPDATE evimed_geo.question_groups SET journey_stage_no=3 WHERE id=$1", [old.id]);
+  const started = await service.startDiagnosis(user, p.id, { version: 1, requestKey: "old-diagnosis" });
+  const job = (await store.query("SELECT * FROM evimed_geo.probe_jobs WHERE round_id=$1", [started.roundId])).rows[0];
+  const snapshotId = `historic-${job.id}`;
+  await measure.insertSnapshot({ id: snapshotId, userId: user.id, geoProjectId: p.id, roundId: started.roundId, questionId: job.question_id, engine: "deepseek", askedAt: new Date("2026-10-23T01:00:00Z"), status: "valid", answerText: "Original answer", answerSha256: null, citations: [], surface: { mode: "web" }, screenshotSha256: null, latencyMs: 1, warnings: [], probeJobId: job.id });
+  await measure.writeFacts({ id: snapshotId, userId: user.id, geoProjectId: p.id }, { brands: [{ name: "Ours", ours: true, count: 1 }], judgedAt: "2026-10-23T02:00:00Z" });
+  for (const [index, status, severity] of [[0, "open", "S3"], [1, "acting", "S4"], [2, "awaiting_remeasure", "S1"], [3, "closed", "S3"]]) await store.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,status,severity,statement,error_type)
+    VALUES($1,$2,$3,$1,'deepseek',$4,$5,$5,$6,$7,'Preserved wrong statement','number')`, [`historic-error-${index}`,user.id,p.id,job.question_id,snapshotId,status,severity]);
+  await store.query("UPDATE evimed_geo.errors SET question_id=NULL WHERE id='historic-error-3'");
+  await store.registerArticles(user.id, p.id, [{ path: "outputs/original.md", deliverableId: "original", layer: "popular", title: "Original article", groupId: old.id, claimIds: [], gate: "unverified", safety: "clear" }]);
+  await service.saveQuestions(user, p.id, { requestKey: "new", contract, rows: [{ text: "Unmeasured new question", originalGroup: "New group", isMeasured: false }] });
+  for (const scope of [{ questionVersion: 1 }, { from: "2026-10-23", to: "2026-10-23" }, { questionVersion: 1, clientTags: ["original"] }]) {
+    const view = await service.clusters(user, p.id, scope);
+    const group = view.groups.find((entry) => entry.id === old.id);
+    assert.ok(group);
+    assert.deepEqual(group.errors, { open: 3, severe: 2, total: 4 });
+    assert.equal(group.journeyStageNo, 3);
+    assert.equal(group.realPhrasings[0].text, "Original wording");
+    assert.equal(group.articles.total, 1);
+    assert.ok(group.actions.total > 0);
+    assert.equal(group.mention.members.exact, true);
+    assert.deepEqual(group.mention.snapshotIds, [snapshotId]);
+    assert.equal(group.byEngine.deepseek.answered, 1);
+    const detail = await service.cluster(user, p.id, old.id, scope);
+    assert.deepEqual(detail.group.errors, group.errors);
+    assert.equal(detail.errorPage.total, 4);
+    assert.equal(detail.articles.length, group.articles.total);
+    assert.equal(detail.actions.length, group.actions.total);
+  }
+  const unmeasured = (await service.clusters(user, p.id, { questionVersion: 2 })).groups[0];
+  assert.deepEqual(unmeasured.errors, { open: 0, severe: 0, total: 0 });
+  assert.equal(unmeasured.mention.state, "absent");
+  assert.equal(unmeasured.mention.n, null);
+  assert.equal(unmeasured.measuredCount, 0);
+});
+
+test("a scoped current group retains established previous-version article aliases", options, async () => {
+  const p = await store.createProject({ userId: user.id, projectId: "cluster-version-alias", engines: ["deepseek"], coverageDays: 90 });
+  const groups = [{ name: "Preserved group", pool: "P2", questions: [{ text: "Original question", kind: "typical", isMeasured: true }] }];
+  const first = await store.writeQuestionSet(user.id, p.id, { groups });
+  await store.registerArticles(user.id, p.id, [{ path: "outputs/preserved.md", deliverableId: "preserved", layer: "popular", title: "Preserved article",
+    groupId: first.groupIds[0], claimIds: [], gate: "unverified", safety: "clear" }]);
+  const second = await store.writeQuestionSet(user.id, p.id, { groups });
+  for (const version of [first, second]) {
+    const scope = { questionVersion: version.version };
+    const list = await service.clusters(user, p.id, scope);
+    const group = list.groups.find(entry => entry.id === version.groupIds[0]);
+    assert.equal(group.articles.total, 1);
+    const detail = await service.cluster(user, p.id, group.id, scope);
+    assert.equal(detail.articles.length, 1);
+    assert.equal(detail.group.articles.total, group.articles.total);
+  }
+});

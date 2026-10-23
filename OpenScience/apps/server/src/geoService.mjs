@@ -54,7 +54,7 @@ import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLo
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
-import { geoSourceFromRow } from "./geoStore.mjs";
+import { geoSourceFromRow, questionGroupFromRow, questionFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
@@ -776,9 +776,9 @@ export class GeoService {
 
   /** Shape existing views from one exact observation selection; historical stored readings remain explicitly historical.
    * @param {any} project @param {any} view @param {Awaited<ReturnType<typeof readGeoSelection>>} selected
-   * @param {string} kind @param {any} input @returns {Promise<any>}
+   * @param {string} kind @param {any} input @param {any} [clusterContext] @returns {Promise<any>}
    */
-  async #applySelection(project, view, selected, kind, input) {
+  async #applySelection(project, view, selected, kind, input, clusterContext = /** @type {any} */ (null)) {
     const { scope, selection, computed } = selected;
     const filtered = geoScopeIsFiltered(scope) || Boolean(input?.selectionRef);
     const cell = (/** @type {string} */ metricId, /** @type {Record<string, any>} */ dimensions = {}, /** @type {any} */ old = null) => {
@@ -877,14 +877,20 @@ export class GeoService {
       if (!versions.size && selected.questions.length) versions.add(scope.questionVersion ?? Math.max(...selected.questions.map((question) => Number(question.set_version))));
       const groups = (await this.store.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND user_id = $2
         AND ($3::integer[] = '{}' OR set_version = ANY($3::integer[])) ORDER BY set_version, position, id`, [project.id, project.userId, [...versions]])).rows;
-      view.groups = groups.filter((group) => (!scope.groupIds.length || scope.groupIds.includes(group.id)) && (!scope.pools.length || scope.pools.includes(group.pool))
+      const context = clusterContext ?? await this.#scopedClusterContext(project, selected, groups);
+      const complete = this.spine.clusters(context.spine, context.derived);
+      view.locked = complete.locked;
+      const completeById = new Map(complete.groups.map((group) => [group.id, group]));
+      view.groups = groups.filter((group) => completeById.has(group.id) && (!scope.groupIds.length || scope.groupIds.includes(group.id)) && (!scope.pools.length || scope.pools.includes(group.pool))
         && (!scope.clientTags.length || selected.questions.some((question) => question.group_id === group.id))).map((group) => {
-        const old = view.groups.find((/** @type {any} */ entry) => entry.id === group.id);
+        const old = completeById.get(group.id);
         const questions = selected.questions.filter((question) => question.group_id === group.id);
         const members = answers.filter((answer) => questions.some((question) => question.id === answer.questionId));
-        const historicalMention = !filtered && !selected.rows.some((row) => row.facts) && old?.mention?.roundId === roundView?.id ? old.mention : null;
+        const legacy = context.legacyReadings.filter((entry) => entry.groupId === group.id && entry.metricId === "M-01" && entry.kind !== "post_publication").at(-1);
+        const historicalMention = !filtered && !selected.rows.some((row) => row.facts) && legacy?.roundId === roundView?.id
+          ? { ...geoGroupReading({ k: legacy.k, n: legacy.n }), roundId: legacy.roundId, date: legacy.date, coverage: legacy.coverage } : null;
         const mention = historicalMention ?? cell("M-01", { scope: "group", pool: group.pool, groupId: group.id });
-        return { ...(old ?? {}), id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
+        return { ...old, id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
           weight: num(group.weight), isControl: group.is_control, signal: group.signal, questionCount: questions.length,
           measuredCount: questions.filter((question) => question.is_measured && !question.retired_at).length, realCount: questions.filter((question) => question.kind === "real").length,
           realPhrasings: old?.realPhrasings ?? [], mention: historicalMention ? { ...mention, members: { exact: false, basis: "historical_unknown" } } : { ...geoGroupReading({ k: mention.numerator, n: mention.denominator }), snapshotIds: mention.snapshotIds, members: mention.members, roundId: roundView?.id ?? null, coverage: selection.coverage },
@@ -1945,6 +1951,42 @@ export class GeoService {
     return { spine, derived };
   }
 
+  /** Build group metadata and work from the authorized selection, never by filling a missing latest-version row.
+   * Metrics use the shared computation; ongoing articles and action choices retain their exact group identifiers.
+   * @param {any} project @param {Awaited<ReturnType<typeof readGeoSelection>>} selected @param {any[]} groups */
+  async #scopedClusterContext(project, selected, groups) {
+    const base = await this.spine.load(project, { answers: false });
+    const errors = await readGeoSelectionErrors(this.store, project, selected, { errorLimit: 1 });
+    const snapshotGroups = new Map(selected.rows.map((row) => [row.snapshotId, row.groupId]));
+    const questionGroups = new Map(selected.questions.map((question) => [String(question.id), String(question.group_id)]));
+    const answers = this.#selectionAnswers(selected);
+    const round = selected.rounds[0];
+    const roundId = round?.id ?? null, date = round ? rowDay(round, selected.scope.timeZone) : null;
+    const rows = selected.computed.cells.filter((entry) => !entry.variant && !entry.rival && !entry.arm && !entry.engine);
+    const versions = [...new Set(groups.map((group) => Number(group.set_version)))];
+    const sets = await this.store.questionSets(project.id);
+    const currentGroups = new Map(base.groups.map((group) => [group.id, group]));
+    const selectedIds = new Set(groups.map(group => String(group.id)));
+    // Current groups retain the spine's established version aliases; a selected historical group keeps its own identity.
+    const currentOf = new Map([...base.currentOf].filter(([, currentId]) => selectedIds.has(currentId)));
+    for (const id of selectedIds) currentOf.set(id, id);
+    const scoped = { ...base, project: { ...base.project, engines: selected.selection.engines },
+      version: versions.length === 1 ? versions[0] : null,
+      locked: versions.length === 1 && Boolean(sets.find((set) => set.version === versions[0])?.lockedAt),
+      groups: groups.map((group) => ({ ...questionGroupFromRow(group), aliasIds: currentGroups.get(String(group.id))?.aliasIds ?? [],
+        questions: selected.questions.filter((question) => question.group_id === group.id).map(questionFromRow) })),
+      currentOf,
+      errors: errors.claimRows.map((row) => ({ ...errorView(row), groupId: questionGroups.get(String(row.question_id)) ?? snapshotGroups.get(row.last_snapshot_id) ?? snapshotGroups.get(row.first_snapshot_id) ?? snapshotGroups.get(row.closed_snapshot_id) ?? null, materials: row.materials ?? [] })),
+      answersByGroup: new Map(groups.map((group) => [String(group.id), answers.filter((answer) => questionGroups.get(String(answer.questionId)) === group.id)])),
+      readings: rows.filter((entry) => entry.scope === "group").map((entry) => ({ groupId: entry.groupId, metricId: entry.metricId,
+        k: entry.numerator, n: entry.denominator, value: entry.value, status: entry.status, roundId, date, kind: round?.kind ?? "single_step", coverage: selected.selection.coverage })),
+      poolReadings: rows.filter((entry) => entry.scope === "pool").map((entry) => ({ pool: entry.pool, metricId: entry.metricId,
+        k: entry.numerator, n: entry.denominator, value: entry.value, status: entry.status, roundId })),
+      arms: {},
+    };
+    return { spine: scoped, derived: await this.spine.actions(scoped), legacyReadings: base.readings, selected };
+  }
+
   /** `GET …/:id/clusters`. @param {{ id: string }} user @param {string} id */
   async clusters(user, id, scope = {}) { return this.clustersOf(await this.requireProject(user, id), scope); }
 
@@ -1952,8 +1994,7 @@ export class GeoService {
   async clustersOf(project, scope = {}) {
     if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.clustersOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
-    const { spine, derived } = await this.#spineOf(project);
-    return this.#applySelection(project, this.spine.clusters(spine, derived), selected, "clusters", scope);
+    return this.#applySelection(project, { groups: [], locked: false, floor: 30 }, selected, "clusters", scope);
   }
 
   /** `GET …/:id/clusters/:groupId`. @param {{ id: string }} user @param {string} id @param {string} groupId */
@@ -1967,8 +2008,10 @@ export class GeoService {
     if (!row) throw failure(404, "geo_cluster_not_found", "Question group not found.");
     const selected = await readGeoSelection(this.store, project, scope);
     const filtered = geoScopeIsFiltered(selected.scope) || Boolean(scope.selectionRef);
-    const historical = !filtered ? await this.#clusterBase(project, groupId) : null;
-    const listed = await this.#applySelection(project, { groups: [], locked: null, floor: 30 }, selected, "clusters", scope);
+    const context = await this.#scopedClusterContext(project, selected, [row]);
+    const stored = !filtered && !selected.rows.some((member) => member.facts) ? await this.#clusterBase(project, groupId) : null;
+    const historical = stored ?? await this.#clusterBase(project, groupId, context);
+    const listed = await this.#applySelection(project, { groups: [], locked: false, floor: 30 }, selected, "clusters", scope, context);
     const group = listed.groups.find((/** @type {any} */ entry) => entry.id === groupId);
     if (!group) throw failure(404, "geo_cluster_not_found", "Question group is outside this selection.");
     const questions = selected.questions.filter((question) => question.group_id === groupId);
@@ -1990,15 +2033,17 @@ export class GeoService {
       errors: errorData.rows.map(errorView), errorPage: errorData.page,
       gaps: historical?.gaps ?? [], claims: historical?.claims ?? {}, actions: historical?.actions ?? [], articles: historical?.articles ?? [],
       orders: historical?.orders ?? [], ownedLinks: historical?.ownedLinks ?? [],
-      effect: historical?.effect ? { ...historical.effect, kind: "historical" }
+      effect: historical?.effect ? { ...historical.effect, kind: filtered ? "observational" : "historical" }
         : { metricId: "M-01", series: [], events: [], arm: null, kind: "observational" } };
   }
 
   /** @param {any} project @param {string} groupId */
-  async #clusterBase(project, groupId) {
-    const { spine, derived } = await this.#spineOf(project);
+  async #clusterBase(project, groupId, context = /** @type {any} */ (null)) {
+    const { spine, derived } = context ?? await this.#spineOf(project);
     const view = await this.spine.cluster(spine, derived, groupId, {
-      answersOf: (texts) => this.#latestAnswers(project, texts),
+      answersOf: async (texts) => context ? new Map(texts.map((value) => [value.trim(), context.selected.rows
+        .filter((member) => context.selected.questions.some((question) => question.id === member.questionId && question.text.trim() === value.trim()))
+        .map((member) => ({ engine: member.engine, snapshotId: member.snapshotId }))])) : this.#latestAnswers(project, texts),
       claimsOf: async (ids) => (await this.store.query(`SELECT id, claim_key, statement, source_label, source_kind, status FROM evimed_geo.claims
         WHERE geo_project_id = $1 AND id = ANY($2::text[])`, [project.id, ids])).rows.map((/** @type {any} */ row) => ({
         id: String(row.id), claimKey: String(row.claim_key), statement: String(row.statement), sourceLabel: text(row.source_label), sourceKind: text(row.source_kind),
