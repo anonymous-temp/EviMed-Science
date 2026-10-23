@@ -39,7 +39,9 @@ export async function prepareGeoLegacyError(client, snapshot, statement, { recon
   const source = (await client.query(`SELECT s.*,r.ref->'evaluationBasis'->'claims' AS claims FROM evimed_geo.snapshots s
     LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE s.id=$1 AND s.user_id=$2 AND s.geo_project_id=$3`, [snapshotId, snapshot.userId, snapshot.geoProjectId])).rows[0];
   if (!source) return { fingerprint: errorFingerprint(statement) };
-  const enriched = identity(statement, source.claims ?? []), oldKey = legacyFingerprint(statement), newKey = errorFingerprint(enriched ?? statement);
+  const frozenClaim = geoClaimForStatement(source.claims ?? [], statement);
+  const keyed = { ...statement, claimKey: statement.claimKey ?? frozenClaim?.key ?? null };
+  const enriched = identity(keyed, source.claims ?? []), oldKey = legacyFingerprint(keyed), newKey = errorFingerprint(enriched ?? keyed);
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`geo-error-family:${source.user_id}:${source.geo_project_id}:${source.engine}:${oldKey}`]);
   const candidates = (await client.query(`SELECT * FROM evimed_geo.errors WHERE user_id=$1 AND geo_project_id=$2 AND engine=$3 AND fingerprint=ANY($4::text[])`,
     [source.user_id, source.geo_project_id, source.engine, [oldKey, newKey]])).rows;
@@ -55,8 +57,8 @@ export async function prepareGeoLegacyError(client, snapshot, statement, { recon
       WHERE s.user_id=$1 AND s.geo_project_id=$2 AND s.engine=$3 AND v.kind='knowledge' AND v.payload->>'recordType'='geo-assessment'
     ) witness JOIN evimed_geo.snapshots s ON s.id=witness.id LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id
     WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(witness.statements,'[]'::jsonb)) x
-      WHERE x->>'verdict'='wrong' AND CASE WHEN $4::text IS NULL THEN x->>'claimId'=$5 ELSE x->>'claimKey'=$4 END)
-    ORDER BY witness.id,witness.revision LIMIT $6`, [source.user_id, source.geo_project_id, source.engine, statement.claimKey ?? null, statement.claimId ?? null, PROOF_LIMIT + 1])).rows;
+      WHERE x->>'verdict'='wrong' AND CASE WHEN $4::text IS NULL THEN x->>'claimId'=$5 ELSE (x->>'claimKey'=$4 OR (x->>'claimKey' IS NULL AND x->>'claimId'=$5)) END)
+    ORDER BY witness.id,witness.revision LIMIT $6`, [source.user_id, source.geo_project_id, source.engine, keyed.claimKey ?? null, statement.claimId ?? null, PROOF_LIMIT + 1])).rows;
   const proofIds = [...new Set([snapshotId, ...witnesses.map(row => row.id)])].sort();
   const facts = (await client.query(`SELECT f.snapshot_id,f.statements,r.ref->'evaluationBasis'->'claims' AS claims FROM evimed_geo.facts f
     JOIN evimed_geo.snapshots s ON s.id=f.snapshot_id LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id
@@ -70,7 +72,7 @@ export async function prepareGeoLegacyError(client, snapshot, statement, { recon
   const survivor = legacyRow ?? canonicalRow;
   if (!survivor) return { fingerprint: newKey };
   const expected = enriched ? geoClaimAssessmentIdentity(enriched) : null;
-  const relevant = witnesses.flatMap(row => (row.statements ?? []).filter(item => item.verdict === 'wrong' && (statement.claimKey ? item.claimKey === statement.claimKey : item.claimId === statement.claimId)).map(item => ({ item, claims: row.claims ?? [] })));
+  const relevant = witnesses.flatMap(row => (row.statements ?? []).filter(item => item.verdict === 'wrong' && (keyed.claimKey ? item.claimKey === keyed.claimKey || item.claimKey == null && item.claimId === statement.claimId : item.claimId === statement.claimId)).map(item => ({ item, claims: row.claims ?? [] })));
   const valid = Boolean(expected && relevant.length && witnesses.length <= PROOF_LIMIT && witnesses.some(row => row.id === survivor.first_snapshot_id) && witnesses.some(row => row.id === survivor.last_snapshot_id)
     && relevant.every(({ item, claims }) => { const normalized = identity(item, claims), frozen = geoClaimForStatement(claims, item); return normalized && frozen && geoClaimAssessmentIdentity(frozen) === expected && geoClaimAssessmentIdentity(normalized) === expected; }));
   const append = async (row, receipt) => {
