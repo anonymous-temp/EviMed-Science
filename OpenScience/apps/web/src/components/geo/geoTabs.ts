@@ -1,28 +1,10 @@
 /**
- * What a GEO project's page is divided into — by the question a reader has,
- * not by the order the platform does its work (fusion plan §8.1, appendix E
- * §3.1: of seventeen products surveyed, none makes its workflow the
- * navigation) — and how the eight steps of the programme sit in those tabs.
+ * Compatibility addresses for the result components inside GEO's eight business workbenches.
+ * The visible workflow rail is the business navigation; only diagnosis and sources expose related result views locally.
  *
- * The eight canonical steps live in the compact workflow selector shared by
- * the result views and the project conversation (owner, 2026-10-19). The views
- * are not the steps, and the relation between them is written here **as data**
- * and nowhere else (A.2):
- *
- *  - `GEO_STEP_HOME` — where a step's own result is read: the tab, the view of
- *    it and the block inside it. A workflow selection goes there; so does an old
- *    address that named the step.
- *  - `GEO_TAB_STEPS` — which steps a tab is built from. The workflow selector identifies the
- *    steps of the tab that is open; a tab may be built from more than one step,
- *    and a step may feed more than one tab (诊断 is read on 准确与安全 and, as a
- *    measurement, on 可见度; 信源 is read on 信源 and, as a strategy, on 方案).
- *
- * `geoTabs.test.ts` holds the table: every step has a home that is a tab, every
- * home tab is built from its step, and every tab but 总览 feeds a step.
- *
- * Old addresses keep working. A bookmark, a link in a delivered report and
- * the conversation frame's own “打开诊断” all name a step, and each resolves
- * to the tab that holds it.
+ * GEO_STEP_HOME maps each step to its existing component/address. GEO_TAB_STEPS records which workbenches can reuse it.
+ * geoViewedStep resolves the inspected workbench from its view and anchor, independently of background programme progress.
+ * Existing report links and bookmarks retain their objects, filters and conversation context.
  */
 import { GEO_STEP_KEYS, type GeoStepKey } from "@/lib/geoClient";
 
@@ -186,13 +168,34 @@ export function geoTabPath(geoId: string, tab: GeoTabKey): string {
 export function geoDestinationPath(
   geoId: string,
   destination: GeoDestination,
-  params: Readonly<Record<string, string | null | undefined>> = {},
+  params: Readonly<Record<string, string | null | undefined>> | URLSearchParams = {},
 ): string {
   const search = new URLSearchParams();
   if (destination.view) search.set(GEO_VIEW_PARAM, destination.view);
-  for (const [name, value] of Object.entries(params)) if (value) search.set(name, value);
+  const entries = params instanceof URLSearchParams ? params.entries() : Object.entries(params);
+  for (const [name, value] of entries) if (value && !(name === GEO_VIEW_PARAM && destination.view)) search.append(name, value);
   const query = search.toString();
   return `${geoTabPath(geoId, destination.tab)}${query ? `?${query}` : ""}${destination.section ? `#${geoSectionId(destination.section)}` : ""}`;
+}
+
+/** The viewed workbench, independent from the programme's currently running step. Old result addresses remain valid. */
+export function geoViewedStep(tab: GeoTabKey, { step = null, view = null, section = null, conversation = false }: {
+  step?: string | null; view?: string | null; section?: string | null; conversation?: boolean;
+}): GeoStepKey | null {
+  const requested = GEO_STEP_KEYS.find(key => key === step) ?? null;
+  if (conversation && requested) return requested;
+  if (tab === "overview") return null;
+  if (tab === "questions") return view === "journey" ? "journey" : "questions";
+  if (tab === "visibility") return section?.replace(/^geo-/, "") === "trend" || requested === "monitoring" ? "monitoring" : "diagnosis";
+  if (tab === "actions") {
+    const block = section?.replace(/^geo-/, "");
+    if (block === "delivery" || block === "budget") return "distribution";
+    if (block === "effect") return "monitoring";
+    if (block === "review") return "content";
+    if (requested && GEO_TAB_STEPS.actions.includes(requested)) return requested;
+    return "content";
+  }
+  return GEO_TAB_STEPS[tab][0] ?? null;
 }
 
 /** Every step id, for the walk and for tests that assert no old link dies. */

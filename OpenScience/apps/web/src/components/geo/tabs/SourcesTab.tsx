@@ -33,7 +33,7 @@ import {
 } from "../spine/sourceModel";
 import { useGeoActions, useGeoClusters } from "../spine/spineData";
 import { sourceKindWord, yuan } from "./geoTabText";
-import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { GeoSourceDrawer } from "./GeoSourceDrawer";
 import { ShowMore, useShowMore } from "./showMore";
 
@@ -89,7 +89,7 @@ const KIND_PARAM = "kind";
  * and the open site is `?source=<domain>`, so a link from a group or a wrong claim lands on it.
  */
 export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const { state, reload } = useGeoLoad(`sources:${geoId}`, () => getGeoSources(geoId));
+  const { state, reload } = useSharedGeoLoad(`sources:${geoId}`, () => getGeoSources(geoId));
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
   if (state.kind === "loading") return <TabSkeleton />;

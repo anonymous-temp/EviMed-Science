@@ -5,6 +5,7 @@ import type { GeoProject, GeoValue } from "@/lib/geoClient";
 import { CLAIM_TYPE_LABEL } from "@/lib/claimCitations";
 import { formatDay } from "@/lib/format";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Note } from "@/components/ui/Note";
 import { StepState } from "@/components/ui/StepState";
 import { safeWebHref } from "@/lib/readPages";
 import { useGeoValue } from "../geoProjectData";
@@ -110,9 +111,10 @@ function ValueBody({ geoId, value, mode, className }: { geoId: string; value: Ge
       {text(data.summary) && mode === "profile" && <p className="mb-3 max-w-measure text-ui leading-relaxed text-text-2">{text(data.summary)}</p>}
       {mode === "coverage" ? <>
         <p className="text-ui text-text-2">{coverageSentence(value.coverage)}</p>
-        {Boolean(value.coverage?.assessment?.partialObservations || value.coverage?.assessment?.unknownObservations) && <p className="mt-2 text-caption text-text-3">
-          {value.coverage.assessment?.partialObservations ?? 0} 条观察来自部分核查，{value.coverage.assessment?.unknownObservations ?? 0} 条观察的核查范围未确定。
-        </p>}
+        {Boolean(value.coverage?.assessment?.partialObservations || value.coverage?.assessment?.unknownObservations) && <Note result={[
+          { n: value.coverage.assessment?.partialObservations ?? 0 }, " 条观察来自部分核查，",
+          { n: value.coverage.assessment?.unknownObservations ?? 0 }, " 条观察的核查范围未确定。",
+        ]} />}
         {Boolean(value.coverage?.uncertain || value.coverage?.notApplicable) && <p className="mt-2 text-caption text-text-3">尚不能判断 {value.coverage.uncertain} 条，不适用 {value.coverage.notApplicable} 条。</p>}
         {Boolean(value.coverage?.assessed && value.coverage?.basisVersion && value.coverage.basisVersion !== value.version) && <p className="mt-2 text-caption text-text-3">以上按第 {value.coverage.basisVersion} 版药品价值分析测得；分析已更新到第 {value.version} 版，下一轮测量后按新版本判断。</p>}
         {!!value.observations?.length && <Disclosure summary={value.observations.length > OBSERVATIONS_SHOWN ? `查看回答中的表达 · 共 ${value.observations.length} 条` : "查看回答中的表达"} className="mt-3">

@@ -19,7 +19,7 @@ import {
   G_SAFETY,
 } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
-import { ActionsTab } from "./ActionsTab";
+import { ActionsTab, type GeoActionWorkbench } from "./ActionsTab";
 
 const client = vi.hoisted(() => ({
   getGeoActions: vi.fn(),
@@ -67,19 +67,42 @@ function Probe() {
 
 const openPanel = vi.fn();
 
-function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/actions") {
+function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/actions", mode: GeoActionWorkbench = "all") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/app/geo/geo_1/actions"
-          element={<><GeoFrameHarness project={project} tab="actions" openPanel={openPanel}><ActionsTab geoId="geo_1" project={project} /></GeoFrameHarness><Probe /></>}
+          element={<><GeoFrameHarness project={project} tab="actions" openPanel={openPanel}><ActionsTab geoId="geo_1" project={project} mode={mode} /></GeoFrameHarness><Probe /></>}
         />
         <Route path="*" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
   );
 }
+
+it("keeps draft work in content and budget work in distribution", async () => {
+  client.getGeoDistribution.mockResolvedValue(distributionFilled);
+  const content = renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  expect(await screen.findByRole("region", { name: "等你放行的稿件" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "投放预算" })).not.toBeInTheDocument();
+  expect(document.getElementById("geo-effect")).toBeNull();
+  content.unmount();
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=distribution", "distribution");
+  expect(await screen.findByRole("region", { name: "投放预算" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "等你放行的稿件" })).not.toBeInTheDocument();
+  expect(document.getElementById("geo-effect")).toBeNull();
+});
+
+it("monitoring presents no action-list filters while its action list is absent", async () => {
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=monitoring", "monitoring");
+  const lead = await screen.findByRole("heading", { name: /已行动的问句群比对照多涨/ });
+  expect(screen.queryByRole("searchbox", { name: "搜索行动" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "进展" })).not.toBeInTheDocument();
+  await userEvent.click(within(lead).getByRole("button", { name: "2" }));
+  expect(screen.getByTestId("search")).toHaveTextContent("step=content");
+  expect(screen.getByTestId("search")).toHaveTextContent("focus=waiting");
+});
 
 function article(id: string, overrides: Partial<GeoArticle> = {}): GeoArticle {
   return {

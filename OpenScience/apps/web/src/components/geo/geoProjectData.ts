@@ -37,7 +37,7 @@ export type GeoLoad<T> =
   | { kind: "loading" }
   /** `off`: the module is not open to this account; `missing`: nothing at that address. */
   | { kind: "error"; message: string; off: boolean; missing: boolean }
-  | { kind: "ready"; data: T };
+  | { kind: "ready"; data: T; refreshError?: string };
 
 export interface GeoLoadResult<T> {
   state: GeoLoad<T>;
@@ -65,6 +65,7 @@ interface Entry {
   /** The latest read's number: an answer to an earlier one is dropped. */
   epoch: number;
   reading: boolean;
+  reloadQueued: boolean;
   loader: () => Promise<unknown>;
   watchers: number;
 }
@@ -87,6 +88,10 @@ export class GeoDataCache {
   /** The read's state: stable until it changes. */
   snapshot = (key: string): GeoLoad<unknown> => this.#entries.get(key)?.state ?? LOADING;
 
+  /** Active views keep usable data during a transient failure, with one visible retry notice in the project shell. */
+  refreshError = (): string => [...new Set([...this.#entries.values()].flatMap(entry =>
+    entry.watchers > 0 && entry.state.kind === "ready" && entry.state.refreshError ? [entry.state.refreshError] : []))].join("；");
+
   /**
    * A consumer begins to read `key`. Returns what ends it. The read starts when nothing has it, when it failed, or when it is older
    * than {@link STALE_MS}; the loader is the consumer's latest.
@@ -94,14 +99,17 @@ export class GeoDataCache {
   watch(key: string, loader: () => Promise<unknown>): () => void {
     let entry = this.#entries.get(key);
     if (!entry) {
-      entry = { state: LOADING, loadedAt: 0, epoch: 0, reading: false, loader, watchers: 0 };
+      entry = { state: LOADING, loadedAt: 0, epoch: 0, reading: false, reloadQueued: false, loader, watchers: 0 };
       this.#entries.set(key, entry);
     }
     entry.loader = loader;
     entry.watchers += 1;
     if (!entry.reading && (entry.state.kind !== "ready" || this.#now() - entry.loadedAt > STALE_MS)) this.#read(entry);
     const held = entry;
-    return () => { held.watchers = Math.max(0, held.watchers - 1); };
+    return () => {
+      held.watchers = Math.max(0, held.watchers - 1);
+      if (held.state.kind === "ready" && held.state.refreshError) for (const listener of this.#listeners) listener();
+    };
   }
 
   /** Read `key` again now, keeping what is shown until the answer comes. */
@@ -119,6 +127,7 @@ export class GeoDataCache {
   }
 
   #read(entry: Entry): void {
+    if (entry.reading) { entry.reloadQueued = true; return; }
     entry.reading = true;
     entry.epoch += 1;
     const epoch = entry.epoch;
@@ -132,7 +141,10 @@ export class GeoDataCache {
         },
         (error: unknown) => {
           if (entry.epoch !== epoch) return;
-          entry.state = failed(error);
+          const failure = failed(error);
+          const denied = error instanceof WebApiError && [401, 403, 404].includes(error.status);
+          entry.state = entry.state.kind === "ready" && !denied && failure.kind === "error"
+            ? { ...entry.state, refreshError: failure.message } : failure;
           entry.loadedAt = 0;
         },
       )
@@ -140,6 +152,11 @@ export class GeoDataCache {
         if (entry.epoch !== epoch) return;
         entry.reading = false;
         for (const listener of this.#listeners) listener();
+        if (entry.reloadQueued) {
+          entry.reloadQueued = false;
+          if (entry.watchers > 0 && (typeof document === "undefined" || document.visibilityState !== "hidden")) this.#read(entry);
+          else entry.loadedAt = 0;
+        }
       });
   }
 }

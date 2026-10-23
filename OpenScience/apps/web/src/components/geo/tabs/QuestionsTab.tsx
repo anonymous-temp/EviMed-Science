@@ -71,6 +71,7 @@ const COLUMNS: ReadonlyArray<ListColumn & { key: SortKey }> = [
  * current set's), and removing a question writes a new one.
  */
 export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const frame = useGeoFrame();
   const [version, setVersion] = useState<number | null>(null);
   const questions = useSharedGeoLoad<GeoQuestions>(`questions:${geoId}:${version ?? "latest"}`, () => getGeoQuestions(geoId, version));
   const clusters = useGeoClusters(geoId);
@@ -79,7 +80,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   const switcher = {
     kind: "chips" as const,
     label: "视图",
-    options: VIEW_OPTIONS,
+    options: frame?.step ? VIEW_OPTIONS.filter(option => option.value !== "journey") : VIEW_OPTIONS,
     value: view,
     onChange: (next: string) => setParams((previous) => {
       const copy = new URLSearchParams(previous);
@@ -93,7 +94,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   if (view === "journey") {
     return (
       <div data-geo-tab="questions" className="flex flex-col gap-8">
-        <JourneyTab geoId={geoId} project={project} toolbar={{ filters: [switcher] }} />
+        <JourneyTab geoId={geoId} project={project} toolbar={frame?.step === "journey" ? undefined : { filters: [switcher] }} />
         <StageGroups rows={rows} loading={clusters.state.kind === "loading"} />
         <ClusterDrawerHost geoId={geoId} project={project} />
       </div>

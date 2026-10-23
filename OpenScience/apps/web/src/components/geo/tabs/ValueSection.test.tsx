@@ -62,7 +62,9 @@ it("keeps the inspected scope visible beside the value observations", async () =
   } };
   client.getGeoValue.mockResolvedValue(value);
   show("coverage");
-  expect(await screen.findByText("2 条观察来自部分核查，1 条观察的核查范围未确定。")).toBeVisible();
+  const coverage = await screen.findByText("条观察来自部分核查，", { exact: false });
+  expect(coverage).toHaveTextContent("2 条观察来自部分核查，1 条观察的核查范围未确定。");
+  expect(coverage).toBeVisible();
 });
 
 it("keeps the last round's coverage after the profile moves on, and says which version it measured", async () => {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect } from "react";
-import type { GeoProject } from "@/lib/geoClient";
+import type { GeoProject, GeoStepKey } from "@/lib/geoClient";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import type { GeoDataCache } from "./geoProjectData";
 import type { GeoTabKey } from "./geoTabs";
@@ -18,6 +18,9 @@ export interface GeoFrameApi {
   project: GeoProject;
   /** The tab that is open; the answer page keeps 问题与回答. */
   tab: GeoTabKey;
+  /** The business workbench currently viewed; unrelated background work never overrides it. */
+  step?: GeoStepKey | null;
+  refreshError?: string;
   /** Read the project again now: after a start, a budget, a tier, anything that moves the rail or the to-dos. */
   reload(): void;
   /**

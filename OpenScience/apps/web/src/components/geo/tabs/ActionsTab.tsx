@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   chooseGeoActionSource,
@@ -18,10 +18,10 @@ import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
-import { useGeoMonitoring } from "../geoProjectData";
+import { useGeoMonitoring, useSharedGeoLoad } from "../geoProjectData";
 import { marketConnected } from "../geoOverviewModel";
 import { scrollBlockToTop } from "../geoScroll";
-import { geoSectionId } from "../geoTabs";
+import { geoDestinationPath, geoSectionId } from "../geoTabs";
 import { ActionDrawer } from "../spine/ActionDrawer";
 import { ActionRow } from "../spine/ActionRow";
 import { BudgetLine, ControlGroups, EffectCard, netEffectInput, OtherArticles, ReviewBlock } from "../spine/ActionsParts";
@@ -43,7 +43,7 @@ import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useG
 import { useGeoActions, useGeoClusters } from "../spine/spineData";
 import { useArticleActions } from "../spine/useArticleActions";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
-import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 
 /** Rows listed before 「显示更多」, and how many each press adds. */
@@ -85,22 +85,26 @@ const CARDS_WAIT: Record<"producer" | "reviewer", { sentence: string; verb: stri
  *
  * The filters are the band's toolbar (`useGeoToolbar`); nothing on this page filters from below its list.
  */
-export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+export type GeoActionWorkbench = "all" | "content" | "distribution" | "monitoring";
+
+export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; project: GeoProject; mode?: GeoActionWorkbench }) {
   const frame = useGeoFrame();
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
   const monitoring = useGeoMonitoring(geoId);
-  const articles = useGeoLoad(`articles:${geoId}`, () => getGeoArticles(geoId));
-  const distribution = useGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
+  const articles = useSharedGeoLoad(`articles:${geoId}`, () => getGeoArticles(geoId));
+  const distribution = useSharedGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
   const drawer = useGeoDrawerAddress();
   const navigate = useNavigate();
+  const location = useLocation();
   const openConversation = useOpenGeoConversation();
   const [stageParam, setStageParam] = useGeoSearchParam(STAGE_PARAM);
   const [cluster, setCluster] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
   const change = useGeoSearchChange();
   const [kind, setKind] = useState<GeoActionKind | null>(null);
   const [query, setQuery] = useState("");
-  const [focus, setFocus] = useState<"acted" | "waiting" | null>(null);
+  const [focusParam, setFocus] = useGeoSearchParam("focus");
+  const focus = focusParam === "acted" || focusParam === "waiting" ? focusParam : null;
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const view = actions.state.kind === "ready" ? actions.state.data : null;
@@ -148,7 +152,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
     return [...seen.entries()].map(([value, label]) => ({ value, label }));
   }, [all]);
   const narrowed = stage !== "all" || kind !== null || cluster !== null || query.trim() !== "" || focus !== null;
-  useGeoToolbar(view && all.length > 0
+  useGeoToolbar(mode !== "monitoring" && view && all.length > 0
     ? {
       filters: [
         { kind: "chips", label: "进展", options: stageOptions, value: stage, onChange: (value) => setStageParam(value === "all" ? null : value) },
@@ -175,7 +179,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
           onChange: () => setFocus(null),
         }] : []),
       ],
-      onClear: narrowed ? () => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setKind(null); setQuery(""); setFocus(null); } : undefined,
+      onClear: narrowed ? () => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, focus: null }); setKind(null); setQuery(""); } : undefined,
       search: { label: "搜索行动", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
       summary: narrowed ? `${rows} / ${all.length} 条行动` : `${all.length} 条行动`,
     }
@@ -219,6 +223,13 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
       if (element) scrollBlockToTop(element);
       return;
     }
+    if (mode === "monitoring") {
+      const query = new URLSearchParams(location.search);
+      query.set("step", target === "acted" ? "distribution" : "content");
+      query.set("focus", target);
+      navigate(geoDestinationPath(geoId, { tab: "actions" }, query));
+      return;
+    }
     setFocus(target);
   };
 
@@ -231,7 +242,7 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
   const listed = new Set(all.flatMap((action) => action.articleIds));
   const others = articleList.filter((article) => !listed.has(article.id) && article.status !== "withdrawn" && article.safety !== "open");
   const nothing = all.length === 0 && articleList.length === 0 && view.control.length === 0;
-  if (nothing) return <StepPending geoId={geoId} project={project} step="content" />;
+  if (nothing && mode !== "monitoring") return <StepPending geoId={geoId} project={project} step={mode === "distribution" ? "distribution" : "content"} />;
 
   const openAction = drawer.action ? all.find((action) => action.key === drawer.action) ?? null : null;
   const input = netEffectInput(monitoring.state.kind === "ready" ? monitoring.state.data : null, distributionData);
@@ -239,8 +250,8 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
 
   return (
     <div data-geo-tab="actions" className="flex flex-col gap-6">
-      <EffectCard parts={parts} input={input} loading={monitoring.state.kind === "loading"} onOpen={headlineTarget} />
-      <ReviewBlock
+      {(mode === "all" || mode === "monitoring") && <EffectCard parts={parts} input={input} loading={monitoring.state.kind === "loading"} onOpen={headlineTarget} />}
+      {(mode === "all" || mode === "content") && <ReviewBlock
         articles={held}
         groupOf={groupOf}
         canReview={can("review")}
@@ -248,19 +259,19 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
         reachable={articleActions.reachable}
         onOpen={articleActions.open}
         onRelease={articleActions.release}
-      />
-      <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />
-      {project.cards?.blockedBy && can("edit") && (
+      />}
+      {(mode === "all" || mode === "distribution") && <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />}
+      {(mode === "all" || mode === "content") && project.cards?.blockedBy && can("edit") && (
         <Note action={<Button variant="secondary" size="sm" onClick={() => frame?.openPanel(CARDS_WAIT[project.cards?.blockedBy as "producer" | "reviewer"].panel)}>{CARDS_WAIT[project.cards.blockedBy].verb}</Button>}>
           {CARDS_WAIT[project.cards.blockedBy].sentence}
         </Note>
       )}
 
-      {all.length > 0 && (
+      {mode !== "monitoring" && all.length > 0 && (
         // The rail's 「投放」 lands here (`GEO_TAB_SECTIONS`): where each piece of work goes, and how far it got, is a row of this list.
         <section id={geoSectionId("delivery")} aria-label="行动" data-geo-actions="">
           {rows === 0 ? (
-            <Note action={<Button variant="secondary" size="sm" onClick={() => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setKind(null); setQuery(""); setFocus(null); }}>清除筛选</Button>}>
+            <Note action={<Button variant="secondary" size="sm" onClick={() => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, focus: null }); setKind(null); setQuery(""); }}>清除筛选</Button>}>
               没有符合的行动。
             </Note>
           ) : (
@@ -307,15 +318,15 @@ export function ActionsTab({ geoId, project }: { geoId: string; project: GeoProj
         </section>
       )}
 
-      <ControlGroups view={view} clusters={clusterRows} />
-      <OtherArticles
+      {(mode === "all" || mode === "monitoring") && <ControlGroups view={view} clusters={clusterRows} />}
+      {(mode === "all" || mode === "content") && <OtherArticles
         articles={others}
         groupOf={groupOf}
         reachable={articleActions.reachable}
         onOpen={articleActions.open}
         onWithdraw={articleActions.withdraw}
         canEdit={can("edit")}
-      />
+      />}
 
       {openAction && (
         <ActionDrawer
