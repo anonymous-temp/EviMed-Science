@@ -452,18 +452,18 @@ export const GEO_ARTICLE_CHANNELS = frozen([...GEO_OWNED_LINK_PLATFORMS, 'media_
 export const GEO_ARTICLE_CHANNEL_LABELS_ZH = Object.freeze({ ...GEO_OWNED_LINK_PLATFORM_LABELS_ZH, media_market: '媒介集市（专业媒体）' })
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
-export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
+export const GEO_READ_WHATS = frozen(['diagnosis_progress', 'project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
   'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research', 'clusters', 'actions'])
-export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
+export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'preview_questions', 'start_diagnosis', 'recover_diagnosis', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
   'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research', 'actions'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
-  project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
+  diagnosis_progress: '诊断进展', project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
   monitoring: '监测', cards: '证据卡片', value: '药品价值分析', research: '相关研究', clusters: '问句群', actions: '行动',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
-  product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
+  preview_questions: '预览原题', start_diagnosis: '开始诊断', recover_diagnosis: '恢复诊断', product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
   sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', owned_links: '自有发布', step: '进度',
   value: '药品价值分析', research: '研究任务', actions: '行动',
 })

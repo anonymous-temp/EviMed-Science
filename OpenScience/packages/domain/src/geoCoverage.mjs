@@ -51,6 +51,8 @@ export function geoSurfaceKey(surface) {
   if (source.newChat === true) parts.push('newchat')
   const city = clean(source.city)
   if (city) parts.push(`city=${city}`)
+  const contract = /** @type {Record<string, any> | undefined} */ (source.measurementContract)
+  if (contract) parts.push(`sampling=${clean(contract.samplingMode)};repeats=${clean(contract.repeats)};basis=${clean(contract.sourceBasis)}`)
   return parts.join(';')
 }
 

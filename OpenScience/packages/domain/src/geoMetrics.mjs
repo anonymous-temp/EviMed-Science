@@ -184,6 +184,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  */
 /**
  * @typedef {object} GeoMetricsOptions
+ * @property {string|null} [samplingMode] Explicit one-shot observations have descriptive rates without inferential intervals.
  * @property {string[]} [pools]            pools to compute (default: every pool of the table)
  * @property {string[]} [engines]          the project's engines; one with no snapshot is `absent`
  * @property {Array<{ id: string, pool: string }>} [groups]  groups to compute (default: those in the rows)
@@ -1009,7 +1010,7 @@ export function computeGeoMetrics(rows, options = {}) {
     if (item) items.push(item)
     else unparsed += 1
   }
-  const pooledAll = items.filter((item) => item.pool)
+  const pooledAll = items.filter((item) => item.pool || oneShotObservation(item.row, options.samplingMode))
   const pooled = pooledAll.filter((item) => !item.inclusion)
 
   const competitors = options.competitors ?? [...new Set(pooled.flatMap((item) => Object.keys(item.rivalCounts)))].sort()
@@ -1192,6 +1193,17 @@ export function computeGeoMetrics(rows, options = {}) {
     }
   }
 
+  if (['one_shot', 'mixed'].includes(options.samplingMode ?? '')) {
+    for (const cell of cells) {
+      cell.ciLow = null
+      cell.ciHigh = null
+      if (cell.value != null && ['ok', 'insufficient'].includes(cell.status) && cell.numerator != null && cell.denominator != null && cell.denominator > 0) {
+        cell.status = 'ok'
+        cell.reason = options.samplingMode === 'mixed' ? 'mixed_contract_descriptive' : 'one_shot_descriptive'
+      }
+    }
+  }
+
   const baselineAll = items.filter((item) => !item.excluded)
   return {
     cells,
@@ -1231,11 +1243,13 @@ function armsOf(items, arms) {
  * The snapshot rows behind one cell, for 「点开这条回答」: the same selection
  * {@link computeGeoMetrics} made (repeats excluded, probes outside the question
  * map excluded). Pass the `arms` used for the batch when the cell is an arm's.
- * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {{ arms?: GeoMetricsOptions['arms'] }} [options]
+ * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {{ arms?: GeoMetricsOptions['arms'], samplingMode?: string | null }} [options]
  * @returns {GeoFactRow[]}
  */
 export function geoCellRows(rows, cell, options = {}) {
-  const inScope = rows.filter((row) => row.pool && !(row.roundKind && EXCLUDED_ROUND_KINDS.has(row.roundKind)))
+  const unclassifiedScope = cell.scope === 'engine' || cell.scope === 'project' && cell.metricId === 'M-20'
+  const unclassified = (/** @type {GeoFactRow} */ row) => unclassifiedScope && oneShotObservation(row, options.samplingMode)
+  const inScope = rows.filter((row) => (row.pool || unclassified(row)) && !(row.roundKind && EXCLUDED_ROUND_KINDS.has(row.roundKind)))
   const pools = cell.pool ? [cell.pool] : cell.scope === 'engine' ? GEO_METRIC_POOL_IDS : (METRIC_INDEX.get(cell.metricId)?.pools ?? GEO_METRIC_POOL_IDS)
   let armGroups = null
   if (cell.arm) {
@@ -1244,7 +1258,7 @@ export function geoCellRows(rows, cell, options = {}) {
       ? new Set(arms[cell.arm] ?? [])
       : new Set(inScope.filter((row) => row.groupId && Boolean(row.isControl) === (cell.arm === 'control')).map((row) => row.groupId))
   }
-  return inScope.filter((row) => pools.includes(/** @type {string} */ (row.pool))
+  return inScope.filter((row) => (pools.includes(/** @type {string} */ (row.pool)) || unclassified(row) && !row.pool)
     && (cell.engine === null || row.engine === cell.engine)
     && (cell.groupId === null || row.groupId === cell.groupId)
     && (armGroups === null || (row.groupId != null && armGroups.has(row.groupId)))
@@ -1577,4 +1591,11 @@ function deepFreeze(value) {
     for (const child of Object.values(value)) deepFreeze(child)
   }
   return value
+}
+
+/** Row provenance takes precedence over the selection default, so mixed windows cannot admit unclassified recurring rows.
+ * @param {GeoFactRow} row @param {string | null | undefined} mode */
+function oneShotObservation(row, mode) {
+  const contract = /** @type {{ samplingMode?: string } | undefined} */ (row.surface?.measurementContract)
+  return contract ? contract.samplingMode === 'one_shot' : mode === 'one_shot'
 }

@@ -1654,6 +1654,8 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
+  'geo_question_import_invalid', 'geo_diagnosis_invalid', 'geo_contract_missing',
+  'geo_recovery_invalid', 'geo_recovery_exhausted', 'geo_recovery_acknowledgment_required',
   'geo_not_enabled',
   'geo_path_invalid',
   'geo_payload_invalid',
