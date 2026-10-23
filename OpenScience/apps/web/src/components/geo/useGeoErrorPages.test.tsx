@@ -10,12 +10,13 @@ const page = (ids: string[], offset = 0, more = false, reference = "frozen") => 
 beforeEach(() => { client.getGeoDiagnosis.mockReset(); });
 it("fetches the next page on the exact frozen selection, and repeated pages never duplicate rows", async () => {
   client.getGeoDiagnosis.mockResolvedValueOnce(page(["first"], 0, true)).mockResolvedValueOnce(page(["first", "only-after-page-one"], 20));
-  const initial = page(["capped"]);
+  const initial = { ...page(["capped"]), scope: { round: "old", from: "2026-10-01", to: "2026-10-23", engines: ["deepseek"], groupIds: ["g1"], questionVersion: 1 } };
   const { result } = renderHook(() => useGeoErrorPages("geo", initial, {}, vi.fn()));
   await waitFor(() => expect(result.current.data?.errors[0].id).toBe("first"));
   act(() => result.current.more());
   await waitFor(() => expect(result.current.data?.errors.map(row => row.id)).toEqual(["first", "only-after-page-one"]));
-  expect(client.getGeoDiagnosis.mock.calls[1][1]).toMatchObject({ round: "old", selectionRef: "frozen" });
+  expect(client.getGeoDiagnosis.mock.calls[0][1]).toEqual({ selectionRef: "frozen" });
+  expect(client.getGeoDiagnosis.mock.calls[1][1]).toEqual({ selectionRef: "frozen" });
   expect(client.getGeoDiagnosis.mock.calls[1][2]).toMatchObject({ errorOffset: 20 });
   expect(appendErrorPage([row("first")], page(["first"]), "frozen")).toHaveLength(1);
   expect(() => appendErrorPage([], page(["wrong-round"], 0, false, "latest"), "frozen")).toThrow(/范围已变化/);
@@ -38,4 +39,12 @@ it("a changed assessment exposes refresh without appending a new latest round to
   expect(result.current.data).toBeNull();
   act(() => result.current.retry());
   expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+it("falls back to the analytical scope only when the diagnosis has no saved reference", async () => {
+  const initial = { ...page(["capped"]), selection: undefined, scope: { round: "old", engines: ["deepseek"] } };
+  client.getGeoDiagnosis.mockResolvedValue({ ...page(["first"]), selection: undefined });
+  const { result } = renderHook(() => useGeoErrorPages("geo", initial, {}, vi.fn()));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(client.getGeoDiagnosis.mock.calls[0][1]).toEqual({ round: "old", engines: ["deepseek"] });
 });

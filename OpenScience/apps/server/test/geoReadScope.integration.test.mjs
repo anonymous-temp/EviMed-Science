@@ -596,3 +596,21 @@ test("a scoped current group retains established previous-version article aliase
     assert.equal(detail.group.articles.total, group.articles.total);
   }
 });
+
+test("saved diagnosis references alone replay historical, date, engine, group and question-version scopes with error filters", options, async () => {
+  for (const scope of [{ round: "r1" }, { from: "2026-10-01", to: "2026-10-02" }, { engines: ["deepseek"] }, { groupIds: ["g1"] }, { questionVersion: 1 }]) {
+    const initial = await service.diagnosis(user, project.id, scope);
+    const selectionRef = initial.selection.reference;
+    await assert.rejects(service.diagnosis(user, project.id, { ...scope, selectionRef, errorLimit: 1 }), error => error.status === 400);
+    const first = await service.diagnosis(user, project.id, { selectionRef, errorLimit: 1, errorOffset: 0 });
+    assert.equal(first.selection.reference, selectionRef);
+    assert.equal(first.errorPage.total, initial.errorPage.total);
+    if (first.errorPage.nextOffset != null) {
+      const next = await service.diagnosis(user, project.id, { selectionRef, errorLimit: 1, errorOffset: first.errorPage.nextOffset });
+      assert.equal(next.selection.reference, selectionRef);
+      assert.notEqual(next.errors[0].id, first.errors[0].id);
+      const matched = await service.diagnosis(user, project.id, { selectionRef, errorSearch: next.errors[0].statement });
+      assert.ok(matched.errors.some(row => row.id === next.errors[0].id));
+    }
+  }
+});
