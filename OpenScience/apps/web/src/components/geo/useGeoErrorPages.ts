@@ -17,7 +17,7 @@ export function useGeoErrorPages(geoId: string, diagnosis: GeoDiagnosis, filters
   const fetchPage = (offset = 0) => {
     const mine = ++epoch.current;
     setValue(old => ({ ...old, key, loading: true, error: null, stale: false }));
-    const scope: GeoReadScope = { ...diagnosis.scope, ...(reference ? { selectionRef: reference } : {}) };
+    const scope: GeoReadScope = reference ? { selectionRef: reference } : { ...diagnosis.scope };
     void getGeoDiagnosis(geoId, scope, { ...filters, errorOffset: offset, errorLimit: 20 }).then(page => {
       const errors = appendErrorPage(offset ? value.data?.errors ?? [] : [], page, reference);
       if (mine === epoch.current) setValue({ key, data: { ...page, errors }, loading: false, error: null, stale: false });
