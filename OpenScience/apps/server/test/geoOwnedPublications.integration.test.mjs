@@ -51,9 +51,28 @@ test('pasting a known page again retains its established article and never updat
   await store.upsertOwnedLinks(project.userId, project.id, [row]);
   const detail = await publications.detail(project, 'three');
   assert.equal(detail.link.articleId, 'publication-article'); assert.equal(detail.link.articleResultVersionId, 'v1'); assert.equal(detail.revision, 0);
+  assert.equal(detail.link.publishedAt, '2026-10-01T00:00:00.000Z');
   await store.query(`INSERT INTO evimed_geo.articles(id,user_id,geo_project_id,title,current_result_version_id,content_sha256) VALUES('other-article',$1,$2,'Another article','other-version',$3)`, [project.userId, project.id, 'a'.repeat(64)]);
   await assert.rejects(store.upsertOwnedLinks(project.userId, project.id, [{ ...row, articleId: 'other-article' }]), { status: 409, code: 'geo_owned_link_invalid' });
   assert.equal((await publications.detail(project, 'three')).link.articleId, 'publication-article');
+});
+
+test('a single page preserves its original publication date through repaste and an explicit later version update', options, async () => {
+  const only = { ...project, id: 'single_publication_geo', projectId: 'single_publication_project' };
+  await seedGeoProject(database, { ...only, engines: ['deepseek'], groups: [], questions: [] });
+  await store.query(`INSERT INTO evimed_geo.articles(id,user_id,geo_project_id,title,current_result_version_id,content_sha256) VALUES('single-article',$1,$2,'Single article','v1',$3)`, [only.userId, only.id, '1'.repeat(64)]);
+  const initial = { url: 'https://example.org/only', urlKey: 'example.org/only', platform: 'brand_site', title: 'Only page', publishedAt: '2026-10-01T00:00:00Z', articleId: 'single-article', groupId: null };
+  const [id] = await store.upsertOwnedLinks(only.userId, only.id, [initial]);
+  await store.query("UPDATE evimed_geo.articles SET current_result_version_id='v2',content_sha256=$1 WHERE id='single-article'", ['2'.repeat(64)]);
+  await store.upsertOwnedLinks(only.userId, only.id, [{ ...initial, publishedAt: '2026-10-23T00:00:00Z' }]);
+  assert.equal((await publications.detail(only, id)).link.publishedAt, '2026-10-01T00:00:00.000Z');
+  await publications.confirm(only, id, update('single-explicit-update'));
+  const result = await publications.detail(only, id);
+  assert.deepEqual(result.history.items.map(item => [item.resultVersionId, item.publishedAt]), [['v2', '2026-10-23T00:00:00.000Z'], ['v1', '2026-10-01T00:00:00.000Z']]);
+  assert.equal(await publications.firstPublishedAt(only), '2026-10-01T00:00:00.000Z');
+  const { GeoService } = await import('../src/geoService.mjs');
+  const service = new GeoService({ store, documents, config: { geoEnabled: true, geoAudience: 'all' } });
+  assert.equal((await service.distribution({ id: only.userId }, only.id)).firstPublishedAt, '2026-10-01T00:00:00.000Z', 'no other page or order masks the original date');
 });
 test('a newer article and a failed receipt cannot leave an unrecorded online version update', options, async () => {
   await assert.rejects(publications.confirm(project, 'two', update('stale-draft', { resultVersionId: 'v3', digest: '3'.repeat(64) })), { code: 'geo_article_head_changed' });

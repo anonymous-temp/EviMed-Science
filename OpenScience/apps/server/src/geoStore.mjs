@@ -1474,7 +1474,7 @@ export class GeoStore {
             article_id, group_id, run_id, article_result_version_id, article_digest)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (geo_project_id, url_key) DO UPDATE SET url = EXCLUDED.url, platform = EXCLUDED.platform, title = EXCLUDED.title,
-            published_at = EXCLUDED.published_at, article_id = coalesce(owned_links.article_id, EXCLUDED.article_id), group_id = coalesce(owned_links.group_id, EXCLUDED.group_id),
+            article_id = coalesce(owned_links.article_id, EXCLUDED.article_id), group_id = coalesce(owned_links.group_id, EXCLUDED.group_id),
             run_id = coalesce(EXCLUDED.run_id, owned_links.run_id), status = 'active', retired_at = NULL, updated_at = now()
           WHERE owned_links.article_id IS NULL OR EXCLUDED.article_id IS NULL OR owned_links.article_id=EXCLUDED.article_id
           RETURNING id`,
