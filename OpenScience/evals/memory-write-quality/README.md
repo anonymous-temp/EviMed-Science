@@ -204,3 +204,39 @@ whatever the templates say (the check that caught it is `g11-english-engineer-pr
 `阶段` sections need to say that a date or a budget is a limit and not a choice or a stage — the card cases of 2026-10-13 failed
 until they did. A case that passed once and failed once (`project-card-slots`: the comparator folded into the exposure line) is a
 sampling variance the template now closes; it passed three of three afterwards.
+
+## The work-order corpus (2026-10-23)
+
+The 41 cases above passed on the native engine while the owner's account held no memory file after ten days of work: every
+keep case was a person introducing themselves or stating a rule, and the corpus never asked the engine to keep the durable
+part of an ordinary task conversation. `cases-general/` now also holds the 25 cases of research G §6 (C01–C24, the last in two
+variants), the upgrade case and one cross-key conflict case, all synthetic (the phone number is a public test number).
+
+| Group | Cases | What is asked |
+|---|---|---|
+| keep: work orders and everyday help | C01 form reshaping after a draft, C03 a convention declared for a named project, C04 a rule adopted from a proposal, C06 an approach confirmed by name, C07 role inside a brief, C08 tools in passing, C09 everyday context, C10 the fact without the reason, C11 a collaborator's convention | the durable part is written, the one-request part is not |
+| refuse | C02 a bare imperative, C05 a bare approval, C12 a recurring task, C13 a dated reminder, C14 a child's details, C15 hard-never even when asked, C16 a link-prefilled recommendation, C18 an offer not taken up, C19 a pasted CV, C20 a stance, C21 a single-request implication, C22 a choice shown twice (E3 is not built: owner decision 3), C23 a tool result narrated, C24a/b the platform's and the kernel's tags | nothing is written (or nothing of the named kind) |
+| state to start from | C17 the recall echo (byte-identical), U01 the upgrade (only AMA remains), C22 | `replay.seed`: a conversation the engine itself turns into the memory the case starts from |
+| legacy only | X01 a later statement contradicts a stored one under another key | the extractor names the stored key as `conflictsWith` (it never fired on production) |
+
+A case may be for one arm only (`arms`), and asks only checks code can decide (`caseShape.mjs`): the older ones plus
+`requireAnyKind` (a form complaint may land as a preference or a correction), `seedKeeps` and `unchangedSinceSeed`,
+`droppedAtTheDoor` (platform text posing as the person's words) and `requireConflictWith`. A reading is a `judge` question.
+
+```bash
+# offline, no engine and no model: shapes, the identifier shapes a case relies on, the messages the door must drop
+node evals/memory-write-quality/run_native_eval.mjs --offline
+node evals/memory-write-quality/run_write_quality_eval.mjs --offline
+# live, native arm: the baseline on the templates as shipped first, then after a change; three samples of every case
+node evals/memory-write-quality/run_native_eval.mjs --url http://127.0.0.1:19330 --key-file <engine root key file> \
+  --repeat 3 --out evals/memory-write-quality/results/$(date +%F)-native-baseline.json
+node evals/memory-write-quality/run_native_eval.mjs --url ... --key-file ... --only c01,c06,c17 --repeat 3     # only the failures again
+# live, legacy arm (the platform's own extractor, the same shared text)
+OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE=<key file> node evals/memory-write-quality/run_write_quality_eval.mjs --repeat 3 \
+  --out evals/memory-write-quality/results/$(date +%F)-legacy.json
+```
+
+A change to the shared text (`packages/domain/src/memoryNeverKept.mjs`) is rendered into the eight templates with
+`node deploy/web/openviking/memory-templates-src/build.mjs`. The lab engine must mount the rendered directory. Corrections are
+written under `preferences/corrections/` since this change (the plugin lists `preferences/` at a session's start), and the
+runner counts both places as the `correction` kind.

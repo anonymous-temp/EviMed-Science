@@ -16,7 +16,9 @@ description: |
   user stated something for it, and never fill one from the topic of a question.
   - 目标: what the work is meant to find out, build or deliver.
   - 范围或对象: what the work is about or aimed at: the subject, case, product, system,
-    audience or population it covers, and what the user said is outside it.
+    audience or population it covers, and what the user said is outside it; the people who
+    work on it or read it, by role and working convention ("导师要先看摘要"), never by contact
+    or private detail.
   - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
     period and size. Describe a dataset by what it is (source, years, size, kinds of
     variables), not by its file or column names and never by its rows.
@@ -29,7 +31,11 @@ description: |
   - 阶段: where the work stands now, and what the user said is still open or pending on
     their side. Remove an item once the user says it is done. A due date is not a stage.
   - 约束: limits the user stated: any deadline or due date ("周五前出初稿", "by the end of
-    the quarter"), budget, standards to follow, things ruled out.
+    the quarter"), budget, standards to follow, things ruled out, and the conventions they set
+    for this work's deliverables (language, format, audience, citation style, what not to
+    touch: "这个仓库里测试文件一律不要动", "报告第一页放摘要"). A work order inside a named project
+    that states such a convention updates the card even when the rest of the conversation is
+    one task.
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
   人群 / 干预或暴露 / 对照 / 结局 / 设计. When the user compares one treatment or exposure with
@@ -44,6 +50,8 @@ description: |
   changes and keep the rest.
 
   __NEVER_KEEP__
+
+  __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/projects"
 filename_template: "{{ project|lower }}.md"
 enabled: true

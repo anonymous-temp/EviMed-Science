@@ -1,6 +1,7 @@
-// Renders ../memory-templates/*.yaml from the sources beside this file: the one never-kept block (`@evimed/domain`'s
-// `MEMORY_NEVER_KEPT_TEXT`, which the legacy extraction states too) and the one language block (`_language.txt`) are
-// written into every type, so each has a single source and each type's rules read complete on their own (the
+// Renders ../memory-templates/*.yaml from the sources beside this file: the one never-kept block and the one decide block
+// (`@evimed/domain`'s `MEMORY_NEVER_KEPT_TEXT` and `MEMORY_DECIDE_TEXT`, which the legacy extraction states too) and the one
+// language block (`_language.txt`) are written into every type, so each has a single source and each type's rules read
+// complete on their own (the
 // extractor shows a type's description under its own "Memory type rules", and its fixed instruction says nothing about
 // what not to keep). The language block exists because the examples and section labels below are partly Chinese: left
 // alone, the model copied them into an English user's memories (2 of 3 live runs, 2026-10-13).
@@ -10,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MEMORY_NEVER_KEPT_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
+import { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
 
 const src = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(src, "..", "memory-templates");
@@ -20,14 +21,17 @@ export function renderMemoryTemplates() {
   const indented = (/** @type {string} */ text) => text.trimEnd().split("\n")
     .map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
   const block = indented(MEMORY_NEVER_KEPT_TEXT);
+  const decide = indented(MEMORY_DECIDE_TEXT);
   const language = indented(fs.readFileSync(path.join(src, "_language.txt"), "utf8"));
   /** @type {Record<string, string>} */
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {
     const text = fs.readFileSync(path.join(src, name), "utf8");
     if (!text.includes("__NEVER_KEEP__")) throw new Error(`${name} does not carry the never-kept block`);
+    if (!text.includes("__DECIDE__")) throw new Error(`${name} does not carry the decide block`);
     if (!text.includes("__LANGUAGE__")) throw new Error(`${name} does not carry the language block`);
-    rendered[name] = text.replace("__NEVER_KEEP__", block).replace("__LANGUAGE__", language);
+    // A function replacement: the blocks carry `$` characters of their own, which a string replacement would read as patterns.
+    rendered[name] = text.replace("__NEVER_KEEP__", () => block).replace("__DECIDE__", () => decide).replace("__LANGUAGE__", () => language);
   }
   return rendered;
 }
