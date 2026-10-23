@@ -255,11 +255,13 @@ export class OpenVikingStub {
       for (const update of operations.updates) this.files.set(update.uri, update.after);
       for (const removed of operations.deletes) { this.files.delete(removed.uri); this.tags.delete(removed.uri); }
       const diffUri = `${archive}/memory_diff.json`;
-      this.files.set(diffUri, JSON.stringify({ archive_uri: archive, extracted_at: new Date().toISOString(), operations,
-        summary: { total_adds: operations.adds.length, total_updates: operations.updates.length, total_deletes: operations.deletes.length } }));
+      const skipped = outcome.skipped ?? [];
+      this.files.set(diffUri, JSON.stringify({ archive_uri: archive, extracted_at: new Date().toISOString(), operations, skipped_operations: skipped,
+        summary: { total_adds: operations.adds.length, total_updates: operations.updates.length, total_deletes: operations.deletes.length, total_skipped: skipped.length } }));
       this.files.set(`${archive}/.done`, "");
       this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "completed", resource_id: id,
-        result: { session_id: id, archive_uri: archive, memories_extracted: { memory_write: operations.adds.length + operations.updates.length }, memory_diff_uri: diffUri }, error: null } });
+        result: { session_id: id, archive_uri: archive, memories_extracted: operations.adds.length + operations.updates.length ? { memory_write: operations.adds.length + operations.updates.length } : {},
+          memory_extraction: { skipped: skipped.length, skipped_operations: skipped }, effective_memory_types: [...STUB_MEMORY_TYPES], memory_diff_uri: diffUri }, error: null } });
     }
     return { session_id: id, status: "accepted", task_id: taskId, archive_uri: archive, archived: true };
   }

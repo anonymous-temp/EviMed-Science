@@ -33,6 +33,16 @@ export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
 ]);
 /** What the worker did with a commit. */
 export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan"]);
+/**
+ * What a settled commit's extraction came to (`nativeMemoryWorker.extractionFacts`): wrote something, wrote some and was refused
+ * some, was refused everything it proposed, or proposed nothing at all. The two zero-file outcomes are told apart on purpose: a
+ * model that proposed nothing is a template or a conversation, an engine that refused is a policy.
+ */
+export const NATIVE_EXTRACTION_OUTCOMES = Object.freeze(["wrote", "wrote_and_skipped", "only_skipped", "proposed_nothing"]);
+/** The engine's own reasons for skipping an operation it was proposed (`skipped_operations[].reason_code`); anything else is `other`. */
+export const NATIVE_SKIP_REASONS = Object.freeze([
+  "memory_type_filtered", "self_memory_disabled", "invalid_ranges", "ambiguous_target", "no_writable_target", "page_id_type_mismatch", "other",
+]);
 /** What the deterministic after-the-fact checks did, by why. */
 export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line"]);
 /** What the worker wrote besides revisions. */
@@ -54,6 +64,8 @@ const ledgerFailures = table(["commit_not_recorded"]);
 const turnCommits = table(NATIVE_TURN_COMMIT_OUTCOMES);
 const workerCommits = table(NATIVE_COMMIT_OUTCOMES);
 const workerOperations = table(["added", "updated", "deleted"]);
+const extractionOutcomes = table(NATIVE_EXTRACTION_OUTCOMES);
+const skippedOperations = table(NATIVE_SKIP_REASONS);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
@@ -87,6 +99,16 @@ export function recordNativeCommit(outcome) { bump(workerCommits, outcome); }
 export function recordNativeOperations({ added = 0, updated = 0, deleted = 0 }) {
   bump(workerOperations, "added", added); bump(workerOperations, "updated", updated); bump(workerOperations, "deleted", deleted);
 }
+/**
+ * What one settled commit's extraction came to, and the reasons the engine gave for what it skipped.
+ * @param {number} operations files the extraction added, updated and deleted
+ * @param {{ skipped?: number, skipReasons?: Record<string, number> }} extraction
+ */
+export function recordNativeExtraction(operations, { skipped = 0, skipReasons = {} } = {}) {
+  const skippedCount = Math.max(0, Math.trunc(Number(skipped)) || 0);
+  bump(extractionOutcomes, operations > 0 ? (skippedCount > 0 ? "wrote_and_skipped" : "wrote") : (skippedCount > 0 ? "only_skipped" : "proposed_nothing"));
+  for (const [reason, count] of Object.entries(skipReasons)) bump(skippedOperations, skippedOperations.has(reason) ? reason : "other", Number(count) || 0);
+}
 /** A memory the deterministic checks deleted or restored, by why. @param {string} reason */
 export function recordNativeCheck(reason) { bump(checkActions, reason); }
 /** @param {string} what */
@@ -96,7 +118,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -108,7 +130,7 @@ export function nativeMemoryCounters() {
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
-    workerOperations: plain(workerOperations), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
 
@@ -143,6 +165,10 @@ export function nativeMemoryMetricFamilies() {
       help: "What the native memory worker did with commits: ingested a diff, read an empty diff, found a failed extraction, replayed one, abandoned one after the replay cap, or found an archive only the scan could see." },
     { name: "open_science_native_memory_operations_total", type: "counter", series: series(workerOperations, "change"),
       help: "Memory operations read from ingested diffs: files added, updated and deleted by the engine's extraction." },
+    { name: "open_science_native_memory_commit_operations_total", type: "counter", series: series(extractionOutcomes, "outcome"),
+      help: "Settled native memory commits by what their extraction came to: wrote something, wrote some and was refused some by the engine, was refused everything it proposed, or proposed nothing. A commit that wrote no file is one of the last two: the model proposed nothing (the templates and the conversation), or the engine refused what it proposed (a policy)." },
+    { name: "open_science_native_memory_skipped_operations_total", type: "counter", series: series(skippedOperations, "reason"),
+      help: "Operations the engine skipped in settled native memory commits, by the engine's own reason code (memory_type_filtered: a type outside the account's allowlist; self_memory_disabled: learning paused; ambiguous_target, no_writable_target, invalid_ranges, page_id_type_mismatch: the proposal did not name a file it could write); any other code is other." },
     { name: "open_science_native_memory_checks_total", type: "counter", series: series(checkActions, "reason"),
       help: "Memories the deterministic after-the-fact checks deleted or restored: an identifier shape, platform-injected text or a platform identifier, or a line the person had removed coming back verbatim." },
     { name: "open_science_native_memory_writes_total", type: "counter", series: series(workerWrites, "what"),

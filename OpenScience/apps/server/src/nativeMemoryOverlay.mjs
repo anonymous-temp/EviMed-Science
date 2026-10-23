@@ -60,6 +60,7 @@ function publicCommit(row) {
     projectId: row.project_id ?? null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
     nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
+    extraction: row.extraction && typeof row.extraction === "object" && !Array.isArray(row.extraction) ? row.extraction : {},
     createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at),
   };
 }
@@ -182,11 +183,37 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
-  /** @param {string} userId @param {string} archiveUri @param {{ operations?: number }} [outcome] */
-  async completeCommit(userId, archiveUri, { operations = 0 } = {}) {
+  /**
+   * @param {string} userId @param {string} archiveUri
+   * @param {{ operations?: number, extraction?: Record<string, any> | null }} [outcome] `extraction`: what the engine said the
+   *   extraction did (`extractionFacts`), kept as it came; absent, the row keeps what it had
+   */
+  async completeCommit(userId, archiveUri, { operations = 0, extraction = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL, pending_text=NULL,
-      ingested_at=clock_timestamp(), updated_at=clock_timestamp() WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
-    [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0)]);
+      extraction=COALESCE($4::jsonb, extraction), ingested_at=clock_timestamp(), updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
+    [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0), extraction ? JSON.stringify(extraction) : null]);
+  }
+
+  /**
+   * What the extraction of an already settled commit said about itself, filled in after the fact (the operator's report
+   * reading an archive the worker settled before the ledger kept it). A row that has it is left alone.
+   * @param {string} userId @param {string} archiveUri @param {Record<string, any>} extraction @returns {Promise<boolean>} whether a row was filled
+   */
+  async setExtraction(userId, archiveUri, extraction) {
+    const result = await this.#query(`UPDATE evimed_memory.native_commits SET extraction=$3::jsonb, updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri=$2 AND state='completed' AND extraction='{}'::jsonb`, [owner(userId), String(archiveUri), JSON.stringify(extraction ?? {})]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * The commits of one account, newest first: what an operator reads to see what each one did.
+   * @param {string} userId @param {{ limit?: number, since?: Date | string | null }} [options]
+   */
+  async commitsOf(userId, { limit = 50, since = null } = {}) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND ($3::timestamptz IS NULL OR created_at >= $3)
+      ORDER BY created_at DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(500, Math.trunc(Number(limit)) || 50)), since ? new Date(since).toISOString() : null]);
+    return result.rows.map(publicCommit);
   }
 
   /** The extraction failed: a replay is owed at `nextAttemptAt`. @param {string} userId @param {string} archiveUri @param {{ error?: string, nextAttemptAt?: Date | null }} failure */

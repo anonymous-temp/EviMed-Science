@@ -6,7 +6,8 @@
  *
  *  - `native_accounts` — that the engine's admin routes know the account (settings and deletion answer 404 until they
  *    do), and when its session archives were last scanned.
- *  - `native_commits` — the ledger of every commit: which archive, which task, what became of it. Fed by the memory
+ *  - `native_commits` — the ledger of every commit: which archive, which task, what became of it, and what its extraction
+ *    said about itself (`extraction`: skipped operations with the engine's reason codes). Fed by the memory
  *    gateway (a commit it forwarded) and by the scan of `sessions/*\/history/archive_*` (an idle auto-commit never
  *    passes the gateway). A failed commit is never retried upstream, so its replay is counted and scheduled here.
  *  - `native_revisions` — what each commit and each edit changed, before and after, read from the archive's
@@ -68,6 +69,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   replayed_as text CHECK (replayed_as IS NULL OR char_length(replayed_as) <= 600),
   -- What the person asked the page to remember, shown as pending until the engine has written it, then cleared.
   pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000),
+  -- What the extraction did, read from the engine when the commit settled: skipped operations and why (the engine's own reason
+  -- codes), what it extracted per category, the memory types it was allowed. Counts and codes, never a memory's text.
+  extraction jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(extraction) = 'object'),
   created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   ingested_at timestamptz(3),
@@ -75,6 +79,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
+-- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
+-- model proposed nothing, or the engine refused what it proposed).
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS extraction jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(extraction) = 'object');
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);

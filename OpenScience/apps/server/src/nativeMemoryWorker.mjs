@@ -3,7 +3,7 @@ import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } fro
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import {
-  recordNativeCheck, recordNativeCommit, recordNativeOperations, recordNativePass, recordNativeWrite,
+  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeOperations, recordNativePass, recordNativeWrite,
 } from "./nativeMemoryMetrics.mjs";
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
@@ -18,6 +18,9 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
  *     pass it, so the account's session archives are scanned and an archive the ledger lacks is entered.
  *  3. **Ingestion.** A finished commit's `memory_diff.json` becomes revisions (before / after: the timeline, 「刚记住了」, the
  *     undo), the files' project tags (a pack restore loses tags, so the overlay keeps them too), and the sources a memory names.
+ *     What the extraction said about itself — the operations it skipped and the engine's reason for each, what it extracted, the
+ *     types it was allowed — goes on the ledger row and into the metrics (`extractionFacts`), read from the task when the diff is
+ *     empty: a commit that wrote no file was either a model that proposed nothing or an engine that refused what it proposed.
  *  4. **The deterministic checks after the fact.** A line the engine wrote that carries an identifier's shape (a phone, an ID
  *     or card number, an e-mail, a key), platform-injected text or a platform identifier, or that the person removed before
  *     and the engine wrote back verbatim (unless the person said it again themselves, word for word, in that conversation: their
@@ -72,6 +75,40 @@ export function cleanBody(body, rejected) {
   }
   const text = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return { text, reasons, hasStatements: memoryLines(kept.filter((line) => !isLabelLine(line)).join("\n")).some((line) => !/^#/.test(line)) };
+}
+
+const REASON_CODE = /^[a-z][a-z0-9_]{0,59}$/;
+
+/**
+ * What an extraction said about itself, from the two places the engine says it (both present on v0.5.0 and v0.5.1.1): the
+ * archive's `memory_diff.json` (`skipped_operations[].reason_code` and `summary.total_skipped`) and the commit's task result
+ * (`memories_extracted` per category, `memory_extraction.skipped_operations`, `effective_memory_types`). Counts and the
+ * engine's reason codes only: a skipped operation's own text is never kept. The diff is the record of the commit; the task's
+ * list is read only for a reason the diff does not give (a diff written with nothing in it still comes with its reasons).
+ * @param {any} diff the parsed `memory_diff.json` @param {any} [task] `OpenVikingSessions.task()`: `{ status, result }`, or null
+ * @returns {{ skipped: number, skipReasons: Record<string, number>, extracted: Record<string, number>, memoryTypes: string[], fromTask: boolean }}
+ */
+export function extractionFacts(diff, task = null) {
+  const list = (/** @type {any} */ value) => (Array.isArray(value) ? value : []);
+  const fromDiff = list(diff?.skipped_operations);
+  const result = task?.result && typeof task.result === "object" ? task.result : null;
+  const fromTask = list(result?.memory_extraction?.skipped_operations);
+  const named = fromDiff.length ? fromDiff : fromTask;
+  /** @type {Record<string, number>} */
+  const skipReasons = {};
+  for (const item of named) {
+    const code = typeof item?.reason_code === "string" && REASON_CODE.test(item.reason_code) ? item.reason_code : "unknown";
+    skipReasons[code] = (skipReasons[code] ?? 0) + 1;
+  }
+  const count = (/** @type {unknown} */ value) => Math.max(0, Math.trunc(Number(value)) || 0);
+  const skipped = Math.max(count(diff?.summary?.total_skipped), count(result?.memory_extraction?.skipped), named.length);
+  /** @type {Record<string, number>} */
+  const extracted = {};
+  for (const [category, amount] of Object.entries(result?.memories_extracted && typeof result.memories_extracted === "object" ? result.memories_extracted : {}).slice(0, 12)) {
+    if (REASON_CODE.test(category) && count(amount)) extracted[category] = count(amount);
+  }
+  const memoryTypes = list(result?.effective_memory_types).filter((/** @type {unknown} */ type) => typeof type === "string" && REASON_CODE.test(type)).slice(0, 16);
+  return { skipped, skipReasons, extracted, memoryTypes, fromTask: Boolean(result) };
 }
 
 export class NativeMemoryWorker {
@@ -228,8 +265,13 @@ export class NativeMemoryWorker {
       try { diff = JSON.parse(diffText); } catch { diff = null; }
       if (diff && typeof diff === "object") {
         const operations = await this.ingest(commit, diff);
-        await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations });
+        // A commit that wrote nothing is the one worth asking about: the engine's task result says what the extraction did and
+        // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
+        const task = operations === 0 && commit.taskId ? await this.sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
+        const extraction = extractionFacts(diff, task);
+        await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations, extraction });
         recordNativeCommit(operations ? "ingested" : "empty");
+        recordNativeExtraction(operations, extraction);
         return true;
       }
     }
