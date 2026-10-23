@@ -115,6 +115,37 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_error_and_source_pages_name_their_authoritative_continuation_offsets(self):
+        cases = [
+            ("errors", "page", "errorOffset", {"errorLimit": 2, "errorOffset": 0}),
+            ("diagnosis", "errorPage", "errorOffset", {"errorLimit": 2, "errorOffset": 0}),
+            ("sources", "answerPage", "answerOffset", {"sourceId": "source_one", "answerLimit": 2, "answerOffset": 0}),
+        ]
+        for what, page_key, offset_key, scope in cases:
+            with self.subTest(what=what):
+                scope = {"selectionRef": "gsel_one", **scope}
+                _Gateway.answers["read"] = (200, {"data": {page_key: {"more": True, "nextOffset": 2}, "items": ["first"]}})
+                first = self.server.call_tool("geo_read", {"what": what, "filter": scope})
+                self.assertTrue(any("filter.%s=2" % offset_key in action for action in first["next_actions"]))
+                self.assertFalse(any("filter.offset" in action for action in first["next_actions"]))
+                _Gateway.answers["read"] = (200, {"data": {page_key: {"more": False, "nextOffset": None}, "items": ["second"]}})
+                second = self.server.call_tool("geo_read", {"what": what, "filter": {**scope, offset_key: 2}})
+                self.assertEqual(second["data"]["items"], ["second"])
+                self.assertEqual(second["next_actions"], [])
+                self.assertEqual(_Gateway.seen[-1]["body"]["filter"][offset_key], 2)
+
+    def test_nullable_member_dimensions_are_validated_before_the_gateway_call(self):
+        _Gateway.answers["read"] = (200, {"data": {"items": [], "more": False}})
+        for value in [None, "P2"]:
+            result = self.server.call_tool("geo_read", {"what": "snapshots", "filter": {"member": {"metricId": "M-06", "scope": "project", "pool": value}}})
+            self.assertEqual(result["status"], "success")
+        requests = len(_Gateway.seen)
+        for value in [17, True, ["P2"], {"unexpected": True}]:
+            with self.subTest(value=value):
+                result = self.server.call_tool("geo_read", {"what": "snapshots", "filter": {"member": {"metricId": "M-06", "scope": "project", "pool": value}}})
+                self.assertEqual(result["status"], "error")
+                self.assertEqual(len(_Gateway.seen), requests, "invalid union types must not reach the gateway")
+
     def test_scoped_member_continuation_preserves_its_identity_and_supports_the_full_selection(self):
         schema = geo_platform.tool_definitions()[0]["inputSchema"]["properties"]["filter"]
         self.assertGreaterEqual(schema["properties"]["offset"]["maximum"], 20000)
