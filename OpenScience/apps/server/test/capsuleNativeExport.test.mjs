@@ -223,3 +223,30 @@ test("a correction lives under the preferences directory and is shared as a corr
   assert.equal(knowledge.entries.filter((entry) => entry.factKind === "preference").length, 1);
   assert.match(knowledge.card.summary, /1 条经验教训/);
 });
+
+test("the domain's share scopes and paths are exactly what the transfer service accepts and writes — the validator is not the looser of the two checks", async () => {
+  const { CAPSULE_SHARE_SCOPES, SHARE_SCOPE_ENTRIES } = await import("@evimed/domain");
+  const { capsuleTransferLocation, renderCapsuleTransferFiles } = await import("../src/capsuleTransferService.mjs");
+  assert.deepEqual([...CAPSULE_SHARE_SCOPES], ["workstyle", "+profile", "+knowledge"]);
+  assert.deepEqual(Object.keys(SHARE_SCOPE_ENTRIES), [...CAPSULE_SHARE_SCOPES]);
+  const { service } = fixture();
+  for (const scope of CAPSULE_SHARE_SCOPES) {
+    await service.exportPreview(userId, "own-capsule", { scopes: scope === "workstyle" ? ["workstyle"] : ["workstyle", scope] });
+  }
+  await assert.rejects(service.exportPreview(userId, "own-capsule", { scopes: ["workstyle", "+documents"] }), { code: "capsule_transfer_invalid" });
+  // Every file a share of each scope is made of is a path its scope declares.
+  const kindsOfScope = { workstyle: ["method_preference", "writing_style", "preference", "tooling"], "+profile": ["profile", "behavior", "expertise"],
+    "+knowledge": ["project_fact", "analysis", "decision", "stance", "tension", "correction", "follow_up"] };
+  /** @param {string} path @param {readonly string[]} allowed */
+  const within = (path, allowed) => allowed.some((one) => (one.endsWith("/") ? path.startsWith(one) : path === one));
+  for (const [scope, kinds] of Object.entries(kindsOfScope)) {
+    for (const kind of kinds) {
+      const place = capsuleTransferLocation(kind);
+      const entry = { id: "00000000-0000-4000-8000-000000000001", version: 1, factKind: kind, layer: place.layer, content: "x", sha256: "0".repeat(64), path: place.path ?? "methods/00000000-0000-4000-8000-000000000001/SKILL.md", origin: "explicit" };
+      for (const path of Object.keys(renderCapsuleTransferFiles("00000000-0000-4000-8000-000000000002", [entry]))) {
+        // Its own scope's paths, or the workstyle's (every share carries it, and with it the provenance file).
+        assert.ok(within(path, SHARE_SCOPE_ENTRIES[/** @type {keyof typeof SHARE_SCOPE_ENTRIES} */ (scope)]) || within(path, SHARE_SCOPE_ENTRIES.workstyle), `${scope} / ${kind}: ${path}`);
+      }
+    }
+  }
+});
