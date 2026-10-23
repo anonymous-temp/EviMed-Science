@@ -81,7 +81,7 @@ test("an added page is kept as its text with the address in front and its origin
   assert.equal(added.changed, true);
   assert.deepEqual(log.reads, [{ url: "https://www.nmpa.gov.cn/xxgk/notice.html", runtime: { userId: "user-one", projectId: "project-one" }, hasSignal: true }]);
   const [original, snapshot] = log.writes;
-  assert.match(original.rel, /^knowledge-base\/\.evimed-snapshots\/nmpa\.gov\.cn-xxgk-notice\.html-[0-9a-f]{8}\.html$/);
+  assert.match(original.rel, /^knowledge-base\/\.evimed-snapshots\/nmpa\.gov\.cn-xxgk-notice\.html-[0-9a-f]{8}-[0-9a-f]{16}\.html$/);
   assert.equal(original.register, false, "the original is kept and never becomes a source of its own");
   assert.match(snapshot.rel, /^knowledge-base\/links\/nmpa\.gov\.cn-xxgk-notice\.html-[0-9a-f]{8}\.md$/);
   assert.equal(snapshot.register, true);

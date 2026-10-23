@@ -565,11 +565,29 @@ test("a delete of something already gone is told from one that deleted, by the c
   assert.equal(await client.remove("usr_alice", "viking://x/a.md"), true, "an answer with no count is a delete that happened, as it always was");
 });
 
- test("write wait deadline belongs to HTTP transport, never a removed request-body timeout", async () => {
+test("write wait deadline belongs to HTTP transport, never a removed request-body timeout", async () => {
   const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: {} } }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   await client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 });
   const body = JSON.parse(fetchImpl.calls[0].options.body);
   assert.equal(body.wait, true);
   assert.equal(Object.hasOwn(body, "timeout"), false);
+});
+
+test("write HTTP deadline aborts the request without cancelling background work", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    await new Promise((resolve, reject) => options.signal.addEventListener("abort", () => {
+      reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    }, { once: true }));
+  };
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await assert.rejects(
+    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 0.01 }),
+    (error) => error.code === "memory_index_timeout",
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.signal.aborted, true);
+  assert.equal(new URL(calls[0].url).pathname, "/api/v1/content/write");
 });

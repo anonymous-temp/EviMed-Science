@@ -573,6 +573,42 @@ CREATE TRIGGER product_documents_memory_index_outbox
 AFTER INSERT OR UPDATE OF payload,revision,deleted_at ON evimed_product.documents
 FOR EACH ROW WHEN (NEW.kind IN ('capsule','fact')) EXECUTE FUNCTION evimed_product.enqueue_memory_index_job();
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-05-memory-index-outbox-v1') ON CONFLICT DO NOTHING;
+-- Business revisions and their replay jobs commit together, including soft deletion and restoration.
+CREATE OR REPLACE FUNCTION evimed_product.enqueue_knowledge_lifecycle_job() RETURNS trigger
+LANGUAGE plpgsql AS $function$
+DECLARE row_data record;
+DECLARE account_generation text;
+DECLARE scope text;
+DECLARE source_id text;
+DECLARE key text;
+BEGIN
+  IF TG_OP='DELETE' THEN row_data := OLD; ELSE row_data := NEW; END IF;
+  IF row_data.kind <> 'source' AND NOT (row_data.kind='preferences' AND row_data.payload->>'recordType'='library-item') THEN RETURN NULL; END IF;
+  scope := CASE WHEN row_data.kind='source' THEN 'source' ELSE 'library' END;
+  IF scope='source' THEN
+    source_id := row_data.id;
+    IF row_data.payload->'connector'->>'type'='wiki' OR coalesce(row_data.payload->>'logicalPath',row_data.payload->'paths'->>0,'') ~ '^knowledge-base/(wiki|kg)/' THEN RETURN NULL; END IF;
+  ELSE source_id := row_data.payload->>'sourceId'; END IF;
+  IF source_id IS NULL THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND NEW.revision=OLD.revision AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND scope='source' AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
+    AND (NEW.payload - ARRAY['progress','usage','lastError']) = (OLD.payload - ARRAY['progress','usage','lastError']) THEN RETURN NULL; END IF;
+  SELECT created_at::text INTO account_generation FROM evimed_control.users WHERE id=row_data.user_id;
+  IF account_generation IS NULL THEN RETURN NULL; END IF;
+  key := 'knowledge-lifecycle:' || md5(row_data.user_id || chr(31) || account_generation || chr(31) || row_data.id || chr(31) || row_data.revision::text || chr(31) || TG_OP);
+  INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key,project_id,max_attempts)
+  VALUES ('knowledge-lifecycle-job:' || md5(key),row_data.user_id,'ov-resource-sync',jsonb_build_object(
+    'action','lifecycle','scope',scope,'sourceId',source_id,'documentId',row_data.id,
+    'projectId',row_data.project_id,'mutationRevision',row_data.revision,'mutationId',key,
+    'accountCreatedAt',account_generation,'generation',row_data.payload->'generation','deleted',TG_OP='DELETE' OR row_data.deleted_at IS NOT NULL
+  ),key,NULL,10) ON CONFLICT(user_id,idempotency_key) DO NOTHING;
+  RETURN NULL;
+END $function$;
+DROP TRIGGER IF EXISTS product_documents_knowledge_lifecycle_outbox ON evimed_product.documents;
+CREATE TRIGGER product_documents_knowledge_lifecycle_outbox
+AFTER INSERT OR UPDATE OF payload,revision,deleted_at OR DELETE ON evimed_product.documents
+FOR EACH ROW EXECUTE FUNCTION evimed_product.enqueue_knowledge_lifecycle_job();
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-23-knowledge-lifecycle-outbox-v1') ON CONFLICT DO NOTHING;
 -- A learned method is the account's, not a project's (2026-09-27, audit L-G1).
 -- Filed under the project it was learnt in, it went with that project through
 -- documents(user_id,project_id) -> projects ON DELETE CASCADE, revisions and

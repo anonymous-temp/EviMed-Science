@@ -14,3 +14,10 @@ test('failed, empty and unready retrieval cannot qualify as a genuine answerable
  assert.equal(retrievalProof({...c,unanswerable:true},{...e,retrieval:[{name:'kb_search',status:'completed',output:{hits:[]}}]}),true);
  assert.throws(()=>retrievalProof({...c,unanswerable:true},{...e,knowledgeInventory:{ready:false,sources:0},retrieval:[{name:'kb_search',status:'completed',output:{hits:[]}}]}),/inventory/);
 });
+test('memory and combined contexts need actual native recall, not a knowledge tool renamed by metadata',()=>{
+ const memory={name:'mcp__openviking__search',status:'completed',output:{memories:[{content:'Preserved memory passage'}]}};
+ assert.throws(()=>retrievalProof({...c,evaluation:{substrate:'memory'}},e),/native memory/);
+ assert.equal(retrievalProof({...c,evaluation:{substrate:'memory'}},{...e,retrieval:[memory]}),true);
+ assert.equal(retrievalProof({...c,evaluation:{substrate:'combined'}},{...e,retrieval:[...e.retrieval,memory]}),true);
+ assert.throws(()=>retrievalProof({...c,evaluation:{substrate:'combined'}},{...e,retrieval:[memory]}),/retrieval/);
+});

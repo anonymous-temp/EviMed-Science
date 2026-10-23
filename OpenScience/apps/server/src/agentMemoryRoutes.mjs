@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
+import { NATIVE_RECORD_ID } from "./nativeMemoryStore.mjs";
+import { memoryEngineStore } from "./memoryEngineAdapter.mjs";
 import { parseAsOf } from "./memoryValidity.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
@@ -96,17 +99,21 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, feedbackEvents?: any, observations?: any,
+ *   memoryIntelligence: any, nativeMemory?: any, memorySubstrate?: any, learning?: any, feedbackEvents?: any, observations?: any,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createAgentMemoryRoutes({
-  config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null,
+  config, apiKeys, store, researchMemory, capsules, memoryIntelligence, nativeMemory = null, memorySubstrate = null, learning = null,
   feedbackEvents = null, observations = null, deleteSubject = null, audit = null,
 }) {
   const enabled = config.agentMemoryApiEnabled === true;
+  const nativeFor = async (/** @type {string} */ userId) => {
+    const selected = await memoryEngineStore(researchMemory, nativeMemory, userId);
+    return selected.engine === "native" ? selected.store : null;
+  };
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
 
@@ -298,7 +305,8 @@ export function createAgentMemoryRoutes({
         .filter((value) => allowed.has(value));
       const user = await accountFor({ create: false });
       const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
-      const records = !user ? [] : await researchMemory.listRecords(user.id, {
+      const recordStore = user ? (await nativeFor(user.id)) ?? researchMemory : researchMemory;
+      const recordFilters = {
         scopes: filters("scope", allowedScopes),
         kinds: filters("kind", allowedKinds),
         // Active only unless asked otherwise: a pending record is a proposal
@@ -308,7 +316,11 @@ export function createAgentMemoryRoutes({
         scopeId,
         query: url.searchParams.get("query") ?? "",
         pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
-      });
+      };
+      const records = !user ? [] : await recordStore.listRecords(user.id, recordFilters);
+      if (user && recordStore !== researchMemory && recordFilters.statuses.includes("pending")) {
+        records.push(...await researchMemory.listRecords(user.id, { ...recordFilters, statuses: ["pending"] }));
+      }
       sendJson(res, 200, { data: records });
       return true;
     }
@@ -316,7 +328,6 @@ export function createAgentMemoryRoutes({
     if (action === "episodes" && method === "POST") {
       requireScope("memory.write");
       const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.episodes);
-      if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
       if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
         throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");
       }
@@ -343,6 +354,16 @@ export function createAgentMemoryRoutes({
       const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
       if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
       const project = await store.requireProject(user, projectId);
+      if (await nativeFor(user.id)) {
+        const entry = await capsules.note(user.id, projectId, {
+          factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
+          origin: "inferred", review: true, externalSession: { sessionId, messages },
+        });
+        sendJson(res, 202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
+          state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
+        return true;
+      }
+      if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
       const run = {
         id: `ext_${identity.keyId}_${Date.now().toString(36)}`,
         sessionId,
@@ -373,7 +394,7 @@ export function createAgentMemoryRoutes({
       requireScope("memory.read");
       if (!researchMemory?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       const user = await accountFor({ create: false });
-      sendJson(res, 200, { data: await memoryBoard({ researchMemory, learning, capsules, observations }, user) });
+      sendJson(res, 200, { data: await memoryBoard({ researchMemory, nativeMemory, learning, capsules, observations, projectId: identity.projectId }, user) });
       return true;
     }
 
@@ -395,6 +416,8 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const input = fields(body, ["learningPaused", "recallPaused"]);
       const user = /** @type {any} */ (await accountFor({ create: true }));
+      const native = await nativeFor(user.id);
+      if (native && typeof input.learningPaused === "boolean") await native.setLearning(user.id, !input.learningPaused);
       const settings = await researchMemory.updateSettings(user.id, input);
       await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
       sendJson(res, 200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
@@ -407,7 +430,12 @@ export function createAgentMemoryRoutes({
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
       const act = record.act || "edit";
-      const outcome = await recordAction({ researchMemory, feedbackEvents }, user, record.id, act, body);
+      if (identity.projectId) {
+        const source = act === "confirm" || !NATIVE_RECORD_ID.test(record.id) ? researchMemory : (await nativeFor(user.id)) ?? researchMemory;
+        const existing = await source.getRecord(user.id, record.id);
+        if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+      }
+      const outcome = await recordAction({ researchMemory, nativeMemory, feedbackEvents }, user, record.id, act, body);
       await trail(outcome.event, user, { target: record.id });
       sendJson(res, 200, { data: outcome.record });
       return true;
@@ -436,9 +464,13 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
-      const changed = await noteAction({ capsules }, user, note.id, note.act, body);
+      if (identity.projectId) {
+        const existing = await capsules?.documents?.get(user.id, "fact", note.id);
+        if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This candidate belongs to a different project.");
+      }
+      const changed = await noteAction({ capsules, researchMemory, nativeMemory }, user, note.id, note.act, body);
       await trail(`note.${note.act}`, user, { target: note.id });
-      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
+      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
     }
 
@@ -457,8 +489,12 @@ export function createAgentMemoryRoutes({
 
     if (action === "" && method === "GET") {
       // What this key can do, from the key. An integrator's first call.
+      const user = await accountFor({ create: false });
+      const engine = user && typeof researchMemory?.memoryEngine === "function" ? await researchMemory.memoryEngine(user.id) : "legacy";
       sendJson(res, 200, { data: {
         version: 1,
+        engine,
+        capabilities: { historicalRecall: engine !== "native", nativeAdmission: engine === "native", nativeAvailable: engine === "native" ? nativeMemory?.configured === true : null },
         scopes: identity.scopes,
         projectId: identity.projectId,
         // An integration key, and whether this request named a subject.

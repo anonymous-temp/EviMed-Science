@@ -683,7 +683,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       )}
       {deleting && <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。"
         confirmLabel="删除" onCancel={() => setDeleting(null)}
-        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); })} />}
+        onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); setSelected((previous) => { const next = new Map(previous); next.delete(deleting.id); return next; }); })} />}
     </div>
   );
 }

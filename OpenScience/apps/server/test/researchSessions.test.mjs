@@ -305,6 +305,11 @@ test("the source-scope route refuses what it cannot check, and clears with an em
       method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": "default" }, body: JSON.stringify(body),
     });
     assert.equal((await put({ sourceIds: [] })).status, 200);
+    const selected = await put({ sourceIds: [], sourceScopeMode: "selected" });
+    assert.equal(selected.status, 200);
+    assert.deepEqual((await selected.json()).data.sourceScope, []);
+    const selectedGet = await fetch(`${base}/api/research-sessions/ses_route/source-scope`, { headers: { "X-Open-Science-Project": "default" } });
+    assert.equal((await selectedGet.json()).data.sourceScopeMode, "selected");
     const cleared = (await (await put({ sourceIds: null })).json()).data;
     assert.deepEqual([cleared.sessionId, cleared.mode, cleared.sourceScope], ["ses_route", "open-domain", null]);
     // Only one field, and ids of the shape the knowledge base's own are.

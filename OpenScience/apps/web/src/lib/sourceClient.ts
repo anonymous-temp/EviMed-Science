@@ -542,6 +542,7 @@ export interface KnowledgeTree {
 export type KnowledgePageLink =
   | { kind: "page"; text: string; path: string; sourceId: string | null; title: string | null; exists: boolean; index: number; end: number }
   | { kind: "source"; text: string; sourceId: string; title: string | null; available: boolean; quote: string | null;
+      checkedAt?: string | null; sourceVersion?: number | null;
       status: "present" | "absent" | "no_quotation" | "source_missing"; inSourceList: boolean; index: number; end: number }
   | { kind: "external"; text: string; href: string; index: number; end: number };
 export interface KnowledgePage {
@@ -568,7 +569,15 @@ export interface KnowledgePage {
   basis: "compiler" | "user";
   stale: Array<{ sourceId: string; reason: KnowledgeStaleReason }>;
 }
-export interface KnowledgeGraphSource { sourceId: string; title: string | null }
+export interface KnowledgeGraphSource {
+  sourceId: string;
+  title: string | null;
+  sourceVersion?: number | null;
+  available?: boolean;
+  checkedAt?: string | null;
+  quote?: string | null;
+  locator?: { page?: number | null; sheet?: string | null; cell?: string | null; start?: number | null; end?: number | null } | null;
+}
 /** One mark of either graph. A wiki node has a `type`, a graph node an `entityType` (open, snake_case upstream). */
 export interface KnowledgeGraphNode {
   id: string;

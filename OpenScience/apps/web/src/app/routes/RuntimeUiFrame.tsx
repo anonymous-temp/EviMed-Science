@@ -868,14 +868,15 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       } else if (message.type === "evimed.runtime-ui.source-scope"
         && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)
         && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
+        && (message.sourceScopeMode === undefined || message.sourceScopeMode === "project" || message.sourceScopeMode === "selected")
         && (message.sourceIds === undefined || (Array.isArray(message.sourceIds) && message.sourceIds.length <= 50
         && message.sourceIds.every((id: unknown) => typeof id === "string" && /^src_[a-f0-9]{32}$/.test(id))))) {
         incoming.current = message.seq;
         const requestId = message.requestId;
         const operation = message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
-          : putWebSessionSourceScope(message.sessionId, message.sourceIds, projectId);
+          : putWebSessionSourceScope(message.sessionId, message.sourceIds, projectId, message.sourceScopeMode);
         void operation.then(
-          value => postToFrame("source-scope-result", { requestId, ok: true, sessionId: message.sessionId, sourceIds: value.sourceScope ?? [], originReference: value.originReference ?? null }),
+          value => postToFrame("source-scope-result", { requestId, ok: true, sessionId: message.sessionId, sourceIds: value.sourceScope ?? [], sourceScopeMode: Array.isArray(value.sourceScope) ? "selected" : "project", originReference: value.originReference ?? null }),
           () => postToFrame("source-scope-result", { requestId, ok: false }),
         );
       } else if (message.type === "evimed.runtime-ui.kb-query"

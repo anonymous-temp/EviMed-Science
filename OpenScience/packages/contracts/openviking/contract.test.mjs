@@ -208,7 +208,10 @@ test("a derived record costs an embedding and no model call, with a language mod
   await withServer({ "/api/v1/content/write": { body: written } }, async ({ port, seen }) => {
     await client(port).write(RECORDED_USER, written.result.uri, "偏好 / 报告呈现", { wait: true, timeoutSeconds: 20 });
     const recorded = provenance.recordedExchanges.find((exchange) => exchange.file === "content-write.json");
-    assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).sort());
+    // Preserve the original recording: its optional wait timeout was valid on
+    // the baseline, but newer engines remove it. Only the HTTP transport owns it now.
+    assert.deepEqual(Object.keys(seen[0].body).sort(), Object.keys(recorded.requestBody).filter((key) => key !== "timeout").sort());
+    assert.equal(Object.hasOwn(seen[0].body, "timeout"), false);
     assert.equal(seen[0].body.mode, "replace");
   });
 });

@@ -282,6 +282,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
       return { requestId: data.requestId, ok: data.ok === true, sessionId: validId(data.sessionId) ? data.sessionId : null,
         originReference: data.originReference?.kind === 'frontier-event' && /^[a-z0-9]{12,32}$/.test(data.originReference.id) && typeof data.originReference.title === 'string' ? { kind: 'frontier-event', id: data.originReference.id, title: data.originReference.title.slice(0, 300) } : null,
+        sourceScopeMode: data.sourceScopeMode === 'selected' ? 'selected' : 'project',
         sourceIds: (Array.isArray(data.sourceIds) ? data.sourceIds : []).filter((/** @type {unknown} */ id) => typeof id === 'string' && /^src_[a-f0-9]{32}$/.test(id)).slice(0, 50) };
     },
     /** @param {any} data */
@@ -580,10 +581,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     },
     /** @param {any} fields */
     'source-scope'(fields) {
+      if (fields.sourceScopeMode !== undefined && fields.sourceScopeMode !== 'project' && fields.sourceScopeMode !== 'selected') return null;
       if (!validId(fields.sessionId) || typeof fields.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(fields.requestId)
         || (fields.sourceIds !== undefined && (!Array.isArray(fields.sourceIds) || fields.sourceIds.length > 50
         || fields.sourceIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !/^src_[a-f0-9]{32}$/.test(id))))) return null;
       return { requestId: fields.requestId, sessionId: fields.sessionId,
+        ...(fields.sourceScopeMode === 'selected' || fields.sourceScopeMode === 'project' ? { sourceScopeMode: fields.sourceScopeMode } : {}),
         ...(fields.sourceIds === undefined ? {} : { sourceIds: [...new Set(fields.sourceIds)] }) };
     },
     /** @param {any} fields */

@@ -101,7 +101,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             since: { type: "string", format: "date-time" },
             asOf: {
               type: "string",
-              description: "The time the question is about, an ISO date (`2025-06-30`, read at the end of that day) or instant; now when omitted. Applies to the account's records: the version that held then comes back, or the earliest version labelled `not_yet_valid` when nothing was recorded that early. A capsule fact has no interval of its own and is returned as it is.",
+              description: "The time the question is about, an ISO date (`2025-06-30`, read at the end of that day) or instant; now when omitted. Applies to the account's records: the version that held then comes back, or the earliest version labelled `not_yet_valid` when nothing was recorded that early. Native accounts return `400 memory_as_of_unsupported` for historical personal-memory recall; they never return current memory labelled as historical. A capsule fact has no interval of its own and is returned as it is.",
             },
             scope: {
               type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all",
@@ -374,7 +374,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           security: [{ agentApiKey: ["memory.write"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/EpisodeRequest" }),
           responses: {
-            202: { description: "Extraction ran. Every record it wrote is `pending`, so `activated` is zero on this path by construction; `pending` counts them and `rejected` counts what the extractor or the hold refused." },
+            202: { description: "Legacy: extraction ran and every resulting record remains pending. Native: the transcript is staged as an existing candidate note, with extracted=0, activated=0, state=pending_confirmation, candidateId and confirm.path pointing to POST /notes/{id}/confirm. No extracting session is opened before confirmation." },
             400: errorResponse("Malformed request."),
             ...common,
           },
@@ -426,7 +426,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/records/{id}/confirm": {
         post: {
           summary: "Confirm a proposal",
-          description: "A record waiting for its owner (`pending`) is put in force as the person's own statement.",
+          description: "Legacy: a pending record is put in force. Native: the candidate revision is admitted once to the native engine; the response carries an admission receipt and does not claim extraction completed.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [recordId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
@@ -503,11 +503,11 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/notes/{id}/confirm": {
         post: {
           summary: "Confirm a proposed note",
-          description: "A note an outside agent proposed (`POST /note`) is put in force.",
+          description: "Legacy: a proposed note is put in force. Native: this existing route confirms notes and staged external-session batches. It returns an idempotent admission receipt keyed by candidate ID and revision; states are queued, submitting, pending, completed, failed, uncertain, suspended or cancelled. Full external transcripts remain candidate evidence; admission uses only original user statements after the existing captured-message privacy filter. No admissible user content returns state=skipped, reason=no_user_content and makes no extracting-session write. Every retry rechecks current engine, project policy and candidate revision/status. Only completed means native extraction settled. recordIds may contain multiple native records; taskId and archiveUri are present when known. Retry the same confirmation to read or recover its receipt; uncertain submissions are inspected before any retry and never blindly appended twice.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [noteId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
-          responses: { 200: { description: "The note, in force." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
+          responses: { 200: { description: "Legacy note in force, or native candidate plus its truthful admission receipt." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
         },
       },
       "/notes/{id}/reject": {

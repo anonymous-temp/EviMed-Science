@@ -1744,10 +1744,11 @@ export async function putWebResearchSession(
 }
 
 /** Persist the native composer's document selection before it submits its message. */
-export async function putWebSessionSourceScope(sessionId: string, sourceIds: string[], projectId: string): Promise<WebResearchSession> {
+export async function putWebSessionSourceScope(sessionId: string, sourceIds: string[], projectId: string, sourceScopeMode?: "project" | "selected"): Promise<WebResearchSession> {
+  if (sourceScopeMode !== undefined && sourceScopeMode !== "project" && sourceScopeMode !== "selected") throw new TypeError("Invalid source scope mode");
   const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/source-scope`), {
     method: "PUT", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
-    body: JSON.stringify({ sourceIds }),
+    body: JSON.stringify({ sourceIds, ...(sourceScopeMode === undefined ? {} : { sourceScopeMode }) }),
   });
   return parseApiResponse<WebResearchSession>(res);
 }

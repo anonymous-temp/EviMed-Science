@@ -181,6 +181,22 @@ services with `compose up --no-build --pull never`. The host preflight keeps a
 10 GiB default floor and refuses overrides below 5 GiB. Build/transfer success
 alone is not deployment or OPS03 acceptance.
 
+## Knowledge and memory consistency operations (2026-10-23)
+
+Knowledge resources and native memories use the same OpenViking service, with different authority and namespaces. The deployment has one upstream account; EviMed users and project subscopes remain opaque mapped identities. PostgreSQL owns source eligibility, versions, personal-library membership, capsule activation and the native-memory overlay. Native memory text remains engine-owned. A personal library shares only within its owning EviMed account.
+
+Source registration publishes immutable version paths before advancing the ledger. The existing source-sync job ledger also carries revision-bound source/library lifecycle work. A remote runtime replica is acknowledged only after its current runtime identity and content digest are verified. Deferred, failed and uncertain work remain observable and retryable; a stale generation cannot make itself current. Do not delete immutable originals to repair an index.
+
+The operator metrics distinguish `source_sync`, `wiki_compile`, `capsule_index`, `native_extraction` and `native_admission` through `open_science_knowledge_queue_*`: observation availability, retained item states, unresolved age, attempts beyond the first, and last successful completion. A missing/unreadable ledger is unknown, not a healthy zero. Counts contain no account/source identifiers. These durable gauges complement the existing process counters and platform-purpose cost ledger; upstream calls without trustworthy tenant attribution remain platform costs. Alert thresholds for shared-engine latency must come from the controlled load run, not an invented SLA.
+
+Before publication migration, run `scripts/ops/source-publication-inventory.mjs` with the configured database and an optional protected roots manifest. It is read-only and reports merged-note ambiguity, conflicting families and original-byte hash mismatches. Preserve its report privately. A hash mismatch cannot be repaired by silently overwriting the only original; restore verified historical bytes when available and retain unresolved evidence otherwise.
+
+An empty explicitly selected-source scope returns no knowledge. Clearing that restriction uses `sourceScopeMode: "project"`; `"selected"` with an empty list remains empty. Source revocation immediately removes retrieval eligibility even if asynchronous engine deletion is delayed. Historical chat text and previously exported files are not remotely erased.
+
+Knowledge-page edits retain the unsaved draft and its original citation mapping when recompilation creates a new source version. The reader offers an explicit comparison before another save. Current quotation labels include verification time and source version; reparse changes invalidate the cached check. Missing locators remain unknown.
+
+Native external episodes stay candidate notes until an existing confirmation route is called. Durable admission preserves the candidate revision, native session/task and resulting record IDs; ambiguous append/commit outcomes are inspected before retry. Use-memory and learn-memory remain separate controls. A snapshot rechecks native file hashes before capsule publication; share revocation prevents future imports, not erasure of recipient copies already imported.
+
 ## Full rebuild on the isolated CI runner
 
 For a dependency upgrade, push the reviewed candidate to a `codex/release-*`

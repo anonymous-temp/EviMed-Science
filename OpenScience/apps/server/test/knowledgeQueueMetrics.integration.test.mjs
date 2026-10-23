@@ -10,7 +10,7 @@ test('durable knowledge queue metrics distinguish queued, retrying and failed wo
     const jobs = ctx.app.sourceService.jobs;
     await ctx.app.sourceSyncWorker?.close();
     const pending = await jobs.enqueue(ctx.user.id, 'ov-resource-sync', { sourceId: 'fixture' }, { idempotencyKey: 'queue-metric', maxAttempts: 5 });
-    await db.query("UPDATE evimed_product.jobs SET created_at=clock_timestamp()-interval '2 minutes',attempts=2,error=$2::jsonb WHERE id=$1", [pending.id, JSON.stringify({ code: 'source_runtime_replica_pending' })]);
+    await db.query("UPDATE evimed_product.jobs SET created_at=clock_timestamp()-interval '2 minutes',attempts=3,error=$2::jsonb WHERE id=$1", [pending.id, JSON.stringify({ code: 'source_runtime_replica_pending' })]);
     const families = await knowledgeQueueMetricFamilies(db);
     const metric = name => families.find(item => item.name === name);
     assert.equal(metric('open_science_knowledge_queue_observed').series[0].value, 1);

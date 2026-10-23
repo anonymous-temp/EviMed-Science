@@ -1,0 +1,97 @@
+// Evaluation-only aggregate budget. Uncertain calls keep their full reservation; no budget is silently released.
+import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+export const REQUIRED_PROVIDER_SCOPES=Object.freeze(['baseline','candidate','openviking']);
+export class SharedBudget {
+  constructor({capCny=50,models,ledgerFile=null,id=randomBytes(12).toString('hex')}) {
+    if(!(capCny>0&&capCny<=50)||!models||!Object.keys(models).length)throw new Error('Invalid aggregate budget configuration');
+    for(const price of Object.values(models))if(!Number.isFinite(price.input)||price.input<0||!Number.isFinite(price.output)||price.output<0||!Number.isSafeInteger(price.maxOutput)||price.maxOutput<0)throw new Error('Invalid finite model pricing/output bound');
+    this.id=id;this.cap=Math.floor(capCny*1e6);this.models=models;this.pending=new Map();this.committed=0;this.ledgerFile=ledgerFile;this.halted=false;
+    if(ledgerFile&&fs.existsSync(ledgerFile)&&fs.statSync(ledgerFile).size)throw new Error('Refuse to reset an existing budget ledger; restart requires explicit recovery');
+    this.record({type:'opened',capMicroCny:this.cap});
+  }
+  record(row){if(this.ledgerFile)fs.appendFileSync(this.ledgerFile,JSON.stringify({at:new Date().toISOString(),budgetId:this.id,...row})+'\n',{mode:0o600});}
+  reserve({scope,model,inputTokens,maxOutputTokens=0}) {
+    const price=Object.hasOwn(this.models,model)?this.models[model]:null;
+    if(!price)throw new Error('Unpriced model refused');
+    if(!Number.isSafeInteger(inputTokens)||inputTokens<0||!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<0||maxOutputTokens>price.maxOutput)throw new Error('Invalid output/input token budget');
+    if(this.halted)throw new Error('Aggregate budget halted after uncertain accounting');
+    const amount=Math.ceil(inputTokens*price.input+maxOutputTokens*price.output);
+    if(this.committed+[...this.pending.values()].reduce((s,r)=>s+r.amount,0)+amount>this.cap)throw new Error('Aggregate budget exhausted');
+    const id=randomBytes(12).toString('hex');const row={scope,model,inputTokens,maxOutputTokens,amount};
+    this.record({type:'reserved',id,...row});this.pending.set(id,row);return id;
+  }
+  settle(id,{inputTokens,outputTokens}) {
+    const r=this.pending.get(id);if(!r)throw new Error('Unknown or already settled reservation');
+    if(!Number.isSafeInteger(inputTokens)||inputTokens<0||inputTokens>r.inputTokens||!Number.isSafeInteger(outputTokens)||outputTokens<0||outputTokens>r.maxOutputTokens){this.halted=true;this.record({type:'halted',id});throw new Error('Usage exceeds reserved token bound; budget halted');}
+    const p=this.models[r.model],amount=Math.ceil(inputTokens*p.input+outputTokens*p.output);
+    this.record({type:'settled',id,inputTokens,outputTokens,amount});this.pending.delete(id);this.committed+=amount;
+  }
+  status(){return {id:this.id,capCny:this.cap/1e6,committedCny:this.committed/1e6,reservedCny:[...this.pending.values()].reduce((s,r)=>s+r.amount,0)/1e6,halted:this.halted,pending:this.pending.size};}
+}
+export function verifyNativeConfiguration(config) {
+  if(!config.nativeConfigFile||!Number.isSafeInteger(config.nativeProcessId))throw new Error('Native OpenViking live config/process wiring missing');
+  const command=spawnSync('ps',['-p',String(config.nativeProcessId),'-o','command='],{encoding:'utf8'});
+  if(command.status!==0||!command.stdout.includes(config.nativeConfigFile)||!/openviking\s+(serve|server)|python.*openviking/i.test(command.stdout))throw new Error('Native config is not bound to the running engine process');
+  const native=JSON.parse(fs.readFileSync(config.nativeConfigFile,'utf8'));
+  const origin=new URL(config.coordinatorUrl).origin;
+  const token=fs.readFileSync(config.tokenFile,'utf8').trim();
+  const dense=native.embedding?.dense;
+  if(!dense?.api_base||new URL(dense.api_base).origin!==origin||!dense.api_base.includes('/scope/openviking/')||dense.api_key!==token)throw new Error('Native embedding provider bypasses the shared coordinator');
+  if(!native.vlm?.api_base||!native.bot?.agents?.api_base)throw new Error('Native VLM/compiler model wiring incomplete');
+  const allowed=new Set([origin,...(config.instrumentedGatewayOrigins??[])]);
+  for(const entry of [native.vlm,native.bot?.agents].filter(Boolean))if(!entry.api_base||!allowed.has(new URL(entry.api_base).origin))throw new Error('Native model provider bypasses instrumented gateway');
+  for(const origin of allowed){const hostname=new URL(origin).hostname;if(!['127.0.0.1','localhost','::1'].includes(hostname))throw new Error('Uninstrumented remote native gateway refused');}
+  return true;
+}
+export function processStartedAt(pid) {
+  if(!Number.isSafeInteger(pid)||pid<=0)throw new Error('Invalid instrumented process identity');
+  const result=spawnSync('ps',['-p',String(pid),'-o','lstart='],{encoding:'utf8',env:{...process.env,TZ:'UTC'}});
+  const start=result.stdout?.trim();
+  if(result.status!==0||!start)throw new Error('Instrumented process is not alive');
+  return start;
+}
+export function loopbackListenerOwners(endpoint) {
+  const port=endpoint.port||(endpoint.protocol==='https:'?'443':'80');
+  const result=spawnSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN','-t'],{encoding:'utf8'});
+  if(result.status!==0)return [];
+  return result.stdout.trim().split(/\s+/).map(Number).filter(Number.isSafeInteger);
+}
+export async function verifyBoundCollector(base,scope,config,{liveVerifier=verifyLiveBudgetWiring,listenerOwners=loopbackListenerOwners}={}) {
+  const endpoint=new URL(base);
+  if(!['http:','https:'].includes(endpoint.protocol)||!['127.0.0.1','localhost','::1','[::1]'].includes(endpoint.hostname)||endpoint.username||endpoint.password||endpoint.pathname!=='/'||endpoint.search||endpoint.hash)throw new Error('Collector must be an unambiguous loopback base URL');
+  if(!['baseline','candidate'].includes(scope))throw new Error('Collector must bind an admitted arm');
+  const status=await liveVerifier(config);
+  const proof=status.wiring?.[scope];
+  if(!proof||proof.budgetId!==status.id||!listenerOwners(endpoint).includes(proof.processId))throw new Error(`Collector listener is not the instrumented ${scope} process on the shared coordinator`);
+  return {...status,binding:{scope,base:endpoint.origin,processId:proof.processId,budgetId:status.id,processStart:proof.processStart}};
+}
+export async function verifyLiveBudgetWiring(config,{fetchImpl=fetch,nativeVerifier=verifyNativeConfiguration}={}) {
+  if(!config?.coordinatorUrl||!config?.tokenFile||!config?.sharedBudgetId)throw new Error('Live shared budget wiring missing');
+  const u=new URL(config.coordinatorUrl);if(!['127.0.0.1','localhost','::1'].includes(u.hostname))throw new Error('Budget wiring coordinator must be owned loopback');
+  nativeVerifier(config);
+  const token=fs.readFileSync(config.tokenFile,'utf8').trim();
+  const nonce=randomBytes(16).toString('hex');
+  const r=await fetchImpl(`${u.origin}/__eval/status?nonce=${nonce}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(5000)});
+  if(!r.ok)throw new Error('Live budget accounting unavailable');
+  const status=await r.json();
+  if(status.nonce!==nonce||status.id!==config.sharedBudgetId||status.halted||!(status.capCny>0&&status.capCny<=50)||!Number.isFinite(status.committedCny)||!Number.isFinite(status.reservedCny))throw new Error('Live aggregate budget accounting identity mismatch');
+  for(const scope of REQUIRED_PROVIDER_SCOPES){const p=status.wiring?.[scope];if(!p?.providerBoundary||!p.processId||!p.processStart||processStartedAt(p.processId)!==p.processStart||p.budgetId!==status.id)throw new Error(`Unverified provider wiring: ${scope}`);}
+  for(const scope of ['baseline','candidate'])try{process.kill(status.wiring[scope].processId,0);}catch{throw new Error('Instrumented control-plane process is not alive');}
+  if(nativeVerifier===verifyNativeConfiguration)for(const origin of config.instrumentedGatewayOrigins??[]){
+    const endpoint=new URL(origin),port=endpoint.port||(endpoint.protocol==='https:'?'443':'80');
+    const result=spawnSync('lsof',['-nP',`-iTCP:${port}`,'-sTCP:LISTEN','-t'],{encoding:'utf8'});
+    const owners=result.stdout.trim().split(/\s+/).map(Number);
+    if(!['baseline','candidate'].some(s=>owners.includes(status.wiring[s].processId)))throw new Error('Native gateway listener is not an instrumented control plane');
+  }
+  return status;
+}
+
+export async function armSharedBudget(config,options) {
+  await verifyLiveBudgetWiring(config,options);
+  const token=fs.readFileSync(config.tokenFile,'utf8').trim();
+  const response=await fetch(`${new URL(config.coordinatorUrl).origin}/__eval/arm`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({budgetId:config.sharedBudgetId}),signal:AbortSignal.timeout(5000)});
+  if(!response.ok)throw new Error('Shared budget refused to arm');
+  return response.json();
+}

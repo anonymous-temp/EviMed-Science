@@ -62,8 +62,11 @@ test('disposable executor enforces no-network/read-only input and scans cheating
 
 test('protocol 12 exposes only bounded candidate execution and refuses command selectors',async()=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'ev-protocol-')),socketPath=path.join(dataDir,'controller.sock');let observed;
+  const dockerBin=path.join(dataDir,'docker-info.mjs');
+  // Execution is injected below; health must use the same isolated test boundary.
+  await fs.writeFile(dockerBin,`#!/usr/bin/env node\nif(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['info','--format','{{.ServerVersion}}']))process.exit(1);\nconsole.log('27.0.0');\n`,{mode:0o755});
   const tools={run:async(_descriptor,_identity,args)=>{observed=args;return 'verified';},admissionAvailable:async()=>true};
-  const server=createRuntimeController({dataDir,runtimeControllerSocket:socketPath,runtimeContainerBin:'docker',runtimeContainerImage:image,evolutionEnabled:true},{evolutionVerification:{tools,imageId:async()=> 'sha256:'+'a'.repeat(64)}});
+  const server=createRuntimeController({dataDir,runtimeControllerSocket:socketPath,runtimeContainerBin:dockerBin,runtimeContainerImage:image,evolutionEnabled:true},{evolutionVerification:{tools,imageId:async()=> 'sha256:'+'a'.repeat(64)}});
   try{
     await server.listen();const client=new RuntimeControllerClient({runtimeControllerSocket:socketPath});
     assert.equal((await client.health()).protocolVersion,RUNTIME_CONTROLLER_PROTOCOL_VERSION);assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION,14);

@@ -1,6 +1,6 @@
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
-import { HttpError, readJson, sendJson } from "./security.mjs";
+import { attachmentDisposition, HttpError, readJson, sendJson } from "./security.mjs";
 import { locateSourceQuote, sourceQuoteExcerpt } from "./sourceQuotations.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
@@ -128,7 +128,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       if (!vault) throw new HttpError(503, "source_state_unavailable", "Exporting the knowledge base needs the source storage.");
       const file = await vault.export(user.id, owned);
       res.writeHead(200, { "Content-Type": file.mimeType, "Content-Length": file.bytes.length,
-        "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+        "Content-Disposition": attachmentDisposition(file.filename), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(Buffer.from(file.bytes));
       return true;
     }

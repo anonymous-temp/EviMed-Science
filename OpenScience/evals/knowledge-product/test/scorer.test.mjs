@@ -8,7 +8,7 @@ test('frozen benchmark has 90 independent questions and separate strata', () => 
 });
 test('identity, source freshness and exact user prompt are checked', () => {
   const c = benchmark.cases[0];
-  const row = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, citedSources: c.sources, staleSources: [], score: 1, arm: 'candidate', repetition: 1, evidence: { runId: 'real-run', transcript: 'saved.jsonl', provider: 'deepseek' } };
+  const row = { caseId: c.id, prompt: c.prompt, actor: c.actor, project: c.project, citedSources: c.sources, staleSources: [], violations: [], abstained: false, score: 1, arm: 'candidate', repetition: 1, evidence: { runId: 'real-run', transcript: 'saved.jsonl', provider: 'deepseek' } };
   assert.equal(validateObservation(c, row), true);
   for (const change of [{ prompt: c.prompt + ' hint' }, { actor: 'other' }, { staleSources: [c.sources[0]] }, { score: NaN }]) assert.throws(() => validateObservation(c, { ...row, ...change }));
 });
@@ -30,4 +30,8 @@ test('bootstrap uses independent question means, not repetitions', () => {
 test('lifecycle violation always fails; insufficient CI evidence is inconclusive', () => {
   const rows = benchmark.cases.flatMap(c => ['baseline', 'candidate'].flatMap(arm => [1, 2, 3].map(repetition => ({ caseId: c.id, arm, repetition, score: 1, violations: c.stratum === 'lifecycle' && arm === 'candidate' ? ['cross-account'] : [], abstained: c.unanswerable }))));
   assert.equal(summarize(benchmark, rows).verdict, 'fail');
+});
+test('two percentage point boundary is strictly inconclusive', () => {
+  const rows = benchmark.cases.flatMap(c => ['baseline','candidate'].flatMap(arm => [1,2,3].map(repetition => ({ caseId:c.id, arm, repetition, score: arm === 'candidate' && c.stratum !== 'lifecycle' ? 0.98 : 1, violations:[], abstained:c.unanswerable }))));
+  assert.equal(summarize(benchmark, rows).verdict, 'inconclusive');
 });

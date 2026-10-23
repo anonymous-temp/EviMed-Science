@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { HttpError } from "./security.mjs";
 import { withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
@@ -236,6 +237,7 @@ const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk",
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
 const registrationLocks = new Map();
+const publicationEffects = new AsyncLocalStorage();
 
 /**
  * The materialized `index.md` a run reads: a bibliographic header, then the
@@ -609,16 +611,29 @@ export class SourceService {
     const mimeType = text(input.mimeType ?? "application/octet-stream", "MIME type", 160);
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
     const facts = registrationFacts(input);
-    const sourceId = sourceIdFor(projectId, sha256);
-    const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
+    const logicalPath = input.logicalPath == null ? file : sourcePath(input.logicalPath);
+    // Notes belong to the document the person created, even when another note has identical bytes.
+    // Existing content-addressed identities remain readable and are reused for their original note.
+    const note = sourceOriginOf({ connectorType: sourceConnector.type, path: logicalPath }) === "note";
+    const legacyId = sourceIdFor(projectId, sha256);
+    const legacy = note ? await this.documents.get(userId, "source", legacyId, { includeDeleted: true }) : null;
+    const legacyPaths = legacy?.payload.paths ?? [];
+    const unambiguousLegacy = legacy?.payload.logicalPath === logicalPath || (legacyPaths.includes(logicalPath)
+      && legacyPaths.filter(entry => sourceOriginOf({ connectorType: sourceConnector.type, path: entry }) === "note").length === 1);
+    const sourceId = note && !unambiguousLegacy
+      ? sourceIdFor(projectId, digest(`${logicalPath}\0${sha256}`)) : legacyId;
+    const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${logicalPath}`).slice(0, 32)}`;
     const { replaces, ...registered } = await this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
-    let exact = await this.documents.get(userId, "source", sourceId);
-    if (exact) {
+    await this.lockSourceMutation(userId, sourceId);
+    let exact = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+    const tombstone = exact?.deletedAt ? exact : null;
+    if (exact && !tombstone) {
       if (exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
-      if (!exact.payload.paths.includes(file)) {
+      if (!exact.payload.paths.includes(file) || (input.logicalPath != null && exact.payload.logicalPath !== logicalPath)) {
         try {
           exact = await this.documents.put(userId, "source", sourceId,
-            { ...exact.payload, paths: [...exact.payload.paths, file].sort(), updatedAt: this.now().toISOString() },
+            { ...exact.payload, paths: [...new Set([...exact.payload.paths, file])].sort(),
+              ...(input.logicalPath != null ? { logicalPath, familyId } : {}), updatedAt: this.now().toISOString() },
             { expectedRevision: exact.revision, projectId });
         } catch (error) {
           if (!isConflict(error)) throw error;
@@ -639,10 +654,12 @@ export class SourceService {
       schemaVersion: 1,
       connector: sourceConnector,
       paths: [file],
+      ...(logicalPath !== file ? { logicalPath } : {}),
       fingerprint: { sha256, size, mtime, providerHash, mimeType },
       familyId,
-      version: Math.max(0, ...family.items.map((item) => Number(item.payload.version) || 0)) + 1,
-      generation: 1,
+      version: Math.max(Number(tombstone?.payload.version) || 0, ...family.items.map((item) => Number(item.payload.version) || 0)) + 1,
+      generation: tombstone ? Number(tombstone.payload.generation) + 1 : 1,
+      ...(tombstone ? { deletion: null } : {}),
       docType,
       depth,
       valueVector: defaultValueVector(docType),
@@ -658,7 +675,7 @@ export class SourceService {
       updatedAt: now,
     };
     try {
-      exact = await this.documents.put(userId, "source", sourceId, payload, { expectedRevision: 0, projectId });
+      exact = await this.documents.put(userId, "source", sourceId, payload, { expectedRevision: tombstone?.revision ?? 0, projectId, restoreDeleted: Boolean(tombstone) });
     } catch (error) {
       if (!isConflict(error)) throw error;
       exact = await this.documents.get(userId, "source", sourceId);
@@ -2071,6 +2088,45 @@ export class SourceService {
     }, { idempotencyKey: `ingest:${source.id}:generation:${source.payload.generation}`, projectId: source.projectId, rearmFailed });
   }
 
+  /** Jobs precede source rows everywhere: registration, worker publication and deletion. */
+  async lockSourceMutation(userId, sourceId) {
+    if (!this.documents.database) return;
+    await this.documents.database.query("SELECT id FROM evimed_control.users WHERE id=$1 FOR SHARE", [userId]);
+    await this.documents.database.query(`SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'sourceId'=$2
+      AND (kind='ingest' OR (kind='consolidate' AND payload->>'action'='source-delete')) ORDER BY id FOR UPDATE`, [userId, sourceId]);
+    await this.documents.database.query("SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND id=$2 FOR UPDATE", [userId, sourceId]);
+  }
+
+  publicationActive() { return Boolean(publicationEffects.getStore()); }
+
+  /** Files and runtime replicas are published only after the owning ledger transaction commits. */
+  async afterPublication(effect) {
+    const effects = publicationEffects.getStore();
+    if (effects) effects.push(effect);
+    else await effect();
+  }
+
+  /** Freeze an already verified legacy original without changing identity or deletion state. */
+  async freezePublicationPath(userId, source, logicalPath, immutablePath) {
+    return this.withRegistrationLocks([`family:${userId}:${source.payload.familyId}`, `source:${userId}:${source.id}`],
+      () => this.freezePublicationPathCurrent(userId, source, logicalPath, immutablePath));
+  }
+
+  /** The caller already owns the source registration/advisory guard. */
+  async freezePublicationPathCurrent(userId, source, logicalPath, immutablePath) {
+    await this.lockSourceMutation(userId, source.id);
+    const database = this.documents.database;
+    const current = await this.documents.get(userId, "source", source.id, { includeDeleted: true });
+    if (!current?.payload.paths?.includes(logicalPath)) return current;
+    const payload = { ...current.payload, logicalPath: current.payload.logicalPath ?? logicalPath,
+      paths: current.payload.paths.map(rel => rel === logicalPath ? immutablePath : rel) };
+    const changed = await database.query(`UPDATE evimed_product.documents SET payload=$3::jsonb,revision=revision+1,updated_at=clock_timestamp()
+      WHERE user_id=$1 AND kind='source' AND id=$2 AND revision=$4 RETURNING *`, [userId, source.id, JSON.stringify(payload), current.revision]);
+    if (!changed.rowCount) throw new HttpError(409, "source_revision_conflict", "The source changed during publication migration.");
+    await recordRevision(database, changed.rows[0]);
+    return sourceRecord(changed.rows[0]);
+  }
+
   async withRegistrationLocks(keys, operation) {
     const held = [];
     for (const key of [...new Set(keys)].sort()) {
@@ -2083,7 +2139,28 @@ export class SourceService {
       await previous;
       held.push({ key, tail, release });
     }
-    try { return await operation(); }
+    try {
+      const inherited = publicationEffects.getStore();
+      const effects = inherited ?? [];
+      const execute = async () => {
+        if (!this.documents.database) return operation();
+        await migrateProductStore(this.documents.database);
+        // A transaction-scoped advisory guard coordinates separate server processes. The guarded
+        // ledger operations share this transaction; immutable staged bytes need no rollback.
+        return this.documents.database.transaction(async client => {
+          for (const key of [...new Set(keys)].sort()) {
+            await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [key]);
+          }
+          return this.documents.database.withTransactionClient(client, operation);
+        });
+      };
+      const effectStart = effects.length;
+      let result;
+      try { result = await publicationEffects.run(effects, execute); }
+      catch (error) { effects.splice(effectStart); throw error; }
+      if (!inherited) for (const effect of effects) await effect();
+      return result;
+    }
     finally {
       for (const item of held.reverse()) {
         item.release();

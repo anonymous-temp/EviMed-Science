@@ -4,8 +4,7 @@ An account's research memory — its notes, facts, preferences and earlier
 conclusions — can be read and added to by an agent running somewhere else: a
 local DSH or Claude profile, a script, another product. Two ways in, one set of
 rules: an HTTP API, and an MCP adapter that speaks that API for agents that only
-speak MCP. Neither holds memory of its own; both reach the same PostgreSQL
-records the workbench's memory page shows.
+speak MCP. Neither holds memory of its own; both reach the account's selected memory engine and the same records the workbench's memory page shows. Native accounts read OpenViking memory files; legacy accounts read PostgreSQL records. An unavailable native engine returns `503 memory_engine_unavailable` and never substitutes legacy personal memory.
 
 This page is the operator's and the integrator's reference. There is no
 management page for keys yet; everything below is an HTTP call.
@@ -195,3 +194,13 @@ the shape is the common `command` / `args` / `env` form):
 
 Keep the key file readable by you alone (`chmod 600`), and give the key
 `memory.read` alone unless the agent should be able to leave notes.
+
+## Native account compatibility
+
+The URL, key scopes, project binding and `X-Subject` rules stay unchanged. Personal recall follows the account engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Historical personal-memory recall (`asOf`) is unsupported on native accounts and returns `400 memory_as_of_unsupported`; current memory is never labelled as historical. Native edits change `value`; forgetting uses the native rejection ledger, and restoration uses the existing undo action. Unsupported native operations return `memory_engine_unsupported`.
+
+For a native account, `POST /episodes` stores the submitted turns in the existing candidate-note ledger. It returns `202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, and `confirm: { path, expectedRevision }`. It opens no extracting engine session at this stage. The full role-labelled transcript stays only in that candidate as evidence. Confirmation sends only original user statements through the existing captured-message privacy filter; assistant statements, including assistant-authored role labels or quoted instructions, are never promoted into user facts. If no admissible user content remains, confirmation returns `admission.state: "skipped"` and `reason: "no_user_content"` without touching an extracting session. Confirm at the returned `/api/agent-memory/v1/notes/{id}/confirm` path with `expectedRevision`. Pending structured-record candidates use the existing `/records/{id}/confirm` and `expectedVersion` route. There is no episode-confirm endpoint.
+
+A native confirmation returns `admission` alongside the candidate. Its immutable candidate ID and revision identify one durable admission. `queued` and `submitting` describe submission work; `pending` means the engine accepted the commit but settlement is outstanding; `completed` means the native worker read the resulting changes. `suspended` means current learning policy prevents a retry; `cancelled` means the candidate revision, account engine or project is no longer authorized. Every new engine write and replay rechecks that authority, so rejecting or editing a candidate prevents its older admission from silently learning later. `failed` retains the candidate and an error, while `uncertain` means a timed-out side effect is being inspected and must not be treated as success. The receipt includes `taskId` and `archiveUri` when known and `recordIds` after settlement; one conversation may produce several records. Repeating the same confirmation returns or recovers that admission, without appending the batch twice. Confirmed native candidates remain inactive in the legacy store.
+
+Native capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.

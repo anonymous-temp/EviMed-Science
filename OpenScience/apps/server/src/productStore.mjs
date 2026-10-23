@@ -184,8 +184,8 @@ export class ProductDocuments {
    * each use as a revision had 77 of them, 75 counters, and its 「回到上一版」
    * restored the previous counter (audit 2026-09-26, L-G4).
    * @param {string} userId @param {string} kind @param {string} id @param {Record<string,any>} payload
-   * @param {{ expectedRevision: number, projectId?: string|null, transactionClient?: any, telemetry?: boolean }} options */
-  async put(userId, kind, id, payload, { expectedRevision, projectId = null, transactionClient = null, telemetry = false }) {
+   * @param {{ expectedRevision: number, projectId?: string|null, transactionClient?: any, telemetry?: boolean, restoreDeleted?: boolean }} options */
+  async put(userId, kind, id, payload, { expectedRevision, projectId = null, transactionClient = null, telemetry = false, restoreDeleted = false }) {
     const values = [productId(userId, "user"), productKind(kind), productId(id), productPayload(payload)];
     productInteger(expectedRevision, 0, 2_147_483_646);
     if (projectId != null) productId(projectId, "project");
@@ -196,8 +196,9 @@ export class ProductDocuments {
         ? await client.query(`INSERT INTO evimed_product.documents(user_id,kind,id,payload,project_id)
             VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING RETURNING *`, [...values, projectId])
         : await client.query(`UPDATE evimed_product.documents SET payload=$4::jsonb,revision=revision+1,
-            updated_at=CASE WHEN $6::boolean THEN updated_at ELSE clock_timestamp() END
-            WHERE user_id=$1 AND kind=$2 AND id=$3 AND revision=$5 AND deleted_at IS NULL RETURNING *`, [...values, expectedRevision, telemetry]);
+            updated_at=CASE WHEN $6::boolean THEN updated_at ELSE clock_timestamp() END,
+            deleted_at=CASE WHEN $7::boolean THEN NULL ELSE deleted_at END
+            WHERE user_id=$1 AND kind=$2 AND id=$3 AND revision=$5 AND (deleted_at IS NULL OR $7::boolean) RETURNING *`, [...values, expectedRevision, telemetry, restoreDeleted]);
       if (!result.rows[0]) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
       if (!telemetry) await saveRevision(client, result.rows[0]);
       return record(result.rows[0]);

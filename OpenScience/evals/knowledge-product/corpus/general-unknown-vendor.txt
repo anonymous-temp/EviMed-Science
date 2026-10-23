@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: unknown-vendor.
+The requested fact is not provided in the supplied evidence.

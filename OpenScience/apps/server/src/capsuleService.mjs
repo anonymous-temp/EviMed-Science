@@ -245,8 +245,9 @@ export class CapsuleService {
    * and that document's project (`LibraryService.publishSourceUnderstanding`):
    * such an entry is recalled only in that project (`recall`) and is not one
    * of the memories the capsule page lists (`mine`).
-   * @param {string} userId @param {string} capsuleId @param {Record<string,any>} input */
-  async addEntry(userId, capsuleId, input) {
+   * @param {string} userId @param {string} capsuleId @param {Record<string,any>} input
+   * @param {{ publicationKey?: string }} [options] internal source-publication identity, never read from input */
+  async addEntry(userId, capsuleId, input, { publicationKey } = {}) {
     await this.get(userId, capsuleId);
     const origin = member(input.origin ?? "explicit", CAPSULE_FACT_ORIGINS, "origin");
     const layer = member(input.layer ?? "knowledge", CAPSULE_LAYERS, "layer");
@@ -257,7 +258,21 @@ export class CapsuleService {
     if (derived && (!/^src_[a-f0-9]{32}$/.test(derived.sourceId) || layer !== DOCUMENT_MEMORY_LAYER)) {
       throw new HttpError(400, "capsule_payload_invalid", "Invalid document origin.");
     }
-    return this.documents.put(userId, "fact", randomUUID(), {
+    const publicationId = publicationKey && derived
+      ? `source-fact:${createHash("sha256").update(JSON.stringify([capsuleId, derived.sourceId, derived.projectId, publicationKey])).digest("hex")}` : null;
+    if (publicationId) {
+      const existing = await this.documents.get(userId, "fact", publicationId, { includeDeleted: true });
+      if (existing) {
+        // Platform withdrawal can follow a restored source; an explicit user forget or correction always wins.
+        if (existing.deletedAt && existing.payload.withdrawn && existing.payload.withdrawn.userSuppressed === false && !existing.payload.correctedAt) {
+          const { withdrawn: _withdrawn, ...payload } = existing.payload;
+          return this.documents.put(userId, "fact", publicationId, { ...payload, status: "approved" },
+            { expectedRevision: existing.revision, restoreDeleted: true });
+        }
+        return existing;
+      }
+    }
+    return this.documents.put(userId, "fact", publicationId ?? randomUUID(), {
       capsuleId, factKind: member(input.factKind, CAPSULE_FACT_KINDS, "fact kind"),
       layer,
       content: text(input.content, "content", 20_000), origin,
@@ -606,7 +621,8 @@ export class CapsuleService {
         // third party's wait for the owner, as the agent-memory API promises
         // its integrators (agentMemoryOpenApi.mjs, rule 1).
         status: input.review === true ? "candidate" : "approved",
-        provenance: origin, contextOnly: true }, { expectedRevision: 0, projectId });
+        provenance: origin, contextOnly: true,
+        ...(input.review === true && input.externalSession ? { externalSession: input.externalSession } : {}) }, { expectedRevision: 0, projectId });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;
       return this.documents.get(userId, "fact", id);

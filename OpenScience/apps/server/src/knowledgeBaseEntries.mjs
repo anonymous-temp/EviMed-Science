@@ -20,8 +20,8 @@
  *   office document is kept as itself, and read by the intake like any
  *   upload. Nothing refetches by itself; 「重新读取」 is the researcher's.
  * - **A refresh or a save replaces.** The same address (or the same note)
- *   always writes the same path, so changed bytes are the next version of
- *   one document. The researcher refreshed or edited one thing; the version it
+ *   keeps the same logical path; intake stages immutable version bytes and
+ *   publishes their path through the source ledger. The researcher refreshed or edited one thing; the version it
  *   replaces goes, and what rests on it is told (`SourceService.register`'s
  *   replacement hand-off). Identical bytes change nothing but the fetch time.
  *
@@ -40,7 +40,7 @@ const URL_MAX_CHARS = 2048;
 /** How much of a title becomes part of a file name. */
 const SLUG_MAX_CHARS = 48;
 
-/** @param {string} value */
+/** @param {string | Buffer} value */
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 
 /**
@@ -190,7 +190,7 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     const text = String(page?.text ?? "").trim();
     if (!text) throw new HttpError(422, "source_link_unreadable", "The page has no text to read.");
     if (kept?.bytes && kept.extension === "html") {
-      const original = originalPath(slug, "html");
+      const original = originalPath(`${slug}-${digest(kept.bytes).slice(0, 16)}`, "html");
       await write({ user, project, rel: original, buffer: kept.bytes, register: false });
       link.original = original;
     }
@@ -209,20 +209,26 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
    */
   async function standingSnapshot(user, project, rel, markdown) {
     const found = await sources.documents.list(user.id, "source", { projectId: project.id, filter: { paths: [rel] }, limit: 1 });
-    const standing = found.items[0];
+    const standing = found.items[0] ?? (await sources.documents.list(user.id, "source", {
+      projectId: project.id, filter: { logicalPath: rel }, limit: 1,
+    })).items[0];
     if (!standing) return null;
     try {
-      const previous = (await readFile(project, rel)).toString("utf8");
+      const previous = (await readFile(project, standing.payload.paths[0])).toString("utf8");
       return snapshotBody(previous) === snapshotBody(markdown) ? standing : null;
     } catch { return null; }
   }
 
   /** @param {any} user @param {any} project @param {string} rel @param {Buffer} buffer @param {Record<string, any>} meta */
   async function writeEntry(user, project, rel, buffer, meta) {
-    const registered = await write({ user, project, rel, buffer, meta });
-    if (!registered?.source) throw new HttpError(503, "source_state_unavailable", "Source intake is not available.");
-    if (!registered.duplicate) await retireOlderVersions(user, registered.source);
-    return registered;
+    const publish = async () => {
+      const registered = await write({ user, project, rel, buffer, meta: { ...meta, logicalPath: rel } });
+      if (!registered?.source) throw new HttpError(503, "source_state_unavailable", "Source intake is not available.");
+      await retireOlderVersions(user, registered.source);
+      return registered;
+    };
+    return sources.withRegistrationLocks
+      ? sources.withRegistrationLocks([`publication:${user.id}:${project.id}:${rel}`], publish) : publish();
   }
 
   /** @param {unknown} value */
@@ -344,7 +350,8 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
           { title: String(readKnowledgePage(text, { path: where.rel }).title || title || where.rel).slice(0, TITLE_MAX_CHARS) });
         return { ...registered, changed: !registered.duplicate };
       }
-      const rel = requireNote(source);
+      const notePath = requireNote(source);
+      const rel = source.payload?.logicalPath ?? notePath;
       const heading = noteTitle(title);
       const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading });
       return { ...registered, changed: !registered.duplicate };

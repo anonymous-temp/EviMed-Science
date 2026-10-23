@@ -1,0 +1,3 @@
+Benchmark fixture only; not real organizational policy or clinical evidence.
+Topic: upload.
+What is the maximum attachment size? Answer: 24 MiB.

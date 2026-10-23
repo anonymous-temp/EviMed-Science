@@ -43,3 +43,29 @@ test("new runtimes include the base knowledge view when the active workspace is 
   assert.equal(provider.views(nested).kb?.host, path.join(root, "knowledge-base"));
   assert.equal(readOnlyWorkspaceViews({}, nested).knowledgeBase, path.join(root, "knowledge-base"));
 });
+
+test("remote acknowledgments require a matching digest from the same AgentBay session", async () => {
+  const owner = { config: {}, key: () => "p" };
+  const provider = new AgentBayRuntimeProvider(owner, { client: {} });
+  const live = { sessionId: "session-1", session: {} };
+  provider.live.set("p", live);
+  provider.mirrorUpload = async () => true;
+  provider.command = async () => ({ ok: true, stdout: "wrong-digest  file", stderr: "", exitCode: 0 });
+  assert.equal((await provider.mirrorUploadReceipt(project, "knowledge-base/a.txt", bytes)).state, "retryable-failure");
+  provider.command = async () => ({ ok: true, stdout: `${sha256}  file`, stderr: "", exitCode: 0 });
+  assert.equal((await provider.mirrorUploadReceipt(project, "knowledge-base/a.txt", bytes)).runtimeIdentity, "session-1");
+  provider.command = async () => {
+    provider.live.set("p", { sessionId: "session-2", session: {} });
+    return { ok: true, stdout: `${sha256}  file`, stderr: "", exitCode: 0 };
+  };
+  assert.equal((await provider.mirrorUploadReceipt(project, "knowledge-base/a.txt", bytes)).code, "runtime_replica_changed");
+});
+
+test("a remote replica timeout releases the caller without claiming acknowledgment", async () => {
+  const remote = manager({ mirrorUpload: async () => new Promise(() => {}) });
+  remote.config.runtimeProxyConnectTimeoutMs = 20;
+  remote.runtimes.set(remote.key(project), { containerName: "session-1" });
+  const receipt = await remote.mirrorWorkspaceUploadReceipt(project, `${project.baseDir}/knowledge-base/a.txt`, bytes);
+  assert.equal(receipt.state, "retryable-failure");
+  assert.equal(receipt.code, "runtime_replica_timeout");
+});

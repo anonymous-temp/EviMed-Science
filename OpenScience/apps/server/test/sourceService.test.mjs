@@ -21,7 +21,7 @@ class MemoryDocuments {
       && Object.entries(filter).every(([key, value]) => row.payload[key] === value));
     return { items: items.slice(0, limit), nextCursor: items.length > limit ? "next" : null };
   }
-  async put(userId, kind, id, payload, { expectedRevision, projectId = null }) {
+  async put(userId, kind, id, payload, { expectedRevision, projectId = null, restoreDeleted = false }) {
     const key = this.key(userId, kind, id);
     const current = this.rows.get(key);
     if ((current?.revision ?? 0) !== expectedRevision) {
@@ -29,7 +29,7 @@ class MemoryDocuments {
       error.code = "product_revision_conflict";
       throw error;
     }
-    const row = { id, kind, userId, projectId, payload, revision: expectedRevision + 1,
+    const row = { id, kind, userId, projectId, payload, ...(restoreDeleted ? { deletedAt: null } : {}), revision: expectedRevision + 1,
       createdAt: current?.createdAt ?? "2026-09-06T00:00:00.000Z", updatedAt: "2026-09-06T00:00:00.000Z" };
     this.rows.set(key, row);
     return row;
@@ -1200,4 +1200,16 @@ test("a deleted content identity is restored with a fresh generation", async () 
   assert.equal(again.source.payload.generation, 3);
   assert.equal(again.source.payload.status, "queued");
   assert.equal(again.source.payload.deletion, null);
+});
+
+test("an ambiguous legacy note merge is preserved for old references and never guessed as a new note identity", async () => {
+  const { service, documents } = fixture();
+  const legacyId = sourceIdFor("project-one", "a".repeat(64));
+  const legacy = await documents.put("user-one", "source", legacyId, {
+    paths: ["knowledge-base/notes/first.md", "knowledge-base/notes/second.md"], generation: 1,
+    fingerprint: { sha256: "a".repeat(64) }, status: "complete",
+  }, { expectedRevision: 0, projectId: "project-one" });
+  const saved = await service.register("user-one", upload({ path: "knowledge-base/notes/first.md" }));
+  assert.notEqual(saved.source.id, legacyId);
+  assert.deepEqual(await documents.get("user-one", "source", legacyId), legacy);
 });

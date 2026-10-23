@@ -224,8 +224,10 @@ def _summary(data: dict) -> tuple[str, str, list[str], list[str]]:
     )
 
 
-def browse(arguments: dict) -> dict:
+def browse(arguments: dict, execution_context: dict | None = None) -> dict:
     payload = _validated(arguments)
+    if execution_context is not None:
+        payload["sessionId"] = execution_context["sessionId"]
     url, token = _gateway()
     request = urllib.request.Request(
         url,

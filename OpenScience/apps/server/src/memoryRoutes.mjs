@@ -1,3 +1,4 @@
+import { memoryEngineStore } from "./memoryEngineAdapter.mjs";
 import { recordResetRemoved } from "./memoryMetrics.mjs";
 import { timeZoneOrDefault } from "./memoryTimeline.mjs";
 import { projectCard } from "./projectOverview.mjs";
@@ -80,10 +81,7 @@ export function createMemoryRoutes({
    * @param {string} userId @returns {Promise<boolean>}
    */
   async function onNative(userId) {
-    if (typeof researchMemory.memoryEngine !== "function") return false;
-    if (await researchMemory.memoryEngine(userId) !== "native") return false;
-    if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-    return true;
+    return (await memoryEngineStore(researchMemory, nativeMemory, userId)).engine === "native";
   }
 
   /** The account's engine, for the settings read: `legacy` when it cannot be read. @param {string} userId */

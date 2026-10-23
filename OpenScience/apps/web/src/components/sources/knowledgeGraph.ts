@@ -196,8 +196,8 @@ export function evidenceOf(lines: readonly GraphLine[]): KnowledgeGraphSource[] 
 }
 
 /** The marks as a list for a person (and a screen reader): a search's hits alone, else the most connected first. */
-export function listedMarks(marks: readonly GraphMark[], hits: ReadonlySet<string>): GraphMark[] {
-  const rows = hits.size > 0 ? marks.filter((mark) => hits.has(mark.id)) : [...marks];
+export function listedMarks(marks: readonly GraphMark[], hits: ReadonlySet<string>, searching = false): GraphMark[] {
+  const rows = searching || hits.size > 0 ? marks.filter((mark) => hits.has(mark.id)) : [...marks];
   return rows.sort(byDegree);
 }
 

@@ -3076,9 +3076,7 @@ function realDirectory(target) {
  * @returns {{ knowledgeBase: string | null, library: string | null }}
  */
 export function readOnlyWorkspaceViews(config, project) {
-  const inBaseWorkspace = Boolean(project.baseDir)
-    && path.resolve(String(project.workspaceDir)) === path.resolve(String(project.baseDir));
-  const knowledgeBase = inBaseWorkspace ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+  const knowledgeBase = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
   const library = config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
   return {
     knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
@@ -3200,6 +3198,8 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  * @property {(project: Record<string, any>, plan: Record<string, any>) => Promise<void>} [abandon] lets go of what a failed launch prepared outside this process
  * @property {(project: Record<string, any>) => string[]} [acceptedWorkloadTokens] the workload tokens a runtime whose token file is not on this host may present
  * @property {(runtime: Record<string, any>) => boolean} [tolerateTokenRefreshFailure] whether a failed renewal can wait for the next one
+ * @property {(project: Record<string, any>) => string | null} [mirrorUploadIdentity] exact active remote identity
+ * @property {(project: Record<string, any>, relative: string, content: Buffer) => Promise<any>} [mirrorUploadReceipt] internal verified replica receipt
  * @property {(project: Record<string, any>, relative: string, content: Buffer) => Promise<boolean>} [mirrorUpload] a researcher's upload the running kernel should see now
  * @property {(child: any) => Record<string, any> | null} [describe] what the runtime's own machine reported at start
  * @property {() => Promise<Record<string, any>>} [readiness] the provider's readiness, when it is not the Docker controller's
@@ -4794,7 +4794,7 @@ export class RuntimeManager {
    * @param {Record<string, any>} project
    */
   async ensureKnowledgeBaseDir(project) {
-    if (!project.baseDir || path.resolve(String(project.workspaceDir)) !== path.resolve(String(project.baseDir))) return;
+    if (!project.baseDir) return;
     const opened = await openScopedDirectoryNoFollow(project.baseDir, path.join(project.baseDir, KNOWLEDGE_BASE_DIR), { create: true })
       .catch(() => null);
     await opened?.handle.close();
@@ -4956,20 +4956,66 @@ export class RuntimeManager {
 
   /**
    * A researcher's upload that a running remote kernel should see now; the
-   * host copy is already written. Only a file inside the project's workspace
-   * is carried, and a failure waits for the next start's push.
+   * host copy is already written. Workspace files and the base project's knowledge
+   * view are mapped separately, including when the active workspace is a subdirectory.
    * @param {Record<string, any>} project @param {string} file absolute host path @param {Buffer} content
    */
   async mirrorWorkspaceUpload(project, file, content) {
     if (typeof this.provider.mirrorUpload !== "function") return false;
-    const relative = path.relative(path.resolve(project.workspaceDir), path.resolve(file));
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return false;
+    const relative = this.runtimeUploadRelativePath(project, file);
+    if (!relative) return false;
+    try { return await this.provider.mirrorUpload(project, relative, content); }
+    catch { return false; }
+  }
+
+  runtimeUploadRelativePath(project, file) {
+    const baseKnowledge = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+    const knowledgeRelative = baseKnowledge ? path.relative(path.resolve(baseKnowledge), path.resolve(file)) : null;
+    const workspaceRelative = path.relative(path.resolve(project.workspaceDir), path.resolve(file));
+    const within = relative => relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    return within(knowledgeRelative) ? `${KNOWLEDGE_BASE_DIR}/${knowledgeRelative.split(path.sep).join("/")}`
+      : within(workspaceRelative) ? workspaceRelative.split(path.sep).join("/") : null;
+  }
+
+  runtimeReplicaIdentity(project) {
+    if (typeof this.provider.mirrorUploadIdentity === "function") return this.provider.mirrorUploadIdentity(project);
+    return this.runtimes.get(this.key(project))?.containerName ?? null;
+  }
+
+  /** Internal replica receipt. The public boolean wrapper retains its existing contract. */
+  async mirrorWorkspaceUploadReceipt(project, file, content) {
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    const provider = this.providerName();
+    const relative = this.runtimeUploadRelativePath(project, file);
+    const base = { provider, sha256, relativePath: relative, runtimeIdentity: null };
+    if (!relative) return { ...base, state: "retryable-failure", code: "runtime_replica_path_unmapped" };
+    if (provider === "docker" && typeof this.provider.mirrorUpload !== "function") return { ...base, state: "not-needed", code: "local-bind-mount" };
+    const transfer = async () => {
+      if (typeof this.provider.mirrorUploadReceipt === "function") {
+        try { return { ...base, ...await this.provider.mirrorUploadReceipt(project, relative, content) }; }
+        catch { return { ...base, state: "retryable-failure", code: "runtime_replica_upload_failed" }; }
+      }
+      const runtime = this.runtimes.get(this.key(project));
+      if (!runtime) return { ...base, state: "deferred", code: "runtime_replica_not_active" };
+      const runtimeIdentity = runtime.containerName ?? runtime.id ?? null;
+      if (typeof this.provider.mirrorUpload !== "function") return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_unsupported" };
+      try {
+        const accepted = await this.provider.mirrorUpload(project, relative, content);
+        if (this.runtimes.get(this.key(project)) !== runtime) return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_changed" };
+        return { ...base, runtimeIdentity, state: accepted ? "acknowledged" : "retryable-failure",
+          ...(accepted ? {} : { code: "runtime_replica_upload_failed" }) };
+      } catch { return { ...base, runtimeIdentity, state: "retryable-failure", code: "runtime_replica_upload_failed" }; }
+    };
+    // Replica delivery is derived work. Bound the account/source fence even if a provider
+    // loses its response; late writes target immutable content, and never publish an acknowledgment.
+    const timeoutMs = Math.min(5000, Math.max(1, Number(this.config.runtimeProxyConnectTimeoutMs) || 5000));
+    let timer;
     try {
-      return await this.provider.mirrorUpload(project, relative.split(path.sep).join("/"), content);
-    } catch {
-      // isolated: evimed_runtime_mirror_upload_failures_total
-      return false;
-    }
+      return await Promise.race([transfer(), new Promise(resolve => {
+        timer = setTimeout(() => resolve({ ...base, runtimeIdentity: this.runtimeReplicaIdentity(project),
+          state: "retryable-failure", code: "runtime_replica_timeout" }), timeoutMs);
+      })]);
+    } finally { clearTimeout(timer); }
   }
 
   /** Every call into a runtime container needs a deadline. Without one, a socket

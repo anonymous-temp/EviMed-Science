@@ -15,6 +15,30 @@ two official Compile skills `llm-wiki` and `knowledge-graph` (upstream sha256, a
 re-wraps the frontmatter — the one the control plane compares). The server is AGPL-3.0 and runs unmodified as its own
 service; the plugin, the skills and the examples are Apache-2.0.
 
+## Candidate rehearsal (2026-10-23; not admitted)
+
+The official `v0.5.1.1` candidate was run in the isolated
+`colima-evimed-extension-acceptance` engine with synthetic documents and a
+bounded deterministic model provider. `fixtures/candidate-0511-fixture.json`
+records this limited result, separate from the production-pin fixtures below.
+Resource push/read/list/grep, replacement, tags, the eight configured memory
+types, cross-user rejection and task ownership passed. Compile cancellation
+reached `cancelled`. A frozen fresh `v0.5.0` fixture volume copied to a new
+volume remained readable under the candidate; its session gained the empty
+`last_idle_commit_accepted_at` field and its preserved fields matched.
+
+This is transport and storage-shape evidence only. All three session commits
+were accepted and then failed extraction because the fixture model deliberately
+does not generate memory operations; no searchable native memories were
+produced. Real-model three-commit retrieval, successful native Compile, a
+production-volume restore and the page-limit/race matrix remain open. The
+production pin, source limits and identity shim remain unchanged. The candidate
+is **not admitted** until those gates pass.
+
+The client now applies `timeoutSeconds` as an HTTP deadline instead of sending
+the removed content-write body `timeout`; this remains compatible with the
+pinned engine. An aborted request does not cancel accepted background work.
+
 ## Division of labour
 
 On 2026-10-12 this file reconciled the upstream capability list and said extraction, VikingBot, Compile and the VLM

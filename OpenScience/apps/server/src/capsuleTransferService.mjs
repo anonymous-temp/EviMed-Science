@@ -305,7 +305,7 @@ export class CapsuleTransferService {
     const native = await this.memoryEngine?.(userId) === "native";
     const nativeFacts = native ? await this.#nativeSnapshot(userId, kinds) : null;
     await migrateResearchMemory(this.documents.database);
-    return this.documents.database.transaction(async client => {
+    const snapshot = await this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
@@ -395,6 +395,8 @@ export class CapsuleTransferService {
         .slice(0, Math.max(0, MAX_ENTRIES + (native ? 1 : 0) - workstyle.length));
       return { revision: capsule.rows[0].revision, facts: [...workstyle, ...knowledge] };
     });
+    await this.#verifyNativeSnapshot(userId, snapshot.facts);
+    return snapshot;
   }
 
   /**
@@ -432,9 +434,25 @@ export class CapsuleTransferService {
           && typeof latest.after === "string" && digest(latest.after) === file.hash;
         return { id: row.id, revision: Number.parseInt(file.hash.slice(0, 7), 16) + 1, scope: row.scope, scopeId: row.scopeId,
           nativeUri: file.uri, adoptedBody,
-          nativeSource: { engine: "native", sha256: file.hash, version: row.version },
+          nativeSource: { engine: "native", uri: file.uri, sha256: file.hash, version: row.version, capturedAt: new Date(this.now()).toISOString() },
           payload: { factKind: row.kind, origin: "explicit", content: checkedText(row.value) } };
       });
+  }
+
+  /** Re-read selected native bytes, bypassing body caches, before exposing or publishing a cross-store snapshot.
+   * This is an optimistic consistency check, not a claim of a distributed transaction.
+   * @param {string} userId @param {any[]} facts */
+  async #verifyNativeSnapshot(userId, facts) {
+    const native = facts.filter((fact) => fact.nativeSource);
+    if (!native.length) return;
+    if (!this.nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+    const overlay = await this.nativeMemory.overlay.files(userId);
+    for (const fact of native) {
+      const body = await this.nativeMemory.sessions.read(userId, fact.nativeSource.uri);
+      if (typeof body !== "string" || digest(body) !== fact.nativeSource.sha256 || overlay.get(fact.nativeSource.uri)?.sensitive) {
+        throw new HttpError(409, "capsule_native_snapshot_changed", "The selected memories changed while the snapshot was being prepared. Try again.");
+      }
+    }
   }
 
   /**
@@ -603,6 +621,7 @@ export class CapsuleTransferService {
       ...(container.passwordWrap ? { passwordWrap: container.passwordWrap.toString("base64") } : {}),
       payload: Object.fromEntries(Object.entries(container.payload).map(([file, bytes]) => [file, bytes.toString("base64")])) });
     if (Buffer.byteLength(archive) > CAPSULE_TRANSFER_MAX_BYTES) throw new HttpError(413, "capsule_transfer_too_large", "This encrypted snapshot exceeds 2 MiB.");
+    await this.#verifyNativeSnapshot(userId, source.facts);
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
     const filename = `${capsuleAccountHash(userId)}-${snapshotId}.evimedcap`;
     await this.withAccount(userId, accountCreatedAt, () => writeProtectedCapsuleFile(directory, filename, archive));

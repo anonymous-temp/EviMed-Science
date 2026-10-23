@@ -159,9 +159,9 @@ function publishableContent(record, now) {
 export class MemorySubstrate {
   /**
    * @param {any} config
-   * @param {{ store?: any, openViking?: any, rerank?: any, jobs?: any }} dependencies
+   * @param {{ store?: any, openViking?: any, rerank?: any, jobs?: any, nativeMemory?: any }} dependencies
    */
-  constructor(config, { store = null, openViking = null, rerank = null, jobs = null } = {}) {
+  constructor(config, { store = null, openViking = null, rerank = null, jobs = null, nativeMemory = null } = {}) {
     this.selection = memoryIndexSelection(config);
     this.provider = this.selection.provider;
     // The deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`).
@@ -170,6 +170,7 @@ export class MemorySubstrate {
     // `recallAcrossMemory` — so one flag on it is one switch, not three.
     this.recallEnabled = config?.memoryRecallEnabled !== false;
     this.store = store;
+    this.nativeMemory = nativeMemory;
     this.openViking = openViking;
     this.rerank = rerank;
     this.jobs = jobs;
@@ -240,6 +241,16 @@ export class MemorySubstrate {
     // whichever index is serving.
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return [];
+    if (typeof this.store?.memoryEngine === "function" && await this.store.memoryEngine(userId) === "native") {
+      if (!this.nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+      if (asOf != null) throw new HttpError(400, "memory_as_of_unsupported", "Historical recall is unavailable on this memory engine.");
+      const found = await this.nativeMemory.search(userId, query);
+      return selectWithinBudget((found.items ?? [])
+        .filter((record) => !record.sensitive && record.status === "active"
+          && (record.scope === "user" || (record.scope === "project" && record.scopeId === projectId)))
+        .map((record) => ({ memo: { ...record, content: record.value, memoryType: record.nativeType ?? "native" } })),
+      { contextLimit: this.contextLimit, contextMaxChars: this.contextMaxChars });
+    }
     const served = await this.#served(userId, query, { projectId, sessionId, asOf, now, standing });
     // What the page means by 「用过 7 次，上次 9月18日」, counted at the one port
     // every recall passes through. Never awaited and never able to throw: a

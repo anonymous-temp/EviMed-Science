@@ -300,9 +300,11 @@ export class OpenVikingClient {
         content: String(content ?? ""),
         mode: "replace",
         wait: Boolean(wait),
-        ...(timeoutSeconds == null ? {} : { timeout: Number(timeoutSeconds) }),
         ...(tags.length ? { tags, tag_mode: "replace" } : {}),
       },
+      // Waiting is bounded by HTTP; v0.5.1 removed the body timeout. An HTTP
+      // abort does not cancel the engine's already accepted background work.
+      timeoutMs: timeoutSeconds == null ? null : Number(timeoutSeconds) * 1_000,
     });
   }
 

@@ -1,0 +1,13 @@
+{
+  "kind": "official-C-export-preflight",
+  "status": "blocked",
+  "blocked": [
+    "Actual product control-plane URL missing",
+    "Owned isolated product data directory missing",
+    "Live shared budget wiring missing",
+    "Actual native engine/model/revision identity receipt missing"
+  ],
+  "spendCny": 0,
+  "collectorBinding": null,
+  "trees": []
+}

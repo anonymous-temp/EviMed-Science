@@ -16,6 +16,20 @@
 
 ---
 
+## Execution checkpoint — 2026-10-23
+
+The owner approved execution. Baseline is `01e965e99a1118439557210b7ab28b9b7e7338a9`; production still serves that baseline until the release ledger records a verified switch. Implementation runs in the attached `platform-followups` worktree. The primary checkout and unrelated peer-review artifacts are preserved.
+
+Implemented and locally exercised: source logical identity/tombstone restoration and immutable versions; durable lifecycle replay and fair reconciliation; immediate resource/compiled-scope revocation; explicit selected-empty scope across native parent/child tools; partial-sync Compile deferral; library and source lineage invalidation; native external-memory admission and capsule snapshot rechecks; quotation version/time and reparse invalidation; scope/search/selection/polling repairs; graph controls, accessible relation evidence and unsent conversation handoffs; conflict draft and Unicode download repairs. Runtime replica locking received an additional independent review; the deterministic real-PostgreSQL concurrent-mutation regression now passes and the fix is approved.
+
+Evidence is under `.evimed-local/acceptance/knowledge-integration-20261023/`. The frontend full run passed 404 files / 5,027 tests before the final citation-map regression; that final focused editor run passed 14 tests. The local browser walk passed 11 journeys, with native DSH composition explicitly blocked in the mock-runtime fixture. The final changed-backend run on real PostgreSQL passed 436 tests with two intentional Docker-only skips. The full harness-port suite passed 368 tests with eight explicit fixture/environment skips after matching the standalone CI pnpm executable. Full Linux CI and real native production journeys remain separate gates. These overlapping counts are not added together.
+
+OpenViking 0.5.1.1 has an isolated API/volume fixture, but native model, Compile, page-limit and upgrade/restore evidence is incomplete. The production pin stays 0.5.0; no obsolete shim or limit is removed without that evidence. The 90-question product harness and official-Wiki C preparation are implemented with a shared CNY50 cap, exact endpoint/process binding and independent run evidence. No paid quality comparison has run and no answer-quality improvement is claimed.
+
+Latest owner deployment decision: finish and push the code, then use the existing Tencent Cloud host. `ubuntu@82.156.128.153` is reachable through the current local SSH configuration. Alibaba is no longer the target. Scoped obsolete-image cleanup and native-engine encrypted backup/isolated restore have completed; exact candidate capacity and serving activation remain pending; no platform switch has occurred. Remaining live work includes native composer/right pane, source/runtime and capsule roundtrips, shared load, frozen quality experiments, exact images and post-deployment user journeys.
+
+The checkboxes below remain acceptance items; implementation alone does not mark a live journey complete.
+
 ## 1. Decisions this plan preserves
 
 1. EviMed is a general agent platform first, with medical evidence methods added when relevant. Normal documents, spreadsheets, code and office work remain first-class.

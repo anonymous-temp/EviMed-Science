@@ -100,6 +100,101 @@ export class NativeMemoryOverlay {
 
   async migrate() { await this.#query("SELECT 1"); }
 
+  /** External candidates are admitted once per immutable revision, before any extracting session is touched.
+   * @param {string} userId @param {any} input */
+  async queueAdmission(userId, input) {
+    const result = await this.#query(`INSERT INTO evimed_memory.native_admissions
+      (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at)
+      SELECT id,$2,$3,$4,$5,$6,created_at FROM evimed_control.users WHERE id=$1
+      ON CONFLICT (user_id,candidate_id,candidate_revision) DO UPDATE SET candidate_id=EXCLUDED.candidate_id
+      RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text]);
+    if (!result.rows[0]) throw new HttpError(404, "memory_admission_gone", "The account no longer exists.");
+    return admissionRow(result.rows[0]);
+  }
+
+  /** @param {string} userId @param {string} candidateId @param {number} revision */
+  async admission(userId, candidateId, revision) {
+    const result = await this.#query(`SELECT a.* FROM evimed_memory.native_admissions a JOIN evimed_control.users u
+      ON u.id=a.user_id AND u.created_at=a.account_created_at WHERE a.user_id=$1 AND a.candidate_id=$2 AND a.candidate_revision=$3`,
+    [owner(userId), candidateId, revision]);
+    return result.rows[0] ? admissionRow(result.rows[0]) : null;
+  }
+
+  /** A short lease serializes confirmations and worker recovery. Expired submissions are inspected, never blindly resent.
+   * @param {string} userId @param {string} candidateId @param {number} revision */
+  async claimAdmission(userId, candidateId, revision) {
+    const result = await this.#query(`UPDATE evimed_memory.native_admissions a SET lease_until=clock_timestamp()+interval '2 minutes',
+      updated_at=clock_timestamp() FROM evimed_control.users u WHERE a.user_id=$1 AND a.candidate_id=$2 AND a.candidate_revision=$3
+      AND u.id=a.user_id AND u.created_at=a.account_created_at AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) RETURNING a.*`,
+    [owner(userId), candidateId, revision]);
+    return result.rows[0] ? admissionRow(result.rows[0]) : null;
+  }
+
+  /** @param {string} userId @param {string} candidateId @param {number} revision @param {any} patch */
+  async updateAdmission(userId, candidateId, revision, patch) {
+    const result = await this.#query(`UPDATE evimed_memory.native_admissions a SET
+      state=COALESCE($4,state), phase=COALESCE($5,phase), archive_uri=COALESCE($6,archive_uri), task_id=COALESCE($7,task_id),
+      record_ids=COALESCE($8::jsonb,record_ids),error=COALESCE($9,error),
+      pending_text=CASE WHEN $4 IN ('completed','cancelled') THEN NULL ELSE pending_text END,
+      lease_until=CASE WHEN $10 THEN NULL ELSE lease_until END,updated_at=clock_timestamp()
+      FROM evimed_control.users u WHERE a.user_id=$1 AND a.candidate_id=$2 AND a.candidate_revision=$3
+      AND u.id=a.user_id AND u.created_at=a.account_created_at RETURNING a.*`,
+    [owner(userId), candidateId, revision, patch.state ?? null, patch.phase ?? null, patch.archiveUri ?? null, patch.taskId ?? null,
+      patch.recordIds ? JSON.stringify(patch.recordIds) : null, patch.error ?? null, patch.release === true]);
+    if (!result.rows[0]) throw new HttpError(404, "memory_admission_gone", "This admission no longer belongs to the account.");
+    return admissionRow(result.rows[0]);
+  }
+
+  /** @param {string} userId */
+  async openAdmissions(userId) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1 AND state NOT IN ('completed','cancelled')
+      ORDER BY created_at LIMIT 50`, [owner(userId)]);
+    return result.rows.map(admissionRow);
+  }
+
+  /** Recheck the current owner, engine, project and immutable candidate revision before extraction or a retry.
+   * @param {string} userId @param {any} admission */
+  async admissionAuthority(userId, admission) {
+    const policy = await this.#query(`SELECT s.engine,s.learning_paused,s.paused_projects FROM evimed_memory.settings s
+      JOIN evimed_control.users u ON u.id=s.user_id WHERE s.user_id=$1`, [owner(userId)]);
+    const settings = policy.rows[0];
+    if (!settings || settings.engine !== "native") return { allowed: false, state: "cancelled", reason: "memory_engine_changed" };
+    if (settings.learning_paused || (admission.projectId && (settings.paused_projects ?? []).includes(admission.projectId))) {
+      return { allowed: false, state: "suspended", reason: "learning_paused" };
+    }
+    if (admission.projectId) {
+      const project = await this.#query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [userId, admission.projectId]);
+      if (!project.rows.length) return { allowed: false, state: "cancelled", reason: "project_unavailable" };
+    }
+    if (String(admission.candidateId).startsWith("record:")) {
+      const found = await this.#query("SELECT version,status,scope,scope_id FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [userId, admission.candidateId.slice(7)]);
+      const candidate = found.rows[0];
+      if (!candidate || candidate.version !== admission.revision || candidate.status !== "pending"
+        || (candidate.scope === "project" ? candidate.scope_id : null) !== admission.projectId) {
+        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
+      }
+    } else {
+      const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
+      const candidate = found.rows[0];
+      if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
+        || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
+        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
+      }
+    }
+    return { allowed: true, state: null, reason: null };
+  }
+
+  /** A replay keeps the original candidate's authorization, including through the existing commit replay chain.
+   * @param {string} userId @param {any} commit */
+  async admissionOfCommit(userId, commit) {
+    const result = await this.#query(`WITH RECURSIVE lineage AS (
+      SELECT archive_uri,engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri=$2
+      UNION SELECT c.archive_uri,c.engine_session FROM evimed_memory.native_commits c JOIN lineage l ON c.replayed_as=l.archive_uri WHERE c.user_id=$1
+    ) SELECT a.* FROM evimed_memory.native_admissions a JOIN lineage l ON a.engine_session=l.engine_session OR a.archive_uri=l.archive_uri
+      WHERE a.user_id=$1 LIMIT 1`, [owner(userId), commit.archiveUri]);
+    return result.rows[0] ? admissionRow(result.rows[0]) : null;
+  }
+
   // ---------------------------------------------------------------- accounts
 
   /** @param {string} userId */
@@ -275,6 +370,13 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND ($2::timestamptz IS NULL OR changed_at > $2) AND ($3::text IS NULL OR engine_session = $3) AND actor = ANY($4::text[])
         AND undone_at IS NULL
       ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20))]);
+    return result.rows.map(publicRevision);
+  }
+
+  /** Exact admission lineage is not the dashboard's bounded recent-changes list.
+   * @param {string} userId @param {string} archiveUri */
+  async admissionRevisions(userId, archiveUri) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND archive_uri=$2 ORDER BY id", [owner(userId), archiveUri]);
     return result.rows.map(publicRevision);
   }
 
@@ -489,6 +591,7 @@ export class NativeMemoryOverlay {
     const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1", [id]);
     const revisions = await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1", [id]);
     const commits = await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1", [id]);
+    await this.#query("DELETE FROM evimed_memory.native_admissions WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1", [id]);
@@ -504,8 +607,17 @@ export class NativeMemoryOverlay {
       await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
       await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
     }
+    await this.#query("DELETE FROM evimed_memory.native_admissions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
     await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
     await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
     return { files: uris };
   }
+}
+
+/** @param {any} row */
+function admissionRow(row) {
+  return { userId: row.user_id, candidateId: row.candidate_id, revision: row.candidate_revision,
+    engineSession: row.engine_session, projectId: row.project_id, text: row.pending_text,
+    state: row.state, phase: row.phase, archiveUri: row.archive_uri, taskId: row.task_id,
+    recordIds: row.record_ids ?? [], error: row.error, createdAt: instant(row.created_at), updatedAt: instant(row.updated_at) };
 }
