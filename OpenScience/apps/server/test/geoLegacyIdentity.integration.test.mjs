@@ -46,7 +46,7 @@ test('legacy same-snapshot wrong enrichment preserves one stable handled issue a
   await record(f); await record(f);
   const rows = await errors(f);
   assert.equal(rows.length, 1); assert.equal(rows[0].id, `${f.id}_error`); assert.equal(rows[0].fingerprint, errorFingerprint(canonical));
-  assert.equal(rows[0].status, 'acting'); assert.equal(rows[0].materials.length, 1); assert.ok(rows[0].notified_at); assert.equal(f.notices.length, 0);
+  assert.equal(rows[0].status, 'acting'); assert.equal(new Date(rows[0].updated_at).toISOString(), '2026-10-24T01:03:00.000Z', 'identity bookkeeping is not a new consumer occurrence'); assert.equal(rows[0].materials.length, 1); assert.ok(rows[0].notified_at); assert.equal(f.notices.length, 0);
   assert.equal(rows[0].judgment_history.filter(row => row.kind === 'legacy_identity_promoted').length, 1);
   assert.ok(after.history.some(row => row.assessment.statements.some(statement => statement.claimVersion == null && statement.verdict === 'wrong')));
 });

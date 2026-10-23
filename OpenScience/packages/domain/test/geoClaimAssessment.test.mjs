@@ -6,7 +6,7 @@ const legacy = { text: 'All ages.', claimId: claim.id, claimKey: claim.key, verd
 test('legacy identity fills only from its unique frozen claim and leaves the original unchanged', () => {
   const enriched = geoEnrichStatementIdentity(legacy, [claim])
   assert.equal(geoClaimAssessmentIdentity(enriched), geoClaimAssessmentIdentity(claim))
-  assert.equal(legacy.claimVersion, undefined)
+  assert.equal(Object.hasOwn(legacy, "claimVersion"), false)
   assert.equal(enriched.verdict, 'wrong')
 })
 test('missing, mixed versions, populations, forms and label conditions remain unknown', () => {
