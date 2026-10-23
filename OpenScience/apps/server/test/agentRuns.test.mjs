@@ -9014,3 +9014,35 @@ test("what a run recorded as its outputs is what a reader is shown, whatever the
     assert.equal(store.withArtifactKinds(old).artifactKinds["weekly.docx"], "deliverable", "and as an answer-line run it was ordinary");
   });
 });
+
+
+test("a run's ledger row keeps why each learned method's card was there, from a closed list, and nothing else about a receipt", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-reasons-"));
+  try {
+    const project = { id: "p", userId: "u", rootDir: root, baseDir: path.join(root, "workspace"), workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_reasons", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000, monitorMaxPolls: 20, readSessionHistory: async () => [], readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_reasons" }, async () => ({ accepted: true }));
+    const digest = (letter) => `sha256:${letter.repeat(64)}`;
+    await store.recordLearning(project, run.id, { methodsLoaded: [
+      { name: "a", digest: digest("a"), reason: "similarity" },
+      { name: "b", digest: digest("b"), reason: "explore", secret: "never kept" },
+      { name: "c", digest: digest("c"), reason: "because I said so" },
+      { name: "d", digest: digest("d") },
+    ] });
+    const [stored] = await store.list(project);
+    assert.deepEqual(stored.methodsLoaded, [
+      { name: "a", digest: digest("a"), reason: "similarity" },
+      { name: "b", digest: digest("b"), reason: "explore" },
+      { name: "c", digest: digest("c") },
+      { name: "d", digest: digest("d") },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

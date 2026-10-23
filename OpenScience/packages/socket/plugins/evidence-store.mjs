@@ -88,6 +88,14 @@ export async function apply(ctx, config) {
      */
     mountedMethods: new Map(),
     /**
+     * The methods each root session was given when its conversation began in this runtime, with why each card was there: the
+     * receipt of what that session carried. Beside the runtime-wide one because the directory is rewritten for each conversation
+     * that starts (`evimed-capsule`), so what the runtime mounted last is not what an older conversation was given. Bounded:
+     * only conversations still being prompted need an entry.
+     * @type {Map<string, { name: string, digest: string, reason?: string }[]>}
+     */
+    mountedMethodsBySession: new Map(),
+    /**
      * What a run-level tool may look at, per root session: the deliverables
      * this conversation planned, and a resolver for the claim ids they carry.
      *
@@ -157,6 +165,24 @@ export async function apply(ctx, config) {
         if (methodName && digest) store.mountedMethods.set(methodName, digest)
       }
     },
+    /**
+     * Record the methods one conversation was given, by name, body digest and the reason its card was there.
+     * @param {string} sessionId
+     * @param {readonly { name: string, digest: string, reason?: string | null }[]} methods
+     */
+    sessionMethods(sessionId, methods) {
+      const key = String(sessionId ?? '').trim()
+      if (!key) return
+      const entries = []
+      for (const method of methods ?? []) {
+        const methodName = String(method?.name ?? '').trim()
+        const digest = String(method?.digest ?? '').trim()
+        if (methodName && digest) entries.push({ name: methodName, digest, ...(typeof method?.reason === 'string' && method.reason ? { reason: method.reason } : {}) })
+      }
+      store.mountedMethodsBySession.delete(key)
+      store.mountedMethodsBySession.set(key, entries)
+      while (store.mountedMethodsBySession.size > 256) store.mountedMethodsBySession.delete(/** @type {string} */ (store.mountedMethodsBySession.keys().next().value))
+    },
     /** @param {string} runId */
     forRun(runId) { return runId ? scopedDiagnostics(runId) : this },
     /** @param {string} sessionId */
@@ -186,7 +212,9 @@ export async function apply(ctx, config) {
       // which the gate reads as "the model had to load it itself", exactly as
       // it did before this existed.
       injectedSkills: [...store.injectedSkills],
-      mountedMethods: [...store.mountedMethods].map(([methodName, digest]) => ({ name: methodName, digest })),
+      // What this run's conversation was given when it began; the runtime-wide set when nothing is recorded for it (a runtime that
+      // predates the per-conversation mount).
+      mountedMethods: store.mountedMethodsBySession.get(String(run.sessionId ?? '')) ?? [...store.mountedMethods].map(([methodName, digest]) => ({ name: methodName, digest })),
       qualityNotices: [...store.qualityNotices, ...(store.runQualityNotices.get(run.runId) ?? [])],
       degraded: [...store.degraded, ...(store.runDegraded.get(run.runId) ?? [])],
       now: new Date().toISOString(),

@@ -56,6 +56,11 @@ test("a conversation's first message chooses what the running runtime carries, a
     assert.equal(f.runtime.capsuleMethodsMounted, 2);
     assert.equal(f.runtime.methodsVersion, selection.version);
     assert.equal(f.manager.lastMountedLearnedMethods.get(f.manager.key(f.project)).find((method) => method.name === "grade-first").reason, "similarity");
+    // What the conversation was given is its receipt when the runtime left none: the answer line plans and delegates nothing.
+    const given = f.manager.methodsGivenTo(f.project, "s1");
+    assert.deepEqual(given.map((method) => [method.name, method.reason]).sort(), [["grade-first", "similarity"], ["slide-titles", "explore"]]);
+    assert.match(given[0].digest, /^sha256:[0-9a-f]{64}$/);
+    assert.deepEqual(f.manager.methodsGivenTo(f.project, "another-session"), []);
     // The same conversation again is not prepared again, and a force does it.
     assert.deepEqual(await f.manager.refreshCapsuleMethods({ userId: "alice", projectId: "paper1", sessionId: "s1", query: "and now something else" }), { refreshed: 0, skipped: ["session_prepared"] });
     assert.deepEqual(await f.manager.refreshCapsuleMethods({ userId: "alice", projectId: "paper1", sessionId: "s1", query: "and now something else", force: true }), { refreshed: 1, skipped: [] });

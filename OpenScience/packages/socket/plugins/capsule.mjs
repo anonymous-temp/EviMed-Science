@@ -24,6 +24,15 @@
  * (`src/learnedMethods.mjs`): the reading is the one trace that says a learned
  * method was used.
  *
+ * What a conversation is shown of them is decided when it begins, not when the runtime does. The control plane rewrites the mounted
+ * directory for the first prompt of each conversation (`RuntimeManager.refreshCapsuleMethods`: the methods nearest to what is asked,
+ * what they reuse, one slot of exposure) and writes `_selection.json` beside it — what to list, in order, and why each learned method is
+ * there. This row reads it when the conversation's first prompt is claimed, keeps what it read for that conversation (a running turn,
+ * and the rest of the conversation, keep what they began with; it is read again at the first turn after the selection has changed),
+ * puts it in the methods section of that conversation's system prompt (replaced in the assembly, so the first request carries it),
+ * and records it as that conversation's receipt with the reasons. What the runtime was launched with is the fallback for a
+ * conversation nobody prepared, and for a control plane that predates the selection file.
+ *
  * Two switches, because the row carries two things. The memory half — the
  * recall and note tools — is the model's way into the person's memory, and an
  * account whose memory OpenViking's native engine keeps already has one: the
@@ -37,7 +46,7 @@
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onPreStep, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
+import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onClaimedPromptAssemble, onPreStep, parentSessionOf, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
@@ -53,6 +62,12 @@ export const inject = ['tools', 'systemPrompt']
  *  guidance (120) and the answer persona (121), inside DSH's tool-guidance band. */
 export const METHODS_SECTION_NAME = 'evimed:capsule-methods'
 export const METHODS_SECTION_ORDER = 130
+
+/** The file the control plane writes beside the mounted methods: what to list, in order, and why each learned method is there. */
+export const SELECTION_FILE = '_selection.json'
+
+/** How many conversations' selections are kept: only a conversation still being prompted needs its own. */
+const SNAPSHOT_LIMIT = 256
 
 /** Provided in the preset's realm when the recall and note tools are registered; absent when the memory half is off. */
 export const MEMORY_SERVICE = 'evimedCapsuleMemory'
@@ -93,20 +108,22 @@ export const Config = Schema.object({
  */
 export async function apply(ctx, config) {
   if (config.enabled === false) return
+  // What the runtime was launched with: the fallback for a conversation nobody prepared (below), and the list a plugin that predates the
+  // per-conversation mount is read as.
   const methods = await loadMethods(ctx, config.methodsDir)
   ctx.provide('evimedCapsuleMethods', methods, true)
   // The root session's receipt of what it carries, in the run-state
   // projection beside the delegation receipts (`evidence-store`).
   if (methods.length) ctx.get('evimedDiagnostics')?.mountedMethods?.(methods.map((method) => ({ name: method.name, digest: method.digest })))
-  // A method that cannot be listed costs that method, never the session.
-  if (methods.length) {
-    try {
-      const text = methodsSectionText(methods, config.methodsDir)
-      ctx.effect(() => registerSection(ctx, { name: METHODS_SECTION_NAME, order: METHODS_SECTION_ORDER, text }))
-    } catch (error) {
-      ctx.get('evimedDiagnostics')?.degrade?.(`capsule methods not listed: ${errorMessage(error)}`)
-    }
+  // A method that cannot be listed costs that method, never the session. The section is registered when there is nothing to list too:
+  // it holds the place a conversation's own list is put in (`conversationMethods`).
+  try {
+    const text = methods.length ? methodsSectionText(methods, config.methodsDir) : ''
+    ctx.effect(() => registerSection(ctx, { name: METHODS_SECTION_NAME, order: METHODS_SECTION_ORDER, text }))
+  } catch (error) {
+    ctx.get('evimedDiagnostics')?.degrade?.(`capsule methods not listed: ${errorMessage(error)}`)
   }
+  if (config.methodsDir) conversationMethods(ctx, config, methods)
 
   // Reported, not returned from. With the memory half on, the two tools below
   // are registered whether or not a memory service is configured: absence is
@@ -204,6 +221,101 @@ export async function apply(ctx, config) {
 }
 
 /**
+ * What the conversation is shown of the mounted methods, decided when it begins.
+ *
+ * A snapshot per root session, taken at its first assembly in this runtime (so a conversation that was resumed after the runtime
+ * restarted is given one too) and renewed at the first turn after the control plane wrote another selection (`_selection.json`'s version).
+ * The methods section of every assembly of that agent, and of its children, is replaced with the snapshot's, and the snapshot is the
+ * conversation's receipt (`evimedDiagnostics.sessionMethods`) and what its delegations carry (`evimedCapsuleMethods.forSession`).
+ * A failure anywhere here leaves the conversation with what the runtime was launched with.
+ * @param {any} ctx @param {Config} config @param {MountedMethod[]} launched
+ */
+function conversationMethods(ctx, config, launched) {
+  /** @type {Map<string, { methods: MountedMethod[], text: string, version: string | null, turn: number }>} */
+  const snapshots = new Map()
+  /** The newest snapshot any conversation took: what a child of a conversation with none is given. @type {{ methods: MountedMethod[], text: string } | null} */
+  let latest = null
+  /** @param {string} sessionId @returns {string} */
+  const rootOf = (sessionId) => sessionId
+  // The methods of one conversation, asked of the list the row already provides (`evimedCapsuleMethods`), which stays what the runtime
+  // was launched with for every reader that takes it as a list. Not a service of its own: a provided service belongs to the
+  // preset's isolation realms, and this is the same list asked by session.
+  Object.defineProperty(launched, 'forSession', {
+    value: (/** @type {string} */ sessionId) => snapshots.get(rootOf(String(sessionId ?? '')))?.methods ?? latest?.methods ?? launched,
+    enumerable: false,
+    configurable: true,
+  })
+  ctx.effect(() => onClaimedPromptAssemble(ctx, async (agent, claimed, assembly) => {
+    try {
+      const child = isSubagentSession(agent)
+      const root = child ? parentSessionOf(agent) : String(agent?.session?.id ?? '')
+      if (!root || !Array.isArray(assembly?.sections)) return false
+      let snapshot = snapshots.get(root)
+      const turnStart = !child && claimed.inputs.length > 0
+      let selection = /** @type {Selection | null | undefined} */ (undefined)
+      if (turnStart && snapshot && snapshot.turn !== claimed.turn) {
+        // A new turn: the selection the control plane has written since this conversation took its own renews it; the same one only
+        // notes the turn. A running turn never reaches here: its steps claim nothing.
+        selection = await readSelection(ctx, config.methodsDir)
+        if (selection && selection.version !== snapshot.version) snapshot = undefined
+        else snapshot.turn = claimed.turn
+      }
+      if (!snapshot && !child) {
+        if (selection === undefined) selection = await readSelection(ctx, config.methodsDir)
+        const taken = await loadMethods(ctx, config.methodsDir, selection)
+        snapshot = { methods: taken, text: taken.length ? methodsSectionText(taken, config.methodsDir) : '', version: selection?.version ?? null, turn: claimed.turn }
+        snapshots.delete(root)
+        snapshots.set(root, snapshot)
+        while (snapshots.size > SNAPSHOT_LIMIT) snapshots.delete(/** @type {string} */ (snapshots.keys().next().value))
+        latest = { methods: snapshot.methods, text: snapshot.text }
+        // This conversation's receipt: the methods it was given, and why each card was there.
+        ctx.get('evimedDiagnostics')?.sessionMethods?.(root, taken.map((method) => ({ name: method.name, digest: method.digest, reason: method.reason })))
+      }
+      const text = (snapshot ?? latest)?.text
+      if (typeof text !== 'string') return false
+      const section = assembly.sections.find((/** @type {any} */ entry) => entry?.name === METHODS_SECTION_NAME)
+      // Cards are literal text: a description with braces in it must not be read as a prompt variable.
+      if (section) { section.text = text; section.interpolate = false }
+    } catch (error) {
+      ctx.get('evimedDiagnostics')?.degrade?.(`conversation methods not read: ${errorMessage(error)}`)
+    }
+    return false
+  }))
+}
+
+/**
+ * @typedef {object} Selection
+ * @property {string} version
+ * @property {{ directory: string, reason: string | null }[]} entries  in the order they are listed
+ */
+
+/**
+ * The selection file the control plane wrote beside the methods, or null when there is none (a control plane that predates it) or it
+ * cannot be read: the caller lists the directories then, as it always did.
+ * @param {any} ctx @param {string} directory
+ * @returns {Promise<Selection | null>}
+ */
+async function readSelection(ctx, directory) {
+  if (!directory) return null
+  const text = await readFileAt(ctx, directory, SELECTION_FILE)
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.methods)) return null
+    const entries = []
+    for (const entry of parsed.methods) {
+      const directoryName = String(entry?.directory ?? '')
+      // A name the control plane wrote is a directory under this one, never a path out of it.
+      if (!directoryName || /[\\/]/.test(directoryName) || directoryName.startsWith('.')) continue
+      entries.push({ directory: directoryName, reason: typeof entry?.reason === 'string' && entry.reason ? entry.reason : null })
+    }
+    return { version: String(parsed.version ?? ''), entries }
+  } catch {
+    return null
+  }
+}
+
+/**
  * The memory half: recall and note, and the service that tells the run policy
  * they exist.
  * @param {any} ctx @param {Config} config
@@ -288,30 +400,37 @@ async function registerMemoryTools(ctx, config) {
  * And the path of its file in the container, which is what a learned method's
  * card names (`src/learnedMethods.mjs`) and what the control plane recognises
  * a session opening (`methodObservations.mjs`).
- * @param {any} ctx @param {string} directory
- * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]>}
+ * @param {any} ctx @param {string} directory @param {Selection | null} [selection] what to list, when the caller has already read it (null: every directory)
+ * @returns {Promise<MountedMethod[]>}
  */
-async function loadMethods(ctx, directory) {
+async function loadMethods(ctx, directory, selection = undefined) {
   if (!directory) return []
-  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]} */
+  // The selection names what to list and why; without one (or one that cannot be read) every directory is listed, as it always was.
+  const picked = selection === undefined ? await readSelection(ctx, directory) : selection
+  const entries = picked
+    ? picked.entries
+    : (await listDirAt(ctx, directory, '.')).filter((entry) => entry.directory).map((entry) => ({ directory: entry.name, reason: /** @type {string | null} */ (null) }))
+  /** @type {MountedMethod[]} */
   const methods = []
-  for (const entry of await listDirAt(ctx, directory, '.')) {
-    if (!entry.directory) continue
-    const body = await readFileAt(ctx, directory, `${entry.name}/SKILL.md`)
+  for (const entry of entries) {
+    const body = await readFileAt(ctx, directory, `${entry.directory}/SKILL.md`)
     if (!body) continue
     const front = parseFrontmatter(body)
     methods.push({
-      name: String(front.name ?? entry.name),
+      name: String(front.name ?? entry.directory),
       description: String(front.description ?? ''),
       whenToUse: String(front.whenToUse ?? ''),
       body,
       digest: await skillBodyDigestAsync(body),
-      directory: entry.name,
-      path: `${directory.replace(/\/+$/, '')}/${entry.name}/SKILL.md`,
+      directory: entry.directory,
+      path: `${directory.replace(/\/+$/, '')}/${entry.directory}/SKILL.md`,
+      reason: entry.reason,
     })
   }
   return methods
 }
+
+/** @typedef {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string, reason?: string | null }} MountedMethod */
 
 /**
  * What the model is told a mounted method is: where it came from, and nothing

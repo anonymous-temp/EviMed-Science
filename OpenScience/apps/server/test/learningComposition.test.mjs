@@ -168,8 +168,11 @@ test("the projection the feed attributes against is the run's own, not whatever 
   // Attribution names deliverables. A projection belonging to a different run
   // holds different deliverable ids, and the failure would not be an error —
   // it would be confident credit assigned to the wrong work.
+  // What is read is the run's own (`runWorkflowProjection` scopes it to the run); with none, only what the control plane itself gave the
+  // conversation counts, and its deliverables are not invented.
   assert.match(serverSource, /await agentRuns\.runWorkflowProjection\(project, run\)/);
-  assert.match(serverSource, /if \(!projection\) return;/);
+  assert.match(serverSource, /if \(!read && !given\.length\) return;/);
+  assert.match(serverSource, /const projection = \{ \.\.\.\(read \?\? \{\}\),/);
 });
 
 test("the evaluation corpus has a producer, and the control plane is not it", async () => {
@@ -399,4 +402,12 @@ test("a method that changed or was stopped, and a conversation that is about to 
   assert.match(native, /runtimeManager\.refreshCapsuleMethods\(\{ userId: project\.userId, projectId: project\.id, sessionId: String\(request\?\.sessionId \?\? ""\),\s*query: nativeInputText\(request\?\.content\)/);
   assert.match(native, /scopeId: runScopeOf\(envelope\.route\.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID\)/, "the scope is the route the first message was given");
   assert.match(native, /if \(failed\) throw failed\.error;/, "a supplement that could not be prepared is still told, after the methods were");
+});
+
+test("a conversation that planned and delegated nothing is counted against what the control plane gave it, not skipped for want of a receipt", () => {
+  // 2026-10-23: `readRunStateProjection` scopes a native turn's projection through its workflow proof, which a turn that called none of
+  // the plan tools does not have, so `recordMethodUse` returned at once for the answer line and its methods were never carried or read.
+  const record = serverSource.slice(serverSource.indexOf("const recordMethodUse = async"), serverSource.indexOf("// Constructed after the runtime exists"));
+  assert.match(record, /const given = run\.sessionId \? runtimeManager\.methodsGivenTo\(project, String\(run\.sessionId\)\) : \[\];\s*if \(!read && !given\.length\) return;/);
+  assert.match(record, /Array\.isArray\(read\?\.mountedMethods\) && read\.mountedMethods\.length \? read\.mountedMethods/, "the runtime's own receipt is preferred");
 });

@@ -1522,8 +1522,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // methods did in it is not a use of them.
     if (run.sessionId && (await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId)
       .catch(() => ({ trial: false }))).trial) return;
-    const projection = await agentRuns.runWorkflowProjection(project, run);
-    if (!projection) return;
+    // The runtime's receipt of the run, when it left one. A conversation that planned and delegated nothing — the answer line, most
+    // of the traffic — leaves none the control plane can scope to its turn (`readRunStateProjection`), and used to be counted for
+    // nothing: not carried, not read. What the control plane gave the conversation when its first prompt arrived is its receipt then.
+    const read = await agentRuns.runWorkflowProjection(project, run);
+    const given = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
+    if (!read && !given.length) return;
+    const projection = { ...(read ?? {}),
+      mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods
+        : given.map(({ name, digest, reason }) => ({ name, digest, reason })) };
     // The whole library: a researcher's methods follow them across projects
     // (`selectLearnedMethods`), so a use is attributed wherever it happens —
     // of the kind of work this run's runtime carried (L-G7), so a research

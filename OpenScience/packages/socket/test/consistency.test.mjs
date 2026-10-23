@@ -1518,6 +1518,27 @@ test("the delegation receipt names first and hashes beside the child, and the re
   assert.equal(settled.receiptError, undefined);
 });
 
+test("a delegation carries the methods its conversation was given, with why each card was there, and not the list the runtime started with", async () => {
+  // 2026-10-23: the runtime's list is the one it started with; each conversation is given its own when it begins, and a child
+  // is handed (and its receipt records) what its parent conversation was shown.
+  const f = await nativePolicyFixture({ briefId: "delegation_owner", subagentStart: () => ({ id: "child", result: Promise.resolve({ stopReason: "completed", output: "done" }) }) });
+  const body = "# Quote first\n\nQuote the source before you summarise it.\n";
+  const launched = [{ name: "launched-only", body: "# Launched\n\nOnly the runtime knows this one.\n" }];
+  /** @type {string[]} */ const asked = [];
+  Object.defineProperty(launched, "forSession", { enumerable: false, value: (/** @type {string} */ sessionId) => { asked.push(sessionId); return [{ name: "quote-first", body, reason: "similarity" }]; } });
+  f.ctx.provide("evimedCapsuleMethods", launched);
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write", clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  for (let attempt = 0; attempt < 40 && ![...f.childRows.values()][0]?.methods; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  const row = [...f.childRows.values()][0];
+  assert.deepEqual(row.methods, [{ name: "quote-first", digest: await skillBodyDigestAsync(body), reason: "similarity" }]);
+  assert.ok(asked.length > 0 && asked.every((sessionId) => typeof sessionId === "string" && sessionId), "asked by the conversation's own session");
+});
+
 test("a retry replaces the failed child with its running session id before settling", async () => {
   /** @type {(value: any) => void} */
   let settleRetry = () => {};

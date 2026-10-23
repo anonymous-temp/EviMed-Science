@@ -155,7 +155,7 @@ export function advanceEvidence(record, event, patch = {}) {
  * @property {Record<string, any>[]} gateRuns
  * @property {Record<string, any>[]} subagents
  * @property {string[]} injectedSkills
- * @property {{ name: string, digest: string }[]} mountedMethods
+ * @property {{ name: string, digest: string, reason?: string }[]} mountedMethods
  * @property {string[]} qualityNotices
  * @property {string[]} degraded
  */
@@ -174,7 +174,7 @@ export const RUN_STATE_FORMAT_VERSION = 1
  *   gateRuns?: readonly Record<string, any>[],
  *   subagents?: readonly Record<string, any>[],
  *   injectedSkills?: readonly string[],
- *   mountedMethods?: readonly { name: string, digest: string }[],
+ *   mountedMethods?: readonly { name: string, digest: string, reason?: string }[],
  *   qualityNotices?: readonly string[],
  *   degraded?: readonly string[],
  *   now: string,
@@ -229,7 +229,7 @@ export function projectRunState(input) {
     // cell was excluded as `arm_not_applied`).
     mountedMethods: (input.mountedMethods ?? [])
       .filter((entry) => entry && typeof entry.name === 'string' && entry.name && typeof entry.digest === 'string' && entry.digest)
-      .map((entry) => ({ name: entry.name, digest: entry.digest })),
+      .map((entry) => ({ name: entry.name, digest: entry.digest, ...(typeof entry.reason === 'string' && entry.reason ? { reason: entry.reason } : {}) })),
     qualityNotices: [...(input.qualityNotices ?? [])],
     degraded: [...(input.degraded ?? [])],
   }

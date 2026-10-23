@@ -3543,6 +3543,13 @@ export class RuntimeManager {
     this.methodMounts = { launches: 0, promptBytes: 0, leftOut: 0, refreshes: 0, refreshFailures: 0 };
     /** The rewrites of a live runtime's methods in flight, by project key: two at once would write one directory twice. */
     this.methodRefreshes = new Map();
+    /**
+     * What the control plane gave each conversation when its first prompt arrived (`refreshCapsuleMethods`): the learned methods, by
+     * id, name, mounted digest and why. The run ledger's receipt for a conversation that planned and delegated nothing, which leaves no
+     * run-state file the control plane can scope to its turn. Bounded: only a conversation still being prompted needs one.
+     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[] }>}
+     */
+    this.sessionMethods = new Map();
     /** Launches that went ahead although the deployment disagrees with its
      *  release manifest (`open_science_runtime_release_unverified_launches_total`),
      *  by the finding's code. The launch is never refused for it; readiness is
@@ -3974,6 +3981,12 @@ export class RuntimeManager {
         if (query !== null || scopeId !== undefined) runtime.methodMountFor = { query, scopeId };
         const mounted = await this.syncCapsuleMethods(project, { ...wanted, launch: false, keep: served });
         for (const method of mounted.learned ?? []) served.add(learnedMethodDirectoryName(method.id));
+        if (sessionId) {
+          const given = `${key}\u0000${sessionId}`;
+          this.sessionMethods.delete(given);
+          this.sessionMethods.set(given, { learned: mounted.learned ?? [] });
+          while (this.sessionMethods.size > 2048) this.sessionMethods.delete(/** @type {string} */ (this.sessionMethods.keys().next().value));
+        }
         runtime.capsuleMethodsMounted = mounted.count;
         runtime.mountedMethodPromptBytes = mounted.promptBytes;
         runtime.methodsVersion = mounted.version;
@@ -3996,6 +4009,16 @@ export class RuntimeManager {
       }
     }
     return { refreshed, skipped };
+  }
+
+  /**
+   * The learned methods the control plane gave one conversation when its first prompt arrived, or none: what a finished run is
+   * counted against when the runtime left no receipt of its own for it (`recordMethodUse`).
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {{id: string, name: string, digest: string, reason: string}[]}
+   */
+  methodsGivenTo(project, sessionId) {
+    return this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`)?.learned ?? [];
   }
 
   activateModelGatewayRuntime(project, runtime) {
