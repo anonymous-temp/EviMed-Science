@@ -223,7 +223,8 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       return reply(await sourceQuoteExcerpt(service, user.id, source, url.searchParams));
     }
     if (action === "family" && method === "GET" && parts.length === 2) {
-      return reply(await service.family(user.id, sourceId, { limit: Number(url.searchParams.get("limit") ?? 50), familyId: url.searchParams.get("familyId") }));
+      const familyId = url.searchParams.get("familyId");
+      return reply(await service.family(user.id, sourceId, { limit: Number(url.searchParams.get("limit") ?? 50), ...(familyId ? { familyId } : {}) }));
     }
     if (action === "understanding" && method === "GET") {
       if (parts.length === 2) return reply(await service.getUnderstanding(user.id, sourceId));
