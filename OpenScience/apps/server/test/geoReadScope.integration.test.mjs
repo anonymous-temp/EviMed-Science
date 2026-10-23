@@ -172,6 +172,13 @@ test("default cluster detail answers belong to the same round as its selection",
   }
 });
 
+test("default group readings expose the same exact membership as the selected measurement", options, async () => {
+  const view = await service.clusters(user, project.id);
+  const group = view.groups.find((entry) => entry.id === "g1");
+  assert.equal(group.mention.members.exact, true);
+  assert.ok(group.mention.snapshotIds.every((id) => id.startsWith("r2-")));
+});
+
 test("source history includes every round selected by an explicit date range", options, async () => {
   await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at)
     SELECT 'history-' || n,$1,$2,'weekly','done',1,'{deepseek}',date '2026-10-03' + n,date '2026-10-03' + n
@@ -248,4 +255,20 @@ test("native error question filters precede totals and pagination", options, asy
   const errors = await service.runtimeRead(project, "errors", { round: "r2", questionId: "q1", limit: 1 });
   assert.equal(errors.total, 1);
   assert.deepEqual(errors.items.map((error) => error.id), ["e2"]);
+});
+
+test("native project and group reads retain comparison DTOs", options, async () => {
+  const scope = { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01" };
+  for (const what of ["project", "clusters"]) assert.ok((await service.runtimeRead(project, what, scope)).comparison);
+});
+
+test("claim aggregates include all matching errors before the independent error page", options, async () => {
+  const view = await service.diagnosis(user, project.id, { round: "r2", errorLimit: 1 });
+  assert.equal(view.errors.length, 1);
+  assert.equal(view.byClaim.reduce((sum, claim) => sum + claim.count, 0), 2);
+});
+
+test("raw citation coverage distinguishes question subsets without depending on judgement", options, async () => {
+  const detail = await service.source(user, project.id, "source1", { from: "2026-10-01", to: "2026-10-02" });
+  assert.notEqual(detail.history[0].coverage, detail.history[1].coverage);
 });
