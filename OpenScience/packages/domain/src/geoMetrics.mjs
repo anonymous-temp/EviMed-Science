@@ -505,7 +505,7 @@ function citationIsOurs(citation, owned) {
 
 /**
  * @typedef {{ status: 'complete'|'partial'|'unknown', reasons: string[], answerChars: number, assessedChars: number }} GeoJudgementCoverage
- * @typedef {{ methodVersion: string, completeAnswers: number, partialAnswers: number, unknownAnswers: number }} GeoAssessmentCounts
+ * @typedef {{ methodVersion: string, completeAnswers: number, partialAnswers: number, unknownAnswers: number, decidableAnswers?: number }} GeoAssessmentCounts
  */
 export const GEO_MEASUREMENT_METHOD_VERSION = 'geo-measurement-2'
 
@@ -628,19 +628,15 @@ function scopeMetrics(items, ctx) {
     else if (item.accuracy === 'correct') right += 1
   }
   const adjudicated = right + wrong
-  const assessment = {
-    methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
-    completeAnswers: adjudicated,
-    partialAnswers: valid.filter((item) => item.accuracy === 'partial').length,
-    unknownAnswers: valid.filter((item) => item.accuracy === 'unknown').length,
-  }
-  const semantic = valid.filter((item) => item.judgementCoverage === 'complete' || item.status === 'refusal')
   const semanticAssessment = {
     methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
-    completeAnswers: semantic.length,
-    partialAnswers: valid.filter((item) => item.status !== 'refusal' && item.judgementCoverage === 'partial').length,
-    unknownAnswers: valid.filter((item) => item.status !== 'refusal' && item.judgementCoverage === 'unknown').length,
+    completeAnswers: valid.filter((item) => item.judgementCoverage === 'complete').length,
+    partialAnswers: valid.filter((item) => item.judgementCoverage === 'partial').length,
+    unknownAnswers: valid.filter((item) => item.judgementCoverage === 'unknown').length,
   }
+  // A verified error settles correctness without proving every part was read.
+  const assessment = { ...semanticAssessment, decidableAnswers: adjudicated }
+  const semantic = valid.filter((item) => item.judgementCoverage === 'complete' || item.status === 'refusal')
 
   /** @type {number[]} */
   const positions = []
@@ -693,6 +689,20 @@ function scopeMetrics(items, ctx) {
       ? unmeasurable('not_extracted')
       : { ...rate(semantic.filter((item) => item.safetyHit === true).length, semantic.length, 'no_valid_answers'), assessment: semanticAssessment },
     'M-20': rate(nValid, nValid + suspects, 'no_snapshots'),
+  }
+  // The entity universe comes from model extraction, unlike literal registered
+  // brand matching. A partial/unknown answer cannot certify the registry floor
+  // or share of voice, even when every observed name is registered. Keep the
+  // observed counts and coverage without presenting them as a complete rate.
+  if (valid.some((item) => item.status !== 'refusal' && item.judgementCoverage !== 'complete')) {
+    for (const id of ['M-04', 'M-04C']) {
+      out[id] = { ...unmeasurable('entity_extraction_incomplete'),
+        numerator: id === 'M-04' ? selfTotal : brandTotal,
+        denominator: id === 'M-04' ? brandTotal : entityTotal, assessment: semanticAssessment }
+    }
+  } else {
+    out['M-04'].assessment = semanticAssessment
+    out['M-04C'].assessment = semanticAssessment
   }
   // Rates over questions answered a different number of times are not one
   // rate: a pool whose questions have 3 and 5 valid answers averages two

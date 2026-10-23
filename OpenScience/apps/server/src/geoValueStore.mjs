@@ -64,10 +64,11 @@ export const GEO_VALUE_OBSERVATIONS_SHOWN = 20;
  * (`judge_extract.valueCoverage`), read where it is stored. One entry per finding per answer: 400 answers and 20 findings
  * are eight thousand entries and nearly three megabytes of JSON, which the runtime's client refuses past four (D-08) — so
  * the counts are taken in SQL, grouped by the profile version each answer was judged against and by status, and only the
- * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, those that say something (any status but
- * `not_applicable`) before those that do not, the most recent answers first.
+ * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, observed statements before unknown or inapplicable
+ * entries, the most recent answers first. Incomplete assessments cannot establish whole-answer absence or inapplicability:
+ * those stored interpretations are returned as uncertain with their original status and coverage, without rewriting history.
  * @param {any} store @param {string} geoId @param {{ engine?: string | null, groupId?: string | null, audience?: string | null }} [filter]
- * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number }>,
+ * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number, judgementCoverage: string }>,
  *   sample: Array<Record<string, any> & { basisVersion: number | null }> }>}
  */
 export async function readGeoValueCoverage(store, geoId, { engine = null, groupId = null, audience = null } = {}) {
@@ -82,21 +83,42 @@ export async function readGeoValueCoverage(store, geoId, { engine = null, groupI
       AND s.round_id =
         (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
           AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`;
+  // One read-time interpretation feeds both counts and sampled observations.
+  // Historical rows with no coverage remain unknown; the older explicit cut
+  // is sufficient evidence of partial coverage. Supported observed text stays.
+  const cte = `WITH observations AS (
+      SELECT obs.entry, obs.position, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric,
+        f.checks, s.engine, s.round_id, s.asked_at, s.id AS snapshot_id, char_length(coalesce(s.answer_text, '')) AS answer_chars,
+        CASE WHEN f.checks -> 'answerCut' IS NOT NULL AND f.checks -> 'answerCut' <> 'null'::jsonb THEN 'partial'
+          WHEN f.checks #>> '{judgementCoverage,status}' IN ('complete', 'partial') THEN f.checks #>> '{judgementCoverage,status}'
+          ELSE 'unknown' END AS coverage_status
+      ${from}
+    ), interpreted AS (
+      SELECT observations.*, CASE WHEN coverage_status <> 'complete' AND entry ->> 'status' IN ('not_addressed', 'not_applicable')
+        THEN 'uncertain' ELSE entry ->> 'status' END AS status FROM observations
+    )`;
   const parameters = [geoId, engine, groupId, audience];
   const [counted, shown] = await Promise.all([
-    store.query(`SELECT ${basis} AS basis, obs.entry ->> 'status' AS status, count(*)::integer AS n ${from} GROUP BY 1, 2`, parameters),
-    store.query(`SELECT * FROM (
-        SELECT obs.entry, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric, s.engine, s.round_id, s.asked_at,
-          row_number() OVER (PARTITION BY ${basis}
-            ORDER BY (coalesce(obs.entry ->> 'status', '') = 'not_applicable'), s.asked_at DESC NULLS LAST, s.id, obs.position) AS place
-        ${from}) ranked
+    store.query(`${cte} SELECT basis, status, coverage_status, count(*)::integer AS n FROM interpreted GROUP BY 1, 2, 3`, parameters),
+    store.query(`${cte} SELECT * FROM (
+        SELECT interpreted.*, row_number() OVER (PARTITION BY basis
+          ORDER BY (coalesce(status, '') IN ('not_applicable', 'uncertain')), asked_at DESC NULLS LAST, snapshot_id, position) AS place
+        FROM interpreted) ranked
       WHERE place <= ${GEO_VALUE_OBSERVATIONS_SHOWN} ORDER BY basis DESC NULLS LAST, place`, parameters),
   ]);
   return {
-    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null, n: Number(row.n) })),
+    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null,
+      n: Number(row.n), judgementCoverage: row.coverage_status })),
     sample: shown.rows.map((/** @type {any} */ row) => {
       const basisVersion = row.basis == null ? null : Number(row.basis);
-      return { ...row.entry, engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
+      const coverage = geoValueObject(row.checks?.judgementCoverage) ? row.checks.judgementCoverage : {};
+      const cut = row.checks?.answerCut;
+      const judgementCoverage = { ...coverage, status: row.coverage_status,
+        reasons: [...new Set([...(Array.isArray(coverage.reasons) ? coverage.reasons : row.coverage_status === "unknown" ? ["historical_coverage_unknown"] : []), ...(cut ? ["answer_truncated"] : [])])],
+        answerChars: Number(coverage.answerChars ?? cut?.chars ?? row.answer_chars),
+        assessedChars: Number(coverage.assessedChars ?? cut?.shown ?? 0) };
+      return { ...row.entry, status: row.status, recordedStatus: row.entry.status ?? null, judgementCoverage,
+        engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
         askedAt: row.asked_at ? new Date(row.asked_at).toISOString() : null };
     }),
   };

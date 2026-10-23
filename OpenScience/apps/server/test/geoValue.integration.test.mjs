@@ -136,7 +136,8 @@ test("a round of eight thousand observations comes back as exact counts and twen
   assert.equal(value.version, 3);
   assert.equal(value.coverage.basisVersion, 2, "the newest basis the round used, never two mixed");
   assert.equal(value.observationsTotal, 320 * 20, "320 answers on basis 2, twenty observations each");
-  assert.deepEqual([value.coverage.assessed, value.coverage.partial, value.coverage.notApplicable, value.coverage.represented], [3200, 3200, 3200, 0], "exact counts over every observation");
+  assert.deepEqual([value.coverage.assessed, value.coverage.partial, value.coverage.notApplicable, value.coverage.uncertain, value.coverage.represented],
+    [3200, 3200, 0, 3200, 0], "historical whole-answer exclusions are uncertain; observed partial statements survive");
   assert.equal(value.observations.length, 20);
   assert.ok(value.observations.every((observation) => observation.status === "partial" && observation.basisVersion === 2 && observation.rubricVersion === "rubric-7"),
     "the observations that say something first; the ones that do not apply only when there are no others");

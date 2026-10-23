@@ -68,7 +68,7 @@ test("single-source generic presence and product attribution never become litera
   const both = parseAnswer({ answer: "康舒宁（示例成分片）", registry });
   assert.equal(both.brands[0].count, 1);
   assert.equal(both.genericMentions[0].count, 1);
-  const coverage = metric([row({ ...facts, judgeExtract: { entityMentions: facts.entityMentions } })], "M-04C");
+  const coverage = metric([row({ ...facts, checks: { judgementCoverage: complete }, judgeExtract: { entityMentions: facts.entityMentions } })], "M-04C");
   assert.deepEqual([coverage.numerator, coverage.denominator, coverage.value], [0, 2, 0], "generics remain identifiable drug entities");
   const shared = parseAnswer({ answer: "示例成分片。", registry: brandRegistry({ ...product, singleSource: false }, [{ brandName: "竞例牌", genericName: "示例成分片" }]) });
   assert.equal(shared.entityMentions, 1, "shared generic attribution must not double-count one occurrence");
@@ -92,7 +92,7 @@ test("M-06 counts answers rather than statements and does not inflate mixed know
     facts([{ text: "wrong", verdict: "wrong" }, { text: "unknown", verdict: "unverifiable" }]), facts([correct], {})];
   const cell = metric(cases.map(row), "M-06");
   assert.deepEqual([cell.numerator, cell.denominator, cell.value], [1, 2, 50]);
-  assert.deepEqual(cell.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 2, partialAnswers: 1, unknownAnswers: 1 });
+  assert.deepEqual(cell.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 3, partialAnswers: 0, unknownAnswers: 1, decidableAnswers: 2 });
   const onlyMixed = metric([row(cases[1])], "M-06");
   assert.equal(onlyMixed.value, null);
   assert.equal(onlyMixed.reason, "not_adjudicated");

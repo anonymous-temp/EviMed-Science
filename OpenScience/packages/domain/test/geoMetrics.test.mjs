@@ -680,8 +680,8 @@ test("golden arithmetic is unchanged except complete-answer accuracy and its dep
   assert.deepEqual(result.denominators, expected.denominators);
   const accuracy = cellOf(result.cells, { metricId: "M-06", scope: "project" });
   assert.deepEqual([accuracy.numerator, accuracy.denominator, accuracy.value], [6, 23, 26.09],
-    "the fixture has six fully correct and seventeen wrong answers; five mixed answers are partial");
-  assert.deepEqual(accuracy.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 23, partialAnswers: 5, unknownAnswers: 29 });
+    "the fixture has six fully correct and seventeen wrong answers; five mixed answers have undecidable accuracy");
+  assert.deepEqual(accuracy.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 56, partialAnswers: 0, unknownAnswers: 1, decidableAnswers: 23 });
   assert.deepEqual([result.gvi.project.value, result.gvi.arms.pilot?.value, result.gvi.arms.control?.value], [48.02, 43.25, 45.15]);
   /** @param {any} gvi */
   const unaffected = (gvi) => ({
