@@ -84,3 +84,37 @@ test('MCP reconnect releases the old definition and decorates its replacement', 
   dispose()
   assert.equal(current.execute, execute)
 })
+
+test('native knowledge child inherits its store-owned root identity and rejects unresolved lineage', async () => {
+  const calls = []
+  const definition = { name: 'mcp__evimed__kb_search', execute: async args => { calls.push(args); return {} } }
+  const rootSession = { id: 'root', header: { id: 'root' } }
+  const child = { id: 'child', header: { id: 'child', origin: 'subagent', parentSession: 'root' }, requestHeader: () => ({ config: { provider: 'deepseek-official', model: 'deepseek-flash' } }) }
+  const dispose = port.decorateEngineToolContext({ tools: { get: name => name === definition.name ? definition : undefined }, sessions: { get: id => id === 'root' ? rootSession : id === 'child' ? child : undefined }, on: () => () => {} })
+  await definition.execute({ __evimed_execution_context: { sessionId: 'forged' } }, { agent: { session: child }, callId: 'c' })
+  assert.equal(calls[0].__evimed_execution_context.sessionId, 'root')
+  child.header = { ...child.header, parentSession: 'missing' }
+  assert.throws(() => definition.execute({}, { agent: { session: child }, callId: 'c' }), /lineage/)
+  dispose()
+})
+
+test('pinned native tool runtime dispatch carries store-owned child scope as its root', async () => {
+  const { Context } = await import('@deepseek-ai/cordis')
+  const { ToolRuntime } = await import('@deepseek-ai/dsh-tools')
+  const { createScope } = await import('@deepseek-ai/dsh-scope')
+  const root = new Context()
+  root.provide('systemPrompt', { tools() {} })
+  const parent = { id: 'root-selected', header: { id: 'root-selected' } }
+  const child = { id: 'native-child', header: { id: 'native-child', origin: 'subagent', parentSession: parent.id }, requestHeader: () => ({ config: { provider: 'deepseek-official', model: 'deepseek-flash' } }) }
+  root.provide('sessions', { get: id => id === parent.id ? parent : id === child.id ? child : undefined })
+  const runtime = new ToolRuntime(root)
+  const dispose = port.decorateEngineToolContext(root)
+  let received
+  const unregister = runtime.register({ name: 'mcp__evimed__kb_browse', description: 'test', parameters: { type: 'object', properties: {}, additionalProperties: false }, output: { schema: { type: 'object' }, render: () => [] }, execute: async args => { received = args.__evimed_execution_context.sessionId; return {} } })
+  const agent = { session: child }
+  agent.ctx = createScope(root, agent).ctx
+  const result = await runtime.execute({ callId: 'child-call', name: 'mcp__evimed__kb_browse', agent, arguments: {}, signal: new AbortController().signal })
+  assert.equal(result.isError, false)
+  assert.equal(received, parent.id)
+  unregister(); dispose()
+})
