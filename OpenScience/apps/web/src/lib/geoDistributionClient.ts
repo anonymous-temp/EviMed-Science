@@ -65,3 +65,29 @@ export function setGeoSourceOwnership(geoId: string, input: {
 }) {
   return productRequest<GeoSourceOwnershipRecord>(`${base(geoId)}/source-ownership`, 'POST', input);
 }
+
+export interface GeoOwnedPublication {
+  id: string; url: string; title: string; platform: string; status: 'active' | 'retired'; publishedAt: string | null;
+  articleId: string | null; articleTitle: string | null; articleResultVersionId: string | null; articleDigest: string | null;
+  currentResultVersionId: string | null; currentDigest: string | null; versionState: 'current' | 'update_needed' | 'unknown';
+}
+export interface GeoPublicationReceipt {
+  revision: number; recordedAt: string; basis: 'legacy_record' | 'user_reported_update'; linkId: string; url: string;
+  articleId: string | null; resultVersionId: string | null; digest: string | null; publishedAt: string | null;
+}
+export interface GeoOwnedPublicationDetail {
+  link: GeoOwnedPublication; revision: number;
+  history: { items: GeoPublicationReceipt[]; nextBeforeRevision: number | null };
+}
+export function getGeoOwnedPublications(geoId: string, input: GeoDistributionPageInput = {}) {
+  return productRequest<GeoDistributionPage<GeoOwnedPublication>>(`${base(geoId)}/owned-links${pageQuery(input)}`);
+}
+export function getGeoOwnedPublication(geoId: string, linkId: string, beforeRevision?: number) {
+  return productRequest<GeoOwnedPublicationDetail>(`${base(geoId)}/owned-links/${encodeURIComponent(linkId)}${beforeRevision ? `?beforeRevision=${beforeRevision}` : ''}`);
+}
+export function confirmGeoOwnedPublication(geoId: string, linkId: string, input: {
+  requestKey: string; expectedRevision: number; expectedResultVersionId: string | null; expectedDigest: string | null;
+  resultVersionId: string; digest: string; publishedAt: string;
+}) {
+  return productRequest<GeoPublicationReceipt>(`${base(geoId)}/owned-links/${encodeURIComponent(linkId)}/published-version`, 'POST', input);
+}

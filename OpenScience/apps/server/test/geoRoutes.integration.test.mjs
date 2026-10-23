@@ -531,8 +531,9 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   assert.equal(view.suggestedBudgetCny, 2000, "the chosen tier's budget");
   assert.deepEqual(view.market, { configured: false });
   assert.equal(view.orders.length, 3);
-  assert.deepEqual(Object.keys(view.orders[0]).sort(), ["articleId", "articleTitle", "cancellable", "checks", "domain", "id", "layer", "media",
-    "priceCny", "publishedUrl", "state", "updatedAt"]);
+  assert.deepEqual(Object.keys(view.orders[0]).sort(), ["articleDigest", "articleId", "articleResultVersionId", "articleTitle", "cancellable", "checks", "domain", "id", "layer", "media",
+    "priceCny", "publishedAt", "publishedUrl", "state", "updatedAt"]);
+  assert.ok(view.orders.every(order => order.articleResultVersionId === null && order.articleDigest === null), "unrecorded historical versions remain unknown");
   assert.equal(view.orders.find((/** @type {any} */ order) => order.id === `o1-${id}`).media, "生命时报");
 
   hooks.market = null;

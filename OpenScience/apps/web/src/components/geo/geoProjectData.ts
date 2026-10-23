@@ -211,11 +211,14 @@ export function useGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResul
  */
 export function useSharedGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResult<T> {
   const cache = useContext(GeoFrameContext)?.data ?? null;
-  const loader = useRef(load);
+  // A departing key may still have queued reads. Keep its loader bound to that key.
+  const keyedLoader = useRef({ key, current: load });
+  if (keyedLoader.current.key !== key) keyedLoader.current = { key, current: load };
+  const loader = keyedLoader.current;
   loader.current = load;
   const standalone = useStandaloneLoad<T>(key, load, cache === null);
   const shared = useSyncExternalStore(cache ? cache.subscribe : NO_SUBSCRIBE, () => (cache ? cache.snapshot(key) : LOADING)) as GeoLoad<T>;
-  useEffect(() => (cache ? cache.watch(key, () => loader.current()) : undefined), [cache, key]);
+  useEffect(() => (cache ? cache.watch(key, () => loader.current()) : undefined), [cache, key, loader]);
   const reload = useCallback(() => { cache?.reload(key); }, [cache, key]);
   return cache ? { state: shared, reload } : standalone;
 }

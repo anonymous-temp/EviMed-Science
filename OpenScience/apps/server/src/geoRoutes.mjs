@@ -63,7 +63,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "source-ownership", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "owned-links", "source-ownership", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -520,6 +520,14 @@ export function createGeoRoutes(dependencies) {
       const result = await service.registerOwnedLink(user, id, body);
       await audit("geo.owned_link.register", "completed", { userId: user.id, code: id, detail: String(result.id ?? "") });
       return reply(result, 201);
+    }
+    if (parts.length === 3 && method === "GET" && tab === "owned-links") return reply(await service.ownedPublicationList(user, id, Object.fromEntries(url.searchParams)));
+    if (parts.length === 4 && method === "GET" && tab === "owned-links") return reply(await service.ownedPublicationDetail(user, id, parts[3], Object.fromEntries(url.searchParams)));
+    if (parts.length === 5 && method === "POST" && tab === "owned-links" && parts[4] === "published-version") {
+      const body = await bodyOf(req, maxJsonBytes, ["requestKey", "expectedRevision", "expectedResultVersionId", "expectedDigest", "resultVersionId", "digest", "publishedAt"]);
+      const result = await service.confirmOwnedPublication(user, id, parts[3], body);
+      await audit("geo.owned_link.version", "completed", { userId: user.id, code: id, detail: parts[3] });
+      return reply(result);
     }
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {

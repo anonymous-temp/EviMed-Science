@@ -77,4 +77,7 @@ test('ordinary members may read annotations and execution, but only editors may 
   assert.equal((await service.distributionLedger(viewer, project.id)).total, 0);
   await assert.rejects(service.sourceOwnershipRead({ id: 'outsider' }, project.id, { target: input.target }), { status: 404 });
   await assert.rejects(service.distributionLedger({ id: 'outsider' }, project.id), { status: 404 });
+  assert.equal((await service.ownedPublicationList(viewer, project.id)).total, 0);
+  await assert.rejects(service.confirmOwnedPublication(viewer, project.id, 'any-link', {}), { status: 403 });
+  await assert.rejects(service.ownedPublicationList({ id: 'outsider' }, project.id), { status: 404 });
 });

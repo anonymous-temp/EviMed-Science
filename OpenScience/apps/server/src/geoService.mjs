@@ -64,6 +64,7 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
+import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
  *   status: string, dataType: string, reason: string | null, methodVersion?: string | null,
@@ -375,6 +376,7 @@ export class GeoService {
     this.now = now;
     this.distributionView = new GeoDistributionView({ store });
     this.sourceOwnership = documents ? new GeoSourceOwnership({ documents, now }) : null;
+    this.ownedPublications = documents ? new GeoOwnedPublications({ store, documents, now }) : null;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
     /** How many error rows 准确与安全 carries at most (`OPEN_SCIENCE_GEO_DIAGNOSIS_ERROR_LIMIT`); the counts beside them are never capped. */
     this.errorListLimit = Number.isSafeInteger(config.geoDiagnosisErrorLimit) && config.geoDiagnosisErrorLimit > 0 ? config.geoDiagnosisErrorLimit : 300;
@@ -1839,6 +1841,21 @@ export class GeoService {
   async distributionOrders(user, id, input = {}) { return this.distributionView.orders(await this.requireProject(user, id), input); }
   async distributionOrder(user, id, orderId, input = {}) { return this.distributionView.order(await this.requireProject(user, id), orderId, input); }
   async distributionLedger(user, id, input = {}) { return this.distributionView.ledger(await this.requireProject(user, id), input); }
+  async ownedPublicationList(user, id, input = {}) {
+    const project = await this.requireProject(user, id);
+    if (!this.ownedPublications) throw failure(503, "geo_unavailable", "Publication records are unavailable.");
+    return this.ownedPublications.list(project, input);
+  }
+  async ownedPublicationDetail(user, id, linkId, input = {}) {
+    const project = await this.requireProject(user, id);
+    if (!this.ownedPublications) throw failure(503, "geo_unavailable", "Publication records are unavailable.");
+    return this.ownedPublications.detail(project, linkId, input);
+  }
+  async confirmOwnedPublication(user, id, linkId, input) {
+    const project = await this.requireProject(user, id, "edit");
+    if (!this.ownedPublications) throw failure(503, "geo_unavailable", "Publication records are unavailable.");
+    return this.ownedPublications.confirm({ ...project, actorId: user.id }, linkId, input);
+  }
   async sourceOwnershipRead(user, id, input) {
     const project = await this.requireProject(user, id);
     if (!this.sourceOwnership) throw failure(503, "geo_unavailable", "Source annotations are unavailable.");
@@ -1854,7 +1871,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
   async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
-    const [orders, money, targets, ownedLinks, publication] = await Promise.all([
+    const [orders, money, targets, ownedLinks, publication, earlierPublication] = await Promise.all([
       // The orders as the market reads them (its own derived times: when the send began, when the state was entered), with the names.
       this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
         FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
@@ -1875,6 +1892,7 @@ export class GeoService {
           WHERE o.geo_project_id=$1 AND e.to_state='published' AND e.from_state IS DISTINCT FROM 'published'
         UNION ALL SELECT published_at AS at FROM evimed_geo.owned_links WHERE geo_project_id=$1
       ) observations`, [project.id]),
+      this.ownedPublications?.firstPublishedAt(project) ?? null,
     ]);
     const suggested = (targets?.rows ?? []).filter((row) => row.tier === project.tier && row.budgetCny != null)
       .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
@@ -1890,7 +1908,7 @@ export class GeoService {
       refundedCny: ledger.refundedCny,
       availableCny: ledger.availableCny,
       suggestedBudgetCny: suggested,
-      firstPublishedAt: iso(publication.rows[0]?.first_at),
+      firstPublishedAt: [iso(publication.rows[0]?.first_at), earlierPublication].filter(Boolean).sort()[0] ?? null,
       market: { configured: Boolean(marketConfigured) },
       orders: orders.rows.map((/** @type {any} */ row) => {
         const order = mapOrder(row);

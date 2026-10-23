@@ -6,18 +6,20 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Note } from '@/components/ui/Note';
 import { useSharedGeoLoad } from '../geoProjectData';
+import { useGeoFrame } from '../geoFrame';
 import { TabError } from './geoTabKit';
 
 const labels = GEO_SOURCE_RELATIONSHIP_LABELS_ZH;
 /** A short manual relationship annotation, never an inferred proof of site ownership. */
 export function SourceRelationship({ geoId, target, canEdit, onChanged }: { geoId: string; target: GeoOwnershipTarget; canEdit: boolean; onChanged?(): void }) {
+  const frame = useGeoFrame();
   const [editing, setEditing] = useState(false), [history, setHistory] = useState(false), [before, setBefore] = useState<number | undefined>();
   const read = useSharedGeoLoad(`source-ownership:${geoId}:${target.kind}:${target.value}:${before ?? ''}`, () => getGeoSourceOwnership(geoId, target, before));
   if (read.state.kind === 'loading') return <p role="status" className="text-caption text-text-3">正在读取信源关系</p>;
   if (read.state.kind === 'error') return <TabError message={read.state.message} onRetry={read.reload} />;
   const data = read.state.data;
   const relation = data.current?.active ? data.current.relation : data.effective?.relation ?? 'unknown';
-  const reload = () => { setBefore(undefined); read.reload(); onChanged?.(); };
+  const reload = () => { setBefore(undefined); if (frame) frame.data.reload(`source-ownership:${geoId}:${target.kind}:${target.value}:`); else read.reload(); onChanged?.(); };
   return <section aria-label={target.kind === 'domain' ? '站点关系' : '页面关系'} className="flex flex-col gap-2 rounded-card bg-surface-1 p-3 text-ui">
     <div className="flex flex-wrap items-center gap-2">
       <span>{target.kind === 'domain' ? '站点关系' : '页面关系'}：{labels[relation]}</span>
