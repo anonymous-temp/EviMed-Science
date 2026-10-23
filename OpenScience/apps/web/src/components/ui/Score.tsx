@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  * A score as a small pill — its name small, a hairline, the number in tabular figures (AIHOT's `Score`, MIT) — and the parts it is
  * made of, as thin bars (前沿动态's 「AI 评分」, owner 2026-10-23: a lone grey 「● 84」 told a reader neither what it was nor what made it).
  *
- * The tier is the pill's ground: `high` the accent, `medium` its pale tint, `low` a grey ground, `surface-3` so it stands on a hovered card (one look for all three: a list of cards spends one kind of control on it) — three steps of one hue, so the
+ * The tier is the pill's ground and ink: `high` the accent's pale tint, `medium` grey with the accent's number, `low` grey with grey (`surface-3`, so it stands on a hovered card; one look for all three: a list of cards spends one kind of control on it) — so the
  * number is read first and the colour only says how high it sits. With `parts` the pill opens them under it: on hover and on keyboard
  * focus (after the tooltip's delays, and the pointer may move onto it), and on a tap; Escape and a press outside close it. Without
  * parts it is a label and not a control.
@@ -22,9 +22,11 @@ export interface ScorePart {
 }
 
 const TIER: Readonly<Record<ScoreTier, string>> = {
-  high: "bg-accent text-accent-fg",
-  medium: "bg-accent-soft text-accent",
-  low: "bg-surface-3 text-text-2",
+  // No tier is the accent's solid ground: that is a primary action's look (the walk reads `bg-accent` as one, 2026-10-23), and a
+  // list of cards is not a row of buttons to press first.
+  high: "bg-accent-soft text-accent",
+  medium: "bg-surface-3 text-accent",
+  low: "bg-surface-3 text-text-3",
 };
 
 function PillFace({ label, value }: { label: string; value: number }) {

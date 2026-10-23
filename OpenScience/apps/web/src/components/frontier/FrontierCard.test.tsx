@@ -99,7 +99,8 @@ describe("a card", () => {
     const pill = within(screen.getByRole("article")).getByRole("button", { name: "AI 评分 86，查看构成" });
     expect(pill).toHaveTextContent(/^AI 评分\s*86$/);
     expect(pill).toHaveAttribute("data-score", "high");
-    expect(pill).toHaveClass("bg-accent", "text-accent-fg");
+    expect(pill).toHaveClass("bg-accent-soft", "text-accent");
+    expect(pill).not.toHaveClass("bg-accent", "text-accent-fg"); // never a primary action's look
     // ☆ and ⋯ follow it on the same row; a card with no tags and no other reports has no footer line for them.
     const row = pill.closest("div.ml-auto");
     expect(row).not.toBeNull();
@@ -115,8 +116,8 @@ describe("a card", () => {
   });
 
   it.each([
-    ["medium", 74, "bg-accent-soft"],
-    ["low", 52, "bg-surface-3"],
+    ["medium", 74, "text-accent"],
+    ["low", 52, "text-text-3"],
   ])("draws a %s score in its own ground", (band, value, ground) => {
     renderCard(scored({ score: value, scoreBand: band, scoreParts: { authority: 20, impact: 20, novelty: (value - 40) / 2, relevance: (value - 40) / 2 } }));
     expect(screen.getByRole("button", { name: `AI 评分 ${value}，查看构成` })).toHaveClass(ground);

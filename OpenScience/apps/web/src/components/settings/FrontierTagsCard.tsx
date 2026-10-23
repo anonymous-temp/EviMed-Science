@@ -3,6 +3,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { fetchFrontierOpsTags, frontierAbsence, frontierErrorMessage, undoFrontierTagChange, type FrontierOpsTags } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
+import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { stamp } from "@/components/frontier/frontierText";
 import { OpsBody, OpsCard, OpsNothing, OpsRow, OpsRows } from "./OpsCard";
 
@@ -19,6 +20,11 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
 
 /** A tag that is not in use for readers, said beside its name (`active` says nothing). */
 const STATE_WORDS: Readonly<Record<string, string>> = { candidate: "待启用", dormant: "暂停使用", merged: "已合并", rejected: "不采用" };
+
+/** Rows each list shows first, and how many more a press adds: the tree holds about 1,500 tags and a full list made 运维 28 screens long. */
+const FIRST_ROWS = 8;
+/** Tags named in one specialty's row; the rest are counted. */
+const TAGS_PER_ROW = 12;
 
 /** 「合并 肝癌 → 肝细胞癌」: the action, the tag, and the other tag where there is one. */
 function changeLine(change: FrontierOpsTags["changes"][number]): string {
@@ -70,18 +76,21 @@ export function FrontierTagsCard() {
     }
   };
 
-  if (absent) return null;
   const specialties = (tags?.specialties ?? []).filter((specialty) => specialty.tags.length > 0);
+  const specialtyRows = useShowMore(specialties, { first: FIRST_ROWS, step: FIRST_ROWS * 2, resetKey: "specialties" });
+  const candidateRows = useShowMore(tags?.candidates ?? [], { first: FIRST_ROWS, step: FIRST_ROWS * 2, resetKey: "candidates" });
+  const changeRows = useShowMore(tags?.changes ?? [], { first: FIRST_ROWS, step: FIRST_ROWS * 2, resetKey: "changes" });
+  if (absent) return null;
   return (
     <OpsCard title="前沿标签" description="各专科的标签、待启用的标签和最近的调整" refresh={{ label: "刷新前沿标签", loading, onRefresh: () => void refresh() }}>
       <OpsBody>
         <div className="space-y-5">
           <OpsRows label="各专科的标签">
-            {specialties.length === 0 ? <OpsNothing>{tags ? "还没有标签。" : "正在读取"}</OpsNothing> : specialties.map((specialty) => (
+            {specialties.length === 0 ? <OpsNothing>{tags ? "还没有标签。" : "正在读取"}</OpsNothing> : specialtyRows.visible.map((specialty) => (
               <OpsRow key={specialty.key} className="items-start">
                 <span className="w-20 shrink-0 text-text">{specialty.label}</span>
                 <span className="min-w-0 flex-1 text-text-2">
-                  {specialty.tags.map((tag, index) => (
+                  {specialty.tags.slice(0, TAGS_PER_ROW).map((tag, index) => (
                     <span key={tag.slug}>
                       {index > 0 && "、"}
                       {tag.name}
@@ -89,12 +98,14 @@ export function FrontierTagsCard() {
                       {" "}<span className="tabular-nums text-text-3">{tag.count30d}</span>
                     </span>
                   ))}
+                  {specialty.tags.length > TAGS_PER_ROW && <span className="text-text-3"> 等 {specialty.tags.length} 个</span>}
                 </span>
               </OpsRow>
             ))}
           </OpsRows>
+          {specialtyRows.remaining > 0 && <ShowMore remaining={specialtyRows.remaining} unit="个专科" onMore={specialtyRows.more} />}
           <OpsRows label="待启用的标签">
-            {(tags?.candidates ?? []).length === 0 ? <OpsNothing>没有待启用的标签。</OpsNothing> : tags!.candidates.map((candidate) => (
+            {(tags?.candidates ?? []).length === 0 ? <OpsNothing>没有待启用的标签。</OpsNothing> : candidateRows.visible.map((candidate) => (
               <OpsRow key={candidate.slug}>
                 <span className="min-w-0 flex-1 truncate text-text">{candidate.name}</span>
                 <span className="shrink-0 tabular-nums text-text-2">{candidate.count30d} 条 · {candidate.sources30d} 个来源</span>
@@ -102,8 +113,9 @@ export function FrontierTagsCard() {
               </OpsRow>
             ))}
           </OpsRows>
+          {candidateRows.remaining > 0 && <ShowMore remaining={candidateRows.remaining} unit="个" onMore={candidateRows.more} />}
           <OpsRows label="最近的调整">
-            {(tags?.changes ?? []).length === 0 ? <OpsNothing>没有调整。</OpsNothing> : tags!.changes.map((change) => (
+            {(tags?.changes ?? []).length === 0 ? <OpsNothing>没有调整。</OpsNothing> : changeRows.visible.map((change) => (
               <OpsRow key={change.id}>
                 <span className="min-w-0 flex-1 truncate text-text">{changeLine(change)}</span>
                 {change.reason && <span className="hidden max-w-[16rem] truncate text-caption text-text-3 sm:block">{change.reason}</span>}
@@ -114,6 +126,7 @@ export function FrontierTagsCard() {
               </OpsRow>
             ))}
           </OpsRows>
+          {changeRows.remaining > 0 && <ShowMore remaining={changeRows.remaining} unit="项" onMore={changeRows.more} />}
         </div>
       </OpsBody>
     </OpsCard>
