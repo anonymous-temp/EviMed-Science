@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { KnowledgePageService } from "../src/knowledgePageService.mjs";
 
 const id = `src_${"a".repeat(32)}`;
@@ -39,7 +40,7 @@ test("knowledge quotations carry the source version and the time of their check"
 });
 
 test("library withdrawal notifies actual dependent projects and propagates failures for replay", async () => {
-  const { service, record } = fixture();
+  const { service, record } = fixture({ shared: true });
   record.payload.dependsOn = [id];
   const calls = [];
   service.noteSourcesChanged = async (...args) => { calls.push(args); return { pages: 1 }; };
@@ -56,4 +57,18 @@ test("runtime eligibility excludes a revoked dependency without erasing the hist
   source.deletedAt = "2026-10-23T09:00:00.000Z";
   assert.equal((await service.browseEligibility("u1", "p1", "wiki", record.payload.path)).allowed, false);
   assert.equal((await service.pageView("u1", project, pageSource)).markdown, markdown);
+});
+
+test("a reparse invalidates a quotation verdict even when the knowledge page bytes do not change", async () => {
+  const { service, source, record } = fixture();
+  const first = await service.pageView("u1", project, pageSource);
+  const link = first.links.find((entry) => entry.kind === "source");
+  record.payload.quotations = { checkedSha256: createHash("sha256").update(markdown).digest("hex"), checkedAt: "2026-10-22T00:00:00.000Z",
+    counts: { present: 1, absent: 0, noQuotation: 0, sourceMissing: 0 }, records: [{ index: link.index, sourceId: id, status: "present", quote, inSourceList: false }] };
+  source.payload.analysis.textSha256 = "e".repeat(64);
+  source.revision += 1;
+  service.sources.loadCapture = async () => ({ input: { text: "The corrected extraction specifies port 4124 instead." }, extractor: {} });
+  const next = await service.pageView("u1", project, pageSource);
+  assert.equal(next.links.find((entry) => entry.kind === "source").status, "absent");
+  assert.equal(next.quotations.checkedAt, "2026-10-23T08:00:00.000Z");
 });
