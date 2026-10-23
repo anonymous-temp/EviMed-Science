@@ -52,10 +52,10 @@ function values(raw, field, vocabulary = null, tags = false) {
   if (raw == null) return [];
   const list = Array.isArray(raw) ? raw : typeof raw === "string" ? tags ? [raw] : raw.split(",") : null;
   if (!list || list.length > 100 || list.some((value) => typeof value !== "string" || !value.trim() || value.length > (tags ? 120 : 80)
-    || hasControls(value) || (vocabulary ? !vocabulary.includes(value) : !tags && !idShape.test(value)))) {
+    || (tags ? [...value].some((character) => character.charCodeAt(0) < 32 && ![9, 10, 13].includes(character.charCodeAt(0))) : hasControls(value)) || (vocabulary ? !vocabulary.includes(value) : !tags && !idShape.test(value)))) {
     throw invalid(`${field} must contain valid ${tags ? "text labels" : "distinct identifiers"}.`);
   }
-  return [...new Set(list.map((value) => value.trim()))].sort();
+  return [...new Set(list.map((value) => tags ? value : value.trim()))].sort();
 }
 
 /** Closed normalization shared by URL and native JSON reads. Same dimension OR, different dimensions AND.
@@ -399,7 +399,9 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   if (rows.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROWS} observations can be analyzed together.`, 422);
   const engines = scope.engines.length ? scope.engines : rounds.length ? [...new Set(rounds.flatMap((round) => Array.isArray(round.engines) && round.engines.length ? round.engines : project.engines))] : project.engines;
   const groups = [...new Map(rows.filter((row) => row.groupId).map((row) => [row.groupId, row.isControl])).entries()];
-  const metricOptions = { engines, competitors: project.competitors.map((/** @type {any} */ competitor) => String(competitor.brandName || competitor.genericName || "")).filter(Boolean),
+  const samplingContracts = rounds.map((round) => round.surface?.measurementContract ?? null);
+  const samplingModes = [...new Set(samplingContracts.map((contract) => contract?.samplingMode ?? "legacy_recurring"))];
+  const metricOptions = { samplingMode: samplingModes.length === 1 ? samplingModes[0] : "mixed", engines, competitors: project.competitors.map((/** @type {any} */ competitor) => String(competitor.brandName || competitor.genericName || "")).filter(Boolean),
     owned: context?.owned ?? {}, arms: { pilot: groups.filter(([, control]) => !control).map(([id]) => String(id)),
       control: groups.filter(([id, control]) => control && !contaminated.includes(String(id))).map(([id]) => String(id)) } };
   const computed = computeGeoSelection(rows, metricOptions);
@@ -436,7 +438,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const selection = { version: 1, reference, dataRevision, memberDigest, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, roundIds,
     counts, timeCoverage, engines, pools: [...new Set(rows.map((row) => row.pool).filter(Boolean))].sort(), questionIds: [...new Set(rows.map((row) => row.questionId).filter(Boolean))].sort(),
     exclusions: { skippedEngines: roundIds.flatMap((id, index) => skipBatches[index].map((engine) => ({ roundId: id, engine }))), clientTagsUnknown: scope.clientTags.length > 0 && !questions.rows.some((question) => Array.isArray(question.scope_client_tags)) },
-    comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, consumerModelVersion: "unknown" },
+    comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, samplingModes, samplingContracts, consumerModelVersion: "unknown" },
     coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };
   bindMemberReferences(computed, reference);
   return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison, subset };
@@ -454,6 +456,9 @@ async function compareGeoSelections(store, measure, project, current, previous, 
   const right = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds, subset });
   for (const selected of [left, right]) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
   const currentCells = left.computed.cells, previousCells = right.computed.cells;
+  const contractKeys = (/** @type {typeof left} */ selected) => [...new Set(selected.selection.comparability.samplingContracts.map((/** @type {any} */ contract) =>
+    JSON.stringify(contract ? { samplingMode: contract.samplingMode, repeats: contract.repeats, sourceBasis: contract.sourceBasis, metricIds: contract.metricIds } : null)))].sort();
+  const contractMatches = contractKeys(left).length === 1 && JSON.stringify(contractKeys(left)) === JSON.stringify(contractKeys(right));
   const cellKey = (/** @type {any} */ cell) => JSON.stringify([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
   const before = new Map(previousCells.map((cell) => [cellKey(cell), cell]));
   const memberKeys = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
@@ -479,14 +484,14 @@ async function compareGeoSelections(store, measure, project, current, previous, 
     });
   };
   return { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
-    comparable: mode === "common" && common.size > 0, commonQuestionEngineModes: common.size,
+    comparable: mode === "common" && common.size > 0 && contractMatches, commonQuestionEngineModes: common.size,
     excluded: { current: current.rows.length - left.rows.length, previous: previous.rows.length - right.rows.length },
     currentSelection: left.selection, previousSelection: right.selection,
     cells: currentCells.map((cell) => { const old = before.get(cellKey(cell));
       const basisMatches = JSON.stringify(compositeBasis(left, cell)) === JSON.stringify(compositeBasis(right, old));
-      const comparable = mode === "common" && common.size > 0 && basisMatches && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
+      const comparable = mode === "common" && common.size > 0 && contractMatches && basisMatches && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
       return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
       engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival,
-      current: cell, previous: old ?? null, comparable, reason: basisMatches ? null : "comparison_basis_changed", delta: comparable && cell.status === "ok" && old?.status === "ok"
+      current: cell, previous: old ?? null, comparable, reason: !contractMatches ? "measurement_contract_changed" : basisMatches ? null : "comparison_basis_changed", delta: comparable && cell.status === "ok" && old?.status === "ok"
         && cell.value != null && old.value != null ? Math.round((cell.value - old.value) * 100) / 100 : null }; }) };
 }

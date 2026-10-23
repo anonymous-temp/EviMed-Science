@@ -275,7 +275,7 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   assert.equal(map.sets[0].measuredCount, 48);
   assert.ok(map.sets[0].lockedAt);
   assert.equal(map.groups.length, 12);
-  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["answers", "id", "isMeasured", "kind", "platform", "sourceUrl", "text"]);
+  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["answers", "classificationStatus", "clientTags", "collectedAt", "id", "isMeasured", "kind", "originalGroup", "originalId", "originalRowIndex", "platform", "pool", "sourceUrl", "text"]);
   const target = map.groups[0].questions[0].id;
   const moved = (await call("POST", `/api/geo/projects/${id}/questions/${target}/unmeasure`, { body: {} })).payload.data;
   assert.equal(moved.version, 2);
@@ -1012,4 +1012,33 @@ test("every point of a trend carries the coverage key of its round, and a change
   await database.query("UPDATE evimed_geo.metrics SET method_version = NULL WHERE round_id = $1", [rounds[3]]);
   const legacy = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(legacy.series.find((/** @type {any} */ line) => line.key === "gvi").points[3].coverage, null);
+});
+
+test("HTTP original import, scoped planned questions, diagnosis progress and recovery enforce project membership", options, async () => {
+  const created = await call("POST", "/api/geo/projects", { body: { brandName: "Original import" } });
+  const id = created.payload.data.id;
+  const root = `/api/geo/projects/${id}`;
+  const contract = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const input = { requestKey: "http-import", rows: [{ text: "  Exact original?\n", originalId: "01" }], contract };
+  assert.equal((await call("POST", `${root}/questions/preview`, { body: input })).payload.data.plannedCalls, 1);
+  const saved = await call("POST", `${root}/questions`, { body: input });
+  assert.equal(saved.status, 200, JSON.stringify(saved.payload));
+  const started = await call("POST", `${root}/diagnosis/start`, { body: { version: 1, requestKey: "http-start" } });
+  const roundId = started.payload.data.roundId;
+  const progressPath = `${root}/diagnosis/${roundId}/progress`;
+  const progress = (await call("GET", progressPath)).payload.data;
+  assert.equal(progress.cells.length, 1);
+  assert.equal(progress.cells[0].text, input.rows[0].text);
+  const questions = (await call("GET", `${root}/questions?round=${roundId}&engines=deepseek`)).payload.data;
+  assert.equal(questions.selection.counts.planned, 1);
+  assert.equal(questions.groups[0].questions[0].originalRowIndex, 0);
+  refused(await call("GET", progressPath, { user: MALLORY }), 404, "geo_project_not_found");
+  await store.addMember({ geoId: id, userId: MALLORY, role: "viewer", invitedBy: ALICE });
+  assert.equal((await call("GET", progressPath, { user: MALLORY })).status, 200);
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed' WHERE round_id=$1", [roundId]);
+  const recovery = { requestKey: "http-recover", jobIds: [progress.cells[0].jobId], acknowledgeUnknown: true };
+  refused(await call("POST", `${root}/diagnosis/${roundId}/recover`, { user: MALLORY, body: recovery }), 403, "geo_member_forbidden");
+  const recovered = await call("POST", `${root}/diagnosis/${roundId}/recover`, { body: recovery });
+  assert.equal(recovered.status, 200, JSON.stringify(recovered.payload));
+  assert.equal((await call("GET", progressPath)).payload.data.cells[0].recoverable, false);
 });

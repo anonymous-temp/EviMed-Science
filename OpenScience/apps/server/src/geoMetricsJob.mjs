@@ -161,10 +161,11 @@ function noiseRow(metricId, band, snapshots) {
 
 /**
  * What `computeGeoMetrics` is told about a project beside the rows.
- * @param {{ engines: string[], competitors: Array<Record<string, any>> }} project @param {{ engines: string[] }} round @param {{ owned?: any } | null} context
+ * @param {{ engines: string[], competitors: Array<Record<string, any>> }} project @param {{ engines: string[], surface?: any }} round @param {{ owned?: any } | null} context
  */
 function metricOptions(project, round, context) {
   return {
+    samplingMode: round.surface?.measurementContract?.samplingMode ?? null,
     engines: round.engines.length ? round.engines : project.engines,
     competitors: project.competitors.map((competitor) => String(competitor?.brandName || competitor?.genericName || "")).filter(Boolean),
     owned: context?.owned ?? {},

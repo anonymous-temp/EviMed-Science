@@ -50,7 +50,7 @@ import {
 } from "@evimed/domain";
 import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
-import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
+import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
@@ -356,6 +356,8 @@ export class GeoService {
     if (!store || !config) throw new TypeError("The GEO service needs its store and the config.");
     this.store = store;
     this.config = config;
+    /** @type {any} The same deployment adapter the measurement worker uses. */
+    this.inclusion = null;
     this.social = social;
     this.cards = cards;
     this.now = now;
@@ -1013,11 +1015,78 @@ export class GeoService {
     };
   }
 
+  /** @param {{ id: string }} user @param {string} id @param {Record<string, any>} data */
+  async previewQuestions(user, id, data) {
+    await this.requireProject(user, id, "edit");
+    return geoQuestionImportPreview(data);
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {Record<string, any>} data */
+  async saveQuestions(user, id, data) {
+    const project = await this.requireProject(user, id, "edit");
+    return geoRuntimeWrite({ store: this.store, project, what: "questions", body: { data } });
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {Record<string, any>} data */
+  async startDiagnosis(user, id, data) {
+    const project = await this.requireProject(user, id, "run");
+    return geoStartDiagnosis(this.store, project, data, this.inclusion);
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {string} roundId @param {Record<string, any>} data */
+  async recoverDiagnosis(user, id, roundId, data) {
+    const project = await this.requireProject(user, id, "run");
+    return geoRecoverDiagnosis(this.store, { ...project, actorId: user.id }, { ...data, roundId });
+  }
+
+  /** @param {{ id: string }} user @param {string} id @param {string} roundId */
+  async diagnosisProgress(user, id, roundId) {
+    const project = await this.requireProject(user, id);
+    return this.diagnosisProgressOf(project, roundId);
+  }
+
+  /** @param {any} project @param {string} roundId */
+  async diagnosisProgressOf(project, roundId) {
+    const round = (await this.store.query(`SELECT id, status, set_version, engines, planned, surface, ref FROM evimed_geo.rounds WHERE id=$1 AND geo_project_id=$2 AND user_id=$3`, [roundId, project.id, project.userId])).rows[0];
+    if (!round) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
+    const jobs = (await this.store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.attempts, j.error_code, j.snapshot_id, s.status AS answer_status,
+      EXISTS (SELECT 1 FROM evimed_geo.snapshots preserved WHERE preserved.probe_job_id=j.id AND preserved.status IN ('valid','refusal')) AS has_preserved_answer,
+      q.text, q.original_id, q.original_group FROM evimed_geo.probe_jobs j JOIN evimed_geo.questions q ON q.id=j.question_id AND q.geo_project_id=j.geo_project_id
+      LEFT JOIN evimed_geo.snapshots s ON s.id=j.snapshot_id WHERE j.round_id=$1 AND j.geo_project_id=$2 ORDER BY j.created_at,j.id`, [roundId, project.id])).rows;
+    const recovered = (await this.store.query(`SELECT ref->'recoveredJobIds' AS ids FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'recoveryOf'=$3`, [project.id, project.userId, round.id])).rows.flatMap((row) => row.ids ?? []);
+    return { roundId: round.id, status: round.status, version: Number(round.set_version), planned: Number(round.planned), contract: round.surface?.measurementContract ?? null,
+      recoveryOf: round.ref?.recoveryOf ?? null, absentEngines: round.engines.filter((/** @type {string} */ engine) => !jobs.some((job) => job.engine === engine)),
+      cells: jobs.map((job) => ({ jobId: job.id, questionId: job.question_id, text: job.text, originalId: job.original_id, originalGroup: job.original_group,
+        engine: job.engine, status: job.status, answerStatus: job.answer_status ?? null, attempts: Number(job.attempts), errorCode: job.error_code ?? null,
+        snapshotId: job.snapshot_id ?? null, deliveryUnknown: job.error_code === "delivery_unknown_no_automatic_retry", recoverable: round.surface?.measurementContract?.samplingMode === "one_shot" && !round.ref?.recoveryOf && !recovered.includes(job.id) && !job.has_preserved_answer && ["failed", "skipped"].includes(job.status) })) };
+  }
+
   /**
    * `GET …/:id/questions?version=`: the named set version, the latest by default.
-   * @param {{ id: string }} user @param {string} id @param {number | null} version
+   * @param {{ id: string }} user @param {string} id @param {number | Record<string, any> | null} version
    */
-  async questions(user, id, version = null) { return this.questionsOf(await this.requireProject(user, id), version); }
+  async questions(user, id, version = null) {
+    const project = await this.requireProject(user, id);
+    return version && typeof version === "object" ? this.scopedQuestionsOf(project, version) : this.questionsOf(project, /** @type {number | null} */ (version));
+  }
+
+  /** Question rows share the exact selection used by every analysis view, including planned cells without answers.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {Record<string, any>} scope */
+  async scopedQuestionsOf(project, scope) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.scopedQuestionsOf(project, scope));
+    const selected = await readGeoSelection(this.store, project, scope);
+    const versions = [...new Set(selected.questions.map((question) => Number(question.set_version)))];
+    const views = await Promise.all(versions.map((version) => this.questionsOf(project, version)));
+    const ids = new Set(selected.questions.map((question) => String(question.id)));
+    const groups = views.flatMap((view) => view.groups.map((group) => ({ ...group, version: view.version,
+      questions: group.questions.filter((question) => ids.has(question.id)).map((question) => ({ ...question,
+        answers: [...new Map(selected.rows.filter((row) => row.questionId === question.id && ["valid", "refusal"].includes(row.status))
+          .sort((a, b) => String(a.askedAt ?? "").localeCompare(String(b.askedAt ?? "")) || a.snapshotId.localeCompare(b.snapshotId))
+          .map((row) => [row.engine, { engine: row.engine, snapshotId: row.snapshotId }])).values()] })) })).filter((group) => group.questions.length));
+    return { sets: views[0]?.sets ?? await this.store.questionSets(project.id), version: versions.length === 1 ? versions[0] : null,
+      contract: views.length === 1 ? views[0].contract : null, groups,
+      scope: selected.scope, selection: selected.selection, comparison: selected.comparison };
+  }
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {number | null} version */
   async questionsOf(project, version = null) {
@@ -1025,19 +1094,22 @@ export class GeoService {
     const chosen = version ?? sets[0]?.version ?? null;
     if (version != null && !sets.some((set) => set.version === version)) throw failure(404, "geo_version_invalid", "No such question set version.");
     const groups = chosen == null ? [] : await this.store.questionMap(project.id, chosen);
-    const answers = await this.#latestAnswers(project, groups.flatMap((group) => group.questions.filter((question) => question.isMeasured).map((question) => question.text)));
+    const answers = await this.#latestAnswers(project, groups.flatMap((group) => group.questions.filter((question) => question.isMeasured).map((question) => question.text)), sets.find((set) => set.version === chosen)?.contract ? chosen : null);
     return {
-      sets: sets.map(({ version: setVersion, lockedAt, measuredCount }) => ({ version: setVersion, lockedAt, measuredCount })),
+      sets: sets.map(({ version: setVersion, lockedAt, measuredCount, contract }) => ({ version: setVersion, lockedAt, measuredCount, contract })),
+      contract: sets.find((set) => set.version === chosen)?.contract ?? null,
       version: chosen,
       groups: groups.map((group) => ({
         id: group.id, pool: group.pool, name: group.name, typicalQuestion: group.typicalQuestion, journeyStage: group.journeyStage,
         valueContext: group.valueContext, audience: group.audience, weight: group.weight, isControl: group.isControl, signal: group.signal,
         questions: group.questions.map((question) => ({
           id: question.id, text: question.text, kind: question.kind, platform: question.platform, sourceUrl: question.sourceUrl,
+          originalRowIndex: question.originalRowIndex, originalId: question.originalId, originalGroup: question.originalGroup, clientTags: question.clientTags, classificationStatus: question.classificationStatus,
+          collectedAt: question.collectedAt, pool: question.pool,
           isMeasured: question.isMeasured,
           // Where the question was last answered, one answer per engine, in the project's engine order: a measured question opens
           // on its answer; one that was never answered has none.
-          answers: question.isMeasured ? answers.get(question.text.trim()) ?? [] : [],
+          answers: question.isMeasured ? answers.get(sets.find((set) => set.version === chosen)?.contract ? question.id : question.text.trim()) ?? [] : [],
         })),
       })),
     };
@@ -1049,18 +1121,19 @@ export class GeoService {
    * an id match would lose every answer link after one edit. The engines come in the project's order (the first is where a link
    * lands); an engine the project no longer lists follows.
    * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string[]} texts
+   * @param {number | null} [version] Imported question versions only link to their own observations.
    * @returns {Promise<Map<string, Array<{ engine: string, snapshotId: string }>>>}
    */
-  async #latestAnswers(project, texts) {
+  async #latestAnswers(project, texts, version = null) {
     /** @type {Map<string, Array<{ engine: string, snapshotId: string }>>} */
     const byText = new Map();
     const wanted = [...new Set(texts.map((value) => value.trim()).filter(Boolean))];
     if (!wanted.length) return byText;
-    const rows = (await this.store.query(`SELECT DISTINCT ON (btrim(q.text), s.engine) btrim(q.text) AS text, s.engine, s.id
+    const rows = (await this.store.query(`SELECT DISTINCT ON (CASE WHEN $4::integer IS NULL THEN btrim(q.text) ELSE q.id END, s.engine) CASE WHEN $4::integer IS NULL THEN btrim(q.text) ELSE q.id END AS text, s.engine, s.id
       FROM evimed_geo.snapshots s JOIN evimed_geo.rounds r ON r.id = s.round_id AND r.kind = ANY($3::text[])
         JOIN evimed_geo.questions q ON q.id = s.question_id AND q.geo_project_id = s.geo_project_id
-      WHERE s.geo_project_id = $1 AND s.status IN ('valid', 'refusal') AND btrim(q.text) = ANY($2::text[])
-      ORDER BY btrim(q.text), s.engine, s.asked_at DESC NULLS LAST, s.id DESC`, [project.id, wanted, [...GEO_HEADLINE_ROUND_KINDS]])).rows;
+      WHERE s.geo_project_id = $1 AND s.status IN ('valid', 'refusal') AND ($4::integer IS NOT NULL OR btrim(q.text) = ANY($2::text[])) AND ($4::integer IS NULL OR q.set_version = $4)
+      ORDER BY CASE WHEN $4::integer IS NULL THEN btrim(q.text) ELSE q.id END, s.engine, s.asked_at DESC NULLS LAST, s.id DESC`, [project.id, wanted, [...GEO_HEADLINE_ROUND_KINDS], version])).rows;
     const order = (/** @type {string} */ engine) => {
       const index = project.engines.indexOf(engine);
       return index === -1 ? project.engines.length : index;
@@ -2037,7 +2110,7 @@ export class GeoService {
    * @param {Record<string, any>} filter
    */
   async runtimeRead(project, what, filter = {}) {
-    if (["project", "diagnosis", "metrics", "snapshots", "errors", "sources", "monitoring", "clusters", "targets"].includes(what)
+    if (["project", "questions", "diagnosis", "metrics", "snapshots", "errors", "sources", "monitoring", "clusters", "targets"].includes(what)
       && !geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.runtimeRead(project, what, filter));
     this.counters.reads += 1;
     const limit = Math.min(filter.limit ?? 20, GEO_READ_MAX_ITEMS);
@@ -2057,10 +2130,12 @@ export class GeoService {
         const claims = page(evidence.claims);
         return { product: evidence.product, competitors: evidence.competitors, claims: claims.items, total: claims.total, more: claims.more };
       }
+      case "diagnosis_progress": return this.diagnosisProgressOf(project, String(filter.round ?? ""));
       case "questions": {
-        const view = await this.questionsOf(project, null);
+        const scope = geoReadScopeInput(filter);
+        const view = Object.keys(scope).length ? await this.scopedQuestionsOf(project, scope) : await this.questionsOf(project, null);
         const groups = page(view.groups.filter((group) => (!filter.pool || group.pool === filter.pool) && (!filter.groupId || group.id === filter.groupId)));
-        return { sets: view.sets, version: view.version, groups: groups.items, total: groups.total, more: groups.more };
+        return { ...view, groups: groups.items, total: groups.total, more: groups.more };
       }
       case "journey": return this.journeyOf(project);
       // The product zone's evidence cards, which the lower layers cite (flywheel F21): each claim with its id, quotation, ✓/⚠ and the

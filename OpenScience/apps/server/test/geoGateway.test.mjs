@@ -289,3 +289,14 @@ test("the social search needs a channel, validates its words, and answers within
   const timedOut = await slow("social", { query: "q", platforms: ["xhs"] });
   assert.deepEqual([timedOut.status, timedOut.body.code], [504, "geo_gateway_timeout"]);
 });
+
+test("native import and explicit recovery refusals retain actionable messages without becoming outages", async (t) => {
+  for (const [status, code] of [[400, "geo_question_import_invalid"], [400, "geo_diagnosis_invalid"], [409, "geo_contract_missing"], [409, "geo_request_key_conflict"],
+    [400, "geo_recovery_invalid"], [409, "geo_recovery_exhausted"], [409, "geo_recovery_acknowledgment_required"]]) {
+    const message = `Correct this request: ${code}`;
+    const { geo } = geoDouble(on, { failStep: new HttpError(Number(status), String(code), message) });
+    const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+    const answer = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
+    assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, "geo_write_payload_invalid", message]);
+  }
+});

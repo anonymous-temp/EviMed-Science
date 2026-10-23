@@ -214,16 +214,15 @@ test("a question map is a new unlocked version; invalid groups and questions are
   assert.equal(result.ids.length, 2);
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.group ?? null, issue.index ?? null, issue.field ?? null, issue.code]), [
     [0, 1, "text", "missing"], [0, 2, "platform", "unknown_value"], [null, 1, "pool", "unknown_value"], [2, 0, "sourceUrl", "invalid"],
-    [null, null, "collectedAt", "notice"],
+    [2, 1, "sourceUrl", "notice"],
   ]);
   const map = await store.questionMap(project.id, 1);
   assert.deepEqual(map.map((group) => [group.name, group.questions.map((question) => question.text)]), [["用法", ["怎么打"]], ["对比", ["哪个好"]]]);
-  // A real phrasing written without its day is dated to the write (G9); one with its day keeps it.
-  const real = map[1].questions[0];
-  assert.equal(real.kind, "real");
-  assert.ok(real.collectedAt && Date.now() - Date.parse(real.collectedAt) < 60_000);
+  // Unknown provenance is never stamped as collected reality; model suggestions stay typical.
+  assert.equal(map[0].questions[0].kind, "typical");
+  assert.equal(map[0].questions[0].collectedAt, null);
   const dated = await write(project, "questions", { data: { groups: [{ pool: "P1", name: "P1-03 与其他减重药怎么选",
-    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
+    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", sourceUrl: "https://www.zhihu.com/question/1", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
   assert.deepEqual(dated.issues, []);
   const [group] = await store.questionMap(project.id, dated.version);
   assert.equal(group.name, "与其他减重药怎么选", "the method's internal group number is not part of the name a reader sees");

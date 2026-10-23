@@ -942,7 +942,8 @@ export class GeoOrchestrator {
 
   /** The latest locked question set and its map, or null. @param {string} geoId */
   async #lockedSet(geoId) {
-    const set = (await this.store.questionSets(geoId)).find((entry) => entry.lockedAt);
+    const sets = await this.store.questionSets(geoId);
+    const set = sets[0]?.contract?.samplingMode === "recurring" ? sets[0] : sets.find((entry) => entry.lockedAt);
     return set ? { version: set.version, groups: await this.store.questionMap(geoId, set.version) } : null;
   }
 
@@ -954,6 +955,9 @@ export class GeoOrchestrator {
    * @returns {Promise<string | null>} the round id, or null when not enqueued now
    */
   async #enqueueOnce(project, key, spec) {
+    const latestSet = (await this.store.query(`SELECT contract, version FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [project.id])).rows[0];
+    const agreement = latestSet?.contract;
+    if (agreement?.samplingMode === "one_shot") return null;
     const existing = await this.#mark(project.id, key);
     if (existing && existing.state !== "claimed") return existing.round_id ?? null;
     if (!this.enqueueRound) return null;
@@ -968,7 +972,7 @@ export class GeoOrchestrator {
     try {
       const out = await this.enqueueRound({ geoProjectId: project.id, kind: spec.kind,
         ...(spec.questionIds ? { questionIds: spec.questionIds } : {}), ...(spec.engines ? { engines: spec.engines } : {}),
-        ...(spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
+        ...(agreement ? { engines: agreement.engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(latestSet.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
       const roundId = typeof out === "string" ? out : String(out?.roundId ?? out?.id ?? out?.round?.id ?? "") || null;
       await this.#update(project.id, key, { state: "done", roundId });
       this.counters.roundsEnqueued += 1;

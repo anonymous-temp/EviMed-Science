@@ -5242,6 +5242,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const notifier = createGeoNotifier({ notifications: notificationService, store: geoParts.store, config, audit: geoAudit });
     const marketClient = overrides.mediaMarketClient ?? createMediaMarketClient(config, overrides.mediaMarketFetch ? { fetchImpl: overrides.mediaMarketFetch } : {});
     const inclusion = inclusionEnabled(config, marketClient) ? new GeoInclusionClient({ market: marketClient, config }) : null;
+    geoParts.service.inclusion = inclusion;
     /** The reviewed file behind an article, read from its project's workspace (what the market sends). @param {any} article @param {any} geoProject */
     const articleBody = async (article, geoProject) => {
       const owner = await store.userById(geoProject.userId);

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { geoValueCanonical } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
@@ -39,7 +41,7 @@ import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
 import { migrateGeo } from "./geoPersistence.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 import { geoOwnedLinkKey } from "./geoStore.mjs";
-import { randomId } from "./security.mjs";
+import { HttpError, randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
 /** The advisory lock key text; `hashtext` of it is the lock. */
@@ -113,6 +115,7 @@ export function jobRow(row) {
     repeatIndex: Number(row.repeat_index ?? 0),
     status: String(row.status),
     attempts: Number(row.attempts ?? 0),
+    samplingMode: row.measurement_contract?.samplingMode ?? null,
     runAfter: iso(row.run_after),
     leaseOwner: row.lease_owner ?? null,
     leaseUntil: iso(row.lease_until),
@@ -369,6 +372,8 @@ export class GeoMeasureStore {
     const rows = await this.questions(geoProjectId, { measuredOnly: true });
     if (!rows.length) return { setVersion: null, questions: [] };
     let setVersion = Math.max(...rows.map((row) => row.setVersion));
+    const latest = (await this.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [geoProjectId])).rows[0];
+    if (latest?.contract) return { setVersion: Number(latest.version), questions: rows.filter((row) => row.setVersion === Number(latest.version)) };
     const locked = await this.query(`SELECT max(version) AS version FROM evimed_geo.question_sets WHERE geo_project_id = $1 AND locked_at IS NOT NULL`,
       [geoProjectId]);
     if (locked.rows[0]?.version != null) setVersion = Number(locked.rows[0].version);
@@ -397,11 +402,26 @@ export class GeoMeasureStore {
       strategyRevision: strategy.rows[0]?.version ?? null, contentRevision: content.rows,
       placements: placements.rows, channels: [...new Set(placements.rows.map((row) => row.media_type))], sourceRevision: sources.rows,
     } }, round.engines);
-    await this.transaction(async (client) => {
+    const requestDigest = createHash("sha256").update(geoValueCanonical({ setVersion: round.setVersion, engines: round.engines,
+      contract: round.surface.measurementContract ?? null, jobs, recoveryOf: round.ref?.recoveryOf ?? null })).digest("hex");
+    return this.transaction(async (client) => {
+      if (round.ref?.requestKey) {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-diagnosis:' || $1))`, [round.geoProjectId]);
+        const existing = (await client.query(`SELECT id, set_version, surface, ref FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'requestKey'=$3`, [round.geoProjectId, round.userId, round.ref.requestKey])).rows[0];
+        if (existing) {
+          if (existing.ref?.requestDigest !== requestDigest) throw new HttpError(409, "geo_request_key_conflict", "This request key already names a different diagnosis.");
+          return String(existing.id);
+        }
+      }
+      if (round.ref?.recoveryOf) {
+        const prior = await client.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id=$1 AND ref->>'recoveryOf'=$2
+          AND (ref->'recoveredJobIds') ?| $3::text[] LIMIT 1`, [round.geoProjectId, round.ref.recoveryOf, round.ref.recoveredJobIds]);
+        if (prior.rows.length) throw new HttpError(409, "geo_recovery_exhausted", "Each failed cell permits one explicit recovery; inspect the previous recovery first.");
+      }
       await client.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, surface, status, planned, done, failed, ref, created_at)
         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, 'queued', $8, 0, 0, $9::jsonb, $10)`,
       [round.id, round.userId, round.geoProjectId, round.kind, round.setVersion, round.engines, JSON.stringify({ ...round.surface, intervention }), round.planned,
-        round.ref ? JSON.stringify(round.ref) : null, round.now.toISOString()]);
+        round.ref ? JSON.stringify({ ...round.ref, requestDigest }) : null, round.now.toISOString()]);
       const base = round.now.getTime();
       for (let offset = 0; offset < jobs.length; offset += 200) {
         const batch = jobs.slice(offset, offset + 200);
@@ -416,6 +436,7 @@ export class GeoMeasureStore {
         await client.query(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, repeat_index, status, attempts, created_at, updated_at)
           VALUES ${tuples.join(", ")}`, values);
       }
+      return round.id;
     });
   }
 
@@ -449,9 +470,15 @@ export class GeoMeasureStore {
    * @param {Date} now
    */
   async recoverExpiredLeases(now) {
-    const result = await this.query(`UPDATE evimed_geo.probe_jobs SET status = 'queued', lease_owner = NULL, lease_until = NULL, updated_at = $1
-      WHERE status = 'leased' AND lease_until < $1 AND external_ref IS NULL RETURNING id`, [now.toISOString()]);
-    return result.rowCount ?? result.rows.length;
+    const completed = await this.query(`UPDATE evimed_geo.probe_jobs j SET status='done', lease_owner=NULL, lease_until=NULL,
+      snapshot_id=(SELECT s.id FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal') ORDER BY s.asked_at DESC NULLS LAST,s.id DESC LIMIT 1), updated_at=$1
+      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND r.surface->'measurementContract'->>'samplingMode'='one_shot'
+      AND j.status='leased' AND j.lease_until<$1 AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) RETURNING j.id`, [now.toISOString()]);
+    const result = await this.query(`UPDATE evimed_geo.probe_jobs j SET status = CASE WHEN r.surface->'measurementContract'->>'samplingMode' = 'one_shot' THEN 'failed' ELSE 'queued' END,
+        error_code = CASE WHEN r.surface->'measurementContract'->>'samplingMode' = 'one_shot' THEN 'delivery_unknown_no_automatic_retry' ELSE j.error_code END,
+        lease_owner = NULL, lease_until = NULL, updated_at = $1
+      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND j.status = 'leased' AND j.lease_until < $1 AND j.external_ref IS NULL RETURNING j.id`, [now.toISOString()]);
+    return (result.rowCount ?? result.rows.length) + (completed.rowCount ?? completed.rows.length);
   }
 
   /**
@@ -470,7 +497,7 @@ export class GeoMeasureStore {
         WHERE j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= $1)
           AND j.engine = ANY($2::text[]) AND NOT (j.engine = ANY($3::text[]))
           AND r.status IN ('queued', 'running') AND p.status = 'active' AND p.deleted_at IS NULL
-          AND ($4::boolean OR NOT (r.kind = ANY($5::text[])) OR r.planned <= $6)
+          AND ($4::boolean OR r.surface->'measurementContract'->>'samplingMode' = 'one_shot' OR NOT (r.kind = ANY($5::text[])) OR r.planned <= $6)
           AND ($7::integer <= 0 OR (SELECT count(*) FROM evimed_geo.snapshots s
                 WHERE s.geo_project_id = j.geo_project_id AND s.asked_at >= $8) < $7)
         ORDER BY r.created_at, j.created_at, j.id
@@ -478,7 +505,7 @@ export class GeoMeasureStore {
         FOR UPDATE OF j SKIP LOCKED
       )
       UPDATE evimed_geo.probe_jobs j SET status = 'leased', lease_owner = $9, lease_until = $10, attempts = j.attempts + 1, updated_at = $1
-      FROM candidate WHERE j.id = candidate.id RETURNING j.*`,
+      FROM candidate WHERE j.id = candidate.id RETURNING j.*, (SELECT surface->'measurementContract' FROM evimed_geo.rounds WHERE id=j.round_id) AS measurement_contract`,
     [now.toISOString(), engines, paused, nightOpen, [...GEO_NIGHT_ROUND_KINDS], nightMinAsks, weeklyCap, weekStart.toISOString(),
       owner, leaseUntil.toISOString()]);
     return result.rows[0] ? jobRow(result.rows[0]) : null;
@@ -505,8 +532,8 @@ export class GeoMeasureStore {
    * @param {{ now: Date, engines: string[], limit: number }} options
    */
   async inclusionJobsToPoll({ now, engines, limit }) {
-    const result = await this.query(`SELECT * FROM evimed_geo.probe_jobs WHERE status = 'leased' AND external_ref IS NOT NULL
-      AND engine = ANY($2::text[]) AND (run_after IS NULL OR run_after <= $1) ORDER BY run_after NULLS FIRST, id LIMIT $3`,
+    const result = await this.query(`SELECT j.*, r.surface->'measurementContract' AS measurement_contract FROM evimed_geo.probe_jobs j JOIN evimed_geo.rounds r ON r.id=j.round_id WHERE j.status = 'leased' AND j.external_ref IS NOT NULL
+      AND j.engine = ANY($2::text[]) AND (j.run_after IS NULL OR j.run_after <= $1) ORDER BY j.run_after NULLS FIRST, j.id LIMIT $3`,
     [now.toISOString(), engines, limit]);
     return result.rows.map(jobRow);
   }
@@ -1066,7 +1093,7 @@ export class GeoMeasureStore {
    */
   async roundFactRows(roundId, geoProjectId = null, userId = null, snapshotIds = null) {
     const result = await this.query(`SELECT s.id, s.question_id, s.engine, s.round_id, s.asked_at, s.status, s.surface, s.citations,
-        r.kind AS round_kind, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
+        r.kind AS round_kind, r.surface->'measurementContract' AS measurement_contract, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
         f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours,
         f.checks, f.judge_extract, f.parser_version
@@ -1084,7 +1111,7 @@ export class GeoMeasureStore {
       return {
         snapshotId: String(row.id), questionId: row.question_id ?? null, engine: String(row.engine), roundId: String(row.round_id),
         roundKind: String(row.round_kind), repeatIndex: Number(row.repeat_index ?? 0), askedAt: iso(row.asked_at), status: String(row.status),
-        surface: row.surface ?? { mode: "web" }, citations: list(row.citations), pool: row.pool ?? null, groupId: row.group_id ?? null,
+        surface: { ...(row.surface ?? { mode: "web" }), ...(row.measurement_contract ? { measurementContract: row.measurement_contract } : {}) }, citations: list(row.citations), pool: row.pool ?? null, groupId: row.group_id ?? null,
         isControl: Boolean(row.is_control),
         facts: usable ? {
           checks: row.checks && typeof row.checks === "object" ? row.checks : {},

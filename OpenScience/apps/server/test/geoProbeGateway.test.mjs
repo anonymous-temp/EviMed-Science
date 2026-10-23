@@ -544,3 +544,14 @@ test("without a configured window the default holds, and the default is the conf
   }
   assert.equal(served, GEO_PROBE_CALLS_PER_MINUTE);
 });
+
+test("the probe admits the full original import length and preserves exact whitespace sent upstream", async () => {
+  const question = `  ${"q".repeat(3995)}\n`;
+  let sent = null;
+  const result = await run(configured, async (_url, options) => { sent = JSON.parse(options.body).question; return jsonResponse({ results: [{ provider: "deepseek", ...answered }] }); },
+    { op: "ask", question, providers: ["deepseek"] });
+  assert.equal(result.statusCode, 200);
+  assert.equal(sent, question);
+  const tooLong = await run(configured, async () => { throw new Error("must not call upstream"); }, { op: "ask", question: "q".repeat(4001), providers: ["deepseek"] });
+  assert.equal(tooLong.statusCode, 400);
+});

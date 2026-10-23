@@ -341,6 +341,21 @@ export function createGeoRoutes(dependencies) {
     }
     const tab = parts[2];
     // --- members: colleagues and outside agencies, by role (the owner alone manages them) ---
+    if (method === "POST" && tab === "questions" && (parts.length === 3 || parts.length === 4 && parts[3] === "preview")) {
+      const body = await bodyOf(req, maxJsonBytes, ["rows", "contract", "requestKey", "note"]);
+      return reply(parts.length === 4 ? await service.previewQuestions(user, id, body) : await service.saveQuestions(user, id, body));
+    }
+    if (method === "POST" && tab === "diagnosis" && parts.length === 4 && parts[3] === "start") {
+      const body = await bodyOf(req, maxJsonBytes, ["version", "requestKey"]);
+      return reply(await service.startDiagnosis(user, id, body));
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[4] === "progress" && method === "GET") {
+      return reply(await service.diagnosisProgress(user, id, parts[3]));
+    }
+    if (tab === "diagnosis" && parts.length === 5 && parts[4] === "recover" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["requestKey", "jobIds", "acknowledgeUnknown"]);
+      return reply(await service.recoverDiagnosis(user, id, parts[3], body));
+    }
     if (tab === "members") {
       if (!hooks.members) throw UNAVAILABLE();
       if (parts.length === 3 && method === "GET") {
@@ -375,7 +390,8 @@ export function createGeoRoutes(dependencies) {
         const raw = url.searchParams.get("version");
         const version = raw == null || raw === "" ? null : Number(raw);
         if (version != null && (!Number.isSafeInteger(version) || version < 1)) throw new HttpError(400, "geo_version_invalid", "version must be a positive whole number.");
-        return reply(await service.questions(user, id, version));
+        const scope = geoScopeFromQuery(url.searchParams);
+        return reply(await service.questions(user, id, [...url.searchParams.keys()].some((key) => key !== "version") ? scope : version));
       }
       if (tab === "diagnosis") return reply(await service.diagnosis(user, id, geoScopeFromQuery(url.searchParams)));
       if (tab === "snapshots") {

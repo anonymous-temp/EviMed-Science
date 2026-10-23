@@ -418,10 +418,10 @@ export function measurableEngines(deps) {
  *
  * @param {Pick<GeoMeasureDeps, "store" | "now" | "inclusion">} deps
  * @param {{ geoProjectId: string, kind: string, questionIds?: string[] | null, engines?: string[] | null, repeat?: number | null,
- *   ref?: Record<string, unknown> | null }} request
+ *   ref?: Record<string, unknown> | null, contract?: Record<string, any> | null, requestKey?: string | null }} request
  * @returns {Promise<{ roundId: string, planned: number, engines: string[], absentEngines: string[], setVersion: number | null }>}
  */
-export async function enqueueRound(deps, { geoProjectId, kind, questionIds = null, engines = null, repeat = null, ref = null }) {
+export async function enqueueRound(deps, { geoProjectId, kind, questionIds = null, engines = null, repeat = null, ref = null, contract = null, requestKey = null }) {
   const { store } = deps;
   const now = (deps.now ?? (() => new Date()))();
   if (!GEO_ROUND_KINDS.includes(kind)) throw new HttpError(400, "geo_round_kind_invalid", "Unknown round kind.");
@@ -454,8 +454,18 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
   } else {
     questions = measured;
   }
+  if (contract?.questionVersion != null && questions.some((question) => question.setVersion !== contract.questionVersion)) {
+    throw new HttpError(400, "geo_round_question_invalid", "Round questions must belong to the measurement agreement's version.");
+  }
+  if (!(contract?.samplingMode === "one_shot" && requestKey)) {
+    const sets = await store.query(`SELECT contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND version=ANY($2::integer[])`,
+      [geoProjectId, [...new Set(questions.map((question) => question.setVersion))]]);
+    if (sets.rows.some((set) => set.contract?.samplingMode === "one_shot")) {
+      throw new HttpError(409, "geo_round_question_invalid", "One-shot questions require an explicit diagnosis start or recovery; automatic confirmation and monitoring cannot add calls.");
+    }
+  }
   const defaultRepeat = kind === "noise" ? catalogue("PROBE_NOISE_SAMPLE_N", 5) : kind === "confirm" ? catalogue("EC_CONFIRM_REPEATS", 10) : 1;
-  const repeats = repeat == null ? defaultRepeat : Number(repeat);
+  const repeats = contract?.samplingMode === "one_shot" ? 1 : repeat == null ? defaultRepeat : Number(repeat);
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20) throw new HttpError(400, "geo_round_repeat_invalid", "A round repeats each ask 1 to 20 times.");
 
   /** @type {Array<{ questionId: string, engine: string, repeatIndex: number }>} */
@@ -471,12 +481,13 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
   // The round's evaluation basis is not frozen here: a queued round can wait for hours (the night window, the weekly cap), and its
   // answers are judged against what stands when it starts (`GeoMeasureStore.startRound`, Q-9).
   const roundId = randomId("gr_");
-  await store.createRound({
+  const createdId = await store.createRound({
     id: roundId, userId: project.userId, geoProjectId, kind,
     setVersion: questionIds?.length ? (questions[0]?.setVersion ?? setVersion) : setVersion,
-    engines: requested, surface: { ...DEFAULT_SURFACE }, planned: jobs.length, ref: ref ?? null, now,
+    engines: requested, surface: { ...DEFAULT_SURFACE, ...(contract ? { measurementContract: contract } : {}) }, planned: jobs.length,
+    ref: requestKey ? { ...ref, requestKey } : ref ?? null, now,
   }, jobs);
-  return { roundId, planned: jobs.length, engines: jobEngines, absentEngines: requested.filter((engine) => !jobEngines.includes(engine)),
+  return { roundId: createdId ?? roundId, planned: jobs.length, engines: jobEngines, absentEngines: requested.filter((engine) => !jobEngines.includes(engine)),
     setVersion: questionIds?.length ? (questions[0]?.setVersion ?? setVersion) : setVersion };
 }
 
@@ -637,6 +648,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     await store.finishJob(job.id, { now: now(), status: "skipped", errorCode: "question_missing" });
     return "next";
   }
+  const oneShot = job.samplingMode === "one_shot";
   const askedAt = now();
   /** @type {Awaited<ReturnType<ReturnType<typeof probeUpstream>["ask"]>>} */
   let answer;
@@ -644,27 +656,29 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     answer = await upstream.ask({ question: question.text, providers: [job.engine], deep: 0, newChat: 1, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     const code = String(/** @type {any} */ (error)?.code ?? "geo_probe_failed");
-    if (BUSY_CODES.has(code)) {
+    if (!oneShot && BUSY_CODES.has(code)) {
       await busy(deps, state, job, counts);
       return "stop";
     }
-    if (CONFIG_CODES.has(code)) {
+    if (!oneShot && CONFIG_CODES.has(code)) {
       await store.requeueJob(job.id, { now: now(), refundAttempt: true });
       counts.probe = "misconfigured";
       await alert(deps, state, { kind: "geo_probe_misconfigured", code, message: "The GEO probe endpoint is not usable; measurement is waiting.",
         idempotencyKey: `geo:probe_misconfigured:${code}` });
       return "stop";
     }
-    // The host did not answer: not a measurement. Kept for the trail, asked again.
+    const deliveryUnknown = oneShot && !CONFIG_CODES.has(code) && !BUSY_CODES.has(code)
+      && !["geo_probe_question_invalid", "geo_probe_provider_invalid", "geo_probe_request_invalid"].includes(code);
+    // Keep dispatch uncertainty on the failed cell so an explicit recovery can explain another possible charge.
     const snapshotId = randomId("gs_");
     await store.insertSnapshot({
       id: snapshotId, userId: job.userId, roundId: job.roundId, geoProjectId: job.geoProjectId, questionId: job.questionId, engine: job.engine,
       askedAt, status: "failed", answerText: null, answerSha256: null, citations: [], screenshotSha256: null,
-      surface: { ...DEFAULT_SURFACE }, latencyMs: now().getTime() - askedAt.getTime(), warnings: [`probe_error:${code}`], probeJobId: job.id,
+      surface: { ...DEFAULT_SURFACE }, latencyMs: now().getTime() - askedAt.getTime(), warnings: [`probe_error:${code}`, ...(deliveryUnknown ? ["delivery_unknown_no_automatic_retry"] : [])], probeJobId: job.id,
     });
     counts.asked += 1;
     counts.failed += 1;
-    await retryOrFail(deps, job, "failed", snapshotId, counts);
+    await retryOrFail(deps, job, oneShot ? deliveryUnknown ? "delivery_unknown_no_automatic_retry" : code : "failed", snapshotId, counts);
     state.hostFailures += 1;
     if (state.hostFailures >= GEO_PROBE_BREAK_AFTER) {
       state.hostPausedUntil = now().getTime() + GEO_PROBE_RECHECK_MS;
@@ -683,7 +697,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     error: "the probe returned no result" };
   const raw = /** @type {Record<string, any>} */ (answer.raw[0] ?? {});
   const rawStatus = String(raw.status ?? "").trim().toLowerCase();
-  if (isRetriableRawStatus(rawStatus)) {
+  if (!oneShot && isRetriableRawStatus(rawStatus)) {
     // The vendor, not the probe host, is busy: this job waits, the others go on.
     const bounces = (state.retriable.get(job.id) ?? 0) + 1;
     state.retriable.set(job.id, bounces);
@@ -748,7 +762,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     await store.finishJob(job.id, { now: now(), status: "done", snapshotId });
     return "next";
   }
-  if (verdict.status === "suspect") {
+  if (verdict.status === "suspect" && !oneShot) {
     await alert(deps, state, {
       kind: "geo_probe_suspect", engine: job.engine, geoProjectId: job.geoProjectId, snapshotId, reason: verdict.reason,
       message: `${engineLabel(job.engine)} returned something that is not an answer (${verdict.reason}); it is out of the denominator and will be asked again.`,
@@ -792,11 +806,11 @@ async function busy(deps, state, job, counts) {
 /**
  * A suspect or failed ask: asked again later while attempts remain, else the
  * job fails (its snapshot stays, out of every denominator).
- * @param {GeoMeasureDeps} deps @param {{ id: string, attempts: number }} job @param {string} status @param {string} snapshotId @param {GeoProbeCounts} counts
+ * @param {GeoMeasureDeps} deps @param {{ id: string, attempts: number, samplingMode?: string | null }} job @param {string} status @param {string} snapshotId @param {GeoProbeCounts} counts
  */
 async function retryOrFail(deps, job, status, snapshotId, counts) {
   const now = (deps.now ?? (() => new Date()))();
-  if (job.attempts < GEO_JOB_MAX_ATTEMPTS) {
+  if (job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
     await deps.store.requeueJob(job.id, { now, runAfter: new Date(now.getTime() + RETRY_DELAY_MS * job.attempts), errorCode: status });
     counts.retried += 1;
     return;
@@ -905,10 +919,10 @@ async function inclusionPass(deps, state, engines, counts) {
       counts.inclusion.submitted += 1;
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "inclusion_failed");
-      if (job.attempts < GEO_JOB_MAX_ATTEMPTS) {
+      if (job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
         await store.requeueJob(job.id, { now: at, runAfter: new Date(at.getTime() + RETRY_DELAY_MS * job.attempts), errorCode: code });
       } else {
-        await store.finishJob(job.id, { now: at, status: "failed", errorCode: code });
+        await store.finishJob(job.id, { now: at, status: "failed", errorCode: job.samplingMode === "one_shot" ? "delivery_unknown_no_automatic_retry" : code });
       }
       counts.inclusion.failed += 1;
       break;

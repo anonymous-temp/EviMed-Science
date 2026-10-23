@@ -44,12 +44,13 @@ import public_sources
 # them. `apps/server/test/evimedMcp.test.mjs` asks this server for the schemas
 # and holds these copies equal to the domain's.
 READ_WHATS = (
+    "diagnosis_progress",
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
     "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards", "value", "research",
     "clusters", "actions",
 )
 WRITE_WHATS = (
-    "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
+    "product", "claims", "questions", "preview_questions", "start_diagnosis", "recover_diagnosis", "lock_questions", "journey", "strategy", "sources", "targets",
     "articles", "placement_plan", "owned_links", "step", "value", "research", "actions",
 )
 ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
@@ -148,18 +149,22 @@ def tool_definitions():
             "name": "geo_write",
             "description": (
                 "Write this 循证 GEO project; valid items survive individual refusals. "
-                "value merges findings; reuse ids to amend. "
-                "questions: groups[].questions[].isMeasured:true selects probes before lock_questions; no answers needed. "
-                "research queues {capabilityId,question,context?,rationale?}; finish this run before it starts. "
-                "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
-                "actions: per-gap strategy actions."
+                "questions saves groups or original rows with a measurement contract; preview_questions previews rows. "
+                "start_diagnosis measures a saved version; recover_diagnosis explicitly recovers failed cells once. "
+                "value merges findings by id; research queues work after this run. owned_links registers or retires publications."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "what": {"type": "string", "enum": list(WRITE_WHATS)},
                     "items": {"type": "array", "minItems": 1, "maxItems": WRITE_MAX_ITEMS, "items": {"type": "object"}},
-                    "data": {"type": "object"},
+                    "data": {"type": "object", "description": (
+                        "Imported questions: rows[{text,originalId?,originalGroup?,clientTags?,kind?,sourceUrl?,collectedAt?,pool?,journeyStage?,audience?,isMeasured?,classificationStatus?}], "
+                        "contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. "
+                        "Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. "
+                        "start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown:true} for failed calls. "
+                        "Read diagnosis_progress with filter.round before recovery."
+                    )},
                 },
                 "required": ["what"],
                 "additionalProperties": False,

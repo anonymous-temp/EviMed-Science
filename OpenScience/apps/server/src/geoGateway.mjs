@@ -266,7 +266,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       } else if (operation === "write") {
         const request = writeRequest(body);
         work = async () => {
-          const result = await geoRuntimeWrite({ store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
+          const result = await geoRuntimeWrite({ inclusion: geo.service.inclusion ?? null, store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
             articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false),
             researchMaxOpen: Number.isSafeInteger(config.geoResearchMaxOpen) ? config.geoResearchMaxOpen : null });
           geo.service.counters.writes += 1;
@@ -302,7 +302,9 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       // else of theirs is a code the run's verdict knows.
       if (error instanceof HttpError) {
         if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
-        else if (passThroughCodes.has(error.code)) {
+        else if (["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_request_key_conflict", "geo_recovery_invalid", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required", "geo_round_empty", "geo_round_question_invalid"].includes(error.code)) {
+          error = gatewayError(error.status, "geo_write_payload_invalid", error.message);
+        } else if (passThroughCodes.has(error.code)) {
           // The run hears the refusal; which constraint of the database made it is the operator's.
           const underneath = /** @type {any} */ (error).cause?.code;
           if (typeof underneath === "string" && /^[A-Za-z0-9_]{1,64}$/.test(underneath)) report(underneath);

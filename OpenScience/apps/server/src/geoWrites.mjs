@@ -46,6 +46,7 @@
  */
 
 import {
+  previewGeoQuestionImport,
   GEO_ACTION_KINDS, GEO_ACTION_PROMISES, GEO_ARTICLE_CHANNELS, GEO_PROMISE_CEILINGS, geoActionNotices,
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_COMPARISON_EVIDENCE_TYPES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
@@ -53,7 +54,9 @@ import {
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
   GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
-import { HttpError } from "./security.mjs";
+import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { enqueueRound } from "./geoProbeQueue.mjs";
+import { HttpError, randomId } from "./security.mjs";
 
 /** @typedef {{ index?: number, indexes?: number[], count?: number, path?: string, group?: number, field?: string, code: string, message: string }} GeoIssue */
 
@@ -458,10 +461,68 @@ function validatedClaims(items, issues) {
   return claims;
 }
 
+/** Deterministic preview shared by HTTP and the native runtime. @param {unknown} data */
+export function geoQuestionImportPreview(data) {
+  try { return previewGeoQuestionImport(data); }
+  catch (error) { throw failure(400, "geo_question_import_invalid", String(/** @type {Error} */ (error).message)); }
+}
+
+/** @param {import("./geoStore.mjs").GeoStore} store @param {any} project @param {Record<string, any>} data @param {any} [inclusion] */
+export async function geoStartDiagnosis(store, project, data, inclusion = null) {
+  if (Object.keys(data).some((key) => !["version", "requestKey"].includes(key)) || !Number.isSafeInteger(data.version) || data.version < 1
+    || typeof data.requestKey !== "string" || !/^[A-Za-z0-9._:-]{1,120}$/.test(data.requestKey)) throw failure(400, "geo_diagnosis_invalid", "Choose a saved question version and a request key.");
+  const set = (await store.questionSets(project.id)).find((item) => item.version === data.version);
+  if (!set?.contract) throw failure(409, "geo_contract_missing", "Save the question version with its measurement agreement first.");
+  const groups = await store.questionMap(project.id, data.version);
+  const questionIds = groups.flatMap((group) => group.questions.filter((q) => q.isMeasured && !q.retiredAt).map((q) => q.id));
+  if (!questionIds.length) throw failure(400, "geo_round_empty", "Select at least one original question.");
+  // A one-shot set is not locked into the recurring orchestrator. It is measured through this explicit start only.
+  const result = await enqueueRound({ store: new GeoMeasureStore(store.database), inclusion }, {
+    geoProjectId: project.id, kind: "single_step", questionIds, engines: set.contract.engines, repeat: set.contract.repeats,
+    contract: { ...set.contract, questionVersion: set.version }, requestKey: data.requestKey,
+  });
+  return { ...result, status: (await new GeoMeasureStore(store.database).round(result.roundId))?.status ?? "queued" };
+}
+
+/** Explicit recovery is a new, trace-linked round, with one recovery generation per failed cell.
+ * @param {import("./geoStore.mjs").GeoStore} store @param {any} project @param {Record<string, any>} data */
+export async function geoRecoverDiagnosis(store, project, data) {
+  if (Object.keys(data).some((key) => !["roundId", "requestKey", "jobIds", "acknowledgeUnknown"].includes(key))
+    || typeof data.roundId !== "string" || typeof data.requestKey !== "string" || !/^[A-Za-z0-9._:-]{1,120}$/.test(data.requestKey)
+    || !Array.isArray(data.jobIds) || !data.jobIds.length || data.jobIds.length > 400 || data.jobIds.some((id) => typeof id !== "string")
+    || new Set(data.jobIds).size !== data.jobIds.length || data.acknowledgeUnknown != null && typeof data.acknowledgeUnknown !== "boolean") throw failure(400, "geo_recovery_invalid", "Name failed cells, a round and a request key.");
+  const measure = new GeoMeasureStore(store.database);
+  const round = await measure.round(data.roundId);
+  if (!round || round.geoProjectId !== project.id || round.userId !== project.userId) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
+  if (round.surface?.measurementContract?.samplingMode !== "one_shot" || round.ref?.recoveryOf) throw failure(409, "geo_recovery_exhausted", "Only an original one-shot diagnosis permits one recovery generation.");
+  const jobs = (await store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.error_code FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2 AND j.id=ANY($3::text[]) AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) ORDER BY j.id`, [round.id, project.id, data.jobIds])).rows;
+  if (jobs.length !== data.jobIds.length || jobs.some((job) => !["failed", "skipped"].includes(job.status))) throw failure(400, "geo_recovery_invalid", "Recovery can only name failed or missing cells of this diagnosis.");
+  if (jobs.some((job) => job.error_code === "delivery_unknown_no_automatic_retry") && data.acknowledgeUnknown !== true) throw failure(409, "geo_recovery_acknowledgment_required", "A failed request may already have reached the provider; explicitly acknowledge that recovery may make another call.");
+  const roundId = await measure.createRound({ id: randomId("gr_"), userId: project.userId, geoProjectId: project.id, kind: "single_step",
+    setVersion: round.setVersion, engines: [...new Set(jobs.map((job) => String(job.engine)))], surface: round.surface, planned: jobs.length,
+    ref: { requestKey: data.requestKey, recoveryOf: round.id, recoveredJobIds: jobs.map((job) => job.id), explicitRecovery: true,
+      acknowledgeUnknown: data.acknowledgeUnknown === true, authorizedBy: project.actorId ?? project.userId }, now: new Date() },
+  jobs.map((job) => ({ questionId: String(job.question_id), engine: String(job.engine), repeatIndex: 0 })));
+  return { roundId, planned: jobs.length, status: (await measure.round(roundId))?.status ?? "queued", recoveryOf: round.id };
+}
+
+/** @param {ReturnType<typeof geoQuestionImportPreview>} preview */
+function importGroups(preview) {
+  /** @type {Map<string, any>} */
+  const groups = new Map();
+  for (const row of preview.rows) {
+    const key = JSON.stringify([row.originalGroup, row.pool, row.journeyStage, row.audience]);
+    if (!groups.has(key)) groups.set(key, { name: row.originalGroup ?? "Imported questions", pool: row.pool,
+      journeyStage: row.journeyStage, audience: row.audience, signal: "client", questions: [] });
+    groups.get(key).questions.push(row);
+  }
+  return [...groups.values()];
+}
+
 // --- the question map -----------------------------------------------------------------------
 
 const GROUP_FIELDS = Object.freeze(["valueContext", "pool", "name", "typicalQuestion", "journeyStage", "journeyStageNo", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
-const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured"]);
+const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured", "originalId", "originalGroup", "clientTags", "classificationStatus"]);
 
 /**
  * A group name's leading internal number (「P1-01 品牌身份」): the method's
@@ -479,9 +540,8 @@ export function geoGroupName(name) {
 
 /**
  * @param {Record<string, any>} data @param {GeoIssue[]} issues
- * @param {string} [writtenAt] when the write reached the platform: a real phrasing written without its `collectedAt` was collected by then
  */
-function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
+function validatedGroups(data, issues) {
   const read = fields(data, issues, {});
   read.unknown(["groups", "note"]);
   const note = read.text("note", 500);
@@ -491,7 +551,6 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
   /** @type {any[]} */
   const groups = [];
   let total = 0;
-  let stamped = 0;
   data.groups.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
     if (notAnObject(entry, index, issues)) return;
     const item = /** @type {Record<string, any>} */ (entry);
@@ -529,7 +588,10 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
       question.unknown(QUESTION_FIELDS);
       const parsed = {
         text: question.text("text", 300, { required: true }),
-        kind: question.word("kind", GEO_QUESTION_KINDS, { fallback: "real" }),
+        kind: question.word("kind", GEO_QUESTION_KINDS, { fallback: "typical" }),
+        originalId: question.text("originalId", 300), originalGroup: question.text("originalGroup", 300),
+        clientTags: Array.isArray(/** @type {any} */ (questionEntry).clientTags) && /** @type {any} */ (questionEntry).clientTags.length <= 40 && /** @type {any} */ (questionEntry).clientTags.every((tag) => typeof tag === "string" && tag.length <= 100) ? /** @type {any} */ (questionEntry).clientTags : [],
+        classificationStatus: question.word("classificationStatus", ["unclassified", "suggested", "confirmed"], { fallback: "suggested" }),
         pool: question.word("pool", GEO_POOLS, { fallback: value.pool }),
         platform: question.word("platform", GEO_QUESTION_PLATFORMS),
         sourceUrl: question.url("sourceUrl"),
@@ -537,12 +599,9 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
         isMeasured: question.flag("isMeasured") ?? false,
       };
       if (question.refused) return;
-      // A real phrasing has a day it was heard (G9: 56 of 56 written without
-      // one). The run passes the post's own `collectedAt`; without it the
-      // phrasing was collected no later than this write, and says so.
-      if (parsed.kind === "real" && !parsed.collectedAt) {
-        parsed.collectedAt = writtenAt;
-        stamped += 1;
+      if (parsed.kind === "real" && (!parsed.collectedAt || !parsed.sourceUrl)) {
+        parsed.kind = null;
+        issues.push({ group: index, index: questionIndex, field: "sourceUrl", code: "notice", message: "The original phrasing is preserved with unknown provenance; real phrasings require a source URL and collection date." });
       }
       if (total >= GEO_WRITE_LIMITS.questions) {
         issues.push({ group: index, index: questionIndex, code: "too_many", message: `A set holds at most ${GEO_WRITE_LIMITS.questions} questions.` });
@@ -553,10 +612,6 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
     });
     groups.push(value);
   });
-  if (stamped) {
-    issues.push({ field: "collectedAt", code: "notice",
-      message: `${stamped} real phrasing(s) came without collectedAt and are dated to this write; pass each post's collectedAt from social_posts_search.` });
-  }
   return { groups, note };
 }
 
@@ -1741,7 +1796,7 @@ const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code 
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
- *   researchMaxOpen?: number | null }} input
+ *   researchMaxOpen?: number | null, inclusion?: any }} input
  *   `articleGate` reads an article's gate from the run ledger, for the bytes the run declares (`contentSha256`); without it every article is `unverified`.
  *   `researchMaxOpen` is the most research tasks a project holds queued or running (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`)
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
@@ -1760,7 +1815,7 @@ export async function geoRuntimeWrite(input) {
 }
 
 /** @param {Parameters<typeof geoRuntimeWrite>[0]} input */
-async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null }) {
+async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null, inclusion = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
@@ -1826,7 +1881,28 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const written = claims.length ? await store.upsertClaims(userId, project.id, claims) : [];
       return done(written.map((entry) => entry.id), { claims: written });
     }
+    case "preview_questions": {
+      return { ok: true, ids: [], issues: [], ...geoQuestionImportPreview(dataOf(body)) };
+    }
+    case "recover_diagnosis": {
+      const recovered = await geoRecoverDiagnosis(store, project, dataOf(body));
+      return done([recovered.roundId], recovered);
+    }
+    case "start_diagnosis": {
+      const started = await geoStartDiagnosis(store, project, dataOf(body), inclusion);
+      return done([started.roundId], started);
+    }
     case "questions": {
+      if (Object.hasOwn(dataOf(body), "rows")) {
+        const preview = geoQuestionImportPreview(dataOf(body));
+        if (!preview.requestKey) throw failure(400, "geo_question_import_invalid", "Save requires a requestKey for safe retries.");
+        const written = await store.writeQuestionSet(userId, project.id, { groups: importGroups(preview), note: preview.note,
+          requestKey: preview.requestKey, contract: preview.contract });
+        return done(written.groupIds, { ...written, contract: { ...preview.contract, questionVersion: written.version }, actualRows: preview.actualRows, plannedCalls: preview.plannedCalls });
+      }
+      if ((await store.questionSets(project.id))[0]?.contract) {
+        throw failure(409, "geo_contract_missing", "Revise this imported question set with rows, its measurement contract and a new requestKey, preserving original text and identifiers. A groups write cannot discard the agreement.");
+      }
       const { groups, note } = validatedGroups(dataOf(body), issues);
       if (!groups.length) return done([]);
       const written = await store.writeQuestionSet(userId, project.id, { groups, note: note ?? null });

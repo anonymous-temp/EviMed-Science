@@ -44,11 +44,12 @@
  * @module geoStore
  */
 
+import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
-import { randomId } from "./security.mjs";
+import { HttpError, randomId } from "./security.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
 
 /** What a project member is called when their display name may not be shown. */
@@ -180,6 +181,8 @@ export function questionFromRow(row) {
     setVersion: Number(row.set_version),
     text: String(row.text),
     kind: text(row.kind),
+    originalRowIndex: row.original_row_index == null ? null : Number(row.original_row_index), originalId: text(row.original_id), originalGroup: text(row.original_group),
+    clientTags: row.client_tags ?? [], classificationStatus: text(row.classification_status) ?? "unclassified",
     pool: text(row.pool),
     platform: text(row.platform),
     sourceUrl: text(row.source_url),
@@ -823,10 +826,10 @@ export class GeoStore {
 
   /** Every set version, newest first. @param {string} geoId */
   async questionSets(geoId) {
-    const result = await this.query(`SELECT version, locked_at, measured_count, note, run_id, created_at FROM evimed_geo.question_sets
+    const result = await this.query(`SELECT version, locked_at, measured_count, note, run_id, created_at, contract FROM evimed_geo.question_sets
       WHERE geo_project_id = $1 ORDER BY version DESC`, [geoId]);
     return result.rows.map((/** @type {any} */ row) => ({
-      version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: row.measured_count == null ? null : Number(row.measured_count),
+      version: Number(row.version), contract: row.contract ?? null, lockedAt: iso(row.locked_at), measuredCount: row.measured_count == null ? null : Number(row.measured_count),
       note: text(row.note), runId: text(row.run_id), createdAt: iso(row.created_at),
     }));
   }
@@ -851,24 +854,34 @@ export class GeoStore {
   /**
    * Write a new, unlocked set version from validated groups.
    * @param {string} userId @param {string} geoId
-   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null }} input
+   * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note?: string | null, runId?: string | null, contract?: any, requestKey?: string | null }} input
    * @returns {Promise<{ version: number, groupIds: string[], questionIds: string[][] }>}
    */
-  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null }) {
-    return this.transaction(async (client) => this.#insertSet(client, userId, geoId, { groups, note, runId, lockedAt: null, measuredCount: null }));
+  async writeQuestionSet(userId, geoId, { groups, note = null, runId = null, contract = null, requestKey = null }) {
+    return this.transaction(async (client) => this.#insertSet(client, userId, geoId, { groups, note, runId, contract, requestKey, lockedAt: null, measuredCount: null }));
   }
 
   /**
    * @param {any} client @param {string} userId @param {string} geoId
    * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note: string | null, runId: string | null,
-   *   lockedAt: string | null, measuredCount: number | null }} input
+   *   lockedAt: string | null, measuredCount: number | null, contract?: any, requestKey?: string | null }} input
    */
-  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount }) {
+  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount, contract = null, requestKey = null }) {
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+    const digest = createHash("sha256").update(geoValueCanonical({ groups, note, contract })).digest("hex");
+    if (requestKey) {
+      const existing = (await client.query(`SELECT version, request_digest FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND user_id=$2 AND request_key=$3`, [geoId, userId, requestKey])).rows[0];
+      if (existing) {
+        if (existing.request_digest !== digest) throw new HttpError(409, "geo_request_key_conflict", "This request key already names different question content.");
+        const savedGroups = (await client.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id=$1 AND set_version=$2 ORDER BY position`, [geoId, existing.version])).rows;
+        const savedQuestions = (await client.query(`SELECT id, group_id FROM evimed_geo.questions WHERE geo_project_id=$1 AND set_version=$2 ORDER BY position`, [geoId, existing.version])).rows;
+        return { version: Number(existing.version), groupIds: savedGroups.map((/** @type {any} */ g) => String(g.id)), questionIds: savedGroups.map((/** @type {any} */ g) => savedQuestions.filter((/** @type {any} */ q) => q.group_id === g.id).map((/** @type {any} */ q) => String(q.id))) };
+      }
+    }
     const version = Number((await client.query(`SELECT coalesce(max(version), 0) + 1 AS next FROM evimed_geo.question_sets
       WHERE geo_project_id = $1`, [geoId])).rows[0].next);
-    await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)`, [geoId, version, userId, lockedAt, measuredCount, note, runId]);
+    await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id, contract, request_key, request_digest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`, [geoId, version, userId, lockedAt, measuredCount, note, runId, contract ? JSON.stringify(contract) : null, requestKey, digest]);
     const groupRows = [];
     const questionRows = [];
     /** @type {string[]} */
@@ -888,6 +901,7 @@ export class GeoStore {
         const questionId = randomId("gq_");
         ids.push(questionId);
         questionRows.push({ id: questionId, group_id: id, text: question.text, kind: question.kind ?? null,
+          original_row_index: question.originalRowIndex ?? null, original_id: question.originalId ?? null, original_group: question.originalGroup ?? null, client_tags: question.clientTags ?? [], classification_status: question.classificationStatus ?? "unclassified",
           pool: question.pool ?? group.pool ?? null, platform: question.platform ?? null, source_url: question.sourceUrl ?? null,
           collected_at: question.collectedAt ?? null, is_measured: question.isMeasured === true, retired_at: question.retiredAt ?? null,
           position: questionRows.length });
@@ -904,10 +918,10 @@ export class GeoStore {
     }
     if (questionRows.length) {
       await client.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, kind, pool, platform,
-          source_url, collected_at, is_measured, retired_at, position)
-        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at, q.position
+          source_url, collected_at, is_measured, retired_at, position, original_id, original_group, client_tags, classification_status, original_row_index)
+        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at, q.position, q.original_id, q.original_group, q.client_tags, q.classification_status, q.original_row_index
         FROM jsonb_to_recordset($1::jsonb) AS q(id text, group_id text, text text, kind text, pool text, platform text, source_url text,
-          collected_at timestamptz, is_measured boolean, retired_at timestamptz, position integer)`, [JSON.stringify(questionRows), userId, geoId, version]);
+          collected_at timestamptz, is_measured boolean, retired_at timestamptz, position integer, original_id text, original_group text, client_tags text[], classification_status text, original_row_index integer)`, [JSON.stringify(questionRows), userId, geoId, version]);
     }
     return { version, groupIds, questionIds };
   }
@@ -948,7 +962,7 @@ export class GeoStore {
     }
     return this.transaction(async (client) => {
       const written = await this.#insertSet(client, userId, geoId, {
-        groups: copied, note: `unmeasure:${questionId}`, runId: null,
+        groups: copied, contract: source.contract, note: `unmeasure:${questionId}`, runId: null,
         lockedAt: source?.lockedAt ? new Date().toISOString() : null, measuredCount: source?.lockedAt ? measured : null,
       });
       return { version: written.version };

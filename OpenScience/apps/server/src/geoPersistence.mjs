@@ -223,6 +223,16 @@ CREATE TABLE IF NOT EXISTS evimed_geo.questions (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_questions_set_idx ON evimed_geo.questions (geo_project_id, set_version);
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS contract jsonb;
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS request_key text;
+ALTER TABLE evimed_geo.question_sets ADD COLUMN IF NOT EXISTS request_digest text;
+CREATE UNIQUE INDEX IF NOT EXISTS geo_question_sets_request_idx ON evimed_geo.question_sets (geo_project_id, request_key) WHERE request_key IS NOT NULL;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS client_tags text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_id text;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_row_index integer;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS original_group text;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS classification_status text;
+
 CREATE INDEX IF NOT EXISTS geo_questions_group_idx ON evimed_geo.questions (group_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.journeys (
