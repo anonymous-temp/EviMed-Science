@@ -21,7 +21,7 @@ import { HttpError } from "../src/security.mjs";
 const UI_ORIGIN = "https://science.example:8443";
 const sha = value => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t) {
+async function fixture(t, automatic = null) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "result-native-revision-"));
   const config = loadConfig({ dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     publicUrl: "https://science.example", runtimeUiPublicOrigin: UI_ORIGIN });
@@ -73,7 +73,7 @@ async function fixture(t) {
     received.push(JSON.parse(req.__openScienceProxyBody.toString())); res.writeHead(200, { "Content-Type": "application/json" }); res.end("{}");
   };
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager,
-    bindResultRevision: (actor, current, request) => revisions.bind(actor.id, current, request) });
+    bindResultRevision: (actor, current, request) => automatic?.version ? revisions.bindConversation(actor.id, current, request, { versionId: automatic.version.versionId, digest: automatic.version.digest, target: null, expectedHeadVersionId: null }) : revisions.bind(actor.id, current, request) });
   const address = await ui.listen(0, "127.0.0.1"); const origin = `http://127.0.0.1:${address.port}`;
   const reuseRoutes = createResultReuseRoutes({ store, revisions, exporter: null });
   const shell = createServer(async (req, res) => {
@@ -169,3 +169,17 @@ test("rendered paragraph/cell hints and a figure retain their exact source versi
   const image = await f.stage(figure, "forest.png", "figure"); assert.equal(image.response.status, 201);
   assert.equal((await f.stage(figure, "some-other-figure.png", "figure")).response.status, 400);
 });
+
+for (const wire of ["http", "mux"]) {
+  test(`native ${wire} admits optional whole-file context on an unprefixed actual follow-up`, { timeout: 10000 }, async t => {
+    const automatic = { version: null }; const f = await fixture(t, automatic);
+    automatic.version = await f.capture("article.md", "Original finding.");
+    const request = { sessionId: "session", requestId: "natural-request", content: [{ type: "text", text: "Make the second paragraph clearer." }] };
+    if (wire === "http") assert.equal((await f.sendHttp(request)).status, 200);
+    else { const client = await f.connect(); client.send({ type: "open", streamId: "natural", endpoint: "session/prompt", payload: { args: { request } } }); assert.equal((await client.next()).type, "item"); }
+    const forwarded = f.received[0].payload.args.request;
+    assert.equal(forwarded.content[0].text, request.content[0].text);
+    assert.match(forwarded.content[1].text, /"kind":"file"/);
+    assert.deepEqual(withoutPlatformBlocks(forwarded.content), [request.content[0]]);
+  });
+}

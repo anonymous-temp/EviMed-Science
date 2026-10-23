@@ -39,7 +39,7 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
     || typeof intent.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
     || (intent.draft !== undefined && (typeof intent.draft !== "string" || intent.draft.length > 100_000))) return null;
   if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== "string"
-    || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || !intent.draft)) return null;
+    || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return null;
   if (intent.originReference && !conversationReference(intent.originReference)) return null;
   if (intent.references && (!Array.isArray(intent.references) || intent.references.length > 50
     || intent.references.some(ref => !ref || typeof ref.id !== "string" || !/^src_[a-f0-9]{32}$/.test(ref.id)

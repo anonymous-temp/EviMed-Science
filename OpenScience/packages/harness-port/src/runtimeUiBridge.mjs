@@ -134,7 +134,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         // scope (and so its composer) exist for the draft below.
         target.__EVIMED_RESULT_REVISION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
-        if (intent.draft !== undefined || (Array.isArray(intent.references) && intent.references.length)) {
+        if (intent.draft !== undefined || intent.resultRevision || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
           const input = ctx.conversation.input.for(scope);
@@ -149,7 +149,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
-            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
+            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft ?? '' });
           }
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
@@ -480,7 +480,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       intent.references = intent.references.map((/** @type {any} */ reference) => ({ id: reference.id, title: reference.title.slice(0, 300) }));
     }
     if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
-      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
+      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return;
     incoming = data.seq;
     const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
     const existing = requests.get(data.requestId);

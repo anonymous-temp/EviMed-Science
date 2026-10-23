@@ -332,3 +332,14 @@ test('draft replacement, another session, cancellation and navigation clearing c
   hooks.dispose();
 });
 function settleTransport() { return new Promise(resolve => setImmediate(resolve)); }
+
+test('whole-file optional context uses the native words with no required draft prefix', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `rr_${'c'.repeat(64)}`;
+  target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 'session-a', referenceId, draft: '' });
+  const request = { sessionId: 'session-a', requestId: 'request-a', content: [{ type: 'text', text: 'Make the second paragraph clearer.' }] };
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request } } }) });
+  const forwarded = JSON.parse(calls[0][1].body).payload.args.request;
+  assert.deepEqual(forwarded.evimedResultRevision, { referenceId }); assert.deepEqual(forwarded.content, request.content);
+  hooks.dispose();
+});

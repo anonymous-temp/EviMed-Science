@@ -258,7 +258,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  */
 export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture" }) {
   const receipt = await readReceipt(project, run);
-  const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
+  const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? []), ...(run.outputFiles ?? []).map(file => typeof file === "string" ? file : file.path), ...(run.presentedFiles ?? []).map(file => typeof file === "string" ? file : file.path)] : [];
   if (!receipt && files.length === 0) return null;
   const imageOnce = askOnce(runtimeImageId);
   // Results a script left outside the deliverable layout (a statistical package at the workspace root) are preserved as
@@ -275,8 +275,15 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
       if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
     }
   } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
+  const ordinary = files.filter(file => typeof file === "string" && !file.startsWith(prefix));
+  const ordinaryItems = [];
+  for (const relativePath of new Set(ordinary)) {
+    try { ordinaryItems.push(await results.captureFile({ userId: project.userId, project, relativePath,
+      producer: { kind: "deliverable", runId: run.id, sessionId: run.sessionId, eventId: "ordinary-output" }, findings: runFindingsOf(run) })); }
+    catch (error) { failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" }); }
+  }
   const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce, reviewOrigin });
   // Reports written while the run was still working were captured before its calculations existed.
   try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
-  return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;
+  return { ...delivered, items: [...ordinaryItems, ...delivered.items], failures: [...delivered.failures, ...failures] };
 }

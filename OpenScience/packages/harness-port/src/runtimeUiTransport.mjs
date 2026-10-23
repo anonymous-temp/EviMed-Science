@@ -39,7 +39,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     stage(value) {
       if (!value || !/^[A-Za-z0-9_-]{1,160}$/.test(value.sessionId)
         || !/^rr_[a-f0-9]{64}$/.test(value.referenceId)
-        || typeof value.draft !== 'string' || !value.draft || value.draft.length > 100_000) throw failure('Invalid result revision reference');
+        || typeof value.draft !== 'string' || value.draft.length > 100_000) throw failure('Invalid result revision reference');
       stagedRevision = { ...value }; sentRevision = null;
     },
     clear() { stagedRevision = null; sentRevision = null; },

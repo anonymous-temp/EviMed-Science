@@ -120,3 +120,23 @@ test("the run is told which file is the revised form of the selection", async t 
   assert.equal(block.revisedPath, `${prefix}/report.md`);
   assert.match(block.preservation, /revisedPath/);
 });
+
+test("whole-file native context binds actual words, replays its request, refuses stale bytes, and ignores unreceipted copies", async t => {
+  const f = await fixture(t);
+  const original = await f.capture("article.md", "Original [citation].");
+  const makeRequest = () => ({ sessionId: f.run.sessionId, requestId: "submitted-request", content: [{ type: "text", text: "Make this easier to understand." }] });
+  const options = { versionId: original.versionId, digest: original.digest, target: null, expectedHeadVersionId: null };
+  const request = makeRequest();
+  const bound = await f.revisions.bindConversation("owner", f.project, request, options);
+  assert.equal(bound.anchor.kind, "file"); assert.equal(bound.anchor.matchMode, "whole_file");
+  assert.equal(bound.instruction, makeRequest().content[0].text);
+  assert.equal((await f.revisions.bindConversation("owner", f.project, makeRequest(), options)).id, bound.id);
+  await assert.rejects(f.revisions.bindConversation("owner", f.project, { ...makeRequest(), content: [{ type: "text", text: "A different instruction" }] }, options), { code: "result_revision_stale" });
+  await assert.rejects(f.revisions.bindConversation("owner", f.project, { ...makeRequest(), requestId: "stale" }, { ...options, digest: "a".repeat(64) }), { code: "result_revision_stale" });
+  const output = `artifacts/result-revisions/${bound.id}/output/article.md`;
+  const copy = await f.capture(output, "Original [citation].", { receipted: false });
+  assert.equal(copy.supersedesVersionId, null);
+  const successor = await f.capture(output, "Clearer wording [citation].", { receipted: false });
+  assert.equal(successor.supersedesVersionId, original.versionId);
+  assert.equal((await f.capture(`artifacts/result-revisions/${bound.id}/output/article.pdf`, "PDF rendition", { receipted: false })).supersedesVersionId, null);
+});

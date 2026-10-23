@@ -348,7 +348,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   // that silently loses the user's target. Strip our envelope before DSH.
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
-    if (request?.evimedResultRevision === undefined) return;
+    if (!request) return;
+    if (!bindResultRevision && request.evimedResultRevision === undefined) return;
     if (!bindResultRevision) throw new HttpError(503, "result_revision_unavailable", "Result revision is unavailable.");
     await bindResultRevision(user, project, request);
     delete request.evimedResultRevision;
