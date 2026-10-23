@@ -236,6 +236,7 @@ function errorView(row) {
     questionId: text(row.question_id),
     // The claim the statement contradicts, stable across the engines that say it: what the errors are grouped by (`byClaim`).
     fingerprint: text(row.fingerprint),
+    judgmentState: row.judgment_state ?? "active", judgmentCorrection: row.judgment_correction ?? null, judgmentHistory: row.judgment_history ?? [],
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
     evidenceQuote: text(row.evidence_quote),
@@ -586,9 +587,9 @@ export class GeoService {
     if (!geoIds.length) return alerts;
     const [errors, worst, safety] = await Promise.all([
       this.store.query(`SELECT geo_project_id, count(*)::integer AS n, count(*) FILTER (WHERE severity = ANY($2::text[]))::integer AS severe
-        FROM evimed_geo.errors WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed' GROUP BY geo_project_id`, [geoIds, [...GEO_URGENT_SEVERITIES]]),
+        FROM evimed_geo.errors WHERE geo_project_id = ANY($1::text[]) AND judgment_state='active' AND status <> 'closed' GROUP BY geo_project_id`, [geoIds, [...GEO_URGENT_SEVERITIES]]),
       this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, severity FROM evimed_geo.errors
-        WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed'
+        WHERE geo_project_id = ANY($1::text[]) AND judgment_state='active' AND status <> 'closed'
         ORDER BY geo_project_id, severity DESC NULLS LAST, updated_at DESC`, [geoIds]),
       this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.articles
         WHERE geo_project_id = ANY($1::text[]) AND safety = 'open' AND status <> 'withdrawn' GROUP BY geo_project_id`, [geoIds]),
@@ -811,7 +812,7 @@ export class GeoService {
       view.scopeErrorSummary = scopeErrors.summary;
       view.errors = errors; view.byClaim = geoErrorsByClaim(errorData.claimRows.map(errorView));
       view.byClaimPage = { ...errorData.page, total: null, shown: view.byClaim.length, unit: "page_claims", partial: errorData.page.more || errorData.page.offset > 0 };
-      view.errorCounts = errorData.counts; view.errorSummary = errorData.summary; view.errorPage = errorData.page;
+      view.activeErrorSummary = errorData.activeSummary; view.errorCounts = errorData.counts; view.errorSummary = errorData.summary; view.errorPage = errorData.page;
       view.errorFilters = errorData.filter;
       view.byEngine = selection.engines.map((engine) => {
         const old = view.byEngine.find((/** @type {any} */ entry) => entry.engine === engine);
@@ -950,7 +951,7 @@ export class GeoService {
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
     const [errors, stops, changed, rounds, publishable, published] = await Promise.all([
       this.store.query(`SELECT id, engine, statement, severity, first_snapshot_id, last_snapshot_id, created_at FROM evimed_geo.errors
-        WHERE geo_project_id = $1 AND status <> 'closed' AND created_at >= $2 ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 3`, [project.id, since]),
+        WHERE geo_project_id = $1 AND judgment_state='active' AND status <> 'closed' AND created_at >= $2 ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 3`, [project.id, since]),
       this.store.query(`SELECT id, title, updated_at FROM evimed_geo.articles WHERE geo_project_id = $1 AND safety = 'open' AND status <> 'withdrawn'
         ORDER BY updated_at DESC LIMIT 2`, [project.id]),
       // An outlet that changed a published text this week (the market's post-publication check).
@@ -1195,13 +1196,14 @@ export class GeoService {
    * @param {string} geoId
    */
   async #errorCounts(geoId) {
-    const rows = (await this.store.query(`SELECT status, severity, count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1
-      GROUP BY status, severity`, [geoId])).rows;
-    const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0 };
+    const rows = (await this.store.query(`SELECT status, judgment_state, severity, count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1
+      GROUP BY status, judgment_state, severity`, [geoId])).rows;
+    const counts = { total: 0, open: 0, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 0, withdrawn: 0 };
     for (const row of rows) {
       const n = Number(row.n);
       const status = String(row.status);
       counts.total += n;
+      if (row.judgment_state === "withdrawn") { counts.withdrawn += n; continue; }
       if (status in counts) counts[/** @type {"open" | "acting" | "awaiting_remeasure" | "closed"} */ (status)] += n;
       if (status !== "closed" && GEO_URGENT_SEVERITIES.includes(String(row.severity))) counts.severe += n;
     }
@@ -1260,7 +1262,7 @@ export class GeoService {
         ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT $2`, [project.id, this.errorListLimit]),
       this.#errorCounts(project.id),
       // Every live error, not the page of them: the hard line reads all of them.
-      this.store.query(`SELECT id, status, severity, cited_source FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed'`, [project.id]),
+      this.store.query(`SELECT id, status, severity, cited_source FROM evimed_geo.errors WHERE geo_project_id = $1 AND judgment_state='active' AND status <> 'closed'`, [project.id]),
     ]);
     const errors = errorRows.rows.map(errorView);
     const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
@@ -2022,7 +2024,7 @@ export class GeoService {
       groups: groups.map((group) => ({ ...questionGroupFromRow(group), aliasIds: currentGroups.get(String(group.id))?.aliasIds ?? [],
         questions: selected.questions.filter((question) => question.group_id === group.id).map(questionFromRow) })),
       currentOf,
-      errors: errors.claimRows.map((row) => ({ ...errorView(row), groupId: questionGroups.get(String(row.question_id)) ?? snapshotGroups.get(row.last_snapshot_id) ?? snapshotGroups.get(row.first_snapshot_id) ?? snapshotGroups.get(row.closed_snapshot_id) ?? null, materials: row.materials ?? [] })),
+      errors: errors.claimRows.filter(row => row.judgment_state !== "withdrawn").map((row) => ({ ...errorView(row), groupId: questionGroups.get(String(row.question_id)) ?? snapshotGroups.get(row.last_snapshot_id) ?? snapshotGroups.get(row.first_snapshot_id) ?? snapshotGroups.get(row.closed_snapshot_id) ?? null, materials: row.materials ?? [] })),
       answersByGroup: new Map(groups.map((group) => [String(group.id), answers.filter((answer) => questionGroups.get(String(answer.questionId)) === group.id)])),
       readings: rows.filter((entry) => entry.scope === "group").map((entry) => ({ groupId: entry.groupId, metricId: entry.metricId,
         k: entry.numerator, n: entry.denominator, value: entry.value, status: entry.status, roundId, date, kind: round?.kind ?? "single_step", coverage: selected.selection.coverage })),
@@ -2435,8 +2437,8 @@ export class GeoService {
     const row = (await this.store.query(`SELECT
         (SELECT count(*) FROM evimed_geo.projects WHERE deleted_at IS NULL)::integer AS projects,
         (SELECT count(*) FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = 'active')::integer AS active,
-        (SELECT count(*) FROM evimed_geo.errors WHERE status <> 'closed')::integer AS open_errors,
-        (SELECT count(*) FROM evimed_geo.errors WHERE status <> 'closed' AND severity = ANY($1::text[]))::integer AS urgent_errors,
+        (SELECT count(*) FROM evimed_geo.errors WHERE judgment_state='active' AND status <> 'closed')::integer AS open_errors,
+        (SELECT count(*) FROM evimed_geo.errors WHERE judgment_state='active' AND status <> 'closed' AND severity = ANY($1::text[]))::integer AS urgent_errors,
         (SELECT count(*) FROM evimed_geo.articles WHERE safety = 'open' AND status <> 'withdrawn')::integer AS safety_stops,
         (SELECT count(*) FROM evimed_geo.rounds WHERE status IN ('queued', 'running'))::integer AS open_rounds`, [[...GEO_URGENT_SEVERITIES]])).rows[0] ?? {};
     return {

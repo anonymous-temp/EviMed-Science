@@ -217,6 +217,7 @@ function Accuracy({
   const groupsWithErrors = useMemo(() => [...new Map([...groupOf.values()].map(group => [group.id, { value: group.id, label: groupName(group.name) || "未命名问题群" }])).values()], [groupOf]);
   const cluster = clusterParam && groupsWithErrors.some((entry) => entry.value === clusterParam) ? clusterParam : null;
   const pages = useGeoErrorPages(geoId, diagnosis, {
+    ...(show === "all" ? {} : { errorJudgmentState: "active" }),
     ...(show === "severe" ? { errorSeverities: ["S3", "S4"], errorStatuses: ["open", "acting", "awaiting_remeasure"] }
       : show === "open" ? { errorStatuses: ["open"] } : show === "acting" ? { errorStatuses: ["acting", "awaiting_remeasure"] } : {}),
     ...(type ? { errorTypes: [type] } : {}), ...(trace ? { errorTrace: trace } : {}), errorSearch: query.trim(),
@@ -315,7 +316,7 @@ function Accuracy({
 
       <ErrorCharts
         errors={errors}
-        summary={pages.data?.errorSummary ?? diagnosis.scopeErrorSummary ?? diagnosis.errorSummary}
+        summary={pages.data?.activeErrorSummary ?? diagnosis.activeErrorSummary ?? pages.data?.errorSummary ?? diagnosis.scopeErrorSummary ?? diagnosis.errorSummary}
         composition={composition}
         compositionTitle={correct.numerator != null && wrongOurs.numerator != null
           // Composition is answer-level, with assessment uncertainty visible beside it.
@@ -396,9 +397,9 @@ export function errorTotals(diagnosis: GeoDiagnosis, rows: readonly GeoErrorRow[
   }
   return {
     total: rows.length,
-    open: rows.filter((error) => error.status === "open").length,
-    working: rows.filter((error) => error.status === "acting" || error.status === "awaiting_remeasure").length,
-    closed: rows.filter((error) => error.status === "closed").length,
+    open: rows.filter((error) => error.judgmentState !== "withdrawn" && error.status === "open").length,
+    working: rows.filter((error) => error.judgmentState !== "withdrawn" && (error.status === "acting" || error.status === "awaiting_remeasure")).length,
+    closed: rows.filter((error) => error.judgmentState !== "withdrawn" && error.status === "closed").length,
     severe: rows.filter(isSevereError).length,
   };
 }

@@ -157,3 +157,10 @@ describe("corrections", () => {
     expect(brief).toContain("原文：每周一次。");
   });
 });
+
+it("keeps withdrawn judgments in history while excluding them from active and severe filters", () => {
+  const withdrawn = { ...row({ id: "withdrawn", severity: "S4", status: "open" }), judgmentState: "withdrawn" as const };
+  expect(filterErrors([withdrawn], { show: "all" })).toEqual([withdrawn]);
+  expect(filterErrors([withdrawn], { show: "open" })).toEqual([]);
+  expect(filterErrors([withdrawn], { show: "severe" })).toEqual([]);
+});

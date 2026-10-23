@@ -477,7 +477,7 @@ function Elsewhere({
   const own = unplaced.map((sentence) => findings.find((finding) => finding.sentence.trim() === sentence.trim())).filter((finding): finding is AnswerFinding => !!finding);
   const count = errors.length + own.length;
   if (count === 0) return null;
-  const summary = own.length === 0 ? `更早的回答里也出现过（${errors.length} 条）` : `另有 ${count} 条讲错记录，原句不在上面的回答里`;
+  const summary = own.length === 0 ? `历史讲错记录（${errors.length} 条）` : `另有 ${count} 条核查记录`;
   return (
     <Disclosure summary={summary} className="mt-8">
       <ul data-geo-elsewhere="" className="flex flex-col divide-y divide-faint">
@@ -489,7 +489,7 @@ function Elsewhere({
         ))}
         {errors.map((error) => {
           const where = error.firstSnapshotId && error.firstSnapshotId !== current ? error.firstSnapshotId : error.snapshotId && error.snapshotId !== current ? error.snapshotId : null;
-          const detail = [monthDay(error.createdAt), GEO_ERROR_STATUS_WORDS[error.status]].filter(Boolean).join(" · ");
+          const detail = [monthDay(error.createdAt), (error.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[error.status])].filter(Boolean).join(" · ");
           return (
             <li key={error.id} className="flex flex-wrap items-baseline gap-x-2 py-2 text-ui text-text-2">
               <span className="min-w-0">{`“${error.statement}”`}</span>

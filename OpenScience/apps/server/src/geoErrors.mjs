@@ -31,15 +31,15 @@
  *   — the owner's method reads the page before choosing a route, and that
  *   reading is the content run's, which fills `materials` later.
  * - **Closed only by measurement.** An error that has been acted on closes
- *   when a later judged answer to the same question on the same engine no
- *   longer carries it (EC-G03); seen again after closing, it reopens (and a
+ *   when a later fully judged answer explicitly verifies the same claim, version
+ *   and applicability as correct (EC-G03); seen again after closing, it reopens (and a
  *   severe one notifies again).
  *
  * @module geoErrors
  */
 
 import { createHash } from "node:crypto";
-import { GEO_METRICS, geoConstant, isOurCitation, canonicalJson } from "@evimed/domain";
+import { GEO_METRICS, geoConstant, isOurCitation, geoClaimApplicability, geoClaimAssessmentIdentity, geoJudgementCoverage } from "@evimed/domain";
 import { compactText } from "./geoParse.mjs";
 import { enqueueRound, measurableEngines } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -72,11 +72,11 @@ const ROUTES = Object.freeze({
 /**
  * The error's identity retains the actual claim version and applicability.
  * Historical rows without these fields keep their legacy identity.
- * @param {{ claimKey?: string | null, text?: string | null, claimVersion?: number | null, applicability?: any }} statement
+ * @param {{ claimKey?: string | null, text?: string | null, claimId?: string | null, claimVersion?: number | null, applicability?: any }} statement
  */
 export function errorFingerprint(statement) {
   const basis = statement.claimKey ? `claim:${statement.claimKey}` : `text:${compactText(statement.text)}`;
-  const conditions = statement.applicability === undefined && statement.claimVersion === undefined ? "" : canonicalJson({ version: statement.claimVersion ?? null, applicability: statement.applicability ?? null });
+  const conditions = statement.applicability === undefined && statement.claimVersion === undefined ? "" : geoClaimAssessmentIdentity(statement);
   return createHash("sha256").update(basis + conditions).digest("hex").slice(0, 32);
 }
 
@@ -181,6 +181,7 @@ async function notifyError(deps, error, context, occurrence = "first") {
   if (typeof deps.notify !== "function") return false;
   const now = (deps.now ?? (() => new Date()))();
   try {
+    const noticeOccurrence = error.judgmentCorrection?.kind === "judgment_reactivated" && error.judgmentCorrection?.assessmentVersion ? `judgment:${error.judgmentCorrection.assessmentVersion}` : occurrence;
     await deps.notify({
       kind: "wrong_ours",
       severity: "safety",
@@ -199,7 +200,7 @@ async function notifyError(deps, error, context, occurrence = "first") {
       evidenceQuote: error.evidenceQuote,
       questionText: context.questionText ?? null,
       snapshotId: error.lastSnapshotId ?? error.firstSnapshotId,
-      idempotencyKey: `geo:wrong_ours:${error.id}:${occurrence}`,
+      idempotencyKey: `geo:wrong_ours:${error.id}:${noticeOccurrence}`,
     });
   } catch {
     return false;
@@ -262,10 +263,11 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
       id: randomId("ge_"), userId: snapshot.userId, geoProjectId: snapshot.geoProjectId,
       fingerprint: errorFingerprint({ ...statement, claimKey: statement.claimKey ?? claim?.key ?? null }),
       engine: snapshot.engine, questionId: snapshot.questionId, snapshotId: snapshot.id, statement: String(statement.text).slice(0, 1_000),
-      errorType: statement.errorType, severity: statement.severity, claimId: statement.claimId, evidenceQuote: statement.evidence ?? null,
+      verifiedStatement: statement, errorType: statement.errorType, severity: statement.severity, claimId: statement.claimId, evidenceQuote: statement.evidence ?? null,
       confirm: null, citedSource: trace.citedSource, action: trace.action, responsible: trace.responsible,
       now, askedAt: snapshot.askedAt ? new Date(snapshot.askedAt) : now,
     });
+    if (!error) continue;
     if (!created) {
       out.seen += 1;
       if (!error.notifiedAt && GEO_NOTIFY_SEVERITIES.includes(String(error.severity)) && error.status !== "closed") {
@@ -284,7 +286,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
     const confirm = await confirmationFor(deps, error, round ? { roundId: round.id, kind: round.kind, ref: round.ref } : null);
     if (confirm) await deps.store.updateError(error.id, { confirm });
   }
-  await deps.store.errorsRecorded(snapshot.id);
+  await deps.store.errorsRecorded(snapshot.id, statements);
   return out;
 }
 
@@ -445,16 +447,26 @@ export async function tickErrors(deps) {
   for (const error of await store.errorsToClose(20)) {
     if (!error.questionId || !error.updatedAt) continue;
     const later = await store.laterJudgedAnswers(error.id);
-    const latest = later.find((answer) => answer.status === "valid");
-    if (!latest || repeatsError(latest.statements, error.fingerprint)) continue;
-    const originalStatements = (await store.query("SELECT statements FROM evimed_geo.facts WHERE snapshot_id=$1", [error.firstSnapshotId])).rows[0]?.statements ?? [];
-    const original = originalStatements.find(statement => statement.claimId === error.claimId && errorFingerprint(statement) === error.fingerprint);
-    // A later answer under another claim version or another population cannot establish this error's disappearance.
-    if (original?.claimVersion != null && !latest.statements.some(statement => statement.claimId === original.claimId
-      && statement.claimVersion === original.claimVersion && canonicalJson(statement.applicability ?? null) === canonicalJson(original.applicability ?? null))) {
-      const basis = latest.roundId ? (await store.round(latest.roundId))?.ref?.evaluationBasis?.claims ?? [] : [];
-      if (!basis.some(claim => claim.id === original.claimId && claim.version === original.claimVersion)) continue;
+    const latest = later[0];
+    if (!latest || latest.status !== "valid" || !latest.judgedAt || geoJudgementCoverage(latest) !== "complete") continue;
+    const origin = (await store.query(`SELECT f.statements,r.ref FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id=f.snapshot_id
+      LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE f.snapshot_id=$1 AND f.geo_project_id=$2 AND f.user_id=$3`,
+      [error.firstSnapshotId, error.geoProjectId, error.userId])).rows[0];
+    let original = (origin?.statements ?? []).find(statement => statement.verdict === "wrong" && statement.claimId === error.claimId);
+    if (!original) continue;
+    if (original.claimVersion == null || !original.applicability) {
+      const frozen = origin?.ref?.evaluationBasis?.claims?.find(claim => claim.id === original.claimId);
+      if (!frozen?.version) continue;
+      original = { ...original, claimVersion: frozen.version, applicability: geoClaimApplicability(frozen) };
     }
+    const identity = geoClaimAssessmentIdentity(original);
+    const relevant = latest.statements.filter(statement => geoClaimAssessmentIdentity(statement) === identity);
+    if (!relevant.length || relevant.some(statement => statement.verdict !== "correct")) continue;
+    const basisContext = await store.projectContext(error.geoProjectId, latest.roundId);
+    const basis = basisContext?.claims.find(claim => geoClaimAssessmentIdentity(claim) === identity);
+    if (!basis || !relevant.some(statement => compactText(statement.evidence).length >= 4
+      && compactText(basis.quote).includes(compactText(statement.evidence))
+      && compactText(latest.answerText).includes(compactText(statement.text)))) continue;
     await store.updateError(error.id, { status: "closed", closed_snapshot_id: latest.id, updated_at: now });
     counts.closed += 1;
   }

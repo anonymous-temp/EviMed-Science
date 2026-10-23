@@ -51,8 +51,8 @@ export type ErrorShow = "severe" | "open" | "acting" | "all";
 export const ERROR_SHOWS: readonly ErrorShow[] = Object.freeze(["severe", "open", "acting", "all"]);
 
 /** A live error that would reach a patient (S3 or S4). */
-export const isSevereError = (error: Pick<GeoErrorRow, "status" | "severity">): boolean =>
-  error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
+export const isSevereError = (error: Pick<GeoErrorRow, "status" | "severity" | "judgmentState">): boolean =>
+  error.judgmentState !== "withdrawn" && error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
 
 const SHOW_MATCHES: Readonly<Record<ErrorShow, (error: GeoErrorRow) => boolean>> = {
   severe: isSevereError,
@@ -75,6 +75,7 @@ export interface ErrorFilter {
 export function filterErrors(errors: readonly GeoErrorRow[], filter: ErrorFilter): GeoErrorRow[] {
   const needle = (filter.query ?? "").trim().toLowerCase();
   return errors.filter((error) => {
+    if (filter.show !== "all" && error.judgmentState === "withdrawn") return false;
     if (!SHOW_MATCHES[filter.show](error)) return false;
     if (filter.engine && error.engine !== filter.engine) return false;
     if (filter.type && (error.errorType ?? "unknown") !== filter.type) return false;

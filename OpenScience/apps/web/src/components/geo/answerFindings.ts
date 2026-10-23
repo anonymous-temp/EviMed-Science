@@ -9,6 +9,7 @@
  *
  * Two sources for one claim are one finding: the correction is the claim's, not the source's.
  */
+import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity } from "@evimed/domain";
 import type { GeoAnswer, GeoErrorRow, GeoStatementFact } from "@/lib/geoClient";
 import { markAnswer } from "./answerMarks";
 
@@ -38,8 +39,8 @@ const claimKey = (error: GeoErrorRow) => error.fingerprint || error.claimId || `
 export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "errors">): AnswerFindings {
   const text = data.snapshot.answerText ?? "";
   const rows = (Array.isArray(data.errors) ? data.errors : []).filter((row) => row && row.statement);
-  const statements = (Array.isArray(data.facts?.statements) ? data.facts.statements : [])
-    .filter((statement) => statement && statement.verdict === "wrong" && statement.text && statement.text.trim());
+  const current = (Array.isArray(data.facts?.statements) ? data.facts.statements : []).filter(statement => statement && statement.text?.trim());
+  const statements = current.filter(statement => statement.verdict === "wrong");
 
   // The row that speaks for a claim: the one first seen in this very answer, then the gravest.
   const best = (candidates: GeoErrorRow[]) => candidates.slice().sort((left, right) =>
@@ -48,10 +49,10 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
   const findings: AnswerFinding[] = [];
   const spoken = new Set<string>();
   for (const statement of statements) {
-    if (findings.some((finding) => same(finding.sentence, statement.text) && JSON.stringify(finding.statement?.applicability ?? null) === JSON.stringify(statement.applicability ?? null))) continue;
+    if (findings.some((finding) => same(finding.sentence, statement.text) && geoClaimAssessmentIdentity(finding.statement) === geoClaimAssessmentIdentity(statement))) continue;
     const candidates = rows.filter(row => ((statement.claimId && row.claimId === statement.claimId) || ((!statement.claimId || !row.claimId) && same(row.statement, statement.text)))
       && (statement.claimVersion == null || row.claimVersion == null || statement.claimVersion === row.claimVersion)
-      && (!statement.applicability || !row.applicability || JSON.stringify(statement.applicability) === JSON.stringify(row.applicability)));
+      && (!statement.applicability || !row.applicability || canonicalJson(geoClaimApplicability(statement)) === canonicalJson(geoClaimApplicability(row))));
     const error = best(candidates);
     for (const row of candidates) spoken.add(claimKey(row));
     findings.push({ sentence: statement.text.trim(), statement, error });
@@ -68,7 +69,8 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
     const row = best(group);
     if (!row) continue;
     const inText = text !== "" && markAnswer(text, { wrong: [row.statement] }).unplaced.length === 0;
-    if (inText) findings.push({ sentence: row.statement.trim(), statement: null, error: row });
+    const assessed = current.some(statement => same(statement.text, row.statement) || Boolean(statement.claimId && statement.claimId === row.claimId));
+    if (inText && !assessed) findings.push({ sentence: row.statement.trim(), statement: null, error: row });
     else elsewhere.push(row);
   }
   return { findings, elsewhere };

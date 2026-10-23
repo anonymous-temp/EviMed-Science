@@ -354,7 +354,7 @@ test("a sentence the judge lists twice keeps the worst verdict it can verify, in
   const built = buildJudgeInput(input);
   const sentence = "玛仕度肽每天注射一次";
   const wrong = { text: sentence, verdict: "wrong", claim: "C1", evidence: "每周一次皮下注射", errorType: "number", severity: "S3" };
-  const unverifiable = { text: sentence, verdict: "unverifiable", claim: null, evidence: "" };
+  const unverifiable = { text: sentence, verdict: "unverifiable", claim: "C1", evidence: "" };
   const other = { text: "出现剧烈腹痛要及时就医", verdict: "unverifiable", claim: null, evidence: "" };
   const kept = (/** @type {any[]} */ statements) => verifyJudgement({ statements }, built, input);
   const verdicts = (/** @type {ReturnType<typeof kept>} */ result) => result.statements.map((statement) => [statement.text, statement.verdict]);
@@ -386,6 +386,7 @@ test("a sentence the judge lists twice keeps the worst verdict it can verify, in
   const twice = kept([wrong, { ...wrong }, unverifiable]);
   assert.deepEqual(verdicts(twice), [[sentence, "wrong"]]);
   assert.deepEqual(twice.dropped, []);
+  assert.equal(kept([{ ...unverifiable, claim: null }, wrong]).statements.length, 2, "an unanchored reading cannot merge a distinct claim identity");
 });
 
 test("a 'wrong on a number' verdict whose numbers are the claim's is dropped", () => {

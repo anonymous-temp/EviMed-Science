@@ -11,6 +11,8 @@ test("every file that records which version of a value profile something stood o
   // write or read a version number; a file not named here that uses one has found a reference to add to `GEO_VALUE_REFERENCES` (and to
   // this list, with the object that holds it).
   const accounted = {
+    "geoDiagnosisReview.mjs": "reuses the existing facts.judge_extract.valueBasisVersion pointer; assessment history stores no new value-profile pointer",
+    "geoErrors.mjs": "reads only frozen evaluationBasis.claims to match a historical claim identity, without storing a value-profile version",
     "geoJudge.mjs": "facts.judge_extract.valueBasisVersion: the version an answer was judged against",
     "geoLearningSignals.mjs": "reads only evaluationBasis.claims; its assessment preserves those claims without retaining a value-profile version pointer",
     "geoMeasureStore.mjs": "rounds.ref.evaluationBasis.value.version: the profile a round froze when it started",

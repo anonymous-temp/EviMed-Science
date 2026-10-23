@@ -1080,10 +1080,12 @@ export function geoErrorsByClaim(errors) {
   }
   const severityRank = (/** @type {string | null} */ severity) => (severity ? GEO_SEVERITIES.indexOf(/** @type {any} */ (severity)) : -1)
   return [...byClaim.entries()].map(([fingerprint, rows]) => {
-    const severity = rows.map((row) => text(row.severity)).filter(Boolean).sort((left, right) => severityRank(right) - severityRank(left))[0] ?? null
-    const status = rows.map((row) => String(row.status)).sort((left, right) => statusRank.indexOf(left) - statusRank.indexOf(right))[0] ?? 'open'
+    const active = rows.filter(row => row.judgmentState !== 'withdrawn');
+    const judged = active.length ? active : rows;
+    const severity = judged.map((row) => text(row.severity)).filter(Boolean).sort((left, right) => severityRank(right) - severityRank(left))[0] ?? null
+    const status = judged.map((row) => String(row.status)).sort((left, right) => statusRank.indexOf(left) - statusRank.indexOf(right))[0] ?? 'open'
     // The answer opened for the claim is the most severe live one's: its row leads.
-    const lead = [...rows].sort((left, right) => (severityRank(text(right.severity)) - severityRank(text(left.severity)))
+    const lead = [...judged].sort((left, right) => (severityRank(text(right.severity)) - severityRank(text(left.severity)))
       || (statusRank.indexOf(String(left.status)) - statusRank.indexOf(String(right.status))))[0]
     return {
       fingerprint,
@@ -1097,7 +1099,7 @@ export function geoErrorsByClaim(errors) {
       snapshotId: text(lead.firstSnapshotId) ?? text(lead.snapshotId),
       citedSources: rows.map((row) => record(row.citedSource)).filter((source) => text(source.attribute) || text(source.domain)),
       actions: [...new Set(rows.map((row) => text(row.action)).filter(Boolean))],
-      urgent: rows.some((row) => GEO_URGENT_SEVERITIES.includes(/** @type {any} */ (row.severity)) && row.status !== 'closed'),
+      urgent: active.some((row) => GEO_URGENT_SEVERITIES.includes(/** @type {any} */ (row.severity)) && row.status !== 'closed'),
     }
   }).sort((left, right) => (severityRank(right.severity) - severityRank(left.severity)) || (statusRank.indexOf(left.status) - statusRank.indexOf(right.status))
     || right.count - left.count)

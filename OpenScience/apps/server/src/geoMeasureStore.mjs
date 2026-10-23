@@ -157,6 +157,7 @@ export function errorRow(row) {
     userId: String(row.user_id),
     geoProjectId: String(row.geo_project_id),
     fingerprint: String(row.fingerprint),
+    judgmentState: row.judgment_state ?? "active", judgmentCorrection: row.judgment_correction ?? null, judgmentHistory: list(row.judgment_history),
     engine: String(row.engine),
     questionId: row.question_id ?? null,
     firstSnapshotId: row.first_snapshot_id ?? null,
@@ -807,10 +808,10 @@ export class GeoMeasureStore {
 
   /**
    * The facts row's wrong statements are in the error ledger now (or it has none): nothing is owed for it.
-   * @param {string} snapshotId
+   * @param {string} snapshotId @param {Array<Record<string, any>>} statements
    */
-  async errorsRecorded(snapshotId) {
-    await this.query(`UPDATE evimed_geo.facts SET errors_owed = false WHERE snapshot_id = $1 AND errors_owed`, [snapshotId]);
+  async errorsRecorded(snapshotId, statements) {
+    await this.query(`UPDATE evimed_geo.facts SET errors_owed = false WHERE snapshot_id = $1 AND errors_owed AND statements=$2::jsonb`, [snapshotId, JSON.stringify(statements)]);
   }
 
   /**
@@ -919,8 +920,13 @@ export class GeoMeasureStore {
     const result = await this.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, first_snapshot_id,
         last_snapshot_id, statement, error_type, severity, severity_basis, claim_id, evidence_quote, confirm, cited_source, action, responsible,
         status, materials, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 'initial', $11, $12, $13::jsonb, $14::jsonb, $15, $16, 'open', '[]'::jsonb, $17, $17)
+      SELECT $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 'initial', $11, $12, $13::jsonb, $14::jsonb, $15, $16, 'open', '[]'::jsonb, $17, $17
+      FROM (SELECT snapshot_id FROM evimed_geo.facts WHERE snapshot_id=$7 AND user_id=$2 AND geo_project_id=$3
+        AND statements @> jsonb_build_array($19::jsonb) FOR SHARE) current_judgment
       ON CONFLICT (geo_project_id, fingerprint, engine) DO UPDATE SET
+        judgment_state = 'active',
+        judgment_correction = CASE WHEN errors.judgment_state='withdrawn' THEN jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text) ELSE errors.judgment_correction END,
+        judgment_history = CASE WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END,
         last_snapshot_id = CASE WHEN errors.last_snapshot_id IS NULL OR $18::timestamptz >= coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.last_snapshot_id), '-infinity'::timestamptz)
           THEN EXCLUDED.last_snapshot_id ELSE errors.last_snapshot_id END,
@@ -931,16 +937,16 @@ export class GeoMeasureStore {
         closed_snapshot_id = CASE WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
           THEN NULL ELSE errors.closed_snapshot_id END,
-        notified_at = CASE WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
+        notified_at = CASE WHEN errors.judgment_state='withdrawn' THEN NULL WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
           THEN NULL ELSE errors.notified_at END,
         updated_at = $17
       RETURNING *, (xmax = 0) AS inserted`,
     [row.id, row.userId, row.geoProjectId, row.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
       row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
-      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString()]);
+      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
     const out = result.rows[0];
-    return { error: errorRow(out), created: Boolean(out.inserted) };
+    return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
   }
 
   /** @param {string} errorId @param {Record<string, unknown>} fields  column → value (jsonb columns as objects) */
@@ -963,7 +969,7 @@ export class GeoMeasureStore {
 
   /** Urgent errors not yet notified. @param {string[]} severities @param {number} limit */
   async errorsToNotify(severities, limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE notified_at IS NULL AND status <> 'closed' AND severity = ANY($1::text[])
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND notified_at IS NULL AND status <> 'closed' AND severity = ANY($1::text[])
       ORDER BY created_at LIMIT $2`, [severities, limit]);
     return result.rows.map(errorRow);
   }
@@ -972,7 +978,7 @@ export class GeoMeasureStore {
   async errorsAwaitingConfirm(limit) {
     const result = await this.query(`SELECT e.*, r.status AS round_status FROM evimed_geo.errors e
         JOIN evimed_geo.rounds r ON r.id = e.confirm ->> 'roundId'
-      WHERE e.confirm ->> 'status' = 'pending' AND r.status IN ('done', 'partial', 'cancelled')
+      WHERE e.judgment_state='active' AND e.confirm ->> 'status' = 'pending' AND r.status IN ('done', 'partial', 'cancelled')
       ORDER BY e.created_at LIMIT $1`, [limit]);
     return result.rows.map((row) => ({ ...errorRow(row), roundStatus: String(row.round_status) }));
   }
@@ -984,7 +990,7 @@ export class GeoMeasureStore {
    * @param {number} limit @param {Date} before
    */
   async errorsWithoutConfirm(limit, before) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE confirm IS NULL AND status <> 'closed' AND created_at < $2
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND confirm IS NULL AND status <> 'closed' AND created_at < $2
       ORDER BY created_at LIMIT $1`, [limit, before.toISOString()]);
     return result.rows.map(errorRow);
   }
@@ -1010,7 +1016,7 @@ export class GeoMeasureStore {
    * @param {number} limit @param {number} maxTries
    */
   async errorsConfirmSkipped(limit, maxTries) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status <> 'closed' AND confirm ->> 'status' = 'skipped'
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND status <> 'closed' AND confirm ->> 'status' = 'skipped'
       AND coalesce((confirm ->> 'tries')::integer, 1) < $2 ORDER BY updated_at LIMIT $1`, [limit, maxTries]);
     return result.rows.map(errorRow);
   }
@@ -1028,7 +1034,7 @@ export class GeoMeasureStore {
 
   /** Open errors that have been acted on. @param {number} limit */
   async errorsToClose(limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status IN ('acting', 'awaiting_remeasure') ORDER BY updated_at LIMIT $1`, [limit]);
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND status IN ('acting', 'awaiting_remeasure') ORDER BY updated_at LIMIT $1`, [limit]);
     return result.rows.map(errorRow);
   }
 
@@ -1041,25 +1047,25 @@ export class GeoMeasureStore {
    * @param {string} errorId
    */
   async laterJudgedAnswers(errorId) {
-    const result = await this.query(`SELECT s.id, s.round_id, s.status, s.asked_at, f.statements FROM evimed_geo.errors e
+    const result = await this.query(`SELECT s.id, s.round_id, s.status, s.asked_at, s.answer_text, f.statements, f.checks, f.judged_at FROM evimed_geo.errors e
         JOIN evimed_geo.snapshots s ON s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine
           AND s.asked_at > e.updated_at
-        JOIN evimed_geo.facts f ON f.snapshot_id = s.id
-      WHERE e.id = $1 AND f.judged_at IS NOT NULL
-      ORDER BY s.asked_at DESC LIMIT 20`, [errorId]);
-    return result.rows.map((row) => ({ id: String(row.id), roundId: row.round_id ?? null, status: String(row.status), askedAt: iso(row.asked_at), statements: list(row.statements) }));
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
+      WHERE e.id = $1
+      ORDER BY s.asked_at DESC,s.id DESC LIMIT 20`, [errorId]);
+    return result.rows.map((row) => ({ id: String(row.id), roundId: row.round_id ?? null, status: String(row.status), askedAt: iso(row.asked_at), answerText: row.answer_text ?? null, judgedAt: iso(row.judged_at), checks: row.checks ?? {}, statements: list(row.statements) }));
   }
 
   /** Open errors whose cited source is not attributed yet. @param {number} limit */
   async errorsToTrace(limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status <> 'closed' AND cited_source IS NOT NULL
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND status <> 'closed' AND cited_source IS NOT NULL
       AND cited_source ->> 'domain' IS NOT NULL AND cited_source ->> 'attribute' IS NULL ORDER BY updated_at LIMIT $1`, [limit]);
     return result.rows.map(errorRow);
   }
 
   /** Open errors no single cited source could be pinned on, and with no disposition yet. @param {number} limit */
   async errorsWithoutDisposition(limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status <> 'closed' AND action IS NULL
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND status <> 'closed' AND action IS NULL
       AND cited_source ->> 'basis' = 'not_attributable' ORDER BY updated_at LIMIT $1`, [limit]);
     return result.rows.map(errorRow);
   }

@@ -1348,7 +1348,7 @@ export class GeoStore {
       SET materials = coalesce(materials, '[]'::jsonb) || jsonb_build_array($3::jsonb),
           status = CASE WHEN status = 'open' THEN 'acting' ELSE status END,
           updated_at = now()
-      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND status <> 'closed'
+      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND judgment_state='active' AND status <> 'closed'
         AND NOT (coalesce(materials, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('articleId', $4::text)))
       RETURNING id`, [geoId, [...new Set(errorIds)], JSON.stringify(entry), material.articleId]);
     return result.rows.map((/** @type {any} */ row) => String(row.id));

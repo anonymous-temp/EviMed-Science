@@ -2372,3 +2372,5 @@ export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricI
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
 export { previewGeoQuestionImport, validateGeoMeasurementContract } from './src/geoQuestionImport.mjs'
+
+export { geoClaimApplicability, geoClaimAssessmentIdentity } from './src/geoClaimAssessment.mjs'

@@ -20,6 +20,7 @@ const statusWords: Record<string, string> = { queued: "等待复核", running: "
 /** Full review remains alongside the original answer. Feedback never hides or resolves an error. */
 export function DiagnosisReview({ geoId, data, project, actions, onAssessmentChanged }: { geoId: string; data: GeoAnswer; project: GeoProject; actions: readonly GeoAction[]; onAssessmentChanged?: () => void }) {
   const review = useGeoLoad(`judgment-review:${geoId}:${data.snapshot.id}`, () => getGeoDiagnosisReview(geoId, data.snapshot.id));
+  const reloadReview = review.reload;
   const open = useOpenGeoConversation();
   const path = useGeoPath();
   const [editing, setEditing] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
-  const [older, setOlder] = useState<{ snapshotId: string; version: string | null; history: GeoDiagnosisReview["history"]; feedback: GeoDiagnosisReview["feedback"]; historyPage?: GeoDiagnosisReview["historyPage"]; feedbackPage?: GeoDiagnosisReview["feedbackPage"] } | null>(null);
+  const [older, setOlder] = useState<{ snapshotId: string; version: string | null; history: GeoDiagnosisReview["history"]; feedback: GeoDiagnosisReview["feedback"]; historyPage?: GeoDiagnosisReview["historyPage"]; feedbackPage?: GeoDiagnosisReview["feedbackPage"]; feedbackCursors?: string[] } | null>(null);
   const [readingOlder, setReadingOlder] = useState(false);
   const ready = review.state.kind === "ready" ? review.state.data : null;
   const observed = useRef<{ snapshotId: string; version: string | null } | null>(null);
@@ -37,13 +38,31 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     observed.current = { snapshotId: data.snapshot.id, version: ready.assessmentVersion };
     if (previous?.snapshotId === data.snapshot.id && previous.version !== ready.assessmentVersion) onAssessmentChanged?.();
   }, [ready, data.snapshot.id, onAssessmentChanged]);
-  const pending = ready?.feedback.some(row => row.status === "queued" || row.status === "running") || older?.snapshotId === data.snapshot.id && older.feedback.some(row => row.status === "queued" || row.status === "running");
+  const pending = ready?.feedback.some(row => row.status === "queued" || row.status === "running") || older?.snapshotId === data.snapshot.id && older.version === ready?.assessmentVersion && older.feedback.some(row => row.status === "queued" || row.status === "running");
+  const pollCursor = useRef(0);
   useEffect(() => {
     if (!pending) return;
-    const timer = window.setInterval(review.reload, 5000);
-    return () => window.clearInterval(timer);
-  }, [pending, review.reload]);
-  if (review.state.kind === "error") return <Note action={<Button variant="secondary" size="sm" onClick={review.reload}>重试</Button>}>无法读取复核记录。</Note>;
+    let live = true;
+    const timer = window.setInterval(() => {
+      reloadReview();
+      const cursors = older?.snapshotId === data.snapshot.id && older.version === ready?.assessmentVersion
+        && older.feedback.some(row => row.status === "queued" || row.status === "running") ? older.feedbackCursors ?? [] : [];
+      const batch = Array.from({ length: Math.min(3, cursors.length) }, (_, index) => cursors[(pollCursor.current + index) % cursors.length]);
+      pollCursor.current += batch.length;
+      void Promise.allSettled(batch.map(feedbackBefore => getGeoDiagnosisReview(geoId, data.snapshot.id, { feedbackBefore }))).then(results => {
+        if (!live) return;
+        for (const result of results) {
+          if (result.status === "rejected") { setError("较早反馈的处理状态暂时无法更新，请稍后重试。"); continue; }
+          const page = result.value;
+          if (page.assessmentVersion !== ready?.assessmentVersion) { reloadReview(); continue; }
+          setOlder(previous => previous?.snapshotId === data.snapshot.id && previous.version === page.assessmentVersion
+            ? { ...previous, feedback: [...new Map([...previous.feedback, ...page.feedback].map(row => [row.id, row])).values()] } : previous);
+        }
+      });
+    }, 5000);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [pending, reloadReview, older, geoId, data.snapshot.id, ready?.assessmentVersion]);
+  if (review.state.kind === "error") return <Note action={<Button variant="secondary" size="sm" onClick={reloadReview}>重试</Button>}>无法读取复核记录。</Note>;
   if (!ready) return <Note action={null}>正在读取逐句核查与复核记录。</Note>;
   const canEdit = !project.access?.abilities || project.access.abilities.includes("edit");
   const canRun = !project.access?.abilities || project.access.abilities.includes("run");
@@ -58,10 +77,11 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     setReadingOlder(true); setError(null);
     try {
       const page = await getGeoDiagnosisReview(geoId, data.snapshot.id, kind === "history" ? { historyBefore: Number(cursor) } : { feedbackBefore: String(cursor) });
-      if (page.assessmentVersion !== ready.assessmentVersion) { review.reload(); setError("判定已经更新，请刷新后查看历史记录。"); return; }
+      if (page.assessmentVersion !== ready.assessmentVersion) { reloadReview(); setError("判定已经更新，请刷新后查看历史记录。"); return; }
       setOlder({ snapshotId: data.snapshot.id, version: ready.assessmentVersion,
         history: kind === "history" ? [...(retained?.history ?? []), ...page.history] : retained?.history ?? [],
         feedback: kind === "feedback" ? [...(retained?.feedback ?? []), ...page.feedback] : retained?.feedback ?? [],
+        feedbackCursors: kind === "feedback" ? [...new Set([...(retained?.feedbackCursors ?? []), String(cursor)])] : retained?.feedbackCursors,
         historyPage: kind === "history" ? page.historyPage : retained?.historyPage,
         feedbackPage: kind === "feedback" ? page.feedbackPage : retained?.feedbackPage });
     } catch (cause) { setError(webErrorMessage(cause, { fallback: "无法读取更早记录，请重试。" })); }
@@ -76,10 +96,10 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     try {
       await submitGeoDiagnosisFeedback(geoId, { snapshotId: data.snapshot.id, statement: statement.text, claimId: statement.claimId,
         assessmentVersion: ready.assessmentVersion, note, requestKey, selectionRef: project.selection?.reference ?? null });
-      setEditing(null); setNote(""); setRequestKey(crypto.randomUUID()); review.reload();
+      setEditing(null); setNote(""); setRequestKey(crypto.randomUUID()); reloadReview();
     } catch (cause) {
       setError(webErrorMessage(cause, { fallback: "无法提交反馈，请刷新判定后重试。" }));
-      review.reload();
+      reloadReview();
     } finally { setBusy(false); }
   };
   const act = (statement: GeoStatementFact, action: "conclusion" | "treatment") => {
@@ -118,7 +138,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
       })}
       {feedbackPage?.more && <Button variant="secondary" size="sm" loading={readingOlder} onClick={() => void earlier("feedback")}>读取更早反馈（已读取 {feedbackRows.length}/{feedbackPage.total}）</Button>}
       {historyPage?.more && <Button variant="secondary" size="sm" loading={readingOlder} onClick={() => void earlier("history")}>读取更早判定（已读取 {history.length}/{historyPage.total}）</Button>}
-      {error && <Note action={<Button variant="secondary" size="sm" onClick={review.reload}>刷新判定</Button>}>{error}</Note>}
+      {error && <Note action={<Button variant="secondary" size="sm" onClick={reloadReview}>刷新判定</Button>}>{error}</Note>}
       {data.errors.filter(row => row.firstSnapshotId && row.firstSnapshotId !== data.snapshot.id).map(row => <Link key={row.id} to={path(answerPath(geoId, row.firstSnapshotId!))} className="text-link">相近错误的原始回答：{row.statement}</Link>)}
     </div>
   </Section>;

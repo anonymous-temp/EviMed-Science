@@ -63,7 +63,8 @@ export function ErrorDrawer({
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const abilities = project.access?.abilities;
-  const canRun = !abilities || abilities.includes("run");
+  const withdrawn = claim.rows.every(row => row.judgmentState === "withdrawn");
+  const canRun = !withdrawn && (!abilities || abilities.includes("run"));
   const corrections = useMemo(() => actions.filter((action) => action.need.errorIds.some((id) => claim.rows.some((row) => row.id === id))), [actions, claim.rows]);
 
   const correct = () => {
@@ -79,7 +80,7 @@ export function ErrorDrawer({
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           {claim.severity && <SeverityBadge level={claim.severity} label />}
           <span>{`${claim.engines.length} 个引擎`}</span>
-          <span>{GEO_ERROR_STATUS_WORDS[claim.status] ?? ""}</span>
+          <span>{withdrawn ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[claim.status] ?? ""}</span>
         </span>
       )}
       onClose={onClose}
@@ -87,6 +88,7 @@ export function ErrorDrawer({
     >
       <div data-geo-error-drawer={claim.key} className="flex flex-col gap-6">
         <Section title="这句话" level="sub">
+          {withdrawn && <p className="text-ui text-text-2">原判定已经复核撤回，记录和复核依据仍保留；这不代表后续实测显示改善。</p>}
           <p className="flex items-start gap-1.5 text-ui text-text">
             <X size={16} aria-hidden="true" className="mt-1 shrink-0 text-danger" />
             <span className="min-w-0 max-w-measure">“{claim.statement}”</span>
@@ -115,7 +117,7 @@ export function ErrorDrawer({
                   meta={(
                     <span className="inline-flex flex-wrap items-baseline gap-x-2">
                       <span className="text-text-2">{engineName(row.engine)}</span>
-                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, GEO_ERROR_STATUS_WORDS[row.status]].filter(Boolean).join(" · ")}</span>
+                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, (row.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[row.status])].filter(Boolean).join(" · ")}</span>
                       {group && <ClusterLink groupId={group.id} className="relative z-sticky">{clusterName(group)}</ClusterLink>}
                     </span>
                   )}

@@ -359,6 +359,10 @@ CREATE TABLE IF NOT EXISTS evimed_geo.errors (
   updated_at         timestamptz NOT NULL DEFAULT now(),
   UNIQUE (geo_project_id, fingerprint, engine)
 );
+-- Judgment corrections remain separate from measured business resolution.
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_state text NOT NULL DEFAULT 'active' CHECK (judgment_state IN ('active','withdrawn'));
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_correction jsonb;
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS judgment_history jsonb NOT NULL DEFAULT '[]'::jsonb;
 CREATE INDEX IF NOT EXISTS geo_errors_project_idx ON evimed_geo.errors (geo_project_id, status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.metrics (

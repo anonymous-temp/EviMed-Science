@@ -1,4 +1,4 @@
-import { canonicalJson, GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
+import { geoClaimApplicability, geoClaimAssessmentIdentity, GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -438,11 +438,11 @@ export function verifyJudgement(answer, built, input) {
     if (!GEO_STATEMENT_VERDICTS.includes(verdict)) { drop("verdict_invalid"); continue; }
     const alias = raw?.claim == null ? "" : String(raw.claim).trim();
     const claim = alias ? claimsByAlias.get(alias) ?? null : null;
-    const key = wordingKey + canonicalJson([claim?.population ?? null, claim?.elements ?? null]);
+    const key = wordingKey + geoClaimAssessmentIdentity(claim);
     // The topic is a closed word; anything else is 其他, which counts in the overall accuracy and not in the specified information's.
     const topic = GEO_STATEMENT_TOPICS.includes(String(raw?.topic ?? "")) ? String(raw.topic) : "other";
     // Which version of which card claim the verdict was judged against is the claim's, filled here and never typed by the model.
-    const judgedAgainst = { claimVersion: claim?.version ?? null, applicability: claim ? { population: claim.population ?? null, elements: claim.elements ?? null, inLabel: claim.inLabel ?? null, validUntil: claim.validUntil ?? null, evidenceLevel: claim.evidenceLevel ?? null } : null, topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
+    const judgedAgainst = { claimVersion: claim?.version ?? null, applicability: geoClaimApplicability(claim), topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
     if (verdict === "unverifiable") {
       keep(key, { text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
       continue;

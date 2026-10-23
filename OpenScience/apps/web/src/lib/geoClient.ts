@@ -343,6 +343,9 @@ export interface GeoCitedSource {
   basis?: "inline_marker" | "no_retrieval" | "not_attributable" | (string & {}) | null;
 }
 export interface GeoErrorRow {
+  judgmentState?: "active" | "withdrawn";
+  judgmentCorrection?: { kind: string; snapshotId: string; assessmentVersion?: string; previousAssessmentVersion?: string; changedAt: string } | null;
+  judgmentHistory?: Array<{ kind: string; snapshotId: string; changedAt: string }>;
   id: string;
   engine: GeoEngine;
   statement: string;
@@ -404,6 +407,7 @@ export interface GeoRoundRef {
 export type GeoAbsentReason = "login" | "paused" | "unavailable" | "no_answer";
 /** The project's errors counted over every row (`count(*)`), whatever the list below carries. `severe` is the live S3/S4 ones. */
 export interface GeoErrorCounts {
+  withdrawn?: number;
   total: number;
   open: number;
   acting: number;
@@ -422,8 +426,9 @@ export interface GeoErrorSummary {
   byEngineSeverity: Record<string, number>;
 }
 export interface GeoErrorPage { offset: number; limit: number; total: number; shown: number; more: boolean; nextOffset: number | null }
-export interface GeoErrorFilters { errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
+export interface GeoErrorFilters { errorJudgmentState?: "active" | "withdrawn"; errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
 export interface GeoDiagnosis extends GeoScopedView {
+  activeErrorSummary?: GeoErrorSummary;
   errorSummary?: GeoErrorSummary;
   scopeErrorSummary?: GeoErrorSummary;
   errorPage?: GeoErrorPage;

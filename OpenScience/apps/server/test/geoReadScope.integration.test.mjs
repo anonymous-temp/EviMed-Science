@@ -147,7 +147,7 @@ test("a diagnosis keeps its error page on the selection snapshot during a concur
   const original = store.query.bind(store);
   let corrected = false;
   store.query = async (sql, params) => {
-    if (!corrected && sql.includes("AS trace, e.status, e.severity")) {
+    if (!corrected && sql.includes("AS trace, e.status, e.judgment_state, e.severity")) {
       corrected = true;
       await database.pool.query("UPDATE evimed_geo.errors SET statement = 'Concurrent correction' WHERE id = 'e2'");
     }

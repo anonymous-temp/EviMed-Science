@@ -442,6 +442,13 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
   await seed("geo_ms");
   const h = await harness();
   try {
+    const claim = (await h.deps.store.projectContext("geo_ms")).claims.find(row => row.key === "dosing");
+    const descriptor = { claimId: claim.id, claimKey: claim.key, claimVersion: claim.version,
+      applicability: { population: claim.population ?? null, elements: claim.elements ?? null, inLabel: claim.inLabel ?? null, validUntil: claim.validUntil ?? null, evidenceLevel: claim.evidenceLevel ?? null }, evidence: claim.quote };
+    const original = { ...descriptor, text: WRONG, verdict: "wrong" };
+    await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,question_id,engine,asked_at,status,answer_text)
+      VALUES('snap_origin','user_geo_ms','geo_ms','geo_ms_q1','deepseek','2026-09-25T14:00:00Z','valid',$1)`, [A_WRONG]);
+    await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,statements,judged_at) VALUES('snap_origin','user_geo_ms','geo_ms',$1::jsonb,'2026-09-25T14:00:00Z')`, [JSON.stringify([original])]);
     // The error moved at .123456; one answer without it was asked at .123100,
     // before that, and one at .123900, after. Read into JavaScript the error's
     // time is .123, and the earlier answer read as later and closed it.
@@ -449,11 +456,12 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
         created_at, updated_at)
       VALUES ('err_ms', 'user_geo_ms', 'geo_ms', 'dosing', 'deepseek', 'geo_ms_q1', $1, 'awaiting_remeasure', '{"status":"done"}'::jsonb,
         '2026-09-25T14:00:00Z', '2026-09-25T15:00:00.123456Z')`, [WRONG]);
+    await database.query("UPDATE evimed_geo.errors SET claim_id=$1,first_snapshot_id='snap_origin' WHERE id='err_ms'", [claim.id]);
     const answer = async (/** @type {string} */ id, /** @type {string} */ askedAt) => {
       await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, question_id, engine, asked_at, status, answer_text)
         VALUES ($1, 'user_geo_ms', 'geo_ms', 'geo_ms_q1', 'deepseek', $2, 'valid', $3)`, [id, askedAt, A_RIGHT]);
-      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, statements, judged_at)
-        VALUES ($1, 'user_geo_ms', 'geo_ms', '[]'::jsonb, $2)`, [id, askedAt]);
+      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, statements, judged_at, checks)
+        VALUES ($1, 'user_geo_ms', 'geo_ms', $3::jsonb, $2, '{"judgementCoverage":{"status":"complete"}}'::jsonb)`, [id, askedAt, JSON.stringify([{ ...descriptor, text: '玛仕度肽每周注射一次', verdict: 'correct' }])]);
     };
     await answer("snap_before", "2026-09-25T15:00:00.123100Z");
     assert.equal((await tickErrors(h.deps)).closed, 0, "asked before the error moved");

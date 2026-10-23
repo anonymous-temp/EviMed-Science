@@ -422,7 +422,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(diagnosis.errors[0].stability, "stable");
   assert.equal(diagnosis.errors[0].snapshotId, `s1-${id}`);
   assert.equal(diagnosis.errors[0].firstSnapshotId, `s1-${id}`, "where the quoted sentence was first said");
-  assert.deepEqual(diagnosis.errorCounts, { total: 1, open: 1, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 1 });
+  assert.deepEqual(diagnosis.errorCounts, { total: 1, open: 1, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 1, withdrawn: 0 });
   assert.deepEqual(diagnosis.noise, { band: 0.04, measuredAt: diagnosis.noise.measuredAt });
   assert.deepEqual(diagnosis.more.map((/** @type {any} */ row) => [row.metricId, row.variant]), [["M-01S", "top1"], ["M-05", null]],
     "headline, NET and NOISE rows are not repeated under 更多; a variant is");

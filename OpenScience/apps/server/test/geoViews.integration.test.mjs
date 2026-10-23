@@ -123,7 +123,7 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
   await addError("closed", "S4"); await addError("closed", "S1"); await addError("closed", "S2");
 
   const diagnosis = await service.diagnosis(USER, project.id);
-  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4 },
+  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4, withdrawn: 0 },
     "S4 + S3 open, S3 acting, S3 awaiting a remeasure — the closed S4 is not live");
   assert.equal(diagnosis.errors.length, 5, "the list is capped (geoDiagnosisErrorLimit), the counts are not");
   assert.ok(diagnosis.errors.every((error) => error.status !== "closed"), "live errors come first, severe first");

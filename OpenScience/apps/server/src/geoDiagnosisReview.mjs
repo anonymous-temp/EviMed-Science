@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson } from '@evimed/domain';
+import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity } from '@evimed/domain';
 import { ProductDocuments, ProductJobs } from './productStore.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { preserveGeoAssessment } from './geoLearningSignals.mjs';
 import { GeoJudge, judgeInputOf, factsOf, geoJudgeBudget } from './geoJudge.mjs';
+import { errorFingerprint } from './geoErrors.mjs';
 import { brandRegistry } from './geoParse.mjs';
 import { HttpError } from './security.mjs';
 
@@ -94,6 +95,37 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       return { id, jobId: job.id, repeated: false };
     }));
   }
+  async function reconcileErrorJudgments(client, project, snapshot, previous, next, facts) {
+    const candidates = [...(previous.assessment.statements ?? []), ...facts.statements].filter(statement => statement.claimId);
+    const affectedIds = [...new Set(candidates.map(statement => statement.claimId))];
+    if (!affectedIds.length) return;
+    const errors = (await client.query(`SELECT * FROM evimed_geo.errors WHERE user_id=$1 AND geo_project_id=$2 AND engine=$3
+      AND claim_id=ANY($4::text[]) ORDER BY id FOR UPDATE`, [project.userId, project.id, snapshot.engine, affectedIds])).rows;
+    for (const error of errors) {
+      const original = candidates.find(statement => statement.claimId === error.claim_id && (errorFingerprint(statement) === error.fingerprint
+        || errorFingerprint({ claimKey: statement.claimKey, text: statement.text }) === error.fingerprint));
+      if (!original) continue;
+      const legacy = errorFingerprint(original) !== error.fingerprint || original.claimVersion == null;
+      const identity = geoClaimAssessmentIdentity(original);
+      const residual = (await client.query(`SELECT EXISTS(SELECT 1 FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id=s.id
+        CROSS JOIN LATERAL jsonb_array_elements(f.statements) statement WHERE s.user_id=$1 AND s.geo_project_id=$2 AND s.engine=$3
+        AND statement->>'verdict'='wrong' AND CASE WHEN $4::boolean THEN (statement->>'claimKey'=$5 OR ($5::text IS NULL AND statement->>'claimId'=$7)) ELSE
+        jsonb_build_object('claimId',statement->'claimId','claimKey',null,'version',statement->'claimVersion',
+          'applicability',CASE WHEN coalesce(statement->'applicability','null'::jsonb)='null'::jsonb THEN 'null'::jsonb ELSE
+          jsonb_build_object('population',statement->'applicability'->'population','elements',statement->'applicability'->'elements',
+            'inLabel',statement->'applicability'->'inLabel','validUntil',statement->'applicability'->'validUntil','evidenceLevel',statement->'applicability'->'evidenceLevel') END)=$6::jsonb END) AS present`,
+        [project.userId, project.id, snapshot.engine, legacy, original.claimKey ?? null, identity, original.claimId])).rows[0].present;
+      const corrected = facts.statements.some(statement => statement.verdict === 'correct' && geoClaimAssessmentIdentity(statement) === identity);
+      if (!residual && !corrected) continue;
+      const state = residual ? 'active' : 'withdrawn';
+      if (state === error.judgment_state) continue;
+      const receipt = { kind: state === 'withdrawn' ? 'assessment_correction' : 'judgment_reactivated', snapshotId: snapshot.id,
+        previousAssessmentVersion: previous.assessmentVersion, assessmentVersion: next.payload.assessmentVersion,
+        claimId: original.claimId, claimVersion: original.claimVersion ?? null, applicability: geoClaimApplicability(original), changedAt: new Date().toISOString() };
+      await client.query(`UPDATE evimed_geo.errors SET judgment_state=$2,judgment_correction=$3::jsonb,judgment_history=judgment_history || jsonb_build_array($3::jsonb),
+        notified_at=CASE WHEN $2='active' THEN NULL ELSE notified_at END WHERE id=$1`, [error.id, state, JSON.stringify(receipt)]);
+    }
+  }
   async function tick() {
     if (!evaluator.available || (await geoJudgeBudget(store, config, new Date())).exhausted) return { processed: 0, skipped: 'judge_unavailable_or_budget' };
     const job = await jobs.claim([kind], 'geo-judgment-review', { leaseMs: 180000 });
@@ -152,7 +184,8 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
           reparsed_at=clock_timestamp() WHERE snapshot_id=$1 AND user_id=$2 AND geo_project_id=$3`,
         [snapshot.id, project.userId, project.id, ...entries.map(([key, value]) => jsonFields.has(key) ? JSON.stringify(value) : value)]);
         if (status !== snapshot.status) await client.query('UPDATE evimed_geo.snapshots SET status=$2 WHERE id=$1', [snapshot.id, status]);
-        await preserveGeoAssessment({ database, client, snapshotId: snapshot.id, facts });
+        const saved = await preserveGeoAssessment({ database, client, snapshotId: snapshot.id, facts });
+        await reconcileErrorJudgments(client, project, snapshot, head.payload, saved, facts);
       });
       completed = true;
       // Reconcile the existing withdrawal outbox before a later learning pass can reuse the replaced assessment.

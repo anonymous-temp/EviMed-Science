@@ -177,7 +177,7 @@ export class GeoSpine {
     const errorRows = (await this.#query(`SELECT e.id, e.fingerprint, e.engine, e.question_id, e.first_snapshot_id, e.last_snapshot_id, e.statement, e.error_type,
         e.severity, e.claim_id, e.cited_source, e.action, e.status, e.materials, e.created_at, q.group_id
       FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id = e.question_id
-      WHERE e.geo_project_id = $1 ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
+      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
     const errors = errorRows.map((row) => ({
       id: String(row.id), fingerprint: text(row.fingerprint), engine: String(row.engine), questionId: text(row.question_id),
       groupId: row.group_id ? String(currentOf.get(String(row.group_id)) ?? row.group_id) : null,

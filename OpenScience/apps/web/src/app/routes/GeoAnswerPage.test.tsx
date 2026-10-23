@@ -347,7 +347,7 @@ describe("one answer", () => {
     };
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [...answerFilled.errors, earlier] });
     renderAnswer();
-    const summary = await screen.findByText("更早的回答里也出现过（1 条）");
+    const summary = await screen.findByText("历史讲错记录（1 条）");
     const folded = summary.closest("details") as HTMLElement;
     expect(folded).not.toHaveAttribute("open");
     expect(folded).toHaveTextContent("“孕妇可以放心使用”");

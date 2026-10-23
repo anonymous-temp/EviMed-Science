@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -73,4 +73,26 @@ it("refreshes answer annotations when a completed recheck changes the active ass
   await userEvent.click(screen.getByRole("button", { name: "提交复核" }));
   await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
   expect(await screen.findByText(/原判定：讲错 · 当前判定：讲对/)).toBeVisible();
+});
+
+it("refreshes an older loaded pending feedback after it fails without changing the assessment head", async () => {
+  const callbacks: Array<() => void> = [];
+  const nativeInterval = window.setInterval.bind(window);
+  const interval = vi.spyOn(window, "setInterval").mockImplementation((callback, timeout) => { if (timeout !== 5000) return nativeInterval(callback, timeout) as unknown as ReturnType<typeof window.setInterval>; callbacks.push(callback as () => void); return 42 as unknown as ReturnType<typeof window.setInterval>; });
+  const cleared = vi.spyOn(window, "clearInterval");
+  let failed = false;
+  client.getGeoDiagnosisReview.mockImplementation(async (_id, _snapshot, page) => page?.feedbackBefore ? {
+    ...saved(), feedbackPage: { total: 101, shown: 1, more: false, nextBefore: null }, feedback: [
+      { id: "old_pending", statement: statement.text, note: "Older pending feedback.", original: statement, assessmentVersion: "a".repeat(64), status: failed ? "failed" : "queued", result: null, error: null, createdAt: "2026-10-23T00:00:00Z" },
+    ],
+  } : { ...saved(), feedbackPage: { total: 101, shown: 100, more: true, nextBefore: "first100" } });
+  try {
+    renderReview();
+    await userEvent.click(await screen.findByRole("button", { name: /读取更早反馈/ }));
+    expect(await screen.findByText(/等待复核 · 提交时原判定/)).toBeVisible();
+    failed = true;
+    await act(async () => { callbacks.at(-1)!(); });
+    expect(await screen.findByText(/复核暂未完成 · 提交时原判定/)).toBeVisible();
+    await waitFor(() => expect(cleared).toHaveBeenCalledWith(42));
+  } finally { interval.mockRestore(); cleared.mockRestore(); }
 });

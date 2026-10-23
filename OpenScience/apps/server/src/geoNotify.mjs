@@ -295,6 +295,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
      *   `geo:wrong_ours:<id>:first`, or `…:seen:<snapshot>` for an error back after it closed)
      */
     async wrongOurs(project, error, { key = null } = {}) {
+      if (error?.judgment_state === "withdrawn" || error?.judgmentState === "withdrawn") return null;
       const row = normalizedError(error);
       const idempotencyKey = key || `geo:wrong_ours:${row.id}:first`;
       const target = row.snapshotId ? source(project.id, "answers", row.snapshotId) : source(project.id, "diagnosis");
@@ -309,7 +310,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       }
       const day = dayIn(row.createdAt ? new Date(row.createdAt) : now(), timeZone);
       const same = await store.query(`SELECT id, engine, statement, severity FROM evimed_geo.errors
-        WHERE geo_project_id = $1 AND status <> 'closed' AND (severity IS NULL OR severity <> ALL($2::text[]))
+        WHERE geo_project_id = $1 AND judgment_state='active' AND status <> 'closed' AND (severity IS NULL OR severity <> ALL($2::text[]))
           AND created_at >= $3::timestamptz AND created_at < $3::timestamptz + interval '1 day'
         ORDER BY severity DESC NULLS LAST, created_at, id LIMIT 50`, [project.id, [...GEO_URGENT_SEVERITIES], zonedMidnight(day, timeZone)])
         .then((result) => result.rows).catch(() => []);
@@ -361,7 +362,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       if (event?.type === "published_text_changed") return notifier.textChanged(event);
       const errorId = typeof event?.errorId === "string" ? event.errorId : null;
       if (errorId) {
-        const row = (await store.query(`SELECT * FROM evimed_geo.errors WHERE id = $1`, [errorId])).rows[0];
+        const row = (await store.query(`SELECT * FROM evimed_geo.errors WHERE id = $1 AND judgment_state='active'`, [errorId])).rows[0];
         if (!row) return null;
         const project = await projectRow(store, row.geo_project_id, row.user_id);
         return project ? notifier.wrongOurs(project, row, { key: typeof event.idempotencyKey === "string" ? event.idempotencyKey : null }) : null;
