@@ -426,6 +426,33 @@ test("a title the ledger cannot give costs the title, never the answer", async (
   assert.deepEqual(page.documents.find((document) => document.sourceId === KICKOFF), { sourceId: KICKOFF });
 });
 
+test("a removed source is excluded immediately even while its engine copy remains", async (t) => {
+  const { resources } = await engine();
+  const { call, ok } = await withGateway(t, { resources, dependencies: {
+    sources: { async get(userId, id) {
+      if (id === KICKOFF) throw Object.assign(new Error("removed"), { status: 404, code: "source_not_found" });
+      return sources.get(userId, id);
+    } },
+  } });
+  assert.equal((await call({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 404);
+  const listing = await ok({ op: "list", root: "sources" });
+  assert.ok(!listing.entries.some((entry) => entry.sourceId === KICKOFF));
+  const matches = await ok({ op: "grep", root: "sources", pattern: "1.5%" });
+  assert.ok(!matches.matches.some((entry) => entry.sourceId === KICKOFF));
+});
+
+test("a withdrawn personal-library copy is not readable through a stale engine path", async (t) => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { library: { async searchScope() { return []; } } } });
+  assert.equal((await call({ op: "read", root: "library", path: `${LIBRARY_DOC}.md` })).status, 404);
+});
+
+test("document authorization fails closed when the source ledger is unavailable", async (t) => {
+  const { resources } = await engine();
+  const { call } = await withGateway(t, { resources, dependencies: { sources: { async get() { throw new Error("database down"); } } } });
+  assert.equal((await call({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 503);
+});
+
 test("what it returns passes through the evaluation isolation, as a knowledge-base answer", async (t) => {
   const { resources } = await engine();
   const seen = [];
