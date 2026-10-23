@@ -109,6 +109,21 @@ test("a cut answer retains complete literal counts but cannot claim complete jud
   assert.equal(metric([row(facts)], "M-01").value, 100);
 });
 
+test("partial entity extraction cannot certify complete brand registry coverage or share of voice", () => {
+  const answer = `${correct.text}${"背景".repeat(4500)}末尾还提及未登记的其他产品。`;
+  const reading = judged(answer, { statements: [correct], entities: [] });
+  const parsed = parseAnswer({ answer, registry, entities: reading.entities });
+  const facts = { ...parsed, checks: reading.checks, statements: reading.statements, judgeExtract: { entityMentions: parsed.entityMentions } };
+  assert.equal(metric([row(facts)], "M-01").value, 100);
+  for (const id of ["M-04C", "M-04"]) {
+    const cell = metric([row(facts)], id);
+    assert.equal(cell.value, null, id);
+    assert.equal(cell.reason, "entity_extraction_incomplete", id);
+    assert.deepEqual([cell.numerator, cell.denominator], [1, 1], "observed counts survive without claiming full coverage");
+    assert.deepEqual(cell.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 0, partialAnswers: 1, unknownAnswers: 0 });
+  }
+});
+
 test("dropped statements, missing completeness, or a reached extraction limit never claim complete coverage", () => {
   assert.equal(judged(correct.text, { statements: [correct] }).checks.judgementCoverage.status, "complete");
   assert.equal(judged(correct.text, { assessmentComplete: undefined, statements: [correct] }).checks.judgementCoverage.status, "unknown");

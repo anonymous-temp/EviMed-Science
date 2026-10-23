@@ -53,6 +53,46 @@ test("semantic observations respect real profile, group, audience and engine bou
   assert.equal(historical.observations[0].basisVersion, 1);
 });
 
+test("partial and unknown answer coverage preserves observations without claiming whole-answer absence", options, async () => {
+  const project = await fresh();
+  await store.writeValue("alice", project.id, { findings: [{ id: "f1", statement: "Conditions matter" }] });
+  const round = `gr_${randomUUID()}`;
+  await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status) VALUES($1,'alice',$2,'baseline','done')", [round, project.id]);
+  const cases = [
+    ["complete-absent", "complete", "not_addressed"], ["complete-inapplicable", "complete", "not_applicable"],
+    ["partial-absent", "partial", "not_addressed"], ["partial-inapplicable", "partial", "not_applicable"],
+    ["unknown-absent", "unknown", "not_addressed"], ["unknown-inapplicable", "unknown", "not_applicable"],
+    ["observed-support", "partial", "represented"], ["observed-conflict", "unknown", "contradicted"],
+    ["observed-partial", "partial", "partial"], ["old-cut", "cut", "not_addressed"],
+  ];
+  for (const [id, coverage, status] of cases) {
+    const snapshot = `gs_${randomUUID()}`;
+    const answer = `Observed statement.${"x".repeat(9000)}`;
+    const checks = coverage === "unknown" ? {} : coverage === "cut" ? { answerCut: { chars: answer.length, shown: 8000 } }
+      : { judgementCoverage: { status: coverage, reasons: coverage === "partial" ? ["answer_truncated"] : [], answerChars: answer.length, assessedChars: coverage === "partial" ? 8000 : answer.length } };
+    await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,engine,asked_at,answer_text) VALUES($1,'alice',$2,$3,'deepseek',now(),$4)",
+      [snapshot, project.id, round, answer]);
+    await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,judge_extract,checks) VALUES($1,'alice',$2,now(),$3::jsonb,$4::jsonb)",
+      [snapshot, project.id, JSON.stringify({ valueBasisVersion: 1, valueCoverage: [{ findingId: id, status, quote: id.startsWith("observed") ? "Observed statement." : "", reason: "Recorded interpretation" }] }), JSON.stringify(checks)]);
+  }
+  const read = await store.valueCoverage(project.id);
+  const count = (status) => read.counts.filter((entry) => entry.status === status).reduce((sum, entry) => sum + entry.n, 0);
+  assert.deepEqual([count("not_addressed"), count("not_applicable"), count("uncertain")], [1, 1, 5]);
+  assert.deepEqual([count("represented"), count("partial"), count("contradicted")], [1, 1, 1]);
+  for (const [id, coverage, status] of cases) {
+    const observation = read.sample.find((entry) => entry.findingId === id);
+    assert.equal(observation.recordedStatus, status, id);
+    assert.equal(observation.judgementCoverage.status, coverage === "cut" ? "partial" : coverage, id);
+    assert.equal(observation.status, coverage !== "complete" && status.startsWith("not_") ? "uncertain" : status, id);
+    if (id.startsWith("observed")) assert.equal(observation.quote, "Observed statement.");
+  }
+  assert.equal(read.counts.filter((entry) => entry.judgementCoverage === "partial").reduce((sum, entry) => sum + entry.n, 0), 5);
+  const value = await new GeoService({ store, config: { geoEnabled: true, geoAudience: "all" } }).valueOf(project);
+  assert.deepEqual([value.coverage.assessed, value.coverage.notAddressed, value.coverage.notApplicable, value.coverage.uncertain, value.observationsTotal], [3, 1, 1, 5, 10]);
+  const stored = await store.query("SELECT judge_extract FROM evimed_geo.facts WHERE geo_project_id=$1", [project.id]);
+  assert.equal(stored.rows.filter((entry) => entry.judge_extract.valueCoverage[0].status.startsWith("not_")).length, 7, "original stored interpretations remain unchanged");
+});
+
 test("a finding written with a key alone is stored under it as its id, and an amendment with an empty list changes nothing (D-09, D-10)", options, async () => {
   const project = await fresh();
   const first = await store.writeValue("alice", project.id, { findings: [{ key: "eff-adults", statement: "keyed only", groupIds: ["g1"] }] });
