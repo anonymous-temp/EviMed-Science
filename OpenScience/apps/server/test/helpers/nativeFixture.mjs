@@ -44,9 +44,9 @@ export function nativeIntegration({ config: settings = {} } = {}) {
   /**
    * A user, an engine stub, and the native pieces over them.
    * @param {import("node:test").TestContext} t
-   * @param {{ extract?: (input: any) => any, config?: Record<string, any> }} [override]
+   * @param {{ extract?: (input: any) => any, config?: Record<string, any>, conversationTitles?: import("../../src/nativeMemoryStore.mjs").ConversationTitles | null }} [override]
    */
-  async function fixture(t, { extract = () => ({}), config: extra = {} } = {}) {
+  async function fixture(t, { extract = () => ({}), config: extra = {}, conversationTitles = null } = {}) {
     resetNativeMemoryMetrics();
     const userId = `nm_${randomUUID().slice(0, 8)}`;
     users.push(userId);
@@ -58,7 +58,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     const merged = { ...config, ...extra };
     const researchMemory = new ResearchMemoryStore(merged, { database });
     let clock = new Date("2026-10-13T08:00:00.000Z");
-    const store = new NativeMemoryStore({ sessions, overlay, now: () => clock });
+    const store = new NativeMemoryStore({ sessions, overlay, now: () => clock, conversationTitles });
     const worker = new NativeMemoryWorker({ config: merged, researchMemory, sessions, overlay, now: () => clock });
     const root = sessions.memoryRoot(userId);
     const engineUser = sessions.engineUser(userId);
@@ -68,10 +68,11 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     await overlay.noteRegistered(userId);
     /**
      * Put a conversation in the engine as the plugin would and commit it, entering the commit in the ledger as the gateway does.
-     * @param {string} name the session's suffix @param {Array<{ role: string, text: string }>} messages @param {{ projectId?: string | null, origin?: string }} [how]
+     * @param {string} name the session's suffix @param {Array<{ role: string, text: string }>} messages
+     * @param {{ projectId?: string | null, origin?: string, engineSession?: string }} [how] `engineSession`: the whole engine session name, for one the plugin did not derive from a conversation
      */
-    async function commitConversation(name, messages, { projectId = null, origin = "gateway" } = {}) {
-      const session = `dsh-session_${name}`;
+    async function commitConversation(name, messages, { projectId = null, origin = "gateway", engineSession = "" } = {}) {
+      const session = engineSession || `dsh-session_${name}`;
       stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, archives: 0, commitCount: 0,
         messages: messages.map((message) => ({ role: message.role, parts: [{ type: "text", text: message.text }] })) });
       const committed = stub.commitSession(engineUser, session);

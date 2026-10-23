@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { identifierShapesIn, maskIdentifiers } from "@evimed/domain";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile } from "./openVikingSessions.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES, nativeMemoryFile, platformSessionOf } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -30,6 +30,12 @@ import { HttpError } from "./security.mjs";
  * undone in one step.
  *
  * @module nativeMemoryStore
+ */
+
+/**
+ * What names the conversations a memory came out of: for each `{ projectId, sessionId }` (a platform conversation and the project
+ * it was held in), its title, or `null` when the conversation was deleted. A conversation it cannot say anything about is absent.
+ * @typedef {(userId: string, refs: { projectId: string, sessionId: string }[]) => Promise<Record<string, string | null>>} ConversationTitles
  */
 
 /** The legacy kind the page labels a native type by; `nativeType` carries the engine's own. */
@@ -129,6 +135,42 @@ function engineFailure(error) {
  *    account's bodies, so the page that has just edited a memory reads it back as it is.
  */
 const BODIES_PER_ACCOUNT = 400;
+
+/**
+ * The conversations a memory came out of, as the evidence the page's drawer already reads (`memorySource` takes the first one
+ * for 「来源对话」): one per platform conversation whose commit the engine wrote the file in, oldest first — so the first is where
+ * it began. The overlay holds what is needed and nothing more: each revision names the engine session (`dsh-<conversation>`) and
+ * the archive of the commit; the ledger names the project. A session the platform did not derive (a migration, a replay, the
+ * page's own 「记住这一条」) is no conversation and is left out. There is no quotation: the engine keeps none, and none is made up.
+ *
+ * For one line of the profile (`line`), only the commit that brought that line counts, found by what the revision's text did to it
+ * — so a conversation that merely touched the file is not named as the source of every line in it, and a line already there when
+ * the oldest revision the overlay still holds was written names nothing rather than a guess.
+ * @param {any[]} history a file's revisions, oldest first @param {Map<string, string>} sessionProjects by engine session
+ * @param {{ line?: string | null }} [options]
+ */
+function conversationEvidence(history, sessionProjects, { line = null } = {}) {
+  const print = line === null ? null : lineFingerprint(line);
+  const printsOf = (/** @type {unknown} */ text) => new Set(memoryLines(text ?? "").map(lineFingerprint));
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @type {any[]} */
+  const evidence = [];
+  for (const revision of history) {
+    if (revision.actor !== "engine" || (revision.change !== "added" && revision.change !== "updated") || !revision.engineSession) continue;
+    const conversationId = platformSessionOf(revision.engineSession);
+    if (!conversationId || seen.has(conversationId)) continue;
+    if (print !== null && !(printsOf(revision.after).has(print) && !printsOf(revision.before).has(print))) continue;
+    seen.add(conversationId);
+    const projectId = sessionProjects.get(revision.engineSession) ?? revision.projectId ?? null;
+    evidence.push({
+      sourceType: "conversation", sourceRef: `sessions/${conversationId}/commits/${String(revision.archiveUri ?? "").split("/").at(-1) || "archive"}`,
+      quote: "", observedAt: revision.changedAt ?? null, weight: 1, fingerprint: `revision:${revision.id}`, conversationId, ...(projectId ? { projectId } : {}),
+    });
+    if (evidence.length >= 8) break;
+  }
+  return evidence;
+}
 const BODY_ACCOUNTS = 100;
 
 export class NativeMemoryStore {
@@ -141,12 +183,14 @@ export class NativeMemoryStore {
 
   /**
    * @param {{ sessions: import("./openVikingSessions.mjs").OpenVikingSessions, overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
-   *   now?: () => Date }} dependencies
+   *   now?: () => Date, conversationTitles?: ConversationTitles | null }} dependencies
+   *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not).
    */
-  constructor({ sessions, overlay, now = () => new Date() }) {
+  constructor({ sessions, overlay, now = () => new Date(), conversationTitles = null }) {
     this.sessions = sessions;
     this.overlay = overlay;
     this.now = now;
+    this.conversationTitles = conversationTitles;
   }
 
   get configured() {
@@ -229,28 +273,103 @@ export class NativeMemoryStore {
     const held = files ?? await this.files(userId);
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
+    // The conversations the engine wrote these files in: its revisions name the engine session, the ledger names the project.
+    const sessionProjects = await this.#sessionProjects(userId, revisions);
     /** @type {any[]} */
     const records = [];
     for (const file of held) {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
-      const base = this.#fileRecord(file, history, changed);
+      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects));
       if (file.type !== "profile") { records.push(base); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of statements(file.body)) {
         const asOf = AS_OF.exec(line)?.[1] ?? null;
+        // A line's own conversation is the one whose commit brought it, not every conversation that touched the file.
+        const evidence = conversationEvidence(history, sessionProjects, { line });
         records.push({
           ...base, id: `${base.id}_${lineFingerprint(line).slice(0, 12)}`, key: `profile.md#${lineFingerprint(line).slice(0, 12)}`,
           value: line.replace(AS_OF, "").trim(), summary: "", lastConfirmedAt: asOf ? `${asOf}T00:00:00.000Z` : base.lastConfirmedAt,
-          document: { id: base.id, uri: file.uri }, revisions: [],
+          document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
       }
     }
     return records.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
-  /** @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state */
-  #fileRecord(file, history, changed) {
+  /**
+   * The project each engine session named by these revisions was held in, for the sessions a platform conversation wrote.
+   * A ledger that cannot answer names none: the evidence then carries no project and the link opens in the project in view.
+   * @param {string} userId @param {Map<string, any[]>} revisions
+   * @returns {Promise<Map<string, string>>}
+   */
+  async #sessionProjects(userId, revisions) {
+    const names = new Set();
+    for (const list of revisions.values()) for (const revision of list) if (revision.engineSession && platformSessionOf(revision.engineSession)) names.add(revision.engineSession);
+    if (!names.size) return new Map();
+    return this.overlay.sessionProjects(userId, [...names]).catch(() => new Map());
+  }
+
+  /**
+   * What the conversations of the records on a page were about, by conversation id, and which of them are gone. Absent
+   * resolver, absent titles: the page then says 「来源对话」 and nothing more. A conversation the person deleted is dropped from
+   * the evidence of the records it names — a link to nothing is not provenance.
+   * @param {string} userId @param {any[]} records
+   * @returns {Promise<{ titles: Record<string, string>, records: any[] }>}
+   */
+  async #withConversationTitles(userId, records) {
+    /** @type {Map<string, { projectId: string, sessionId: string }>} */
+    const refs = new Map();
+    for (const record of records) {
+      for (const item of record.evidence ?? []) {
+        if (item.sourceType !== "conversation" || !item.projectId) continue;
+        refs.set(`${item.projectId}\u0000${item.conversationId}`, { projectId: item.projectId, sessionId: item.conversationId });
+      }
+    }
+    if (!refs.size || typeof this.conversationTitles !== "function") return { titles: {}, records };
+    /** @type {Record<string, string | null>} */
+    let named = {};
+    try { named = await this.#titlesCached(userId, [...refs.values()]); } catch { return { titles: {}, records }; }
+    /** @type {Record<string, string>} */
+    const titles = {};
+    for (const [sessionId, title] of Object.entries(named)) if (typeof title === "string" && title) titles[sessionId] = title;
+    const gone = new Set(Object.entries(named).filter(([, title]) => title === null).map(([sessionId]) => sessionId));
+    if (!gone.size) return { titles, records };
+    return { titles, records: records.map((record) => {
+      const evidence = (record.evidence ?? []).filter((/** @type {any} */ item) => !(item.sourceType === "conversation" && gone.has(item.conversationId)));
+      return evidence.length === (record.evidence ?? []).length ? record : { ...record, evidence, evidenceCount: evidence.length };
+    }) };
+  }
+
+  /** @type {Map<string, { at: number, value: string | null }>} the resolver's answers for a minute: the ledger it reads is a file per project */
+  #titleCache = new Map();
+
+  /** @param {string} userId @param {{ projectId: string, sessionId: string }[]} refs @returns {Promise<Record<string, string | null>>} */
+  async #titlesCached(userId, refs) {
+    const now = this.now().getTime();
+    /** @type {Record<string, string | null>} */
+    const out = {};
+    const missing = [];
+    for (const ref of refs) {
+      const held = this.#titleCache.get(`${userId}\u0000${ref.projectId}\u0000${ref.sessionId}`);
+      if (!held || now - held.at >= 60_000) { missing.push(ref); continue; }
+      if (held.value !== "") out[ref.sessionId] = held.value;
+    }
+    if (missing.length) {
+      const answered = await /** @type {ConversationTitles} */ (this.conversationTitles)(userId, missing);
+      for (const ref of missing) {
+        // "": the resolver had nothing to say of this conversation (remembered, so that the ledger is not read again for it).
+        const value = Object.hasOwn(answered, ref.sessionId) ? answered[ref.sessionId] : "";
+        if (this.#titleCache.size > 2_000) this.#titleCache.clear();
+        this.#titleCache.set(`${userId}\u0000${ref.projectId}\u0000${ref.sessionId}`, { at: now, value });
+        if (value !== "") out[ref.sessionId] = value;
+      }
+    }
+    return out;
+  }
+
+  /** @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it */
+  #fileRecord(file, history, changed, evidence = []) {
     const first = history[0] ?? null;
     const last = history.at(-1) ?? null;
     const updatedAt = last?.changedAt ?? file.modTime ?? null;
@@ -269,7 +388,7 @@ export class NativeMemoryStore {
       confidence: 1,
       importance: 0.5,
       sensitive: file.sensitive,
-      evidenceCount: 0,
+      evidenceCount: evidence.length,
       version: versionOfHash(file.hash),
       createdAt: first?.changedAt ?? file.modTime ?? null,
       updatedAt,
@@ -278,7 +397,7 @@ export class NativeMemoryStore {
       supersededBy: null,
       invalidSince: null,
       validFrom: null,
-      evidence: [],
+      evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: history.filter((revision) => revision.before !== null).map((revision, index) => ({
         version: index + 1, value: String(revision.before ?? ""), summary: "", status: "active", changedAt: revision.changedAt,
@@ -301,7 +420,9 @@ export class NativeMemoryStore {
     const files = await this.files(userId);
     const document = files.find((file) => nativeFileId(file.uri) === id);
     if (!document) throw new HttpError(404, "memory_not_found", "Memory not found.");
-    return this.#fileRecord(document, [], []);
+    // The document names every conversation that wrote it, as a file does (its lines each name their own).
+    const history = (await this.overlay.revisionsOf(userId, document.uri, { limit: 32 })).slice().reverse();
+    return this.#fileRecord(document, [], [], conversationEvidence(history, await this.#sessionProjects(userId, new Map([[document.uri, history]]))));
   }
 
   /** The file a record id names, read now, with the line a profile-line id names. @param {string} userId @param {string} id */
@@ -325,14 +446,14 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ holder?: { id: string, name: string } }} [options]
    */
   async profile(userId, { holder = undefined } = {}) {
-    const records = await this.records(userId);
+    const { titles, records } = await this.#withConversationTitles(userId, await this.records(userId));
     /** @type {Record<string, any[]>} */
     const groups = {};
     for (const kind of new Set(Object.values(LEGACY_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
     return {
       ...(holder ? { holder } : {}), records, groups, activeCount: records.length, pendingCount: 0, episodeCount: 0,
-      conversations: {}, usage: {}, engine: "native", pending: await this.pending(userId),
+      conversations: titles, usage: {}, engine: "native", pending: await this.pending(userId),
     };
   }
 
@@ -364,7 +485,7 @@ export class NativeMemoryStore {
    */
   async search(userId, query) {
     const text = String(query ?? "").trim();
-    const records = await this.records(userId);
+    const records = (await this.#withConversationTitles(userId, await this.records(userId))).records;
     const lower = text.toLowerCase();
     const items = text ? records.filter((record) => `${record.summary}\n${record.value}`.toLowerCase().includes(lower)) : records;
     const seen = new Set(items.map((record) => record.id));
@@ -382,7 +503,7 @@ export class NativeMemoryStore {
         }
       }
     }
-    return { items, query: text, semantic, conversations: {}, usage: {} };
+    return { items, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
   }
 
   /**

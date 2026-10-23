@@ -429,6 +429,24 @@ export class NativeMemoryOverlay {
     return result.rows[0]?.project_id ?? null;
   }
 
+  /**
+   * The project each of these engine sessions was held in, as the gateway noted it when the session began, else as the commits of
+   * it recorded. A session with no project (or one the overlay never saw) is absent.
+   * @param {string} userId @param {readonly string[]} engineSessions @returns {Promise<Map<string, string>>}
+   */
+  async sessionProjects(userId, engineSessions) {
+    /** @type {Map<string, string>} */
+    const found = new Map();
+    const names = [...new Set(engineSessions.map(String))].slice(0, 500);
+    if (!names.length) return found;
+    const result = await this.#query(`SELECT DISTINCT ON (engine_session) engine_session, project_id FROM (
+        SELECT engine_session, project_id, 0 AS rank, created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session = ANY($2::text[])
+        UNION ALL SELECT engine_session, project_id, 1, created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session = ANY($2::text[])) rows
+      WHERE project_id IS NOT NULL ORDER BY engine_session, rank, created_at DESC`, [owner(userId), names]);
+    for (const row of result.rows) found.set(String(row.engine_session), String(row.project_id));
+    return found;
+  }
+
   /** The engine sessions of one project, as the gateway and the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */
   async projectSessions(userId, projectId) {
     const result = await this.#query(`SELECT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
