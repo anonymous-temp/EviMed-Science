@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { cancelGeoOrder, type GeoProject } from '@/lib/geoClient';
 import { getGeoExecutionOrders, getGeoOrderDetail, getGeoProjectLedger, type GeoExecutionOrder } from '@/lib/geoDistributionClient';
 import { getResultVersion } from '@/lib/resultProvenance';
@@ -12,7 +13,7 @@ import { Note } from '@/components/ui/Note';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useSharedGeoLoad } from '../geoProjectData';
 import { useGeoFrame } from '../geoFrame';
-import { useGeoSearchParam, useGeoSearchChange } from '../spine/drawerParams';
+import { searchWith } from '../spine/drawerParams';
 import { useOpenArticle } from '../spine/useOpenArticle';
 import { orderStateWord } from '../geoText';
 import { yuan } from './geoTabText';
@@ -25,8 +26,9 @@ const phaseNames: Record<string, string> = { send_started: '正在提交', late_
 /** Execution history is independent of the current strategy's action list. */
 export function DistributionWorkbench({ geoId, project }: { geoId: string; project: GeoProject }) {
   const [tab, setTab] = useState<'orders' | 'ledger'>('orders');
-  const [orderId, setOrderId] = useGeoSearchParam('order');
-  const change = useGeoSearchChange();
+  const [params, setParams] = useSearchParams();
+  const orderId = params.get('order');
+  const change = (values: Record<string, string | null>) => setParams(previous => new URLSearchParams(searchWith(previous.toString(), values)));
   const openOrder = (id: string) => change({ order: id, action: null, group: null, error: null, source: null, publication: null });
   return <section aria-label="投放执行记录" className="flex flex-col gap-3">
     <div className="flex flex-wrap items-center gap-2">
@@ -34,7 +36,7 @@ export function DistributionWorkbench({ geoId, project }: { geoId: string; proje
       <Button variant={tab === 'ledger' ? 'secondary' : 'text'} aria-pressed={tab === 'ledger'} onClick={() => setTab('ledger')}>费用流水</Button>
     </div>
     {tab === 'orders' ? <OrderPage key={geoId} geoId={geoId} onOpen={openOrder} /> : <LedgerPage key={geoId} geoId={geoId} onOpen={openOrder} />}
-    {orderId && <OrderDetail key={`${geoId}:${orderId}`} geoId={geoId} project={project} orderId={orderId} onClose={() => setOrderId(null)} />}
+    {orderId && <OrderDetail key={`${geoId}:${orderId}`} geoId={geoId} project={project} orderId={orderId} onClose={() => change({ order: null })} />}
   </section>;
 }
 
