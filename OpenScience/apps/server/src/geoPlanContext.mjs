@@ -86,6 +86,7 @@ export class GeoPlanContext {
     const allowed = ["requestKey", "sessionId", "mode", "selectionRef", "strategyVersion", "sourceId", "url", "groupIds", "errorIds", "actionKeys"];
     if (!body || Object.keys(body).some(key => !allowed.includes(key)) || !/^[A-Za-z0-9_-]{1,160}$/.test(body.requestKey ?? "")
       || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId ?? "") || !["strategy", "content"].includes(body.mode)
+      || body.mode === "strategy" && body.strategyVersion != null
       || ["groupIds", "errorIds", "actionKeys"].some(key => body[key] != null && (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== "string" || value.length > 240)))
       || body.url != null && (typeof body.url !== "string" || body.url.length > 2000)) throw fail("geo_plan_context_invalid", "Invalid planning selection.", 400);
     await this.authorizeSession(user, project, body.sessionId);

@@ -2237,9 +2237,8 @@ export class GeoService {
     }
     const strategy = await this.store.latestStrategy(project.id, { ...(filter.strategyVersion != null || context?.strategyVersion ? { strategyVersion: Number(filter.strategyVersion ?? context.strategyVersion) } : { scopeKey: context?.scopeKey ?? scopeKey }) });
     if (filter.strategyVersion != null && !strategy) throw new HttpError(404, "geo_strategy_not_found", "This plan version is unavailable.");
-    if (context && filter.strategyVersion != null && (context.strategyVersion != null
-      ? Number(context.strategyVersion) !== filter.strategyVersion
-      : strategy?.scopeKey !== context.scopeKey)) throw new HttpError(409, "geo_plan_context_mismatch", "Choose the plan version belonging to this selected input.");
+    if (context && (strategy && strategy.scopeKey !== context.scopeKey
+      || context.mode === "content" && strategy?.version !== context.strategyVersion)) throw new HttpError(409, "geo_plan_context_mismatch", "Choose the plan version belonging to this selected input.");
     const basis = context?.basis ?? strategy?.basis ?? null;
     if (filter.strategyVersion != null && scoped) {
       try { selected = await readGeoSelection(this.store, project, geoReadScopeInput(filter)); } catch { /* historical basis stays available */ }

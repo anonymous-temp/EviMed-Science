@@ -807,6 +807,11 @@ test('a plan context cannot mix another plan version or scope into its frozen in
     await store.writeTargets(user.id, project.id, [{ tier: '2', metricId: 'M-01S', pool: 'all', target: 85, dataType: 'forecast' }]);
     const b = await freezeGeoPlanBasis(store, project, { round: 'r2', groupIds: ['g2'], engines: ['deepseek'] });
     const versionB = await store.writeStrategy(user.id, project.id, { scopeKey: geoPlanScopeKey(b.basis.scope), basis: b.basis, summary: 'Plan B' });
+    await assert.rejects(adapter.stage(user, project.id, { requestKey: 'mixed-strategy-input', sessionId: 'selector-session', mode: 'strategy', selectionRef: a.basis.selection.reference, strategyVersion: versionB.version }), error => error.code === 'geo_plan_context_invalid');
+    const legacy = await adapter.documents.get(project.userId, 'geo-plan-context', strategy.referenceId);
+    await adapter.documents.put(project.userId, 'geo-plan-context', strategy.referenceId, { ...legacy.payload, strategyVersion: versionB.version }, { projectId: project.projectId, expectedRevision: legacy.revision });
+    await assert.rejects(service.strategy(user, project.id, { planContextRef: strategy.referenceId }), error => error.code === 'geo_plan_context_mismatch', 'existing invalid staged records cannot mix scopes either');
+    await adapter.documents.put(project.userId, 'geo-plan-context', strategy.referenceId, legacy.payload, { projectId: project.projectId, expectedRevision: legacy.revision + 1 });
     for (const context of [content, strategy]) {
       for (const what of ['strategy', 'targets']) {
         await assert.rejects(service.runtimeRead(project, what, { planContextRef: context.referenceId, strategyVersion: versionB.version }), error => error.code === 'geo_plan_context_mismatch');
