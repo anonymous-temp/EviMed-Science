@@ -1763,8 +1763,8 @@ export interface PreservedConversationHistory {
   sessionId: string; capturedAt: string | null; partial: boolean;
   messages: Array<{ seq: number; role: "user" | "assistant"; text: string }>;
 }
-export async function getWebConversationHistory(sessionId: string, projectId: string): Promise<PreservedConversationHistory> {
-  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history`), {
+export async function getWebConversationHistory(sessionId: string, projectId: string, runId?: string): Promise<PreservedConversationHistory> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`), {
     headers: { "X-Open-Science-Project": projectId },
   });
   return parseApiResponse<PreservedConversationHistory>(res);

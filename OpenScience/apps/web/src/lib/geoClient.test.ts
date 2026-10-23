@@ -32,7 +32,8 @@ describe("starting work, and reading what the programme did", () => {
     expect(runs[1].at).toMatch(/^(2026-09-14|9月14日)$/);
     expect(runs[2].at).toBeNull();
     // Nothing the page would print is an id.
-    expect(JSON.stringify(runs)).not.toMatch(/run_|geo:/);
+    expect(runs.map(run => run.runId)).toEqual(['run_1', 'run_2', 'run_3']);
+    expect(JSON.stringify(runs.map(run => [run.label, run.at]))).not.toMatch(/run_|geo:/);
     network.productRequest.mockResolvedValue({});
     expect(await getGeoProgrammeRuns("geo_1")).toEqual([]);
   });

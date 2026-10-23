@@ -5,6 +5,8 @@
  * Each module's client turns its own answer into this one shape, and `components/runs/ProgrammeRunsDrawer.tsx` is the one drawer.
  */
 export interface ProgrammeRun {
+  /** Exact execution identity; absent only on older module responses. */
+  runId?: string;
   /** The session the step ran in — the key of its record, never a place to go. */
   sessionId: string;
   /** What the step was, in the person's words: 「写第 2 批稿件」, 「生成虚拟患者」. */

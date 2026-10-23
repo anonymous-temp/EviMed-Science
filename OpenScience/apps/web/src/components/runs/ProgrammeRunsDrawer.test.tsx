@@ -165,3 +165,20 @@ describe("AI 运行 — the record of what a module's programme did in the backg
     expect(load, "nothing is going on: nothing is read").toHaveBeenCalledTimes(2);
   });
 });
+
+it('two executions in one native session retain separate rows, files and request-scoped prose', async () => {
+  const runs: ProgrammeRun[] = [{ sessionId: 'shared', runId: 'run_first', label: 'First task', state: 'finished', at: null }, { sessionId: 'shared', runId: 'run_second', label: 'Second task', state: 'finished', at: null }];
+  api.runs.mockResolvedValue([{ id: 'run_first', sessionId: 'shared', outputFiles: ['first.md'] }, { id: 'run_second', sessionId: 'shared', outputFiles: ['second.md'] }]);
+  api.history.mockImplementation(async (_session: string, _project: string, runId: string) => ({ messages: [{ seq: 1, role: 'assistant', text: runId === 'run_first' ? 'First result' : 'Second result' }] }));
+  draw({ load: vi.fn().mockResolvedValue(runs) });
+  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'First task' }));
+  expect(await screen.findByRole('link', { name: 'first.md' })).toHaveAttribute('href', '/app/runs/run_first/files/first.md');
+  expect(screen.queryByRole('link', { name: 'second.md' })).not.toBeInTheDocument();
+  expect(await screen.findByText('First result')).toBeInTheDocument();
+  expect(api.history).toHaveBeenLastCalledWith('shared', 'p-masi', 'run_first');
+  await user.click(screen.getByRole('button', { name: /全部运行/ })); await user.click(screen.getByRole('button', { name: 'Second task' }));
+  expect(await screen.findByRole('link', { name: 'second.md' })).toHaveAttribute('href', '/app/runs/run_second/files/second.md');
+  expect(screen.queryByRole('link', { name: 'first.md' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Second result')).toBeInTheDocument();
+  expect(api.history).toHaveBeenLastCalledWith('shared', 'p-masi', 'run_second');
+});

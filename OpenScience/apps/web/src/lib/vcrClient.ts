@@ -2429,7 +2429,7 @@ export type VcrBackgroundRun = ProgrammeRun;
 export async function getVcrBackgroundRuns(studyId: string): Promise<VcrBackgroundRun[]> {
   const value = obj(await productRequest<unknown>(`${study(studyId)}/runs`));
   return arr(value.runs).filter((item) => typeof item.sessionId === "string").map((item) => ({
-    sessionId: String(item.sessionId), label: text(item.label) ?? "后台分析", state: programmeRunState(item.state), at: text(item.at),
+    sessionId: String(item.sessionId), ...(text(item.runId) ? { runId: text(item.runId)! } : {}), label: text(item.label) ?? "后台分析", state: programmeRunState(item.state), at: text(item.at),
   }));
 }
 

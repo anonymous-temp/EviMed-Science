@@ -1497,6 +1497,7 @@ export async function getGeoProgrammeRuns(geoId: string): Promise<ProgrammeRun[]
   const rows = Array.isArray(value?.runs) ? (value.runs as Array<Record<string, unknown>>) : [];
   return rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
     sessionId: String(row.sessionId),
+    ...(typeof row.runId === "string" && row.runId ? { runId: row.runId } : {}),
     label: typeof row.label === "string" && row.label.trim() ? row.label.trim() : "后台分析",
     state: programmeRunState(row.state),
     at: typeof row.startedAt === "string" && row.startedAt ? formatRelativeTime(row.startedAt) || null : null,

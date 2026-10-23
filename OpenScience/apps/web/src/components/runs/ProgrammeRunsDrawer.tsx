@@ -77,7 +77,7 @@ export function ProgrammeRunsDrawer({ projectId, load, version = null, onClose }
                 : (
                   <List label="AI 运行" divided>
                     {state.runs.map((run) => (
-                      <ListRow key={run.sessionId} title={run.label} onOpen={() => setRecord(run)} meta={metaOf(run)} />
+                      <ListRow key={run.runId ?? run.sessionId} title={run.label} onOpen={() => setRecord(run)} meta={metaOf(run)} />
                     ))}
                   </List>
                 )}
@@ -118,7 +118,7 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
     void listWebAgentRuns({ projectId }).then((runs) => {
       if (!live) return;
       const seen = new Set<string>();
-      setFiles(runs.filter((candidate) => candidate.sessionId === run.sessionId).flatMap((candidate) => {
+      setFiles(runs.filter((candidate) => candidate.sessionId === run.sessionId && (!run.runId || candidate.id === run.runId)).flatMap((candidate) => {
         const paths = [...(candidate.artifacts ?? []), ...(candidate.unverifiedArtifacts ?? []), ...(candidate.outputFiles ?? []), ...(candidate.presentedFiles ?? [])];
         return paths.flatMap((path) => {
           const safe = safeWorkspacePath(path);
@@ -129,12 +129,13 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
         });
       }));
     }, () => { if (live) setFiles("error"); });
-    void getWebConversationHistory(run.sessionId, projectId).then(
+    const history = run.runId ? getWebConversationHistory(run.sessionId, projectId, run.runId) : getWebConversationHistory(run.sessionId, projectId);
+    void history.then(
       (value) => { if (live) setHistory(value); },
       () => { if (live) setHistory("error"); },
     );
     return () => { live = false; };
-  }, [run.sessionId, projectId, round]);
+  }, [run.runId, run.sessionId, projectId, round]);
   return (
     <div data-programme-run-record="" className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">

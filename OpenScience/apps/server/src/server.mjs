@@ -6906,7 +6906,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (historyRoute && req.method === "GET") {
         const ctx = await context(req, res);
         const sessionId = decodeRouteComponent(historyRoute[1], "research session id");
-        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project)) });
+        const runId = new URL(req.url ?? "/", "http://localhost").searchParams.get("runId");
+        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project), undefined, { runId }) });
         return;
       }
 
