@@ -2474,11 +2474,11 @@ export async function restartWebRuntime(): Promise<string> {
  * retired pass-through cost us: with a proxied kernel the page had to know the
  * kernel's protocol, so every kernel change was a frontend change.
  */
-export async function createWebRuntimeSession(): Promise<{ id: string; kernel: string }> {
+export async function createWebRuntimeSession(projectId = getWebProjectId()): Promise<{ id: string; kernel: string }> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.session.create");
   const res = await fetchWithWebAuth(apiUrl("/runtime/sessions"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
     body: "{}",
   });
   return parseApiResponse<{ id: string; kernel: string }>(res);

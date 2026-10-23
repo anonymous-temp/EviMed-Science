@@ -94,6 +94,7 @@ export interface GeoScopedView {
 
 export interface GeoMetricSelector {
   observationDate?: string;
+  observationRound?: string;
   metricId: string;
   scope: string;
   engine: string | null;

@@ -2495,6 +2495,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
+    get selectedExporter() { return documentExportService; },
     get exporter() { return geo?.exporter ?? null; },
     get members() { return geo?.members ?? null; },
     // The cards of the project's product zone: read as the project, written as its owner (the zone is the owner's).
@@ -2572,8 +2573,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return { project, reference: { artifactId: source.artifactId, root: source.root ?? "workspace", workspace: project.activeWorkspace ?? "" },
         ...await freezeArtifactDocument(project, source) };
     },
-    authorize: async (user, payload) => {
-      if (payload.source.studyId) {
+    authorize: async (user, payload, ability = "read") => {
+      if (payload.source.kind === "geo-selected-analysis") {
+        if (!geo) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        const project = await geo.service.requireProject(user, payload.source.geoId, ability === "read" ? "read" : "run");
+        if (project.projectId !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+      } else if (payload.source.studyId) {
         if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
         const { project } = await vcrDocumentAdapter.authorize(user, payload.source);
         if (project.id !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");

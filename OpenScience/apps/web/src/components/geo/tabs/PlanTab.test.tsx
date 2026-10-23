@@ -25,6 +25,8 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...client,
 }));
 
+const createSession=vi.hoisted(()=>vi.fn());
+vi.mock("@/lib/apiClient",async original=>({...await original<typeof import("@/lib/apiClient")>(),createWebRuntimeSession:createSession}));
 const open = vi.hoisted(() => vi.fn());
 vi.mock("../useOpenGeoConversation", () => ({ useOpenGeoConversation: () => open }));
 
@@ -345,4 +347,17 @@ it("labels frozen historical readings as plan-time values instead of current rea
   expect(screen.getByText("2026-10-01")).toBeInTheDocument();
   expect(document.body.textContent).toContain("方案时");
   expect(document.body.textContent).not.toContain("现在 21%");
+});
+
+
+it("creates the first ordinary session before staging a plan draft",async()=>{
+  client.getGeoProject.mockResolvedValue({...project,sessionId:null});
+  createSession.mockReset().mockResolvedValue({id:"created-plan-session",kernel:"dsh"});
+  client.stageGeoPlanContext.mockImplementation(async(_geo,input)=>({referenceId:"gpc_first_plan",sessionId:input.sessionId,draft:"Selected unsent plan"}));
+  render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}}/></GeoFrameHarness></MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",mode:"strategy"})));
+  expect(createSession).toHaveBeenCalledWith(project.projectId);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({projectId:project.projectId,sessionId:"created-plan-session",geoPlanContext:{referenceId:"gpc_first_plan"}}),"Selected unsent plan");
 });

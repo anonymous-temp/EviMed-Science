@@ -1,3 +1,4 @@
+import { freezeSelectedGeoAnalysis } from "./geoAnalysis.mjs";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./geoStore.mjs";
 import { readGeoSelection, withGeoReadTransaction, geoReadScopeInput } from "./geoReadScope.mjs";
@@ -84,9 +85,9 @@ export class GeoPlanContext {
   }
   async stage(user, geoId, body) {
     const project = await this.service.requireProject(user, geoId, "edit");
-    const allowed = ["requestKey", "sessionId", "mode", "selectionRef", "strategyVersion", "sourceId", "url", "groupIds", "errorIds", "actionKeys"];
+    const allowed = ["requestKey", "sessionId", "mode", "selectionRef", "strategyVersion", "sourceId", "url", "groupIds", "errorIds", "actionKeys", "view", "expectedDigest", "focus", "intent"];
     if (!body || Object.keys(body).some(key => !allowed.includes(key)) || !/^[A-Za-z0-9_-]{1,160}$/.test(body.requestKey ?? "")
-      || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId ?? "") || !["strategy", "content"].includes(body.mode)
+      || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId ?? "") || !["strategy", "content", "analysis"].includes(body.mode)
       || body.mode === "strategy" && body.strategyVersion != null
       || ["groupIds", "errorIds", "actionKeys"].some(key => body[key] != null && (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== "string" || value.length > 240)))
       || body.url != null && (typeof body.url !== "string" || body.url.length > 2000)) throw fail("geo_plan_context_invalid", "Invalid planning selection.", 400);
@@ -95,7 +96,15 @@ export class GeoPlanContext {
     const existing = await this.documents.get(project.userId, "geo-plan-context", id);
     if (existing) { if (existing.payload.fingerprint !== fingerprint) throw fail("geo_plan_context_conflict", "This request key already names another selection."); return this.publicOf(existing); }
     let basis, scopeKey, actions = [];
-    if (body.mode === "content") {
+    if (body.mode === "analysis") {
+      if (["strategyVersion","sourceId","url","groupIds","errorIds","actionKeys"].some(key => body[key] != null) || !body.selectionRef || !/^[a-f0-9]{64}$/.test(body.expectedDigest ?? "") || !body.view || body.intent != null && !["explain", "compare", "next_steps"].includes(body.intent)
+        || body.focus != null && (!body.focus || typeof body.focus !== "object" || Array.isArray(body.focus) || Object.keys(body.focus).some(key => !["rowKey", "columnKey"].includes(key)))) throw fail("geo_plan_context_invalid", "Choose an exact analysis and focus.", 400);
+      const analysis = await freezeSelectedGeoAnalysis(this.store, project, { selectionRef: body.selectionRef, view: body.view, expectedDigest: body.expectedDigest });
+      if (body.focus && !analysis.rows.some(row => row.key === body.focus.rowKey && Object.hasOwn(row.values, body.focus.columnKey))) throw fail("geo_plan_focus_invalid", "This reading is outside the analysis.", 400);
+      if (Buffer.byteLength(JSON.stringify(analysis)) > 200_000) throw fail("geo_plan_basis_too_large", "Narrow the dates, groups or metric before opening this analysis in conversation.", 422);
+      basis = { schemaVersion: 1, analysis, selection: analysis.selection, scope: analysis.scope, groups: [], focus: body.focus ?? null, intent: body.intent ?? "explain" };
+      scopeKey = geoPlanScopeKey(analysis.scope);
+    } else if (body.mode === "content") {
       if (!Number.isSafeInteger(body.strategyVersion) || body.strategyVersion < 1 || !body.actionKeys?.length) throw fail("geo_plan_context_invalid", "Choose a plan version and its actions.", 400);
       const plan = await this.store.latestStrategy(project.id, { strategyVersion: body.strategyVersion });
       if (!plan?.basis) throw fail("geo_plan_basis_unavailable", "Refresh this plan before using it.");
@@ -119,7 +128,7 @@ export class GeoPlanContext {
       const rows = (await this.store.query(`SELECT id FROM evimed_geo.errors WHERE geo_project_id=$1 AND id=ANY($2::text[]) AND (first_snapshot_id=ANY($3::text[]) OR last_snapshot_id=ANY($3::text[]))`, [project.id, body.errorIds, selectedIds])).rows;
       if (rows.length !== new Set(body.errorIds).size) throw fail("geo_plan_focus_invalid", "The error is outside this selection.", 400);
     }
-    const draft = body.mode === "strategy" ? "请根据所选问题群和信源生成或调整实施方案，保留依据与不确定性。" : "请按所选方案行动处理内容，保留依据和原稿，完成后关联成果。";
+    const draft = body.mode === "analysis" ? "请解释所选分析中的实测结果、样本和缺失情况，并说明能够得出的结论。" : body.mode === "strategy" ? "请根据所选问题群和信源生成或调整实施方案，保留依据与不确定性。" : "请按所选方案行动处理内容，保留依据和原稿，完成后关联成果。";
     const payload = { recordType: "geo-plan-context", id, geoId: project.id, actorId: user.id, fingerprint, sessionId: body.sessionId, mode: body.mode,
       strategyVersion: body.strategyVersion ?? null, scopeKey, basis, basisDigest: geoPlanDigest(basis), actions, groupIds: body.groupIds ?? basis.groups.map(group => group.id),
       actionKeys: body.actionKeys ?? [], draft, state: "staged", requestId: null, outputs: [] };
@@ -183,7 +192,7 @@ export class GeoPlanContext {
       }
     }
     request.content.push({ type: "text", text: `\n<evimed_geo_plan_context>${JSON.stringify({ referenceId: row.id, requestId: request.requestId, ...row.payload,
-      instruction: "Use this frozen input as context for the actual user request. Answer ordinary questions normally; do not create files merely because this context exists. geo_read strategy/targets accepts planContextRef. If the user requests a strategy, write deliverables/<unique-deliverable-id>/strategy.json and geo-strategy.md using the existing geo-strategy format. Scoped geo_write is unavailable because a project token cannot attest the producing request; the completed run imports the file under its actual bound context. For requested content use the existing geo-content article files and articles.json registration. Preserve exact group/action IDs. Do not replace the frozen basis. No purchase or publication is authorized." }).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")}</evimed_geo_plan_context>` });
+      instruction: row.payload.mode === "analysis" ? "Use basis.analysis as the exact numeric input for the actual user request. Preserve missing states, domain metric definitions, scope, digest and current-context target labels. Do not recalculate metrics or replace these historical readings with latest data. geo_read analysis with only planContextRef pages this frozen table. Exact members still require their selectionRef and may return 409 after data changes; disclose that and preserve the frozen readings. Answer in the ordinary conversation; do not create files unless the user requests them. No publication or purchase is authorized." : "Use this frozen input as context for the actual user request. Answer ordinary questions normally; do not create files merely because this context exists. geo_read strategy/targets accepts planContextRef. If the user requests a strategy, write deliverables/<unique-deliverable-id>/strategy.json and geo-strategy.md using the existing geo-strategy format. Scoped geo_write is unavailable because a project token cannot attest the producing request; the completed run imports the file under its actual bound context. For requested content use the existing geo-content article files and articles.json registration. Preserve exact group/action IDs. Do not replace the frozen basis. No purchase or publication is authorized." }).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")}</evimed_geo_plan_context>` });
     delete request.geoPlanContext;
     return row.payload;
   }

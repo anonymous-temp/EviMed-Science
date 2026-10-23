@@ -1,14 +1,15 @@
 import { fetchWithWebAuth, getWebProjectId, webApiBase } from './apiClient';
 import { productRequest } from './productClient';
 
-export type DocumentFormat = 'docx' | 'pdf' | 'html';
-export type DocumentSource = { artifactId: string; root?: 'workspace' | 'base' } | { studyId: string; exportId: string } | { versionId: string };
+export type DocumentFormat = 'docx' | 'pdf' | 'html' | 'csv' | 'xlsx';
+export type DocumentSource = { geoId:string;selectionRef:string;view:import('./geoAnalysisClient').GeoAnalysisDescriptor;expectedDigest:string } | { artifactId: string; root?: 'workspace' | 'base' } | { studyId: string; exportId: string } | { versionId: string };
 export interface DocumentExport {
   id: string;
   state: 'queued' | 'running' | 'ready' | 'partial' | 'failed' | 'canceled';
   formats: Partial<Record<DocumentFormat, { state: 'queued' | 'ready' | 'failed'; code?: string }>>;
 }
-export function requestDocumentExport(source: DocumentSource) {
+export function requestDocumentExport(source: DocumentSource, formats?:DocumentFormat[]) {
+  if ('geoId' in source) return productRequest<DocumentExport>(`/geo/projects/${encodeURIComponent(source.geoId)}/export`, 'POST', {kind:'selected',selectionRef:source.selectionRef,view:source.view,expectedDigest:source.expectedDigest,formats:formats??['csv']});
   return productRequest<DocumentExport>('/document-exports', 'POST', { projectId: getWebProjectId(), source, formats: ['docx', 'pdf', 'html'] });
 }
 export function getDocumentExport(id: string) { return productRequest<DocumentExport>(`/document-exports/${encodeURIComponent(id)}`); }

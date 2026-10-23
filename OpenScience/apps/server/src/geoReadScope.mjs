@@ -146,13 +146,14 @@ export function geoReadPage(input = {}) {
 
 /** The same closed member selector crosses the HTTP and native boundaries. @param {any} member */
 export function normalizeGeoMember(member) {
-  const fields = ["metricId", "scope", "engine", "pool", "groupId", "arm", "variant", "rival", "observationDate"];
+  const fields = ["metricId", "scope", "engine", "pool", "groupId", "arm", "variant", "rival", "observationDate", "observationRound"];
   if (!member || typeof member !== "object" || Array.isArray(member) || Object.keys(member).some((name) => !fields.includes(name))
     || typeof member.metricId !== "string" || !/^M-[0-9]{2}[A-Z]?$/u.test(member.metricId)
     || !["project", "pool", "engine", "pool_engine", "group", "arm"].includes(member.scope)
     || Object.values(member).some((value) => value !== null && (typeof value !== "string" || value.length > 120))) {
     throw invalid("member must name a metric returned by this selection.");
   }
+  if (member.observationDate && member.observationRound) throw invalid("Choose a day or a round, not both.");
   if ("observationDate" in member) {
     if (typeof member.observationDate !== "string" || !member.observationDate) throw invalid("observationDate must be a nonempty date.");
     normalizeGeoReadScope({ from: member.observationDate });
@@ -204,6 +205,14 @@ export function geoDailyReadings(selected, onlyDay = null) {
     bindMemberReferences(result, selected.selection.reference, { observationDate: date });
     return { date, roundIds, version: versions.length === 1 ? versions[0] : null, result };
   });
+}
+
+/** Round cohorts reuse domain metrics and carry the exact round in the existing member selector. */
+export function geoRoundReadings(selected, roundId) {
+  if (!selected.selection.roundIds.includes(roundId)) throw invalid("This round is outside the selection.");
+  const result = computeGeoSelection(selected.rows.filter(row => row.roundId === roundId), selected.metricOptions);
+  bindMemberReferences(result, selected.selection.reference, { observationRound: roundId });
+  return result;
 }
 
 /** A subset key retains the existing four-part wire format; no snapshot or round id makes repeated questions incomparable.

@@ -5,6 +5,7 @@ import {
   GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
   GEO_TIERS, geoProducerSettingsIssues, geoVisibleQuestionOfReason, normalizeGeoProducerSettings,
 } from "@evimed/domain";
+import { GEO_ANALYSIS_FIELDS } from "./geoAnalysis.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -63,7 +64,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "snapshots", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "owned-links", "source-ownership", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "owned-links", "source-ownership", "analysis", "monitoring", "run", "runs", "export", "cards", "members", "clusters", "actions", "strategy"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -184,6 +185,7 @@ function money(value, field, zero = false) {
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
+ *   selectedExporter?: any,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
  *     articleReferences?: (project: any, articleId: string) => Promise<any>, articlePublishable?: (project: any, articleId: string) => Promise<any> } | null,
@@ -441,6 +443,7 @@ export function createGeoRoutes(dependencies) {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
+      if (tab === "analysis") return reply(await service.analysis(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
       if (tab === "monitoring") return reply(await service.monitoring(user, id, geoScopeFromQuery(url.searchParams, [])));
       // 「AI 运行」: what the programme did in the project's own sessions, apart from the person's conversation — a read-only record, each
       // row named by what it was (the route reason's sentence, never the brief it was sent with) and none of them a place to go.
@@ -613,7 +616,13 @@ export function createGeoRoutes(dependencies) {
       return reply(await hooks.orchestrator.runStep(asOwner(user, project), project, body.step));
     }
     if (parts.length === 3 && method === "POST" && tab === "export") {
-      const body = await bodyOf(req, maxJsonBytes, ["kind"]);
+      const body = await bodyOf(req, maxJsonBytes, ["kind", "selectionRef", "view", "expectedDigest", "formats"]);
+      if (body.kind === "selected") {
+        const project = await service.requireProject(user, id, "run");
+        if (!dependencies.selectedExporter) throw UNAVAILABLE();
+        return reply(await service.selectedExport(user, project, body, dependencies.selectedExporter));
+      }
+      if (Object.keys(body).some(key => key !== "kind")) throw new HttpError(400, "geo_read_filter_invalid", "Choose a selected export to include analytical scope.");
       if (typeof body.kind !== "string" || !GEO_EXPORT_KINDS.includes(body.kind)) {
         throw new HttpError(400, "geo_export_kind_invalid", `kind must be one of: ${GEO_EXPORT_KINDS.join(", ")}.`);
       }

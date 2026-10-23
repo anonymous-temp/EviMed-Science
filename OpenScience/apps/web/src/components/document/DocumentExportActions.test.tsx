@@ -43,3 +43,17 @@ describe('document export actions', () => {
     expect(screen.getByRole('button', { name: '导出 PDF' })).toBeEnabled();
   });
 });
+
+it('requests only the selected table format and retains downloads when a second format is requested',async()=>{
+  const source={geoId:'geo',selectionRef:'gsel_exact',view:{viewId:'V01' as const},expectedDigest:'digest'};
+  vi.mocked(requestDocumentExport).mockReset().mockResolvedValueOnce({id:'csv-export',state:'ready',formats:{csv:{state:'ready'}}}).mockResolvedValueOnce({id:'xlsx-export',state:'ready',formats:{xlsx:{state:'ready'}}});
+  render(<DocumentExportActions source={source}/>);
+  fireEvent.click(screen.getByRole('button',{name:'导出 CSV'}));
+  await screen.findByRole('button',{name:'下载 CSV'});
+  expect(requestDocumentExport).toHaveBeenNthCalledWith(1,source,['csv']);
+  fireEvent.click(screen.getByRole('button',{name:'导出 Excel'}));
+  await screen.findByRole('button',{name:'下载 Excel'});
+  expect(requestDocumentExport).toHaveBeenNthCalledWith(2,source,['xlsx']);
+  fireEvent.click(screen.getByRole('button',{name:'下载 CSV'}));
+  await waitFor(()=>expect(downloadDocumentExport).toHaveBeenCalledWith('csv-export','csv'));
+});

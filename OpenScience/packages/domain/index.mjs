@@ -1967,7 +1967,7 @@ export {
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
 
-export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_REPORT_EXPORT_FORMATS, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
 // numberBinding — the one mechanism by which a number in a report is resolved from a result, not typed (plan 2026-10-02 §11.3 N06;
 // lifted out of the 「虚拟临床研究」 renderer, which keeps its own issue codes and sentences).

@@ -1407,3 +1407,17 @@ describe("productClient budget refusals", () => {
     expect(inbox.inboxErrorMessage(error)).toBe("消息已发生变化，请刷新后重试。");
   });
 });
+
+
+it("creates the ordinary native session in the explicitly requested project without switching global context",async()=>{
+  const client=await loadClient("/api");
+  client.setWebProjectId("other-open-project");
+  const fetchMock=vi.spyOn(globalThis,"fetch").mockImplementation(async(input)=>String(input).endsWith("/runtime/sessions")?responseJson({id:"actual-session",kernel:"dsh"}):csrfMeResponse());
+  await expect(client.createWebRuntimeSession("geo-control-project")).resolves.toEqual({id:"actual-session",kernel:"dsh"});
+  const index=fetchMock.mock.calls.findIndex(([input])=>String(input).endsWith("/runtime/sessions"));
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(callHeaders(fetchMock,index).get("X-Open-Science-Project")).toBe("geo-control-project");
+  expect(callHeaders(fetchMock,index).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  expect(client.getWebProjectId()).toBe("other-open-project");
+  expect((fetchMock.mock.calls[index][1] as RequestInit).method).toBe("POST");
+});

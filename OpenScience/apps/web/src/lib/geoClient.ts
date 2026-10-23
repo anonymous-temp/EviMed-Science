@@ -1588,6 +1588,6 @@ export const markGeoMarketOrderLost = (orderId: string, reason: string) =>
   productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/lost`, "POST", { reason });
 export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: boolean; day?: string }>("/geo/market/clear-stop", "POST", { note });
 
-export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[]}) {
+export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[]}) {
   return productRequest<{referenceId:string;sessionId:string;draft:string}>(`${project(geoId)}/strategy/context`, "POST", input);
 }

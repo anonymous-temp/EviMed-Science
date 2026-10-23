@@ -44,6 +44,7 @@ import public_sources
 # them. `apps/server/test/evimedMcp.test.mjs` asks this server for the schemas
 # and holds these copies equal to the domain's.
 READ_WHATS = (
+    "analysis",
     "diagnosis_progress",
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
     "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards", "value", "research",
@@ -85,10 +86,11 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project's pages and answers. Numeric cells retain counts and unknowns. "
-                "Analytical filters share inclusive dates (Asia/Shanghai), engines, questionVersion, groups and pools. "
-                "Reuse selectionRef; copy members.metric into member to page exact snapshots. Comparisons are observational. "
-                "Actions give lean rows and totals; filter.key or groupId reads one whole. version reads a prior value basis."
+                "Read this 循证 GEO project's pages and answers. Cells preserve counts and unknowns. "
+                "Filters share inclusive dates (Asia/Shanghai), engines, questionVersion, groups and pools. "
+                "Reuse selectionRef and members.metric for exact snapshots. Comparisons are observational. "
+                "analysis reads V01/V02 tables; bound planContextRef pages frozen input. "
+                "Actions give lean rows; filter.key or groupId reads one whole. version reads a prior value basis."
             ),
             "inputSchema": {
                 "type": "object",
@@ -111,6 +113,10 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
+                            "viewId": {"type": "string", "enum": ["V01", "V02"]},
+                            "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
+                            "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
+                            "expectedDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                             "planContextRef": {"type": "string", "pattern": "^gpc_[a-f0-9]{64}$"},
                             "strategyVersion": {"type": "integer", "minimum": 1},
                             "url": {"type": "string", "maxLength": 2000},
@@ -128,7 +134,8 @@ def tool_definitions():
                             "member": {
                                 "type": "object", "description": "Copy members.metric from a cell to page its exact contributing snapshots.",
                                 "properties": {"metricId": {"type": "string"}, "scope": {"type": "string", "enum": ["project", "pool", "engine", "pool_engine", "group", "arm"]},
-                                               "observationDate": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                                               "observationRound": ID,
+                                    "observationDate": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
                                                **{key: {"type": ["string", "null"]} for key in ["engine", "pool", "groupId", "arm", "variant", "rival"]}},
                                 "required": ["metricId", "scope"], "additionalProperties": False,
                             },

@@ -1,3 +1,4 @@
+import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
 import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
@@ -36,11 +37,8 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     setBusy(true); setError(null);
     try {
       const current = await getGeoProject(geoId);
-      const sessionId = geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId;
-      if (!sessionId) {
-        await open({ projectId: project.projectId, geoId });
-        setRetryKey(null); return;
-      }
+      const sessionId = await ensureGeoConversationSession(project.projectId,
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
       const signature = JSON.stringify([sessionId,plan.selection?.reference,plan.version,sourceId,sourceUrl,action?.key]);
       const key = retryKey?.signature === signature ? retryKey.key : crypto.randomUUID(); setRetryKey({signature,key});
       const context = await stageGeoPlanContext(geoId, { requestKey: key, sessionId, mode: action ? "content" : "strategy",

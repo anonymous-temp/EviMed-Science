@@ -41,6 +41,7 @@ import {
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters, geoSourcePage } from "./geoReadScope.mjs";
+import { GEO_ANALYSIS_FIELDS, normalizeGeoAnalysisView } from "./geoAnalysis.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
 
@@ -51,7 +52,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze([...new Set([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "url", "key", "limit", "offset", "member"])]);
+const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "url", "key", "limit", "offset", "member"])]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
@@ -119,6 +120,7 @@ function readRequest(body) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
+  if (body.what !== "analysis" && ["viewId", "metricId", "dimension", "expectedDigest"].some(key => raw[key] != null)) throw gatewayError(400, "geo_read_filter_invalid", "Analysis fields require what=analysis.");
   /** @type {Record<string, any>} */
   const filter = {};
   for (const key of ["round", "groupId", "questionId", "sourceId"]) {
@@ -155,6 +157,14 @@ function readRequest(body) {
   geoSourcePage(raw);
   for (const name of GEO_SOURCE_PAGE_FIELDS) if (raw[name] != null) filter[name] = raw[name];
   for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
+  if (body.what === "analysis" && raw.planContextRef && Object.keys(raw).some(key => !["planContextRef","limit","offset"].includes(key))) throw gatewayError(400, "geo_read_filter_invalid", "Read the frozen analysis without replacing its selection.");
+  if (body.what === "analysis" && !raw.planContextRef) {
+    Object.assign(filter, normalizeGeoAnalysisView(Object.fromEntries(["viewId", "metricId", "dimension"].filter(key => raw[key] != null).map(key => [key, raw[key]]))));
+    if (raw.expectedDigest != null) {
+      if (!/^[a-f0-9]{64}$/.test(raw.expectedDigest)) throw gatewayError(400, "geo_read_filter_invalid", "Invalid analysis digest.");
+      filter.expectedDigest = raw.expectedDigest;
+    }
+  }
   if (raw.member != null) filter.member = normalizeGeoMember(raw.member);
   return { what: body.what, filter };
 }

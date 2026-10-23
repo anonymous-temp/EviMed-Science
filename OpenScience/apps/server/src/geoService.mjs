@@ -50,7 +50,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadPage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
 import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
@@ -63,6 +63,7 @@ import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 import { GeoDistributionView } from "./geoDistributionView.mjs";
+import { readGeoAnalysis, freezeSelectedGeoAnalysis, freezeGeoAnalysisDocument } from "./geoAnalysis.mjs";
 import { GeoSourceOwnership } from "./geoSourceOwnership.mjs";
 import { GeoOwnedPublications } from "./geoOwnedPublications.mjs";
 
@@ -2333,6 +2334,27 @@ export class GeoService {
 
   // --- the runtime's reads (geo_read) -----------------------------------------------------
 
+  async analysis(user, id, input = {}) {
+    return this.analysisOf(await this.requireProject(user, id), input);
+  }
+  async analysisOf(project, input = {}) {
+    if (input.planContextRef) {
+      if (Object.keys(input).some(key => !["planContextRef", "limit", "offset"].includes(key))) throw new HttpError(400, "geo_read_filter_invalid", "Use the frozen context without replacing its selection.");
+      const row = await this.planContexts?.documents.get(project.userId, "geo-plan-context", input.planContextRef);
+      if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id || row.payload.mode !== "analysis" || row.payload.state !== "bound") throw new HttpError(404, "geo_plan_context_not_found", "The selected analysis is unavailable.");
+      await this.requireProject({ id: row.payload.actorId }, project.id);
+      const frozen = row.payload.basis.analysis;
+      const { limit, offset } = geoReadPage(input);
+      return { ...frozen, rows: frozen.rows.slice(offset, offset + limit), page: { total: frozen.rows.length, shown: frozen.rows.slice(offset, offset + limit).length, nextOffset: offset + limit < frozen.rows.length ? offset + limit : null }, readingsKind: "submitted_input" };
+    }
+    return readGeoAnalysis(this.store, project, input);
+  }
+  async selectedExport(user, project, body, exporter) {
+    await this.requireProject(user, project.id, "run");
+    if (!body.selectionRef || !/^[a-f0-9]{64}$/.test(body.expectedDigest ?? "") || !body.view) throw new HttpError(400, "geo_read_filter_invalid", "Choose the selected analysis and its revision.");
+    const view = await freezeSelectedGeoAnalysis(this.store, project, { selectionRef: body.selectionRef, view: body.view, expectedDigest: body.expectedDigest });
+    return exporter.requestFrozen(user, { project: { id: project.projectId, userId: project.userId }, reference: { kind: "geo-selected-analysis", geoId: project.id, selectionRef: view.selection.reference, digest: view.digest, view: view.view }, ...freezeGeoAnalysisDocument(view) }, body.formats ?? ["csv"]);
+  }
   /**
    * What `geo_read` answers for one `what`, in the page's shapes, cut to the
    * tool's bounds: at most 50 items, answer text at most 4,000 characters;
@@ -2342,6 +2364,7 @@ export class GeoService {
    * @param {Record<string, any>} filter
    */
   async runtimeRead(project, what, filter = {}) {
+    if (what === "analysis") return this.analysisOf(project, filter);
     if (["project", "questions", "diagnosis", "metrics", "snapshots", "errors", "sources", "monitoring", "clusters", "targets"].includes(what)
       && !geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.runtimeRead(project, what, filter));
     this.counters.reads += 1;
@@ -2401,8 +2424,8 @@ export class GeoService {
         const selected = await readGeoSelection(this.store, project, geoReadScopeInput(filter));
         let members = selected.rows.filter((row) => !filter.questionId || row.questionId === filter.questionId);
         if (filter.member) {
-          const { observationDate, ...descriptor } = filter.member;
-          const computed = observationDate ? geoDailyReadings(selected, observationDate)[0]?.result : selected.computed;
+          const { observationDate, observationRound, ...descriptor } = filter.member;
+          const computed = observationDate ? geoDailyReadings(selected, observationDate)[0]?.result : observationRound ? geoRoundReadings(selected, observationRound) : selected.computed;
           const metric = computed?.cells.find((entry) => Object.entries(descriptor).every(([key, value]) => /** @type {any} */ (entry)[key] === value));
           if (!metric) throw failure(400, "geo_read_filter_invalid", "The metric is not in this selection.");
           const inputRows = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? computed.balance.deduped : computed.balance.rows;

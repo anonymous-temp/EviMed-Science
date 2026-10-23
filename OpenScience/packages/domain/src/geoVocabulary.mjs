@@ -454,7 +454,7 @@ export const GEO_ARTICLE_CHANNELS = frozen([...GEO_OWNED_LINK_PLATFORMS, 'media_
 export const GEO_ARTICLE_CHANNEL_LABELS_ZH = Object.freeze({ ...GEO_OWNED_LINK_PLATFORM_LABELS_ZH, media_market: '媒介集市（专业媒体）' })
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
-export const GEO_READ_WHATS = frozen(['diagnosis_progress', 'project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
+export const GEO_READ_WHATS = frozen(['analysis', 'diagnosis_progress', 'project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
   'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research', 'clusters', 'actions'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'preview_questions', 'start_diagnosis', 'recover_diagnosis', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
   'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research', 'actions'])
@@ -470,7 +470,7 @@ export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   value: '药品价值分析', research: '研究任务', actions: '行动',
 })
 /** The export runs 「⋯」 offers. */
-export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal'])
+export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal', 'selected'])
 
 /**
  * The action read model (`geoActions.mjs`): what the platform is doing, or is about to do, for one question group. The words are the
