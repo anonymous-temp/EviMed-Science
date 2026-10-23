@@ -127,9 +127,9 @@ function unreceiptedEntries(files, receipt) {
  * the bytes readable now — and before its siblings, so a report captured beside
  * it can bind its numbers to it. `transformationsFor` joins the script to the
  * dataset transformations N03 recorded for it.
- * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string}} input
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null,reviewOrigin?:string,observedOnly?:Set<string>}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture" }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null, reviewOrigin = "capture", observedOnly = new Set() }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
@@ -216,7 +216,8 @@ export async function captureResultDelivery({ results, project, run, receipt = n
     for (const file of ordered) {
       if (matrixVersion && file.path === matrixFile.path) { capturedOutputs.push(matrixVersion); continue; }
       try {
-        const input = { userId: project.userId, project, relativePath: file.path, producer, expectedDigest: file.sha256, review,
+        const fileProducer = observedOnly.has(file.path) ? { ...producer, kind: "workspace", sessionId: null } : producer;
+        const input = { userId: project.userId, project, relativePath: file.path, producer: fileProducer, expectedDigest: file.sha256, review,
           inputs: [...links.inputs, ...(matrixVersion ? [{ kind: "artifact", id: matrixVersion.artifactId, digest: matrixVersion.digest,
             versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : []), ...(executions.get(file.path)?.inputs ?? [])],
           findings: [...links.findings, ...findings], ...lineageOf(file.path) };
@@ -229,12 +230,12 @@ export async function captureResultDelivery({ results, project, run, receipt = n
             // Changed after its receipt: still the file the run produced. It
             // is captured as the bytes it is now, with nothing the receipt
             // vouched for — no digest binding, no claim links, no review.
-            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer: fileProducer, findings,
               inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
             unbound.push(file.path);
           }
         } else {
-          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer: fileProducer, findings,
             inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
           unbound.push(file.path);
         }
@@ -275,15 +276,32 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
       if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
     }
   } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
-  const ordinary = files.filter(file => typeof file === "string" && !file.startsWith(prefix));
+  const gradedPaths = new Set((receipt?.entries ?? []).flatMap(entry => (entry.files ?? []).map(file => file.path)));
+  const ordinary = files.filter(file => typeof file === "string" && !gradedPaths.has(file));
+  const observedOnly = new Set();
   const ordinaryItems = [];
+  const observedOrdinary = [];
+  const presented = new Set((run.presentedFiles ?? []).map(file => typeof file === "string" ? file : file.path));
   for (const relativePath of new Set(ordinary)) {
-    try { ordinaryItems.push(await results.captureFile({ userId: project.userId, project, relativePath,
-      producer: { kind: "deliverable", runId: run.id, sessionId: run.sessionId, eventId: "ordinary-output" }, findings: runFindingsOf(run) })); }
-    catch (error) { failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" }); }
+    try {
+      const bytes = await stableBytes(project, relativePath, results.maxSnapshotBytes ?? 100 * 1024 * 1024);
+      const prior = await results.list?.(project.userId, { projectId: project.id, path: relativePath, runId: run.id, limit: 100 });
+      const witnessed = prior?.items.find(version => version.digest === sha(bytes) && version.producer?.sessionId === run.sessionId
+        && version.producer?.kind !== "workspace");
+      if (witnessed && !relativePath.startsWith(prefix)) { ordinaryItems.push(witnessed); continue; }
+      const producer = { kind: "deliverable", runId: run.id, sessionId: run.sessionId, eventId: "ordinary-output" };
+      const revision = relativePath.startsWith("artifacts/result-revisions/")
+        ? await results.resolveCaptureContext?.(project, { relativePath, producer }) : null;
+      // A workspace mtime window is an observation, not proof that this session wrote the file. Preserve it without session authority.
+      const owned = Boolean(witnessed) || presented.has(relativePath) || Boolean(revision);
+      if (relativePath.startsWith(prefix)) { if (!owned) observedOnly.add(relativePath); continue; }
+      if (!owned) observedOrdinary.push(relativePath);
+      ordinaryItems.push(await results.captureFile({ userId: project.userId, project, relativePath,
+        producer: owned ? producer : { kind: "workspace", runId: run.id }, findings: runFindingsOf(run) }));
+    } catch (error) { failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" }); }
   }
-  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce, reviewOrigin });
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce, reviewOrigin, observedOnly });
   // Reports written while the run was still working were captured before its calculations existed.
   try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
-  return { ...delivered, items: [...ordinaryItems, ...delivered.items], failures: [...delivered.failures, ...failures] };
+  return { ...delivered, items: [...ordinaryItems, ...delivered.items], unbound: [...observedOrdinary, ...delivered.unbound], failures: [...delivered.failures, ...failures] };
 }

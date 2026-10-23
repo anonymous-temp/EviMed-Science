@@ -32,6 +32,14 @@ export function articleRefusalAtSend(article, checkedSha256) {
   return null;
 }
 
+/** A review may change after capture, but it applies only to the exact pinned version and digest. */
+function reviewOfVersion(article, version) {
+  const same = article.currentResultVersionId === version.result_version_id && article.contentSha256 === version.digest;
+  const review = same ? article : version.review?.digest === version.digest ? version.review : version.association;
+  return { ...version.association, status: article.status === "withdrawn" ? "withdrawn" : review.status,
+    safety: review.safety, gate: review.gate, contentSha256: version.digest };
+}
+
 /** The refusal a second live order for one article gets, from this store and its double alike. */
 export function articleLiveError() {
   return new HttpError(409, "geo_order_article_live", "The article already has a live order.");
@@ -688,8 +696,7 @@ export class GeoMarketStore {
     const version = (await this.#query(`SELECT * FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
       [order.geoProjectId, order.articleId, order.articleResultVersionId])).rows[0];
     if (!version || version.digest !== order.articleDigest) return null;
-    return { ...article, ...version.association, id: article.id, isControl: article.isControl,
-      status: article.status === "withdrawn" ? "withdrawn" : version.association.status,
+    return { ...article, ...reviewOfVersion(article, version), id: article.id, isControl: article.isControl,
       currentResultVersionId: version.result_version_id, contentSha256: version.digest, path: version.path,
       runId: version.run_id, onlineUpdateNeeded: false };
   }
@@ -819,11 +826,10 @@ export class GeoMarketStore {
       let checked = article.rows[0] ? { status: article.rows[0].status, safety: article.rows[0].safety, gate: article.rows[0].gate,
         contentSha256: article.rows[0].content_sha256 } : null;
       if (row.article_result_version_id) {
-        const version = (await client.query(`SELECT digest, association FROM evimed_geo.article_versions
+        const version = (await client.query(`SELECT result_version_id, digest, association, review FROM evimed_geo.article_versions
           WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`, [row.geo_project_id,row.article_id,row.article_result_version_id])).rows[0];
         if (!version || version.digest !== row.article_digest || version.digest !== articleSha256) return { refused: "article_changed_since_review" };
-        checked = article.rows[0] ? { ...version.association, status: article.rows[0].status === "withdrawn" ? "withdrawn" : version.association.status,
-          contentSha256: version.digest } : null;
+        checked = article.rows[0] ? reviewOfVersion({ ...checked, currentResultVersionId: article.rows[0].current_result_version_id }, version) : null;
       } else if (article.rows[0]?.current_result_version_id) return { refused: "article_changed_since_review" };
       const refusal = articleRefusalAtSend(checked, articleSha256);
       if (refusal) return { refused: refusal };

@@ -20,7 +20,7 @@ import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 60000 };
 const sha = value => createHash("sha256").update(value).digest("hex");
-async function fixture(t, filename = "article.md") {
+async function fixture(t, filename = "article.md", initial = { gate: "passed", safety: "released" }) {
   const isolated = await createGeoTestDatabase(url, "georevision");
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "geo-revision-"));
   const config = loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: "postgres", devAuth: true });
@@ -52,7 +52,7 @@ async function fixture(t, filename = "article.md") {
   f.initialBytes = filename.endsWith("docx") ? Buffer.from("PK original Word") : Buffer.from("# Original\nEvidence [claim].");
   f.original = await f.capture(filename, f.initialBytes);
   [f.articleId] = await store.registerArticles(user.id, geo.id, [{ path: filename, layer: "popular", title: "Original", groupId: null,
-    claimIds: ["claim"], gate: "passed", safety: "released", contentSha256: f.original.digest, runId: f.run.id,
+    claimIds: ["claim"], gate: initial.gate, safety: initial.safety, contentSha256: f.original.digest, runId: f.run.id,
     valueContext: { basis: "known" }, channel: "media_market", audience: "patient" }]);
   await f.adapter.complete(project, f.run);
   f.request = text => ({ sessionId: f.run.sessionId, requestId: `request-${f.run.id}`, content: [{ type: "text", text }] });
@@ -198,4 +198,41 @@ test("unavailable Word parsing preserves new bytes with unknown checks and never
   assert.equal(article.refStatus, "unchecked"); assert.equal(article.refCheckedSha, null); assert.equal(article.safety, "open");
   assert.ok(f.reports.includes("source_parser_unconfigured"));
   assert.equal((await f.results.raw(f.user.id, f.project.id, next.versionId)).bytes.toString(), "PK revised with unavailable parser");
+});
+
+test("publication uses a later review of the pinned same bytes without copying review from another version", options, async t => {
+  const f = await fixture(t, "article.md", { gate: "unverified", safety: "open" });
+  const market = new GeoMarketStore(f.accounts.database);
+  await f.store.changeArticle(f.geo.id, f.articleId, { safety: "released", fromSafety: ["open"] });
+  await f.store.refreshArticleGate(f.geo.id, f.articleId, "passed");
+  await f.store.query(`UPDATE evimed_geo.projects SET status='active',budget='{"totalCny":1000,"dailyCny":1000}'::jsonb WHERE id=$1`, [f.geo.id]);
+  const at = new Date().toISOString();
+  const [order] = await market.insertOrders([{ userId: f.user.id, geoProjectId: f.geo.id, articleId: f.articleId, mediaType: "website", resourceId: "review-outlet", priceCny: 10, reserveCny: 11 }], at);
+  const article = await market.getOrderArticle(order);
+  assert.equal(article.safety, "released"); assert.equal(article.gate, "passed"); assert.equal(article.status, "publishable");
+  const reservation = await market.reserveForSend(order.id, { at, dayStart: at, sendDetail: {}, articleSha256: f.original.digest });
+  assert.ok(reservation && "order" in reservation);
+  f.run = { ...f.run, id: "review-successor", kernelRequestIds: ["request-review-successor"] };
+  const bound = await f.adapter.bind(f.user, f.project, f.request("Revise the conclusion"));
+  await f.output(bound, "A revised conclusion [claim]");
+  await f.adapter.complete(f.project, f.run);
+  const retained = await market.getOrderArticle(order);
+  assert.equal(retained.safety, "released"); assert.equal(retained.gate, "passed");
+  const history = await f.store.articleVersions(f.geo.id, f.articleId);
+  assert.equal(history[0].association.safety, "open", "the original capture association is immutable");
+  assert.equal(history[0].review.safety, "released", "the later attestation remains bound to those original bytes");
+  assert.equal(history[0].review.digest, f.original.digest);
+});
+
+test("an exact preserved migrated article acquires its business head before the first natural follow-up", options, async t => {
+  const f = await fixture(t);
+  await f.store.query(`DELETE FROM evimed_geo.article_versions WHERE article_id=$1`, [f.articleId]);
+  await f.store.query(`UPDATE evimed_geo.articles SET current_result_version_id=NULL WHERE id=$1`, [f.articleId]);
+  f.run = { ...f.run, id: "migrated-followup", kernelRequestIds: ["request-migrated-followup"] };
+  const bound = await f.adapter.bind(f.user, f.project, f.request("Clarify the limitation"));
+  assert.equal(bound.target?.articleId, f.articleId);
+  assert.equal((await f.store.getArticle(f.geo.id, f.articleId)).currentResultVersionId, f.original.versionId);
+  const revised = await f.output(bound, "Revised migrated article [claim]");
+  await f.adapter.complete(f.project, f.run);
+  assert.equal((await f.store.getArticle(f.geo.id, f.articleId)).currentResultVersionId, revised.versionId);
 });

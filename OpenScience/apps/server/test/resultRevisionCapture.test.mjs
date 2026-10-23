@@ -140,3 +140,30 @@ test("whole-file native context binds actual words, replays its request, refuses
   assert.equal(successor.supersedesVersionId, original.versionId);
   assert.equal((await f.capture(`artifacts/result-revisions/${bound.id}/output/article.pdf`, "PDF rendition", { receipted: false })).supersedesVersionId, null);
 });
+
+test("mtime-only ordinary output discovery preserves bytes without claiming another session's producer", async t => {
+  const f = await fixture(t);
+  const foreign = await f.capture("concurrent-b.docx", "PK another session's Word", { producer: { kind: "tool", runId: "run-b", sessionId: "session-b", callId: "write-b" } });
+  const other = await f.capture("deliverables/b/article.md", "Another session's Markdown", { producer: { kind: "tool", runId: "run-b", sessionId: "session-b", callId: "write-b-md" } });
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project,
+    run: { ...f.run, outputFiles: [foreign.path, other.path] }, readReceipt: async () => null });
+  assert.equal(captured.items.length, 2);
+  for (const item of captured.items) {
+    assert.equal(item.producer.kind, "workspace");
+    assert.equal(item.producer.sessionId, null);
+  }
+  assert.equal((await f.results.query("owner", "p", { producer: { sessionId: f.run.sessionId } })).items.length, 0);
+  assert.equal((await f.results.raw("owner", "p", captured.items[0].versionId)).bytes.toString(), "PK another session's Word");
+});
+
+
+test("an actual native presentation gives a shell-written ordinary Word file its own conversation witness", async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.project.workspaceDir, "presented.docx"), "PK shell-written Word");
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project,
+    run: { ...f.run, outputFiles: ["presented.docx"], presentedFiles: ["presented.docx"] }, readReceipt: async () => null });
+  assert.equal(captured.items[0].producer.kind, "deliverable");
+  assert.equal(captured.items[0].producer.sessionId, f.run.sessionId);
+});

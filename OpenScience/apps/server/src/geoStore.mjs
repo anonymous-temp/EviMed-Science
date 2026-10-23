@@ -1162,7 +1162,7 @@ export class GeoStore {
   /** @param {string} geoId @param {string} articleId */
   async articleVersions(geoId, articleId) {
     return (await this.query(`SELECT result_version_id AS "resultVersionId", parent_version_id AS "parentVersionId", digest,
-      path, run_id AS "runId", session_id AS "sessionId", request_id AS "requestId", association, created_at AS "createdAt"
+      path, run_id AS "runId", session_id AS "sessionId", request_id AS "requestId", association, review, created_at AS "createdAt"
       FROM evimed_geo.article_versions WHERE geo_project_id = $1 AND article_id = $2 ORDER BY created_at, result_version_id`, [geoId, articleId])).rows;
   }
 
@@ -1181,6 +1181,14 @@ export class GeoStore {
       const changed = expectedHeadVersionId != null;
       if (!changed && (article.path !== version.path || article.content_sha256 !== version.digest)) throw new HttpError(409, "geo_article_bytes_changed", "Article bytes changed.");
       if (changed && (version.supersedesVersionId !== expectedHeadVersionId || version.digest === article.content_sha256)) throw new HttpError(409, "geo_article_ancestry_invalid", "The output is not a changed successor.");
+      if (changed) {
+        const previous = (await client.query(`SELECT digest FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+          [geoId,articleId,expectedHeadVersionId])).rows[0];
+        if (!previous || previous.digest !== article.content_sha256) throw new HttpError(409, "geo_article_bytes_changed", "Article bytes changed.");
+        // Preserve later same-byte reviews before this row starts describing different bytes. The captured association stays immutable.
+        await client.query(`UPDATE evimed_geo.article_versions SET review=$4::jsonb WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+          [geoId,articleId,expectedHeadVersionId,JSON.stringify({ digest: previous.digest, status: article.status, safety: article.safety, gate: article.gate })]);
+      }
       const association = { ...geoArticleFromRow(article), currentResultVersionId: version.versionId, contentSha256: version.digest, path: version.path,
         runId: version.producer?.runId ?? null, ...(changed ? { gate: "unverified", safety: "open", protectedSha256: null,
         claimRefs: checks?.references ?? [], refStatus: checks?.status ?? "unchecked", refCheckedSha: checks ? version.digest : null } : {}) };

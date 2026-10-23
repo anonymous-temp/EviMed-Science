@@ -29,6 +29,17 @@ export class GeoArticleResults {
     const geo = await this.store.projectByControlProject(project.userId, project.id);
     if (!geo || !request?.sessionId) return null;
     await this.service.requireProject(user, geo.id, "edit");
+    // Migrate only an exact preserved producer identity, never today's bytes under a historical path.
+    for (const article of await this.store.listArticles(geo.id)) {
+      if (article.currentResultVersionId || !article.runId || !editable(article.path)) continue;
+      const captured = await this.results.list(user.id, { projectId: project.id, path: article.path, runId: article.runId, limit: 100 });
+      const version = captured.items.find(item => item.digest === article.contentSha256 && item.producer?.sessionId === request.sessionId
+        && item.producer?.runId === article.runId && item.producer?.kind !== "workspace");
+      if (!version) continue;
+      await this.results.raw(user.id, project.id, version.versionId);
+      try { await this.store.linkArticleVersion(geo.id, article.id, { version }); }
+      catch (error) { if (error?.code !== "geo_article_head_changed") throw error; }
+    }
     if (request.evimedResultRevision !== undefined) {
       let row = await this.documents.get(project.userId, "result-revision", request.evimedResultRevision?.referenceId);
       if (row?.projectId === project.id && !row.payload.target) {
@@ -61,7 +72,7 @@ export class GeoArticleResults {
     // An ordinary generated file without GEO business metadata still belongs to the shared result chain.
     if (!candidates.length) {
       const found = await this.results.query(user.id, project.id, { producer: { sessionId: request.sessionId } }, { limit: 100 });
-      const editableVersions = found.items.filter(version => editable(version.path));
+      const editableVersions = found.items.filter(version => editable(version.path) && version.producer?.kind !== "workspace");
       const parents = new Set(editableVersions.map(version => version.supersedesVersionId).filter(Boolean));
       const parentBytes = new Set(editableVersions.filter(version => parents.has(version.versionId)).map(version => `${version.path}\0${version.digest}`));
       const leaves = [...new Map(editableVersions.filter(version => !parents.has(version.versionId) && !parentBytes.has(`${version.path}\0${version.digest}`))
@@ -103,7 +114,8 @@ export class GeoArticleResults {
     // Initial association requires the registered bytes, this run, and this exact path. Backfills cannot claim old-run authorship.
     for (const article of await this.store.listArticles(geo.id)) {
       if (article.currentResultVersionId || article.runId !== run.id) continue;
-      const version = versions.find(item => item.path === article.path && item.digest === article.contentSha256);
+      const version = versions.find(item => item.path === article.path && item.digest === article.contentSha256
+        && item.producer?.sessionId === run.sessionId && item.producer?.kind !== "workspace");
       if (version) linked += Number((await this.store.linkArticleVersion(geo.id, article.id, { version })).linked);
     }
     const page = await this.documents.list(project.userId, "result-revision", { projectId: project.id, limit: 100,

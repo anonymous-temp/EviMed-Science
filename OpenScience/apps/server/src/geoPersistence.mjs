@@ -533,6 +533,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.article_versions (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (geo_project_id, article_id, result_version_id)
 );
+ALTER TABLE evimed_geo.article_versions ADD COLUMN IF NOT EXISTS review jsonb;
 CREATE INDEX IF NOT EXISTS geo_article_versions_session_idx ON evimed_geo.article_versions (geo_project_id, session_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.orders (
