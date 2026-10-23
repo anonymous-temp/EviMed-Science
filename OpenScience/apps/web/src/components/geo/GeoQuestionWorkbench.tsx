@@ -22,6 +22,8 @@ const key = () => crypto.randomUUID();
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
   const [params, setParams] = useSearchParams();
   const identityGeneration = useRef(0);
+  const canEdit = !project.access || project.access.abilities.includes('edit');
+  const editableNow = useRef(canEdit); editableNow.current = canEdit;
   const [identityVersion, setIdentityVersion] = useState(0);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -48,8 +50,8 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     void fetchWebMe().then(me => {
       if (!live || generation !== identityGeneration.current || !me?.user?.id) return;
       const scoped = `geo-question-import:${me.tenant?.id ?? me.user.tenantId ?? me.user.id}:${me.user.id}:${project.projectId}:${geoId}`;
-      const raw = localStorage.getItem(scoped);
-      if (raw) {
+      const raw = editableNow.current ? localStorage.getItem(scoped) : null;
+      if (raw && editableNow.current) {
         const held = JSON.parse(raw) as { input?: GeoImportInput & { requestKey: string }; preview?: GeoImportPreview };
         if (held.input?.requestKey && Array.isArray(held.input.rows) && held.input.rows.length <= 400 && held.input.contract && held.preview) {
           pendingImport.current = held.input; setRows(held.input.rows); setContract(held.input.contract); setPreview(held.preview); setEditing(true);
@@ -58,10 +60,9 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
       setStorageScope(scoped);
     }).catch(() => { if (live) setError('账户或上次保存记录无法读取，请刷新后重试。'); });
     return () => { live = false; };
-  }, [geoId, project.projectId, identityVersion]);
+  }, [geoId, project.projectId, identityVersion, canEdit]);
   const pendingStart = useRef<{ version: number; requestKey: string } | null>(null);
   useEffect(() => { pendingStart.current = null; }, [storageScope]);
-  const canEdit = !project.access || project.access.abilities.includes('edit');
   const canRun = !project.access || project.access.abilities.includes('run');
   const version = saved ?? data.version;
   const activeContract = saved != null ? contract : data.contract;
@@ -73,10 +74,11 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const act = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (cause) { setError(failure(cause)); } finally { setBusy(false); } };
   const updateRow = (index: number, patch: Partial<GeoQuestionImportRow>) => { setRows(previous => previous.map((row, at) => at === index ? { ...row, ...patch } : row)); changed(); };
   const changed = () => { setPreview(null); pendingImport.current = null; };
-  const editExisting = () => { if (pendingImport.current) return; void act(async () => {
+  const editExisting = () => { if (!editableNow.current || pendingImport.current) return; void act(async () => {
     if (!data.contract) throw new Error('这个历史题库不支持原表编辑，请导入完整原题创建新的采样版本。');
     if (data.version == null) throw new Error('请先选择一个问句版本再编辑。');
     const complete = data.selection ? await getGeoQuestions(geoId, data.version) : data;
+    if (!editableNow.current) return;
     setBook(null); setContract(complete.contract ?? initialContract);
     const originals = complete.groups.flatMap(group => group.questions.map(question => ({ group, question })));
     originals.sort((a, b) => (a.question.originalRowIndex ?? Number.MAX_SAFE_INTEGER) - (b.question.originalRowIndex ?? Number.MAX_SAFE_INTEGER));
@@ -86,7 +88,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const loadFile = (file: File) => { void act(async () => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('请选择 Excel 或 CSV 文件。');
     if (file.size > 10 * 1024 * 1024) throw new Error('文件超过 10 MB，请拆分后导入。');
-    const next = await readQuestionWorkbook(await file.arrayBuffer(), /\.csv$/i.test(file.name) ? 'csv' : 'excel'); setBook(next); setSheet(0); setMapping({}); setRows([]); changed();
+    const next = await readQuestionWorkbook(await file.arrayBuffer(), /\.csv$/i.test(file.name) ? 'csv' : 'excel'); if (!editableNow.current) return; setBook(next); setSheet(0); setMapping({}); setRows([]); changed();
   }); };
   const start = () => { void act(async () => {
     if (!storageScope) throw new Error('请等待账户确认后再开始。');
@@ -105,7 +107,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
       {version != null && activeContract != null && canRun && <Button size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
     </div>
     {version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" onClick={editExisting}>调整口径</Button> : undefined} />}
-    {editing && <div className="my-4 flex flex-col gap-4">
+    {editing && canEdit && <div className="my-4 flex flex-col gap-4">
       <Input type="file" label="选择 Excel / CSV（首行为列名，最多 400 题、10 MB）" accept=".xlsx,.xls,.csv" disabled={busy || !!pendingImport.current} onChange={event => { const file = event.target.files?.[0]; if (file) loadFile(file); }} />
       {book && <>
         <label className="text-ui text-text">工作表<select disabled={busy || !!pendingImport.current} aria-label="工作表" className={inputClasses()} value={sheet} onChange={event => { setSheet(Number(event.target.value)); setRows([]); setMapping({}); changed(); }}>{book.sheets.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select></label>
@@ -122,7 +124,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
           <td className="p-2"><input type="checkbox" aria-label={`测量第 ${index + 1} 题`} checked={row.isMeasured !== false} disabled={busy || !!pendingImport.current} onChange={event => { setRows(previous => previous.map((item, at) => at === index ? { ...item, isMeasured: event.target.checked } : item)); changed(); }} /></td>
         </tr>)}</tbody></table></div>
         <Button size="sm" disabled={busy} onClick={() => { void act(async () => { setPreview(await previewGeoQuestions(geoId, { rows, contract })); }); }}>核对导入预览</Button>
-        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!storageScope) throw new Error('请等待账户确认后再保存。'); pendingImport.current ??= { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: pendingImport.current, preview })); const result = await importGeoQuestions(geoId, pendingImport.current); localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
+        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!editableNow.current) throw new Error('你在这个项目里只有查看权限。'); if (!storageScope) throw new Error('请等待账户确认后再保存。'); pendingImport.current ??= { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: pendingImport.current, preview })); const result = await importGeoQuestions(geoId, pendingImport.current); if (!editableNow.current) return; localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
       </>}
       <Button size="sm" variant="text" disabled={busy} onClick={() => setEditing(false)}>收起整理</Button>
     </div>}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -19,7 +19,7 @@ const progress = (patch: Partial<GeoDiagnosisProgress> = {}): GeoDiagnosisProgre
 ], ...patch });
 function Address() { const location = useLocation(); return <output>{location.search}</output>; }
 function show(path = '/questions', viewer = false) { return render(<MemoryRouter initialEntries={[path]}><GeoQuestionWorkbench geoId="g1" project={geoProject({}, viewer ? { access: { roles: ['viewer'], abilities: ['read'], owner: false } } : {})} data={data} onSaved={vi.fn()} /><Address /></MemoryRouter>); }
-beforeEach(() => { sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
+beforeEach(() => { sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
 it('opens import on an empty set, preserves quoted CSV duplicates and saves only after preview', async () => {
   show();
   await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
@@ -139,4 +139,30 @@ it('does not reveal another account pending question import', async () => {
   show(); await waitFor(() => expect(identity.fetchWebMe).toHaveBeenCalled());
   expect(screen.queryByDisplayValue('Private prior account text')).toBeNull();
   expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
+});
+
+it('keeps a downgraded viewer pending import private while retaining the account recovery record and readable progress', async () => {
+  const input = { rows: [{ text: 'Held editor-only question text' }], contract, requestKey: 'held-editor-key' };
+  const held = JSON.stringify({ input, preview: { ...input, actualRows: 1, measuredRows: 1, plannedCalls: 1, duplicateCandidates: [] } });
+  const storageKey = 'geo-question-import:t1:u1:prj_geo_1:g1'; localStorage.setItem(storageKey, held);
+  show('/questions?diagnosisRound=r1', true); await screen.findByText(/总任务 102/);
+  expect(screen.queryByDisplayValue('Held editor-only question text')).toBeNull();
+  expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '导入问句' })).toBeNull();
+  expect(screen.getByRole('link', { name: '查看回答' })).toBeVisible();
+  expect(client.importGeoQuestions).not.toHaveBeenCalled(); expect(localStorage.getItem(storageKey)).toBe(held);
+});
+it('does not restore an editor request when permissions are revoked during the identity read', async () => {
+  const input = { rows: [{ text: 'Delayed private editor question' }], contract, requestKey: 'held-key' };
+  localStorage.setItem('geo-question-import:t1:u1:prj_geo_1:g1', JSON.stringify({ input, preview: { ...input, actualRows: 1, measuredRows: 1, plannedCalls: 1, duplicateCandidates: [] } }));
+  let resolveIdentity!: (value: { user: { id: string }; tenant: { id: string } }) => void;
+  identity.fetchWebMe.mockImplementationOnce(() => new Promise(resolve => { resolveIdentity = resolve; }));
+  const props = { geoId: 'g1', data, onSaved: vi.fn() };
+  const mounted = render(<MemoryRouter><GeoQuestionWorkbench {...props} project={geoProject()} /></MemoryRouter>);
+  mounted.rerender(<MemoryRouter><GeoQuestionWorkbench {...props} project={geoProject({}, { access: { roles: ['viewer'], abilities: ['read'], owner: false } })} /></MemoryRouter>);
+  await act(async () => { resolveIdentity({ user: { id: 'u1' }, tenant: { id: 't1' } }); });
+  await waitFor(() => expect(identity.fetchWebMe).toHaveBeenCalledTimes(2));
+  expect(screen.queryByDisplayValue('Delayed private editor question')).toBeNull();
+  expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull();
+  expect(client.importGeoQuestions).not.toHaveBeenCalled();
 });
