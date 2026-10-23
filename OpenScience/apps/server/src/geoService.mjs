@@ -2077,7 +2077,7 @@ export class GeoService {
           FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id = ANY($2::text[])
           ORDER BY scope, metric_id, coalesce(pool, ''), coalesce(engine, ''), coalesce(group_id, ''), coalesce(arm, ''), coalesce(variant, ''), coalesce(rival, ''), computed_at DESC, id DESC`,
         [project.id, selected.selection.roundIds])).rows;
-        const fullRound = selected.rounds.length === 1 && !selected.subset
+        const fullRound = selected.rounds.length === 1 && !selected.subset && !selected.scope.from && !selected.scope.to
           && ![selected.scope.engines, selected.scope.pools, selected.scope.groupIds, selected.scope.clientTags].some((values) => values.length);
         const historic = fullRound && stored.length && stored.every((row) => row.method_version == null) && !selected.rows.some((row) => row.facts);
         const values = historic ? stored.map((row) => metricView(row, this.metricName)) : selected.computed.cells.map((entry) => ({
