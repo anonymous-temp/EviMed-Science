@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, memoryMapHeadlineFindings, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -2674,6 +2674,41 @@ test("记忆地图's probe judges the view switch, the names of its figures and 
   assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ thin: true })).failures, ["memory-map@desktop: the page says there is too little to draw and draws the graph"]);
   assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], thin: true, lists: [{ label: "标记", rows: 3 }] })).failures, []);
   assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], empty: true, lists: [] })).failures, []);
+});
+
+test("记忆地图's headline is held to the rows the page draws, and a page that holds nothing proved nothing", () => {
+  const mark = (glyph, over = {}) => ({ glyph, warn: false, replaced: false, ...over });
+  const at = "memory-map@desktop";
+  const sentence = "EviMed 记住了你的 3 件事，其中 1 件需要看一眼。";
+  const rows = [mark("●", { warn: true }), mark("◆"), mark("●"), mark("■"), mark("▲")];
+  // The numbers are the rows: three memories (a document and a method are not memories), one of them amber.
+  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: rows, more: false }), { failures: [], notices: [] });
+  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: "EviMed 记住了你的 5 件事。", marks: rows, more: false }).failures,
+    [`${at}: the headline says 5 memories and the list draws 3`, `${at}: the headline says 0 need a look and the list marks 1`]);
+  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("●", { warn: true })], more: false }).failures,
+    [`${at}: the headline says 3 memories and the list draws 4`, `${at}: the headline says 1 need a look and the list marks 2`]);
+  // A replaced memory is a row and is not a memory in force: the server does not count it either.
+  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("●", { replaced: true })], more: false }), { failures: [], notices: [] });
+  // A list with more to show, or a folded group, holds more than its rows: not compared, and said so.
+  const long = memoryMapHeadlineFindings(at, { headline: sentence, marks: rows, more: true });
+  assert.deepEqual(long.failures, []);
+  assert.match(long.notices[0], /not compared/u);
+  assert.match(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("⬢")], more: false }).notices[0], /not compared/u);
+  // An account with no memory is not observable, whatever the page says about documents; a page that says it has none and draws some fails.
+  for (const headline of ["还没有记住什么。", "胶囊里有 47 份资料，还没有记下关于你的事。"]) {
+    const empty = memoryMapHeadlineFindings(at, { headline, marks: [mark("■")], more: false });
+    assert.deepEqual(empty.failures, []);
+    assert.match(empty.notices[0], /not observable/u);
+  }
+  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: "还没有记住什么。", marks: [mark("●")], more: false }).failures,
+    [`${at}: the headline holds no memory (“还没有记住什么。”) and the list draws 1`]);
+  // No headline at all is not a pass either; a read that did not carry the fields (an older probe) is not judged.
+  assert.match(memoryMapHeadlineFindings(at, { headline: null, marks: [], more: false }).notices[0], /not observable/u);
+  assert.deepEqual(memoryMapHeadlineFindings(at, {}), { failures: [], notices: [] });
+  // And it is the probe's judgement of the page.
+  const probed = probeFindings("memory-map", "desktop", "memoryMap", { views: [...MEMORY_MAP_VIEWS], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 5 }], thin: false, empty: false,
+    headline: "EviMed 记住了你的 9 件事。", marks: rows, more: false });
+  assert.deepEqual(probed.failures, [`${at}: the headline says 9 memories and the list draws 3`, `${at}: the headline says 0 need a look and the list marks 1`]);
 });
 
 test("记忆地图's drawer is read open and in the address, then closed and gone from it", () => {

@@ -81,7 +81,12 @@ describe("the sentence the picture proves", () => {
   });
   it("has no button when there is nothing to look at, and a plain sentence when there is nothing at all", () => {
     expect(headline({ summary: summary(7, 0), nodes: [] })).toEqual([{ text: "EviMed 记住了你的 7 件事。" }]);
-    expect(headline({ summary: summary(0, 0), nodes: [] })).toEqual([{ text: "还没有记住什么。" }]);
+    expect(headline({ summary: { ...summary(0, 0), documents: 0 }, nodes: [] })).toEqual([{ text: "还没有记住什么。" }]);
+  });
+  it("does not say nothing is remembered over a picture of documents and methods: it says what is there", () => {
+    expect(headline({ summary: summary(0, 0), nodes: [] })).toEqual([{ text: "胶囊里有 1 份资料，还没有记下关于你的事。" }]);
+    expect(headlineText(headline({ summary: { ...summary(0, 0), documents: 47, methods: 3 }, nodes: [] }))).toBe("胶囊里有 47 份资料、3 种做法，还没有记下关于你的事。");
+    expect(headlineText(headline({ summary: { ...summary(0, 0), documents: 0, methods: 2 }, nodes: [] }))).toBe("胶囊里有 2 种做法，还没有记下关于你的事。");
   });
 });
 

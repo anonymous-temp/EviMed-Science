@@ -429,6 +429,8 @@ export async function buildMemoryMap({ sources }, request) {
   /** @type {Record<string, any>} */
   const document = {
     version: 1,
+    // Which kind of account this is, for the page that offers 「记住这一条」 only where the memory can take words typed on it.
+    engine: asked.engine,
     scope: { projectId, range, timeZone, focus, depth: focus ? depth : null },
     status: { topics: topicsStatus },
     summary, facets, nodes, edges,

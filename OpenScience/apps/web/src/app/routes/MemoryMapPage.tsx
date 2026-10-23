@@ -13,13 +13,15 @@ import { GraphView } from "@/components/memory/map/GraphView";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { mapToolbar } from "@/components/memory/map/mapToolbar";
 import { MemoryFrame } from "@/components/memory/MemoryFrame";
+import { MemoryHeaderActions } from "@/components/memory/MemoryHeaderActions";
 import { MarkList, type MarkLine } from "@/components/memory/map/MarkList";
 import { TimeView } from "@/components/memory/map/TimeView";
 import { TopicsView } from "@/components/memory/map/TopicsView";
 import { headline, headlineParts, isThin, markRows, narrowMap, STRUCTURE } from "@/components/memory/map/mapModel";
 import { useMapSelection } from "@/components/memory/map/useMapSelection";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
-import { projectScopeGroups } from "@/components/memory/memoryItems";
+import { OTHER_PROJECT, projectScopeGroups } from "@/components/memory/memoryItems";
+import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectChoices } from "@/components/memory/useProjectChoices";
 import { webErrorMessage } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
@@ -70,6 +72,8 @@ export function MemoryMapPage() {
   const navigate = useNavigate();
   const { selection, search, setView, narrow, clear, drawer } = useMapSelection();
   const { doc, status, failed, loading, grouping, reload } = useMemoryMap({ projectId: selection.project, range: selection.range, focus: selection.focus, depth: selection.depth });
+  // 「刚记住了 … 撤销」: the landing is a visit to the capsule like any tab's.
+  useMemoryWritePrompt();
   const projects = useProjectStore((state) => state.projects);
   const labels = useProjectLabels();
   const projectName = useCallback((id: string | null) => (id ? labels.get(id) ?? projects.find((project) => project.id === id)?.name ?? null : null), [labels, projects]);
@@ -187,6 +191,14 @@ export function MemoryMapPage() {
       tab="map" map documentTitle="记忆地图"
       scope={choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: selection.project, onChange: (project) => narrow({ project }), allLabel: "全部项目" } : undefined}
       toolbar={toolbar}
+      actions={(
+        <MemoryHeaderActions
+          native={doc?.engine === "native"}
+          // 「本项目」 is the project the map is narrowed to; with every project shown it is the shell's own.
+          projectId={selection.project === OTHER_PROJECT ? null : selection.project ?? undefined}
+          onChanged={reload}
+        />
+      )}
       headline={sentence ? { parts: sentence, id: "memory-map-headline" } : undefined}
     >
       {failed && !doc && <LoadError message="暂时读不到记忆地图。" onRetry={reload} />}

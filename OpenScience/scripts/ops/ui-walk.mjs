@@ -2128,7 +2128,17 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "memoryMap") {
     const text = words(main);
+    // The sentence over the picture and the marks of the list under it, read as the page draws them: a mark's shape is its first aria-hidden
+    // character (`MarkGlyph`), amber when it needs a look; a replaced one says so in its line, a folded group has the hexagon.
+    const marksList = all("main ul[aria-label='标记']").find(visible);
+    const marks = marksList ? [...marksList.querySelectorAll(":scope > li")].map((li) => {
+      const glyph = li.querySelector("span[aria-hidden='true']");
+      return { glyph: glyph ? words(glyph) : "", warn: Boolean(glyph && String(glyph.className).includes("text-warn")), replaced: words(li).includes("已被后来的说法替代") };
+    }) : [];
     return {
+      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
+      marks,
+      more: all("[data-show-more]").some(visible),
       views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
@@ -2284,6 +2294,47 @@ export function memoryMapFindings(name, read) {
 }
 
 /**
+ * The sentence over 记忆地图 against the list under it: the headline's numbers must be the rows the page draws, and a page that says it
+ * holds nothing has proved nothing. Pure, so the rule is tested without a browser.
+ *
+ * The sentence is 「EviMed 记住了你的 N 件事，其中 M 件…」 (N memories in force, M of them needing a look), or — when no memory is written — 「胶囊里有
+ * … ，还没有记下关于你的事」 / 「还没有记住什么」. The rows are the marks of the list: a memory is a ● or a ◆ (a replaced one says so in its line and
+ * is not counted, as the server does not), a mark that needs a look wears the amber. The two are compared only when the list is whole: a
+ * list with a 显示更多 left, or with a folded group (⬢) in it, holds more than its rows, and says so as a notice, not a pass.
+ *
+ * A headline of zero memories is **not observable**: nothing was there to compare, which is a different thing from agreeing.
+ * @param {string} current the report's `name@viewport`
+ * @param {{ headline?: string | null, marks?: Array<{ glyph: string, warn: boolean, replaced: boolean }>, more?: boolean }} read
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function memoryMapHeadlineFindings(current, read) {
+  /** @type {string[]} */ const failures = [];
+  /** @type {string[]} */ const notices = [];
+  if (read.headline === undefined || read.marks === undefined) return { failures, notices };
+  if (!read.headline) {
+    notices.push(`${current}: not observable: the page has no headline, so its numbers were not compared with its rows`);
+    return { failures, notices };
+  }
+  const said = /记住了你的\s*(\d+)\s*件事/u.exec(read.headline);
+  const memories = said ? Number(said[1]) : 0;
+  const looks = said ? Number(/其中\s*(\d+)\s*件/u.exec(read.headline)?.[1] ?? 0) : 0;
+  const drawn = read.marks.filter((mark) => (mark.glyph === "●" || mark.glyph === "◆") && !mark.replaced);
+  if (memories === 0) {
+    if (drawn.length > 0) failures.push(`${current}: the headline holds no memory (“${read.headline}”) and the list draws ${drawn.length}`);
+    else notices.push(`${current}: not observable: the headline holds no memory, so its numbers were not compared with any row`);
+    return { failures, notices };
+  }
+  if (read.more || read.marks.some((mark) => mark.glyph === "⬢")) {
+    notices.push(`${current}: not compared: the list is longer or folded, so its rows are not the headline's ${memories} memories`);
+    return { failures, notices };
+  }
+  if (drawn.length !== memories) failures.push(`${current}: the headline says ${memories} memories and the list draws ${drawn.length}`);
+  const amber = drawn.filter((mark) => mark.warn).length;
+  if (amber !== looks) failures.push(`${current}: the headline says ${looks} need a look and the list marks ${amber}`);
+  return { failures, notices };
+}
+
+/**
  * What the knowledge graph's first mark did: the first row of the list under the picture is pressed, the page that opens is read (a
  * knowledge page's own body, at a document's address, with no engine address in it), and Back brings the graph again at its address.
  * A page with no mark says so; it is not a pass.
@@ -2414,6 +2465,11 @@ export function probeFindings(name, viewportName, kind, r) {
       for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
       if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
       if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
+      {
+        const counted = memoryMapHeadlineFindings(current, r);
+        failures.push(...counted.failures);
+        notices.push(...counted.notices);
+      }
       break;
     }
     case "calculationHistory": {

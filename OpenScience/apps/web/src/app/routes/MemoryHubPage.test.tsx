@@ -958,6 +958,17 @@ describe("记忆胶囊", () => {
       await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_2"));
     });
 
+    it("pauses the project the 项目 tab shows, not the one the shell is in", async () => {
+      // The shell is in prj_1; the tab was asked for prj_2.
+      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
+      const user = userEvent.setup();
+      open("?tab=project&project=prj_2");
+      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_2"));
+      await user.click(await screen.findByRole("button", { name: "记忆设置" }));
+      await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
+      await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_2"] }));
+    });
+
     it("opens the memory a slot was written from in the drawer, and does not offer one the page does not hold", async () => {
       fetchProjectOverview.mockResolvedValue(overview());
       const user = userEvent.setup();

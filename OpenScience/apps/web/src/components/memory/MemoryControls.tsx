@@ -30,7 +30,9 @@ import { Switch } from "@/components/ui/Switch";
  * the researcher's own capsule), and none of what it does not (对话, 报告, 知识库
  * and the capsules others shared).
  */
-export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember }: {
+export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, projectId: shown }: {
+  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「其他」 of the 项目 tab), where the item is off. */
+  projectId?: string | null;
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
   onSettingsChanged?: () => void;
@@ -43,7 +45,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const projectId = getWebProjectId();
+  const projectId = shown === undefined ? getWebProjectId() : shown;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +82,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
   };
 
   const memoryOn = settings ? !settings.learningPaused && !settings.recallPaused : false;
-  const projectPaused = settings?.pausedProjects.includes(projectId) ?? false;
+  const projectPaused = projectId !== null && (settings?.pausedProjects.includes(projectId) ?? false);
 
   return (
     <>
@@ -106,9 +108,9 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
             label: "本项目不使用记忆",
             toggle: true,
             checked: projectPaused,
-            disabled: !settings || busy,
+            disabled: !settings || busy || projectId === null,
             onSelect: () => {
-              if (!settings) return;
+              if (!settings || projectId === null) return;
               void change({
                 pausedProjects: projectPaused
                   ? settings.pausedProjects.filter((id) => id !== projectId)

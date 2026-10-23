@@ -14,7 +14,11 @@ const refreshTopics = vi.fn();
 const editTopic = vi.fn();
 const fetchRecordLinks = vi.fn();
 const fetchMemoryProfile = vi.fn();
+const fetchMemorySettings = vi.fn();
+const updateMemorySettings = vi.fn();
+const writePrompt = vi.fn();
 
+vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => writePrompt() }));
 vi.mock("@/lib/memoryMapClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")),
   fetchMemoryMap: (...args: unknown[]) => fetchMemoryMap(...args),
@@ -25,6 +29,8 @@ vi.mock("@/lib/memoryMapClient", async () => ({
 vi.mock("@/lib/apiClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")),
   fetchMemoryProfile: (...args: unknown[]) => fetchMemoryProfile(...args),
+  fetchMemorySettings: (...args: unknown[]) => fetchMemorySettings(...args),
+  updateMemorySettings: (...args: unknown[]) => updateMemorySettings(...args),
 }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: () => Promise.resolve([]) }));
 
@@ -95,8 +101,58 @@ beforeEach(() => {
   editTopic.mockReset();
   fetchRecordLinks.mockReset().mockResolvedValue({ rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [] });
   fetchMemoryProfile.mockReset().mockResolvedValue({ records: Array.from({ length: 10 }, (_, index) => record(`m${index}`)), groups: {}, activeCount: 10, pendingCount: 0 });
+  writePrompt.mockReset();
+  fetchMemorySettings.mockReset().mockResolvedValue({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null });
+  updateMemorySettings.mockReset().mockImplementation((patch: object) => Promise.resolve({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null, ...patch }));
 });
 afterEach(cleanup);
+
+describe("the landing's header: the verbs of a capsule are on the map too", () => {
+  it("has the 记忆 switch and the one 「⋯」 of the lists, with the same four entries, and runs the 「刚记住了」 prompt", async () => {
+    const user = userEvent.setup();
+    open();
+    expect(await screen.findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
+    expect(writePrompt).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    const menu = await screen.findByRole("menu", { name: "记忆设置" });
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    // No 记住这一条 for an account whose memory is not the engine's own.
+    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
+  });
+
+  it("offers 记住这一条 to an account on the engine's own memory, and only then", async () => {
+    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "native" }));
+    open();
+    expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
+    cleanup();
+    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "postgres" }));
+    open();
+    await screen.findByRole("switch", { name: "记忆" });
+    await screen.findByText(/EviMed 记住了你的/u);
+    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
+  });
+
+  it("pauses the project the map is narrowed to, and a map of every project the project the shell is in", async () => {
+    useProjectStore.setState({ projects: [{ id: "prj_1", name: "疳证" }, { id: "prj_2", name: "信尔美" }], currentId: "prj_1" });
+    const user = userEvent.setup();
+    open("?project=prj_2");
+    await screen.findByRole("switch", { name: "记忆" });
+    await user.click(screen.getByRole("button", { name: "记忆设置" }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
+    await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_2"] }));
+    useProjectStore.setState({ projects: [], currentId: "default" });
+  });
+
+  it("says what the capsule holds when it holds documents and no memory, not that nothing is remembered", async () => {
+    fetchMemoryMap.mockResolvedValue(busyMap({
+      nodes: [{ id: "document:src_1", type: "document", subtype: "guideline", group: "指南", label: "GOLD 指南", state: "current", open: { kind: "page", href: "/app/files/src_1" } }],
+      edges: [], events: [], summary: { memories: 0, documents: 47, methods: 0, projects: 0, needsLook: 0, since: null },
+    }));
+    open();
+    expect(await screen.findByText("胶囊里有 47 份资料，还没有记下关于你的事。")).toBeInTheDocument();
+    expect(screen.queryByText("还没有记住什么。")).toBeNull();
+  });
+});
 
 describe("记忆地图", () => {
   it("says the sentence the picture proves, with the number that needs a look as a button, and lists the same marks under the canvas", async () => {

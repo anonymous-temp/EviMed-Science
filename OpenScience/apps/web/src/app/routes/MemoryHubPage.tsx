@@ -367,6 +367,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
       scope={tab === "project" && choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: scope, onChange: setProjectChoice } : undefined}
       actions={(
         <MemoryControls
+          // 「本项目」 is the project this tab shows (the dropdown's), not the one the shell happens to be in.
+          projectId={tab === "project" ? (scope && scope !== OTHER_PROJECT ? scope : null) : undefined}
           onReset={reload}
           onSettingsChanged={reloadOverview}
           onShare={() => setDrawer("share")}

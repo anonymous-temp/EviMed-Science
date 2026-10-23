@@ -109,6 +109,8 @@ export interface MapDay {
 
 export interface MemoryMap {
   version: 1;
+  /** Which store keeps the account's memories; absent from a control plane older than the overview. */
+  engine?: "postgres" | "native";
   scope: { projectId: string | null; range: { from: string | null; to: string; unit: "day" | "week" | "month" }; timeZone: string; focus: string | null; depth: number | null };
   status: { topics: "ready" | "stale" | "empty" | "off" };
   summary: { memories: number; documents: number; methods: number; projects: number; needsLook: number; since: string | null };

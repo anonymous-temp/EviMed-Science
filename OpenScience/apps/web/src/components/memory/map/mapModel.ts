@@ -92,8 +92,13 @@ export interface HeadlinePart {
  * otherwise by their count; the number is a button.
  */
 export function headline(doc: Pick<MemoryMap, "summary" | "nodes">): HeadlinePart[] {
-  const { memories, needsLook } = doc.summary;
-  if (memories === 0) return [{ text: "还没有记住什么。" }];
+  const { memories, needsLook, documents, methods } = doc.summary;
+  if (memories === 0) {
+    // What the page draws is not nothing because no memory was written: a graph of documents under 「还没有记住什么」 was the one sentence
+    // of the landing, and it said the opposite of the picture. The sentence says what is there, and that no memory is yet.
+    const holds = [documents > 0 ? `${documents} 份资料` : "", methods > 0 ? `${methods} 种做法` : ""].filter(Boolean);
+    return [{ text: holds.length > 0 ? `胶囊里有 ${holds.join("、")}，还没有记下关于你的事。` : "还没有记住什么。" }];
+  }
   const sources = doc.nodes.filter((node) => node.type === "memory" && node.state === "check" && String(node.reason ?? "").startsWith("source-")).length;
   const base = `EviMed 记住了你的 ${memories} 件事`;
   if (needsLook === 0) return [{ text: `${base}。` }];
