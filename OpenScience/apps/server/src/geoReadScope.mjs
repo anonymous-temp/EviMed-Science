@@ -1,7 +1,7 @@
 /** One authorized observation selection for GEO pages, the native read tool and exports. No metric formulas live here. */
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
+import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, computeGvi, geoMetricMembers, geoJudgementCoverage,
   GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -342,19 +342,37 @@ async function compareGeoSelections(store, measure, project, current, previous, 
   const currentCells = left.computed.cells, previousCells = right.computed.cells;
   const cellKey = (/** @type {any} */ cell) => JSON.stringify([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
   const before = new Map(previousCells.map((cell) => [cellKey(cell), cell]));
+  const memberKeys = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
+    if (!metric) return [];
+    const input = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? selected.computed.balance.deduped : selected.computed.balance.rows;
+    return [...new Set(geoMetricMembers(/** @type {any[]} */ (input), metric, selected.metricOptions).rows.map(comparisonKey))].sort();
+  };
+  // Equal answer identities do not imply an equal composite: missing assessments redistribute the GVI's ingredient weights.
+  const compositeBasis = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
+    if (metric?.metricId !== "M-19") return null;
+    const gvi = computeGvi(selected.computed.cells, { arm: metric.arm });
+    const pools = metric.pool ? [metric.pool] : gvi.poolsUsed;
+    return pools.map((/** @type {string} */ pool) => {
+      const index = gvi.pools[pool];
+      return { pool, weight: metric.pool ? 1 : gvi.poolWeights[pool], dimensions: Object.entries(index?.dimensions ?? {}).map(([dimension, entry]) => ({
+        dimension, weight: index.effectiveWeights[dimension] ?? null,
+        ingredients: entry.used.map((metricId) => {
+          const ingredient = selected.computed.cells.find((candidate) => candidate.metricId === metricId && candidate.pool === pool
+            && candidate.scope === (metric.arm ? "arm" : "pool") && candidate.arm === metric.arm && !candidate.engine && !candidate.variant && !candidate.rival);
+          return { metricId, members: memberKeys(selected, ingredient) };
+        }),
+      })) };
+    });
+  };
   return { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
     comparable: mode === "common" && common.size > 0, commonQuestionEngineModes: common.size,
     excluded: { current: current.rows.length - left.rows.length, previous: previous.rows.length - right.rows.length },
     currentSelection: left.selection, previousSelection: right.selection,
     cells: currentCells.map((cell) => { const old = before.get(cellKey(cell));
-      const memberKeys = (/** @type {typeof left} */ selected, /** @type {any} */ metric) => {
-        if (!metric) return [];
-        const input = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? selected.computed.balance.deduped : selected.computed.balance.rows;
-        return [...new Set(geoMetricMembers(/** @type {any[]} */ (input), metric, selected.metricOptions).rows.map(comparisonKey))].sort();
-      };
-      const comparable = mode === "common" && common.size > 0 && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
+      const basisMatches = JSON.stringify(compositeBasis(left, cell)) === JSON.stringify(compositeBasis(right, old));
+      const comparable = mode === "common" && common.size > 0 && basisMatches && JSON.stringify(memberKeys(left, cell)) === JSON.stringify(memberKeys(right, old));
       return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool,
       engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival,
-      current: cell, previous: old ?? null, comparable, delta: comparable && cell.status === "ok" && old?.status === "ok"
+      current: cell, previous: old ?? null, comparable, reason: basisMatches ? null : "comparison_basis_changed", delta: comparable && cell.status === "ok" && old?.status === "ok"
         && cell.value != null && old.value != null ? Math.round((cell.value - old.value) * 100) / 100 : null }; }) };
 }

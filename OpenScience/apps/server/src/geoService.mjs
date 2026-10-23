@@ -1431,7 +1431,14 @@ export class GeoService {
     const round = selected.rounds[0] ?? null;
     // Each round's answers are read once, and the latest round's are the list: the history's last point IS the detail's counts.
     const allAnswers = this.#selectionAnswers(historySelection);
-    const citingByRound = rounds.map((entry) => answersCiting(allAnswers.filter((answer) => historySelection.rows.some((member) => member.snapshotId === answer.id && member.roundId === entry.id)), domain, engine));
+    const roundBySnapshot = new Map(historySelection.rows.map((member) => [member.snapshotId, member.roundId]));
+    /** @type {Map<string, typeof allAnswers>} */ const answersByRound = new Map();
+    for (const answer of allAnswers) {
+      const roundId = roundBySnapshot.get(answer.id);
+      const batch = answersByRound.get(roundId) ?? [];
+      batch.push(answer); answersByRound.set(roundId, batch);
+    }
+    const citingByRound = rounds.map((entry) => answersCiting(answersByRound.get(entry.id) ?? [], domain, engine));
     const citing = answersCiting(this.#selectionAnswers(selected), domain, engine);
     const sourceCoverage = (/** @type {any} */ entry) => {
       const observations = historySelection.rows.filter((member) => member.roundId === entry.id && (!engine || member.engine === engine) && ["valid", "refusal"].includes(member.status));
