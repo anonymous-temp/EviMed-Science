@@ -350,7 +350,14 @@ export function createGeoRoutes(dependencies) {
       return reply(await service.submitDiagnosisFeedback(user, id, body), 202);
     }
     if (tab === "diagnosis" && parts.length === 5 && parts[3] === "reviews" && method === "GET") {
-      return reply(await service.readDiagnosisReview(user, id, parts[4]));
+      const page = {};
+      for (const key of url.searchParams.keys()) {
+        const values = url.searchParams.getAll(key);
+        if (!["feedbackBefore", "historyBefore", "feedbackLimit", "historyLimit"].includes(key) || values.length !== 1
+          || key !== "feedbackBefore" && !/^\d+$/u.test(values[0])) throw new HttpError(400, "geo_read_filter_invalid", "Invalid judgment history page.");
+        page[key] = key === "feedbackBefore" ? values[0] : Number(values[0]);
+      }
+      return reply(await service.readDiagnosisReview(user, id, parts[4], page));
     }
     if (method === "POST" && tab === "diagnosis" && parts.length === 4 && parts[3] === "start") {
       const body = await bodyOf(req, maxJsonBytes, ["version", "requestKey"]);

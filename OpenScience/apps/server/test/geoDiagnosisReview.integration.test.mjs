@@ -13,7 +13,7 @@ const options = { skip: !url && 'A disposable localhost PostgreSQL database is r
 let isolated, database, store, review, project, service;
 const claim = { id: 'review_geo_claim_0', key: 'label', version: 1, quote: 'Adults only.', statement: 'Adults only.', sourceRef: 'label:2026', population: 'Adults', elements: { form: 'tablet' } };
 const wrong = { text: 'All ages may use it.', verdict: 'wrong', claimId: claim.id, claimKey: claim.key, evidence: claim.quote, errorType: 'dropped_condition', topic: 'indication', severity: 'S3' };
-let nextVerdict = 'correct', calls = 0, omitStatements = false;
+let nextVerdict = 'correct', calls = 0, omitStatements = false, omitCitations = false;
 before(async () => {
   if (!url) return;
   isolated = await createGeoTestDatabase(url, 'georeview');
@@ -26,10 +26,11 @@ before(async () => {
     VALUES('review_round','review_owner','review_geo','baseline','done',1,'{deepseek}',$1::jsonb)`, [JSON.stringify({ evaluationBasis: { claims: [claim], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
   await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,answer_text)
     VALUES('review_snapshot','review_owner','review_geo','review_round','review_question','deepseek','valid',$1)`, [wrong.text]);
-  await store.writeFacts({ id: 'review_snapshot', userId: project.userId, geoProjectId: project.id }, { parserVersion: 'geo-parse-test', judgedAt: '2026-10-24T01:00:00Z', statements: [wrong], assessmentBasis: [claim] });
+  await database.query("UPDATE evimed_geo.snapshots SET citations='[{\"url\":\"https://example.com/label\"}]'::jsonb WHERE id='review_snapshot'");
+  await store.writeFacts({ id: 'review_snapshot', userId: project.userId, geoProjectId: project.id }, { parserVersion: 'geo-parse-test', judgedAt: '2026-10-24T01:00:00Z', statements: [wrong], assessmentBasis: [claim], checks: { citations: [{ url: 'https://example.com/label', statement: wrong.text, exists: true, supports: 'no', evidence: 'Adults only.' }] } });
   review = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => {
     calls += 1;
-    return { statements: omitStatements ? [] : [{ ...wrong, verdict: nextVerdict }], checks: { offLabel: [], omittedSafety: [], citations: [], judgementCoverage: { status: 'complete' } }, recommendations: [], entities: [], dropped: [] };
+    return { statements: omitStatements ? [] : [{ ...wrong, verdict: nextVerdict }], checks: { offLabel: [], omittedSafety: [], citations: omitCitations ? [] : [{ url: 'https://example.com/label', statement: wrong.text, exists: null, supports: null, evidence: null }], judgementCoverage: { status: 'complete' } }, recommendations: [], entities: [], dropped: [] };
   } } });
   service = new GeoService({ store: new GeoStore({ database }), config: { geoEnabled: true, geoAudience: 'all' } });
   service.diagnosisReview = review;
@@ -54,6 +55,7 @@ test('a recheck has a new assessment head while preserving the original judgment
   assert.deepEqual(await review.tick(), { processed: 1 });
   const saved = await review.read(project, 'review_snapshot');
   assert.equal(saved.current.statements[0].verdict, 'correct');
+  assert.equal(saved.current.checks.citations[0].supports, 'no', 'unchecked replacement fields cannot erase the preserved page contradiction');
   assert.equal(saved.feedback[0].original.verdict, 'wrong'); assert.equal(saved.feedback[0].status, 'succeeded');
   assert.ok(saved.history.some(row => row.assessment.statements[0].verdict === 'wrong'));
   assert.ok(saved.history.some(row => row.assessment.statements[0].verdict === 'correct'));
@@ -92,13 +94,23 @@ test('a second queued review cannot overwrite a newer assessment head', options,
 
 
 test('an incomplete recheck retains the defensible prior statement instead of silently treating it as corrected', options, async () => {
-  omitStatements = true;
+  omitStatements = true; omitCitations = true;
   await review.submit(project, await input('incomplete_review'));
   assert.deepEqual(await review.tick(), { processed: 1 });
   const saved = await review.read(project, 'review_snapshot');
   assert.equal(saved.current.statements[0].verdict, 'wrong');
   assert.equal(saved.current.checks.judgementCoverage.status, 'partial');
   assert.equal(saved.original.statements[0].verdict, 'wrong');
+});
+
+test('a recheck retains exact unchanged cited-page verification instead of replacing it with unchecked fields', options, async () => {
+  const saved = await review.read(project, 'review_snapshot');
+  const citation = saved.current.checks.citations.find(row => row.url === 'https://example.com/label' && row.statement === wrong.text);
+  assert.ok(citation, 'the unchanged preserved citation remains in the current assessment');
+  assert.equal(citation.exists, true);
+  assert.equal(citation.supports, 'no');
+  assert.equal(citation.evidence, 'Adults only.');
+  assert.ok(citation.retainedFromAssessment, 'retained evidence names the judgment from which it came');
 });
 
 test('feedback beyond the first page remains reachable and assessment history counts distinct judgments', options, async () => {
@@ -126,4 +138,14 @@ test('feedback beyond the first page remains reachable and assessment history co
     cursor = page.feedbackPage.nextBefore;
   }
   assert.equal(allFeedback.size, first.feedbackPage.total);
+  const boundary = await input('boundary_feedback');
+  for (let index = first.feedbackPage.total; index < 101; index += 1) await review.submit(project, { ...boundary, requestKey: `feedback_boundary_${index}` });
+  const capped = await review.read(project, 'review_snapshot');
+  assert.equal(capped.feedback.length, 100);
+  assert.equal(capped.feedbackPage.total, 101);
+  assert.equal(capped.feedbackPage.more, true);
+  const final = await review.read(project, 'review_snapshot', { feedbackBefore: capped.feedbackPage.nextBefore });
+  assert.equal(final.feedback.length, 1);
+  assert.equal(final.feedbackPage.more, false);
+  assert.equal(new Set([...capped.feedback, ...final.feedback].map(row => row.id)).size, 101);
 });

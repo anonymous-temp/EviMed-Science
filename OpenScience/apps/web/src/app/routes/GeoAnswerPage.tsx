@@ -88,7 +88,7 @@ export function GeoAnswerPage() {
   const claims = evidence.state.kind === "ready" && Array.isArray(evidence.state.data?.claims) ? evidence.state.data.claims : [];
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = questionSet.state.kind === "ready" ? questionSet.state.data?.groups : undefined;
-  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} actions={everyAction} groups={groups} />;
+  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} actions={everyAction} groups={groups} onAssessmentChanged={answer.reload} />;
 }
 
 /**
@@ -146,6 +146,7 @@ function Answer({
   claims,
   actions,
   groups,
+  onAssessmentChanged,
 }: {
   geoId: string;
   data: GeoAnswer;
@@ -153,6 +154,7 @@ function Answer({
   claims: GeoClaim[];
   actions: readonly GeoAction[];
   groups: Parameters<typeof questionGroupIndex>[0];
+  onAssessmentChanged: () => void;
 }) {
   const path = useGeoPath();
   const navigate = useNavigate();
@@ -265,7 +267,7 @@ function Answer({
           <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} onOpen={(key) => drawer.open({ error: key })} />
           <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
-          {project && <DiagnosisReview geoId={geoId} data={data} project={project} actions={actions} />}
+          {project && <DiagnosisReview geoId={geoId} data={data} project={project} actions={actions} onAssessmentChanged={onAssessmentChanged} />}
           <Elsewhere geoId={geoId} current={snapshot.id} errors={found.elsewhere} unplaced={marked.unplaced} findings={found.findings} />
         </article>
       </div>

@@ -45,3 +45,32 @@ it("viewers retain original evidence and history without mutation controls", asy
   expect(screen.queryByRole("button", { name: "更新项目结论或文章" })).toBeNull();
   expect(screen.getByText(/Adults；form：tablet/)).toBeVisible();
 });
+
+it("loads earlier feedback and distinct judgments without changing the active assessment head", async () => {
+  const first = { ...saved(), historyPage: { total: 2, shown: 1, more: true, nextBefore: 8 }, feedbackPage: { total: 1, shown: 0, more: true, nextBefore: "feedback_cursor" } };
+  client.getGeoDiagnosisReview.mockResolvedValueOnce(first);
+  renderReview();
+  client.getGeoDiagnosisReview.mockResolvedValueOnce({ ...saved(), feedbackPage: { total: 1, shown: 1, more: false, nextBefore: null }, feedback: [
+    { id: "older_feedback", statement: statement.text, note: "An earlier preserved feedback.", original: statement, assessmentVersion: "a".repeat(64), status: "succeeded", result: null, error: null, createdAt: "2026-10-23T00:00:00Z" },
+  ] });
+  await userEvent.click(await screen.findByRole("button", { name: /读取更早反馈/ }));
+  expect(await screen.findByText(/An earlier preserved feedback/)).toBeVisible();
+  expect(client.getGeoDiagnosisReview.mock.calls[1][2]).toEqual({ feedbackBefore: "feedback_cursor" });
+  client.getGeoDiagnosisReview.mockResolvedValueOnce({ ...saved(), historyPage: { total: 2, shown: 1, more: false, nextBefore: null }, history: [{ version: "b".repeat(64), state: "active", assessment: { statements: [{ ...statement, verdict: "unverifiable" }] } }] });
+  await userEvent.click(screen.getByRole("button", { name: /读取更早判定/ }));
+  expect(await screen.findByText("历史判定：尚无法判定")).toBeVisible();
+  expect(client.getGeoDiagnosisReview.mock.calls[2][2]).toEqual({ historyBefore: 8 });
+  expect(screen.queryByRole("button", { name: /读取更早/ })).toBeNull();
+});
+
+it("refreshes answer annotations when a completed recheck changes the active assessment version", async () => {
+  const changed = vi.fn();
+  render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={answerFilled} project={geoProject()} actions={[]} onAssessmentChanged={changed} /></MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button", { name: "反馈并复核判定" }));
+  expect(changed).not.toHaveBeenCalled();
+  await userEvent.type(screen.getByRole("textbox", { name: "反馈理由与适用条件" }), "Review the conditions.");
+  client.getGeoDiagnosisReview.mockResolvedValue({ ...saved(), assessmentVersion: "b".repeat(64), current: { statements: [{ ...statement, verdict: "correct" }] } });
+  await userEvent.click(screen.getByRole("button", { name: "提交复核" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText(/原判定：讲错 · 当前判定：讲对/)).toBeVisible();
+});

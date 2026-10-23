@@ -20,23 +20,51 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       AND deleted_at IS NULL AND payload->>'recordType'='geo-assessment' AND payload->>'geoProjectId'=$3 AND payload->>'snapshotId'=$4`,
     [project.userId, project.projectId, project.id, snapshotId])).rows[0] ?? null;
   }
-  async function read(project, snapshotId) {
+  async function read(project, snapshotId, page = {}) {
+    const { feedbackBefore = null, historyBefore = null, feedbackLimit = 100, historyLimit = 50 } = page;
+    if (Object.keys(page).some(key => !['feedbackBefore', 'historyBefore', 'feedbackLimit', 'historyLimit'].includes(key))
+      || feedbackBefore != null && (typeof feedbackBefore !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/u.test(feedbackBefore))
+      || historyBefore != null && (!Number.isSafeInteger(historyBefore) || historyBefore < 1)
+      || !Number.isSafeInteger(feedbackLimit) || feedbackLimit < 1 || feedbackLimit > 100
+      || !Number.isSafeInteger(historyLimit) || historyLimit < 1 || historyLimit > 50) throw new HttpError(400, 'geo_read_filter_invalid', 'Invalid judgment history page.');
     await migrateProductStore(database);
+    return database.transaction(async client => {
+      await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+      return database.withTransactionClient(client, () => readPage(project, snapshotId, { feedbackBefore, historyBefore, feedbackLimit, historyLimit }));
+    });
+  }
+  async function readPage(project, snapshotId, { feedbackBefore, historyBefore, feedbackLimit, historyLimit }) {
     const snapshot = await store.snapshot(snapshotId);
     if (!snapshot || snapshot.geoProjectId !== project.id || snapshot.userId !== project.userId) throw new HttpError(404, 'geo_snapshot_not_found', 'Answer not found.');
     const current = await assessment(project, snapshotId);
-    const feedback = (await database.query(`SELECT d.id,d.payload,d.created_at,j.id AS job_id,j.status,j.error,j.result FROM evimed_product.documents d
-      LEFT JOIN evimed_product.jobs j ON j.user_id=d.user_id AND j.id=d.payload->>'jobId'
-      WHERE d.user_id=$1 AND d.project_id=$2 AND d.kind='knowledge' AND d.deleted_at IS NULL AND d.payload->>'recordType'='geo-judgment-feedback'
-      AND d.payload->>'geoProjectId'=$3 AND d.payload->>'snapshotId'=$4 ORDER BY d.created_at DESC,d.id DESC LIMIT 100`,
-    [project.userId, project.projectId, project.id, snapshotId])).rows;
+    const feedbackWhere = `d.user_id=$1 AND d.project_id=$2 AND d.kind='knowledge' AND d.deleted_at IS NULL
+      AND d.payload->>'recordType'='geo-judgment-feedback' AND d.payload->>'geoProjectId'=$3 AND d.payload->>'snapshotId'=$4`;
+    const params = [project.userId, project.projectId, project.id, snapshotId];
+    if (feedbackBefore && !(await database.query(`SELECT d.id FROM evimed_product.documents d WHERE ${feedbackWhere} AND d.id=$5`, [...params, feedbackBefore])).rows[0]) {
+      throw new HttpError(404, 'geo_feedback_not_found', 'Feedback page not found.');
+    }
+    const feedbackRows = (await database.query(`SELECT d.id,d.payload,d.created_at,j.id AS job_id,j.status,j.error,j.result FROM evimed_product.documents d
+      LEFT JOIN evimed_product.jobs j ON j.user_id=d.user_id AND j.id=d.payload->>'jobId' WHERE ${feedbackWhere}
+      AND ($5::text IS NULL OR (d.created_at,d.id)<(SELECT cursor.created_at,cursor.id FROM evimed_product.documents cursor WHERE cursor.user_id=$1 AND cursor.kind='knowledge' AND cursor.id=$5))
+      ORDER BY d.created_at DESC,d.id DESC LIMIT $6`, [...params, feedbackBefore, feedbackLimit + 1])).rows;
+    const feedbackTotal = Number((await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents d WHERE ${feedbackWhere}`, params)).rows[0].n);
+    const feedback = feedbackRows.slice(0, feedbackLimit);
+    const judged = `SELECT DISTINCT ON (payload->>'assessmentVersion') revision,payload FROM evimed_product.revisions
+      WHERE user_id=$1 AND kind='knowledge' AND id=$2 AND payload->>'assessmentVersion' IS NOT NULL
+      ORDER BY payload->>'assessmentVersion',revision DESC`;
+    const historyRows = current ? (await database.query(`SELECT * FROM (${judged}) judged WHERE ($3::integer IS NULL OR revision<$3) ORDER BY revision DESC LIMIT $4`,
+      [project.userId, current.id, historyBefore, historyLimit + 1])).rows : [];
+    const historyTotal = current ? Number((await database.query(`SELECT count(*)::integer AS n FROM (${judged}) judged`, [project.userId, current.id])).rows[0].n) : 0;
+    const history = historyRows.slice(0, historyLimit);
     const first = current ? (await database.query("SELECT payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='knowledge' AND id=$2 ORDER BY revision ASC LIMIT 1", [project.userId, current.id])).rows[0]?.payload?.assessment : null;
-    const claimIds = [...new Set([...(first?.statements ?? []), ...(current?.payload.assessment.statements ?? [])].map(row => row.claimId).filter(Boolean))];
+    const claimIds = [...new Set([...(first?.statements ?? []), ...(current?.payload.assessment.statements ?? []), ...history.flatMap(row => row.payload.assessment?.statements ?? []), ...feedback.map(row => row.payload.original)].map(row => row.claimId).filter(Boolean))];
     const claimDetails = claimIds.length ? (await database.query(`SELECT id, version, population, elements, source_ref, source_label, statement, quote
       FROM evimed_geo.claims WHERE geo_project_id=$1 AND user_id=$2 AND id=ANY($3::text[]) LIMIT 400`, [project.id, project.userId, claimIds])).rows.map(row => ({
         id: row.id, version: row.version, population: row.population, elements: row.elements, sourceRef: row.source_ref, sourceLabel: row.source_label, statement: row.statement, quote: row.quote })) : [];
     return { claimDetails, original: first, assessmentVersion: current?.payload.assessmentVersion ?? null, current: current?.payload.assessment ?? null,
-      state: current?.payload.state ?? 'unknown', history: current ? (await documents.history(project.userId, 'knowledge', current.id)).map(row => ({ version: row.payload.assessmentVersion, assessment: row.payload.assessment, state: row.payload.state })) : [],
+      state: current?.payload.state ?? 'unknown', history: history.map(row => ({ revision: row.revision, version: row.payload.assessmentVersion, assessment: row.payload.assessment, state: row.payload.state })),
+      historyPage: { total: historyTotal, shown: history.length, more: historyRows.length > historyLimit, nextBefore: historyRows.length > historyLimit ? history.at(-1).revision : null },
+      feedbackPage: { total: feedbackTotal, shown: feedback.length, more: feedbackRows.length > feedbackLimit, nextBefore: feedbackRows.length > feedbackLimit ? feedback.at(-1).id : null },
       feedback: feedback.map(row => ({ id: row.id, ...row.payload, status: row.status ?? 'unknown', error: row.error, result: row.result, createdAt: row.created_at })) };
   }
   async function submit(project, input) {
@@ -88,6 +116,18 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       const input = /** @type {import("./geoJudge.mjs").GeoJudgeInput} */ (judgeInputOf(context, question, snapshot));
       input.reviewFeedback = { statement: p.statement, note: p.note };
       const judged = await evaluator.judge(input);
+      const priorCitations = current.payload.assessment.checks?.citations ?? [];
+      for (const prior of priorCitations) {
+        if (prior.exists == null && prior.supports == null && !prior.evidence
+          || !snapshot.citations.some(citation => citation.url === prior.url)
+          || !snapshot.answerText?.includes(prior.statement)) continue;
+        const index = judged.checks.citations.findIndex(citation => citation.url === prior.url && citation.statement === prior.statement);
+        const next = judged.checks.citations[index];
+        if (next && (next.exists != null || next.supports != null || next.evidence)) continue;
+        const retained = { ...prior, retainedFromAssessment: prior.retainedFromAssessment ?? current.payload.assessmentVersion };
+        if (index < 0) judged.checks.citations.push(retained);
+        else judged.checks.citations[index] = retained;
+      }
       const retained = current.payload.assessment.statements.filter(prior => !judged.statements.some(next => next.text === prior.text && next.claimId === prior.claimId));
       if (retained.length) {
         judged.statements.push(...retained);

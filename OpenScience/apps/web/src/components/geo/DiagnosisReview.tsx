@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction } from "@/lib/geoClient";
+import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +18,7 @@ const verdictWords: Record<string, string> = { wrong: "讲错", correct: "讲对
 const statusWords: Record<string, string> = { queued: "等待复核", running: "正在复核", succeeded: "复核完成", failed: "复核暂未完成" };
 
 /** Full review remains alongside the original answer. Feedback never hides or resolves an error. */
-export function DiagnosisReview({ geoId, data, project, actions }: { geoId: string; data: GeoAnswer; project: GeoProject; actions: readonly GeoAction[] }) {
+export function DiagnosisReview({ geoId, data, project, actions, onAssessmentChanged }: { geoId: string; data: GeoAnswer; project: GeoProject; actions: readonly GeoAction[]; onAssessmentChanged?: () => void }) {
   const review = useGeoLoad(`judgment-review:${geoId}:${data.snapshot.id}`, () => getGeoDiagnosisReview(geoId, data.snapshot.id));
   const open = useOpenGeoConversation();
   const path = useGeoPath();
@@ -27,8 +27,17 @@ export function DiagnosisReview({ geoId, data, project, actions }: { geoId: stri
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+  const [older, setOlder] = useState<{ snapshotId: string; version: string | null; history: GeoDiagnosisReview["history"]; feedback: GeoDiagnosisReview["feedback"]; historyPage?: GeoDiagnosisReview["historyPage"]; feedbackPage?: GeoDiagnosisReview["feedbackPage"] } | null>(null);
+  const [readingOlder, setReadingOlder] = useState(false);
   const ready = review.state.kind === "ready" ? review.state.data : null;
-  const pending = ready?.feedback.some(row => row.status === "queued" || row.status === "running");
+  const observed = useRef<{ snapshotId: string; version: string | null } | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const previous = observed.current;
+    observed.current = { snapshotId: data.snapshot.id, version: ready.assessmentVersion };
+    if (previous?.snapshotId === data.snapshot.id && previous.version !== ready.assessmentVersion) onAssessmentChanged?.();
+  }, [ready, data.snapshot.id, onAssessmentChanged]);
+  const pending = ready?.feedback.some(row => row.status === "queued" || row.status === "running") || older?.snapshotId === data.snapshot.id && older.feedback.some(row => row.status === "queued" || row.status === "running");
   useEffect(() => {
     if (!pending) return;
     const timer = window.setInterval(review.reload, 5000);
@@ -38,8 +47,28 @@ export function DiagnosisReview({ geoId, data, project, actions }: { geoId: stri
   if (!ready) return <Note action={null}>正在读取逐句核查与复核记录。</Note>;
   const canEdit = !project.access?.abilities || project.access.abilities.includes("edit");
   const canRun = !project.access?.abilities || project.access.abilities.includes("run");
+  const retained = older?.snapshotId === data.snapshot.id && older?.version === ready.assessmentVersion ? older : null;
+  const history = [...new Map([...ready.history, ...(retained?.history ?? [])].map(row => [row.version, row])).values()];
+  const feedbackRows = [...new Map([...ready.feedback, ...(retained?.feedback ?? [])].map(row => [row.id, row])).values()];
+  const historyPage = retained?.historyPage ?? ready.historyPage;
+  const feedbackPage = retained?.feedbackPage ?? ready.feedbackPage;
+  const earlier = async (kind: "history" | "feedback") => {
+    const cursor = kind === "history" ? historyPage?.nextBefore : feedbackPage?.nextBefore;
+    if (cursor == null) return;
+    setReadingOlder(true); setError(null);
+    try {
+      const page = await getGeoDiagnosisReview(geoId, data.snapshot.id, kind === "history" ? { historyBefore: Number(cursor) } : { feedbackBefore: String(cursor) });
+      if (page.assessmentVersion !== ready.assessmentVersion) { review.reload(); setError("判定已经更新，请刷新后查看历史记录。"); return; }
+      setOlder({ snapshotId: data.snapshot.id, version: ready.assessmentVersion,
+        history: kind === "history" ? [...(retained?.history ?? []), ...page.history] : retained?.history ?? [],
+        feedback: kind === "feedback" ? [...(retained?.feedback ?? []), ...page.feedback] : retained?.feedback ?? [],
+        historyPage: kind === "history" ? page.historyPage : retained?.historyPage,
+        feedbackPage: kind === "feedback" ? page.feedbackPage : retained?.feedbackPage });
+    } catch (cause) { setError(webErrorMessage(cause, { fallback: "无法读取更早记录，请重试。" })); }
+    finally { setReadingOlder(false); }
+  };
   const original = ready.original?.statements ?? ready.history.at(-1)?.assessment?.statements ?? ready.current?.statements ?? data.facts?.statements ?? [];
-  const statements = [...new Map([...original, ...(ready.current?.statements ?? [])].map(row => [`${row.claimId}:${row.text}`, row])).values()];
+  const statements = [...new Map([...original, ...history.flatMap(row => row.assessment?.statements ?? []), ...feedbackRows.map(row => row.original), ...(ready.current?.statements ?? [])].map(row => [`${row.claimId}:${row.text}`, row])).values()];
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const send = async (statement: GeoStatementFact) => {
     if (!ready.assessmentVersion || !note.trim()) return;
@@ -68,11 +97,11 @@ export function DiagnosisReview({ geoId, data, project, actions }: { geoId: stri
         const current = (ready.current?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId);
         const claimDetail = ready.claimDetails?.find(row => row.id === statement.claimId);
         const applicable = claimDetail ?? (statement as GeoStatementFact & { applicability?: { population?: string | null; elements?: Record<string, unknown> | null } }).applicability;
-        const feedback = ready.feedback.filter(row => row.statement === statement.text && row.original.claimId === statement.claimId);
+        const feedback = feedbackRows.filter(row => row.statement === statement.text && row.original.claimId === statement.claimId);
         const statementKey = `${statement.claimId}:${statement.text}`;
         return <section key={`${statement.claimId}:${statement.text}`} className="flex flex-col gap-3 border-b border-border pb-4">
           <p className="text-body text-text">“{statement.text}”</p>
-          <p className="text-ui text-text-2">原判定：{verdictWords[prior?.verdict ?? statement.verdict]} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
+          <p className="text-ui text-text-2">原判定：{prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
           <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
           {claimDetail && <p className="text-ui text-text-2">依据：{safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据"} · 正确说法：{claimDetail.statement}</p>}
           <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核验引文"}</p>
@@ -83,10 +112,12 @@ export function DiagnosisReview({ geoId, data, project, actions }: { geoId: stri
           </div>}
           {canRun && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" onClick={() => act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
           <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && row.claimId === statement.claimId)))} canRun={canRun} onAsk={() => act(statement, "conclusion")} />
-          {ready.history.length > 1 && <div className="text-caption text-text-3">{ready.history.slice().reverse().map((entry, index) => { const item = (entry.assessment?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId); return <p key={entry.version}>第 {index + 1} 次判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
+          {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
           {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => item.text === row.statement && item.claimId === row.original.claimId)?.verdict ?? "unverifiable"]}</p>}</div>)}
         </section>;
       })}
+      {feedbackPage?.more && <Button variant="secondary" size="sm" loading={readingOlder} onClick={() => void earlier("feedback")}>读取更早反馈（已读取 {feedbackRows.length}/{feedbackPage.total}）</Button>}
+      {historyPage?.more && <Button variant="secondary" size="sm" loading={readingOlder} onClick={() => void earlier("history")}>读取更早判定（已读取 {history.length}/{historyPage.total}）</Button>}
       {error && <Note action={<Button variant="secondary" size="sm" onClick={review.reload}>刷新判定</Button>}>{error}</Note>}
       {data.errors.filter(row => row.firstSnapshotId && row.firstSnapshotId !== data.snapshot.id).map(row => <Link key={row.id} to={path(answerPath(geoId, row.firstSnapshotId!))} className="text-link">相近错误的原始回答：{row.statement}</Link>)}
     </div>

@@ -1222,10 +1222,10 @@ export class GeoService {
   }
 
   /** @param {{ id: string }} user @param {string} id @param {string} snapshotId */
-  async readDiagnosisReview(user, id, snapshotId) {
+  async readDiagnosisReview(user, id, snapshotId, page = {}) {
     const project = await this.requireProject(user, id);
     if (!this.diagnosisReview) throw failure(503, "geo_review_unavailable", "Judgment review is unavailable.");
-    return this.diagnosisReview.read(project, snapshotId);
+    return this.diagnosisReview.read(project, snapshotId, page);
   }
 
   /** @param {{ id: string }} user @param {string} id @param {any} input */

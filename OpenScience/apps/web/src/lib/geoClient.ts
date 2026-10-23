@@ -1283,10 +1283,15 @@ export interface GeoDiagnosisReview {
   assessmentVersion: string | null;
   state: string;
   current: { statements: GeoStatementFact[] } | null;
-  history: Array<{ version: string; state: string; assessment: { statements: GeoStatementFact[] } }>;
+  historyPage?: { total: number; shown: number; more: boolean; nextBefore: number | null };
+  feedbackPage?: { total: number; shown: number; more: boolean; nextBefore: string | null };
+  history: Array<{ revision?: number; version: string; state: string; assessment: { statements: GeoStatementFact[]; judgedAt?: string | null } }>;
   feedback: Array<{ id: string; statement: string; note: string; assessmentVersion: string; original: GeoStatementFact; status: string; result: { statements: GeoStatementFact[] } | null; error: { code: string } | null; createdAt: string }>;
 }
-export const getGeoDiagnosisReview = (geoId: string, snapshotId: string) => productRequest<GeoDiagnosisReview>(`${project(geoId)}/diagnosis/reviews/${encodeURIComponent(snapshotId)}`);
+export function getGeoDiagnosisReview(geoId: string, snapshotId: string, page: { feedbackBefore?: string; historyBefore?: number } = {}) {
+  const query = new URLSearchParams(Object.entries(page).map(([key, value]) => [key, String(value)]));
+  return productRequest<GeoDiagnosisReview>(`${project(geoId)}/diagnosis/reviews/${encodeURIComponent(snapshotId)}${query.size ? `?${query}` : ""}`);
+}
 export const submitGeoDiagnosisFeedback = (geoId: string, input: { snapshotId: string; statement: string; claimId: string | null; assessmentVersion: string; note: string; requestKey: string; selectionRef?: string | null }) => productRequest<{ id: string; jobId: string }>(`${project(geoId)}/diagnosis/feedback`, "POST", input);
 
 export function getGeoAnswer(geoId: string, snapshotId: string) {

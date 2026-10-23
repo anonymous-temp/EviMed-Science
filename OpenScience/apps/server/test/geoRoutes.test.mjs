@@ -396,7 +396,7 @@ test('structured judgment feedback keeps its exact fields and review history sta
   const service = {
     allows: () => true,
     submitDiagnosisFeedback: async (user, id, input) => { calls.push({ user, id, input }); return { id: 'feedback', jobId: 'job' }; },
-    readDiagnosisReview: async (user, id, snapshotId) => { calls.push({ user, id, snapshotId }); return { feedback: [] }; },
+    readDiagnosisReview: async (user, id, snapshotId, page) => { calls.push({ user, id, snapshotId, page }); return { feedback: [] }; },
   };
   const { routes } = fixture({ service });
   const body = { snapshotId: 'snap1', statement: 'Original sentence', claimId: 'claim1', assessmentVersion: 'a'.repeat(64), note: 'Different conditions', requestKey: 'request_123' };
@@ -404,7 +404,9 @@ test('structured judgment feedback keeps its exact fields and review history sta
   await routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', body), post);
   assert.equal(post.status, 202); assert.deepEqual(calls[0].input, body);
   const get = response();
-  await routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1'), get);
+  await routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1?historyBefore=8&feedbackBefore=feedback1'), get);
   assert.equal(calls[1].snapshotId, 'snap1');
+  assert.deepEqual(calls[1].page, { historyBefore: 8, feedbackBefore: 'feedback1' });
+  await assert.rejects(routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1?unknown=1'), response()), { status: 400 });
   await assert.rejects(routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', { ...body, resolved: true }), response()), { status: 400 });
 });
