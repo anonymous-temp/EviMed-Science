@@ -48,7 +48,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { geoDailyReadings, geoSourcePage, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
 import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
@@ -899,11 +899,14 @@ export class GeoService {
     }
     if (filtered && (kind === "project" || kind === "monitoring")) {
       const ordered = [...selected.rounds].sort((a, b) => rowDay(a, scope.timeZone).localeCompare(rowDay(b, scope.timeZone)) || String(a.id).localeCompare(String(b.id)));
-      const perRound = ordered.map((entry) => ({ round: entry, result: computeGeoSelection(selected.rows.filter((row) => row.roundId === entry.id), selected.metricOptions) }));
-      const history = (/** @type {string} */ metricId, /** @type {string | null} */ engine = null, /** @type {string | null} */ variant = null) => perRound.map(({ round: entry, result }) => {
+      const readings = scope.from || scope.to ? geoDailyReadings(selected) : ordered.map((entry) => ({
+        date: rowDay(entry, scope.timeZone), roundIds: [entry.id], version: entry.set_version == null ? null : Number(entry.set_version),
+        result: computeGeoSelection(selected.rows.filter((row) => row.roundId === entry.id), selected.metricOptions) }));
+      const history = (/** @type {string} */ metricId, /** @type {string | null} */ engine = null, /** @type {string | null} */ variant = null) => readings.map(({ date, roundIds, version, result }) => {
         const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && candidate.variant === variant && !candidate.rival);
-        return { date: rowDay(entry, scope.timeZone), roundId: entry.id, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
-          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), entry.set_version == null ? null : Number(entry.set_version), engine) };
+        return { date, roundId: roundIds.length === 1 ? roundIds[0] : null, roundIds, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
+          members: point?.members ?? null, snapshotIds: point?.snapshotIds ?? [],
+          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), version, engine) };
       });
       if (kind === "project") view.overview.metrics = view.overview.metrics.map((/** @type {any} */ entry) => ({ ...entry,
         trend: history(GEO_OVERVIEW_METRICS.find((definition) => definition.key === entry.key)?.metricId ?? "") }));
@@ -2091,9 +2094,11 @@ export class GeoService {
         const selected = await readGeoSelection(this.store, project, geoReadScopeInput(filter));
         let members = selected.rows.filter((row) => !filter.questionId || row.questionId === filter.questionId);
         if (filter.member) {
-          const metric = selected.computed.cells.find((entry) => Object.entries(filter.member).every(([key, value]) => /** @type {any} */ (entry)[key] === value));
+          const { observationDate, ...descriptor } = filter.member;
+          const computed = observationDate ? geoDailyReadings(selected, observationDate)[0]?.result : selected.computed;
+          const metric = computed?.cells.find((entry) => Object.entries(descriptor).every(([key, value]) => /** @type {any} */ (entry)[key] === value));
           if (!metric) throw failure(400, "geo_read_filter_invalid", "The metric is not in this selection.");
-          const inputRows = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? selected.computed.balance.deduped : selected.computed.balance.rows;
+          const inputRows = metric.scope === "engine" || metric.scope === "pool_engine" || metric.metricId === "M-20" ? computed.balance.deduped : computed.balance.rows;
           members = geoMetricMembers(/** @type {any[]} */ (inputRows), metric, selected.metricOptions).rows;
         }
         const values = [project.id, members.map((row) => row.snapshotId)];

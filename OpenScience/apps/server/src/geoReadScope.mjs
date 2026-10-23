@@ -153,6 +153,33 @@ export function computeGeoSelection(rows, options) {
   return { ...result, cells };
 }
 
+/** @param {ReturnType<typeof computeGeoSelection>} computed @param {string} reference @param {Record<string, string>} [extra] */
+function bindMemberReferences(computed, reference, extra = {}) {
+  for (const cell of computed.cells) Object.assign(cell.members, { selectionRef: reference, metric: { metricId: cell.metricId, scope: cell.scope, engine: cell.engine,
+    pool: cell.pool, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival, ...extra } });
+}
+
+/** Actual-day cohorts share the frozen selection, with the day carried in each exact member selector.
+ * @param {Awaited<ReturnType<typeof readGeoSelection>>} selected @param {string | null} [onlyDay]
+ */
+export function geoDailyReadings(selected, onlyDay = null) {
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: selected.scope.timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  /** @type {Map<string, any[]>} */ const buckets = new Map();
+  for (const row of selected.rows) {
+    if (!row.askedAt) continue;
+    const date = formatter.format(new Date(row.askedAt));
+    if (onlyDay && date !== onlyDay) continue;
+    const members = buckets.get(date) ?? []; members.push(row); buckets.set(date, members);
+  }
+  return [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([date, rows]) => {
+    const roundIds = [...new Set(rows.map((row) => row.roundId))].sort();
+    const versions = [...new Set(selected.rounds.filter((round) => roundIds.includes(round.id)).map((round) => round.set_version == null ? null : Number(round.set_version)))];
+    const result = computeGeoSelection(rows, selected.metricOptions);
+    bindMemberReferences(result, selected.selection.reference, { observationDate: date });
+    return { date, roundIds, version: versions.length === 1 ? versions[0] : null, result };
+  });
+}
+
 /** A subset key retains the existing four-part wire format; no snapshot or round id makes repeated questions incomparable.
  * @param {any[]} rows @param {number | null} setVersion @param {string | null} [engine]
  */
@@ -320,7 +347,8 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const observationDays = admitted.map((entry) => entry.observation_date).filter(Boolean).sort();
   const timeCoverage = { basis: "answer_asked_at", from: scope.from, to: scope.to, timeZone: scope.timeZone,
     observedFrom: observationDays[0] ?? null, observedTo: observationDays.at(-1) ?? null, unknownTime: Number(coverageRows?.unknown_time ?? 0),
-    unknownTimeScope: dated ? "matching_filters_without_dates" : "selected_rounds", plannedRounds, plannedBasis: "round_schedule" };
+    unknownTimeScope: dated ? "matching_filters_without_dates" : "selected_rounds", plannedRounds, plannedBasis: "round_schedule",
+    currentContextFields: ["unknownTime", "plannedRounds"] };
   if (dated) for (const round of rounds) {
     const days = admitted.filter((entry) => entry.round_id === round.id).map((entry) => entry.observation_date).filter(Boolean).sort();
     round.selection_date = days[0] ?? null;
@@ -361,7 +389,8 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const comparison = comparisonSelection ? await compareGeoSelections(store, measure, project, { rows, scope, roundIds }, comparisonSelection, scope.comparisonMode) : null;
   const memberDigest = digest(/** @type {any[]} */ (computed.balance.deduped).map((row) => row.snapshotId));
   const dataRevision = digest({ methodVersion: GEO_MEASUREMENT_METHOD_VERSION, rows, skipped: skipBatches, rounds: rounds.map((round) => [round.id, round.status, round.set_version, round.surface]),
-    errorRevision, answerRevision, subset, timeCoverage, metricOptions, questions: selectedQuestions, comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
+    // Current unplaced/scheduled context is disclosed beside the observed selection, but cannot invalidate its frozen members.
+    errorRevision, answerRevision, subset, metricOptions, questions: selectedQuestions, comparisonRevision: comparisonSelection?.selection.dataRevision ?? null });
   if (expectedRevision && expectedRevision !== dataRevision) throw invalid("The saved selection changed after measurement. Refresh the view and use its new selection reference.", 409);
   const scopeSaved = { ...scope, selectionRef: null };
   const reference = `gsel_${digest([project.userId, project.id, scopeSaved, roundIds, dataRevision]).slice(0, 40)}`;
@@ -380,8 +409,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     exclusions: { skippedEngines: roundIds.flatMap((id, index) => skipBatches[index].map((engine) => ({ roundId: id, engine }))), clientTagsUnknown: scope.clientTags.length > 0 && !questions.rows.some((question) => Array.isArray(question.scope_client_tags)) },
     comparability: { kind: "observational", causal: false, methodVersions: methods, questionVersions: versions, modes, consumerModelVersion: "unknown" },
     coverage: geoSelectionCoverage(/** @type {any[]} */ (computed.balance.rows), versions.length === 1 ? versions[0] : null) };
-  for (const cell of computed.cells) Object.assign(cell.members, { selectionRef: reference, metric: { metricId: cell.metricId, scope: cell.scope, engine: cell.engine,
-    pool: cell.pool, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival } });
+  bindMemberReferences(computed, reference);
   return { scope: scopeSaved, selection, rounds, rows, computed, metricOptions, questions: selectedQuestions, comparison, subset };
 }
 
