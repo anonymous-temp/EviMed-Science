@@ -22,7 +22,9 @@
  *
  * When embedding is unavailable (no embedder composed, or a call failed) every answer degrades to the lexical shortlist
  * and says so: the arrays this module returns carry a non-enumerable `mode`, `"embedding"` or `"lexical"`, so a caller
- * can put it in a job result without a comparison against a plain array breaking. A failed call is not retried for
+ * can put it in a job result without a comparison against a plain array breaking. `pairs` also carries `topScore`, the
+ * highest cosine between any two methods whether or not it reached the floor, so a provisional floor can be read
+ * against a real library. A failed call is not retried for
  * `retryAfterMs`, so an embedder that is down costs one request, not one per method per pass.
  *
  * @module methodSimilarity
@@ -130,10 +132,12 @@ function dot(left, right) {
 /**
  * @template T
  * @param {T[]} list @param {"embedding" | "lexical"} mode
- * @returns {T[] & {mode: "embedding" | "lexical"}}
+ * @param {number | null} [topScore] the highest cosine seen between two methods, floor or not (embedding mode)
+ * @returns {T[] & {mode: "embedding" | "lexical", topScore?: number | null}}
  */
-function withMode(list, mode) {
+function withMode(list, mode, topScore = null) {
   Object.defineProperty(list, "mode", { value: mode, enumerable: false });
+  if (topScore !== null) Object.defineProperty(list, "topScore", { value: topScore, enumerable: false });
   return /** @type {any} */ (list);
 }
 
@@ -247,7 +251,7 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
    * under the name the consolidation's grouping already reads.
    * @param {readonly any[]} methods method documents
    * @param {{topK?: number, floor?: number}} [options]
-   * @returns {Promise<{a: string, b: string, score: number, overlap: number}[] & {mode: "embedding" | "lexical"}>}
+   * @returns {Promise<{a: string, b: string, score: number, overlap: number}[] & {mode: "embedding" | "lexical", topScore?: number | null}>}
    */
   async function pairs(methods, { topK = METHOD_SIMILARITY_TOP_K, floor = METHOD_SIMILARITY_PAIR_FLOOR } = {}) {
     const list = [...(methods ?? [])];
@@ -257,11 +261,13 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
         const { methods: methodVectors } = await vectors(list);
         /** @type {Map<string, {a: string, b: string, score: number, overlap: number}>} */
         const found = new Map();
+        let top = -1;
         for (let left = 0; left < list.length; left += 1) {
           const neighbours = [];
           for (let right = 0; right < list.length; right += 1) {
             if (right === left) continue;
             const score = dot(methodVectors[left], methodVectors[right]);
+            if (score > top) top = score;
             if (score >= floor) neighbours.push({ right, score });
           }
           neighbours.sort((one, two) => two.score - one.score || byId(list[one.right], list[two.right]));
@@ -271,7 +277,7 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
             if (!found.has(key)) found.set(key, { a: list[first].id, b: list[second].id, score, overlap: score });
           }
         }
-        return withMode([...found.values()].sort((one, two) => two.score - one.score || one.a.localeCompare(two.a) || one.b.localeCompare(two.b)), "embedding");
+        return withMode([...found.values()].sort((one, two) => two.score - one.score || one.a.localeCompare(two.a) || one.b.localeCompare(two.b)), "embedding", Math.round(top * 1e4) / 1e4);
       } catch (error) {
         failed(error);
       }

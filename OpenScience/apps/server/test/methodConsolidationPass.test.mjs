@@ -147,6 +147,7 @@ test("a pass over a library nothing groups says so instead of succeeding quietly
   await h.make("plots-b-one", "axis-b");
   const result = await h.sleep();
   assert.deepEqual([result.noGroups, result.groups, result.groupsFormed], [true, 0, 0]);
+  assert.ok(result.shortlist.topScore !== null && result.shortlist.topScore < 0.8, "and how close the closest two were, which is what the floor is read against");
   assert.ok(result.noop.includes("no_groups"));
   assert.deepEqual(h.dispatched, []);
   assert.deepEqual(h.noops, [["no_groups", 1]]);

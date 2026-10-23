@@ -59,7 +59,9 @@ test("the pairs of a library are each method's nearest neighbours above the floo
 
 test("the floor and the per-method bound are the caller's", async () => {
   const similarity = createMethodSimilarity({ embed: stubEmbedder().embed });
-  assert.deepEqual(await similarity.pairs(library(), { floor: 1.01 }), [], "no cosine reaches it");
+  const none = await similarity.pairs(library(), { floor: 1.01 });
+  assert.deepEqual(none, [], "no cosine reaches it");
+  assert.ok(/** @type {any} */ (none).topScore > 0.9 && /** @type {any} */ (none).topScore <= 1, "but the highest cosine seen is told, so a floor can be read against a real library");
   assert.equal((await similarity.pairs(library(), { floor: 0.99 })).length <= 2, true, "a higher floor keeps a subset of the pairs");
   const crowded = Array.from({ length: 6 }, (_, index) => method(`n${index}`, `Same axis. axis-d ${index}`));
   const bounded = await similarity.pairs(crowded, { topK: 1, floor: 0.5 });

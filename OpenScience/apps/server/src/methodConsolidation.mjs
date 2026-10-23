@@ -453,7 +453,7 @@ export class MethodConsolidation {
     if (methods.length === 0) {
       this.#noop("no_methods");
       return { action: "sleep", methods: 0, groupsFormed: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [],
-        shortlist: { mode: "none", pairs: 0 }, noGroups: false, noMethods: true, noop: ["no_methods"] };
+        shortlist: { mode: "none", pairs: 0, topScore: null }, noGroups: false, noMethods: true, noop: ["no_methods"] };
     }
     // Two methods is the floor for *comparing* them, and nothing else. It used
     // to return here, which also skipped promotion, evaluation queueing and
@@ -582,7 +582,7 @@ export class MethodConsolidation {
       action: "sleep",
       mergedRetirements,
       methods: refreshed.length,
-      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length },
+      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length, topScore: shortlist.topScore ?? null },
       groupsFormed: groups.length,
       groups: outcome.groups,
       skippedUnchanged: outcome.skippedUnchanged,
@@ -618,14 +618,15 @@ export class MethodConsolidation {
   }
 
   /** The shortlist of pairs a pass groups from: by embedding when the similarity module answers, by shared words otherwise.
+   *  `topScore` is the highest cosine between any two methods, below the floor or not, so the provisional floor can be read against a real library.
    *  @param {readonly any[]} methods
-   *  @returns {Promise<{pairs: {a: string, b: string, overlap: number, score?: number}[], mode: string}>} */
+   *  @returns {Promise<{pairs: {a: string, b: string, overlap: number, score?: number}[], mode: string, topScore?: number | null}>} */
   async #shortlist(methods) {
     if (this.similarity) {
       const pairs = await this.similarity.pairs(methods).catch(() => null);
-      if (pairs) return { pairs, mode: /** @type {any} */ (pairs).mode ?? "embedding" };
+      if (pairs) return { pairs, mode: /** @type {any} */ (pairs).mode ?? "embedding", topScore: /** @type {any} */ (pairs).topScore ?? null };
     }
-    return { pairs: candidatePairs(methods), mode: "lexical" };
+    return { pairs: candidatePairs(methods), mode: "lexical", topScore: null };
   }
 
   /**
@@ -671,7 +672,9 @@ export class MethodConsolidation {
     const assignments = resolveAssignments(members, decided.assignments);
     // `supersedes` builds nothing (the replaced method is stopped by the library's own rules once it is unused), so a group that
     // holds only that is recorded and not sent to the builder.
-    const buildable = assignments.filter(({ entry }) => entry.RELATION_TYPE !== "supersedes" && (!buildTypes || buildTypes.includes(entry.RELATION_TYPE)));
+    // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
+    const buildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && (entry.RELATION_TYPE !== "subset" || wider) && (!buildTypes || buildTypes.includes(entry.RELATION_TYPE)));
     const decidedNothing = assignments.length === 0;
     // A merge nobody has proven blocks the build of this group, and nothing else: DECIDE and the relations above have run.
     const blockedUnproven = buildable.length > 0 && members.some(unprovenMerge);
