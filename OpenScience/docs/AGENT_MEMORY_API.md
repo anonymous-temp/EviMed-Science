@@ -4,8 +4,9 @@ An account's research memory — its notes, facts, preferences and earlier
 conclusions — can be read and added to by an agent running somewhere else: a
 local DSH or Claude profile, a script, another product. Two ways in, one set of
 rules: an HTTP API, and an MCP adapter that speaks that API for agents that only
-speak MCP. Neither holds memory of its own; both reach the same PostgreSQL
-records the workbench's memory page shows.
+speak MCP. Neither holds memory of its own; both reach the same memory the
+workbench's memory page shows, on whichever engine keeps the account's memory
+(see "Which engine" below).
 
 This page is the operator's and the integrator's reference. There is no
 management page for keys yet; everything below is an HTTP call.
@@ -76,7 +77,7 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 | `GET /openapi.json` | none | The machine-readable description (no key needed, still behind the enable switch). |
 | `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints. An integrator's first call. |
 | `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "asOf"?, "scope"?, "capsuleIds"? (1–8), "methods"? }` | `memory.read` | Searches the account's memory and returns hits with their source. A record is the version that held at `asOf` (now when omitted) in the project asked; where it is uncertain the item says so — `uncertain: true`, `caveats` (`conflict`, `source_retracted`, `source_expired`, `source_changed`, `not_yet_valid`, `insufficient_evidence`), the other statement in `conflictsWith`, the lapsed sources in `staleSources` — and is still returned: a caveat is a label, never a reason to withhold. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
-| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it. |
+| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it: on their memory page, where it is listed with 待确认 and the choice 确认 or 不要, or through the dashboard's note operations. Notes are the capsule store's, the same on both engines. |
 | `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists structured records, filtered (comma-separated values; `pageSize` up to 200, default 50). **Active records only** unless `status` asks for others: a pending record is a proposal nobody has agreed to. |
 | `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns) for the platform's own extractor to read. Every candidate must quote the conversation exactly, and **every record it writes is `pending`** until the account owner confirms it (`activated` is always 0). It may add evidence to a memory already in force; a candidate that would change or replace one is refused. |
 
@@ -113,8 +114,8 @@ number or does not name the herbs is replaced by a fixed sentence), written to
 the method ledger, in effect at once and returned by `recall`. A habit whose
 share falls below a quarter over enough later edits is retired with the reason
 said. Changes naming a toxic herb (the `tcmToxicHerbs` rows of
-`packages/domain/src/clinical-safety-rules.json`, the list the memory
-checkpoint and the capsule import scan read) are never learned from and are
+`packages/domain/src/clinical-safety-rules.json`; only observations read that
+list, and nothing else in the platform does) are never learned from and are
 counted for the dashboard's `neverLearned` line. No runtime is involved, and a doctor
 who paused learning is not observed.
 
@@ -131,6 +132,41 @@ memory records (capsule entries follow each capsule's own activation). Those
 switches are on the memory page (「记忆开关」). A deployment that has turned
 recall off altogether (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED=false`) answers every
 `recall` with `{ "items": [], "mode": "disabled" }`.
+
+## Which engine
+
+An account's memory is on one of two engines, and the API follows the account's:
+
+- **`legacy`: the platform's own records.** Everything above applies as
+  written: an episode is extracted and held for the owner, records are
+  `pending` until confirmed, `restore` brings a forgotten record back.
+- **`native`: OpenViking's memory engine.** Memory is the engine's own files,
+  the ones the workbench's memory page shows. `/recall` reads them (the account's
+  own and the project's, never a sensitive one), `/records` and `/dashboard`
+  list them, a forget removes the file from the engine and keeps its text only
+  for the undo (the forget's answer carries the `version` an undo names), an edit
+  replaces its text, and `PUT /settings` pauses the engine's own learning too.
+  What a file does not have is refused by name, `400 memory_engine_unsupported`:
+  **`/episodes`** (the engine keeps what it extracts with nothing held for the
+  owner, which this API never does: propose a fact with `/note`), a summary edit
+  with no `value`, and `restore` (undo it instead); `confirm` is `409
+  memory_not_pending`, since nothing waits for confirmation. A native account has
+  no replaced records and no usage counts, and the engine has no `asOf`.
+  A deployment that cannot reach the engine for a native account answers `503
+  memory_engine_unavailable`, never the other engine's rows.
+
+Every answer that reads or acts on an account's memory names its engine: an
+`engine` field in an object body (`/recall`, `/dashboard`, `/settings`,
+`/episodes`) and an `X-Memory-Engine` header on all of them. Notes, observations
+and methods are the capsule store's and the learning ledger's, and are the same on
+both.
+
+Which engine a new account gets is the deployment's default: native whenever
+OpenViking is the index. The API-only shape (`deploy/web/docker-compose.api-only.yml`)
+pins the default to `legacy`, because the CDSS integration is built on episodes,
+pending records and the confirm step; set `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED=true`
+in its `.env` to give new accounts the native engine (accounts that exist keep
+theirs; `scripts/ops/memory-engine.mjs` moves one).
 
 ## Lineage cards as capsules
 
@@ -163,6 +199,15 @@ password is read from a file, never from the command line.
 posting episodes stay HTTP calls: they are integration actions, and a tool per
 verb is a catalogue the model pays for on every first turn.
 
+`memory_recall` takes `query`, `factKinds`, `since`, `asOf`, `limit`, and the two
+that serve a clinical integration: `capsuleIds` (1–8, read these capsules instead
+of the ones in force: one school at a time) and `methods` (`all`, `own`,
+`capsules` or `none`). The fact kinds are the API's own fourteen. Both tools take an
+optional `subject`, sent as `X-Subject`, for an integration key (one doctor behind
+an institution): set by the host application, not chosen from the conversation;
+the process's `EVIMED_MEMORY_SUBJECT` is the default when a call names none, and
+whether the key may name a subject at all is the service's to refuse.
+
 It needs Python 3 and nothing else. Configure it with:
 
 | Variable | Meaning |
@@ -170,6 +215,7 @@ It needs Python 3 and nothing else. Configure it with:
 | `EVIMED_MEMORY_API_URL` | The API base, e.g. `https://evimed.example.org/api/agent-memory/v1`. |
 | `EVIMED_MEMORY_API_KEY_FILE` | A file holding the key (preferred: the key stays out of process listings and shared configs). |
 | `EVIMED_MEMORY_API_KEY` | The key itself, for a local profile only. |
+| `EVIMED_MEMORY_SUBJECT` | The person calls are for when a call names none (integration keys only; absent, the key's own account). |
 | `EVIMED_MEMORY_TIMEOUT_SECONDS` | Per-call timeout, 1–60, default 20. |
 
 With no URL or no key the tools answer that the adapter is unconfigured rather

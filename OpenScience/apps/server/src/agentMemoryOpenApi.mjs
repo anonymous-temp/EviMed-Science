@@ -63,10 +63,11 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       description: [
         "Read and propose research memory on behalf of one account, for an agent that is not EviMed's own.",
         "",
-        "Two rules hold everywhere in this API and are worth reading before the endpoints:",
+        "Three rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
         "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
+        "3. An account's memory is on one of two engines, and the API follows the account's. On the platform's own records (`engine: \"legacy\"`) everything below applies as written. On the native memory engine (`engine: \"native\"`) memory is the engine's own files: `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` is refused (`400 memory_engine_unsupported`) because the engine keeps what it extracts with nothing held for the owner, which rule 1 forbids; a native account has no pending records, no replaced ones, and no usage counts, and `restore` is the undo. Notes, observations and methods are the same on both. Every answer that reads or acts on an account's memory names its engine: `engine` in an object body, and the `X-Memory-Engine` header on all of them. A deployment that cannot reach the engine for a native account answers `503 memory_engine_unavailable`, never the other engine's rows.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
       ].join("\n"),
@@ -87,7 +88,14 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           description: `An account API key, minted at POST /api/agent-keys (\`subjects: true\` makes it an integration key). Scopes: ${AGENT_KEY_SCOPES.join(", ")}.`,
         },
       },
+      headers: {
+        MemoryEngine: {
+          description: "Which engine keeps the memory this answer read or acted on: `legacy` (the platform's own records) or `native` (the memory engine's own files). See rule 3.",
+          schema: { type: "string", enum: ["legacy", "native"] },
+        },
+      },
       schemas: {
+        Engine: { type: "string", enum: ["legacy", "native"], description: "Which engine keeps the account's memory. See rule 3." },
         FactKind: { type: "string", enum: [...CAPSULE_FACT_KINDS] },
         RecallRequest: {
           type: "object",
@@ -140,6 +148,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
               type: "object",
               properties: {
                 items: { type: "array", items: { type: "object", additionalProperties: true } },
+                engine: { $ref: "#/components/schemas/Engine" },
                 sources: { type: "object", properties: { memory: { type: "integer" }, capsule: { type: "integer" } } },
                 mode: { type: "string" },
                 contextOnly: { type: "boolean", const: true },
@@ -279,6 +288,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             data: {
               type: "object",
               properties: {
+                engine: { $ref: "#/components/schemas/Engine" },
                 switches: { $ref: "#/components/schemas/Settings" },
                 records: { type: "array", items: { $ref: "#/components/schemas/BoardRecord" }, description: "What is in force." },
                 pending: { type: "array", items: { type: "object", additionalProperties: true },
@@ -324,7 +334,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/recall": {
         post: {
           summary: "Search this account's memory",
-          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules, or of the capsules named in `capsuleIds` — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project. It also returns `methods`: how this account works (its learned methods) and how the capsules read work (their work-style entries), the account's own first. Reading a method counts nothing.",
+          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes; for an account on the native engine, the engine's own memory files) and the facts of its active capsules, or of the capsules named in `capsuleIds` — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project. It also returns `methods`: how this account works (its learned methods) and how the capsules read work (their work-style entries), the account's own first. Reading a method counts nothing.",
           security: [{ agentApiKey: ["memory.read"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/RecallRequest" }),
           responses: {
@@ -361,7 +371,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             { name: "query", in: "query", schema: { type: "string" } },
             { name: "pageSize", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
           ],
-          responses: { 200: { description: "Records, newest first." }, ...common },
+          responses: { 200: { description: "Records, newest first.", headers: { "X-Memory-Engine": { $ref: "#/components/headers/MemoryEngine" } } }, ...common, 503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable, or the account is on the native engine and the deployment cannot reach it (`memory_engine_unavailable`).") },
         },
       },
       "/episodes": {
@@ -375,7 +385,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           requestBody: jsonBody({ $ref: "#/components/schemas/EpisodeRequest" }),
           responses: {
             202: { description: "Extraction ran. Every record it wrote is `pending`, so `activated` is zero on this path by construction; `pending` counts them and `rejected` counts what the extractor or the hold refused." },
-            400: errorResponse("Malformed request."),
+            400: errorResponse("Malformed request, or the account is on the native memory engine, which keeps what it extracts with nothing held for the owner (`memory_engine_unsupported`, rule 3): propose a fact with `POST /note` instead."),
             ...common,
           },
         },

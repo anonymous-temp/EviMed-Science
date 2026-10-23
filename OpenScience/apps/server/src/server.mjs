@@ -3071,6 +3071,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // goes through. There is no route that writes a record directly.
   const agentMemoryRoutes = createAgentMemoryRoutes({
     config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
+    // An account on the native engine is read and acted on through the store the memory page uses (`agentMemoryRoutes.mjs`, rule 4).
+    nativeMemory: config.ovNativeMemoryEnabled ? nativeMemory : null,
     // The methods recall returns: the account's own learned library.
     learning: learningService,
     // The dashboard: the rejections the extractor must respect, forgetting
