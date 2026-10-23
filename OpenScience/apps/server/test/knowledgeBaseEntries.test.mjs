@@ -11,6 +11,7 @@ const FETCHED = "2026-10-07T08:00:00.000Z";
 function setup({ page = null, onRead = null, files = new Map(), standing = [] } = {}) {
   const log = { writes: [], reads: [], removed: [], refreshed: [] };
   const sources = {
+    get: async (_userId, id) => standing.find(row => row.id === id),
     documents: { list: async (_userId, _kind, { filter }) => ({ items: filter.familyId ? standing.filter((row) => row.payload.familyId === filter.familyId)
       : standing.filter((row) => row.payload.paths.includes(filter.paths?.[0])) }) },
     remove: async (userId, id, input) => { log.removed.push({ userId, id, ...input }); return { id }; },
@@ -134,13 +135,14 @@ test("a link read again says only when, if the page is as it was, and is the nex
   assert.equal(same.log.refreshed[0].link.fetchedAt, FETCHED);
   assert.deepEqual(same.log.removed, []);
 
-  // A changed page: the next version is written to the same path, and the version it replaces goes.
+  // A changed page keeps the same logical path and preserves the prior source.
   const changed = setup({ files: first.files, standing: [standing], page: { receipt: { url: "u", finalUrl: "u", title: "关于修订阿莫西林制剂说明书的公告（更新）", site: "www.nmpa.gov.cn", fetchedAt: FETCHED, rendered: false, contentType: "html" }, text: "新增儿童用法用量。" } });
   const next = await changed.entries.refetchLink({ user, project, source: standing });
   assert.equal(next.changed, true);
   const written = changed.log.writes.find((write) => write.register);
   assert.equal(written.rel, snapshotRel);
-  assert.deepEqual(changed.log.removed, [{ userId: "user-one", id: "src_stand", expectedRevision: 3, accountCreatedAt: "2026-09-01" }]);
+  assert.deepEqual(changed.log.removed, []);
+
 
   await assert.rejects(setup().entries.refetchLink({ user, project, source: { id: "src_plain", payload: { paths: ["knowledge-base/a.pdf"] } } }), { code: "source_link_required", status: 409 });
 });
@@ -160,7 +162,7 @@ test("a note is a Markdown file under notes/ named for its title, and two notes 
   await assert.rejects(entries.addNote({ user, project, title: "t", body: { text: "x" } }), { code: "source_note_invalid" });
 });
 
-test("a note opens with its title and text, and saving writes the same path and retires the version it replaces", async () => {
+test("a note opens with its title and text, and saving writes the same path and publishes without deleting history", async () => {
   const { entries, log, files } = setup();
   const added = await entries.addNote({ user, project, title: "组会记录", body: "确定分组。" });
   const rel = log.writes[0].rel;
@@ -173,7 +175,8 @@ test("a note opens with its title and text, and saving writes the same path and 
   assert.equal(saved.changed, true);
   assert.equal(family.log.writes[0].rel, rel, "the same path: changed text is the next version of one note");
   assert.equal(family.log.writes[0].text, "# 组会记录（修订）\n\n确定分组并写明局限。\n");
-  assert.deepEqual(family.log.removed.map((entry) => entry.id), ["src_note"], "only the older version goes, never the one that now stands");
+  assert.deepEqual(family.log.removed, [], "history is preserved rather than deleted");
+
 
   await assert.rejects(entries.saveNote({ user, project, source: { id: "src_pdf", payload: { paths: ["knowledge-base/a.pdf"], connector: { type: "upload" } } }, title: "t", body: "" }), { code: "source_note_required", status: 409 });
   await assert.rejects(entries.readNote({ project, source: { id: "src_link", payload: { paths: ["knowledge-base/links/a.md"], connector: { type: "upload" } } } }), { code: "source_note_required" });

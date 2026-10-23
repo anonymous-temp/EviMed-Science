@@ -27,9 +27,13 @@ test("note A-B-A restores identity, preserves old bytes, and independent equal n
     assert.equal(restored.source.id, first.source.id);
     assert.ok(restored.source.payload.generation > first.source.payload.generation);
     assert.equal(restored.source.payload.version, 3);
-    assert.equal(restored.source.payload.deletion, null);
+    assert.equal(restored.source.payload.deletion ?? null, null, "republishing history is not a deletion restore");
     const inventory = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
-    assert.equal(inventory.items.length, 2);
+    assert.equal(inventory.items.length, 3, "both note identities and the historical B source remain addressable");
+    const current = await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id });
+    assert.deepEqual(current.items.map(row => row.id).sort(), [restored.source.id, independent.source.id].sort());
+    assert.equal(inventory.items.find(row => row.id === next.source.id).payload.publication.current, false);
+    assert.equal(await readFile(path.join(ctx.project.baseDir, next.source.payload.paths[0]), "utf8"), "# Identity\n\nB\n");
   } finally { await ctx.close(); }
 });
 
@@ -37,12 +41,25 @@ test("concurrent note saves leave one current version whose registered digest ma
   const ctx = await signedIn();
   try {
     const first = await post(ctx, "/api/sources/notes", { projectId: ctx.project.id, title: "Concurrent", body: "A" });
-    const versions = await Promise.all(["B", "C"].map(body => post(ctx, `/api/sources/${first.source.id}/note`, { title: "Concurrent", body }, "PUT")));
-    const live = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    const versions = await Promise.all(["B", "C"].map(async body => {
+      const response = await fetch(`${ctx.base}/api/sources/${first.source.id}/note`, { method: "PUT", headers: ctx.headers,
+        body: JSON.stringify({ title: "Concurrent", body }) });
+      return { status: response.status, body, result: await response.json() };
+    }));
+    assert.equal(versions.filter(version => version.status === 200).length, 1);
+    const conflict = versions.find(version => version.status === 409);
+    assert.equal(conflict?.result.code, "source_revision_conflict");
+    const winner = versions.find(version => version.status === 200);
+    const live = await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id });
     assert.equal(live.items.length, 1);
-    assert.ok(versions.some(version => version.source.id === live.items[0].id));
+    assert.equal(winner.result.data.source.id, live.items[0].id);
     const bytes = await readFile(path.join(ctx.project.baseDir, live.items[0].payload.paths[0]));
+    assert.equal(bytes.toString("utf8"), `# Concurrent\n\n${winner.body}\n`);
     assert.equal(createHash("sha256").update(bytes).digest("hex"), live.items[0].payload.fingerprint.sha256);
+    assert.equal(await readFile(path.join(ctx.project.baseDir, first.source.payload.paths[0]), "utf8"), "# Concurrent\n\nA\n");
+    const history = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    assert.equal(history.items.length, 2, "the losing save publishes no source");
+    assert.equal(history.items.find(row => row.id === first.source.id).payload.publication.current, false);
   } finally { await ctx.close(); }
 });
 
@@ -133,10 +150,17 @@ test("concurrent web refreshes leave exactly one version with matching preserved
   try {
     const first = await post(ctx, "/api/sources/links", { projectId: ctx.project.id, url: "https://example.org/publication" });
     await Promise.all([0, 1].map(() => post(ctx, `/api/sources/${first.source.id}/refetch`, {})));
-    const live = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    const history = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    assert.equal(history.items.length, 3);
+    assert.equal(history.items.filter(row => row.payload.publication.current === false).length, 2);
+    const live = await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id });
     assert.equal(live.items.length, 1);
-    const bytes = await readFile(path.join(ctx.project.baseDir, live.items[0].payload.paths[0]));
-    assert.equal(createHash("sha256").update(bytes).digest("hex"), live.items[0].payload.fingerprint.sha256);
+    for (const source of history.items) {
+      const bytes = await readFile(path.join(ctx.project.baseDir, source.payload.paths[0]));
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), source.payload.fingerprint.sha256);
+    }
+    const original = await readFile(path.join(ctx.project.baseDir, first.source.payload.paths[0]), "utf8");
+    assert.match(original, /Web revision 1/);
     assert.equal(live.items[0].payload.version, 3);
   } finally { await ctx.close(); }
 });
@@ -164,8 +188,12 @@ test("editing a seeded legacy note preserves its historical bytes and unchanged-
     const old = await ctx.app.sourceService.documents.get(ctx.user.id, "source", legacy.id, { includeDeleted: true });
     const original = await readFile(path.join(ctx.project.baseDir, old.payload.paths[0]));
     assert.equal(createHash("sha256").update(original).digest("hex"), legacy.payload.fingerprint.sha256);
-    const live = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
-    assert.equal(live.items.length, 1);
+    const history = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id });
+    assert.equal(history.items.length, 2);
+    assert.equal(old.payload.publication.current, false);
+    assert.equal(await readFile(path.join(ctx.project.baseDir, old.payload.paths[0]), "utf8"), "# Legacy\n\nA\n");
+    const live = await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id });
+    assert.deepEqual(live.items.map(row => row.id), [next.source.id]);
   } finally { await ctx.close(); }
 });
 
@@ -173,13 +201,29 @@ test("post-registration retirement failure rolls the ledger back without changin
   const ctx = await signedIn();
   try {
     const legacy = await seedLegacyNote(ctx);
-    ctx.app.sourceService.remove = async () => { throw new Error("Injected retirement failure"); };
+    const documents = ctx.app.sourceService.documents;
+    const put = documents.put.bind(documents);
+    let registeredId = null, injected = false;
+    documents.put = async (userId, kind, id, payload, options) => {
+      if (kind === "source" && id !== legacy.id) registeredId = id;
+      if (kind === "source" && id === legacy.id && payload.publication?.current === false) {
+        assert.ok(registeredId, "the new source was registered before the predecessor pointer failed");
+        injected = true;
+        throw new Error("Injected current-pointer publication failure");
+      }
+      return put(userId, kind, id, payload, options);
+    };
     const response = await fetch(`${ctx.base}/api/sources/${legacy.id}/note`, { method: "PUT", headers: ctx.headers,
       body: JSON.stringify({ title: "Legacy", body: "B" }) });
     assert.equal(response.status, 500);
     assert.equal(await readFile(path.join(ctx.project.baseDir, legacy.payload.paths[0]), "utf8"), "# Legacy\n\nA\n");
     const current = await ctx.app.sourceService.documents.get(ctx.user.id, "source", legacy.id);
     assert.equal(current.payload.fingerprint.sha256, legacy.payload.fingerprint.sha256);
+    assert.ok(injected, "the actual predecessor publication write failed");
+    assert.equal(current.revision, legacy.revision);
+    assert.equal(current.payload.publication.current, true);
+    assert.equal(await documents.get(ctx.user.id, "source", registeredId), null, "the new registration rolled back");
+    assert.deepEqual((await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id })).items.map(row => row.id), [legacy.id]);
   } finally { await ctx.close(); }
 });
 

@@ -1707,6 +1707,32 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
     judgeService,
+    prepareRegistration: async (userId, input) => {
+      if (input.connector?.type !== "openlist") return input;
+      if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is unavailable.");
+      const user = await store.userById(userId);
+      if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
+      const project = await store.requireProject(user, input.projectId);
+      const buffer = await openListConnector.capture(userId, input);
+      const logicalPath = input.logicalPath ?? input.path;
+      const name = path.posix.basename(String(input.connector.id));
+      const relative = `knowledge-base/.evimed-revisions/${input.sha256}/${name}`;
+      const full = resolveScopedPath(project.baseDir, relative);
+      await withProjectStorageMutation(project, async () => {
+        let existing;
+        try { existing = await readFileNoFollow(project.baseDir, full); }
+        catch (error) { if (!["ENOENT", "file_not_found"].includes(error.code)) throw error; }
+        if (existing) {
+          if (createHash("sha256").update(existing).digest("hex") !== input.sha256) {
+            throw new HttpError(409, "source_changed", "The preserved OpenList original changed.");
+          }
+          return;
+        }
+        await assertProjectCapacity(project, full, buffer.length, config);
+        await writeFileAtomicNoFollow(project.baseDir, full, buffer, { mode: 0o600 });
+      });
+      return { ...input, logicalPath, path: relative };
+    },
     afterReplace: async event => {
       const outcomes = await Promise.allSettled([
         resultImpacts?.reconcileReplacement(event.userId, event),
@@ -2020,7 +2046,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const project = await sourceProject(job);
       job.sourceProject = project;
       let localPath;
-      if (connectorType === "openlist") {
+      if (connectorType === "openlist" && !String(source.payload.paths?.[0] ?? "").startsWith("knowledge-base/.evimed-revisions/")) {
         if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
         const remotePath = source.payload.connector?.id;
         const buffer = await openListConnector.read(job.userId, remotePath);

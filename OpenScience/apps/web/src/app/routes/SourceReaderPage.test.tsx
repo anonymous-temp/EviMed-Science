@@ -10,6 +10,7 @@ import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
 import { TWO_COLUMN_MIN_WIDTH } from "@/components/sources/useReaderBox";
 import knowledgePage from "@/components/sources/knowledgeFixtures/page-analysis-mine.json";
 import knowledgeStatus from "@/components/sources/knowledgeFixtures/status-compiled.json";
+import { readerMeta, ORIGIN_LABEL } from "@/components/sources/sourceView";
 import { SourceReaderPage } from "./SourceReaderPage";
 
 const mocks = vi.hoisted(() => ({
@@ -749,7 +750,12 @@ describe("a document's page", () => {
     });
 
     it("is the editor for a note, and saving it follows the note to its next version", async () => {
-      const column = await original(note);
+      const savedNote = { ...note, id: "src_note_2" };
+      mocks.getSource.mockImplementation(async (id: string) => id === savedNote.id ? savedNote : note);
+      mocks.getSourceNote.mockImplementation(async (id: string) => ({ title: note.display.title, body: id === savedNote.id ? "增加：敏感性分析另行报告。" : "确定 C1–C3 三类比较分开合并。" }));
+      resize(700);
+      renderReader(readerAt(note.id));
+      const column = await screen.findByRole("tabpanel");
       const body = await within(column).findByLabelText("正文");
       expect(body).toHaveValue("确定 C1–C3 三类比较分开合并。");
       expect(within(column).getByRole("button", { name: "保存" })).toBeDisabled();
@@ -759,6 +765,59 @@ describe("a document's page", () => {
       await waitFor(() => expect(mocks.saveSourceNote).toHaveBeenCalledWith("src_note", { title: "10月3日组会记录", body: "增加：敏感性分析另行报告。" }));
       expect(mocks.toastSuccess).toHaveBeenCalledWith("已保存，正在重新读取");
       await waitFor(() => expect(addressOf()).toBe("/app/files/src_note_2"));
+      await userEvent.click(await screen.findByRole("tab", { name: "内容" }));
+      expect(await screen.findByText("增加：敏感性分析另行报告。")).toBeInTheDocument();
+      expect(screen.queryByText("确定 C1–C3 三类比较分开合并。")).not.toBeInTheDocument();
+    });
+
+    it("keeps historical note originals readable but read only", async () => {
+      const historical = { ...note, payload: { ...note.payload, publication: { current: false } } };
+      mocks.getSource.mockResolvedValue(historical);
+      resize(700);
+      renderReader(readerAt(note.id));
+      const body = await screen.findByLabelText("正文");
+      expect(body).toHaveAttribute("readonly");
+      expect(screen.getByLabelText("标题")).toHaveAttribute("readonly");
+      expect(screen.getByText("历史版本，仅供查看。")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+      expect(mocks.saveSourceNote).not.toHaveBeenCalled();
+    });
+
+    it("keeps note version navigation beside its independently loaded preview", async () => {
+      const old = { ...note, payload: { ...note.payload, familyId: "fam_note", version: 1 } };
+      const latest = { ...old, id: "src_note_latest", payload: { ...old.payload, version: 2 } };
+      mocks.getSource.mockImplementation(async (id: string) => id === latest.id ? latest : old);
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: old.id, familyId: "fam_note", currentVersion: 2, items: [latest, old], nextCursor: null });
+      mocks.getSourceUnderstanding.mockResolvedValue({ current: null });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      renderReader(readerAt(old.id));
+      const newest = await screen.findByRole("link", { name: "打开最新版本" });
+      await userEvent.click(newest);
+      await waitFor(() => expect(addressOf()).toContain(latest.id));
+      await userEvent.click(await screen.findByText("以前的版本（1）"));
+      const previous = await screen.findByRole("link", { name: /第 1 版/ });
+      await userEvent.click(previous);
+      await waitFor(() => expect(addressOf()).toBe(readerAt(old.id)));
+      expect(mocks.getSourceUnderstanding).not.toHaveBeenCalled();
+    });
+
+    it("deduplicates identical metadata labels while retaining distinct origins", () => {
+      expect(readerMeta(note).split(" · ").filter((part) => part === "笔记")).toHaveLength(1);
+      for (const origin of ["upload", "drive"] as const) {
+        const source = makeSource("src_meta", { typeShort: "笔记", origin });
+        expect(readerMeta(source)).toContain("笔记");
+        expect(readerMeta(source)).toContain(ORIGIN_LABEL[origin]);
+      }
+    });
+
+    it("renders a saved note as Markdown without an understanding", async () => {
+      mocks.getSource.mockResolvedValue(note);
+      mocks.getSourceUnderstanding.mockResolvedValue({ current: null });
+      mocks.getSourceNote.mockResolvedValue({ title: "Note", body: "# Saved heading\n\n| Item | Value |\n| --- | --- |\n| A | 3 |" });
+      resize(700);
+      renderReader(readerAt("src_note") + "?tab=content");
+      expect(await screen.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
+      expect(await screen.findByRole("table")).toBeInTheDocument();
     });
 
     it("opens on the editor where there are two tabs, because a note is the original", async () => {
@@ -834,7 +893,7 @@ describe("a document's page", () => {
       expect(mocks.getSource.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    it("writes no sentence for a readable document the reading has nothing on: the column holds what there is, and there is none", async () => {
+    it("offers the original when a readable document has no understanding", async () => {
       mocks.getSourceUnderstanding.mockResolvedValue({ ...understanding({}, "src_image"), current: null });
       mocks.getSource.mockResolvedValue(picture);
       renderReader(readerAt("src_image"));
@@ -842,7 +901,7 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH);
       await waitFor(() => expect(mocks.getSourceUnderstanding).toHaveBeenCalled());
       await waitFor(() => expect(within(columnOf("points")!).queryByRole("status", { name: "正在加载内容" })).toBeNull());
-      expect(columnOf("points")!.textContent?.trim()).toBe("");
+      expect(within(columnOf("points")!).getByRole("link", { name: "查看原文" })).toHaveAttribute("href", "/app/files/src_image?tab=original");
     });
 
     it("says it could not load the key points, with a way to try again, and the original still shows", async () => {

@@ -153,6 +153,7 @@ export interface SourceDisplay {
 /** How many documents fall under each chip, over the whole scope and the search — not over the page. */
 export type SourceCounts = Record<"all" | SourceKind, number>;
 export interface SourcePayload {
+  publication?: { current: boolean; legacyAmbiguous?: boolean; bindings?: Record<string, { logicalPath: string; current: boolean; publicationRevision: number }> };
   paths: string[];
   /** The title a note or a saved page was filed under. */
   title?: string;
@@ -426,8 +427,8 @@ export interface DuplicateGroup {
   decision: { decision: "linked" | "dismissed"; note: string; at: string } | null;
 }
 
-export function getSourceFamily(id: string) {
-  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family`);
+export function getSourceFamily(id: string, familyId?: string) {
+  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family${familyId ? `?familyId=${encodeURIComponent(familyId)}` : ""}`);
 }
 export function listSourceFolders(projectId: string) {
   const query = new URLSearchParams({ projectId });

@@ -10,13 +10,14 @@ import { formatDay } from "@/lib/format";
 import { productErrorMessage } from "@/lib/productClient";
 import { chatPath } from "@/lib/runLocation";
 import {
-  getSourceFamily, getSourceMaterials, getSourceUnderstanding, getSourceUses, sourceFailureMessage,
+  getSourceNote, getSourceFamily, getSourceMaterials, getSourceUnderstanding, getSourceUses, sourceFailureMessage,
   type SourceAnchor, type SourceFamily, type SourceRecord, type SourceUnderstanding, type SourceUnderstandingResult, type SourceUse,
 } from "@/lib/sourceClient";
 import { coverageGap, materialEntries, type MaterialEntry, type SourceMaterialsStructure } from "@/lib/sourceMaterials";
 import { labelFor } from "@/lib/statusLabel";
 import { DatasetMeaningPanel } from "./DatasetMeaningPanel";
-import { isReading } from "./sourceView";
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
+import { isEditableNote, isReading } from "./sourceView";
 
 /** The most key points a document page lists: what the document says, not everything it says. */
 const KEY_POINTS = 8;
@@ -79,10 +80,43 @@ export function SourceKeyPoints(props: {
 }) {
   return (
     <div className="space-y-6">
-      <KeyPointsBody {...props} />
+      {isEditableNote(props.source) ? <NotePreview key={props.source.id + ":" + props.source.revision} source={props.source} versionPath={props.versionPath} /> : <KeyPointsBody {...props} />}
       <UsedBy source={props.source} />
     </div>
   );
+}
+
+function NotePreview({ source, versionPath }: { source: SourceRecord; versionPath: (sourceId: string) => string }) {
+  const [family, setFamily] = useState<SourceFamily | null>(null);
+  useEffect(() => {
+    let active = true;
+    setFamily(null);
+    if (source.payload.familyId) {
+      getSourceFamily(source.id).then(
+        (value) => { if (active) setFamily(value); },
+        () => { /* Version history is supplementary to the saved note. */ },
+      );
+    }
+    return () => { active = false; };
+  }, [source.id, source.payload.familyId, source.payload.generation]);
+  const [body, setBody] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setError(null);
+    getSourceNote(source.id).then(
+      (note) => { if (active) setBody(note.body); },
+      (failure) => { if (active) setError(`无法打开这篇笔记：${productErrorMessage(failure)}`); },
+    );
+    return () => { active = false; };
+  }, [source.id, attempt]);
+  if (error) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
+  if (body === null) return <p role="status">正在打开笔记</p>;
+  return <div className="space-y-6">
+    {body.trim() ? <MarkdownViewer>{body}</MarkdownViewer> : <p className="text-ui text-text-3">这篇笔记尚无正文。</p>}
+    <Versions source={source} family={family} versionPath={versionPath} />
+  </div>;
 }
 
 function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
@@ -162,6 +196,7 @@ function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
     return (
       <div className="space-y-6">
         {meaning}
+        {!meaning && !gap && <p className="text-ui text-text-3">尚无内容解读。<Link className="text-link" to={{ search: "?tab=original" }}>查看原文</Link></p>}
         {gap && <Gap>{gap}</Gap>}
         {versions}
       </div>
@@ -360,7 +395,7 @@ function Versions({ source, family, versionPath }: { source: SourceRecord; famil
         <Disclosure summary={`以前的版本（${older.length}）`}>
           <ul className="space-y-1">
             {older.map((item) => (
-              <li key={item.id}>
+              <li key={`${item.id}:${versionOf(item)}`}>
                 <Link to={versionPath(item.id)} className="text-link hover:underline">第 {versionOf(item)} 版 · {formatDay(item.createdAt)}</Link>
               </li>
             ))}

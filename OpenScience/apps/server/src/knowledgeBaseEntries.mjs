@@ -219,12 +219,18 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     } catch { return null; }
   }
 
-  /** @param {any} user @param {any} project @param {string} rel @param {Buffer} buffer @param {Record<string, any>} meta */
-  async function writeEntry(user, project, rel, buffer, meta) {
+  /** @param {any} user @param {any} project @param {string} rel @param {Buffer} buffer @param {Record<string, any>} meta @param {any} [expectedSource] */
+  async function writeEntry(user, project, rel, buffer, meta, expectedSource = null) {
     const publish = async () => {
+      if (expectedSource) {
+        const base = await sources.get(user.id, expectedSource.id);
+        if (base.projectId !== project.id || base.payload.publication?.current === false || base.revision !== expectedSource.revision) {
+          throw new HttpError(409, "source_revision_conflict", "The note changed; open its current version before saving.");
+        }
+      }
       const registered = await write({ user, project, rel, buffer, meta: { ...meta, logicalPath: rel } });
       if (!registered?.source) throw new HttpError(503, "source_state_unavailable", "Source intake is not available.");
-      await retireOlderVersions(user, registered.source);
+      if (sourceOriginOf({ connectorType: registered.source.payload?.connector?.type, path: rel }) === "wiki") await retireOlderVersions(user, registered.source);
       return registered;
     };
     return sources.withRegistrationLocks
@@ -353,7 +359,7 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
       const notePath = requireNote(source);
       const rel = source.payload?.logicalPath ?? notePath;
       const heading = noteTitle(title);
-      const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading });
+      const registered = await writeEntry(user, project, rel, Buffer.from(noteMarkdown(heading, noteBody(body)), "utf8"), { title: heading }, source);
       return { ...registered, changed: !registered.duplicate };
     },
   };

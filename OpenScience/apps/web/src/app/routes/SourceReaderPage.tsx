@@ -207,7 +207,7 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const tab: ReaderTab = view.tab ?? (source && isEditableNote(source) ? "original" : "content");
   const menu = source ? sourceMenuItems(source, {
     duplicate: group !== null, busy, onRetry: readAgain, onShare: toggleShared, onDuplicates: () => setDuplicatesOpen(true), onDelete: () => setDeleting(true),
-  }) : [];
+  }).filter((item) => source.payload.publication?.current !== false || item === "separator" || !("label" in item) || item.label !== "重新读取") : [];
 
   const start = Number(params.get("start")), end = Number(params.get("end")), sha = params.get("sha") ?? "";
   const span = params.has("start") && Number.isSafeInteger(start) && start >= 0 && Number.isSafeInteger(end)

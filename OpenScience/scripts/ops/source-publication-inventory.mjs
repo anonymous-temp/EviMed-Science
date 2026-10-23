@@ -19,10 +19,17 @@ export async function sourcePublicationInventory(rows, { readDigest = async () =
     const base = { userId: row.user_id, projectId: row.project_id, sourceId: row.id, revision: row.revision, deleted: Boolean(row.deleted_at) };
     const sourcePaths = Array.isArray(payload.paths) ? payload.paths : [];
     const notes = sourcePaths.filter(rel => /^knowledge-base\/notes\//.test(rel));
-    if (notes.length > 1) issues.push({ ...base, code: "ambiguous_merged_notes", paths: [...notes].sort() });
-    const familyKey = `${row.user_id}\0${row.project_id}\0${payload.familyId ?? payload.logicalPath ?? row.id}`;
-    const family = families.get(familyKey) ?? [];
-    family.push(row); families.set(familyKey, family);
+    if (notes.length > 1 && (!payload.publication?.bindings || payload.publication?.legacyAmbiguous)) issues.push({ ...base, code: "ambiguous_merged_notes", paths: [...notes].sort() });
+    if (!notes.length && sourcePaths.length > 1 && !payload.logicalPath
+      && (!payload.publication?.bindings || payload.publication?.legacyAmbiguous)) {
+      issues.push({ ...base, code: "ambiguous_source_aliases", paths: [...sourcePaths].sort() });
+    }
+    const bindings = payload.publication?.bindings ?? { [payload.familyId ?? payload.logicalPath ?? row.id]: { current: payload.publication?.current !== false } };
+    for (const [familyId, binding] of Object.entries(bindings)) {
+      const familyKey = `${row.user_id}\0${row.project_id}\0${familyId}`;
+      const family = families.get(familyKey) ?? [];
+      family.push({ ...row, bindingCurrent: binding.current, bindingFamilyId: familyId }); families.set(familyKey, family);
+    }
     for (const rel of sourcePaths) {
       const key = `${row.user_id}\0${row.project_id}\0${rel}`;
       const owners = paths.get(key) ?? [];
@@ -33,9 +40,9 @@ export async function sourcePublicationInventory(rows, { readDigest = async () =
     }
   }
   for (const family of families.values()) {
-    const live = family.filter(row => !row.deleted_at);
+    const live = family.filter(row => !row.deleted_at && row.bindingCurrent !== false);
     if (live.length > 1) issues.push({ userId: live[0].user_id, projectId: live[0].project_id, code: "conflicting_live_family",
-      familyId: live[0].payload.familyId ?? null, sourceIds: live.map(row => row.id).sort() });
+      familyId: live[0].bindingFamilyId ?? null, sourceIds: live.map(row => row.id).sort() });
   }
   for (const owners of paths.values()) {
     if (new Set(owners.map(row => row.payload.fingerprint?.sha256)).size > 1 && owners.some(row => !row.deleted_at)) {

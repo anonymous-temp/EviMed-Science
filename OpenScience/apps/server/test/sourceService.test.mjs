@@ -221,8 +221,8 @@ test("a file that arrives with new bytes tells what rests on the document it rep
     afterReplace: async (event) => { events.push(event); if (failing) throw Object.assign(new Error("impact store down"), { code: "product_state_unavailable" }); } });
   const first = await service.register("user-one", upload());
   assert.deepEqual(events, [], "a first document replaces nothing");
-  await service.register("user-one", upload({ path: "knowledge-base/copy.docx" }));
-  assert.deepEqual(events, [], "the same bytes under another name replace nothing");
+  await service.register("user-one", upload());
+  assert.deepEqual(events, [], "the same bytes read again replace nothing");
   const second = await service.register("user-one", upload({ sha256: "b".repeat(64), size: 8192 }));
   assert.equal(events.length, 1);
   assert.deepEqual(events[0], { userId: "user-one", projectId: "project-one",
@@ -820,7 +820,7 @@ test("the version chain reads back the family every source has been writing", as
   const other = await service.register("user-one", upload({ path: "knowledge-base/其他.docx", sha256: "c".repeat(64) }));
   const chain = await service.family("user-one", first.source.id);
   assert.equal(chain.familyId, first.source.payload.familyId);
-  assert.equal(chain.currentVersion, 1);
+  assert.equal(chain.currentVersion, 2);
   assert.deepEqual(chain.items.map(item => item.id), [second.source.id, first.source.id], "newest version first");
   assert.equal(chain.items.some(item => item.id === other.source.id), false, "another path is another family");
   const filtered = await service.list("user-one", { projectId: "project-one", familyId: first.source.payload.familyId });

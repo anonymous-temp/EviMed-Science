@@ -13,3 +13,10 @@ test("inventory reports ambiguous notes, conflicting live families and deleted/c
   assert.ok(!JSON.stringify(result).includes("PRIVATE BODY"));
   assert.deepEqual(await sourcePublicationInventory([...rows].reverse(), { readDigest: async () => "new" }), result);
 });
+
+ test("historical publication rows do not conflict with the current family member", async () => {
+  const row = (id, current) => ({ user_id: "u", project_id: "p", id, revision: 1, deleted_at: null,
+    payload: { familyId: "f", publication: { current }, paths: [`knowledge-base/notes/.evimed-revisions/${id}/a.md`], fingerprint: { sha256: id } } });
+  const result = await sourcePublicationInventory([row("old", false), row("new", true)], { readDigest: async (_row, rel) => rel.includes("old") ? "old" : "new" });
+  assert.equal(result.issues.some(issue => issue.code === "conflicting_live_family"), false);
+});
