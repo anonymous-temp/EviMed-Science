@@ -951,11 +951,15 @@ export class GeoMeasureStore {
         notified_at = CASE WHEN errors.judgment_state='withdrawn' THEN NULL WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
           THEN NULL ELSE errors.notified_at END,
-        updated_at = CASE WHEN $20::boolean THEN errors.updated_at ELSE $17 END
+        updated_at = CASE WHEN EXISTS (
+          SELECT 1 FROM evimed_geo.snapshots previous JOIN evimed_geo.snapshots incoming ON incoming.id=EXCLUDED.last_snapshot_id
+          WHERE previous.id=errors.last_snapshot_id AND previous.user_id=errors.user_id AND previous.geo_project_id=errors.geo_project_id
+            AND incoming.user_id=errors.user_id AND incoming.geo_project_id=errors.geo_project_id AND incoming.asked_at<=previous.asked_at
+        ) THEN errors.updated_at ELSE $17 END
       RETURNING *, (xmax = 0) AS inserted`,
     [row.id, row.userId, row.geoProjectId, prepared.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
       row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
-      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId }), prepared.preserveOccurrenceClock ?? false]);
+      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
     const out = result.rows[0];
     return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
     });
