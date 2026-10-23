@@ -2274,6 +2274,7 @@ export class GeoService {
     if (filter.planContextRef && this.planContexts) {
       const row = await this.planContexts.documents.get(project.userId, "geo-plan-context", filter.planContextRef);
       if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id) throw new HttpError(404, "geo_plan_context_not_found", "The plan is unavailable.");
+      if (!['strategy', 'content'].includes(row.payload.mode)) throw new HttpError(409, 'geo_plan_context_mismatch', 'Choose a planning context for this strategy read.');
       context = row.payload;
     }
     const scoped = Object.entries(geoReadScopeInput(filter)).some(([key, value]) => {

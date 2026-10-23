@@ -147,10 +147,32 @@ export class GeoPlanContext {
     await this.authorizeSession(user, project, request.sessionId);
     const row = await this.resolve(user, project, request.geoPlanContext?.referenceId);
     if (row.payload.mode === "strategy" && row.payload.state !== "bound") await readGeoSelection(this.store, project, { selectionRef: row.payload.basis.selection.reference });
-    this.prepared.set(request, { referenceId: row.id, actorId: user.id, projectId: controlProject.id,
+    const originalText = (request.content ?? []).filter(part => part?.type === "text").map(part => part.text).join("\n");
+    this.prepared.set(request, { referenceId: row.id, actorId: user.id, ownerId: project.userId, projectId: controlProject.id,
       requestId: request.requestId, sessionId: request.sessionId,
-      requestDigest: geoPlanDigest((request.content ?? []).filter(part => part?.type === "text").map(part => part.text).join("\n")),
-      fingerprint: row.payload.fingerprint, basisDigest: row.payload.basisDigest });
+      originalText, originalParts: request.content?.length ?? 0, requestDigest: geoPlanDigest(originalText),
+      fingerprint: row.payload.fingerprint, basisDigest: row.payload.basisDigest, basisIdentity: geoPlanDigest(row.payload.basis) });
+  }
+  /** Only this operation's verified binding can qualify a request-local route. Injected text never grants it. */
+  async routingInputForRequest(controlProject, request) {
+    const prepared = request && this.prepared.get(request);
+    if (!prepared) return null;
+    const project = await this.store.projectByControlProject(controlProject.userId, controlProject.id);
+    if (!project || prepared.ownerId !== controlProject.userId || prepared.projectId !== controlProject.id || prepared.sessionId !== request.sessionId || prepared.requestId !== request.requestId) throw fail("geo_plan_context_mismatch", "The selected request belongs to another conversation.");
+    const actor = { id: prepared.actorId };
+    await this.service.requireProject(actor, project.id, "edit");
+    await this.authorizeSession(actor, project, request.sessionId);
+    const row = await this.resolve(actor, project, prepared.referenceId);
+    const binding = await this.documents.get(project.userId, "geo-plan-context", `gpcbind_${geoPlanDigest([actor.id, controlProject.id, request.requestId])}`);
+    const originalText = (request.content ?? []).slice(0, prepared.originalParts).filter(part => part?.type === "text").map(part => part.text).join("\n");
+    if (!binding || binding.projectId !== controlProject.id || binding.payload.recordType !== "geo-plan-request" || binding.payload.geoId !== project.id || binding.payload.actorId !== actor.id
+      || binding.payload.sessionId !== request.sessionId || binding.payload.requestId !== request.requestId || binding.payload.referenceId !== row.id
+      || binding.payload.requestDigest !== prepared.requestDigest || geoPlanDigest(originalText) !== prepared.requestDigest
+      || row.payload.state !== "bound" || row.payload.sessionId !== request.sessionId || row.payload.requestId !== request.requestId || row.payload.requestDigest !== prepared.requestDigest
+      || row.payload.fingerprint !== prepared.fingerprint || row.payload.basisDigest !== prepared.basisDigest || geoPlanDigest(row.payload.basis) !== prepared.basisIdentity) throw fail("geo_plan_context_mismatch", "The selected input no longer matches this request.");
+    const brand = project.product?.brandName || project.product?.genericName;
+    return { originalText: prepared.originalText, referenceId: row.id, mode: row.payload.mode, basisDigest: row.payload.basisDigest,
+      suppliedInputs: typeof brand === "string" && brand.trim() ? { brandEntity: brand.trim().slice(0, 240) } : {} };
   }
   async bind(user, controlProject, request) {
     if (request.geoPlanContext === undefined) return null;
@@ -193,7 +215,9 @@ export class GeoPlanContext {
         row = latest;
       }
     }
-    request.content.push({ type: "text", text: `\n<evimed_geo_plan_context>${JSON.stringify({ referenceId: row.id, requestId: request.requestId, ...row.payload,
+    const boundInput = { ...row.payload };
+    delete boundInput.outputs;
+    request.content.push({ type: "text", text: `\n<evimed_geo_plan_context>${JSON.stringify({ referenceId: row.id, requestId: request.requestId, ...boundInput,
       instruction: row.payload.mode === "analysis" ? "Use basis.analysis as the exact numeric input for the actual user request. Preserve missing states, domain metric definitions, scope, digest and current-context target labels. Do not recalculate metrics or replace these historical readings with latest data. geo_read analysis with only planContextRef pages this frozen table. Exact members still require their selectionRef and may return 409 after data changes; disclose that and preserve the frozen readings. Answer in the ordinary conversation; do not create files unless the user requests them. No publication or purchase is authorized." : "Use this frozen input as context for the actual user request. Answer ordinary questions normally; do not create files merely because this context exists. geo_read strategy/targets accepts planContextRef. If the user requests a strategy, write deliverables/<unique-deliverable-id>/strategy.json and geo-strategy.md using the existing geo-strategy format. Scoped geo_write is unavailable because a project token cannot attest the producing request; the completed run imports the file under its actual bound context. For requested content use the existing geo-content article files and articles.json registration. Preserve exact group/action IDs. Do not replace the frozen basis. No purchase or publication is authorized." }).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e")}</evimed_geo_plan_context>` });
     delete request.geoPlanContext;
     return row.payload;

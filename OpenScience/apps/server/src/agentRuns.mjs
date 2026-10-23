@@ -7963,7 +7963,19 @@ export class AgentRunStore {
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
           : await routeTurn(question, { requestIds });
-        const reservation = await this.reserveRun(project, binding ?? {
+        // Like a module step dispatched over a conversation's binding, an authenticated request-local
+        // route pins this run to its actual capability. The persistent research-session record is unchanged.
+        // The server sets routedOverBinding only after reading the immutable selected-input route.
+        const requestLocal = routed.routedOverBinding === true || Boolean((continuation || reply) && previous);
+        const selected = binding?.mode === "specialist" && !requestLocal ? {
+          ...routed,
+          effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
+          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply ? routed.effectiveRouteReason : "session-binding",
+        } : routed;
+        const pinned = requestLocal && binding?.mode === "specialist" ? { ...binding,
+          agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent,
+        } : binding;
+        const reservation = await this.reserveRun(project, pinned ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
           baselineCursor: `seq_${first.seq}`,
@@ -7974,12 +7986,12 @@ export class AgentRunStore {
           question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
           automated: continuation,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
-          estimatedMinutes: routed.estimatedMinutes ?? null,
+          estimatedMinutes: selected.estimatedMinutes ?? null,
           forkedFrom: source,
-          effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
-          effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
-          effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
-          effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
+          effectiveAgentId: selected.effectiveAgentId ?? binding?.agentId ?? null,
+          effectiveAgentVersion: selected.effectiveAgentVersion ?? binding?.agentVersion ?? null,
+          effectiveRuntimeAgent: selected.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
+          effectiveRouteReason: `${adoptedRouteReason}${selected.effectiveRouteReason ? `:${selected.effectiveRouteReason}` : ""}`.slice(0, 64),
         });
         run = reservation.run;
         // The first run of a fork is named after the line it branched from,

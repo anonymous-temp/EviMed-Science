@@ -3277,8 +3277,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
       const run = await agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
-        routeTurn: async (text, input) => (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text))
-          ?? routeAdoptedInput(full, sessionId, text),
+        routeTurn: async (text, input) => {
+          const frozen = await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text);
+          // Only the authenticated immutable snapshot can commission a GEO turn over the persistent binding.
+          // A fallback classification or text that merely names a context has no such authority.
+          return frozen ? { ...frozen, routedOverBinding: /^gpc_[a-f0-9]{64}$/.test(frozen.geoContextRef ?? "") }
+            : routeAdoptedInput(full, sessionId, text);
+        },
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
       await recordNativeSessionHandbooks(full, sessionId);
@@ -4321,13 +4326,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   };
   const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
   const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
-  if (learningService && config.learningEnabled) nativeHandbookContext = new NativeHandbookContext({
+  nativeHandbookContext = new NativeHandbookContext({
     route: routeAdoptedInput,
     select: (project, session, route) => selectOwnedHandbooks(project, session, {}, route),
     budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
     attached: recordNativeSessionHandbooks,
     allowed: async (project, sessionId) => {
-      if (!config.learningEnabled || internalFor(project.userId, project.id)) return false;
+      if (!learningService || !config.learningEnabled || internalFor(project.userId, project.id)) return false;
       const state = await memoryPausedFor(researchMemory, project.userId, project.id, sessionId);
       return !state.learning && !state.trial;
     },
@@ -5981,19 +5986,26 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }
   }
 
-  async function routeAdoptedInput(project, sessionId, text) {
+  async function routeAdoptedInput(project, sessionId, text, input = null) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
     await assertPublicSessionPrompt(project, sessionId, binding);
     const registry = await agentRegistry;
-    if (binding?.mode === "specialist") return {
+    const selected = input?.request && geoPlanContexts ? await geoPlanContexts.routingInputForRequest(project, input.request) : null;
+    if (binding?.mode === "specialist" && !selected) return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
       estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
-    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const query = selected?.originalText ?? text;
+    const supplied = new Set(Object.keys(selected?.suppliedInputs ?? {}));
+    // Inputs already supplied by the verified GEO project are not missing from a short native request.
+    // Keep the human words and both classifier implementations unchanged; only this request's catalogue is qualified.
+    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID).map(agent => selected && agent.id.startsWith("geo-")
+      ? { ...agent, requiredInputs: (agent.requiredInputs ?? []).filter(key => !supplied.has(key)) } : agent);
+    const classifierTrace = {};
     const { specialist } = await routeOpenDomain({
-      query: text, agents: routableAgents, classifier: specialistClassifier,
+      query, agents: routableAgents, classifier: specialistClassifier, trace: classifierTrace,
       owner: { userId: project.userId, projectId: project.id },
     });
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
@@ -6002,15 +6014,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           agentId: answerAgent.id,
           agentVersion: answerAgent.version,
           runtimeAgent: answerAgent.runtimeAgent,
-          reason: "unrouted:open-domain",
+          reason: classifierTrace.failure ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure) : "unrouted:open-domain",
         }
       : null);
     return {
-      question: text,
+      question: query,
       effectiveAgentId: effective?.agentId ?? null,
       effectiveAgentVersion: effective?.agentVersion ?? null,
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
+      ...(selected ? { geoContextRef: selected.referenceId } : {}),
+      ...(selected?.mode === "analysis" && effective?.agentId === OPEN_DOMAIN_ANSWER_AGENT_ID ? { geoAnalysisRead: { referenceId: selected.referenceId } } : {}),
       estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),
     };
   }
@@ -8182,7 +8196,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       return resultRevisions.bind(user.id, project, request);
     } : null,
-    preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
+    preparePrompt: async (project, request) => {
+      try { return await nativeHandbookContext.prepare(project, request); }
+      catch (error) {
+        if (geoPlanOwnWork.has(request)) {
+          const refused = error instanceof HttpError ? error : new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+          refused.definitivelyRejected = true;
+          throw refused;
+        }
+        throw error;
+      }
+    },
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
     // on that run — the learning loop's in-run correction signal.

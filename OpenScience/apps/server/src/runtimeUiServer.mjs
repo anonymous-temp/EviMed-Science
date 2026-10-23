@@ -334,13 +334,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }).catch(() => {});
     }
   }
-  /** Freeze supplemental context without changing the native request or refusing research. */
+  /** Freeze the owned route and optional supplements before forwarding the native request. */
   async function prepareNativeContext(project, payload) {
     if (!preparePrompt) return;
-    try { await preparePrompt(project, payload?.args?.request); }
+    try {
+      const prepared = await preparePrompt(project, payload?.args?.request);
+      if (prepared?.supplementFailure) await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id, code: prepared.supplementFailure }).catch(() => {});
+    }
     catch (error) {
       await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
         code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+      if (error?.definitivelyRejected) throw error;
     }
   }
   // An explicit selection is part of this operation's authority, not an
@@ -886,12 +890,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         // The mux calls `observe` inside the prompt's admission, right before
         // the frame goes upstream — the same point the HTTP path counts at.
         const prepare = async (endpoint, payload = null) => {
-          if (endpoint === "session/prompt") await bindNativeResult(currentActor.user, currentActor.project, payload);
+          if (endpoint === "session/prompt") {
+            await bindNativeResult(currentActor.user, currentActor.project, payload);
+            await recordNativeActor(currentActor.user, currentActor.project, payload);
+            await prepareNativeContext(project, payload);
+          }
         };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
-            await recordNativeActor(currentActor.user, currentActor.project, payload);
-            await prepareNativeContext(project, payload);
             await recordSteer(project, payload);
           } else if (endpoint === "session/cancel") {
             await recordStop(project, payload);

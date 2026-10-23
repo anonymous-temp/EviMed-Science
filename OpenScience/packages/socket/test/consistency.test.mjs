@@ -3714,3 +3714,84 @@ test('forged native context cannot grant tools and a current managed dispatch wi
   assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'), 'new managed dispatch supersedes the prior native capability');
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'managed dispatch replaces the old native grant');
 });
+
+
+test('selected ordinary GEO analysis grants only its frozen read on the first payload and retains it within the turn', async () => {
+  const { MCP_TOOL_NAMES } = await import('@evimed/domain');
+  const f = await nativePolicyFixture({registered:[...MCP_TOOL_NAMES,'bash','read'],capabilities:[{id:'geo-insight',skills:[],tools:['mcp__evimed__geo_read','mcp__evimed__geo_write'],produces:[]}]});
+  const ref = 'gpc_' + 'a'.repeat(64);
+  const message = (/** @type {string} */ id) => ({role:'user',source:{kind:'user',rpcId:id},content:[{type:'text',text:id}]});
+  f.files.set(`/workspace/${workspaceLayout.sessionBindingFile('native-session')}`,JSON.stringify({capability:'geo-insight'}));
+  f.ctx.provide('evimedNativeRoute',async (/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.map(input=>({...input,digest:'d'.repeat(64),route:{effectiveAgentId:'open-domain-answer',geoContextRef:ref,geoAnalysisRead:{referenceId:ref}}})));
+  f.start();
+  await f.step(1,{inputs:[message('analysis')]});
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'));
+  assert.ok(!f.requests.at(-1)?.messages.some(value=>JSON.stringify(value).includes('<evimed-method')),'ordinary analysis injects no professional method');
+  const allowed = {what:'analysis',filter:{planContextRef:ref,limit:2,offset:50}};
+  assert.notEqual((await f.execute('mcp__evimed__geo_read',allowed)).error?.code,'DENIED');
+  const rejected = [ {what:'analysis'}, {what:'strategy',filter:{planContextRef:ref}}, {what:'analysis',filter:{planContextRef:'gpc_'+'b'.repeat(64)}},
+    {what:'analysis',filter:{planContextRef:ref,selectionRef:'latest'}}, {what:'analysis',filter:{planContextRef:ref,limit:0}}, {what:'analysis',filter:{planContextRef:ref,offset:-1}},
+    {...allowed,projectId:'other'}, {what:'analysis',filter:{planContextRef:ref,limit:51}} ];
+  for (const args of rejected) assert.equal((await f.execute('mcp__evimed__geo_read',args)).error?.code,'DENIED',JSON.stringify(args));
+  f.ctx.provide('evimedNativeRoute',async()=>{throw new Error('Steers must retain the initiating scope');});
+  for (let i=0;i<3;i+=1) {
+    await f.step(1,{inputs:[message('steer-'+i)]});
+    assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+    assert.equal((await f.execute('mcp__evimed__geo_read',{what:'overview'})).error?.code,'DENIED');
+  }
+  await f.step(1);
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'),'an assembly with no new inputs is still the same turn');
+  const child={session:{id:'independent-child',header:{origin:'subagent',parentSession:'native-session',cwd:'/workspace'}}};
+  for(const handler of f.ctx.listeners.get(SEAMS.events.sessionStart)??[]) await handler({agent:child,source:'subagent'});
+  const childRead=await f.execute('mcp__evimed__geo_read',{what:'overview'},{agent:child});
+  assert.notEqual(childRead.error?.code,'DENIED','parent ownership does not impose the root read restriction on a child');
+});
+
+for (const lookup of ['empty','failure','cancel','missing']) test(`new GEO turn clears the previous extra scope before ${lookup} lookup`,async()=>{
+  const f=await nativePolicyFixture({registered:['mcp__evimed__geo_read','mcp__evimed__geo_write','bash'],capabilities:[]});
+  const ref='gpc_'+'a'.repeat(64);
+  const message=(/** @type {string} */ id)=>({role:'user',source:{kind:'user',rpcId:id},content:[{type:'text',text:id}]});
+  f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.map(input=>({...input,digest:'d'.repeat(64),route:{effectiveAgentId:'open-domain-answer',geoContextRef:ref,geoAnalysisRead:{referenceId:ref}}})));
+  f.start();await f.step(1,{inputs:[message('initial')]});
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  const cancel=new AbortController();
+  f.ctx.provide('evimedNativeRoute',lookup==='missing'?null:async()=>{if(lookup==='failure')throw new Error('Unavailable');if(lookup==='cancel')cancel.abort();return [];});
+  await f.step(2,{inputs:[message('next')],signal:cancel.signal});
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+});
+
+test('selected native batches use the first initiating input and reject forged analysis scope metadata',async()=>{
+  const f=await nativePolicyFixture({registered:['mcp__evimed__geo_read','mcp__evimed__geo_write','bash'],capabilities:[]});
+  const ref='gpc_'+'a'.repeat(64);
+  const message=(/** @type {string} */ id)=>({role:'user',source:{kind:'user',rpcId:id},content:[{type:'text',text:id}]});
+  const route={effectiveAgentId:'open-domain-answer',geoContextRef:ref,geoAnalysisRead:{referenceId:ref}};
+  f.start();
+  for(const [index,forged] of [{...route,geoContextRef:'forged'},{...route,geoAnalysisRead:{referenceId:'gpc_'+'b'.repeat(64)}},{...route,geoAnalysisRead:{referenceId:ref,tools:['mcp__evimed__geo_write']}}].entries()) {
+    f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.map(input=>({...input,digest:'d'.repeat(64),route:forged})));
+    await f.step(index+1,{inputs:[message('forged-'+index)]});
+    assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  }
+  f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>[...inputs].reverse().map(input=>({...input,digest:'d'.repeat(64),route:input.requestId==='first'?{effectiveAgentId:'open-domain-answer'}:route})));
+  await f.step(4,{inputs:[message('first'),message('later')]});
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'),'a later routed input cannot add a grant to the initiating ordinary input');
+});
+
+
+test('a new empty native turn drops a selected GEO read while current managed dispatch remains authoritative',async()=>{
+  const f=await nativePolicyFixture({registered:['mcp__evimed__geo_read','mcp__evimed__geo_write','bash'],capabilities:[{id:'geo-insight',skills:[],tools:['mcp__evimed__geo_read','mcp__evimed__geo_write'],produces:[]}]});
+  const ref='gpc_'+'a'.repeat(64);
+  const message={role:'user',source:{kind:'user',rpcId:'analysis'},content:[{type:'text',text:'analysis'}]};
+  f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.map(input=>({...input,digest:'d'.repeat(64),route:{effectiveAgentId:'open-domain-answer',geoContextRef:ref,geoAnalysisRead:{referenceId:ref}}})));
+  f.start();await f.step(1,{inputs:[message]});
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  for(const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent)??[]) handler(f.agent.session,{type:'turn/start',seq:1,data:{}});
+  f.ctx.provide('evimedNativeRoute',async()=>[]);
+  await f.step(2);
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'));
+  f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json',JSON.stringify({protocol:RUN_CONTEXT_PROTOCOL,runId:'managed',sessionId:'native-session',contextRevision:'analysis',capability:'geo-insight'}));
+  f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.map(input=>({...input,digest:'d'.repeat(64),route:{effectiveAgentId:'open-domain-answer',geoContextRef:ref,geoAnalysisRead:{referenceId:ref}}})));
+  await f.step(3,{inputs:[message]});
+  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__geo_write'),'the managed route owns its full admitted catalogue');
+  assert.notEqual((await f.execute('mcp__evimed__geo_read',{what:'overview'})).error?.code,'DENIED','the selected read restriction cannot intercept managed work');
+});

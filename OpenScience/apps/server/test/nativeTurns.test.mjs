@@ -1023,3 +1023,18 @@ test("a later observed steer joins the existing native turn's request identities
   await f.adopt();
   assert.deepEqual((await f.runs())[0].kernelRequestIds, after.kernelRequestIds);
 });
+
+
+test("native adoption keeps specialist stickiness unless the trusted route callback marks the request-local operation", async t => {
+  const binding = {sessionId:fixture.sessionId,mode:"specialist",agentId:"geo-insight",agentVersion:"1.0.0",runtimeAgent:"evimed-geo-insight"};
+  for (const qualified of [false,true]) {
+    const f=await setup(t);
+    f.bindings.set(fixture.sessionId,binding);
+    await f.adopt(async()=>({effectiveAgentId:"geo-strategy",effectiveAgentVersion:"1.2.0",effectiveRuntimeAgent:"evimed-geo-strategy",effectiveRouteReason:"llm:0.95",geoContextRef:"gpc_"+"a".repeat(64),...(qualified?{routedOverBinding:true}:{})}));
+    const runs=await f.runs();
+    assert.ok(runs.every(run=>run.effectiveAgentId===(qualified?"geo-strategy":"geo-insight")),"a context-shaped field or route reason alone cannot change a bound native run");
+    assert.ok(runs.every(run=>run.agentId===run.effectiveAgentId),"the run pin stays foldable under its actual effective identity");
+    assert.equal(f.bindings.get(fixture.sessionId),binding,"the persistent session binding is unchanged");
+    f.restart();assert.equal((await f.runs()).length,2,"restarted ledger reads the same pins");
+  }
+});

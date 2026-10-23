@@ -14,10 +14,10 @@ const textDigest = (value) => digest(String(value));
 const routeDigest = (value) => textDigest(String(value).replace(/\s+/g, " ").trim());
 const validRequestId = (value) => typeof value === "string" && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const validSession = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes"];
+const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes", "geoContextRef", "geoAnalysisRead"];
 
 export class NativeHandbookContext {
-  /** @param {{route:(project:any,sessionId:string,text:string)=>Promise<any>,select:(project:any,session:any,route:any)=>Promise<any>,
+  /** @param {{route:(project:any,sessionId:string,text:string,input?:{requestIds:string[],request:any})=>Promise<any>,select:(project:any,session:any,route:any)=>Promise<any>,
    * budget:(project:any)=>number,allowed?:(project:any,sessionId:string)=>Promise<boolean>,attached?:(project:any,sessionId:string,requestIds:string[])=>Promise<any>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
   constructor({ route, select, budget, allowed = async () => true, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
     this.route = route; this.select = select; this.budget = budget; this.allowed = allowed; this.attached = attached;
@@ -44,6 +44,9 @@ export class NativeHandbookContext {
   async envelope(project, sessionId, requestId) {
     if (!validSession(sessionId) || !validRequestId(requestId)) return null;
     const value = await this.readFile(project, this.file(project, sessionId, requestId));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const { digest: storedDigest, ...envelope } = value;
+    if (!/^[a-f0-9]{64}$/.test(storedDigest ?? "") || digest(JSON.stringify(envelope)) !== storedDigest) return null;
     return value?.ownerId === project.userId && value?.projectId === project.id && value?.sessionId === sessionId
       && value?.requestId === requestId && value.expiresAt > this.now() ? value : null;
   }
@@ -73,7 +76,6 @@ export class NativeHandbookContext {
     // The next queued turn gets its own snapshot in the ordinary path.
     if (request?.mode === "steer") return null;
     if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
-    if (!await this.allowed(project, request.sessionId)) return null;
     const fingerprint = digest(JSON.stringify(request));
     const key = this.file(project, request.sessionId, request.requestId);
     const pending = this.preparing.get(key);
@@ -93,47 +95,55 @@ export class NativeHandbookContext {
       if (existing.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
       return existing;
     }
-    let canceled = false;
+    const text = nativeInputText(request.content);
+    // Routing is core request identity. Its existing classifier budget is independent of optional recall.
+    const route = await this.route(project, request.sessionId, text, { requestIds: [request.requestId], request });
+    let context = "", items = [], supplementFailure = null;
     let timer;
-    const timeout = new Promise((_, reject) => { timer = setTimeout(() => {
-      canceled = true; reject(new HttpError(503, "handbook_context_timeout", "Supplement preparation timed out."));
-    }, this.timeoutMs); });
-    const freeze = async () => {
-      const text = nativeInputText(request.content);
-      const route = await this.route(project, request.sessionId, text);
-      const selected = await this.select(project, { sessionId: request.sessionId }, route);
-      if (canceled) return null;
-      const context = String(selected?.context ?? "");
-      if (Buffer.byteLength(context) > Math.min(MAX_HANDBOOK_PROMPT_BYTES, Math.max(0, this.budget(project)))) {
-        throw new HttpError(413, "handbook_context_limit", "The supplement exceeds the current prompt allowance.");
+    try {
+      const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new HttpError(503, "handbook_context_timeout", "Supplement preparation timed out.")), this.timeoutMs); });
+      const optional = async () => await this.allowed(project, request.sessionId) ? this.select(project, { sessionId: request.sessionId }, route) : null;
+      const selected = await Promise.race([optional(), timeout]);
+      if (selected) {
+        context = String(selected?.context ?? "");
+        if (Buffer.byteLength(context) > Math.min(MAX_HANDBOOK_PROMPT_BYTES, Math.max(0, this.budget(project)))) throw new HttpError(413, "handbook_context_limit", "The supplement exceeds the prompt allowance.");
+        items = selected?.items ?? [];
       }
-      const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
-        fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
-        route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
-        context, items: selected?.items ?? [], preparedAt: this.now(), expiresAt: this.now() + this.ttlMs };
-      const value = { ...envelope, digest: digest(JSON.stringify(envelope)) };
-      const bytes = JSON.stringify(value);
-      if (Buffer.byteLength(bytes) > MAX_FILE_BYTES) throw new HttpError(413, "handbook_context_limit", "The request context is too large.");
-      return withProjectStorageMutation(project, async () => {
-        if (canceled) return null;
-        const current = await this.envelope(project, request.sessionId, request.requestId);
-        if (current) {
-          if (current.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
-          return current;
-        }
-        await this.prune(project);
-        if (canceled) return null;
-        await writeFileAtomicNoFollow(project.rootDir, this.file(project, request.sessionId, request.requestId), bytes, { mode: 0o600 });
-        return value;
-      });
-    };
-    try { return await Promise.race([freeze(), timeout]); } finally { clearTimeout(timer); }
+    } catch (error) {
+      context = ""; items = [];
+      supplementFailure = ["handbook_context_timeout", "handbook_context_limit"].includes(error?.code) ? error.code : "handbook_context_unavailable";
+    } finally { clearTimeout(timer); }
+    const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
+      fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
+      route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
+      context, items, preparedAt: this.now(), expiresAt: this.now() + this.ttlMs, ...(supplementFailure ? { supplementFailure } : {}) };
+    let value = { ...envelope, digest: digest(JSON.stringify(envelope)) };
+    if (Buffer.byteLength(JSON.stringify(value)) > MAX_FILE_BYTES) {
+      const routeOnly = { ...envelope, context: "", items: [], supplementFailure: "handbook_context_limit" };
+      value = { ...routeOnly, digest: digest(JSON.stringify(routeOnly)) };
+    }
+    const bytes = JSON.stringify(value);
+    if (Buffer.byteLength(bytes) > MAX_FILE_BYTES) throw new HttpError(413, "handbook_context_limit", "The request route is too large.");
+    return withProjectStorageMutation(project, async () => {
+      const current = await this.envelope(project, request.sessionId, request.requestId);
+      if (current) {
+        if (current.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
+        return current;
+      }
+      await this.prune(project);
+      await writeFileAtomicNoFollow(project.rootDir, this.file(project, request.sessionId, request.requestId), bytes, { mode: 0o600 });
+      return value;
+    });
   }
 
   /** Read only actual current-step input identities, within one combined context allowance. */
   async read(project, { sessionId, inputs }) {
     if (!validSession(sessionId) || !Array.isArray(inputs) || inputs.length > 16) throw new HttpError(400, "handbook_request_invalid", "Invalid current inputs.");
-    if (!await this.allowed(project, sessionId)) return { contexts: [], routes: [] };
+    let supplementsAllowed = false, timer;
+    try {
+      supplementsAllowed = await Promise.race([this.allowed(project, sessionId), new Promise(resolve => { timer = setTimeout(() => resolve(false), this.timeoutMs); })]);
+    } catch { /* Unavailable optional recall cannot erase the owned route. */ }
+    finally { clearTimeout(timer); }
     const contexts = [];
     const routes = [];
     let bytes = 0;
@@ -142,7 +152,7 @@ export class NativeHandbookContext {
       const envelope = await this.envelope(project, sessionId, input?.requestId);
       if (!envelope || envelope.textDigest !== input.textDigest || routes.some(item => item.requestId === input.requestId)) continue;
       routes.push({ requestId: input.requestId, textDigest: envelope.textDigest, digest: envelope.digest, route: envelope.route });
-      if (!envelope.context) continue;
+      if (!supplementsAllowed || !envelope.context) continue;
       const size = Buffer.byteLength(envelope.context) + 1;
       if (bytes + size > allowance) continue;
       await withProjectStorageMutation(project, async () => {

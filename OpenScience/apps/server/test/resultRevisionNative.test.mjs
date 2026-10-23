@@ -21,7 +21,7 @@ import { HttpError } from "../src/security.mjs";
 const UI_ORIGIN = "https://science.example:8443";
 const sha = value => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t, automatic = null, planning = null, preparing = null, admission = null) {
+async function fixture(t, automatic = null, planning = null, preparing = null, admission = null, contextPreparation = null) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "result-native-revision-"));
   const config = loadConfig({ dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     publicUrl: "https://science.example", runtimeUiPublicOrigin: UI_ORIGIN });
@@ -76,6 +76,7 @@ async function fixture(t, automatic = null, planning = null, preparing = null, a
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager,
     bindGeoPlan: planning,
     prepareGeoPlan: preparing,
+    preparePrompt: contextPreparation,
     bindResultRevision: (actor, current, request) => automatic?.version ? revisions.bindConversation(actor.id, current, request, { versionId: automatic.version.versionId, digest: automatic.version.digest, target: null, expectedHeadVersionId: null }) : revisions.bind(actor.id, current, request) });
   const address = await ui.listen(0, "127.0.0.1"); const origin = `http://127.0.0.1:${address.port}`;
   const reuseRoutes = createResultReuseRoutes({ store, revisions, exporter: null });
@@ -239,4 +240,21 @@ for (const wire of ['http', 'mux']) test(`native ${wire} validates the same sele
   assert.equal(await send(make('ready'), 'ready'), wire === 'http' ? 200 : 'item');
   assert.deepEqual(events, ['prepare', 'prepare', 'admit', 'bind']); assert.equal(f.received.length, 1);
   assert.equal(f.received[0].payload.args.request.geoPlanContext, undefined);
+});
+
+
+for (const wire of ["http", "mux"]) test(`native ${wire} rejects a definitive route failure before forwarding while optional failures stay advisory`,{timeout:10000},async t=>{
+  const f=await fixture(t,null,null,null,null,async(_project,request)=>{
+    const error=new HttpError(503,"geo_plan_context_unavailable","The selected request route could not be preserved.");
+    if(request.requestId==='selected') error.definitivelyRejected=true;
+    throw error;
+  });
+  const send=async(requestId)=>{
+    const request={sessionId:'session',requestId,mode:'queue',content:[{type:'text',text:'Please do this work.'}]};
+    if(wire==='http') return (await f.sendHttp(request)).status;
+    const client=await f.connect();client.send({type:'open',streamId:requestId,endpoint:'session/prompt',payload:{args:{request}}});
+    return (await client.next()).type;
+  };
+  assert.equal(await send('selected'),wire==='http'?503:'error');assert.equal(f.received.length,0);
+  assert.equal(await send('ordinary'),wire==='http'?200:'item');assert.equal(f.received.length,1);
 });

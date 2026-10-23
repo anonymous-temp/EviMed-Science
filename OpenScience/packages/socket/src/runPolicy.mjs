@@ -190,6 +190,18 @@ export function toolPolicy(call, state) {
   return { allow: true }
 }
 
+/** A request-local analysis read never becomes access to a different or current GEO view.
+ * @param {any} args @param {string} referenceId */
+export function selectedGeoAnalysisReadAllowed(args, referenceId) {
+  if (!/^gpc_[a-f0-9]{64}$/.test(referenceId) || !args || typeof args !== 'object' || Array.isArray(args)
+    || Object.keys(args).some(key => !['what', 'filter'].includes(key)) || args.what !== 'analysis') return false
+  const filter = args.filter
+  return Boolean(filter && typeof filter === 'object' && !Array.isArray(filter)
+    && Object.keys(filter).every(key => ['planContextRef', 'limit', 'offset'].includes(key)) && filter.planContextRef === referenceId
+    && (filter.limit === undefined || Number.isSafeInteger(filter.limit) && filter.limit >= 1 && filter.limit <= 50)
+    && (filter.offset === undefined || Number.isSafeInteger(filter.offset) && filter.offset >= 0))
+}
+
 /**
  * The kernel's own sub-agent tool, as the preset names it (`tool-subagent`, `toolName: subagent`): children for general
  * work, each a managed activation since 0.2.1 (the call returns the child's id; the result arrives as a settlement
