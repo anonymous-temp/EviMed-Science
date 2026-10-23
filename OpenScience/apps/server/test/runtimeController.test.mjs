@@ -1672,9 +1672,30 @@ test("release gate profile crosses the actual controller socket and changes only
   assert.equal(dshProfileInput(config, project, ordinary, 'deepseek-flash', '').modelGatewayUrl, config.modelGatewayInternalUrl);
   const ordinaryInput = dshProfileInput(config, project, ordinary, 'deepseek-flash', '');
   const gateInput = dshProfileInput(config, project, plan, 'deepseek-flash', '');
-  assert.deepEqual({ ...gateInput, modelGatewayUrl: ordinaryInput.modelGatewayUrl }, ordinaryInput);
+  assert.equal(gateInput.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  assert.equal(gateInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL, config.releaseGateModelGatewayInternalUrl);
+  const normalizeModel = (/** @type {any} */ input) => ({ ...input, modelGatewayUrl: ordinaryInput.modelGatewayUrl,
+    mcpEnvironment: { ...input.mcpEnvironment, EVIMED_MODEL_GATEWAY_URL: ordinaryInput.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL } });
+  assert.deepEqual(normalizeModel(gateInput), ordinaryInput);
 
-
+  // No database is opened: these are the same pure launch/profile builders the
+  // controller uses with a Postgres deployment and an activated memory account.
+  const postgres = { ...config, stateStore: 'postgres', evimedWorkloadSigningSecret: 'fixture-workload-secret-at-least-32-bytes' };
+  const memoryGatewayUrl = 'http://open-science-web:8787/internal/memory/v1';
+  const ancillaryOrdinary = buildRuntimeLaunchPlan(postgres, project, 49152, { memoryGatewayUrl });
+  const ancillaryGate = buildRuntimeLaunchPlan(postgres, project, 49152, { memoryGatewayUrl, modelGatewayProfile: 'release-gate' });
+  const normalProfile = dshProfileInput(postgres, project, ancillaryOrdinary, 'deepseek-flash', '/fixture/token');
+  const gateProfile = dshProfileInput(postgres, project, ancillaryGate, 'deepseek-flash', '/fixture/token');
+  for (const field of ['capsuleGatewayUrl', 'revisionGatewayUrl']) {
+    assert.ok(normalProfile[field]?.startsWith('http://open-science-web:8787/'), field);
+    assert.equal(gateProfile[field], normalProfile[field], field);
+  }
+  assert.equal(ancillaryOrdinary.memoryGatewayUrl, memoryGatewayUrl);
+  assert.ok(ancillaryOrdinary.args.includes(`EVIMED_MEMORY_GATEWAY_URL=${memoryGatewayUrl}`));
+  assert.equal(ancillaryGate.memoryGatewayUrl, memoryGatewayUrl);
+  assert.ok(ancillaryGate.args.includes(`EVIMED_MEMORY_GATEWAY_URL=${memoryGatewayUrl}`));
+  assert.deepEqual({ ...gateProfile, modelGatewayUrl: normalProfile.modelGatewayUrl,
+    mcpEnvironment: { ...gateProfile.mcpEnvironment, EVIMED_MODEL_GATEWAY_URL: normalProfile.mcpEnvironment.EVIMED_MODEL_GATEWAY_URL } }, normalProfile);
 
   assert.equal(config.modelGatewayInternalUrl, "http://open-science-web:8787/internal/model/v1");
 });
