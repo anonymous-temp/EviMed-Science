@@ -142,7 +142,7 @@ export class GeoSpine {
     const baselineRound = baseline.rows[0] ?? null;
 
     const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.group_id, m.metric_id, m.round_id, r.kind, r.sample_date::text AS day,
-        m.numerator, m.denominator, m.value, m.status
+        m.numerator, m.denominator, m.value, m.status, m.method_version
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'group' AND m.group_id IS NOT NULL AND m.metric_id = ANY($2::text[])
         AND m.variant IS NULL AND m.rival IS NULL AND m.arm IS NULL AND m.engine IS NULL
@@ -151,7 +151,7 @@ export class GeoSpine {
     const readings = readingRows.map((row) => ({
       groupId: String(currentOf.get(String(row.group_id)) ?? row.group_id), metricId: String(row.metric_id), roundId: String(row.round_id), date: text(row.day),
       kind: String(row.kind), k: num(row.numerator), n: num(row.denominator), value: num(row.value), status: String(row.status),
-      coverage: coverageKeyOf(coverages.get(String(row.round_id))),
+      coverage: coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
     }));
 
     const poolReadings = (await this.#query(`SELECT DISTINCT ON (m.pool, m.metric_id) m.pool, m.metric_id, m.value, m.status, m.numerator, m.denominator, m.round_id

@@ -368,6 +368,10 @@ CREATE TABLE IF NOT EXISTS evimed_geo.metrics (
 CREATE INDEX IF NOT EXISTS geo_metrics_lookup_idx ON evimed_geo.metrics (geo_project_id, metric_id, computed_at);
 CREATE INDEX IF NOT EXISTS geo_metrics_round_idx ON evimed_geo.metrics (round_id);
 
+-- Coverage belongs to the saved computation, including its method version. Historical rows remain unknown.
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS assessment jsonb;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS method_version text;
+
 CREATE TABLE IF NOT EXISTS evimed_geo.strategy (
   geo_project_id text NOT NULL,
   version        integer NOT NULL,

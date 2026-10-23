@@ -1,6 +1,6 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
-import { geoValueJudged } from "@evimed/domain";
+import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
 /**
  * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -819,7 +819,7 @@ export class GeoMeasureStore {
    * @param {string} geoProjectId @param {string} key @param {number} limit
    */
   async factsCountedUnder(geoProjectId, key, limit) {
-    const result = await this.query(`SELECT f.snapshot_id, f.brands, f.statements, f.judge_extract, f.judged_at, s.status, s.answer_text,
+    const result = await this.query(`SELECT f.snapshot_id, f.brands, f.statements, f.judge_extract, f.checks, f.parser_version, f.judged_at, s.status, s.answer_text,
         s.citations, s.surface
       FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
       WHERE f.geo_project_id = $1 AND f.registry_key IS DISTINCT FROM $2
@@ -827,6 +827,7 @@ export class GeoMeasureStore {
     return result.rows.map((row) => ({
       snapshotId: String(row.snapshot_id), brands: list(row.brands), statements: list(row.statements),
       judgeExtract: row.judge_extract && typeof row.judge_extract === "object" ? row.judge_extract : null, judged: row.judged_at != null,
+      checks: row.checks && typeof row.checks === "object" ? row.checks : {}, parserVersion: row.parser_version ?? null,
       status: String(row.status), answerText: row.answer_text ?? null, citations: list(row.citations),
       surface: row.surface && typeof row.surface === "object" ? row.surface : null,
     }));
@@ -846,11 +847,14 @@ export class GeoMeasureStore {
     }
     await this.query(`UPDATE evimed_geo.facts SET brands = $2::jsonb, mentions_ours = $3, first_ours = $4, recommended_ours = $5, position_ours = $6,
         brands_mentioned = $7, retrieval_triggered = $8, cites_ours = $9, cites_ours_in_body = $10, failure_mode = $11,
-        registry_key = $12, reparsed_at = $13
+        registry_key = $12, reparsed_at = $13, judge_extract = coalesce($14::jsonb, judge_extract), checks = coalesce($15::jsonb, checks),
+        parser_version = coalesce($16, parser_version)
       WHERE snapshot_id = $1`,
     [snapshotId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null, facts.recommendedOurs ?? null,
       facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null, facts.citesOurs ?? null,
-      facts.citesOursInBody ?? null, facts.failureMode ?? null, key, at.toISOString()]);
+      facts.citesOursInBody ?? null, facts.failureMode ?? null, key, at.toISOString(),
+      facts.judgeExtract == null ? null : JSON.stringify(facts.judgeExtract), facts.checks == null ? null : JSON.stringify(facts.checks),
+      facts.parserVersion ?? null]);
   }
 
   // ───────────────────────── errors ─────────────────────────
@@ -1064,7 +1068,8 @@ export class GeoMeasureStore {
     const result = await this.query(`SELECT s.id, s.question_id, s.engine, s.round_id, s.asked_at, s.status, s.surface, s.citations,
         r.kind AS round_kind, coalesce(j.repeat_index, 0) AS repeat_index, coalesce(q.pool, g.pool) AS pool, q.group_id, g.is_control,
         f.snapshot_id IS NOT NULL AS has_facts, f.judged_at, f.brands, f.first_ours, f.position_ours, f.recommended_ours, f.retrieval_triggered,
-        f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours
+        f.statements, f.red_flag_expected, f.red_flag_hits, f.safety_terms_hit, f.failure_mode, f.mentions_ours,
+        f.checks, f.judge_extract, f.parser_version
       FROM evimed_geo.snapshots s
         JOIN evimed_geo.rounds r ON r.id = s.round_id
         LEFT JOIN evimed_geo.probe_jobs j ON j.id = s.probe_job_id
@@ -1081,6 +1086,9 @@ export class GeoMeasureStore {
         surface: row.surface ?? { mode: "web" }, citations: list(row.citations), pool: row.pool ?? null, groupId: row.group_id ?? null,
         isControl: Boolean(row.is_control),
         facts: usable ? {
+          checks: row.checks && typeof row.checks === "object" ? row.checks : {},
+          judgeExtract: row.judge_extract && typeof row.judge_extract === "object" ? row.judge_extract : null,
+          genericMentions: list(row.judge_extract?.genericMentions), parserVersion: row.parser_version ?? null, judged: row.judged_at != null,
           brands: list(row.brands), firstOurs: row.first_ours ?? null, positionOurs: num(row.position_ours),
           recommendedOurs: row.recommended_ours ?? null, retrievalTriggered: row.retrieval_triggered ?? null, statements: list(row.statements),
           redFlagExpected: list(row.red_flag_expected), redFlagHits: list(row.red_flag_hits),
@@ -1140,13 +1148,14 @@ export class GeoMeasureStore {
           values.push(randomId("gm_"), userId, geoProjectId, roundId, row.scope, row.pool ?? null, row.engine ?? null, row.groupId ?? null,
             row.arm ?? null, row.metricId, row.variant ?? null, row.rival ?? null, row.reason ?? null, row.numerator ?? null,
             row.denominator ?? null, row.value ?? null, row.ciLow ?? null, row.ciHigh ?? null, row.status, row.dataType ?? "measured",
-            row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString());
+            row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString(),
+            row.assessment == null ? null : JSON.stringify(row.assessment), GEO_MEASUREMENT_METHOD_VERSION);
           const n = values.length;
-          return `(${Array.from({ length: 24 }, (_, index) => `$${n - 23 + index}`).join(", ")})`;
+          return `(${Array.from({ length: 26 }, (_, index) => `$${n - 25 + index}`).join(", ")})`;
         });
         await client.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, engine, group_id, arm, metric_id,
             variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, noise_band, noise_measured,
-            computed_at)
+            computed_at, assessment, method_version)
           VALUES ${tuples.join(", ")}`, values);
       }
     });

@@ -56,15 +56,19 @@ export function geoSurfaceKey(surface) {
 
 /**
  * The coverage key of a reading.
- * @param {{ setVersion?: number | null, pools?: readonly unknown[] | null, engines?: readonly unknown[] | null, surface?: Record<string, unknown> | null }} measured
+ * @param {{ setVersion?: number | null, pools?: readonly unknown[] | null, engines?: readonly unknown[] | null, surface?: Record<string, unknown> | null,
+ *   methodVersion?: string | null }} measured
  *   what was measured: the question set's version, the pools of the answered questions, the engines that answered, the probe surface
  * @returns {string | null} null when no engine answered: there is nothing for a coverage to be of
  */
-export function geoCoverageKey({ setVersion = null, pools = [], engines = [], surface = null } = {}) {
+export function geoCoverageKey({ setVersion = null, pools = [], engines = [], surface = null, methodVersion = undefined } = {}) {
   const heard = sortedSet(engines)
   if (heard.length === 0) return null
+  if (methodVersion !== undefined && !clean(methodVersion)) return null
   const version = Number.isSafeInteger(setVersion) && /** @type {number} */ (setVersion) >= 0 ? `v${setVersion}` : 'v-'
-  return [version, sortedSet(pools).join(VALUE), heard.join(VALUE), geoSurfaceKey(surface)].join(PART)
+  // Keep the four-part format readable by existing clients. Explicitly unknown methods are never comparable.
+  const method = methodVersion === undefined ? '' : `;method=${encodeURIComponent(clean(methodVersion))}`
+  return [version, sortedSet(pools).join(VALUE), heard.join(VALUE), `${geoSurfaceKey(surface)}${method}`].join(PART)
 }
 
 /**

@@ -27,13 +27,15 @@ export function ErrorCharts({
   composition,
   compositionTitle,
   denominator,
+  historical = false,
   selection,
 }: {
   errors: readonly GeoErrorRow[];
-  /** How the round's answers divide: right about us, left us out, wrong about us, wrong about a rival. */
+  /** Answer-level composition, including partial, unknown and refused observations. */
   composition: readonly ShareSegment[];
   compositionTitle: string;
   denominator: string | null;
+  historical?: boolean;
   selection: ErrorChartSelection;
 }) {
   const composition_ = (
@@ -41,9 +43,9 @@ export function ErrorCharts({
       title={compositionTitle}
       state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
       emptyText="这一轮还没有统计出回答的构成。"
-      // Counted by answer, beside a rate counted by statement: the footnote says which, so “讲错 44 次” is not read against
-      // “准确率 68%” as a share of the same thing (G17).
-      footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
+      footnote={[denominator, historical
+        ? "当前准确率保留历史计算口径；回答核查范围按现有记录显示，两者不作直接换算"
+        : "事实准确率按可判定的回答计算；部分可判定、尚无法判定和拒答分别展示，不视为讲对"].filter(Boolean).join(" · ")}
       height={120}
     >
       <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />

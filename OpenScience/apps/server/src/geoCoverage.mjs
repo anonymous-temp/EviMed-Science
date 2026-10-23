@@ -52,11 +52,11 @@ export async function roundCoverages(db, roundIds) {
 /**
  * The key of a reading of one round: of the whole round, or — for a reading that is one engine's — of that engine alone, since an
  * engine's rate does not depend on which other engines answered.
- * @param {RoundCoverage | undefined | null} coverage @param {{ engine?: string | null }} [options]
+ * @param {RoundCoverage | undefined | null} coverage @param {{ engine?: string | null, methodVersion?: string | null }} [options]
  * @returns {string | null}
  */
-export function coverageKeyOf(coverage, { engine = null } = {}) {
+export function coverageKeyOf(coverage, { engine = null, methodVersion = undefined } = {}) {
   if (!coverage) return null;
   const engines = engine ? coverage.engines.filter((name) => name === engine) : coverage.engines;
-  return geoCoverageKey({ setVersion: coverage.setVersion, pools: coverage.pools, engines, surface: coverage.surface });
+  return geoCoverageKey({ setVersion: coverage.setVersion, pools: coverage.pools, engines, surface: coverage.surface, methodVersion });
 }

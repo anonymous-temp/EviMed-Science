@@ -246,7 +246,7 @@ export async function measureRound(deps, roundId) {
   // domain withdraws the whole pool's rates as uneven_denominators.
   const { cells, balance, denominators } = computeRoundCells(kept, options);
   const communication = deps.evolution?.communication;
-  if (communication && kept.some((row) => row.statements?.some((statement) => statement.verdict === "wrong"))) {
+  if (communication && kept.some((row) => row.facts?.statements?.some((statement) => statement.verdict === "wrong"))) {
     try { await communication.offer({ sourceEventId: `geo-round:${round.id}`, userId: project.userId, projectId: project.projectId, entityKeys: project.entityKeys ?? [] }); } catch { /* Module intake must not affect measurement. */ }
   }
   await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });

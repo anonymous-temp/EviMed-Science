@@ -79,6 +79,10 @@ export interface GeoCell {
    * sends them: the first is where a click on the number lands.
    */
   snapshotIds?: string[];
+  /** The saved computation's judgment coverage; absent for historical calculations with unknown coverage. */
+  assessment?: { methodVersion: string; completeAnswers: number; partialAnswers: number; unknownAnswers: number; decidableAnswers?: number };
+  /** Null identifies a preserved historical calculation whose method is not recorded. */
+  methodVersion?: string | null;
 }
 
 /** One step of the program (`projects.steps[key]`, SPEC §2.2). */
@@ -410,7 +414,7 @@ export interface GeoDiagnosis {
   rounds: GeoRoundRef[];
   byEngine: Array<{ engine: GeoEngine; mention: GeoCell; accuracy: GeoCell; citation: GeoCell; retrieval: GeoCell }>;
   byPool: Array<{ pool: GeoPool; mention: GeoCell; topCompetitor: string | null; mainIssue: string | null }>;
-  failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell };
+  failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell; unknown?: GeoCell; partial?: GeoCell; refused?: GeoCell };
   errors: GeoErrorRow[];
   /** The same errors by claim, one row per wrong claim with the engines that tell it. Absent from a server older than R19. */
   byClaim?: GeoErrorByClaim[];
@@ -1020,6 +1024,7 @@ function finite(value: unknown): number | null {
 export function readGeoCell(raw: unknown): GeoCell {
   const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const status = typeof value.status === "string" && CELL_STATUSES.has(value.status) ? value.status as GeoCellStatus : "not_measurable";
+  const assessment = readGeoAssessment(value.assessment);
   return {
     value: finite(value.value),
     numerator: finite(value.numerator),
@@ -1029,10 +1034,23 @@ export function readGeoCell(raw: unknown): GeoCell {
     status,
     dataType: typeof value.dataType === "string" && DATA_TYPES.has(value.dataType) ? value.dataType as GeoDataType : "measured",
     ...(typeof value.reason === "string" && value.reason ? { reason: value.reason } : {}),
+    ...(assessment ? { assessment } : {}),
+    ...("methodVersion" in value ? { methodVersion: typeof value.methodVersion === "string" && value.methodVersion ? value.methodVersion : null } : {}),
     ...(Array.isArray(value.snapshotIds)
       ? { snapshotIds: value.snapshotIds.filter((snapshot): snapshot is string => typeof snapshot === "string" && snapshot.length > 0) }
       : {}),
   };
+}
+
+function readGeoAssessment(raw: unknown): GeoCell["assessment"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = raw as Record<string, unknown>;
+  const count = (item: unknown): item is number => typeof item === "number" && Number.isSafeInteger(item) && item >= 0;
+  if (typeof value.methodVersion !== "string" || !value.methodVersion || !count(value.completeAnswers)
+    || !count(value.partialAnswers) || !count(value.unknownAnswers)
+    || (value.decidableAnswers !== undefined && !count(value.decidableAnswers))) return undefined;
+  return { methodVersion: value.methodVersion, completeAnswers: value.completeAnswers, partialAnswers: value.partialAnswers,
+    unknownAnswers: value.unknownAnswers, ...(count(value.decidableAnswers) ? { decidableAnswers: value.decidableAnswers } : {}) };
 }
 
 function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
@@ -1181,9 +1199,11 @@ export interface GeoValue {
    * `uncertain` and `notApplicable` are counted beside it and outside the headline `represented / assessed`.
    * `basisVersion`: the value-profile version the latest round was judged against (null before any judged round).
    */
-  coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
+  coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null;
+    assessment?: { completeObservations: number; partialObservations: number; unknownObservations: number } };
   /** At most twenty, the ones that say something first and the most recent answers first; `coverage` counts every one of `observationsTotal`. */
-  observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
+  observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null;
+    recordedStatus?: string | null; judgementCoverage?: { status: "complete" | "partial" | "unknown"; reasons: string[]; answerChars: number; assessedChars: number } }>;
   observationsTotal?: number;
 }
 

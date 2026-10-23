@@ -52,6 +52,29 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/ac
   );
 }
 
+it("keeps partially checked and unknown answers visible beside answer-level accuracy", async () => {
+  const diagnosis = diagnosisWith([]);
+  const cell = { ...diagnosis.failureModes.correct, numerator: 3, denominator: 10, value: 30 };
+  client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, failureModes: {
+    ...diagnosis.failureModes, partial: cell, unknown: cell, refused: { ...cell, numerator: 1 },
+  } });
+  renderTab();
+  expect(await screen.findByText("部分可判定")).toBeVisible();
+  expect(screen.getByText("尚无法判定")).toBeVisible();
+  expect(screen.getByText("明确拒答")).toBeVisible();
+  expect(screen.getByText(/事实准确率按可判定的回答计算/)).toBeVisible();
+});
+
+it("identifies historical accuracy instead of applying the new completeness promise to an old calculation", async () => {
+  const project = geoProject();
+  const accuracy = project.overview.metrics.find(item => item.key === "accuracy");
+  if (!accuracy) throw new Error("fixture needs accuracy");
+  accuracy.cell = { ...accuracy.cell, methodVersion: null };
+  renderTab(project);
+  expect(await screen.findByText(/当前准确率保留历史计算口径/)).toBeVisible();
+  expect(screen.queryByText(/事实准确率按可判定的回答计算/)).not.toBeInTheDocument();
+});
+
 /** One error row of the live shape: a claim told by one engine in answer to one question. */
 function row(id: string, overrides: Partial<GeoErrorRow> = {}): GeoErrorRow {
   return {

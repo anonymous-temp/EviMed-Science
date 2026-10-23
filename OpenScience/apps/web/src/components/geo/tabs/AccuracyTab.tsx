@@ -124,6 +124,9 @@ function Accuracy({
   const wrongOurs = readGeoCell(modes?.wrongOurs);
   const omitted = readGeoCell(modes?.omitted);
   const wrongRival = readGeoCell(modes?.wrongCompetitor);
+  const partial = readGeoCell(modes?.partial);
+  const unknown = readGeoCell(modes?.unknown);
+  const refused = readGeoCell(modes?.refused);
 
   const tiles = [
     {
@@ -176,6 +179,9 @@ function Accuracy({
     { key: "omitted", label: "漏提我方", value: omitted.numerator ?? 0, tone: "quiet" },
     { key: "wrongOurs", label: "讲错我方", value: wrongOurs.numerator ?? 0, tone: "s3" },
     { key: "wrongRival", label: "讲错竞品", value: wrongRival.numerator ?? 0, tone: "s1" },
+    { key: "partial", label: "部分可判定", value: partial.numerator ?? 0, tone: "rival-2" },
+    { key: "unknown", label: "尚无法判定", value: unknown.numerator ?? 0, tone: "rival-3" },
+    { key: "refused", label: "明确拒答", value: refused.numerator ?? 0, tone: "quiet" },
   ];
 
   // ---- the selection the charts and the list share, kept in the address so the way back from an answer returns to the list as it was
@@ -323,10 +329,11 @@ function Accuracy({
         errors={errors}
         composition={composition}
         compositionTitle={correct.numerator != null && wrongOurs.numerator != null
-          // Counted by answer, beside a rate counted by statement: the heading says which.
+          // Composition is answer-level, with assessment uncertainty visible beside it.
           ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
           : "这一轮的回答里我方出现在哪些位置"}
         denominator={denominator}
+        historical={accuracy?.cell.methodVersion === null}
         selection={{
           engine,
           type,

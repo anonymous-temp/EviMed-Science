@@ -40,7 +40,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoErrorsByClaim, geoLeanActionsPage, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList,
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoAnswerAccuracy, geoErrorsByClaim, geoLeanActionsPage, geoSpecifiedInfoAccuracy, geoValueActive, geoValueContext, geoValueImpacts, geoValueList,
   hardLines, parseGeoActionKey, summarizeGeoValueCoverageCounts } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
@@ -61,7 +61,8 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
- *   status: string, dataType: string, reason: string | null }} GeoCell */
+ *   status: string, dataType: string, reason: string | null, methodVersion?: string | null,
+ *   assessment?: { methodVersion: string, completeAnswers: number, partialAnswers: number, unknownAnswers: number, decidableAnswers?: number } }} GeoCell */
 
 /** The cell no row speaks for: 「未测」, never zero. */
 export const GEO_ABSENT_CELL = Object.freeze({ value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured",
@@ -168,6 +169,8 @@ export function geoCellFromRow(row) {
   return {
     value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low), ciHigh: num(row.ci_high),
     status: String(row.status), dataType: String(row.data_type ?? "measured"), reason: text(row.reason),
+    methodVersion: text(row.method_version),
+    ...(row.assessment && typeof row.assessment === "object" && !Array.isArray(row.assessment) ? { assessment: row.assessment } : {}),
   };
 }
 
@@ -446,7 +449,9 @@ export class GeoService {
       points.push({
         date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator),
         // An engine's own series is of that engine alone: its rate does not move with which others answered.
-        ...(coverages ? { coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), { engine: extra === "engine" ? text(row.engine) : null }) } : {}),
+        ...(coverages ? { coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), {
+          engine: extra === "engine" ? text(row.engine) : null, methodVersion: text(row.method_version),
+        }) } : {}),
       });
       map.set(key, points);
       byProject.set(row.geo_project_id, map);
@@ -476,7 +481,7 @@ export class GeoService {
     for (const row of rows) {
       const points = byRival.get(String(row.rival)) ?? [];
       points.push({ date: rowDay(row, this.timeZone), value: row.status === "ok" ? num(row.value) : null, n: num(row.denominator), k: num(row.numerator),
-        coverage: coverageKeyOf(coverages.get(String(row.round_id ?? ""))) });
+        coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), { methodVersion: text(row.method_version) }) });
       byRival.set(String(row.rival), points);
     }
     return [...byRival].map(([name, points]) => ({ name, points: points.slice(-TREND_POINTS) }));
@@ -985,7 +990,8 @@ export class GeoService {
     /** @type {Map<string, any>} */
     const cells = new Map();
     /** @type {Record<string, any>} */
-    let failureModes = { omitted: tallyCell(0, 0, []), correct: tallyCell(0, 0, []), wrongOurs: tallyCell(0, 0, []), wrongCompetitor: tallyCell(0, 0, []) };
+    let failureModes = { omitted: tallyCell(0, 0, []), correct: tallyCell(0, 0, []), wrongOurs: tallyCell(0, 0, []), wrongCompetitor: tallyCell(0, 0, []),
+      unknown: tallyCell(0, 0, []), partial: tallyCell(0, 0, []), refused: tallyCell(0, 0, []) };
     /** @type {Array<{ cell: Record<string, any>, row: any }>} */
     const traced = [];
     /** @type {Map<string, { competitor: string | null, issue: string | null }>} */
@@ -1014,21 +1020,26 @@ export class GeoService {
           traced.push({ cell: entry.cell, row });
           return entry;
         });
-      // The four failure modes as cells: the count over the round's answers
-      // (valid and refusal; suspect ones are out), with the answers behind it.
-      const modes = (await this.store.query(`SELECT f.failure_mode, s.id FROM evimed_geo.facts f
-        JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+      // Re-read judgment eligibility with the same domain rule as accuracy. Historical labels alone do not prove completeness.
+      const modes = (await this.store.query(`SELECT f.failure_mode, f.judged_at, f.statements, f.checks, f.mentions_ours,
+          f.snapshot_id IS NOT NULL AS has_facts, s.id, s.status FROM evimed_geo.snapshots s
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
         WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') ORDER BY s.asked_at NULLS LAST, s.id LIMIT 20000`,
       [round.id, project.id])).rows;
       /** @type {Map<string, string[]>} */
       const byMode = new Map();
       for (const row of modes) {
-        const list = byMode.get(String(row.failure_mode)) ?? [];
+        const accuracy = geoAnswerAccuracy({ statements: row.statements ?? [], checks: row.checks ?? {}, judgedAt: iso(row.judged_at) });
+        const key = accuracy === "wrong" ? row.failure_mode === "wrong_competitor" ? "wrong_competitor" : "wrong_ours"
+          : row.status === "refusal" ? "refused" : !row.has_facts || row.judged_at == null ? "unknown"
+            : row.mentions_ours !== true ? "omitted" : accuracy;
+        const list = byMode.get(key) ?? [];
         list.push(String(row.id));
-        byMode.set(String(row.failure_mode), list);
+        byMode.set(key, list);
       }
       const mode = (/** @type {string} */ key) => tallyCell(byMode.get(key)?.length ?? 0, modes.length, byMode.get(key) ?? []);
-      failureModes = { omitted: mode("omitted"), correct: mode("correct"), wrongOurs: mode("wrong_ours"), wrongCompetitor: mode("wrong_competitor") };
+      failureModes = { omitted: mode("omitted"), correct: mode("correct"), wrongOurs: mode("wrong_ours"), wrongCompetitor: mode("wrong_competitor"),
+        unknown: mode("unknown"), partial: mode("partial"), refused: mode("refused") };
       const competitors = (await this.store.query(`SELECT DISTINCT ON (q.pool) q.pool, brand.value ->> 'name' AS name,
           sum(coalesce((brand.value ->> 'count')::integer, 1)) AS n
         FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
@@ -1975,6 +1986,12 @@ export class GeoService {
     /** @type {Record<string, number>} */
     const byStatus = {};
     for (const entry of onBasis) if (entry.status) byStatus[entry.status] = (byStatus[entry.status] ?? 0) + entry.n;
+    const assessment = { completeObservations: 0, partialObservations: 0, unknownObservations: 0 };
+    for (const entry of onBasis) {
+      const key = entry.judgementCoverage === "complete" ? "completeObservations"
+        : entry.judgementCoverage === "partial" ? "partialObservations" : "unknownObservations";
+      assessment[key] += entry.n;
+    }
     const observations = basisVersion == null ? [] : sample.filter((observation) => observation.basisVersion === basisVersion).slice(0, GEO_VALUE_OBSERVATIONS_SHOWN);
     // The changed sources a reader is asked to look at are those that reach a finding that still stands: a change that names no finding
     // of the profile, or whose findings were retired since, asks for no look at anything. Nothing closes such a change, so counting every
@@ -1987,7 +2004,7 @@ export class GeoService {
       ? { requestedVersion: filter.version, notice: `Version ${filter.version} of the value profile is not stored: a project keeps its latest versions and its milestone ones.` } : {};
     return { ...profile, data: { ...profile.data, ...geoValueContext(profile.data, filter) }, research,
       impacts: impacts.filter((impact) => impact.findingIds.some((id) => standing.has(id))), impactsTotal: impacts.length,
-      coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion }, observations,
+      coverage: { ...summarizeGeoValueCoverageCounts(byStatus), basisVersion, assessment }, observations,
       observationsTotal: onBasis.reduce((total, entry) => total + entry.n, 0), ...gone };
   }
 

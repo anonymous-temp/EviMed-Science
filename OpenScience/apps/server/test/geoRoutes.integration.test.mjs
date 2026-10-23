@@ -12,6 +12,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { GEO_MEASUREMENT_METHOD_VERSION, geoCoverageDifference } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, geoScreenshotPath } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -366,7 +367,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(diagnosis.round.linklessEngines, [], "deepseek's citation carries its link");
   const deepseek = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "deepseek");
   assert.deepEqual(deepseek.mention, { value: 0.42, numerator: 20, denominator: 48, ciLow: null, ciHigh: null, status: "ok", dataType: "measured",
-    reason: null, snapshotIds: [`s1-${id}`] }, "a cell names the answers it rests on (the suspect one is out)");
+    reason: null, methodVersion: null, snapshotIds: [`s1-${id}`] }, "a historical cell keeps its value and unknown method, with its answer preview");
   assert.equal(deepseek.retrieval.status, "absent", "an unmeasured cell is absent, never zero");
   const doubao = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "doubao");
   assert.deepEqual([doubao.retrieval.status, doubao.retrieval.reason, doubao.retrieval.value], ["not_measurable", "no_retrieval", null]);
@@ -416,7 +417,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
   const [gvi, mention, accuracy, citation] = page.overview.metrics;
   assert.equal(gvi.cell.value, 31.5);
-  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null, coverage: "v1|P1|deepseek|web;fast;newchat" }], "a point carries the sample it rests on, and what its round measured");
+  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null, coverage: null }], "historical values remain, but an unrecorded method is not comparable");
   assert.deepEqual([mention.cell.numerator, mention.cell.denominator], [56, 310], "the plain M-01S, not its top1 variant");
   assert.equal(accuracy.cell.status, "insufficient");
   assert.equal(citation.cell.status, "absent");
@@ -432,9 +433,9 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(row.headline.mention.denominator, 310);
 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: "v1|P1|deepseek|web;fast;newchat" }] });
-  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: "v1|P1|deepseek|web;fast;newchat" }], "the arm-scope index at pool null");
-  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
+  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: null }] });
+  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: null }], "the arm-scope index at pool null");
+  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: null }]);
   assert.equal(monitoring.arms.netEffect.value, 0.06);
   assert.equal(monitoring.arms.netEffect.noiseBand, 0.04);
   assert.equal(monitoring.arms.netEffect.noiseMeasured, null, "a row written before it kept its band says nothing about it");
@@ -444,7 +445,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
     const stored = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.arms.netEffect;
     assert.deepEqual([stored.noiseBand, stored.noiseMeasured], [band, measured]);
   }
-  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
+  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: null }]);
   assert.equal(monitoring.newErrors[0].id, `e-${id}`);
   assert.equal(monitoring.next.kind, "weekly", "past a baseline, the next is the weekly round");
   // G6: a confirmation round in the queue is not the next measurement; the
@@ -684,10 +685,10 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   await round(`rw2-${id}`, "weekly", "2026-09-28");
   await round(`rs-${id}`, "sentinel", "2026-09-29");
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
-      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
   [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null,
-    row.value ?? null, row.status ?? "ok", row.at]);
+    row.value ?? null, row.status ?? "ok", row.at, GEO_MEASUREMENT_METHOD_VERSION]);
   await metric("r1", { round: `rw1-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 31, n: 100, value: 31, at: "2026-09-21T10:00:00Z" });
   await metric("r2", { round: `rw2-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 34, n: 100, value: 34, at: "2026-09-28T10:00:00Z" });
   // A sentinel's sliver never draws a point.
@@ -707,7 +708,8 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
   assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
-    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34, coverage: "v1|P4|qianwen|web;fast;newchat" }] }]);
+    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34,
+      coverage: `v1|P4|qianwen|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}` }] }]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
@@ -930,9 +932,9 @@ test("every point of a trend carries the coverage key of its round, and a change
   const { rounds } = await weeklyRounds(id, { questionId: question.id, cites: () => [] });
   const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
-      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ok', $12)`,
-  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null, row.value, row.at]);
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ok', $12, $13)`,
+  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null, row.value, row.at, GEO_MEASUREMENT_METHOD_VERSION]);
   for (const [index, round] of rounds.entries()) {
     const at = `${["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"][index]}T13:00:00Z`;
     await metric(`g${index}`, { round, metricId: "M-19", value: 50 - index * 3, n: 100, k: 50, at });
@@ -948,8 +950,8 @@ test("every point of a trend carries the coverage key of its round, and a change
   assert.equal(gvi.trend.length, 4);
   assert.equal(shape(keys(gvi.trend)), "0010", "the key moves once, where the engine set did");
   assert.ok(gvi.trend.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage.startsWith("v1|")));
-  assert.match(gvi.trend[0].coverage, /\|deepseek,kimi\|web;fast;newchat$/);
-  assert.match(gvi.trend[3].coverage, /\|deepseek,doubao,kimi\|web;fast;newchat$/);
+  assert.ok(gvi.trend[0].coverage.endsWith(`|deepseek,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
+  assert.ok(gvi.trend[3].coverage.endsWith(`|deepseek,doubao,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
 
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
@@ -958,5 +960,13 @@ test("every point of a trend carries the coverage key of its round, and a change
   // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
   const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
   assert.equal(shape(keys(kimi.points)), "0000");
-  assert.match(kimi.points[0].coverage, /\|kimi\|web;fast;newchat$/);
+  assert.ok(kimi.points[0].coverage.endsWith(`|kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION}`));
+  await database.query("UPDATE evimed_geo.metrics SET method_version = $1 WHERE round_id = $2", ["another-measurement-method", rounds[3]]);
+  const changed = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  const changedPoints = changed.series.find((/** @type {any} */ line) => line.key === "gvi").points;
+  assert.equal(geoCoverageDifference(changedPoints[2].coverage, changedPoints[3].coverage).comparable, false,
+    "the same engines and questions do not make different calculation methods comparable");
+  await database.query("UPDATE evimed_geo.metrics SET method_version = NULL WHERE round_id = $1", [rounds[3]]);
+  const legacy = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.equal(legacy.series.find((/** @type {any} */ line) => line.key === "gvi").points[3].coverage, null);
 });
