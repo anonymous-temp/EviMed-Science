@@ -348,7 +348,44 @@ test("a method file printed through the shell is opened; one only listed, counte
   assert.deepEqual([...(found.get("s") ?? [])].sort(), [`file:${dir}`, `file:${other}`]);
 });
 
+test("a method read after a cd into its directory, or through a glob over it, is opened; a folder read as a whole names no method", () => {
+  const dir = `_lm${"a".repeat(32)}`;
+  const other = `_lm${"b".repeat(32)}`;
+  const root = "/runtime/capsule-methods";
+  for (const command of [
+    `cd ${root}/${dir} && cat SKILL.md`,
+    `cd ${root}/${dir}/ && head -80 ./SKILL.md`,
+    `cd "${root}/${dir}"; less SKILL.md`,
+    `(cd ${root}/${dir} && awk 'NR<40' SKILL.md)`,
+    `cd ${root}/${dir} && cat *`,
+    `cd ${root}/${dir} && cat *.md`,
+    `cat ${root}/${dir}/*`,
+    `cat ${root}/${dir}/SKILL*`,
+    `head -50 ${root}/${dir}/*.md | tail -20`,
+    `cd ${root} && cd ${dir} && cat SKILL.md`,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [dir], command);
+  }
+  for (const command of [
+    `cd ${root}/${dir} && ls`,
+    `cd ${root}/${dir} && wc -l SKILL.md`,
+    `cd ${root}/${dir} && cat SKILL.md.bak`,
+    `cd ${root}/${dir} && cat scripts/x.py`,
+    `cd ${root}/${dir} && cd /workspace && cat SKILL.md`,
+    `cd /workspace && cat SKILL.md`,
+    `grep -r Workflow ${root}`,
+    `cat ${root}/*/SKILL.md`,
+    `cat ${root}/${dir}/scripts/*`,
+    `ls ${root}/${dir}/*`,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [], command);
+  }
+  assert.deepEqual(methodFilesReadByCommand(`cd ${root}/${dir} && cat SKILL.md; cd ${root}/${other} && head SKILL.md`).sort(), [dir, other],
+    "each directory read after a cd of its own");
+});
+
 /**
+ * Run every scenario of an incident case through the reader and hold it to what the case says./**
  * Run every scenario of an incident case through the reader and hold it to what the case says. A scenario names the sessions' tool calls (with
  * `{method-name}` standing for that method's directory), the delegations, the deliverables and what the runtime mounted; each session also
  * carries one assistant message, as every real session does.

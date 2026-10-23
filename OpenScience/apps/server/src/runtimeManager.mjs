@@ -17,7 +17,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods, runtimeCapsuleMethodsDir } from "./capsuleMethods.mjs";
-import { learnedMethodFamilyForRuntime } from "./learnedMethodMount.mjs";
+import { learnedMethodDirectoryName, learnedMethodFamilyForRuntime, runScopeOf } from "./learnedMethodMount.mjs";
 import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { webSearchHasEngine } from "./webSearchGateway.mjs";
@@ -2613,7 +2613,10 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     // so the hosted controller, which builds its own, reaches the same answer.
     const capsuleMethodsDir = capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
-    const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
+    // A directory with nothing in it is mounted too: a launch keeps one, so that the methods a later refresh writes
+    // (`refreshCapsuleMethods`) are in front of the runtime that is already up and not only of the next one.
+    const capsuleMethodsLive = capsuleMethodsDirectoryPresent(capsuleMethodsDir);
+    const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount, capsuleMethodsLive });
     const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
     if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
     if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
@@ -2687,11 +2690,11 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           : []),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
-        // Only when something was written. `--mount type=bind` refuses a source
+        // Only when the directory exists. `--mount type=bind` refuses a source
         // that does not exist -- `docker run` fails before the kernel starts --
-        // and a project with no approved method has no directory, so the mount
-        // is conditional on the same count the plugin's directory name is.
-        ...(capsuleMethodCount > 0
+        // and a project that was never launched by this control plane has none, so
+        // the mount is conditional on the same fact the plugin's directory name is.
+        ...(capsuleMethodsLive
           ? [
               "--mount",
               `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
@@ -2856,6 +2859,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // other half of the deployment -- the directory the profile names -- from
       // the same number that decided whether anything is mounted at all.
       capsuleMethodCount,
+      capsuleMethodsLive,
       readOnlyViews,
       runtimeDirs: [
         runtimeRoot,
@@ -3005,6 +3009,18 @@ function mountedCapsuleMethodCount(directory) {
 }
 
 /**
+ * Whether the methods directory exists as a real directory, however few methods are in it. A link is not one.
+ * @param {string} directory @returns {boolean}
+ */
+function capsuleMethodsDirectoryPresent(directory) {
+  try {
+    return lstatSync(directory).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The directory the capsule plugin is told to read, from one rule.
  *
  * Two values, not three: the container path when something was materialized,
@@ -3014,13 +3030,13 @@ function mountedCapsuleMethodCount(directory) {
  * but `docker` by name (`invalid_runtime_sandbox`), so a branch for one would be
  * a branch no launch can reach and a claim that a mode still exists.
  *
- * @param {{ capsuleMethodCount?: number, capsuleMethodsRuntimeDir?: string }} plan
+ * @param {{ capsuleMethodCount?: number, capsuleMethodsLive?: boolean, capsuleMethodsRuntimeDir?: string }} plan
  * @returns {string}
  */
 export function capsuleMethodsRuntimePath(plan) {
   // A remote session keeps its methods where its launcher installs them
   // read-only (`capsuleMethodsRuntimeDir`); a container mounts them here.
-  return plan.capsuleMethodCount ? (plan.capsuleMethodsRuntimeDir ?? runtimeCapsuleMethodsDir) : "";
+  return plan.capsuleMethodCount || plan.capsuleMethodsLive ? (plan.capsuleMethodsRuntimeDir ?? runtimeCapsuleMethodsDir) : "";
 }
 
 /** Where a runtime sees the project's knowledge base: inside its workspace,
@@ -3506,6 +3522,8 @@ export class RuntimeManager {
     this.geoProjectOf = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
+    /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function } | null} */
+    this.methodSimilarity = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
     /**
@@ -3522,7 +3540,9 @@ export class RuntimeManager {
     /** What the mounted-method byte budget did across launches
      *  (`open_science_mounted_method_*`): launches, bytes it spent on what the
      *  methods put in front of the model, and methods it left out. */
-    this.methodMounts = { launches: 0, promptBytes: 0, leftOut: 0 };
+    this.methodMounts = { launches: 0, promptBytes: 0, leftOut: 0, refreshes: 0, refreshFailures: 0 };
+    /** The rewrites of a live runtime's methods in flight, by project key: two at once would write one directory twice. */
+    this.methodRefreshes = new Map();
     /** Launches that went ahead although the deployment disagrees with its
      *  release manifest (`open_science_runtime_release_unverified_launches_total`),
      *  by the finding's code. The launch is never refused for it; readiness is
@@ -3843,23 +3863,31 @@ export class RuntimeManager {
    * The researcher's recall pause (the account's, or 「本项目不使用记忆」) is read
    * here too, because methods are 记忆 as the memory page defines it: while it
    * holds, nothing is mounted and the directory an earlier launch wrote is
-   * cleared (2026-10-10 review L-5). It is read once per launch, so a pause
-   * set while a runtime is up takes effect at that runtime's next launch — the
-   * same moment a disabled capsule's methods leave (`CapsuleService.disable`)
-   * — and an idle runtime is let go when the pause is turned on
-   * (`releasePausedMethodRuntimes`) so that moment comes at the next dispatch.
-   * One mid-turn, or held open by a tab, keeps its methods until it stops, and
+   * cleared (2026-10-10 review L-5). It is read at every launch and at the first
+   * prompt of each conversation (`refreshCapsuleMethods`), so a pause set while a
+   * runtime is up takes effect for the next conversation — the same moment a
+   * disabled capsule's methods leave (`CapsuleService.disable`) — and an idle
+   * runtime is let go when the pause is turned on (`releasePausedMethodRuntimes`).
+   * A conversation that is already running keeps the methods it began with, and
    * so does a 「试用一次」 conversation inside a runtime that has them: a prompt
-   * section registered at launch cannot be taken from one conversation.
+   * section is not taken back from a conversation that has it.
    * A pause that cannot be read refuses the launch, as every other failure of
    * the mount does: mounting nothing quietly is what this method exists to end.
    *
+   * `query`, `scopeId` and `launch` say what the mount is for: the first message of the conversation about to be prompted and the
+   * scope of its run (`selectLearnedMethods`), and whether this is a runtime start (`launch`, the default) or the rewrite of one that
+   * is already up (`refreshCapsuleMethods`). A launch has no message to rank by.
+   *
+   * `keep` names the learned methods this runtime was already given: they stay on disk while they are approved (`selectLearnedMethods`).
+   *
    * @param {any} project
-   * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number,
-   *   learned: {id: string, name: string, digest: string}[],
+   * @param {{ query?: string | null, scopeId?: string | null, launch?: boolean, keep?: Iterable<string> | null }} [options]
+   * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
+   *   learned: {id: string, name: string, digest: string, reason: string}[], learnedBytes: number, version: string,
+   *   rank: { mode: string | null, topScore: number | null },
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
-  async syncCapsuleMethods(project) {
+  async syncCapsuleMethods(project, { query = null, scopeId = undefined, launch = true, keep = null } = {}) {
     const paused = await this.recallPausedFor(project);
     const mounted = await materializeCapsuleMethods({
       // Under a pause every source is dropped, which is also what clears the directory.
@@ -3872,19 +3900,102 @@ export class RuntimeManager {
         projectId: String(project.id),
         boundedRunId: this.boundedRuntimeScope(project)?.runId ?? null,
       }),
+      // What the mount is for: the first message of the conversation and the scope of its run, ranked by the control plane's
+      // similarity (`methodSimilarity.mjs`). A launch has neither, and mounts what was approved most recently.
+      ...(scopeId === undefined ? {} : { scopeId }),
+      query,
+      similarity: this.methodSimilarity ?? null,
+      keep,
       project,
       directory: capsuleMethodsHostDir(project),
+      // The directory outlives a launch with nothing to mount: the runtime mounts it empty, and the next selection reaches it.
+      keepDirectory: true,
       // What the methods may put in front of the model, in bytes of what is
       // injected (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`).
       maxPromptBytes: this.config.mountedMethodPromptBytes,
     });
     // What the learned half put in the room, for the loop's own counters.
-    try { this.learningMetrics?.observeMount?.({ methods: mounted.learned?.length ?? 0, bytes: mounted.learnedBytes ?? 0 }); } catch { /* a counter never fails a launch */ }
+    try { this.learningMetrics?.observeMount?.({ methods: mounted.learned?.length ?? 0, bytes: mounted.learnedBytes ?? 0, reasons: (mounted.learned ?? []).map((method) => method.reason), mode: mounted.rank?.mode ?? null }); } catch { /* a counter never fails a launch */ }
     // And what the budget spent and could not carry, for its own counter.
-    this.methodMounts.launches += 1;
+    if (launch) this.methodMounts.launches += 1;
     this.methodMounts.promptBytes += Number(mounted.promptBytes) || 0;
     this.methodMounts.leftOut += Number(mounted.leftOut) || 0;
     return mounted;
+  }
+
+  /**
+   * Bring the methods a live runtime carries to what they should be now, without restarting it: for the conversation that is about
+   * to start in it, when a method is approved or retired, and when a capsule is enabled or disabled (`CapsuleService`). A runtime
+   * used to be given its methods once, at its start, and kept them for as long as it lived — a method learnt at noon waited for the
+   * next launch, and one retired stayed in every prompt until then.
+   *
+   * What changes is the directory the runtime mounts (`syncCapsuleMethods`, in place), and what the capsule plugin reads when a
+   * conversation's first prompt arrives (`packages/socket/plugins/capsule.mjs`): so a conversation that is already running keeps
+   * the methods it began with, and the next one is given the new ones. `query` is the first message of that next conversation
+   * and `scopeId` its run's scope; with a `sessionId`, a session that has been prepared in this runtime is not prepared again
+   * (the plugin reads once per session, so a second rewrite for the same one would change what the directory holds under the
+   * conversations around it for nothing). What the runtime was given before stays on disk while it is approved, so that a conversation
+   * that began earlier can still read the file its card names.
+   *
+   * Never an error: a runtime that cannot be refreshed keeps what it has, and says why. A runtime that is not a container on
+   * this host (a remote session has its methods installed once) is left as it is.
+   *
+   * `reuse`: rewrite for the conversation the runtime was last rewritten for (a method changed; nobody is starting a conversation).
+   *
+   * @param {{ userId: string, projectId?: string | null, query?: string | null, scopeId?: string | null, sessionId?: string | null, force?: boolean, reuse?: boolean }} input
+   *   `projectId` absent: every live runtime of the account
+   * @returns {Promise<{ refreshed: number, skipped: string[] }>}
+   */
+  async refreshCapsuleMethods({ userId, projectId = null, query = null, scopeId = undefined, sessionId = null, force = false, reuse = false }) {
+    /** @type {string[]} */
+    const skipped = [];
+    let refreshed = 0;
+    for (const runtime of [...this.runtimes.values()]) {
+      const project = runtime?.project;
+      if (!project || String(project.userId) !== String(userId)) continue;
+      if (projectId !== null && String(project.id) !== String(projectId)) continue;
+      const key = this.key(project);
+      if (runtime.kind !== RUNTIME_KERNEL_NAME || runtime.sandboxMode !== "docker") { skipped.push("not_a_live_container"); continue; }
+      // The platform's own projects carry no researcher's method.
+      if (learnedMethodFamilyForRuntime({ projectId: String(project.id), boundedRunId: this.boundedRuntimeScope(project)?.runId ?? null }) === null) { skipped.push("internal_project"); continue; }
+      const run = async () => {
+        if (this.runtimes.get(key) !== runtime || this.runtimeStops.has(key)) return "not_running";
+        if (sessionId) {
+          const seen = (runtime.methodSessions ??= new Set());
+          if (seen.has(sessionId) && !force) return "session_prepared";
+          seen.add(sessionId);
+          // Bounded: a runtime that lives a day sees many conversations, and only the recent ones can still be prompted for the first time.
+          while (seen.size > 512) seen.delete(/** @type {string} */ (seen.values().next().value));
+        }
+        // What this runtime was given before stays readable while it is approved: a conversation that began earlier was shown cards
+        // naming those files, and another beginning now must not take them from it.
+        const served = (runtime.servedMethodDirectories ??= new Set());
+        const wanted = reuse && query === null && scopeId === undefined ? runtime.methodMountFor ?? { query: null, scopeId: undefined } : { query, scopeId };
+        if (query !== null || scopeId !== undefined) runtime.methodMountFor = { query, scopeId };
+        const mounted = await this.syncCapsuleMethods(project, { ...wanted, launch: false, keep: served });
+        for (const method of mounted.learned ?? []) served.add(learnedMethodDirectoryName(method.id));
+        runtime.capsuleMethodsMounted = mounted.count;
+        runtime.mountedMethodPromptBytes = mounted.promptBytes;
+        runtime.methodsVersion = mounted.version;
+        this.lastMountedLearnedMethods.set(key, mounted.learned ?? []);
+        this.lastMountedCapsuleMethods.set(key, mounted.capsule ?? []);
+        return null;
+      };
+      const previous = this.methodRefreshes.get(key) ?? Promise.resolve(null);
+      const next = previous.catch(() => null).then(run);
+      this.methodRefreshes.set(key, next);
+      try {
+        const reason = await next;
+        if (reason) skipped.push(reason);
+        else { refreshed += 1; this.methodMounts.refreshes += 1; }
+      } catch (error) {
+        this.methodMounts.refreshFailures += 1;
+        skipped.push(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "refresh_failed");
+      } finally {
+        if (this.methodRefreshes.get(key) === next) this.methodRefreshes.delete(key);
+      }
+    }
+    return { refreshed, skipped };
   }
 
   activateModelGatewayRuntime(project, runtime) {
@@ -4691,6 +4802,10 @@ export class RuntimeManager {
       agentsGenerated,
       capsuleMethodsMounted,
       mountedMethodPromptBytes: mountedMethods.promptBytes,
+      // The conversations the methods were already rewritten for (`refreshCapsuleMethods`), and the version of the selection now there.
+      methodSessions: new Set(),
+      servedMethodDirectories: new Set((mountedMethods.learned ?? []).map((method) => learnedMethodDirectoryName(method.id))),
+      methodsVersion: mountedMethods.version ?? null,
       workloadTokenFile: mcpSync.workloadTokenFile,
       workloadTokenRefreshMs: mcpSync.workloadTokenRefreshMs,
       modelGatewayToken: modelGatewaySync.token,
@@ -5434,6 +5549,13 @@ export class RuntimeManager {
     }
     if (!allowBounded) this.assertInteractiveRuntimeAvailable(project);
     await this.assertPersonalSkillPromptGeneration(project, { sessionId, mode });
+    // The methods this conversation is given are chosen by what it asks: the directory the runtime mounts is rewritten for the
+    // first message of a session (`refreshCapsuleMethods`), before the prompt that makes the plugin read it. A refresh that fails
+    // leaves the runtime with the methods it has.
+    if (mode !== "steer" && typeof text === "string" && text.trim()) {
+      await this.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId, query: text,
+        ...(routedCapability === undefined ? {} : { scopeId: runScopeOf(routedCapability) }) }).catch(() => null);
+    }
     if (typeof system === "string" && system.trim()) {
       await this.writeRunContextFile(project, system, { sessionId, required: strictContext });
     }

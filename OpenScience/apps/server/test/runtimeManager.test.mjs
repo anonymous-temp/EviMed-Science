@@ -3356,7 +3356,7 @@ test("an active capsule's approved methods reach the container environment and t
       args.includes(`EVIMED_CAPSULE_METHODS_DIR=${runtimeCapsuleMethodsDir}`),
       "a name missing from the --env list leaves the plugin on its schema default",
     );
-    assert.deepEqual((await readdir(hostDir)).sort(), ["mounted"], "only the approved entry is materialized");
+    assert.deepEqual((await readdir(hostDir)).sort(), ["_selection.json", "mounted"], "only the approved entry is materialized, beside the file that says why each learned method is there");
     // Outside the container's `/runtime` mount, which is read-write: inside it,
     // the same files would also be reachable at a writable path.
     const runtimeMountRoot = path.join(runtimeProject.runtimeDir, "container-runtime");
@@ -3402,7 +3402,7 @@ test("an active capsule's approved methods reach the container environment and t
   }
 });
 
-test("a project whose capsules hold no mountable method starts with no methods directory named", async () => {
+test("a project whose capsules hold no mountable method mounts an empty methods directory, which a later selection fills", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "os-rt-capsule-none-"));
   const projectRoot = path.join(tmp, "project");
   const runtimeProject = {
@@ -3451,13 +3451,11 @@ test("a project whose capsules hold no mountable method starts with no methods d
   try {
     await assert.rejects(() => manager.startKernel(runtimeProject), (error) => error?.code === "runtime_exited");
     const args = JSON.parse(await readFile(argvLog, "utf8"));
-    assert.ok(args.includes("EVIMED_CAPSULE_METHODS_DIR="));
-    assert.equal(args.some((arg) => String(arg).includes(`dst=${runtimeCapsuleMethodsDir}`)), false);
-    assert.equal(
-      existsSync(capsuleMethodsHostDir(runtimeProject)),
-      false,
-      "nothing was written, so nothing is left behind for the runtime to find or write into",
-    );
+    // An empty directory is mounted (read-only, and named to the plugin): the methods a refresh writes later reach this runtime
+    // without a restart, and a runtime launched with none is no longer one that can never be given any.
+    assert.ok(args.includes(`EVIMED_CAPSULE_METHODS_DIR=${runtimeCapsuleMethodsDir}`));
+    assert.ok(args.includes(`type=bind,src=${capsuleMethodsHostDir(runtimeProject)},dst=${runtimeCapsuleMethodsDir},readonly`));
+    assert.deepEqual(await readdir(capsuleMethodsHostDir(runtimeProject)), ["_selection.json"], "no method directory: nothing was approved");
     const state = JSON.parse(await readFile(path.join(runtimeProject.metaDir, "runtime-state.json"), "utf8"));
     assert.equal(state.capsuleMethodsMounted, 0, "zero is a reading, not a missing field");
   } finally {

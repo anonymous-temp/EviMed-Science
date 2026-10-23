@@ -22,7 +22,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS } from "@evimed/domain";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
 import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
@@ -445,11 +445,14 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * run. `learning` closes that circle; without it this function behaves exactly
  * as it did before, which is what a deployment with no product database gets.
  *
- * The directory is rebuilt from scratch on every launch rather than merged
- * into: a method the user retired between two runs has to disappear from the
- * runtime, and a leftover file is a rule the user believes they removed. It is
- * created only when there is something to write, so a project with no methods
- * leaves no directory for anything to find, mount or write into.
+ * The directory is brought to exactly this selection on every write rather than merged into: a method the user retired between
+ * two runs has to disappear from the runtime, and a leftover file is a rule the user believes they removed. It is brought there
+ * in place, never by removing the directory and making it again: a runtime that is already running holds this directory as a
+ * bind mount, and a directory replaced under a bind mount leaves the runtime looking at the one that was deleted. What is new
+ * is written before what is stale is removed, so a listing taken in between holds both and never neither. Without
+ * `keepDirectory` it is created only when there is something to write, so a project with no methods leaves no directory for
+ * anything to find, mount or write into; a launch asks to keep it (the runtime mounts it empty and the next selection reaches
+ * the runtime that is already up).
  *
  * Files are written with the no-follow atomic helpers under the methods
  * directory as their own scoped root, so a directory name that somehow escaped
@@ -457,15 +460,27 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * (0444) inside 0700 directories: the container reads them, and nothing —
  * including the run — writes its own method.
  *
+ * `_selection.json` is written last, beside the method directories: what the plugin lists, in order, and for each learned method
+ * the reason it is there (`similarity`, `dependency`, `explore`, `recent`), and a version that changes when the selection does. The
+ * capsule plugin reads it when a conversation's first prompt arrives, so the mount receipt a finished run is counted by carries the
+ * reason; a plugin that predates it lists every directory and ignores a file.
+ *
  * `maxPromptBytes` is the byte budget (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`),
  * spent on what each method puts in front of the model: a capsule entry's
  * whole document, a learned method's card (`MAX_MOUNTED_CAPSULE_METHOD_BYTES`).
  * `promptBytes` in the result is what was spent, and `leftOut` how many
  * methods the byte budget could not carry.
  *
+ * `scopeId`, `query` and `similarity` say what the learned half is selected for (`selectLearnedMethods`): the run's scope, the
+ * first message of its conversation, and the module that reads closeness. Without a query there is nothing to rank by.
+ *
+ * `keep` names learned methods a running runtime was already given (`selectLearnedMethods`): the ones still approved stay on disk
+ * (current, written like the rest) and are not in `_selection.json`, so a conversation that began earlier can still read the file its
+ * card names and one that begins now is shown only the selection.
+ *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   learnedFamily?: "geo" | "research" | null, maxPromptBytes?: number,
- *   writeFile?: typeof writeFileAtomicNoFollow }} options
+ *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null,
+ *   keep?: Iterable<string> | null, keepDirectory?: boolean, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -474,8 +489,8 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * (`learnedMethodFamilyForRuntime`); absent, the whole library.
  *
  * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
- *   learned: {id: string, name: string, digest: string}[],
- *   learnedBytes: number,
+ *   learned: {id: string, name: string, digest: string, reason: string}[],
+ *   learnedBytes: number, version: string, rank: { mode: string | null, topScore: number | null },
  *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
  */
 export async function materializeCapsuleMethods({
@@ -484,6 +499,11 @@ export async function materializeCapsuleMethods({
   directory,
   learning = null,
   learnedFamily = undefined,
+  scopeId = undefined,
+  query = null,
+  similarity = null,
+  keep = null,
+  keepDirectory = false,
   maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
 }) {
@@ -515,6 +535,10 @@ export async function materializeCapsuleMethods({
       cardDirectory: runtimeCapsuleMethodsDir,
       onLeftOut: countLeftOut,
       ...(learnedFamily === undefined ? {} : { family: learnedFamily }),
+      ...(scopeId === undefined ? {} : { scopeId }),
+      query,
+      similarity,
+      keep,
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
@@ -539,41 +563,105 @@ export async function materializeCapsuleMethods({
   }
   const capsuleMethods = [...ownMethods, ...receivedMethods];
   const methods = [...ownMethods, ...learnedMethods, ...receivedMethods];
-  await fs.rm(directory, { recursive: true, force: true });
   const learned = learnedMethods.map((method) => ({
     id: method.id,
     name: method.name,
     digest: method.digest,
+    reason: method.reason,
   }));
   // The panel shows at most 160 characters of a method; a prefix is all it keeps.
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, capsule };
+  const rank = { mode: /** @type {any} */ (learnedMethods).mode ?? null, topScore: /** @type {any} */ (learnedMethods).topScore ?? null };
+  const reasons = new Map(learnedMethods.map((method) => [method.directoryName, method.reason]));
+  const version = selectionVersion(methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })));
+  if (methods.length === 0 && !keepDirectory) {
+    await fs.rm(directory, { recursive: true, force: true });
+    return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule };
+  }
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
+  // New and changed first, stale last (see above). What a running runtime was given and is still approved is written too, and stays.
+  /** @type {any[]} */
+  const kept = /** @type {any} */ (learnedMethods).kept ?? [];
   let bytes = 0;
-  for (const method of methods) {
-    await writeFile(
-      directory,
-      path.join(directory, method.directoryName, "SKILL.md"),
-      method.document,
-      { encoding: "utf8", mode: 0o444 },
-    );
+  for (const method of [...methods, ...kept]) {
     // A code skill is a body plus the scripts it tells the run to execute.
     // Writing only the body mounted an instruction to run a file that was not
     // there, which reads to the model as its own mistake. Same scope root and
     // same read-only mode as the body: the container executes them, and
     // nothing — including the run — writes its own.
-    const files = "files" in method ? method.files : {};
-    for (const [relative, content] of Object.entries(files ?? {})) {
-      await writeFile(
-        directory,
-        path.join(directory, method.directoryName, relative),
-        content,
-        { encoding: "utf8", mode: 0o444 },
-      );
+    /** @type {Record<string, string>} */
+    const wanted = { "SKILL.md": method.document };
+    for (const [relative, content] of Object.entries("files" in method ? method.files ?? {} : {})) wanted[relative] = String(content);
+    const target = path.join(directory, method.directoryName);
+    const held = await readTree(target);
+    if (!sameTree(held, wanted)) {
+      // Replaced file by file (a rename), so a reader never finds the method's own file missing; what the method no longer has goes after.
+      for (const [relative, content] of Object.entries(wanted)) {
+        if (held?.get(relative) !== content) await writeFile(directory, path.join(target, relative), content, { encoding: "utf8", mode: 0o444 });
+      }
+      for (const relative of held?.keys() ?? []) {
+        if (!(relative in wanted)) await fs.rm(path.join(target, relative), { recursive: true, force: true });
+      }
     }
-    bytes += method.bytes;
+    if (methods.includes(method)) bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, capsule };
+  const present = new Set([...methods, ...kept].map((method) => method.directoryName));
+  present.add(SELECTION_FILE);
+  for (const entry of await fs.readdir(directory)) {
+    if (!present.has(entry)) await fs.rm(path.join(directory, entry), { recursive: true, force: true });
+  }
+  // What the plugin lists, in the order of the selection: the researcher's own entries, the learned methods best first, what a
+  // received pack brought. A learned method carries the reason it is there; a capsule entry none.
+  await writeFile(directory, path.join(directory, SELECTION_FILE), `${JSON.stringify({
+    version, methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
+  })}\n`, { encoding: "utf8", mode: 0o444 });
+  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule };
+}
+
+/** The file beside the method directories that says which learned method is there for which reason. */
+export const SELECTION_FILE = "_selection.json";
+
+/**
+ * What the selection is, as a short digest: the methods and the bodies they were mounted as and why. It changes when a card
+ * would change in front of a run, and not otherwise, so a reader can tell "the same mount" without comparing text.
+ * @param {{ directory: string, digest: string, reason: string | null }[]} entries
+ * @returns {string}
+ */
+function selectionVersion(entries) {
+  const lines = entries.map((entry) => `${entry.directory}\u0000${entry.digest}\u0000${entry.reason ?? ""}`).sort();
+  return createHash("sha256").update(lines.join("\n"), "utf8").digest("hex").slice(0, 16);
+}
+
+/**
+ * Every regular file under a directory, by relative path; null when there is no such directory. A thing that is not a regular
+ * file (a link, a socket) is read as a file whose content cannot match, so the directory is written again.
+ * @param {string} directory @returns {Promise<Map<string, string> | null>}
+ */
+async function readTree(directory) {
+  /** @type {import("node:fs").Dirent[]} */
+  let entries;
+  try { entries = await fs.readdir(directory, { withFileTypes: true, recursive: true }); } catch { return null; }
+  /** @type {Map<string, string>} */
+  const tree = new Map();
+  for (const entry of entries) {
+    const full = path.join(entry.parentPath, entry.name);
+    const relative = path.relative(directory, full).split(path.sep).join("/");
+    if (entry.isDirectory()) continue;
+    tree.set(relative, entry.isFile() ? await fs.readFile(full, "utf8").catch(() => "\u0000unreadable") : "\u0000not a file");
+  }
+  return tree;
+}
+
+/** @param {Map<string, string> | null} tree @param {Record<string, string>} wanted @returns {boolean} */
+function sameTree(tree, wanted) {
+  if (!tree) return false;
+  const names = Object.keys(wanted);
+  return tree.size === names.length && names.every((name) => tree.get(name) === wanted[name]);
+}
+
+/** What a reason of a mount is worth to a count of carried runs: the methods that were meant for the work. @param {unknown} reason @returns {boolean} */
+export function isRelevantMountReason(reason) {
+  return /** @type {readonly unknown[]} */ (METHOD_RELEVANT_MOUNT_REASONS).includes(reason);
 }

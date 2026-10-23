@@ -125,7 +125,8 @@ import { LearningWorker } from "./learningWorker.mjs";
 import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
-import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
+import { learnedMethodFamilyForRuntime, methodFamily, runScopeOf } from "./learnedMethodMount.mjs";
+import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
@@ -239,6 +240,7 @@ import { verifySourceMetadata } from "./sourceMetadata.mjs";
 import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
 import { createLibrary } from "./libraryService.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
+import { nativeInputText } from "@evimed/harness-port";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
 // The knowledge base as a tree, for the runtime's `kb_browse` tool: the engine's documents, wiki and graph (2026-10-13).
 import { KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler } from "./kbBrowseGateway.mjs";
@@ -1584,8 +1586,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // method that is carried and never opened (`never_opened`, `OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`). A run the model never
     // got to act in weighed nothing, and counts for nothing.
     if (derived.answered) {
-      for (const methodId of derived.carried) {
-        await learningService.recordCarried(project.userId, methodId).catch(async (error) => {
+      // Why each card was in front of the run decides what the load is counted as: a method that was meant for the work is one the
+      // run passed over when it did not open it, and one that was the exposure slot's is not (`LearningService.recordCarried`).
+      for (const { id: methodId, reason } of derived.carriedBy) {
+        await learningService.recordCarried(project.userId, methodId, reason ?? undefined).catch(async (error) => {
           await securityAudit(config, "learning.observation.record", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "method_carried_failed",
@@ -1621,6 +1625,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let learningRuntime = null;
   /** @type {any} */
   let learningWorker = null;
+  /** What the researcher did after a run that opened a learned method, folded into the method's counters on the hourly pass (`methodAppliedOutcomes.mjs`). @type {ReturnType<typeof createMethodAppliedOutcomes> | null} */
+  let methodApplied = null;
   /** What queues a lesson when a run finishes (learningTriggers.mjs). */
   /** @type {LearningTriggers | null} */
   let learningTriggers = null;
@@ -3426,6 +3432,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // anywhere, and the counters that decide whether one may be approved could
   // never move, because moving them requires the method to have been in a run.
   runtimeManager.learningService = learningService;
+  // A method that took effect, was amended or stopped is in the runtimes of the account that is up without a restart (`RuntimeManager.refreshCapsuleMethods`):
+  // told, never asked, so a runtime that cannot be refreshed keeps what it has. It is rewritten for the conversation it was last rewritten for,
+  // so what an open conversation was shown is not taken from it by a method changing.
+  if (learningService) learningService.onMountChange = (userId) => runtimeManager.refreshCapsuleMethods({ userId, reuse: true });
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
   // The researcher's own 「记忆」 switches, which the memory page promises over everything a run is handed — the learned and
@@ -4065,6 +4075,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               code: receipt.missing[0]?.reason ?? "incomplete",
             });
           }
+          // The counters of what each method was given and did: no text of the conversation, only which methods were in front of the run
+          // and which it opened, so a conversation that read a patient record is counted like any other (2026-10-23: the early return
+          // below used to take every such run out of the loop's counters, and a method the work of the study used daily looked unused).
+          await recordMethodUse({ project, run, sessions });
           if (!reusableClinicalContext) return;
           // What actually fed what, for the evaluation corpus.
           //
@@ -4103,8 +4117,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // from a library with nothing worth promoting.
           //
           // It runs inside the transcript write on purpose: it needs the same
-          // sessions, and both must finish before the run's container is let go.
-          await recordMethodUse({ project, run, sessions });
+          // sessions, and both must finish before the run's container is let go
+          // (above, before the clinical-context return: it carries no clinical content).
           if (learningService && config.learningEnabled && !internalFor(project.userId, project.id)) {
             const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
             if (!state.learning && !state.trial) {
@@ -4430,6 +4444,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       embed: overrides.methodEmbed ?? (methodEmbedder.configured ? (texts) => methodEmbedder.embedDocuments(texts) : null),
       logger: { warn: (message) => process.stderr.write(`${message}\n`) },
     });
+    // The mount ranks the library by the same reading of "close" (`RuntimeManager.syncCapsuleMethods`).
+    runtimeManager.methodSimilarity = methodSimilarity;
     const consolidation = new MethodConsolidation({
       // A card carried this many answered runs and never opened is stopped, with the count as the reason (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
       // each stop is counted by the branch that decided.
@@ -4454,6 +4470,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         code: typeof detail?.verdict === "string" ? detail.verdict : "unknown",
         detail: `method=${detail?.methodId ?? ""}`,
       }),
+    });
+    if (feedbackEvents) methodApplied = createMethodAppliedOutcomes({
+      learning: learningService, feedback: feedbackEvents,
+      resolveProject: async (userId, projectId) => {
+        const user = await store.userById(userId);
+        return user ? store.requireProject(user, projectId).catch(() => null) : null;
+      },
+      runsOf: (project) => agentRuns.list(project),
+      onApplied: (outcome) => learningMetrics.observeApplied(outcome),
+      audit: (event, detail) => securityAudit(config, event, "failed", detail),
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory, canReuseRun, canReuseRuns,
@@ -8184,7 +8210,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
-    preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
+    // A conversation typed in the kernel's own window: its supplements are frozen before the prompt goes, and so is what the runtime carries of
+    // the researcher's methods, chosen by what it asks (`RuntimeManager.refreshCapsuleMethods`). Neither refuses the prompt.
+    preparePrompt: nativeHandbookContext || learningService ? async (project, request) => {
+      /** @type {any} */
+      let envelope = null;
+      /** @type {{ error: unknown } | null} */
+      let failed = null;
+      if (nativeHandbookContext) {
+        try { envelope = await nativeHandbookContext.prepare(project, request); } catch (error) { failed = { error }; }
+      }
+      if (request?.mode !== "steer") {
+        await runtimeManager.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId: String(request?.sessionId ?? ""),
+          query: nativeInputText(request?.content),
+          ...(envelope?.route ? { scopeId: runScopeOf(envelope.route.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID) } : {}) }).catch(() => null);
+      }
+      if (failed) throw failed.error;
+      return envelope;
+    } : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
     // on that run — the learning loop's in-run correction signal.
@@ -8298,6 +8341,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.userById(row.user_id);
           if (!user) continue;
           await ensureLearningProject(store, user);
+          // What the researcher did after the runs that opened a method since the last pass reaches the counters first, so the pass that
+          // decides what to stop reads it (`methodAppliedOutcomes.mjs`). A failure of it is its own and costs the pass nothing.
+          await methodApplied?.settleUser(row.user_id).catch(() => null);
           const pass = await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
             // One pass per researcher per interval however often this timer fires.
             idempotencyKey: `consolidate:sleep:${interval}:${period}`,

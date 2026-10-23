@@ -8,7 +8,7 @@
 // `scripts/dev/generate-briefs.mjs`, was deleted on 2026-10-23: it had no executed edge to walk and produced no brief.)
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";

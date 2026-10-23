@@ -17,7 +17,9 @@ import {
   renderCapsuleMethod,
   runtimeCapsuleMethodsDir,
   selectCapsuleMethods,
+  SELECTION_FILE,
 } from "../src/capsuleMethods.mjs";
+import { createMethodSimilarity } from "../src/methodSimilarity.mjs";
 import { learnedMethodCardEntry } from "@evimed/domain";
 import { learnedMethodDirectoryName } from "../src/learnedMethodMount.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
@@ -730,7 +732,7 @@ test("a learned method costs the budget its card, not its text, so long ones sti
     assert.equal(launched.leftOut, 1);
     await manager.syncCapsuleMethods(project);
     assert.deepEqual(manager.statsAll().methodMounts,
-      { launches: 2, promptBytes: 2 * launched.promptBytes, leftOut: 2, maxPromptBytes: ownBytes + cards - 1 });
+      { launches: 2, promptBytes: 2 * launched.promptBytes, leftOut: 2, refreshes: 0, refreshFailures: 0, maxPromptBytes: ownBytes + cards - 1 });
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }
@@ -856,6 +858,84 @@ test("scratch fixtures write nothing outside the temporary project", async () =>
     await writeFile(path.join(project.rootDir, "sentinel"), "keep", "utf8");
     await materializeCapsuleMethods({ capsules: fakeCapsules(), project, directory });
     assert.equal(await readFile(path.join(project.rootDir, "sentinel"), "utf8"), "keep");
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------- a live runtime's directory is changed in place (2026-10-23) */
+
+/** One approved learned method, as the ledger returns it. */
+function learnedDoc(name, { approvedAt = "2026-09-01T00:00:00.000Z", body = "## Purpose\nDo it.\n\n## Workflow\n1. Do it.", files = null, scope = undefined } = {}) {
+  return {
+    id: `method:learned:${name}`,
+    payload: {
+      status: "approved", statusChangedAt: approvedAt,
+      frontmatter: { name, description: `Does ${name} in words of its own.`, whenToUse: `When ${name} is what is being asked.`, metadata: { role: "functional" } },
+      body, ...(files ? { files } : {}), ...(scope ? { provenance: { origin: "inferred", scope } } : {}),
+    },
+  };
+}
+
+test("the directory is brought to the selection in place: it survives, a changed method is replaced file by file, what is stale goes last", async () => {
+  const { project, directory } = await scratchProject();
+  try {
+    const learning = { documents: [learnedDoc("alpha"), learnedDoc("beta", { files: { "scripts/x.py": "print(1)\n" } })], async approvedMethods() { return this.documents; } };
+    const first = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(first.count, 2);
+    const before = await stat(directory);
+    const alphaDir = learnedMethodDirectoryName("method:learned:alpha");
+    const betaDir = learnedMethodDirectoryName("method:learned:beta");
+    const alphaFile = path.join(directory, alphaDir, "SKILL.md");
+    const alphaBefore = await stat(alphaFile);
+
+    // beta changes (its body and its script go), alpha stays, gamma arrives.
+    learning.documents = [learnedDoc("alpha"), learnedDoc("beta", { body: "## Purpose\nDo it differently.\n\n## Workflow\n1. Otherwise." }), learnedDoc("gamma")];
+    const second = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(second.count, 3);
+    assert.equal((await stat(directory)).ino, before.ino, "the same directory: a runtime holding it as a bind mount still sees what is written");
+    assert.equal((await stat(alphaFile)).ino, alphaBefore.ino, "a method that did not change is not written again");
+    assert.match(await readFile(path.join(directory, betaDir, "SKILL.md"), "utf8"), /Do it differently/);
+    assert.equal(existsSync(path.join(directory, betaDir, "scripts", "x.py")), false, "a file the method no longer has is gone");
+    assert.deepEqual(await mounted(directory), [alphaDir, betaDir, learnedMethodDirectoryName("method:learned:gamma")].sort());
+
+    // gamma retires: the directory stays, and says so.
+    learning.documents = [learnedDoc("alpha")];
+    const third = await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.equal(third.count, 1);
+    assert.deepEqual(await mounted(directory), [alphaDir]);
+    // And the last one: an empty directory is kept when the caller keeps it, and is not when it does not.
+    learning.documents = [];
+    await materializeCapsuleMethods({ capsules: null, learning, project, directory, keepDirectory: true });
+    assert.deepEqual(await readdir(directory), ["_selection.json"], "nothing mounted, and the directory is still there for the next selection");
+    assert.equal((await stat(directory)).ino, before.ino);
+    await materializeCapsuleMethods({ capsules: null, learning, project, directory });
+    assert.equal(existsSync(directory), false);
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("the selection file says which learned method is there for which reason, and its version moves only when the mount does", async () => {
+  const { project, directory } = await scratchProject();
+  try {
+    const learning = {
+      documents: [learnedDoc("grade-first", { body: "## Purpose\nReport GRADE certainty of evidence first.\n\n## Workflow\n1. Report it." }), learnedDoc("kayak-notes")],
+      async approvedMethods() { return this.documents; },
+    };
+    const similarity = createMethodSimilarity();
+    const options = { capsules: null, learning, project, directory, keepDirectory: true, scopeId: "conversation", similarity };
+    const asked = await materializeCapsuleMethods({ ...options, query: "grade first when you report certainty" });
+    const selection = JSON.parse(await readFile(path.join(directory, SELECTION_FILE), "utf8"));
+    assert.equal(selection.version, asked.version);
+    assert.ok(asked.learned.every((method) => ["similarity", "dependency", "explore", "recent"].includes(method.reason)));
+    assert.deepEqual(selection.methods.map((entry) => entry.reason).sort(), asked.learned.map((method) => method.reason).sort());
+    assert.deepEqual(selection.methods.map((entry) => entry.directory).sort(), (await mounted(directory)));
+    assert.equal(asked.rank.mode, "lexical");
+    // The same question again is the same mount.
+    assert.equal((await materializeCapsuleMethods({ ...options, query: "grade first when you report certainty" })).version, asked.version);
+    // Another question that picks another reason is another mount.
+    assert.notEqual((await materializeCapsuleMethods({ ...options, query: "something about kayak river notes" })).version, asked.version);
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }

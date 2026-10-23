@@ -41,6 +41,7 @@
  * @module
  */
 
+import { METHOD_RELEVANT_MOUNT_REASONS } from "@evimed/domain";
 import { toSkillName } from "@evimed/harness-port";
 
 import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
@@ -78,9 +79,6 @@ export function methodObservationSessionsForRun({ run, projection, sessions }) {
  *  methods directory. */
 const MOUNTED_METHOD_FILE = /(?:^|\/)(_lm[0-9a-f]{32})\/SKILL\.md$/;
 
-/** The same file named anywhere inside a shell command. */
-const MOUNTED_METHOD_FILE_IN_COMMAND = /(?:^|[\s/'"=])(_lm[0-9a-f]{32})\/SKILL\.md(?=$|[\s'";|&)<>])/g;
-
 /**
  * The shell programs that print a file's text, a closed vocabulary. A command
  * that names a method's file with anything else — `ls`, `wc -l`, `stat`,
@@ -92,6 +90,25 @@ const READING_PROGRAMS = new Set([
   "cat", "head", "tail", "sed", "awk", "less", "more", "nl", "grep", "egrep", "rg", "cut", "tac", "bat", "python", "python3", "node",
 ]);
 
+/** A path under one method's directory, wherever it is named in a command: the directory and what follows it. */
+const METHOD_PATH_IN_COMMAND = /(?:^|[\s/'"=(])(_lm[0-9a-f]{32})\/([^\s'";|&)<>]*)/g;
+
+/** A method directory named as a place to be: `cd /runtime/capsule-methods/_lm…` or `cd _lm…/`. */
+const METHOD_DIRECTORY_TARGET = /(?:^|\/)(_lm[0-9a-f]{32})\/*$/;
+
+/**
+ * Whether a file name, as a shell would expand it inside a method directory, is that method's own file: `SKILL.md` itself, or a
+ * glob that matches it (`*`, `*.md`, `SKILL*`). Anything else in the directory (`SKILL.md.bak`, a script) is not.
+ * @param {string} tail @returns {boolean}
+ */
+function namesSkillFile(tail) {
+  const name = tail.replace(/^\.\//, "");
+  if (name === "SKILL.md") return true;
+  if (!/[*?[]/.test(name)) return false;
+  const pattern = name.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  try { return new RegExp(`^${pattern}$`).test("SKILL.md"); } catch { return false; }
+}
+
 /**
  * The mounted methods a shell command read, by directory name.
  *
@@ -101,22 +118,42 @@ const READING_PROGRAMS = new Set([
  * it opened its capability's own method with `wc -l` through the shell and
  * then read it with `read` — so both tools have to be understood, and `wc -l`
  * must not be mistaken for the reading.
+ *
+ * A method's file is named three ways, all of them a reading by a reading program: by its path, by a glob over its directory
+ * (`cat /runtime/capsule-methods/_lm…/*`), and by its bare name after a `cd` into the directory (`cd _lm… && cat SKILL.md`,
+ * 2026-10-23: the last two were missed, so a method read that way was carried and never opened). A `cd` holds for the segments
+ * after it, and a `cd` anywhere else ends it. A folder of methods read as a whole (`grep -r … /runtime/capsule-methods`) names no
+ * one method and counts for none.
  * @param {unknown} command @returns {string[]}
  */
 export function methodFilesReadByCommand(command) {
   const text = String(command ?? "");
-  if (!text.includes("/SKILL.md")) return [];
+  if (!text.includes("_lm")) return [];
   /** @type {Set<string>} */
   const read = new Set();
-  for (const segment of text.split(/&&|\|\||[;|\n]/)) {
-    const directories = [...segment.matchAll(MOUNTED_METHOD_FILE_IN_COMMAND)].map((match) => match[1]);
-    if (!directories.length) continue;
-    const words = segment.trim().split(/\s+/);
+  /** @type {string | null} */
+  let inside = null;
+  for (const raw of text.split(/&&|\|\||[;|\n]/)) {
+    const segment = raw.trim().replace(/^[({]+\s*/, "");
+    if (!segment) continue;
+    const words = segment.split(/\s+/);
     let index = 0;
     while (index < words.length && (words[index] === "sudo" || words[index] === "env" || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]))) index += 1;
     const program = (words[index] ?? "").split("/").pop() ?? "";
+    if (program === "cd") {
+      inside = METHOD_DIRECTORY_TARGET.exec(String(words[index + 1] ?? "").replace(/^["']|["']$/g, ""))?.[1] ?? null;
+      continue;
+    }
     if (!READING_PROGRAMS.has(program)) continue;
-    for (const directory of directories) read.add(directory);
+    for (const found of segment.matchAll(METHOD_PATH_IN_COMMAND)) {
+      if (namesSkillFile(found[2])) read.add(found[1]);
+    }
+    if (inside) {
+      for (const word of words.slice(index + 1)) {
+        const name = word.replace(/[)}]+$/, "").replace(/^["']|["']$/g, "").replace(/^\.\//, "");
+        if (name && !name.startsWith("-") && !name.includes("/") && namesSkillFile(name)) read.add(inside);
+      }
+    }
   }
   return [...read];
 }
@@ -235,13 +272,17 @@ export function invokedSkillsBySession(sessions) {
  * @typedef {object} RunMethodObservations
  * @property {{methodId: string, observation: {runId: string, family: string, outcome: string, at: string, invoked: boolean}}[]} observations
  * @property {string[]} eligible   approved methods that were available and not mounted
- * @property {{name: string, digest: string}[]} methodsLoaded
+ * @property {{name: string, digest: string, reason?: string}[]} methodsLoaded   with why each card was there, when the mount said (`METHOD_MOUNT_REASONS`)
  * @property {{name: string, digest: string}[]} methodsInvoked   every approved method the run opened, with the digest of the file it was carried as
  * @property {{name: string, mounted: string, current: string}[]} mismatched
  * @property {{id: string, name: string}[]} invokedWithoutMount   opened, and credited to no deliverable's observation
  * @property {string[]} carried   ids of the approved methods the run carried a card for
+ * @property {{id: string, reason: string | null}[]} carriedBy   the same, with why each card was in front of the run: `null` when the receipt does not say (a runtime that predates the reason)
  * @property {boolean} answered   the model got to act in the run's own session, so a card it did not open was passed over rather than unseen
  */
+
+/** @param {string} reason @returns {boolean} whether a card was there because the method was meant for the work */
+const isRelevantReason = (reason) => /** @type {readonly string[]} */ (METHOD_RELEVANT_MOUNT_REASONS).includes(reason);
 
 /**
  * Derive every counter movement one finished run earns.
@@ -280,6 +321,14 @@ export function runMethodObservations(input) {
   const loaded = new Map();
   /** @type {Map<string, string>} */
   const invoked = new Map();
+  /** Why each card was in front of the run, by method name: the receipt's word, the most relevant of them when two disagree. @type {Map<string, string>} */
+  const reasons = new Map();
+  /** @param {string} name @param {unknown} reason */
+  const noteReason = (name, reason) => {
+    if (typeof reason !== "string" || !reason) return;
+    const held = reasons.get(name);
+    if (!held || (!isRelevantReason(held) && isRelevantReason(reason))) reasons.set(name, reason);
+  };
   /** @type {RunMethodObservations["mismatched"]} */
   const mismatched = [];
   const seenFamilies = new Set();
@@ -298,6 +347,7 @@ export function runMethodObservations(input) {
       const digest = String(entry?.digest ?? "");
       if (!name || !digest) continue;
       loaded.set(name, digest);
+      noteReason(name, entry?.reason);
       const known = byName.get(name);
       if (known && usedIn(invokedHere, known)) invoked.set(name, digest);
       if (!known || !outcome) continue;
@@ -325,7 +375,7 @@ export function runMethodObservations(input) {
   const delegated = new Set(subagents.map((record) => String(record?.deliverableId ?? "")).filter(Boolean));
   const rootInvoked = invokedBySession.get(String(input.run?.sessionId ?? "")) ?? new Set();
   const mountedForRoot = (Array.isArray(input.projection?.mountedMethods) ? input.projection.mountedMethods : [])
-    .map((entry) => ({ name: String(entry?.name ?? ""), digest: String(entry?.digest ?? "") }))
+    .map((entry) => ({ name: String(entry?.name ?? ""), digest: String(entry?.digest ?? ""), reason: entry?.reason }))
     .filter((entry) => entry.name && entry.digest);
   for (const item of items) {
     const deliverableId = String(item?.id ?? "");
@@ -398,6 +448,7 @@ export function runMethodObservations(input) {
     const name = String(entry?.name ?? "");
     const digest = String(entry?.digest ?? "");
     if (name && digest && !carried.has(name)) carried.set(name, digest);
+    if (name && digest) noteReason(name, entry?.reason);
   }
 
   // The run's own record of what it opened, whole: every approved method whose
@@ -441,11 +492,12 @@ export function runMethodObservations(input) {
   return {
     observations,
     eligible,
-    methodsLoaded: [...carried.entries()].map(([name, digest]) => ({ name, digest })),
+    methodsLoaded: [...carried.entries()].map(([name, digest]) => ({ name, digest, ...(reasons.has(name) ? { reason: /** @type {string} */ (reasons.get(name)) } : {}) })),
     methodsInvoked: [...invoked.entries()].map(([name, digest]) => ({ name, digest })),
     mismatched,
     invokedWithoutMount,
     carried: (input.methods ?? []).filter((method) => carried.has(method.name)).map((method) => method.id),
+    carriedBy: (input.methods ?? []).filter((method) => carried.has(method.name)).map((method) => ({ id: method.id, reason: reasons.get(method.name) ?? null })),
     answered,
   };
 }

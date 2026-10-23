@@ -50,7 +50,7 @@ test("the durable counts come from the ledger in closed vocabularies, across eve
   const database = ledger();
   const counts = await learningLedgerCounts(database, { now: new Date("2026-09-27T00:00:00.000Z") });
   assert.deepEqual(counts.methods, { candidate: 0, approved: 2, retired: 1 });
-  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41 });
+  assert.deepEqual(counts.uses, { loaded: 9, invoked: 3, succeeded: 8, read: 1, carried: 41, explored: 0, appliedCorrected: 0, appliedClean: 0 });
   assert.equal(counts.handbookCandidates, 2, "the reviewer's lessons are counted apart from the researcher's methods");
   assert.equal(counts.lessons.delivered.queued, 1);
   assert.equal(counts.lessons.delivered.succeeded, 3);

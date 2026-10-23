@@ -89,7 +89,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
+import { METHOD_MOUNT_REASONS, clinicalSafetyCautionHits, isResearcherOwnedWork, isVerificationRun, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -1078,7 +1078,7 @@ function normalizeCapabilityHandbooks(value) {
 
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{name: string, digest: string, seq?: number, trial?: boolean}[]} */
+  /** @type {{name: string, digest: string, seq?: number, trial?: boolean, reason?: string}[]} */
   const entries = [];
   for (const item of value.slice(0, maxLearningMethods)) {
     if (!item || typeof item.name !== "string" || !item.name) continue;
@@ -1091,6 +1091,8 @@ function normalizeMethodDigests(value) {
       // once, and the ledger could no longer tell a measured arm from an
       // ordinary run -- so every later comparison would quietly mix the two.
       ...(item.trial === true ? { trial: true } : {}),
+      // Why a loaded method's card was in front of the run (`METHOD_MOUNT_REASONS`), so a later count can be split by it.
+      ...(typeof item.reason === "string" && METHOD_MOUNT_REASONS.includes(item.reason) ? { reason: item.reason } : {}),
     });
   }
   return entries;

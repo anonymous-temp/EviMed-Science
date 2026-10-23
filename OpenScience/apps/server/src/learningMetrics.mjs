@@ -27,7 +27,7 @@
  * @module learningMetrics
  */
 
-import { METHOD_RELATION_TYPES } from "@evimed/domain";
+import { METHOD_APPLIED_OUTCOMES, METHOD_MOUNT_REASONS, METHOD_RELATION_TYPES } from "@evimed/domain";
 
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
@@ -36,7 +36,9 @@ import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 const METHOD_STATUSES = Object.freeze(["candidate", "approved", "retired"]);
 const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", "canceled"]);
 const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change", "handbook"]);
-const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried"]);
+const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried", "explored", "appliedCorrected", "appliedClean"]);
+/** How a mount ranked the library (`selectLearnedMethods`): by meaning, by the words they share, or not at all (no first message to rank by). */
+const MOUNT_RANKING = Object.freeze(["embedding", "lexical", "recent"]);
 /** The branches of `retirementProposal` that stop a method on their own, as the counter of stops labels them. */
 const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened", "superseded", "unproven_merge_expired", "library_cap"]);
 /**
@@ -73,6 +75,20 @@ export class LearningMetrics {
     this.consolidateNoop = Object.fromEntries([...CONSOLIDATE_NOOP_REASONS, "other"].map((reason) => [reason, 0]));
     /** @type {Record<string, number>} */
     this.relations = Object.fromEntries([...METHOD_RELATION_TYPES, "other"].map((type) => [type, 0]));
+    /** @type {Record<string, number>} */
+    this.mountReasons = Object.fromEntries([...METHOD_MOUNT_REASONS, "other"].map((reason) => [reason, 0]));
+    /** @type {Record<string, number>} */
+    this.mountRanking = Object.fromEntries([...MOUNT_RANKING, "other"].map((mode) => [mode, 0]));
+    /** @type {Record<string, number>} */
+    this.applied = Object.fromEntries([...METHOD_APPLIED_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+  }
+
+  /** One run's reaction recorded against a method it opened (`foldApplied`): the researcher corrected it, or moved on.
+   *  @param {string} outcome @param {number} [times] */
+  observeApplied(outcome, times = 1) {
+    const label = closed(outcome, METHOD_APPLIED_OUTCOMES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.applied[label] = (this.applied[label] ?? 0) + n;
   }
 
   /** A stage of the consolidation pass that did nothing, and why (`CONSOLIDATE_NOOP_REASONS`).
@@ -112,14 +128,23 @@ export class LearningMetrics {
     else this.deliveries.sampledOut += 1;
   }
 
-  /** One runtime launch: how many learned methods it mounted, and their bytes.
-   *  @param {{methods: number, bytes: number}} mount */
-  observeMount({ methods, bytes }) {
+  /** One mount of learned methods: how many it put in the room and their bytes, why each is there (`METHOD_MOUNT_REASONS`) and how the
+   *  library was ranked for it (`selectLearnedMethods`). A launch and the rewrite of a runtime that is up are each one.
+   *  @param {{methods: number, bytes: number, reasons?: readonly string[], mode?: string | null}} mount */
+  observeMount({ methods, bytes, reasons = [], mode = null }) {
     const mounted = count(methods);
     if (mounted > 0) this.mounts.withMethods += 1;
     else this.mounts.without += 1;
     this.mountedMethods += mounted;
     this.mountedBytes += count(bytes);
+    for (const reason of reasons) {
+      const label = closed(reason, METHOD_MOUNT_REASONS);
+      this.mountReasons[label] = (this.mountReasons[label] ?? 0) + 1;
+    }
+    if (mode) {
+      const label = closed(mode, MOUNT_RANKING);
+      this.mountRanking[label] = (this.mountRanking[label] ?? 0) + 1;
+    }
   }
 
   /** One finished run that carried learned methods: how many, and how many it used.
@@ -165,6 +190,15 @@ export class LearningMetrics {
       { name: "open_science_learning_relations_total", type: "counter",
         help: "Relations between methods the consolidation pass newly recorded, by type (shared_part, subset, merge, abstract_pattern, conflicts_with, supersedes).",
         series: Object.entries(this.relations).map(([type, value]) => ({ value, labels: { type } })) },
+      { name: "open_science_learning_mount_selected_total", type: "counter",
+        help: "Learned methods put in front of a run, by why: similarity (among the nearest to the conversation's first message), dependency (reused by one that was), explore (the slot of exposure) and recent (no first message to rank by).",
+        series: Object.entries(this.mountReasons).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_mount_ranked_total", type: "counter",
+        help: "Mounts of learned methods, by how the library was ranked: embedding, lexical (the words they share, when no embedder answered) or recent (no first message).",
+        series: Object.entries(this.mountRanking).map(([mode, value]) => ({ value, labels: { mode } })) },
+      { name: "open_science_learning_method_applied_total", type: "counter",
+        help: "Runs that opened a learned method, by what the researcher did next: corrected it (a correction, preference or rejection that named the method) or moved on (clean).",
+        series: Object.entries(this.applied).map(([outcome, value]) => ({ value, labels: { outcome } })) },
       { name: "open_science_learning_run_methods_total", help: "Learned methods finished runs carried, and the ones they used.", type: "counter", series: [
         { value: this.runMethodsLoaded, labels: { kind: "loaded" } },
         { value: this.runMethodsInvoked, labels: { kind: "invoked" } },
@@ -188,7 +222,10 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,invoked}')::numeric END),0) AS invoked,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,succeeded}')::numeric END),0) AS succeeded,
       coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,read}')::numeric END),0) AS read,
-      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,carried}')::numeric END),0) AS carried
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,carried}')::numeric END),0) AS carried,
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,explored}')::numeric END),0) AS explored,
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,appliedCorrected}')::numeric END),0) AS "appliedCorrected",
+      coalesce(sum(CASE WHEN payload->>'status'='approved' THEN (payload #>> '{learning,counts,appliedClean}')::numeric END),0) AS "appliedClean"
     FROM evimed_product.documents
     WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType' = ANY($1::text[]) AND ($2::text IS NULL OR user_id=$2)
     GROUP BY 1,2`, [[LEARNED_METHOD_RECORD_TYPE, HANDBOOK_CANDIDATE_RECORD_TYPE], owner]);
@@ -287,8 +324,8 @@ export function learningMetricFamilies(enabled, ledger, counters) {
         series: METHOD_STATUSES.map((status) => ({ value: ledger.methods[status] ?? 0, labels: { status } })) },
       { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, awaiting or consumed by the capability handbook loop.", type: "gauge",
         series: [{ value: ledger.handbookCandidates }] },
-      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run.", type: "gauge",
-        series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind } })) },
+      { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one, carried as a card by an answered run (as meant for the work), explored (exposure only), and what the researcher did after a run that opened one: applied_corrected or applied_clean.", type: "gauge",
+        series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind: kind.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`) } })) },
       { name: "open_science_learning_distill_jobs", help: "Distillation lessons queued, by trigger and job status.", type: "gauge",
         series: Object.entries(ledger.lessons).flatMap(([trigger, statuses]) => JOB_STATUSES.map((status) => ({ value: statuses[status] ?? 0, labels: { trigger, status } }))) },
       { name: "open_science_learning_distill_results", help: "Finished distillation lessons, by what they wrote.", type: "gauge",
