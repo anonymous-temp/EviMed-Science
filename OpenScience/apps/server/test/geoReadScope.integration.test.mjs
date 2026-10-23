@@ -504,3 +504,25 @@ test("a dated explicit-round selection with no matching observations replays its
   assert.equal(replay.selection.reference, selected.selection.reference);
   await assert.rejects(readGeoSelection(store, project, { round: "no-such-round", from: "2026-10-02", to: "2026-10-02" }), (error) => error.status === 404);
 });
+
+test("inherited question pools retain selected metadata and invalidate edited question text", options, async () => {
+  const inherited = await store.createProject({ userId: user.id, projectId: "inherited-pool-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name)
+    VALUES ('inherited-g',$1,$2,1,'P2','Inherited')`, [user.id,inherited.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text)
+    VALUES ('inherited-q',$1,$2,'inherited-g',1,NULL,'Original question?')`, [user.id,inherited.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at)
+    VALUES ('inherited-r',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01','2026-10-01')`, [user.id,inherited.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at)
+    VALUES ('inherited-s',$1,$2,'inherited-r','inherited-q','deepseek','refusal','2026-10-01')`, [user.id,inherited.id]);
+  const scope = { pools: ["P2"] };
+  const selected = await readGeoSelection(store, inherited, scope);
+  assert.equal(selected.rows.length, 1);
+  assert.equal(selected.questions.length, 1);
+  const detail = await service.cluster(user, inherited.id, "inherited-g", scope);
+  assert.equal(detail.questions[0].text, "Original question?");
+  const answers = await service.runtimeRead(inherited, "snapshots", { selectionRef: selected.selection.reference });
+  assert.equal(answers.items[0].pool, "P2");
+  await store.query("UPDATE evimed_geo.questions SET text = 'Changed question?' WHERE id = 'inherited-q'");
+  await assert.rejects(readGeoSelection(store, inherited, { selectionRef: selected.selection.reference }), (error) => error.status === 409);
+});
