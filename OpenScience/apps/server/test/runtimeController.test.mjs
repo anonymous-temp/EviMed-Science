@@ -6,7 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, requestRuntime, verifyEviMedWorkloadToken } from "../src/runtimeManager.mjs";
+import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, dshProfileInput, requestRuntime, verifyEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "../src/runtimeControllerClient.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
@@ -1605,4 +1605,76 @@ test('evolution admission measures the whole host and reserves its final researc
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'research'}));
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'evimed-sources'}));
   manager.config.evolutionEnabled=false;assert.doesNotThrow(()=>manager.enforceRuntimeCapacity(project));
+});
+
+test("release gate profile crosses the actual controller socket and changes only the model target", async (t) => {
+  const tmp = await shortTempDir("gate-socket-");
+  const dataDir = path.join(tmp, "data");
+  await mkdir(dataDir, { recursive: true });
+  const socketPath = path.join(tmp, "c.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir, "release-gate", "gate-012345abcdef");
+  await projectTree(dataDir, "alice", "gate-012345abcdef");
+  await projectTree(dataDir, "release-gate", "paper1");
+  let requests = 0;
+  const counter = http.createServer((req, res) => { requests++; res.end('{}'); });
+  await new Promise(resolve => counter.listen(0, '127.0.0.1', () => resolve(undefined)));
+  t.after(() => new Promise(resolve => counter.close(() => resolve(undefined))));
+  const counterAddress = counter.address();
+  assert.ok(counterAddress && typeof counterAddress !== 'string');
+
+  const config = {
+    ...controllerConfig({ dataDir, socketPath, dockerBin }),
+    modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+    releaseGateModelGatewayInternalUrl: `http://127.0.0.1:${counterAddress.port}/internal/model/v1`,
+  };
+  const priorState = process.env.FAKE_DOCKER_STATE, priorVolume = process.env.FAKE_VOLUME_ROOT;
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  const controller = createRuntimeController(config);
+  t.after(async () => {
+    await client.cleanupRuntime(project).catch(() => {});
+    await controller.close();
+    if (priorState === undefined) delete process.env.FAKE_DOCKER_STATE; else process.env.FAKE_DOCKER_STATE = priorState;
+    if (priorVolume === undefined) delete process.env.FAKE_VOLUME_ROOT; else process.env.FAKE_VOLUME_ROOT = priorVolume;
+    await removeTree(tmp);
+  });
+  await controller.listen();
+  const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath });
+  const payload = { userId: project.userId, projectId: project.id, activeWorkspace: "", port: 49152,
+    password: "pw_abcdefghijklmnopqrstuvwxyz", capsuleGatewayUrl: "", revisionGatewayUrl: "", publicSourceGatewayUrl: "", modelGatewayProfile: "release-gate" };
+  // Real HTTP over the Unix socket reaches controller-side validation. Docker
+  // remains a fixture: this proves transport and launch planning, not an image.
+  for (const extra of [
+    { userId: "alice" }, { projectId: "paper1" }, { modelGatewayProfile: "unknown" },
+    { modelGatewayUrl: "http://attacker:9999/internal/model/v1" },
+    { capsuleGatewayUrl: "http://open-science-release-receipt:8798/internal/capsules/v1" },
+    { revisionGatewayUrl: "http://open-science-release-receipt:8798/internal/revisions/v1/authorize" },
+    { memoryGatewayUrl: "http://open-science-release-receipt:8798/internal/memory/v1" },
+  ]) await assert.rejects(() => client.request("POST", "/v1/runtime/start", { ...payload, ...extra }));
+  controller.config.releaseGateModelGatewayInternalUrl = "";
+  await assert.rejects(() => client.request("POST", "/v1/runtime/start", payload));
+  controller.config.releaseGateModelGatewayInternalUrl = config.releaseGateModelGatewayInternalUrl;
+  const plan = buildRuntimeLaunchPlan(config, project, 49152, { modelGatewayProfile: "release-gate" });
+  assert.equal(plan.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  const manager = new RuntimeManager(loadConfig({ ...config, runtimeControllerMode: "socket", runtimeProxyConnectTimeoutMs: 3000, runtimeControllerPollMs: 100, allowDirectDockerControl: false }));
+  t.after(() => manager.closeAll());
+  await manager.start(project, { modelGatewayProfile: "release-gate" });
+  const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
+  assert.ok(patch.includes(config.releaseGateModelGatewayInternalUrl));
+  const providerUrl = /baseURL: ["']?([^\s"']+)/.exec(patch)?.[1];
+  assert.equal(providerUrl, config.releaseGateModelGatewayInternalUrl);
+  await (await fetch(providerUrl)).text();
+  assert.equal(requests, 1);
+  const profiled = dshProfileInput(config, project, { ...plan, gateways: { model: 'http://wrong:9999', capsule: 'http://normal/capsule' } }, 'deepseek-flash', '');
+  assert.equal(profiled.modelGatewayUrl, config.releaseGateModelGatewayInternalUrl);
+  const ordinary = buildRuntimeLaunchPlan(config, project, 49152);
+  assert.equal(dshProfileInput(config, project, ordinary, 'deepseek-flash', '').modelGatewayUrl, config.modelGatewayInternalUrl);
+  const ordinaryInput = dshProfileInput(config, project, ordinary, 'deepseek-flash', '');
+  const gateInput = dshProfileInput(config, project, plan, 'deepseek-flash', '');
+  assert.deepEqual({ ...gateInput, modelGatewayUrl: ordinaryInput.modelGatewayUrl }, ordinaryInput);
+
+
+
+  assert.equal(config.modelGatewayInternalUrl, "http://open-science-web:8787/internal/model/v1");
 });

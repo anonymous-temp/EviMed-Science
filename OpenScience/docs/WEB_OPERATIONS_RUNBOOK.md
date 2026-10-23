@@ -1997,3 +1997,17 @@ what already runs and `onArrival` what the input turns on. An independently labe
 matching set is evaluated with
 `node evals/vcr-matching/run_matching_evaluation.mjs --dataset <set.json>`; the report
 carries the file's SHA-256 so the holdout can be frozen before tuning.
+
+### Release gate model counter endpoint
+
+The standalone `node scripts/ops/deepseek-kernel-release-gate.mjs` operator command requires
+`OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL`, for example
+`http://open-science-release-receipt:8798/internal/model/v1`. Configure the same fixed
+address in the receipt operator and runtime controller. It is disabled when unset;
+ordinary runtimes keep `OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL`.
+The address requires HTTP, an explicit port and the exact `/internal/model/v1` path,
+without credentials, query or fragment. The hostname must resolve from runtime containers
+to the operator running the counter. The gate binds that port and fails if occupied;
+it never switches to a random port. Invalid configuration is rejected before paid provider
+compatibility calls. Only explicit release-gate projects may select this model destination;
+knowledge, memory and other auxiliary gateways retain their normal addresses.

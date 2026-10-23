@@ -399,3 +399,34 @@ test("a receipt carries exactly the certified fields and nothing else", () => {
     );
   }
 });
+
+test('invalid release deployment is rejected before any provider request', async t => {
+  const http = await import('node:http');
+  let calls = 0;
+  const server = http.createServer((_req, res) => { calls++; res.writeHead(500); res.end(); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const prior = process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL;
+  process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL = `http://127.0.0.1:${address.port}`;
+  const dir = await mkdtemp(path.join(tmpdir(), 'gate-preflight-'));
+  const keyFile = path.join(dir, 'key'); await writeFile(keyFile, 'test-key');
+  t.after(async () => {
+    if (prior === undefined) delete process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL; else process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL = prior;
+    await new Promise(resolve => server.close(() => resolve(undefined)));
+    await rm(dir, { recursive: true, force: true });
+  });
+  const base = { runtimeMode: 'kernel', runtimeSandboxMode: 'docker', dataDir: dir,
+    releaseGateModelGatewayInternalUrl: 'http://receipt:8798/internal/model/v1' };
+  for (const [override, code] of [
+    [{ releaseGateModelGatewayInternalUrl: '' }, 'runtime_model_gateway_profile_unconfigured'],
+    [{ releaseGateModelGatewayInternalUrl: 'http://receipt:8798/wrong' }, 'runtime_model_gateway_profile_invalid'],
+    [{ runtimeMode: 'unsupported' }, 'deepseek_release_runtime_mode_invalid'],
+    [{ runtimeSandboxMode: 'host' }, 'deepseek_release_runtime_sandbox_invalid'],
+    [{ dataDir: '' }, 'deepseek_release_data_dir_missing'],
+  ]) {
+    await assert.rejects(runDeepSeekKernelReleaseGate({ config: { ...base, ...override }, keyFile,
+      receiptId: 'dsrg_preflight', receiptSigningSecret: testReceiptSigningSecret,
+      receiptPath: path.join(dir, 'receipt.json') }), error => error.code === code);
+    assert.equal(calls, 0);
+  }
+});
