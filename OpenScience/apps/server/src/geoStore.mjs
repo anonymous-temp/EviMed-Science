@@ -44,6 +44,7 @@
  * @module geoStore
  */
 
+import { resolveGeoErrorIds } from "./geoLegacyErrorIdentity.mjs";
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { canonicalGeoUrl, geoValueCanonical, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
@@ -1348,14 +1349,17 @@ export class GeoStore {
   async attachCorrection(geoId, errorIds, material) {
     if (!errorIds.length) return [];
     const entry = { kind: "article", ...material, at: new Date().toISOString() };
-    const result = await this.query(`UPDATE evimed_geo.errors
+    return this.transaction(async client => {
+    const resolvedIds = await resolveGeoErrorIds(client, geoId, [...new Set(errorIds)], { lock: true });
+    const result = await client.query(`UPDATE evimed_geo.errors
       SET materials = coalesce(materials, '[]'::jsonb) || jsonb_build_array($3::jsonb),
           status = CASE WHEN status = 'open' THEN 'acting' ELSE status END,
           updated_at = now()
       WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND judgment_state='active' AND status <> 'closed'
         AND NOT (coalesce(materials, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('articleId', $4::text)))
-      RETURNING id`, [geoId, [...new Set(errorIds)], JSON.stringify(entry), material.articleId]);
+      RETURNING id`, [geoId, resolvedIds, JSON.stringify(entry), material.articleId]);
     return result.rows.map((/** @type {any} */ row) => String(row.id));
+    });
   }
 
   /**

@@ -38,7 +38,7 @@
  * @module geoErrors
  */
 
-import { createHash } from "node:crypto";
+import { errorFingerprint } from "./geoErrorIdentity.mjs";
 import { GEO_METRICS, geoConstant, isOurCitation, geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoJudgementCoverage } from "@evimed/domain";
 import { compactText } from "./geoParse.mjs";
 import { enqueueRound, measurableEngines } from "./geoProbeQueue.mjs";
@@ -69,16 +69,7 @@ const ROUTES = Object.freeze({
   none: { action: "continuous_supply", responsible: "platform" },
 });
 
-/**
- * The error's identity retains the actual claim version and applicability.
- * Historical rows without these fields keep their legacy identity.
- * @param {{ claimKey?: string | null, text?: string | null, claimId?: string | null, claimVersion?: number | null, applicability?: any }} statement
- */
-export function errorFingerprint(statement) {
-  const basis = statement.claimKey ? `claim:${statement.claimKey}` : `text:${compactText(statement.text)}`;
-  const conditions = statement.applicability === undefined && statement.claimVersion === undefined ? "" : geoClaimAssessmentIdentity(statement);
-  return createHash("sha256").update(basis + conditions).digest("hex").slice(0, 32);
-}
+export { errorFingerprint } from "./geoErrorIdentity.mjs";
 
 /** Resolve the clinical identity actually recorded by this error, never an arbitrary same-id variant.
  * @param {any[]} statements @param {any} error @param {any[]} [frozenClaims] @param {{ includeNonWrong?: boolean }} [options] */
@@ -278,7 +269,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
   const now = (deps.now ?? (() => new Date()))();
   const out = { created: 0, seen: 0, notified: 0 };
   const wrong = statements.filter((statement) => statement.verdict === "wrong");
-  if (!wrong.length) return out;
+  await deps.store.reconcileLegacyErrors?.(snapshot, statements);
   // Recorded below, the facts row stops owing them (`errorsRecorded`); one that throws first leaves the debt for the housekeeping.
   const round = snapshot.roundId ? await deps.store.round(snapshot.roundId) : null;
   for (const statement of wrong) {
@@ -329,19 +320,10 @@ function repeatsError(statements, original) {
  *   responsible?: string | null, status?: "acting" | "awaiting_remeasure" }} change
  */
 export async function noteErrorAction(deps, { geoProjectId, errorId, materials = [], action = null, responsible = null, status = "acting" }) {
-  const error = await deps.store.error(errorId);
-  if (!error || error.geoProjectId !== geoProjectId) throw new HttpError(404, "geo_error_not_found", "Error not found.");
   if (status !== "acting" && status !== "awaiting_remeasure") throw new HttpError(400, "geo_error_status_invalid", "An error moves to acting or awaiting re-measurement.");
   if (action !== null && !GEO_ERROR_ACTIONS.includes(action)) throw new HttpError(400, "geo_error_action_invalid", "Unknown error action.");
-  if (error.status === "closed") throw new HttpError(409, "geo_error_closed", "The error is closed.");
   const now = (deps.now ?? (() => new Date()))();
-  const next = error.status === "awaiting_remeasure" && status === "acting" ? "awaiting_remeasure" : status;
-  await deps.store.updateError(errorId, {
-    materials: [...error.materials, ...materials.map((material) => ({ ...material, at: now.toISOString() }))],
-    ...(action ? { action } : {}), ...(responsible ? { responsible } : {}),
-    status: next, updated_at: now,
-  });
-  return { id: errorId, status: next };
+  return deps.store.appendErrorAction(geoProjectId, errorId, { materials: materials.map(material => ({ ...material, at: now.toISOString() })), action, responsible, status, now });
 }
 
 /** How many confirmation rounds one error is given, the first included: a skipped one is asked again, never without bound. */

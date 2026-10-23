@@ -31,3 +31,13 @@ export function geoClaimForStatement(claims, statement) {
     && (statement.applicability == null || canonicalJson(geoClaimApplicability(claim)) === canonicalJson(geoClaimApplicability(statement))))
   return candidates.length === 1 ? candidates[0] : null
 }
+
+
+/** Complete a legacy comparison identity only from one preserved frozen claim. Missing proof remains unknown.
+ * @param {any} statement @param {any[]} frozenClaims */
+export function geoEnrichStatementIdentity(statement, frozenClaims) {
+  if (statement?.claimVersion != null && statement?.applicability != null) return statement
+  const claim = geoClaimForStatement(frozenClaims, statement)
+  if (!claim || claim.version == null || statement.claimKey != null && claim.key !== statement.claimKey) return null
+  return { ...statement, claimVersion: statement.claimVersion ?? claim.version, applicability: statement.applicability ?? geoClaimApplicability(claim) }
+}

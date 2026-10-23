@@ -71,3 +71,37 @@ test('ambiguous frozen versions retain legacy identity and record an explicit un
 test('normal new recording of provable legacy-shaped facts uses the exact frozen identity immediately', options, async () => {
   const f = await fixture('legacy_new', [claim], { baseline: false }); await record(f); const [row] = await errors(f); assert.equal(row.fingerprint, errorFingerprint(canonical));
 });
+
+test('a pre-existing mechanical canonical duplicate retires as an alias and keeps original handling', options, async () => {
+  const f = await fixture('legacy_duplicate');
+  await database.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,statement,claim_id,severity,notified_at,created_at,updated_at)
+    SELECT 'mechanical_duplicate',user_id,geo_project_id,$2,engine,question_id,first_snapshot_id,last_snapshot_id,statement,claim_id,severity,notified_at,created_at,created_at FROM evimed_geo.errors WHERE id=$1`, [`${f.id}_error`, errorFingerprint(canonical)]);
+  await record(f);
+  const rows = await errors(f), survivor = rows.find(row => row.id === `${f.id}_error`), retired = rows.find(row => row.id === 'mechanical_duplicate');
+  assert.equal(survivor.fingerprint, errorFingerprint(canonical)); assert.equal(survivor.status, 'acting'); assert.equal(survivor.materials.length, 1);
+  assert.equal(retired.judgment_state, 'withdrawn'); assert.equal(retired.judgment_correction.kind, 'legacy_identity_duplicate');
+  assert.equal((await store.error('mechanical_duplicate')).id, survivor.id); assert.equal(f.notices.length, 0);
+  const { noteErrorAction } = await import('../src/geoErrors.mjs');
+  await noteErrorAction(f.deps, { geoProjectId: f.id, errorId: 'mechanical_duplicate', materials: [{ kind: 'note', text: 'Arrived via old link' }] });
+  assert.equal((await store.error(survivor.id)).materials.length, 2);
+});
+test('independently handled canonical duplicates remain explicit and retain both materials', options, async () => {
+  const f = await fixture('legacy_conflict');
+  await database.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,statement,claim_id,status,materials)
+    SELECT 'handled_duplicate',user_id,geo_project_id,$2,engine,question_id,first_snapshot_id,last_snapshot_id,statement,claim_id,'awaiting_remeasure','[{"kind":"note","text":"Independent handling"}]'::jsonb FROM evimed_geo.errors WHERE id=$1`, [`${f.id}_error`, errorFingerprint(canonical)]);
+  await record(f); const rows = await errors(f); assert.equal(rows.length, 2); assert.equal(rows.every(row => row.judgment_state === 'active'), true);
+  assert.equal(rows.every(row => row.materials.length === 1), true); assert.ok(rows.find(row => row.id === `${f.id}_error`).judgment_history.some(row => row.reason === 'independently_handled_duplicate'));
+});
+test('an older mixed-condition contribution prevents promotion even when first and last pointers coincide', options, async () => {
+  const f = await fixture('legacy_mixed'), child = { ...claim, version: 2, population: 'Children', elements: { form: 'solution' } };
+  await database.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,ref) VALUES($1,$2,$3,'confirm','done',1,'{deepseek}',$4::jsonb)`, [`${f.id}_childround`, f.project.userId, f.id, JSON.stringify({ evaluationBasis: { claims: [child] } })]);
+  await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text) VALUES($1,$2,$3,$4,$5,'deepseek','valid','2026-10-23T00:00:00Z',$6)`, [`${f.id}_older`, f.project.userId, f.id, `${f.id}_childround`, f.snapshot.questionId, legacy.text]);
+  await store.writeFacts({ id: `${f.id}_older`, userId: f.project.userId, geoProjectId: f.id }, { parserVersion: 'legacy', judgedAt: '2026-10-23T01:00:00Z', statements: [legacy] });
+  await record(f); const original = (await errors(f)).find(row => row.id === `${f.id}_error`);
+  assert.equal(original.fingerprint, legacyHash); assert.ok(original.judgment_history.some(receipt => receipt.kind === 'legacy_identity_unresolved'));
+  assert.equal(original.materials.length, 1);
+});
+test('concurrent replays produce one promotion receipt and never lose an already appended action', options, async () => {
+  const f = await fixture('legacy_concurrent'); await Promise.all([record(f), record(f)]);
+  const [row] = await errors(f); assert.equal((await errors(f)).length, 1); assert.equal(row.judgment_history.filter(entry => entry.kind === 'legacy_identity_promoted').length, 1); assert.equal(row.materials.length, 1);
+});

@@ -1,3 +1,4 @@
+import { prepareGeoLegacyError, resolveGeoErrorIds } from "./geoLegacyErrorIdentity.mjs";
 import { createHash } from "node:crypto";
 import { geoValueCanonical } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
@@ -908,17 +909,26 @@ export class GeoMeasureStore {
   /** @param {string} errorId */
   async error(errorId) {
     const result = await this.query("SELECT * FROM evimed_geo.errors WHERE id = $1", [errorId]);
-    return result.rows[0] ? errorRow(result.rows[0]) : null;
+    if (!result.rows[0]) return null;
+    const row = result.rows[0];
+    const [id] = await resolveGeoErrorIds(this.database, row.geo_project_id, [errorId]);
+    if (!id || id === errorId) return id ? errorRow(row) : null;
+    const target = (await this.query("SELECT * FROM evimed_geo.errors WHERE id=$1 AND geo_project_id=$2 AND user_id=$3", [id, row.geo_project_id, row.user_id])).rows[0];
+    return target ? errorRow(target) : null;
   }
 
-  /**
-   * Record one sighting of a wrong statement: a new error, or the existing
-   * one's latest snapshot (reopened when it had been closed). Severity only
-   * rises. Returns the row and whether it was created.
-   * @param {Record<string, any>} row
-   */
+  /** Complete bounded legacy identity debt outside the review's facts transaction.
+   * @param {any} snapshot @param {any[]} statements */
+  async reconcileLegacyErrors(snapshot, statements) {
+    const families = new Map(statements.filter(statement => statement.claimId).map(statement => [statement.claimKey ?? statement.claimId, statement]));
+    for (const statement of families.values()) await this.transaction(client => prepareGeoLegacyError(client, snapshot, statement, { reconcile: true }));
+  }
+
+  /** @param {Record<string, any>} row */
   async upsertError(row) {
-    const result = await this.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, first_snapshot_id,
+    return this.transaction(async client => {
+    const prepared = row.verifiedStatement ? await prepareGeoLegacyError(client, row, row.verifiedStatement) : { fingerprint: row.fingerprint };
+    const result = await client.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, first_snapshot_id,
         last_snapshot_id, statement, error_type, severity, severity_basis, claim_id, evidence_quote, confirm, cited_source, action, responsible,
         status, materials, created_at, updated_at)
       SELECT $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 'initial', $11, $12, $13::jsonb, $14::jsonb, $15, $16, 'open', '[]'::jsonb, $17, $17
@@ -943,11 +953,27 @@ export class GeoMeasureStore {
           THEN NULL ELSE errors.notified_at END,
         updated_at = $17
       RETURNING *, (xmax = 0) AS inserted`,
-    [row.id, row.userId, row.geoProjectId, row.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
+    [row.id, row.userId, row.geoProjectId, prepared.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
       row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
       row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
     const out = result.rows[0];
     return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
+    });
+  }
+
+  /** Append an action against the current alias target under the migration lock.
+   * @param {string} geoProjectId @param {string} errorId @param {any} input */
+  async appendErrorAction(geoProjectId, errorId, input) {
+    return this.transaction(async client => {
+      const [id] = await resolveGeoErrorIds(client, geoProjectId, [errorId], { lock: true });
+      if (!id) throw new HttpError(404, "geo_error_not_found", "Error not found.");
+      const error = (await client.query("SELECT * FROM evimed_geo.errors WHERE id=$1", [id])).rows[0];
+      if (error.status === "closed") throw new HttpError(409, "geo_error_closed", "The error is closed.");
+      const status = error.status === "awaiting_remeasure" && input.status === "acting" ? "awaiting_remeasure" : input.status;
+      await client.query(`UPDATE evimed_geo.errors SET materials=materials || $2::jsonb,action=coalesce($3,action),responsible=coalesce($4,responsible),
+        status=$5,updated_at=$6 WHERE id=$1`, [id, JSON.stringify(input.materials), input.action, input.responsible, status, input.now.toISOString()]);
+      return { id, status };
+    });
   }
 
   /** @param {string} errorId @param {Record<string, unknown>} fields  column → value (jsonb columns as objects) */
@@ -965,7 +991,12 @@ export class GeoMeasureStore {
       if (json.has(column)) return value == null ? null : JSON.stringify(value);
       return value instanceof Date ? value.toISOString() : value;
     });
-    await this.query(`UPDATE evimed_geo.errors SET ${sets.join(", ")} WHERE id = $1`, [errorId, ...values]);
+    await this.transaction(async client => {
+      const row = (await client.query("SELECT geo_project_id FROM evimed_geo.errors WHERE id=$1", [errorId])).rows[0];
+      if (!row) return;
+      const [id] = await resolveGeoErrorIds(client, row.geo_project_id, [errorId], { lock: true });
+      if (id) await client.query(`UPDATE evimed_geo.errors SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
+    });
   }
 
   /** Urgent errors not yet notified. @param {string[]} severities @param {number} limit */

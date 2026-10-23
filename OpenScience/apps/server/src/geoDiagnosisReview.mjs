@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement } from '@evimed/domain';
+import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement, geoEnrichStatementIdentity } from '@evimed/domain';
 import { ProductDocuments, ProductJobs } from './productStore.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { preserveGeoAssessment } from './geoLearningSignals.mjs';
@@ -173,7 +173,8 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
         if (index < 0) judged.checks.citations.push(retained);
         else judged.checks.citations[index] = retained;
       }
-      const retained = current.payload.assessment.statements.filter(prior => !judged.statements.some(next => geoStatementAssessmentIdentity(next) === geoStatementAssessmentIdentity(prior)));
+      const frozenClaims = (await store.round(snapshot.roundId))?.ref?.evaluationBasis?.claims ?? [];
+      const retained = current.payload.assessment.statements.filter(prior => !judged.statements.some(next => geoStatementAssessmentIdentity(geoEnrichStatementIdentity(next, frozenClaims) ?? next) === geoStatementAssessmentIdentity(geoEnrichStatementIdentity(prior, frozenClaims) ?? prior)));
       if (retained.length) {
         judged.statements.push(...retained);
         judged.checks.judgementCoverage = { ...judged.checks.judgementCoverage, status: 'partial',
@@ -190,7 +191,7 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
           care_hint: facts.careHint ?? null, statements: facts.statements, checks: facts.checks, failure_mode: facts.failureMode,
           parser_version: facts.parserVersion, judged_at: facts.judgedAt, red_flag_expected: facts.redFlagExpected,
           red_flag_hits: facts.redFlagHits, safety_terms_hit: facts.safetyTermsHit, registry_key: facts.registryKey, judge_extract: facts.judgeExtract,
-          errors_owed: facts.statements.some(row => row.verdict === 'wrong') };
+          errors_owed: facts.statements.some(row => row.verdict === 'wrong') || head.payload.assessment.statements.some(row => row.claimId && row.claimVersion == null) };
         const jsonFields = new Set(['brands', 'statements', 'checks', 'red_flag_expected', 'red_flag_hits', 'safety_terms_hit', 'judge_extract']);
         const entries = Object.entries(fields);
         await client.query(`UPDATE evimed_geo.facts SET ${entries.map(([key], index) => `${key}=$${index + 4}${jsonFields.has(key) ? '::jsonb' : ''}`).join(',')},
