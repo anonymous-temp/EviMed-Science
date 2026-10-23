@@ -156,7 +156,7 @@ export function normalizeGeoMember(member) {
     throw invalid("member must name a metric returned by this selection.");
   }
   if ("observationDate" in member) {
-    if (typeof member.observationDate !== "string") throw invalid("observationDate must be a date.");
+    if (typeof member.observationDate !== "string" || !member.observationDate) throw invalid("observationDate must be a nonempty date.");
     normalizeGeoReadScope({ from: member.observationDate });
   }
   return { ...member };
@@ -314,7 +314,6 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   if (scope.questionVersion) add(where, "r.set_version = ?", scope.questionVersion);
   const contextRoundWhere = [...where];
   if (frozenRoundIds) add(where, "r.id = ANY(?::text[])", frozenRoundIds);
-  const baseRoundWhere = [...where];
   const observed = ["s.geo_project_id = $1", "s.user_id = $2", "s.round_id = r.id"];
   if (scope.engines.length) add(observed, "s.engine = ANY(?::text[])", scope.engines);
   if (scope.questionVersion) add(observed, "q.set_version = ?", scope.questionVersion);
@@ -353,7 +352,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     LIMIT ${contextLimit ?? (ranged ? GEO_SELECTION_MAX_ROUNDS + 1 : 1)}`)).rows;
   if (rounds.length > GEO_SELECTION_MAX_ROUNDS) throw invalid(`Choose a shorter date range: at most ${GEO_SELECTION_MAX_ROUNDS} rounds can be analyzed together.`, 422);
   if (scope.round && !rounds.length) {
-    const exists = (await selectionQuery(`SELECT 1 FROM evimed_geo.rounds r WHERE ${baseRoundWhere.join(" AND ")} LIMIT 1`)).rows.length;
+    const exists = (await selectionQuery(`SELECT 1 FROM evimed_geo.rounds r WHERE ${contextRoundWhere.join(" AND ")} LIMIT 1`)).rows.length;
     if (!exists) throw new HttpError(404, "geo_round_not_found", "The round is not a full measurement of this project.");
   }
   const roundIds = rounds.map((round) => String(round.id));
