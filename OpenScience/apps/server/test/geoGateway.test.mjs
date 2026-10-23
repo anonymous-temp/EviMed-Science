@@ -82,6 +82,15 @@ async function serve(t, handler) {
 
 const on = { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], geoSocialTimeoutMs: 2_000 };
 
+test("exact member continuation can reach every observation in a bounded selection", async (t) => {
+  const { geo, calls } = geoDouble(on);
+  const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const filter = { selectionRef: "gsel_one", member: { metricId: "M-06", scope: "project" }, offset: 19_950, limit: 50 };
+  assert.equal((await post("read", { what: "snapshots", filter })).status, 200);
+  assert.deepEqual(calls[0][3], filter);
+  assert.equal((await post("read", { what: "snapshots", filter: { ...filter, offset: 20_001 } })).status, 400);
+});
+
 test("the gateway address is the model gateway's server, and only when the module is on", () => {
   assert.equal(geoGatewayProviderUrl({ geoEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1" }),
     "http://open-science-web:8787/internal/geo/v1");

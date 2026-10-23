@@ -115,6 +115,17 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_scoped_member_continuation_preserves_its_identity_and_supports_the_full_selection(self):
+        schema = geo_platform.tool_definitions()[0]["inputSchema"]["properties"]["filter"]
+        self.assertGreaterEqual(schema["properties"]["offset"]["maximum"], 20000)
+        selection = {"reference": "gsel_one", "dataRevision": "revision-one"}
+        _Gateway.answers["read"] = (200, {"data": {"selection": selection, "items": [], "more": False, "total": 20000}})
+        scope = {"selectionRef": "gsel_one", "member": {"metricId": "M-06", "scope": "project", "pool": None}, "offset": 19950, "limit": 50}
+        result = self.server.call_tool("geo_read", {"what": "snapshots", "filter": scope})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["selection"], selection)
+        self.assertEqual(_Gateway.seen[0]["body"]["filter"], scope)
+
     def test_a_read_posts_the_what_and_filter_with_the_runtime_token_through_call_tool(self):
         _Gateway.answers["read"] = (200, {"data": {"what": "metrics", "items": [{"metricId": "M-01", "cell": {"value": 0.18, "numerator": 56,
             "denominator": 310, "ciLow": 0.14, "ciHigh": 0.23, "status": "ok", "dataType": "measured"}}], "more": True}})
