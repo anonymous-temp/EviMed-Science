@@ -927,41 +927,50 @@ export class GeoMeasureStore {
   /** @param {Record<string, any>} row */
   async upsertError(row) {
     return this.transaction(async client => {
-    const prepared = row.verifiedStatement ? await prepareGeoLegacyError(client, row, row.verifiedStatement) : { fingerprint: row.fingerprint };
-    const result = await client.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, first_snapshot_id,
+      const prepared = row.verifiedStatement ? await prepareGeoLegacyError(client, row, row.verifiedStatement) : { fingerprint: row.fingerprint };
+      // One authoritative observation time drives every ordering decision; a missing time remains unknown.
+      const observedAt = "(SELECT asked_at FROM incoming)";
+      const unknownOccurrence = "jsonb_build_object('kind','wrong_occurrence_time_unknown','snapshotId',$7::text,'recordedAt',$17::text)";
+      const result = await client.query(`WITH incoming AS MATERIALIZED (
+        SELECT id,asked_at FROM evimed_geo.snapshots WHERE id=$7 AND user_id=$2 AND geo_project_id=$3 AND engine=$5
+      ) INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, first_snapshot_id,
         last_snapshot_id, statement, error_type, severity, severity_basis, claim_id, evidence_quote, confirm, cited_source, action, responsible,
-        status, materials, created_at, updated_at)
-      SELECT $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 'initial', $11, $12, $13::jsonb, $14::jsonb, $15, $16, 'open', '[]'::jsonb, $17, $17
+        status, materials, created_at, updated_at, judgment_history)
+      SELECT $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 'initial', $11, $12, $13::jsonb, $14::jsonb, $15, $16, 'open', '[]'::jsonb, $17::timestamptz, $17::timestamptz,
+        CASE WHEN ${observedAt} IS NULL THEN jsonb_build_array(${unknownOccurrence}) ELSE '[]'::jsonb END
       FROM (SELECT snapshot_id FROM evimed_geo.facts WHERE snapshot_id=$7 AND user_id=$2 AND geo_project_id=$3
-        AND statements @> jsonb_build_array($19::jsonb) FOR SHARE) current_judgment
+        AND statements @> jsonb_build_array($18::jsonb) FOR SHARE) current_judgment CROSS JOIN incoming
       ON CONFLICT (geo_project_id, fingerprint, engine) DO UPDATE SET
         judgment_state = 'active',
-        judgment_correction = CASE WHEN errors.judgment_state='withdrawn' THEN jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text) ELSE errors.judgment_correction END,
-        judgment_history = CASE WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END,
-        last_snapshot_id = CASE WHEN errors.last_snapshot_id IS NULL OR $18::timestamptz >= coalesce(
-            (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.last_snapshot_id), '-infinity'::timestamptz)
+        judgment_correction = CASE WHEN errors.judgment_state='withdrawn' THEN CASE WHEN ${observedAt} IS NULL THEN ${unknownOccurrence}
+          ELSE jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text) END ELSE errors.judgment_correction END,
+        judgment_history = CASE WHEN ${observedAt} IS NULL THEN CASE WHEN EXISTS (
+          SELECT 1 FROM jsonb_array_elements(errors.judgment_history) receipt WHERE receipt->>'kind'='wrong_occurrence_time_unknown' AND receipt->>'snapshotId'=$7
+        ) THEN errors.judgment_history ELSE errors.judgment_history || jsonb_build_array(${unknownOccurrence}) END
+          WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END,
+        last_snapshot_id = CASE WHEN ${observedAt} IS NOT NULL AND (errors.last_snapshot_id IS NULL OR ${observedAt} >= coalesce(
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.last_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine), '-infinity'::timestamptz))
           THEN EXCLUDED.last_snapshot_id ELSE errors.last_snapshot_id END,
         severity = greatest(errors.severity, EXCLUDED.severity),
-        status = CASE WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
-            (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
+        status = CASE WHEN errors.status='closed' AND ${observedAt} >
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
           THEN 'open' ELSE errors.status END,
-        closed_snapshot_id = CASE WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
-            (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
+        closed_snapshot_id = CASE WHEN errors.status='closed' AND ${observedAt} >
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
           THEN NULL ELSE errors.closed_snapshot_id END,
-        notified_at = CASE WHEN errors.judgment_state='withdrawn' THEN NULL WHEN errors.status = 'closed' AND $18::timestamptz > coalesce(
-            (SELECT asked_at FROM evimed_geo.snapshots WHERE id = errors.closed_snapshot_id), '-infinity'::timestamptz)
+        notified_at = CASE WHEN errors.judgment_state='withdrawn' THEN NULL WHEN errors.status='closed' AND ${observedAt} >
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
           THEN NULL ELSE errors.notified_at END,
-        updated_at = CASE WHEN EXISTS (
-          SELECT 1 FROM evimed_geo.snapshots previous JOIN evimed_geo.snapshots incoming ON incoming.id=EXCLUDED.last_snapshot_id
-          WHERE previous.id=errors.last_snapshot_id AND previous.user_id=errors.user_id AND previous.geo_project_id=errors.geo_project_id
-            AND incoming.user_id=errors.user_id AND incoming.geo_project_id=errors.geo_project_id AND incoming.asked_at<=previous.asked_at
+        updated_at = CASE WHEN ${observedAt} IS NULL OR EXISTS (
+          SELECT 1 FROM evimed_geo.snapshots previous WHERE previous.id=errors.last_snapshot_id AND previous.user_id=errors.user_id
+            AND previous.geo_project_id=errors.geo_project_id AND previous.engine=errors.engine AND ${observedAt}<=previous.asked_at
         ) THEN errors.updated_at ELSE $17 END
       RETURNING *, (xmax = 0) AS inserted`,
-    [row.id, row.userId, row.geoProjectId, prepared.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
-      row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
-      row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), row.askedAt.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
-    const out = result.rows[0];
-    return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
+      [row.id, row.userId, row.geoProjectId, prepared.fingerprint, row.engine, row.questionId, row.snapshotId, row.statement, row.errorType,
+        row.severity, row.claimId, row.evidenceQuote, row.confirm ? JSON.stringify(row.confirm) : null,
+        row.citedSource ? JSON.stringify(row.citedSource) : null, row.action, row.responsible, row.now.toISOString(), JSON.stringify(row.verifiedStatement ?? { verdict: "wrong", claimId: row.claimId })]);
+      const out = result.rows[0];
+      return { error: out ? errorRow(out) : null, created: Boolean(out?.inserted) };
     });
   }
 
