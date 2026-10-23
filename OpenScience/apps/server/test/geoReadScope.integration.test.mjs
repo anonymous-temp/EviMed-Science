@@ -445,3 +445,47 @@ test("observation caps apply after engine and question-dimension filters", optio
     assert.deepEqual(selected.rows.map((row) => row.snapshotId), ["filtered-cap-one"]);
   }
 });
+
+test("dated trends pool actual day buckets across rounds and preserve exact day-member continuations", options, async () => {
+  const daily = await store.createProject({ userId: user.id, projectId: "daily-occurrence-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ('daily-g',$1,$2,1,'P2','Daily')`, [user.id, daily.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text)
+    VALUES ('daily-q1',$1,$2,'daily-g',1,'P2','One?'),('daily-q2',$1,$2,'daily-g',1,'P2','Two?')`, [user.id, daily.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,surface)
+    VALUES ('daily-r1',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01','2026-10-02','{"mode":"web"}'),
+    ('daily-r2',$1,$2,'weekly','done',1,'{deepseek}','2026-10-01','2026-10-02','{"mode":"web"}')`, [user.id, daily.id]);
+  for (const [id, round, question, askedAt, mentioned] of [["daily-a","daily-r1","daily-q1","2026-10-01T15:59Z",true],
+    ["daily-b","daily-r1","daily-q2","2026-10-01T16:01Z",false], ["daily-c","daily-r2","daily-q1","2026-10-01T15:00Z",false],
+    ["daily-d","daily-r2","daily-q2","2026-10-01T15:01Z",false]]) {
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,surface)
+      VALUES ($1,$2,$3,$4,$5,'deepseek','valid',$6,'{"mode":"web"}')`, [id,user.id,daily.id,round,question,askedAt]);
+    await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,checks)
+      VALUES ($1,$2,$3,'2026-10-03',$4::jsonb,'{"judgementCoverage":{"status":"complete"}}')`,
+    [id,user.id,daily.id,JSON.stringify(mentioned ? [{name:"Ours",ours:true,count:1}] : [])]);
+  }
+  const scope = { from: "2026-10-01", to: "2026-10-02" };
+  const monitoring = await service.monitoring(user, daily.id, scope);
+  const points = monitoring.series.find((entry) => entry.key === "mention").points;
+  assert.deepEqual(points.map((point) => [point.date, point.n, point.k]), [["2026-10-01",3,1],["2026-10-02",1,0]]);
+  assert.deepEqual(points[0].roundIds.sort(), ["daily-r1","daily-r2"]);
+  for (const point of points) {
+    const detail = await service.runtimeRead(daily, "snapshots", { selectionRef: point.members.selectionRef, member: point.members.metric, limit: 50 });
+    assert.equal(detail.total, point.n);
+    assert.equal(point.members.metric.observationDate, point.date);
+  }
+  const overview = await service.projectView(user, daily.id, scope);
+  assert.deepEqual(overview.overview.metrics.find((entry) => entry.key === "mention").trend, points);
+});
+
+test("frozen observed references survive changes to unrelated current schedule and undated context", options, async () => {
+  const selected = await readGeoSelection(store, project, { from: "2026-10-01", to: "2026-10-02" });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date)
+    VALUES ('unrelated-queue',$1,$2,'weekly','queued',1,'{deepseek}','2026-10-02')`, [user.id, project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
+    VALUES ('unrelated-undated',$1,$2,'unrelated-queue','deepseek','failed')`, [user.id, project.id]);
+  const replay = await readGeoSelection(store, project, { selectionRef: selected.selection.reference });
+  assert.equal(replay.selection.reference, selected.selection.reference);
+  assert.equal(replay.selection.dataRevision, selected.selection.dataRevision);
+  assert.equal(replay.selection.timeCoverage.plannedRounds, selected.selection.timeCoverage.plannedRounds + 1);
+  assert.equal(replay.selection.timeCoverage.unknownTime, selected.selection.timeCoverage.unknownTime + 1);
+});
