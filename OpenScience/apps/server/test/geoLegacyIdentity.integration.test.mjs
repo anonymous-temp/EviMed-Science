@@ -171,11 +171,12 @@ async function addClockSnapshot(f, suffix, at, statements, { verified = false } 
   await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text)
     SELECT $2,user_id,geo_project_id,round_id,question_id,engine,'valid',$3,$4 FROM evimed_geo.snapshots WHERE id=$1`, [f.snapshot.id, id, at, answer]);
   const snapshot = await store.snapshot(id);
-  let facts = { parserVersion: 'legacy', judgedAt: at, statements, checks: { judgementCoverage: { status: 'complete' } } };
+  let facts = { parserVersion: 'legacy', judgedAt: at ?? '2026-10-24T06:02:00Z', statements, checks: { judgementCoverage: { status: 'complete' } } };
   if (verified) {
     const input = { owner: { userId: f.project.userId, projectId: f.project.projectId }, product: f.context.project.product, competitors: [], careFlags: [], question: { text: 'Who may use it?' }, answer, claims: [claim] };
-    const judged = verifyJudgement({ assessmentComplete: true, statements: [{ text: answer, claim: 'C1', verdict: 'correct', evidence: claim.quote, topic: 'indication' }] }, buildJudgeInput(input), input);
-    facts = factsOf({ snapshot, judged, registry: brandRegistry(f.context.project.product, []), countedOwned: f.context.owned, at: new Date(at), claims: [claim] }).facts;
+    const verdict = statements[0].verdict;
+    const judged = verifyJudgement({ assessmentComplete: true, statements: [{ text: answer, claim: 'C1', verdict, evidence: claim.quote, topic: 'indication', ...(verdict === 'wrong' ? { errorType: 'dropped_condition', severity: 'S3' } : {}) }] }, buildJudgeInput(input), input);
+    facts = factsOf({ snapshot, judged, registry: brandRegistry(f.context.project.product, []), countedOwned: f.context.owned, at: new Date(at ?? '2026-10-24T06:02:00Z'), claims: [claim] }).facts;
   }
   await store.writeFacts(snapshot, facts);
   return { ...f, snapshot };
@@ -222,4 +223,37 @@ test('a new wrong after verified closure reopens once and its own replay preserv
   assert.equal(first.notified, 1);
   await record({ ...latest, deps: { ...f.deps, now: () => new Date('2026-10-24T06:00:00Z') } });
   const [row] = await errors(f); assert.equal(row.id, `${f.id}_error`); assert.equal(row.status, 'open'); assert.equal(row.closed_snapshot_id, null); assert.equal(row.last_snapshot_id, latest.snapshot.id); assert.equal(row.updated_at.toISOString(), '2026-10-24T05:01:00.000Z'); assert.equal(row.materials.length, 1); assert.equal(f.notices.length, 1);
+});
+
+test('a verified wrong strictly after closure within one millisecond reopens and notifies once at PostgreSQL precision', options, async () => {
+  const { f } = await clockFixture('legacy_clock_precision');
+  const correct = await addClockSnapshot(f, 'precise_correct', '2026-10-24T06:00:00.000100Z', [{ ...canonical, text: claim.quote, verdict: 'correct' }], { verified: true });
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-24T06:01:00Z') });
+  assert.equal((await store.error(`${f.id}_error`)).closedSnapshotId, correct.snapshot.id);
+  const wrong = await addClockSnapshot(f, 'precise_wrong', '2026-10-24T06:00:00.000200Z', [canonical], { verified: true });
+  assert.equal(wrong.snapshot.askedAt, correct.snapshot.askedAt, 'ordinary snapshot DTOs round both observations to the same millisecond');
+  const recorded = await record({ ...wrong, deps: { ...f.deps, now: () => new Date('2026-10-24T06:02:00Z') } });
+  const [row] = await errors(f);
+  assert.equal(row.status, 'open', 'the database observed the wrong answer strictly after the correct closure');
+  assert.equal(row.closed_snapshot_id, null); assert.equal(row.last_snapshot_id, wrong.snapshot.id); assert.equal(row.updated_at.toISOString(), '2026-10-24T06:02:00.000Z'); assert.equal(recorded.notified, 1);
+  await record({ ...wrong, deps: { ...f.deps, now: () => new Date('2026-10-24T07:00:00Z') } });
+  assert.equal((await errors(f))[0].updated_at.toISOString(), row.updated_at.toISOString()); assert.equal(f.notices.length, 1);
+  const older = await addClockSnapshot(f, 'precise_older', '2026-10-24T06:00:00.000150Z', [canonical], { verified: true });
+  await record({ ...older, deps: { ...f.deps, now: () => new Date('2026-10-24T08:00:00Z') } });
+  const [after] = await errors(f); assert.equal(after.last_snapshot_id, wrong.snapshot.id); assert.equal(after.updated_at.toISOString(), row.updated_at.toISOString()); assert.equal(after.materials.length, 1); assert.equal(f.notices.length, 1);
+});
+test('an unknown observation time preserves a known closure and records unresolved wrong history without inventing a later occurrence', options, async () => {
+  const { f, correct } = await clockFixture('legacy_clock_unknown_time');
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-24T03:01:00Z') });
+  const [before] = await errors(f); assert.equal(before.closed_snapshot_id, correct.snapshot.id);
+  const unknown = await addClockSnapshot(f, 'unknown_time_wrong', null, [canonical], { verified: true });
+  assert.equal(unknown.snapshot.askedAt, null);
+  const recorded = await record({ ...unknown, deps: { ...f.deps, now: () => new Date('2026-10-24T06:02:00Z') } });
+  await record({ ...unknown, deps: { ...f.deps, now: () => new Date('2026-10-24T07:00:00Z') } });
+  const [after] = await errors(f);
+  assert.equal(after.status, 'closed'); assert.equal(after.closed_snapshot_id, correct.snapshot.id); assert.equal(after.last_snapshot_id, before.last_snapshot_id); assert.equal(after.updated_at.toISOString(), before.updated_at.toISOString()); assert.equal(f.notices.length, 0);
+  assert.deepEqual(recorded, { created: 0, seen: 1, notified: 0 });
+  assert.equal(after.judgment_history.filter(receipt => receipt.kind === 'wrong_occurrence_time_unknown' && receipt.snapshotId === unknown.snapshot.id).length, 1);
+  const fact = (await database.query('SELECT statements,errors_owed FROM evimed_geo.facts WHERE snapshot_id=$1', [unknown.snapshot.id])).rows[0];
+  assert.equal(fact.statements[0].verdict, 'wrong'); assert.equal(fact.errors_owed, false);
 });
