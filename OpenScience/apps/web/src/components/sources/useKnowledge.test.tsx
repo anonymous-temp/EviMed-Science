@@ -41,6 +41,20 @@ describe("useKnowledgeStatus", () => {
     expect(result.current.status?.state).toBe("compiled");
   });
 
+  it("waits for a slow status request before scheduling another poll", async () => {
+    let finish: (value: KnowledgeStatus) => void = () => {};
+    mocks.status.mockResolvedValueOnce(compiling).mockImplementationOnce(() => new Promise<KnowledgeStatus>((resolve) => { finish = resolve; })).mockResolvedValue(compiling);
+    const { result, unmount } = renderHook(() => useKnowledgeStatus("p1", true));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(mocks.status).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(mocks.status).toHaveBeenCalledTimes(2);
+    await act(async () => { finish(compiled); });
+    expect(result.current.status?.state).toBe("compiled");
+    unmount();
+  });
+
   it("names what a round left, so the tree is read again when it changes", () => {
     expect(roundKey(null)).toBe("");
     expect(roundKey(compiled)).not.toBe(roundKey({ ...compiled, round: compiled.round + 1 }));
