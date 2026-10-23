@@ -13,6 +13,7 @@ import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { LearningEvidence, settleKeyFor } from "../src/learningEvidence.mjs";
 import { FEEDBACK_EVENT_TRIGGERS, FEEDBACK_SUBJECT_TYPES, PRODUCT_JOB_KINDS, migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
+import { learningEvidenceReport } from "../../../scripts/ops/learning-evidence-report.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -128,6 +129,14 @@ test("the clean runs of a scope in a window are the ones nobody corrected, howev
   assert.deepEqual((await feedback.cleanSettledRuns(stranger, window)).map((member) => member.runId), ["o_stranger"]);
   assert.deepEqual(await feedback.cleanSettledRuns(owner, { ...window, scope: "no-such-scope" }), []);
   assert.deepEqual((await feedback.cleanSettledRuns(owner, { ...window, limit: 2 })).map((member) => member.runId), ["c_accept", "c_new_question"], "the newest of the family when it is bounded");
+
+  // The operator's report reads the same rows: this account, once, with what it left and when.
+  const [mine, ...others] = await learningEvidenceReport(database, { user: owner, now: new Date("2026-10-23T12:00:00.000Z") });
+  assert.deepEqual(others, []);
+  assert.equal(mine.user, owner);
+  assert.equal(mine.lastEvidenceAt, new Date(at(55)).toISOString());
+  assert.ok(mine.evidence7d.silent >= 4 && mine.evidence7d["follow-up"] >= 4 && mine.evidence7d["result-corrected"] >= 1);
+  assert.ok(mine.corrections30d >= 5, "the steer, the corrected follow-ups and the result corrected");
 });
 
 test("a delivery is settled by the product queue: not before its window closes, at once when the next turn brings it forward, and a routine follows the third clean run", options, async () => {
