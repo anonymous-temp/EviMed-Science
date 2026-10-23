@@ -180,3 +180,72 @@ test("source history includes every round selected by an explicit date range", o
   assert.equal(result.selection.roundIds.length, 7);
   assert.equal(result.history.length, 7);
 });
+
+test("comparison sides retain independently replayable exact member selections", options, async () => {
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured)
+    VALUES ('q-extra',$1,$2,'g1',1,'P2','Extra question?',true)`, [user.id, project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+    VALUES ('r2-extra',$1,$2,'r2','q-extra','deepseek','2026-10-02','refusal','Cannot answer','{"mode":"web"}')`, [user.id, project.id]);
+  for (const mode of ["common", "separate"]) {
+    const view = await readGeoSelection(store, project, { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01", comparisonMode: mode });
+    const entry = view.comparison.cells.find((cell) => cell.scope === "engine" && cell.engine === "deepseek" && cell.metricId === "M-20" && cell.variant === "refusal");
+    for (const side of ["current", "previous"]) {
+      const metric = entry[side];
+      assert.ok(metric.members.selectionRef);
+      assert.notEqual(metric.members.selectionRef, view.selection.reference);
+      const restored = await readGeoSelection(store, project, { selectionRef: metric.members.selectionRef });
+      const detail = await service.runtimeRead(project, "snapshots", { selectionRef: metric.members.selectionRef, member: metric.members.metric, limit: 50 });
+      assert.equal(detail.total, metric.members.total);
+      assert.deepEqual(detail.items.map((item) => item.id).sort(), metric.snapshotIds.slice().sort());
+      assert.equal(restored.rows.some((row) => row.snapshotId === "r2-extra"), side === "current" && mode === "separate");
+    }
+  }
+});
+
+test("engine histories include refusal variants in default and filtered reads", options, async () => {
+  for (const filter of [{}, { round: "r2" }]) {
+    const view = await service.monitoring(user, project.id, filter);
+    const refusal = view.byEngine.find((entry) => entry.engine === "deepseek").metrics.find((entry) => entry.metricId === "M-20" && entry.variant === "refusal");
+    assert.ok(refusal);
+    assert.ok(refusal.points.some((point) => point.value != null));
+  }
+});
+
+test("source answer pages and native error filters retain complete scoped totals", options, async () => {
+  const first = await service.source(user, project.id, "source1", { round: "r2", answerLimit: 1 });
+  assert.equal(first.answers.length, 1);
+  assert.equal(first.answerPage.total, 4);
+  const second = await service.runtimeRead(project, "sources", { selectionRef: first.selection.reference, sourceId: "source1", answerLimit: 1, answerOffset: first.answerPage.nextOffset });
+  assert.equal(second.answerPage.total, 4);
+  assert.notEqual(first.answers[0].snapshotId, second.answers[0].snapshotId);
+  const errors = await service.runtimeRead(project, "errors", { round: "r2", questionId: "q1", limit: 1 });
+  assert.equal(errors.total, 1);
+  assert.deepEqual(errors.items.map((error) => error.id), ["e2"]);
+});
+
+test("saved selections detect edits to raw answer and question text used by detail readers", options, async () => {
+  for (const [table, id, field] of [["snapshots", "r2-q1-deepseek", "answer_text"], ["questions", "q1", "text"]]) {
+    const before = (await store.query(`SELECT ${field} AS text FROM evimed_geo.${table} WHERE id = $1`, [id])).rows[0].text;
+    const selected = await readGeoSelection(store, project, { round: "r2" });
+    await store.query(`UPDATE evimed_geo.${table} SET ${field} = 'Changed detail text' WHERE id = $1`, [id]);
+    try {
+      await assert.rejects(readGeoSelection(store, project, { selectionRef: selected.selection.reference }), (error) => error.status === 409);
+    } finally { await store.query(`UPDATE evimed_geo.${table} SET ${field} = $2 WHERE id = $1`, [id, before]); }
+  }
+});
+
+test("common comparison does not turn a failed engine into an apparent visibility gain", options, async () => {
+  await store.query("UPDATE evimed_geo.snapshots SET status = 'failed' WHERE id = 'r2-q1-kimi'");
+  try {
+    const view = await readGeoSelection(store, project, { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01", pools: ["P2"] });
+    const mention = view.comparison.cells.find((cell) => cell.scope === "project" && cell.metricId === "M-01S" && cell.variant === null);
+    assert.deepEqual([mention.current.denominator, mention.previous.denominator], [1, 1]);
+    assert.equal(mention.delta, 0);
+  } finally { await store.query("UPDATE evimed_geo.snapshots SET status = 'valid' WHERE id = 'r2-q1-kimi'"); }
+});
+
+test("native error question filters precede totals and pagination", options, async () => {
+  const errors = await service.runtimeRead(project, "errors", { round: "r2", questionId: "q1", limit: 1 });
+  assert.equal(errors.total, 1);
+  assert.deepEqual(errors.items.map((error) => error.id), ["e2"]);
+});
