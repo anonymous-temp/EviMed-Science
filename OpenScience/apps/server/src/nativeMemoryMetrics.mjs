@@ -17,7 +17,7 @@ export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "plat
 export const MEMORY_GATEWAY_COMMIT_OUTCOMES = Object.freeze(["accepted", "nothing_pending", "not_learning", "rate_limited", "failed"]);
 /** Why a caller's conversation is not learned from or read (`memoryAdmission`). */
 export const MEMORY_ADMISSION_REASONS = Object.freeze([
-  "legacy_engine", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent",
+  "legacy_engine", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent", "before_reset",
 ]);
 /** What the gateway refuses by name. */
 export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
@@ -29,10 +29,10 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
  *  (dropped at the bound, a platform-started turn, an attended turn already running again), or what the commit did. */
 export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
   "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
-  "committed", "nothing_pending", "not_learning", "rate_limited", "failed",
+  "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed",
 ]);
 /** What the worker did with a commit. */
-export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan"]);
+export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan", "before_reset"]);
 /**
  * What a settled commit's extraction came to (`nativeMemoryWorker.extractionFacts`): wrote something, wrote some and was refused
  * some, was refused everything it proposed, or proposed nothing at all. The two zero-file outcomes are told apart on purpose: a

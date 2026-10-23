@@ -68,13 +68,13 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     await overlay.noteRegistered(userId);
     /**
      * Put a conversation in the engine as the plugin would and commit it, entering the commit in the ledger as the gateway does.
-     * @param {string} name the session's suffix @param {Array<{ role: string, text: string }>} messages
+     * @param {string} name the session's suffix @param {Array<{ role: string, text: string, at?: string }>} messages
      * @param {{ projectId?: string | null, origin?: string, engineSession?: string }} [how] `engineSession`: the whole engine session name, for one the plugin did not derive from a conversation
      */
     async function commitConversation(name, messages, { projectId = null, origin = "gateway", engineSession = "" } = {}) {
       const session = engineSession || `dsh-session_${name}`;
       stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, archives: 0, commitCount: 0,
-        messages: messages.map((message) => ({ role: message.role, parts: [{ type: "text", text: message.text }] })) });
+        messages: messages.map((message) => ({ role: message.role, parts: [{ type: "text", text: message.text }], ...(message.at ? { created_at: message.at } : {}) })) });
       const committed = stub.commitSession(engineUser, session);
       await overlay.recordCommit({ userId, archiveUri: committed.archive_uri, engineSession: session, projectId, origin, taskId: committed.task_id });
       return { session, ...committed };

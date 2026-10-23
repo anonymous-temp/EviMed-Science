@@ -1,6 +1,7 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryAdmission.mjs";
 import { recordRuntimeWithoutGateway, recordTurnCommit } from "./nativeMemoryMetrics.mjs";
+import { endedBeforeReset } from "./researchMemory.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
 
 /**
@@ -56,7 +57,7 @@ const CONVERSATION = /^[A-Za-z0-9_-]{1,160}$/;
 
 /**
  * @typedef {{
- *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any,
+ *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, endedAt: string | null,
  * }} Armed
  */
 
@@ -64,7 +65,7 @@ export class NativeTurnCommit {
   /**
    * @param {{
    *   config: any,
-   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string> },
+   *   researchMemory: { configured?: boolean, memoryEngine: (userId: string) => Promise<string>, resetInstant?: (userId: string) => Promise<string | null> },
    *   sessions: { configured?: boolean, readSession: (userId: string, sessionId: string) => Promise<any> },
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
@@ -132,14 +133,14 @@ export class NativeTurnCommit {
       // the engine. Counted here for the turns that pass through no dispatch (typed in the kernel's own frame); the next
       // dispatch replaces such a runtime.
       if (this.runtimeWithoutGateway?.(project) === true) recordRuntimeWithoutGateway("turn_end");
-      this.#arm(project, sessionId);
+      this.#arm(project, sessionId, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
     }
   }
 
-  /** @param {any} project @param {string} sessionId */
-  #arm(project, sessionId) {
+  /** @param {any} project @param {string} sessionId @param {string | null} endedAt when the turn that armed it ended */
+  #arm(project, sessionId, endedAt) {
     const userId = String(project.userId);
     const key = `${userId}\u0000${sessionId}`;
     const held = this.armed.get(key);
@@ -153,7 +154,7 @@ export class NativeTurnCommit {
       return;
     }
     /** @type {Armed} */
-    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null };
+    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, endedAt };
     entry.timer = this.setTimer(() => { this.armed.delete(key); this.queue.push(entry); this.#pump(); }, this.debounceMs);
     this.armed.set(key, entry);
     recordTurnCommit("scheduled");
@@ -185,9 +186,19 @@ export class NativeTurnCommit {
   }
 
   /** @param {Armed} entry */
+  async #endedBeforeReset(entry) {
+    if (typeof this.researchMemory.resetInstant !== "function") return false;
+    const resetAt = await this.researchMemory.resetInstant(entry.userId).catch(() => null);
+    return endedBeforeReset({ finishedAt: entry.endedAt }, resetAt);
+  }
+
+  /** @param {Armed} entry */
   async #run(entry) {
     if (this.closed) return;
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
+    // A turn that was over before the account reset its memory is not committed after it: the reset deleted the engine's sessions
+    // (and with them what was pending), and the plugin's replay of an old message must not make a session to commit from.
+    if (await this.#endedBeforeReset(entry)) { recordTurnCommit("before_reset"); return; }
     const user = { id: entry.userId };
     // The admission decides who is learned from. Asked before the engine is read so that a paused account, a trial, a
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit

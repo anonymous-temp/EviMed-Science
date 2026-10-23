@@ -264,6 +264,14 @@ export class NativeMemoryWorker {
       let diff;
       try { diff = JSON.parse(diffText); } catch { diff = null; }
       if (diff && typeof diff === "object") {
+        // An extraction the engine had accepted before the account reset its memory finishes after it: its files are what the
+        // person asked to forget, and they are taken out again instead of being read into the overlay as new memories.
+        const removed = await this.#undoBeforeReset(commit, diff);
+        if (removed !== null) {
+          await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations: 0, extraction: { skipped: 0, skipReasons: {}, extracted: {}, memoryTypes: [], fromTask: false, beforeReset: removed } });
+          recordNativeCommit("before_reset");
+          return true;
+        }
         const operations = await this.ingest(commit, diff);
         // A commit that wrote nothing is the one worth asking about: the engine's task result says what the extraction did and
         // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
@@ -287,6 +295,47 @@ export class NativeMemoryWorker {
     await this.overlay.failCommit(commit.userId, commit.archiveUri, { error: reason, nextAttemptAt: this.now() });
     recordNativeCommit("failed");
     return false;
+  }
+
+  /**
+   * Whether this commit's conversation was over before the account last reset its memory — every message of its archive carries a
+   * time and the latest is earlier than the reset — and, when it was, what it wrote is removed: the files its diff added or updated
+   * that still hold exactly the text the diff says it left (a file that says anything else has been written since, by a later
+   * conversation or by the person, and is theirs). A message with no time places the commit nowhere: a rule that needs the metadata
+   * to be there before it lets anything through is one missing field away from a platform that stops learning.
+   * @param {any} commit @param {any} diff @returns {Promise<number | null>} files removed, or null when the commit is not from before a reset
+   */
+  async #undoBeforeReset(commit, diff) {
+    if (typeof this.researchMemory?.resetInstant !== "function") return null;
+    const resetAt = await this.researchMemory.resetInstant(commit.userId).catch(() => null);
+    if (!resetAt) return null;
+    const raw = await this.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`).catch(() => null);
+    let latest = Number.NEGATIVE_INFINITY;
+    let timed = 0;
+    for (const line of String(raw ?? "").split("\n")) {
+      if (!line.trim()) continue;
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      const at = Date.parse(String(message?.created_at ?? ""));
+      if (!Number.isFinite(at)) return null;
+      timed += 1;
+      latest = Math.max(latest, at);
+    }
+    if (!timed || latest >= Date.parse(resetAt)) return null;
+    const root = this.sessions.memoryRoot(commit.userId);
+    let removed = 0;
+    for (const list of ["adds", "updates"]) {
+      for (const operation of Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []) {
+        const uri = String(operation?.uri ?? "");
+        if (!nativeMemoryFile(uri, root)) continue;
+        const current = await this.sessions.read(commit.userId, uri).catch(() => null);
+        if (current === null || contentHash(current) !== contentHash(String(operation?.after ?? ""))) continue;
+        await this.sessions.remove(commit.userId, uri);
+        await this.overlay.removeFile(commit.userId, uri);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   /**
