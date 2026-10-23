@@ -15,13 +15,9 @@ function accountLockName(userId) {
   return `memory-index-account:${userId}`;
 }
 
-/** How many facts are written at once, and how long a write may wait for its
- *  vector before the server answers 504. The wait bound stays below the
- *  client's own request timeout so that a slow embedding is reported by the
- *  server, which knows whether the content was written, rather than by an
- *  aborted socket, which does not. */
+/** How many facts are written at once. A write waits for its vector (`wait: true`) under the client's own request
+ *  deadline; the engine's `timeout` field is gone from v0.5.1, so there is no second, shorter bound to set. */
 const WRITE_CONCURRENCY = 4;
-const WRITE_WAIT_SECONDS = 5;
 
 /** What one fact looks like as a file. The kind and the layer lead, because
  *  they are the words a reader (and an embedding) needs to place the sentence
@@ -346,7 +342,7 @@ export class MemoryIndexing {
         try {
           await this.openViking.write(userId, capsuleFactUri(userId, {
             accountCreatedAt, capsuleId, factKind: entry.factKind, factId: entry.id, revision: entry.revision,
-          }), factDocument(entry), { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+          }), factDocument(entry), { wait: true });
         } catch (error) {
           // Stop taking new work, but let the writers already in flight settle
           // before the failure is raised: a rebuild that abandoned them would

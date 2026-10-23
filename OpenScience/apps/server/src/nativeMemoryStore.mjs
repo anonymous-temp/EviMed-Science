@@ -653,9 +653,12 @@ export class NativeMemoryStore {
     const memoryType = last.memoryType;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
+      // `replace` in both branches. A file the engine has written again at this address since the person forgot it
+      // is overwritten by the restore: `create` only refused that on v0.5.0 (409) and is a plain alias of `replace`
+      // from v0.5.1, so the guard cannot be relied on, and the person asked for this text back.
       if (live) await this.#engine(() => this.sessions.replace(userId, uri, String(last.before)));
       else await this.#engine(() => this.sessions.client.request({ method: "POST", path: "/api/v1/content/write", userId, timeoutMs: 20_000,
-        body: { uri, content: String(last.before), mode: "create", wait: true } }));
+        body: { uri, content: String(last.before), mode: "replace", wait: true } }));
       await this.overlay.unreject(userId, memoryType, statements(String(last.before)));
       await this.overlay.upsertFile({ userId, uri, memoryType, body: String(last.before), projectId: last.projectId ?? undefined });
       if (last.projectId) await this.#engine(() => this.sessions.setTags(userId, uri, [`project=${last.projectId}`])).catch(() => {});

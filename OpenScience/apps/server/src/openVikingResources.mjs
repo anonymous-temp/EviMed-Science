@@ -145,13 +145,9 @@ export class OpenVikingResources {
     const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, ...(state ? [`state=${state}`] : [])];
     const body = { uri, content: String(text ?? ""), wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
     try {
-      let written;
-      try {
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "create" }, timeoutMs: WRITE_TIMEOUT_MS });
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_conflict") throw error;
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "replace" }, timeoutMs: WRITE_TIMEOUT_MS });
-      }
+      // `replace` creates a file that is not there, and has done on every pin; from v0.5.1 `create` is only an alias of
+      // it (no 409 on an existing file), so the create-then-replace pair this used to be would be one call twice.
+      const written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "replace" }, timeoutMs: WRITE_TIMEOUT_MS });
       this.counters.pushes += 1;
       return { uri, bytes: Number(written?.result?.written_bytes) || Buffer.byteLength(body.content) };
     } catch (error) { this.counters.failures += 1; throw error; }
