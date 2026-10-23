@@ -111,7 +111,7 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       const identity = geoClaimAssessmentIdentity(original);
       const residual = (await client.query(`SELECT EXISTS(SELECT 1 FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id=s.id
         CROSS JOIN LATERAL jsonb_array_elements(f.statements) statement WHERE s.user_id=$1 AND s.geo_project_id=$2 AND s.engine=$3
-        AND statement->>'verdict'='wrong' AND CASE WHEN $4::boolean THEN (statement->>'claimKey'=$5 OR ($5::text IS NULL AND statement->>'claimId'=$7)) ELSE
+        AND statement->>'verdict'='wrong' AND CASE WHEN $4::boolean OR statement->>'claimVersion' IS NULL OR coalesce(statement->'applicability','null'::jsonb)='null'::jsonb THEN (statement->>'claimKey'=$5 OR ($5::text IS NULL AND statement->>'claimId'=$7)) ELSE
         jsonb_build_object('claimId',statement->'claimId','claimKey',null,'version',statement->'claimVersion',
           'applicability',CASE WHEN coalesce(statement->'applicability','null'::jsonb)='null'::jsonb THEN 'null'::jsonb ELSE
           jsonb_build_object('population',statement->'applicability'->'population','elements',statement->'applicability'->'elements',

@@ -105,6 +105,10 @@ export async function prepareGeoLegacyError(client, snapshot, statement, { recon
     const currentReadings = facts.flatMap(row => row.statements.map(item => identity(item, row.claims ?? []) ?? item));
     const residual = currentReadings.some(item => item.verdict === 'wrong' && geoClaimAssessmentIdentity(item) === expected);
     const replacements = target.statements.map(item => identity(item, target.claims ?? []) ?? item).filter(item => geoClaimAssessmentIdentity(item) === expected);
+    if (residual && survivor.judgment_state === 'withdrawn') {
+      const receipt = { kind: 'legacy_identity_residual_wrong', snapshotId, identity: expected };
+      await client.query(`UPDATE evimed_geo.errors SET judgment_state='active',judgment_correction=$2::jsonb,judgment_history=judgment_history || jsonb_build_array($2::jsonb) WHERE id=$1`, [survivor.id, JSON.stringify(receipt)]);
+    }
     if (!residual && replacements.length && replacements.every(item => ['correct', 'unverifiable'].includes(item.verdict)) && survivor.judgment_state !== 'withdrawn') {
       const receipt = { kind: replacements.every(item => item.verdict === 'correct') ? 'assessment_correction' : 'assessment_superseded_unknown', snapshotId, identity: expected };
       await client.query(`UPDATE evimed_geo.errors SET judgment_state='withdrawn',judgment_correction=$2::jsonb,judgment_history=judgment_history || jsonb_build_array($2::jsonb) WHERE id=$1`, [survivor.id, JSON.stringify(receipt)]);
