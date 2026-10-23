@@ -17,6 +17,8 @@ const initialContract: GeoMeasurementContract = { samplingMode: 'one_shot', repe
 // eslint-disable-next-line no-restricted-syntax -- Parser validation messages are owned Chinese text; HTTP refusals still use webErrorMessage.
 const failure = (error: unknown) => webErrorMessage(error, { fallback: error instanceof Error ? error.message : '操作未完成，请重试。' });
 const key = () => crypto.randomUUID();
+/** Invalidate requests against the latest counter, including when an effect is disposed. */
+const invalidateIdentity = (generation: { current: number }) => { generation.current++; };
 
 /** Version editing and diagnosis are deliberate writes; viewing or importing never starts sampling. */
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
@@ -41,7 +43,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [saved, setSaved] = useState<number | null>(null);
   const pendingImport = useRef<(GeoImportInput & { requestKey: string }) | null>(null);
   useEffect(() => {
-    const reset = () => { identityGeneration.current++; setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false); setSaved(null); };
+    const reset = () => { invalidateIdentity(identityGeneration); setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false); setSaved(null); };
     const started = () => { reset(); setIdentityVersion(value => value + 1); };
     window.addEventListener(WEB_SESSION_ENDED_EVENT, reset); window.addEventListener(WEB_SESSION_STARTED_EVENT, started);
     return () => { window.removeEventListener(WEB_SESSION_ENDED_EVENT, reset); window.removeEventListener(WEB_SESSION_STARTED_EVENT, started); };
@@ -72,7 +74,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
         }
       } catch { setError('浏览器暂时无法读取保存记录；请检查本地存储可用空间后重试。'); }
     }).catch(() => { if (live) setError('账户或上次保存记录无法读取，请刷新后重试。'); });
-    return () => { live = false; identityGeneration.current++; };
+    return () => { live = false; invalidateIdentity(identityGeneration); };
   }, [geoId, project.projectId, identityVersion, canEdit]);
   const pendingStart = useRef<{ version: number; requestKey: string } | null>(null);
   useEffect(() => { pendingStart.current = null; }, [storageScope]);
