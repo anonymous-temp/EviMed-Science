@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { FeedbackEvents } from "../src/feedbackEvents.mjs";
+import { LearningEvidence } from "../src/learningEvidence.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
@@ -75,6 +77,7 @@ test("a reset cancels the account's queued and running learning jobs and deletes
   const queuedDistill = await seedJob(alice, "distill", "q-distill");
   const runningDistill = await seedJob(alice, "distill", "r-distill", "running");
   const queuedConsolidate = await seedJob(alice, "consolidate", "q-consolidate");
+  const queuedSettle = await seedJob(alice, "learning-evidence", "q-settle");
   // Not learning: the index outbox carries a withdrawal the reset itself owes, and a notice is not a lesson.
   const outbox = await seedJob(alice, "memory-record-index", "outbox");
   const notice = await seedJob(alice, "notify", "notice");
@@ -84,10 +87,10 @@ test("a reset cancels the account's queued and running learning jobs and deletes
   const bobsFeedback = await seedFeedback(bob);
 
   const removed = await resetLearnedMemory(database, alice);
-  assert.equal(removed.jobs, 3);
+  assert.equal(removed.jobs, 4);
   assert.equal(removed.feedback, 2);
 
-  for (const job of [queuedDistill, runningDistill, queuedConsolidate]) {
+  for (const job of [queuedDistill, runningDistill, queuedConsolidate, queuedSettle]) {
     const row = await jobStatus(job.id);
     assert.equal(row.status, "canceled", `${job.id} is cancelled`);
     assert.equal(row.lease_token, null, "and a worker that holds it loses the lease, so it cannot finish it");
@@ -182,6 +185,7 @@ function ledgerRun(id, finishedAt, capability = "clinical-evidence-synthesis") {
 test("a lesson is not queued for a conversation that ended before the reset, and a routine does not count it as a peer", options, async () => {
   const owner = `${alice}_lessons`;
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Lesson owner','development')", [owner]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,'prj_lessons','Lessons',1048576)", [owner]);
   try {
     const project = { id: "prj_lessons", userId: owner };
     const resetAt = await store.noteReset(owner);
@@ -195,7 +199,7 @@ test("a lesson is not queued for a conversation that ended before the reset, and
     const triggers = new LearningTriggers({
       jobs: { async enqueue(_user, kind, payload, opts) { queued.push({ kind, payload, opts }); return { id: `job_${queued.length}` }; } },
       agentRuns: { async list() { return runs; }, async runWorkflowProjection() { return null; } },
-      memory: store, periodMs: 90 * 86_400_000,
+      memory: store,
     });
 
     const old = await triggers.afterRun(project, runs[0]);
@@ -205,16 +209,28 @@ test("a lesson is not queued for a conversation that ended before the reset, and
     const corrected = await triggers.afterCorrection(project, { runId: "run_before_1", event: { id: "ev_1", trigger: "result-corrected" } });
     assert.deepEqual(corrected, { queued: [], skipped: "before_reset" }, "nor from an old run the researcher corrects now");
 
-    // The third successful run of the capability is the routine's (METHOD_INDUCTION_MIN_TRAJECTORIES): its peers are the runs
-    // after the reset only, so with the two before it left out the family has not reached the third run yet.
-    const third = await triggers.afterRun(project, runs[3]);
-    assert.deepEqual(third.queued, ["delivered"], "a conversation after the reset is learned from as before");
-    assert.ok(queued.every((item) => item.payload.trigger !== "routine"), "and the routine counts only what came after the reset");
+    // A routine is τ clean runs of one scope and one shape (METHOD_INDUCTION_MIN_TRAJECTORIES), counted when a run is settled from the feedback
+    // ledger: the two runs before the reset were settled long ago, and they are no peers of a run after it, however recently they were counted.
+    const feedback = new FeedbackEvents({ database });
+    const shape = [{ format: "md", labels: ["summary", "findings"] }];
+    const clean = (run, evidence = "silent") => feedback.recordLearningEvidence(owner, { runId: run.id, key: "settled",
+      detail: { evidence, verdict: "none", at: at(10_000), endedAt: run.finishedAt, scope: "clinical-evidence-synthesis", shape, sessionId: run.sessionId } });
+    for (const run of runs.slice(0, 2)) await clean(run);
+    const evidence = new LearningEvidence({
+      feedback, jobs: { async enqueue() { return { id: "settle" }; } }, agentRuns: { async list() { return runs; } }, triggers: () => triggers, judge: null,
+      resolveProject: async () => project, readShapes: async () => ({ "deliverables/a/report.md": shape[0] }), now: () => new Date(ms + 10_000),
+    });
+    const settle = (runId) => evidence.settle({ job: { userId: owner, projectId: project.id, payload: { runId } } });
+    assert.deepEqual(await settle("run_before_1"), { settled: null, routine: false, skipped: "before_reset" }, "a conversation that ended before the reset is not settled for the loop");
+    const first = await settle("run_after_1");
+    assert.deepEqual([first.settled, first.routine], ["silent", false]);
+    const second = await settle("run_after_2");
+    assert.deepEqual([second.settled, second.routine], ["silent", false], "with the two before it left out the family has not reached the third run yet");
     assert.equal(counter("open_science_memory_skipped_before_reset_total", "stage", "routine_peer") >= 2, true, "the two earlier runs were left out of the family");
-    const reached = await triggers.afterRun(project, runs[4]);
-    assert.ok(reached.queued.includes("routine"), "the third run after the reset completes the routine");
+    const reached = await settle("run_after_3");
+    assert.deepEqual([reached.settled, reached.routine], ["silent", true], "the third run after the reset completes the routine");
     const routine = queued.find((item) => item.payload.trigger === "routine");
-    assert.ok(routine.payload.peers.every((/** @type {{ runId: string }} */ peer) => peer.runId.startsWith("run_after")), "and its peers all ended after the reset");
+    assert.deepEqual(routine.payload.peers.map((/** @type {{ runId: string }} */ peer) => peer.runId), ["run_after_1", "run_after_2"], "and its peers all ended after the reset");
   } finally {
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
   }

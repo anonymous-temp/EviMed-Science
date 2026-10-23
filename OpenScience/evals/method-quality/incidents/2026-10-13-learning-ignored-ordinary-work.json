@@ -17,12 +17,14 @@
       {
         "name": "a weekly report written in an ordinary conversation, recorded from what changed in the workspace",
         "run": { "artifacts": [], "outputFiles": ["reports/weekly-10-13.docx"] },
-        "expect": { "queued": ["delivered"] }
+        "expect": { "queued": [] },
+        "note": "Until 2026-10-23 this queued a `delivered` lesson. It is a settled run now (`silent` evidence, thirty minutes on) and, with two more clean ones of the same shape in the conversation, a routine (learningEvidence.mjs)."
       },
       {
         "name": "a script an ordinary conversation was asked for, which no gate graded",
         "run": { "artifacts": [], "unverifiedArtifacts": ["scripts/rename.py"] },
-        "expect": { "queued": ["delivered"] }
+        "expect": { "queued": [] },
+        "note": "As above: the file is read for its shape when the run is settled, not by a lesson at its end."
       },
       {
         "name": "a question answered in prose, no file, no correction",
@@ -32,7 +34,7 @@
       {
         "name": "the researcher typed a correction into the turn that made the report",
         "run": { "artifacts": [], "outputFiles": ["reports/weekly-10-13.docx"], "corrections": 1 },
-        "expect": { "queued": ["correction", "delivered"] }
+        "expect": { "queued": ["correction"] }
       },
       {
         "name": "the researcher corrected a turn that left no file",

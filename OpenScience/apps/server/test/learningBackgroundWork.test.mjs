@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { carriesPlatformContext } from "@evimed/domain";
 
-import { learningTriggersFor } from "../src/learningTriggers.mjs";
+import { learningRefusal, learningTriggersFor } from "../src/learningTriggers.mjs";
 import { AUTOMATED_REQUEST_HEADER, accountOpenUsage, automatedRequest } from "../src/server.mjs";
 
 const openScience = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -27,11 +27,14 @@ test("a harness marks its dispatches with a header as well as in the body, and a
   for (const value of ["0", "false", "", undefined, "yes"]) assert.equal(automatedRequest({ headers: { "x-evimed-automated": value } }), false, String(value));
   assert.equal(automatedRequest({}), false);
 
+  // The researcher corrected it: a lesson (what a clean delivery teaches is read when the run is settled, `learningEvidence.mjs`).
   const run = { id: "run_1", status: "succeeded", artifacts: ["deliverables/d1/report.md"], transcript: { completeness: "complete" },
-    effectiveAgentId: "meta-analysis", sessionId: "s1" };
+    effectiveAgentId: "meta-analysis", sessionId: "s1", corrections: 1 };
   assert.ok(learningTriggersFor({ run, runs: [run] }).length > 0, "the researcher's run is a lesson");
+  assert.equal(learningRefusal({ run, runs: [run] }), null);
   const probed = { ...run, automated: true };
   assert.deepEqual(learningTriggersFor({ run: probed, runs: [probed] }), [], "the same run dispatched by a harness is not");
+  assert.equal(learningRefusal({ run: probed, runs: [probed] }), "not_researcher_work", "and a refusal that says why, for the counter");
 });
 
 /** Every file under a tree, skipping dependencies and generated output. @param {string} directory @returns {AsyncGenerator<string>} */

@@ -423,6 +423,28 @@ export const KERNEL_MOUNTED_TOOL_NAMES = Object.freeze([
 ])
 
 /**
+ * The tools that are the platform's own choreography of a run, not the person's work: planning, delegating and awaiting, the
+ * delivery submission, the package check, the revision and rendering helpers, the capsule and screening and review helpers (every
+ * socket tool, and the ones retired but still in old transcripts), and the kernel's step list, question tool, sub-agent and file
+ * hand-over. A routine is what the work did, so a trajectory digest (`trajectoryDigest.mjs`) removes these in code before a model
+ * sees the run's tool order; they were left to a sentence in the distillation prompt until 2026-10-23, and the learned methods of
+ * the one account that taught the platform were all about submit, anchor and receipt.
+ *
+ * A literal built from the two closed lists above and the kernel's own names; a tool added to either list is choreography by
+ * default, which is the safe side: a missing name leaks a step into a lesson, an extra one only hides it.
+ */
+export const PLATFORM_CHOREOGRAPHY_TOOL_NAMES = Object.freeze([...new Set([
+  ...SOCKET_TOOL_NAME_LIST,
+  ...Object.values(RETIRED_SOCKET_TOOL_NAMES),
+  'todo_write', 'todo', 'present', 'ask_user', 'ask_user_question', 'ask-user', 'subagent', 'task',
+])])
+
+/** @param {string} name @returns {boolean} */
+export function isPlatformChoreographyTool(name) {
+  return PLATFORM_CHOREOGRAPHY_TOOL_NAMES.includes(String(name ?? ''))
+}
+
+/**
  * Every tool name a skill body may legally call: the kernel's plus ours.
  * MCP tools are not here because a skill body calls them by their prefixed
  * model-visible name, which `isMcpToolName` already recognises.

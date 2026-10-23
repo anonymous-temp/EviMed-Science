@@ -1055,8 +1055,6 @@ services:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS:
-      # The share (0 to 1) of finished deliveries that queue a distillation; value-less: unset is the code's 0.33.
-      OPEN_SCIENCE_LEARNING_DISTILL_SAMPLE_SHARE:
       # The share (0 to 1) of repaired deliveries that queue a distillation; value-less: unset is the code's 0 (the delivery gate's bookkeeping is not a research method).
       OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE:
       # Answered runs that may carry a learned method's card without one opening the method before it is stopped; value-less: unset is the code's 20, 0 never.

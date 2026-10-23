@@ -34,7 +34,10 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
   "wiki-compile",
   // One document's copy in OpenViking made to agree with PostgreSQL (`openVikingSourceSync.mjs`).
-  "ov-resource-sync"]);
+  "ov-resource-sync",
+  // A finished run's reaction window closing (`learningEvidence.mjs`): thirty minutes after it ended, the run is read for the evidence
+  // the researcher left (a follow-up, a correction) or its silence, and a routine is looked for.
+  "learning-evidence"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -53,10 +56,13 @@ export const FEEDBACK_EVENT_TRIGGERS = Object.freeze([
   "deliverable-edited",
   // A correction made through the anchored revision, with the immutable pair of result versions it produced (N12).
   "result-corrected",
+  // The researcher's reaction to a run — a steer, a follow-up judged on the next turn, a result corrected, silence — as the learning
+  // loop counts it (2026-10-23, `@evimed/domain` `learningEvidence.mjs`). Back-office: no page lists it.
+  "learning-evidence",
 ]);
 
 /** What a feedback event can be about. A `result-version` is an immutable result version, named by its version id. */
-export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable", "result-version"]);
+export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable", "result-version", "run"]);
 
 const migrations = new WeakMap();
 
