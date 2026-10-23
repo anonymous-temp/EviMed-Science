@@ -14,13 +14,16 @@ import {
   METHOD_RELATION_TYPES,
   computeMethodLevels,
   emptyLearning,
+  bodyPreservation,
   foldCarried,
+  foldDecided,
   foldEligible,
+  foldLevel,
   foldObservation,
   foldRead,
   foldRelation,
+  isUnprovenMerge,
   libraryEvictions,
-  methodContribution,
   methodHarmTest,
   methodLevel,
   methodStrength,
@@ -29,6 +32,7 @@ import {
   relationIssues,
   resetLearningForDigest,
   retirementProposal,
+  storedEvidenceQuotes,
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
@@ -221,8 +225,13 @@ test("strength decays, and retirement is proposed only when something validated 
   );
   const proposal = retirementProposal(method({ learning: unusedAndReplaced }), { nowMs: NOW, isApproved: () => true });
   assert.equal(proposal.propose, true);
-  assert.equal(proposal.immediate, false);
+  assert.equal(proposal.immediate, true, "replaced and idle: stopped now, with one click to restore (it was a proposal nobody read)");
+  assert.equal(proposal.code, "superseded");
   assert.match(proposal.reason, /superseded by m2/);
+  // One the researcher stated is only proposed, and a replacement that is not in force replaces nothing.
+  const stated = retirementProposal(method({ learning: unusedAndReplaced, provenance: { origin: "explicit" } }), { nowMs: NOW, isApproved: () => true });
+  assert.deepEqual([stated.propose, stated.immediate, stated.code], [true, false, "superseded"]);
+  assert.equal(retirementProposal(method({ learning: unusedAndReplaced }), { nowMs: NOW, isApproved: () => false }).propose, false);
 
   // Unused with nothing to replace it: retiring would remove a capability.
   const orphan = retirementProposal(
@@ -411,18 +420,6 @@ test("the harm test reads only the runs that used the method, never the ones tha
   assert.equal(methodHarmTest(mixed).state, "watching");
 });
 
-test("contribution is outcomes over trials, and silence is not neutrality", () => {
-  assert.equal(methodContribution(record(10, 10)), 1);
-  assert.equal(methodContribution(record(10, 5)), 0);
-  assert.equal(methodContribution(record(10, 0)), -1);
-  assert.equal(Number(methodContribution(record(10, 4))).toFixed(2), "-0.20");
-  // Never mounted is not evidence of anything; a rule that reads it as 0 would
-  // retire every method that has just been promoted.
-  assert.equal(methodContribution(emptyLearning(DIGEST_A)), null);
-  assert.equal(methodContribution(foldEligible(emptyLearning(DIGEST_A))), null);
-  assert.equal(methodContribution(undefined), null);
-});
-
 test("a method only ever read by a run that delegates nothing is not idle, and still retirable when it hurts", () => {
   // The non-delegating answer line: it calls the `skill` tool, reads the body,
   // and answers the researcher directly. No delegation means no mounted digest
@@ -437,7 +434,7 @@ test("a method only ever read by a run that delegates nothing is not idle, and s
 
   const read = foldRelation(foldRead(quiet, daysAgo(2)), superseded);
   assert.equal(read.counts.read, 1);
-  assert.equal(methodContribution(read), null, "a reading carries no verdict and may not move a success rate");
+  assert.equal(read.counts.loaded, 0, "a reading carries no verdict, so it is not a delivery that could move a rate");
   const kept = retirementProposal(method({ learning: read }), { nowMs: NOW, isApproved: () => true });
   assert.equal(kept.propose, false);
   assert.match(kept.reason, /delegated nothing/);
@@ -449,12 +446,11 @@ test("a method only ever read by a run that delegates nothing is not idle, and s
   assert.equal(retirementProposal(method({ learning: stale }), { nowMs: NOW, isApproved: () => true }).propose, true);
 
   // Being read is evidence of not being idle, never evidence of being good: a
-  // method whose packages keep being refused is proposed however often it is
-  // read, because the contribution clause sits above this one.
-  const harmful = method({ status: "approved", learning: foldRead(record(24, 10), daysAgo(1)) });
+  // method whose packages keep being refused is stopped however often it is
+  // read, because the harm test sits above this one.
+  const harmful = method({ status: "approved", learning: foldRead(runs("rrrr"), daysAgo(1)) });
   const proposal = retirementProposal(harmful, { nowMs: NOW });
-  assert.equal(proposal.propose, true);
-  assert.match(proposal.reason, /24 trajectories at a contribution of -0\.17/);
+  assert.deepEqual([proposal.propose, proposal.immediate, proposal.code], [true, true, "harm"]);
 });
 
 test("a reading moves the timestamp forward only, and an unreadable one changes nothing", () => {
@@ -472,73 +468,144 @@ test("a reading moves the timestamp forward only, and an unreadable one changes 
   assert.equal(foldRead(once, undefined).counts.read, 1);
 });
 
-test("a method that is used constantly and hurts is proposed, which decay alone can never do", () => {
-  // 24 recent trajectories, 10 accepted: contribution -0.17, strength high.
-  const busy = method({ status: "approved", learning: record(24, 10) });
+test("a method that is used constantly and hurts is stopped by the harm test, which decay alone can never do", () => {
+  // Used every day and rejected most of the time: strength is high, which is exactly what the recency rule reads as healthy.
+  const busy = method({ status: "approved", learning: runs("aarararrarrrrr") });
   const proposal = retirementProposal(busy, { nowMs: NOW });
-  assert.ok(proposal.strength > 0.5, "this is exactly the case the recency rule reads as healthy");
-  assert.equal(proposal.propose, true);
-  assert.equal(proposal.immediate, false, "a proposal, never a silent deletion");
-  assert.match(proposal.reason, /24 trajectories at a contribution of -0\.17/);
-  assert.equal(Number(proposal.contribution).toFixed(2), "-0.17");
-
-  // It needs no replacement to be proposed: removing something that makes
-  // packages worse removes nothing.
+  assert.ok(proposal.strength > 0.5);
+  assert.deepEqual([proposal.propose, proposal.immediate, proposal.code], [true, true, "harm"]);
   assert.ok(!/superseded/.test(proposal.reason));
 });
 
-test("the contribution clause waits for enough trials, and fires on a safety method too", () => {
-  // A bad ratio, but too few trajectories for this clause to say anything.
-  // Four good runs first, so the harm test has already read this revision as
-  // clear and it is the contribution clause alone that is being asked (a run
-  // of early rejections is the harm test's to decide; see above).
-  const early = method({ status: "approved", learning: runs("aaaarrrrrr") });
-  assert.equal(methodContribution(early.learning), -0.2);
-  assert.equal(retirementProposal(early, { nowMs: NOW }).propose, false);
-  assert.equal(retirementProposal(early, { nowMs: NOW, minTrials: 5 }).propose, true, "the floor is a parameter, and it bites");
-
-  // A self-declared safety flag is not an exemption from outcomes.
-  const safety = method({
-    status: "approved",
-    learning: record(24, 10),
-    provenance: { origin: "inferred", safetyRelated: true },
-  });
-  assert.equal(retirementProposal(safety, { nowMs: NOW }).propose, true);
-  assert.equal(retirementProposal(safety, { nowMs: NOW }).code, "contribution");
-
-  // A good method with many trials is left alone.
-  const good = method({ status: "approved", learning: record(24, 20) });
-  assert.equal(retirementProposal(good, { nowMs: NOW }).propose, false);
+test("there is no contribution clause any more: a method that is only sometimes refused is left to the harm test", () => {
+  // 24 trajectories, 10 accepted (contribution -0.17, the old clause's proposal that nothing read): the harm test, which reads
+  // the order of the runs and not a ratio, has not crossed, and nothing else stops a method that is in use.
+  const mixed = method({ status: "approved", learning: record(24, 10) });
+  const proposal = retirementProposal(mixed, { nowMs: NOW });
+  assert.notEqual(proposal.code, "contribution");
+  assert.equal(proposal.immediate, false);
 });
 
-test("a library over its cap gives up its worst first, and never the untried", () => {
+/** A record whose last use was `daysAgoUsed` days ago and that was opened `opens` times: what the cap ranks by. */
+const usedLast = (/** @type {number} */ opens, /** @type {number | null} */ daysAgoUsed) => {
+  let learning = emptyLearning(DIGEST_A);
+  if (opens > 0) learning = { ...learning, counts: { ...learning.counts, invoked: opens } };
+  if (daysAgoUsed !== null) learning = foldObservation(learning, { runId: "r", family: "f", outcome: "accepted", at: daysAgo(daysAgoUsed), invoked: opens > 0 });
+  return learning;
+};
+
+test("a library over its cap gives up its least-used first: fewest openings, then longest idle", () => {
   const methods = [
-    method({ id: "m_bad", status: "approved", learning: record(20, 4) }),
-    method({ id: "m_ok", status: "approved", learning: record(20, 14) }),
-    method({ id: "m_worst", status: "approved", learning: record(20, 2) }),
-    method({ id: "m_new", status: "approved", learning: emptyLearning(DIGEST_A) }),
-    method({ id: "m_candidate", status: "candidate", learning: record(20, 1) }),
+    method({ id: "m_busy", status: "approved", learning: usedLast(9, 1) }),
+    method({ id: "m_idle", status: "approved", learning: usedLast(1, 90) }),
+    method({ id: "m_recent", status: "approved", learning: usedLast(1, 2) }),
+    method({ id: "m_never", status: "approved", learning: usedLast(0, null) }),
+    method({ id: "m_candidate", status: "candidate", learning: usedLast(0, null) }),
   ];
   assert.deepEqual(libraryEvictions(methods, { cap: 10 }), [], "under the cap, nothing is given up");
 
   const over = libraryEvictions(methods, { cap: 2 });
-  assert.deepEqual(over.map((entry) => entry.id), ["m_worst", "m_bad"],
-    "four approved against a cap of two: the two lowest contributions, worst first");
+  assert.deepEqual(over.map((entry) => entry.id), ["m_never", "m_idle"],
+    "four approved against a cap of two: the one nobody opened first, then the one idle longest");
+  assert.ok(over.every((entry) => entry.immediate), "an inferred method is stopped, restorable in one click");
   assert.match(over[0].reason, /cap of 2/);
-  assert.ok(!over.some((entry) => entry.id === "m_new"), "a method with no record has nothing to be judged on");
   assert.ok(!over.some((entry) => entry.id === "m_candidate"), "only effective methods count against the cap");
 });
 
-test("the cap ranks a safety method by its contribution like any other", () => {
-  // The cap is an outcome rule, not a disuse rule: the one exemption a safety
-  // method has (build spec §8.7) does not reach it.
+test("the cap protects a method written recently, gives a stated method up last, and only as a proposal", () => {
+  const written = (/** @type {string} */ id, /** @type {string} */ since, /** @type {any} */ extra = {}) => ({ ...method({ id, status: "approved", learning: emptyLearning(DIGEST_A), ...extra }), since });
   const methods = [
-    method({ id: "m_safety", status: "approved", learning: record(20, 1), provenance: { origin: "inferred", safetyRelated: true } }),
-    method({ id: "m_a", status: "approved", learning: record(20, 18) }),
-    method({ id: "m_b", status: "approved", learning: record(20, 19) }),
+    written("m_old", daysAgo(120)),
+    written("m_new", daysAgo(1)),
+    written("m_stated", daysAgo(300), { provenance: { origin: "explicit" } }),
   ];
-  const over = libraryEvictions(methods, { cap: 1 });
-  assert.deepEqual(over.map((entry) => entry.id), ["m_safety", "m_a"]);
+  assert.deepEqual(libraryEvictions(methods, { cap: 2 }).map((entry) => entry.id), ["m_old"], "unopened and equal, the older goes");
+  const both = libraryEvictions(methods, { cap: 1 });
+  assert.deepEqual(both.map((entry) => entry.id), ["m_old", "m_new"], "the researcher's own statement is the last to go");
+  const all = libraryEvictions(methods, { cap: 0 });
+  assert.deepEqual(all.map((entry) => [entry.id, entry.immediate]), [["m_old", true], ["m_new", true], ["m_stated", false]]);
+});
+
+test("the cap ranks a safety method like any other: the flag exempts from disuse, not from the size of the library", () => {
+  const methods = [
+    method({ id: "m_safety", status: "approved", learning: usedLast(0, null), provenance: { origin: "inferred", safetyRelated: true } }),
+    method({ id: "m_a", status: "approved", learning: usedLast(5, 1) }),
+    method({ id: "m_b", status: "approved", learning: usedLast(6, 1) }),
+  ];
+  assert.deepEqual(libraryEvictions(methods, { cap: 1 }).map((entry) => entry.id), ["m_safety", "m_a"]);
+});
+
+/* ------------------------------------------- a merge nobody has proven expires */
+
+/** A method a consolidation pass wrote by merging others. */
+const merged = (/** @type {any} */ options = {}) => method({ status: "approved", provenance: { origin: "inferred", consolidatedBy: "consolidate:job_1" }, ...options });
+
+test("an unproven merge is one a pass built and the harm test has not cleared", () => {
+  assert.equal(isUnprovenMerge(merged()), true);
+  assert.equal(isUnprovenMerge(method({ status: "approved", provenance: { origin: "inferred", runId: "run_1", consolidatedBy: "consolidate:job_1" } })), false, "a taught method a pass only amended is not a merge");
+  assert.equal(isUnprovenMerge(method({ status: "approved" })), false);
+  assert.equal(isUnprovenMerge(merged({ learning: runs("aaaa") })), false, "four runs that opened it and held up clear it");
+  assert.equal(isUnprovenMerge(merged({ status: "candidate", learning: runs("aaaa") })), true, "one that is not in force is not cleared");
+  assert.equal(isUnprovenMerge(merged({ digest: DIGEST_B, learning: runs("aaaa", DIGEST_A) })), true, "another body's runs prove nothing about this one");
+});
+
+test("an unproven merge that its runs never opened expires, by carried runs or by age, and says so", () => {
+  const since = daysAgo(3);
+  const carried = merged({ learning: carriedRecord(10) });
+  const byCarried = retirementProposal({ ...carried, since }, { nowMs: NOW });
+  assert.deepEqual([byCarried.propose, byCarried.immediate, byCarried.code, byCarried.runs], [true, true, "unproven_merge_expired", 10]);
+  assert.match(byCarried.reason, /carried in 10 runs and never opened/);
+  assert.notEqual(retirementProposal({ ...merged({ learning: carriedRecord(9) }), since }, { nowMs: NOW }).code, "unproven_merge_expired", "one load short of the limit");
+
+  const old = { ...merged(), since: daysAgo(14) };
+  const byAge = retirementProposal(old, { nowMs: NOW });
+  assert.deepEqual([byAge.propose, byAge.immediate, byAge.code], [true, true, "unproven_merge_expired"]);
+  assert.match(byAge.reason, /14 days old and not used once/);
+  assert.notEqual(retirementProposal({ ...merged(), since: daysAgo(13) }, { nowMs: NOW }).code, "unproven_merge_expired");
+  assert.notEqual(retirementProposal(merged(), { nowMs: NOW }).code, "unproven_merge_expired", "a record that cannot say when it was written has no age to read");
+
+  // Opened once, by anything, it is being used and waits for its test; a taught method is never read by this clause.
+  assert.notEqual(retirementProposal({ ...merged({ learning: carriedRecord(40, { read: 1 }) }), since: daysAgo(40) }, { nowMs: NOW }).code, "unproven_merge_expired");
+  assert.notEqual(retirementProposal({ ...method({ status: "approved", learning: carriedRecord(12) }), since: daysAgo(40) }, { nowMs: NOW }).code, "unproven_merge_expired");
+  // The limits are the deployment's to move.
+  assert.equal(retirementProposal({ ...merged({ learning: carriedRecord(3) }), since }, { nowMs: NOW, unprovenMergeMinCarried: 3 }).code, "unproven_merge_expired");
+  assert.notEqual(retirementProposal({ ...merged({ learning: carriedRecord(30) }), since }, { nowMs: NOW, unprovenMergeMinCarried: 0 }).code, "unproven_merge_expired");
+});
+
+/* ------------------------------------------ what a group stamp and a level are */
+
+test("a group stamp is written once per group and version, and a level only when it changes", () => {
+  const learning = emptyLearning(DIGEST_A);
+  const stamped = foldDecided(learning, { key: "k1", at: "2026-10-23T00:00:00.000Z", version: 2 });
+  assert.deepEqual(stamped.decided, { key: "k1", at: "2026-10-23T00:00:00.000Z", version: 2 });
+  assert.equal(foldDecided(stamped, { key: "k1", at: "2026-10-24T00:00:00.000Z", version: 2 }), stamped, "the same group at the same version is not written again");
+  assert.equal(foldDecided(stamped, { key: "k2", at: "2026-10-24T00:00:00.000Z", version: 2 }).decided?.key, "k2");
+  assert.equal(foldDecided(stamped, { key: "k1", at: "2026-10-24T00:00:00.000Z", version: 3 }).decided?.version, 3, "a new decide version reads the group again");
+  assert.equal(foldDecided(learning, { key: "", at: "x" }), learning);
+  assert.equal(resetLearningForDigest(stamped, DIGEST_B).decided, undefined, "an amended body is a new question");
+
+  assert.equal(foldLevel(learning, 0), learning);
+  assert.equal(foldLevel(learning, 2).level, 2);
+  assert.equal(foldLevel(learning, -1), learning, "a level is never negative");
+  assert.equal(foldLevel(undefined, 1).level, 1);
+});
+
+/* ------------------------------------------------ what a rewrite must keep */
+
+test("a rewrite keeps every check and every quotation the method's own body carries", () => {
+  const body = ["## Purpose", "Keep the span: “the 12 mm cut-off was chosen by the researcher”.", "", "## Verification", "- The quote still matches.", "", "## Constraints", "- Never widen.", ""].join("\n");
+  const provenance = { evidence: [{ runId: "r1", seqRange: [1, 2], quote: "the 12 mm cut-off was chosen by the researcher" }, "a quote the body does not carry at all"] };
+  assert.deepEqual(storedEvidenceQuotes(provenance), ["the 12 mm cut-off was chosen by the researcher", "a quote the body does not carry at all"]);
+  assert.deepEqual(storedEvidenceQuotes({ evidence: ["short", { quote: "x".repeat(700) }, 5, null] }), [], "too short, too long and not text are not quotations");
+
+  assert.deepEqual(bodyPreservation({ body, provenance }, body), { ok: true, dropped: [], quotesDropped: [] });
+  const rephrased = body.replace("the 12 mm cut-off was chosen by the researcher", "a 12 mm threshold the researcher picked");
+  const lost = bodyPreservation({ body, provenance }, rephrased);
+  assert.equal(lost.ok, false);
+  assert.deepEqual(lost.quotesDropped, ["the 12 mm cut-off was chosen by the researcher"], "the quotation the body carried is gone; the one it never carried is held by the record, not the body");
+  const shrunk = bodyPreservation({ body, provenance }, body.replace("- Never widen.\n", ""));
+  assert.deepEqual([shrunk.ok, shrunk.dropped], [false, ["Never widen."]]);
+  assert.deepEqual(bodyPreservation({ body }, body.replace("Keep the span", "Keep the exact span")), { ok: true, dropped: [], quotesDropped: [] }, "a method that stores no quotation is held to its checks alone");
 });
 
 /* ------------------------------------------------- carried and never opened */

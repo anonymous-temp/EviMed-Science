@@ -94,7 +94,7 @@ test("launches and runs count what they carried, and the families expose all of 
   counters.observeRetirement("never_opened");
   counters.observeRetirement("never_opened");
   counters.observeRetirement("harm");
-  counters.observeRetirement("superseded");
+  counters.observeRetirement("a branch nobody named");
   const counts = await learningLedgerCounts(ledger());
   const families = learningMetricFamilies(true, counts, counters);
   const byName = new Map(families.map((family) => [family.name, family]));
@@ -105,13 +105,15 @@ test("launches and runs count what they carried, and the families expose all of 
     "open_science_learning_mounted_methods_total", "open_science_learning_mounted_bytes_total",
     "open_science_learning_runs_with_methods_total", "open_science_learning_run_methods_total", "open_science_learning_delivery_lessons_total",
     "open_science_learning_repair_lessons_total", "open_science_learning_method_retirements_total",
+    "open_science_learning_consolidate_noop_total", "open_science_learning_relations_total",
   ]) assert.ok(byName.has(name), `${name} is exposed`);
   assert.deepEqual(byName.get("open_science_learning_repair_lessons_total")?.series, [
     { value: 1, labels: { outcome: "distilled" } }, { value: 2, labels: { outcome: "sampled_out" } },
   ], "the repaired deliveries the loop no longer reads are a number, not a silence");
   assert.deepEqual(byName.get("open_science_learning_method_retirements_total")?.series, [
     { value: 0, labels: { code: "incident" } }, { value: 1, labels: { code: "harm" } }, { value: 0, labels: { code: "scientific_regression" } },
-    { value: 2, labels: { code: "never_opened" } }, { value: 1, labels: { code: "other" } },
+    { value: 2, labels: { code: "never_opened" } }, { value: 0, labels: { code: "superseded" } }, { value: 0, labels: { code: "unproven_merge_expired" } },
+    { value: 0, labels: { code: "library_cap" } }, { value: 1, labels: { code: "other" } },
   ], "a method stopped for never being opened is counted apart from the ones the harm test stopped");
   assert.equal(byName.get("open_science_learning_method_uses")?.series.find((sample) => sample.labels?.kind === "carried")?.value, 41);
   assert.deepEqual(byName.get("open_science_learning_delivery_lessons_total")?.series, [

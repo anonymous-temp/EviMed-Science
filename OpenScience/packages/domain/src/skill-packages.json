@@ -829,11 +829,11 @@
       "id": "capability/method-relations",
       "name": "method-relations",
       "origin": "capability",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:5491e5bf229bf00166985e9e8721f9aa2cf5a0beef223c03d515c7bc3054cdbb",
+      "digest": "sha256:655860abf91e5ea84135a47843d320fda04b34bedb1140c55ebd5539721e5628",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"05e45c58c6bfa7fb61bba5f279b3d09ac1ac28fe8348a29ba815ef0b8842353d"}],
+      "references": [{"path":"capability.yaml","sha256":"a656c27962902f665765f67c53fddf2317644e156904ab737b6b9458a5af2027"}],
       "operations": [
         {
           "name": "method-relations",

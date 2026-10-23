@@ -36,13 +36,13 @@ import {
   MAX_ACTIVE_LEARNED_METHODS,
   MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_STRENGTH_TAU_DAYS,
-  METHOD_CONTRIBUTION_MIN_TRIALS,
-  METHOD_CONTRIBUTION_RETIRE_AT,
   METHOD_HARM_TEST,
   METHOD_SCIENTIFIC_HARM_TEST,
+  METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS,
+  METHOD_UNPROVEN_MERGE_MIN_CARRIED,
   METHOD_UNUSED_RETIRE_LOADS,
 } from './constants.mjs'
-import { isMethodDigest } from './methodSkill.mjs'
+import { isMethodDigest, preservedSectionsIntact } from './methodSkill.mjs'
 import { scientificOutcomes } from './methodFeedback.mjs'
 
 /**
@@ -52,6 +52,14 @@ import { scientificOutcomes } from './methodFeedback.mjs'
  * exists because the paper's builder has no way to say "these two disagree" and
  * so would merge them; `supersedes` exists because a merge has to leave a
  * forwarding address or the sources' history is orphaned.
+ *
+ * Four are symmetric (`shared_part`, `merge`, `abstract_pattern`, `conflicts_with`: each
+ * member records the others). Two have a direction, which the analyser's assignment
+ * names (`WIDER`, `REPLACES`) and which is recorded once, on the member that is the
+ * lesser of the two, pointing at the other: a `subset` relation held by a method names
+ * the wider method it is a part of, and a `supersedes` relation held by a method names
+ * the method that replaced it — its forwarding address, which is what `retirementProposal`
+ * reads.
  */
 export const METHOD_RELATION_TYPES = Object.freeze([
   'shared_part', 'subset', 'merge', 'abstract_pattern', 'conflicts_with', 'supersedes',
@@ -83,10 +91,10 @@ export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
  *  the whole open-domain answer line — can still call the `skill` tool and read
  *  a method, but it produces no mounted digest and no deliverable verdict, so
  *  there is nothing to judge the reading by. It is deliberately kept out of
- *  `methodContribution`, whose denominator is `loaded`: a reading with no
- *  verdict entering a success rate would move the rate without evidence, in
- *  whichever direction the arithmetic happened to fall. What it does support is
- *  the one claim it is: the method was not passed over. */
+ *  every rate whose denominator is `loaded`: a reading with no verdict entering
+ *  a success rate would move the rate without evidence, in whichever direction
+ *  the arithmetic happened to fall. What it does support is the one claim it
+ *  is: the method was not passed over. */
 export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'read', 'carried'])
 
 /**
@@ -113,8 +121,10 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number, carried?: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
- * @property {number} level
+ * @property {number} level  derived from `depends_on` by `computeMethodLevels` and written back by the consolidation pass (`foldLevel`)
  * @property {string|null} [lastReadAt]  when a run last read the body with nothing to attribute it to
+ * @property {{key: string, at: string, version?: number}} [decided]  the group of methods this one was last decided in
+ *   (`foldDecided`): the sha256 of the group's sorted `id@digest`, so an unchanged group is not read again
  */
 
 /**
@@ -124,6 +134,9 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {string[]} [feedbackEventIds]
  * @property {boolean} [safetyRelated]
  * @property {boolean} [incident]   a confirmed incident this method contributed to
+ * @property {string} [consolidatedBy]   `consolidate:<job id>`: a consolidation pass wrote or rewrote this body (a merge when `runId` is absent too)
+ * @property {unknown} [evidence]   the quotations the lesson rests on (`storedEvidenceQuotes`)
+ * @property {{methodId: string, digest?: string}[]} [mergedFrom]   the methods a merge folded together
  */
 
 /**
@@ -137,6 +150,7 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {MethodProvenance} provenance
  * @property {any} [scientific]  what became of the results produced under each revision (`methodFeedback.mjs`)
  * @property {readonly string[]} [revisions]  the content digests of every body the method has held, newest first
+ * @property {string|null} [since]  when the body it holds now was written, for the rules that read an age
  */
 
 /* ------------------------------------------------------------ the learning payload */
@@ -280,6 +294,35 @@ export function restartCarried(learning) {
   const current = learning ?? emptyLearning('')
   if (!Number(current.counts?.carried ?? 0)) return current
   return { ...current, counts: { ...current.counts, carried: 0 } }
+}
+
+/**
+ * Remember the group a method was last decided in, so the consolidation pass reads an unchanged group once.
+ *
+ * `key` is the group's (the sha256 of its sorted `id@digest`, `methodConsolidation.mjs`); a method is skipped when every
+ * member of its group holds the group's current key at the current `version`, and a body that changes resets the
+ * learning payload (`resetLearningForDigest`) and with it this stamp, which is the same event that changes the key.
+ * @param {MethodLearning | undefined} learning
+ * @param {{key: string, at: string, version?: number}} decided
+ * @returns {MethodLearning}
+ */
+export function foldDecided(learning, decided) {
+  const current = learning ?? emptyLearning('')
+  if (!decided?.key || !decided?.at) return current
+  const same = current.decided?.key === decided.key && current.decided?.version === decided.version
+  return same ? current : { ...current, decided: { key: String(decided.key), at: String(decided.at), ...(decided.version != null ? { version: Number(decided.version) } : {}) } }
+}
+
+/**
+ * The method's level in the library, as `computeMethodLevels` derives it, stored on the record.
+ * @param {MethodLearning | undefined} learning
+ * @param {number} level
+ * @returns {MethodLearning}
+ */
+export function foldLevel(learning, level) {
+  const current = learning ?? emptyLearning('')
+  const next = Number.isSafeInteger(level) && level >= 0 ? level : 0
+  return current.level === next ? current : { ...current, level: next }
 }
 
 /**
@@ -444,73 +487,62 @@ export function scientificRegression({ digest, revisions = [], scientific, optio
 }
 
 /**
- * How much a method is worth having, from outcomes alone.
- *
- * `(successes - failures) / trials`, where a trial is a trajectory the method
- * was mounted for and a failure is a trajectory whose deliverable the gate
- * refused. Ranges from -1 (never helped) through 0 (as often as not) to 1.
- *
- * Deliberately not `methodStrength`. Strength answers "is this still being
- * used", which is a recency question, and the two disagree exactly where it
- * matters: a method mounted into every run of the last fortnight whose packages
- * keep getting refused has high strength and negative contribution, and it is
- * the single worst thing a library can contain — it is not idle, it is active
- * and wrong. A retirement rule reading strength alone can never propose it.
- *
- * Null rather than 0 when the method has never been mounted: "no evidence" and
- * "evidence that it is neutral" are different, and a rule that cannot tell them
- * apart retires everything new.
- *
- * `undefined` is admitted for the same reason the null is returned: a method
- * with no learning record at all is the commonest input here, not an error.
- *
- * @param {MethodLearning | undefined} learning
- * @returns {number | null}
+ * The newest evidence of a method being used, in milliseconds, or the time it was written when there is none.
+ * @param {MethodRecord} method @returns {number}
  */
-export function methodContribution(learning) {
-  const trials = Number(learning?.counts?.loaded ?? 0)
-  if (!Number.isFinite(trials) || trials <= 0) return null
-  const successes = Number(learning?.counts?.succeeded ?? 0)
-  const failures = trials - successes
-  return (successes - failures) / trials
+function lastActivityMs(method) {
+  let latest = Number.NaN
+  for (const observation of method?.learning?.observations ?? []) {
+    const at = Date.parse(observation?.at ?? '')
+    if (!Number.isNaN(at) && !(at <= latest)) latest = at
+  }
+  const read = Date.parse(method?.learning?.lastReadAt ?? '')
+  if (!Number.isNaN(read) && !(read <= latest)) latest = read
+  if (!Number.isNaN(latest)) return latest
+  const since = Date.parse(method?.since ?? '')
+  return Number.isNaN(since) ? 0 : since
 }
 
 /**
- * Which effective methods a library over its cap should give up first.
+ * Which effective methods a library over its cap should give up, the least-used first.
  *
- * Not a deletion and not an eviction: a proposal, lowest contribution first,
- * exactly as many as it takes to get back under the cap. A method that has
- * never been mounted is not a candidate — it has no record to be judged on, and
- * a cap that evicts the untried would guarantee the library only ever holds
- * what it already had.
+ * The consolidation pass stops these (a status with the reason written on it and one click to restore, never a deletion):
+ * as many as it takes to get back under the cap. "Least used" is what the record can say without a verdict: the fewest
+ * opens (`invoked` plus `read`), then the longest since anything touched the method (an observation, a reading, or when it
+ * was written for one nobody has used), then the id so the order is the same on every read. A method the researcher stated
+ * is given up last, and only ever as a proposal (`immediate: false`): an inferred one is the system's guess, a stated one
+ * is an instruction. A method written recently is protected by that order and not by an exemption, so a cap that
+ * evicts the untried would not guarantee the library only ever holds what it already had.
  *
- * A safety-related method is judged like any other here. It used to be left
- * out, and the flag is one the distillation run raises about its own output
- * (`risk.touchesSafety`), so a single self-declared word exempted a method from
- * every outcome rule the library has (audit 2026-09-26, L-G2). The build spec
- * exempts safety methods from one clause only — being proposed for disuse
- * (§8.7) — and this is a clause about outcomes: its ranking is contribution,
- * which an unused method does not have.
+ * This used to rank by contribution (successes against failures of a method's deliveries) and return a proposal nothing
+ * read; the contribution clause went with the paired evaluation's contrast, which the owner declined (2026-10-23).
+ * A safety-related method is ranked like any other: the flag is one the distillation run raises about its own output
+ * (audit 2026-09-26, L-G2), and the build spec exempts a safety method from one clause only — disuse, which this is not
+ * the outcome of: the cap is about the size of the library.
  *
  * @param {readonly MethodRecord[]} methods  the effective ones
  * @param {{cap?: number}} [options]
- * @returns {{id: string, contribution: number, reason: string}[]}
+ * @returns {{id: string, immediate: boolean, opens: number, reason: string}[]}
  */
 export function libraryEvictions(methods, options = {}) {
   const cap = options.cap ?? MAX_ACTIVE_LEARNED_METHODS
   const active = (methods ?? []).filter((method) => method?.status === 'approved')
   const excess = active.length - cap
   if (excess <= 0) return []
-  const judged = active
-    .map((method) => ({ id: method.id, contribution: methodContribution(method.learning) }))
-    .filter((entry) => entry.contribution !== null)
-    .sort((left, right) => Number(left.contribution) - Number(right.contribution)
+  const opens = (/** @type {MethodRecord} */ method) => Number(method.learning?.counts?.invoked ?? 0) + Number(method.learning?.counts?.read ?? 0)
+  const stated = (/** @type {MethodRecord} */ method) => (method.provenance?.origin === 'explicit' ? 1 : 0)
+  return [...active]
+    .sort((left, right) => stated(left) - stated(right)
+      || opens(left) - opens(right)
+      || lastActivityMs(left) - lastActivityMs(right)
       || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-  return judged.slice(0, excess).map((entry) => ({
-    id: entry.id,
-    contribution: Number(entry.contribution),
-    reason: `the library holds ${active.length} effective methods against a cap of ${cap}, and this one contributes ${Number(entry.contribution).toFixed(2)}`,
-  }))
+    .slice(0, excess)
+    .map((method) => ({
+      id: method.id,
+      immediate: stated(method) === 0,
+      opens: opens(method),
+      reason: `the library holds ${active.length} effective methods against a cap of ${cap}, and this one is among the least used (${opens(method)} openings)`,
+    }))
 }
 
 /**
@@ -603,10 +635,25 @@ export function promotionVerdict(method, options = {}) {
  * @property {number} [tauDays]
  * @property {number} [minStrength]
  * @property {(id: string) => boolean} [isApproved]  whether a superseding method is effective
- * @property {number} [minTrials]   trajectories before contribution may retire it
- * @property {number} [retireAt]    the contribution at or below which it is proposed
  * @property {number} [unusedAfterLoads]   runs that may carry the card without one opening the method before it is stopped; 0 never (`METHOD_UNUSED_RETIRE_LOADS`)
+ * @property {number} [unprovenMergeMinCarried]  the same, for a merge nobody has proven (`METHOD_UNPROVEN_MERGE_MIN_CARRIED`)
+ * @property {number} [unprovenMergeMaxAgeDays]  how old a merge may be with no use at all (`METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS`)
  */
+
+/**
+ * A method a consolidation pass built by merging others (rather than one a run taught it, or one a pass only amended)
+ * that has not cleared the harm test on runs that opened it. The originals it replaces stay in force beside it until it
+ * has (`mergeCleared`), so building on it again only adds another version of the same lesson: between 2026-10-07 and
+ * 10-12 the hourly pass built 27 of them out of three taught methods.
+ * @param {MethodRecord} method @returns {boolean}
+ */
+export function isUnprovenMerge(method) {
+  const provenance = /** @type {any} */ (method?.provenance ?? {})
+  if (!String(provenance.consolidatedBy ?? '').startsWith('consolidate:') || provenance.runId) return false
+  const cleared = method?.status === 'approved' && Boolean(method.learning) && method.learning.digest === method.digest
+    && methodHarmTest(method.learning).state === 'clear'
+  return !cleared
+}
 
 /**
  * Whether to propose retiring a method.
@@ -617,19 +664,23 @@ export function promotionVerdict(method, options = {}) {
  *    disuse. Rarely needed is what a safety check looks like when it is working.
  *    That is the whole exemption (build spec §8.7: 「标了安全相关 — 永不因闲置
  *    提议」). It used to be checked first and returned early, which also
- *    exempted the method from the harm test and from
- *    contribution — and `safetyRelated` is raised by the distillation run about
+ *    exempted the method from the harm test and from the other
+ *    outcome clauses — and `safetyRelated` is raised by the distillation run about
  *    its own output, so one self-declared word bought immunity from every
  *    outcome the library can observe (audit 2026-09-26, L-G2). Outcome clauses
  *    now read a safety method like any other; only the idle clause skips it.
  *  - A method implicated in a confirmed incident is retired immediately and
  *    does not wait for the nightly job or for a replacement.
  *
- * Everything else is a *proposal*: a notice with a one-click rollback, never a
- * silent deletion, and never a deletion at all — retirement is a status.
+ * Retirement is a status, never a deletion, and one click restores it. A method the
+ * system inferred is stopped at once by every branch that has evidence; one the
+ * researcher stated is only proposed (`immediate: false`), and the proposal rides
+ * on the pass's result. There is no other kind of proposal: a clause that was
+ * computed every hour and acted on by nobody (contribution, over a contrast the
+ * owner declined, 2026-10-23) was deleted rather than kept to look like a rule.
  * @param {MethodRecord} method
  * @param {RetirementOptions} options
- * @returns {{propose: boolean, immediate: boolean, code: string, reason: string, strength: number, contribution?: number, runs?: number, rejected?: number, replacement?: string,
+ * @returns {{propose: boolean, immediate: boolean, code: string, reason: string, strength: number, runs?: number, rejected?: number, replacement?: string,
  *   action?: 'rollback' | 'retire', rollbackToDigest?: string | null, evidence?: string[]}}
  *   `code` names the branch that decided, for a sentence in the reader's language;
  *   `reason` is the log's.
@@ -679,16 +730,34 @@ export function retirementProposal(method, options) {
       strength,
     }
   }
+  const unusedAfter = options.unusedAfterLoads ?? METHOD_UNUSED_RETIRE_LOADS
+  const carriedRuns = Number(learning.counts?.carried ?? 0)
+  const opens = Number(learning.counts?.invoked ?? 0) + Number(learning.counts?.read ?? 0)
+  // A merge nobody has proven expires. It was held back until the harm test cleared it, and the test needs runs that opened
+  // it, which a library nobody opens never supplies: one stuck merge froze relations, merges and dedup for its whole
+  // group for good. It is proven by being opened, so it goes when the runs that carried it never opened it, or when it
+  // has stood for two weeks with no use of any kind. The sources it was built from are still there, so nothing is lost.
+  if (isUnprovenMerge(method) && opens === 0 && !method?.provenance?.safetyRelated) {
+    const minCarried = options.unprovenMergeMinCarried ?? METHOD_UNPROVEN_MERGE_MIN_CARRIED
+    const maxAgeDays = options.unprovenMergeMaxAgeDays ?? METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS
+    const sinceMs = Date.parse(method?.since ?? '')
+    const ageDays = Number.isNaN(sinceMs) ? null : Math.max(0, (options.nowMs - sinceMs) / 86_400_000)
+    if (minCarried > 0 && carriedRuns >= minCarried && learning.digest === method?.digest) {
+      return { propose: true, immediate: true, code: 'unproven_merge_expired', runs: carriedRuns, strength,
+        reason: `a merge the consolidation pass built, carried in ${carriedRuns} runs and never opened (limit ${minCarried})` }
+    }
+    if (maxAgeDays > 0 && ageDays !== null && ageDays >= maxAgeDays) {
+      return { propose: true, immediate: true, code: 'unproven_merge_expired', strength,
+        reason: `a merge the consolidation pass built, ${ageDays.toFixed(0)} days old and not used once (limit ${maxAgeDays} days)` }
+    }
+  }
   // Carried again and again, never opened (owner ruling of 2026-10-12 after the live audit: eight cards in a run, one run in fifty
-  // opening any). The harm test above reads only runs that opened the method and the outcome clause below only deliveries, so
-  // a method the work never reaches for is invisible to both and rides in every prompt for good. It is stopped on the one fact
+  // opening any). The harm test above reads only runs that opened the method, so a method the work never reaches for is invisible to
+  // it and rides in every prompt for good. It is stopped on the one fact
   // that says so: `carried` runs the model answered in, and not one open (`invoked` or `read`). The reason is written on the
   // method and a restore starts the count again, so a method that was merely waiting for its kind of question costs the
   // researcher one click. A method the researcher stated is only proposed, a safety method is exempt as it is from disuse, and
   // counts about another body of the method say nothing about this one.
-  const unusedAfter = options.unusedAfterLoads ?? METHOD_UNUSED_RETIRE_LOADS
-  const carriedRuns = Number(learning.counts?.carried ?? 0)
-  const opens = Number(learning.counts?.invoked ?? 0) + Number(learning.counts?.read ?? 0)
   if (unusedAfter > 0 && carriedRuns >= unusedAfter && opens === 0 && learning.digest === method?.digest && !method?.provenance?.safetyRelated) {
     return {
       propose: true,
@@ -699,44 +768,26 @@ export function retirementProposal(method, options) {
       strength,
     }
   }
-  // Outcome before recency. A method that is mounted constantly and whose
-  // packages keep being refused has *high* strength, so every clause below this
-  // one reads it as healthy and lets it stay — which is how a library ends up
-  // actively injecting the thing that is hurting it while every metric on the
-  // dashboard looks busy and fine. This is the only clause that can propose a
-  // method that is still in daily use, and it needs no replacement to do it:
-  // removing something that makes packages worse removes nothing.
-  const contribution = methodContribution(learning)
-  const minTrials = options.minTrials ?? METHOD_CONTRIBUTION_MIN_TRIALS
-  const retireAt = options.retireAt ?? METHOD_CONTRIBUTION_RETIRE_AT
-  if (contribution !== null && Number(learning.counts?.loaded ?? 0) >= minTrials && contribution <= retireAt) {
-    return {
-      propose: true,
-      immediate: false,
-      code: 'contribution',
-      runs: Number(learning.counts.loaded),
-      reason: `${learning.counts.loaded} trajectories at a contribution of ${contribution.toFixed(2)}, at or below ${retireAt}`,
-      strength,
-      contribution,
-    }
-  }
+  // A `supersedes` relation held by this method names the method that replaced it (`METHOD_RELATION_TYPES`).
   const superseded = (learning.relations ?? []).filter((relation) => relation.type === 'supersedes')
   const replacement = superseded.find((relation) => !options.isApproved || options.isApproved(relation.target))
   const minStrength = options.minStrength ?? 0.5
+  // Outcomes first, then recency: a method that is mounted constantly and whose deliveries keep being refused has a high
+  // strength, and the harm test above is what reads it; this clause only ever stops something that is also idle.
   if (strength >= minStrength) {
     return { propose: false, immediate: false, code: 'in_use', reason: `still in use (strength ${strength.toFixed(2)})`, strength }
   }
   // Read lately, with nothing to show for it.
   //
-  // Every clause above this one reads outcomes, and a run that delegates
+  // The clauses above this one read outcomes, and a run that delegates
   // nothing produces none — so a method used exclusively by the non-delegating
   // answer line arrives here with a strength of exactly 0 and is
   // indistinguishable from one nobody has opened in a year. That is the whole
   // reason `read` is counted separately, and this is the only place it is
   // allowed to change an answer.
   //
-  // Deliberately below the contribution clause, not above it: a method whose
-  // packages keep being refused must still be proposable no matter how often it
+  // Deliberately below the harm test, not above it: a method whose
+  // packages keep being refused must still be stopped no matter how often it
   // is read. Being read is evidence of not being idle, never evidence of being
   // good.
   //
@@ -763,7 +814,60 @@ export function retirementProposal(method, options) {
   if (method?.provenance?.safetyRelated) {
     return { propose: false, immediate: false, code: 'safety_related', reason: 'safety-related: rarely invoked is what a working safety check looks like, so it is never proposed for disuse', strength }
   }
-  return { propose: true, immediate: false, code: 'superseded', replacement: replacement.target, reason: `unused (strength ${strength.toFixed(2)}) and superseded by ${replacement.target}`, strength }
+  // Acted on, not only proposed (it was unreachable while no pass recorded `supersedes`, and a proposal nobody read after):
+  // idle, replaced by a method that is in force, and the researcher can restore it in one click. One the researcher
+  // stated is still only proposed.
+  return { propose: true, immediate: method?.provenance?.origin !== 'explicit', code: 'superseded', replacement: replacement.target,
+    reason: `unused (strength ${strength.toFixed(2)}) and superseded by ${replacement.target}`, strength }
+}
+
+/* ------------------------------------------------------ what a rewrite must keep */
+
+/** How many stored evidence quotes one method is read for, and how long a quote may be: the bound on a check, not a policy. */
+const STORED_QUOTES_LIMIT = 20
+const STORED_QUOTE_LENGTH = { min: 8, max: 600 }
+
+/** @param {unknown} text @returns {string} */
+const squashed = (text) => String(text ?? '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The quotations a method's record stores as the evidence it rests on: `provenance.evidence`, each entry a string or an
+ * object with a `quote`, the run's verbatim words that the distillation run was required to quote and the contract
+ * checked against the excerpt. Bounded and cleaned, and empty for a record that stores none (the ones written before
+ * the distillation kept them).
+ * @param {{evidence?: unknown} | null | undefined} provenance
+ * @returns {string[]}
+ */
+export function storedEvidenceQuotes(provenance) {
+  const entries = Array.isArray(provenance?.evidence) ? provenance.evidence : []
+  /** @type {string[]} */
+  const quotes = []
+  for (const entry of entries) {
+    const text = squashed(typeof entry === 'string' ? entry : /** @type {any} */ (entry)?.quote)
+    if (text.length < STORED_QUOTE_LENGTH.min || text.length > STORED_QUOTE_LENGTH.max || quotes.includes(text)) continue
+    quotes.push(text)
+    if (quotes.length >= STORED_QUOTES_LIMIT) break
+  }
+  return quotes
+}
+
+/**
+ * Whether a rewrite of a method (a merge's canonical body, or an amendment) still carries what the method stored: every
+ * `## Verification` and `## Constraints` item (`preservedSectionsIntact`), and every evidence quotation the method's own
+ * body carries. A stored quotation that sits in the body is part of what the method says, and a rewrite that rephrases it
+ * has moved the method away from the words it was learnt from; one the body does not carry is held by the record
+ * (`provenance.evidence`, which a merge passes on to its canonical method), so the body is not asked to repeat it.
+ * Code, no model: the whole check is containment of normalised text, decided before the rewrite is written.
+ * @param {{body?: string, provenance?: {evidence?: unknown}}} source  the method before the rewrite
+ * @param {string} afterBody  the rewritten body
+ * @returns {{ok: boolean, dropped: string[], quotesDropped: string[]}}
+ */
+export function bodyPreservation(source, afterBody) {
+  const items = preservedSectionsIntact(String(source?.body ?? ''), String(afterBody ?? ''))
+  const before = squashed(source?.body)
+  const after = squashed(afterBody)
+  const quotesDropped = storedEvidenceQuotes(source?.provenance).filter((quote) => before.includes(quote) && !after.includes(quote))
+  return { ok: items.ok && quotesDropped.length === 0, dropped: items.dropped, quotesDropped }
 }
 
 /* -------------------------------------------------------------- the graph */

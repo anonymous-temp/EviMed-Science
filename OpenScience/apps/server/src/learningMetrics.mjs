@@ -27,6 +27,8 @@
  * @module learningMetrics
  */
 
+import { METHOD_RELATION_TYPES } from "@evimed/domain";
+
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
@@ -36,7 +38,14 @@ const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", 
 const RESULT_OPERATIONS = Object.freeze(["create", "amend", "merge", "no_change", "handbook"]);
 const USE_KINDS = Object.freeze(["loaded", "invoked", "succeeded", "read", "carried"]);
 /** The branches of `retirementProposal` that stop a method on their own, as the counter of stops labels them. */
-const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened"]);
+const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regression", "never_opened", "superseded", "unproven_merge_expired", "library_cap"]);
+/**
+ * Why a stage of the consolidation pass did nothing (`MethodConsolidation`): the pass used to succeed with `groups: 1, builds: 0, relations: 0`
+ * for eleven days and say nothing else. `skipped_unchanged` is a group read before and not changed since; `blocked_unproven` a group whose build
+ * waits for a merge nobody has proven; `decide_failed` a DECIDE that produced no answer; `decided_nothing` one that found nothing related;
+ * `merge_refused` a build that dropped something a source stored; `build_limit` a build left for the next pass; the rest are the library's size.
+ */
+const CONSOLIDATE_NOOP_REASONS = Object.freeze(["no_methods", "too_few_methods", "no_groups", "skipped_unchanged", "blocked_unproven", "decide_failed", "decided_nothing", "merge_refused", "build_limit"]);
 
 /** @param {unknown} value @param {readonly string[]} allowed @returns {string} */
 const closed = (value, allowed) => (allowed.includes(String(value ?? "")) ? String(value) : "other");
@@ -60,6 +69,26 @@ export class LearningMetrics {
     this.repairs = { distilled: 0, sampledOut: 0 };
     /** @type {Record<string, number>} */
     this.retirements = Object.fromEntries([...RETIREMENT_CODES, "other"].map((code) => [code, 0]));
+    /** @type {Record<string, number>} */
+    this.consolidateNoop = Object.fromEntries([...CONSOLIDATE_NOOP_REASONS, "other"].map((reason) => [reason, 0]));
+    /** @type {Record<string, number>} */
+    this.relations = Object.fromEntries([...METHOD_RELATION_TYPES, "other"].map((type) => [type, 0]));
+  }
+
+  /** A stage of the consolidation pass that did nothing, and why (`CONSOLIDATE_NOOP_REASONS`).
+   *  @param {string} reason @param {number} [times] */
+  observeConsolidateNoop(reason, times = 1) {
+    const label = closed(reason, CONSOLIDATE_NOOP_REASONS);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.consolidateNoop[label] = (this.consolidateNoop[label] ?? 0) + n;
+  }
+
+  /** Relations the consolidation pass newly recorded, by type (a relation a method already held is not counted again).
+   *  @param {string} type @param {number} [times] */
+  observeRelation(type, times = 1) {
+    const label = closed(type, METHOD_RELATION_TYPES);
+    const n = Math.trunc(count(times));
+    if (n > 0) this.relations[label] = (this.relations[label] ?? 0) + n;
   }
 
   /** One repaired delivery that would have queued a lesson: whether the repair sample took it (`OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE`).
@@ -128,8 +157,14 @@ export class LearningMetrics {
           { value: this.repairs.sampledOut, labels: { outcome: "sampled_out" } },
         ] },
       { name: "open_science_learning_method_retirements_total", type: "counter",
-        help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened.",
+        help: "Methods the consolidation pass stopped on its own, by the branch that decided; never_opened is the card that rode in OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS answered runs and was never opened, unproven_merge_expired a merge nobody opened, library_cap the least used of a library over its cap.",
         series: Object.entries(this.retirements).map(([code, value]) => ({ value, labels: { code } })) },
+      { name: "open_science_learning_consolidate_noop_total", type: "counter",
+        help: "Stages of the consolidation pass that did nothing, by reason: skipped_unchanged, blocked_unproven, decide_failed, decided_nothing, merge_refused, build_limit, no_groups, too_few_methods, no_methods.",
+        series: Object.entries(this.consolidateNoop).map(([reason, value]) => ({ value, labels: { reason } })) },
+      { name: "open_science_learning_relations_total", type: "counter",
+        help: "Relations between methods the consolidation pass newly recorded, by type (shared_part, subset, merge, abstract_pattern, conflicts_with, supersedes).",
+        series: Object.entries(this.relations).map(([type, value]) => ({ value, labels: { type } })) },
       { name: "open_science_learning_run_methods_total", help: "Learned methods finished runs carried, and the ones they used.", type: "counter", series: [
         { value: this.runMethodsLoaded, labels: { kind: "loaded" } },
         { value: this.runMethodsInvoked, labels: { kind: "invoked" } },

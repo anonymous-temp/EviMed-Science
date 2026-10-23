@@ -45,27 +45,29 @@ export const MEMORY_PROMOTION_MIN_RUNS = 2
 export const METHOD_INDUCTION_MIN_TRAJECTORIES = 3
 
 /**
- * How many trajectories a method needs before its contribution may retire it.
- *
- * The published recipe uses 100 trials before a skill is eligible for
- * outcome-driven retirement. Ours is lower on purpose: 100 more trajectories of
- * a method that is actively hurting is a hundred packages paying for the
- * delay. Since 2026-09-20 a method takes effect the night it is learned, and
- * early harm is `METHOD_HARM_TEST`'s to catch within its first forty runs;
- * this clause is the slow one, for a revision that went bad after that test had
- * read it as clear.
+ * The embedding shortlist the consolidation pass groups from (`methodSimilarity.pairs`): each method's nearest
+ * neighbours by cosine of the method text's embedding, at most `METHOD_SIMILARITY_TOP_K` per method, none below
+ * `METHOD_SIMILARITY_PAIR_FLOOR`. SkillPyramid's SCREEN retrieves by name, description and embedding similarity; ours
+ * had only shared words. Provisional: 0.80 sits below `DEDUP_SEMANTIC_COSINE` (0.95), which is for "these are the
+ * same text", because a shortlist only decides what DECIDE reads, and DECIDE is the one that says whether two methods
+ * are related. Chosen before there is a distribution of scores over a real library, to be read from the job result's
+ * `shortlist` figures and moved once there is one; nothing in the pass depends on the exact number.
  */
-export const METHOD_CONTRIBUTION_MIN_TRIALS = 20
+export const METHOD_SIMILARITY_PAIR_FLOOR = 0.8
+export const METHOD_SIMILARITY_TOP_K = 20
 
 /**
- * The contribution below which a method is proposed for retirement.
- *
- * `(successes - failures) / trials`, so 0 is "as often as not" and -0.10 is the
- * published threshold, kept as published: it is the one number in the recipe
- * with a measured result behind it, and moving it without our own distribution
- * would be inventing a number that looks like evidence.
+ * When a merge the consolidation pass built, and nobody has used, goes away (`retirementProposal`, code
+ * `unproven_merge_expired`). It used to be held back until the harm test cleared it, which needs four runs that opened
+ * it; with a library nobody opens, that never happened and the guard froze the whole group (production, 2026-10-12 to
+ * 10-23: 705 hourly passes, no relation, no build). A merge has to be opened to be proven, so one that its runs never
+ * opened is stopped: carried in `METHOD_UNPROVEN_MERGE_MIN_CARRIED` answered runs without one opening it, or
+ * `METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS` days old with no use at all. Stopping is a status: one click restores it.
+ * Provisional like the numbers above; half of `METHOD_UNUSED_RETIRE_LOADS` because a merge duplicates what its sources
+ * already say, so nothing is lost while it waits to be opened.
  */
-export const METHOD_CONTRIBUTION_RETIRE_AT = -0.1
+export const METHOD_UNPROVEN_MERGE_MIN_CARRIED = 10
+export const METHOD_UNPROVEN_MERGE_MAX_AGE_DAYS = 14
 
 /**
  * The detector for a learned method that makes results worse: a capped
@@ -96,8 +98,8 @@ export const METHOD_HARM_TEST = Object.freeze({ baseRate: 0.1, harmRate: 0.4, al
  * front of it and opens the file only when it applies. A method that has been weighed twenty times and never opened is
  * not being chosen by the work this researcher does; it costs prompt room in every run (the audit of 2026-10-12 found a
  * run carrying 8.6 cards on average, 22 of the 35 on file rewordings of two lessons) and earns nothing, and the harm test
- * cannot retire it because it reads only runs that opened the method. Twenty is the same count `METHOD_CONTRIBUTION_MIN_TRIALS`
- * asks before a method's outcomes may stop it. A load counts only when the model had a turn to weigh the card in
+ * cannot retire it because it reads only runs that opened the method. Twenty is the count the published recipe asks before a
+ * skill's outcomes may stop it. A load counts only when the model had a turn to weigh the card in
  * (`runMethodObservations`, `answered`). Stopping is a status: the method stays on its page with the reason written on it,
  * and restoring it gives it a fresh count. Zero turns the rule off (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`).
  */
@@ -125,9 +127,9 @@ export const METHOD_SCIENTIFIC_HARM_TEST = Object.freeze({ baseRate: 0.25, harmR
  * The failure this bounds is not cost, it is silence: an unbounded library
  * degrades retrieval and injects the wrong method into runs that would have
  * been fine, and nothing in the run says so. The published cap is 50 and there
- * is no reason ours should differ — what differs is that we evict by proposal
- * rather than by deletion, so passing it costs the researcher a notice, never a
- * capability they were relying on.
+ * is no reason ours should differ. A library over it stops its least-used
+ * methods (`libraryEvictions`) — a status with the reason written on it and
+ * one click to restore, never a deletion; it used to be a proposal nobody read.
  */
 export const MAX_ACTIVE_LEARNED_METHODS = 50
 
