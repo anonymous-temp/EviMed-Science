@@ -16,7 +16,7 @@ import { List } from "@/components/ui/ListRow";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
 import { MemoryControls } from "@/components/memory/MemoryControls";
-import { MEMORY_TIME_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryFrame";
+import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryFrame";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { HandbookDrawer, MethodDrawer } from "@/components/memory/PracticeDrawer";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
@@ -67,9 +67,10 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
  *  - 做法: what the platform learned — for every study, and for one research
  *    tool each — read, stopped, or taken back to the version before. Never
  *    typed in: methods are learned, not written (owner ruling 2026-09-20).
- *  - 地图: the memory map (`/app/memory/map`), a page of its own that wears this page's frame. 「成长」 was the fourth tab until
- *    2026-10-17: the line of how much the capsule held said "grew to 75" over a line that fell to 42; what happened each week is
- *    the map's 「时间」 view now, and `?tab=growth` arrives there.
+ *  - 总览 (`/app/memory/overview`) and 地图 (`/app/memory/map`): pages of their own that wear this page's frame — the capsule as six parts
+ *    and the explorer they drill into. 「成长」 was a tab until 2026-10-17: the line of how much the capsule held said "grew to 75" over a
+ *    line that fell to 42; what the capsule gained is the overview's first card now, what happened each week the map's 「时间」 view, and
+ *    `?tab=growth` arrives at the overview.
  *
  * What the page no longer has, and why: the two stat blocks and 「查看做法」
  * counted the same methods three ways and moved nothing the reader could see;
@@ -97,15 +98,16 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
 export function MemoryHubPage() {
   const [params] = useSearchParams();
   const feature = useMemoryMapFeature();
-  // A plain entry opens the actual visual overview; explicit list, search and record links keep their destination.
+  // A plain entry opens the overview, the capsule as one picture; explicit list, search and record links keep their destination.
   if (params.size === 0) {
     if (feature === "loading") return <RunsSkeleton filter={false} />;
-    if (feature === "on") return <Navigate to={memoryTabAddress("map")} replace />;
+    if (feature === "on") return <Navigate to={MEMORY_OVERVIEW_ADDRESS} replace />;
   }
-  // 「成长」 is the map's time view now: an address that names the old tab goes there (where the deployment draws the map), else to the first list.
-  if (params.get("tab") === "growth") {
+  // 「成长」 is the overview's first card now (and the map's 时间 view behind it): an address that names the old tab goes to the overview
+  // (where the deployment draws it), else to the first list. `?tab=capsules` was `/app/capsules`'s and lands on the overview too.
+  if (params.get("tab") === "growth" || params.get("tab") === "capsules") {
     if (feature === "loading") return <RunsSkeleton filter={false} />;
-    return <Navigate to={feature === "on" ? MEMORY_TIME_ADDRESS : memoryTabAddress("self")} replace />;
+    return <Navigate to={feature === "on" ? MEMORY_OVERVIEW_ADDRESS : memoryTabAddress("self")} replace />;
   }
   return <MemoryHub mapOn={feature === "on"} />;
 }
@@ -259,8 +261,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     : null;
   const setProjectChoice = (id: string | null) => { if (id) setParams((current) => withParam(current, "project", id), { replace: true }); };
   const chooseTab = (next: MemoryPageTab) => {
-    // 地图 is a page of its own that reads as this page's last tab.
-    if (next === "map") { navigate(memoryTabAddress("map")); return; }
+    // 总览 and 地图 are pages of their own that read as this page's first tabs.
+    if (next === "map" || next === "overview") { navigate(memoryTabAddress(next)); return; }
     setLanded(true);
     setParams((current) => withParam(current, "tab", next));
   };
@@ -368,6 +370,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
       scope={tab === "project" && choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: scope, onChange: setProjectChoice } : undefined}
       actions={(
         <MemoryControls
+          // 「本项目」 is the project this tab shows (the dropdown's), not the one the shell happens to be in.
+          projectId={tab === "project" ? (scope && scope !== OTHER_PROJECT ? scope : null) : undefined}
           onReset={reload}
           onSettingsChanged={reloadOverview}
           onShare={() => setDrawer("share")}

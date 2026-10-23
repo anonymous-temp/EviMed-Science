@@ -309,7 +309,7 @@ export function ImportPanel({ onImported }: { onImported: (capsule: CapsuleRecor
   </div>;
 }
 
-type ShareTab = "export" | "import";
+export type ShareTab = "export" | "import";
 
 /**
  * 「分享与导入」, the drawer from the memory page's 「⋯」: two tabs, 导出 and
@@ -322,8 +322,8 @@ type ShareTab = "export" | "import";
  * import tab does not need it, so a capsule that cannot be made costs the
  * export and nothing else.
  */
-export function ShareDrawer({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
-  const [tab, setTab] = useState<ShareTab>("export");
+export function ShareDrawer({ onClose, onImported, initialTab = "export" }: { onClose: () => void; onImported: () => void; initialTab?: ShareTab }) {
+  const [tab, setTab] = useState<ShareTab>(initialTab);
   const [capsule, setCapsule] = useState<CapsuleRecord | null>(null);
   useEffect(() => {
     let active = true;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchMemoryProfile, type WebMemoryProfile } from "@/lib/apiClient";
 import { listAllMethods } from "@/lib/methodsClient";
 import type { WebMethod } from "@/lib/methodsClient";
+import { fetchMyCapsule, type MyCapsule } from "@/lib/memoryClient";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { factItems } from "@/components/memory/memoryItems";
 import { MethodDrawer } from "@/components/memory/PracticeDrawer";
@@ -12,7 +13,9 @@ import { MethodDrawer } from "@/components/memory/PracticeDrawer";
  * each memory, so the whole record is read when the drawer opens, the way the memory page reads it, and a memory that is gone by
  * then is said so in a sentence rather than shown as an empty drawer.
  *
- * `open` is the address's own key: `record:<id>` or `method:<id>`, the same keys the memory page uses.
+ * `open` is the address's own key: `record:<id>`, `entry:<id>` or `method:<id>`, the same keys the memory page uses. An `entry` is a note of
+ * the researcher's own capsule (the 「项目笔记」 a conversation wrote): the page reads the capsule's notes when it opens, and `FactDrawer` edits,
+ * forgets and undoes it through the capsule's own routes, as it does on the memory page.
  */
 export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord, canOpenRecord }: {
   open: string;
@@ -24,13 +27,20 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
 }) {
   const [profile, setProfile] = useState<WebMemoryProfile | null | "failed">(null);
   const [methods, setMethods] = useState<WebMethod[] | null | "failed">(null);
+  const [mine, setMine] = useState<MyCapsule | null | "failed">(null);
   const [attempt, setAttempt] = useState(0);
-  const kind = open.startsWith("method:") ? "method" : open.startsWith("record:") ? "record" : null;
+  const kind = open.startsWith("method:") ? "method" : open.startsWith("record:") ? "record" : open.startsWith("entry:") ? "entry" : null;
 
   useEffect(() => {
     if (kind !== "record") return undefined;
     let cancelled = false;
     fetchMemoryProfile().then((found) => { if (!cancelled) setProfile(found); }, () => { if (!cancelled) setProfile("failed"); });
+    return () => { cancelled = true; };
+  }, [kind, attempt]);
+  useEffect(() => {
+    if (kind !== "entry") return undefined;
+    let cancelled = false;
+    fetchMyCapsule().then((found) => { if (!cancelled) setMine(found); }, () => { if (!cancelled) setMine("failed"); });
     return () => { cancelled = true; };
   }, [kind, attempt]);
   useEffect(() => {
@@ -72,6 +82,27 @@ export function MapDrawer({ open, projectName, onClose, onChanged, onOpenRecord,
         siblings={records ?? []}
         onClose={onClose} onChanged={reload}
         onOpenRecord={onOpenRecord} canOpenRecord={(id) => knownIds.has(id) && canOpenRecord(id)}
+      />
+    );
+  }
+  if (kind === "entry") {
+    if (mine === null) return null;
+    // A note the researcher forgot is under 已忘记的内容 and is no mark of the map: it is not found here, and the sentence says so.
+    const found = mine !== "failed" ? factItems([], mine.entries).find((entry) => entry.key === open) ?? null : null;
+    if (!found) {
+      return (
+        <p role="status" className="mt-4 text-ui text-text-2">
+          {mine === "failed" ? "暂时读不到这条笔记，请重试。" : "这条笔记已经不在了。"}
+          <button type="button" onClick={mine === "failed" ? reload : onClose} className="ml-2 text-accent hover:underline">{mine === "failed" ? "重试" : "知道了"}</button>
+        </p>
+      );
+    }
+    return (
+      <FactDrawer
+        key={found.key} item={found}
+        projectName={found.group === "project" ? projectName(found.projectId) : null}
+        siblings={[]} onClose={onClose} onChanged={reload}
+        onOpenRecord={onOpenRecord} canOpenRecord={() => false}
       />
     );
   }

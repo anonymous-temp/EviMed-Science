@@ -16,12 +16,19 @@
  *   base's own 「全部」 list keeps them, which is not this map's to change. Because they are the newest files a compile writes,
  *   they would also fill the page and push the uploads off it, so the page is followed (a few pages) until it holds enough
  *   documents of the researcher's own.
+ * - **The inventory is the list's own, not the page's.** What the overview says about the knowledge (how many documents, of what
+ *   kind, in which project) is `facets.documentTypes` and `facets.projectDocuments`, counted by the knowledge base for the whole of
+ *   each project (`list`'s `counts`, compiled files left out), so a library of three hundred is three hundred and not the hundred the
+ *   page of marks holds. The marks and the days (`buckets[].document`, one for each document added) are what the page read.
  * - A failed read of one project leaves that project's documents out; the source fails only when every read did.
  *
  * @module memoryMapSources/documents
  */
 
+import { SOURCE_KINDS } from "@evimed/domain";
+
 import { sourceDisplayOf } from "../sourceDisplay.mjs";
+import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId } from "./common.mjs";
 import { drawnLinks } from "./records.mjs";
 
@@ -48,6 +55,30 @@ export function documentNode(item) {
 }
 
 /**
+ * How many documents one project holds under each chip, compiled files left out: the list's own inventory of the whole scope (`counts`),
+ * else — a list with no database behind it has none — what the page read.
+ * @param {any} listed the first page of `SourceService.list` @param {readonly any[]} items the documents read
+ * @returns {Map<string, number>} chip id → count, for the chips with documents
+ */
+export function documentKindCounts(listed, items) {
+  const counts = listed?.counts && typeof listed.counts === "object" ? listed.counts : null;
+  /** @type {Map<string, number>} */
+  const tally = new Map();
+  if (counts) {
+    for (const kind of SOURCE_KINDS) {
+      const count = Number(counts[kind.id]);
+      if (kind.id !== "wiki" && Number.isFinite(count) && count > 0) tally.set(kind.id, Math.trunc(count));
+    }
+    return tally;
+  }
+  for (const item of items) {
+    const kind = sourceDisplayOf(item).kind;
+    if (kind !== "wiki") tally.set(kind, (tally.get(kind) ?? 0) + 1);
+  }
+  return tally;
+}
+
+/**
  * @param {{ sources: any, researchMemory?: any }} dependencies `sources`: the knowledge base's `SourceService` (`list`, `get`)
  * @returns {import("./common.mjs").MapSource}
  */
@@ -57,25 +88,36 @@ export function createDocumentsSource({ sources, researchMemory = null }) {
     applies: () => Boolean(sources) && typeof sources.list === "function",
     async read(request) {
       const projectIds = (request.projectId ? [request.projectId] : request.projects.map((project) => project.id)).slice(0, MAP_DOCUMENT_PROJECTS);
-      /** One project's own documents, newest first. @param {string} projectId @returns {Promise<{ items: any[] }>} */
+      /** One project's own documents, newest first, and how many of each chip the project holds. @param {string} projectId @returns {Promise<{ projectId: string, items: any[], kinds: Map<string, number> }>} */
       const documentsOf = async (projectId) => {
         /** @type {any[]} */
         const items = [];
+        /** @type {any} */
+        let first = null;
         /** @type {string | null} */
         let cursor = null;
         for (let page = 0; page < MAP_DOCUMENT_PAGES && items.length < MAP_DOCUMENT_PAGE; page += 1) {
           const listed = await sources.list(request.user.id, { projectId, limit: MAP_DOCUMENT_PAGE, ...(cursor ? { cursor } : {}) });
+          if (page === 0) first = listed;
           items.push(...(listed?.items ?? []).filter((/** @type {any} */ item) => item && !item.deletedAt && !isCompiledMirror(item)));
           cursor = typeof listed?.nextCursor === "string" && listed.nextCursor ? listed.nextCursor : null;
           if (!cursor) break;
         }
-        return { items: items.slice(0, MAP_DOCUMENT_PAGE) };
+        return { projectId, items: items.slice(0, MAP_DOCUMENT_PAGE), kinds: documentKindCounts(first, items) };
       };
       const pages = await Promise.allSettled(projectIds.map(documentsOf));
       const read = pages.filter((page) => page.status === "fulfilled");
       if (projectIds.length > 0 && read.length === 0) throw /** @type {PromiseRejectedResult} */ (pages[0]).reason;
-      const items = read.flatMap((page) => /** @type {PromiseFulfilledResult<any>} */ (page).value.items);
+      const held = read.map((page) => /** @type {PromiseFulfilledResult<Awaited<ReturnType<typeof documentsOf>>>} */ (page).value);
+      const items = held.flatMap((page) => page.items);
       const nodes = items.map(documentNode);
+      // The inventory of what the knowledge base holds, by chip and by project (the overview's 知识 and 项目).
+      /** @type {Map<string, number>} */
+      const byKind = new Map();
+      for (const page of held) for (const [kind, count] of page.kinds) byKind.set(kind, (byKind.get(kind) ?? 0) + count);
+      const documentTypes = SOURCE_KINDS.filter((kind) => byKind.has(kind.id)).map((kind) => ({ id: kind.id, label: kind.label, count: /** @type {number} */ (byKind.get(kind.id)) }))
+        .sort((left, right) => right.count - left.count);
+      const projectDocuments = held.map((page) => ({ id: page.projectId, count: [...page.kinds.values()].reduce((sum, count) => sum + count, 0) }));
       /** @type {import("./common.mjs").MapEdge[]} */
       const edges = nodes.filter((node) => node.projectId).map((node) => ({ from: node.id, to: nodeId("project", /** @type {string} */ (node.projectId)), type: "belongs-to" }));
 
@@ -92,7 +134,9 @@ export function createDocumentsSource({ sources, researchMemory = null }) {
           }
         } catch { /* the placeholders stand (principle 19) */ }
       }
-      return { nodes, edges };
+      // The days the documents were added, for the growth strip: the newest of each project that the page read.
+      const added = items.map((item) => instant(item.createdAt)).filter((at) => at !== null).map((at) => ({ at: /** @type {string} */ (at), type: "document" }));
+      return { nodes, edges, buckets: bucketsOf(added, request.timeZone, request.now), facets: { documentTypes, projectDocuments } };
     },
   };
 }

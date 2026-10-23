@@ -101,7 +101,8 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
                     <span>{`${topic.weight} 条记忆 · ${trendWords(topic.trend)}`}</span>
                   </span>
                 }
-                menu={<Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
+                // A topic the page made from the kinds and projects (fewer memories than the model groups) is not the researcher's to rename or merge.
+                menu={topic.derived ? undefined : <Menu label={`“${topic.label}”的操作`} items={menuFor(topic)} />}
               />
             )
           ))}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapEdge, MapNode } from "@/lib/memoryMapClient";
-import { existingAt, headline, headlineParts, headlineText, isThin, markKindWord, markRows, narrowMap, relationTitle, replayStops } from "./mapModel";
+import { derivedTopics, existingAt, headline, headlineParts, headlineText, isAboutYou, isThin, markKindWord, markRows, narrowMap, relationTitle, replayStops } from "./mapModel";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, state: "current", at: "2026-09-01T00:00:00.000Z", open: { kind: "record", id }, ...over });
 const edge = (from: string, to: string, type: MapEdge["type"] = "belongs-to"): MapEdge => ({ from, to, type });
@@ -68,6 +68,76 @@ describe("narrowing the document in hand", () => {
   });
 });
 
+describe("a part of the capsule, which is how a card of the overview opens the map", () => {
+  const part = (name: "you" | "project" | "method" | "knowledge") => narrowMap(doc, { ...none, part: name });
+
+  it("tells what is about the person from what is a project's: a project's memory, or a project's kind, is not about the person", () => {
+    expect(isAboutYou(nodes[2]!)).toBe(true);
+    expect(isAboutYou(nodes[3]!)).toBe(false);
+    expect(isAboutYou(memory("e", { subtype: "decision" }))).toBe(false);
+    expect(isAboutYou(memory("f", { subtype: "project_fact", projectId: null }))).toBe(false);
+    expect(isAboutYou(memory("g", { subtype: "writing_style" }))).toBe(true);
+    expect(isAboutYou({ type: "cluster", memberType: "memory", subtype: "preference", projectId: null })).toBe(true);
+    expect(isAboutYou({ type: "cluster", memberType: "document", subtype: "preference", projectId: null })).toBe(false);
+    expect(isAboutYou(nodes[6]!)).toBe(false);
+  });
+
+  it("关于你: the memories about the person and the account they hang from, nothing else of a project or the knowledge", () => {
+    const you = part("you");
+    expect(you.narrowed).toBe(true);
+    // `memory:b` replaced `memory:d`: what a memory replaced is tied to it, as it is under any other narrowing.
+    expect(ids(you.nodes)).toEqual(["memory:a", "memory:b", "memory:d", "you:account"]);
+    expect(you.edges.map((entry) => `${entry.from}>${entry.to}`).sort()).toEqual(["memory:a>you:account", "memory:b>memory:d", "memory:d>you:account"]);
+  });
+
+  it("项目: a project's memories with the documents they rest on, the project they sit in and the documents that belong to it", () => {
+    const withProjectDocument: MapNode[] = [...nodes, { id: "document:src_2", type: "document", label: "方案", state: "current", projectId: "p", at: "2026-09-06T00:00:00.000Z" }];
+    const found = narrowMap({ nodes: withProjectDocument, edges: [...edges, edge("document:src_2", "project:p")], facets }, { ...none, part: "project" });
+    expect(ids(found.nodes)).toEqual(["document:src_1", "document:src_2", "memory:b", "memory:c", "memory:d", "project:p", "reference:doi:10.1/x"]);
+  });
+
+  it("做法 and 知识: the learned methods and the documents, each with no memory in it", () => {
+    expect(ids(part("method").nodes)).toEqual(["method:m1", "you:account"]);
+    expect(ids(part("knowledge").nodes)).toEqual(["document:src_1", "reference:doi:10.1/x"]);
+  });
+
+  it("is one more narrowing among the others: a part and what needs a look are both held", () => {
+    expect(ids(narrowMap(doc, { ...none, part: "project", look: true }).nodes)).toEqual(["memory:c", "project:p", "reference:doi:10.1/x"]);
+    expect(ids(narrowMap(doc, { ...none, part: "you", look: true }).nodes)).toEqual([]);
+  });
+});
+
+describe("the topics of a capsule the model has not grouped", () => {
+  const small: MapNode[] = [
+    memory("a", { subtype: "preference", at: "2026-10-01T00:00:00.000Z" }),
+    memory("b", { subtype: "profile", at: "2026-10-02T00:00:00.000Z" }),
+    memory("c", { subtype: "decision", projectId: "p", at: "2026-10-05T00:00:00.000Z" }),
+    memory("d", { subtype: "project_fact", projectId: "p", at: "2026-07-01T00:00:00.000Z" }),
+    memory("e", { subtype: "preference", state: "replaced" }),
+    { id: "document:x", type: "document", label: "资料", state: "current" },
+  ];
+  const now = new Date("2026-10-12T00:00:00Z");
+  const topics = derivedTopics({ nodes: small }, (id) => (id === "p" ? "心衰随访" : null), now);
+
+  it("are the kinds in the memory page's words and the projects by name; a memory is in its kind and in its project", () => {
+    expect(topics.map((topic) => [topic.label, topic.weight])).toEqual([["心衰随访", 2], ["偏好", 1], ["已定的决策", 1], ["背景", 1], ["项目事实", 1]]);
+    expect(topics.find((topic) => topic.label === "心衰随访")?.members).toEqual(["memory:c", "memory:d"]);
+    expect(topics.every((topic) => topic.derived === true)).toBe(true);
+    // A replaced memory and a document are no one's topic; the 30 days' trend is the model's own count.
+    expect(topics.flatMap((topic) => topic.members)).not.toContain("memory:e");
+    expect(topics.find((topic) => topic.label === "心衰随访")?.trend).toBe(1);
+    expect(derivedTopics({ nodes: [] }, () => null, now)).toEqual([]);
+  });
+
+  it("narrow the map to their members, the way the model's topics do, and a project the account no longer has is named plainly", () => {
+    const withTopics = { nodes: small, edges: [], facets };
+    const kind = narrowMap(withTopics, { ...none, topic: "derived:kind:偏好" });
+    expect(ids(kind.nodes)).toEqual(["memory:a"]);
+    expect(ids(narrowMap(withTopics, { ...none, topic: "derived:project:p" }).nodes)).toEqual(["memory:c", "memory:d"]);
+    expect(derivedTopics({ nodes: small }, () => null, now).some((topic) => topic.label === "其他项目")).toBe(true);
+  });
+});
+
 describe("the sentence the picture proves", () => {
   const summary = (memories: number, needsLook: number) => ({ memories, documents: 1, methods: 0, projects: 1, needsLook, since: null });
   it("names the count that needs a look, and makes that number a button", () => {
@@ -81,7 +151,12 @@ describe("the sentence the picture proves", () => {
   });
   it("has no button when there is nothing to look at, and a plain sentence when there is nothing at all", () => {
     expect(headline({ summary: summary(7, 0), nodes: [] })).toEqual([{ text: "EviMed 记住了你的 7 件事。" }]);
-    expect(headline({ summary: summary(0, 0), nodes: [] })).toEqual([{ text: "还没有记住什么。" }]);
+    expect(headline({ summary: { ...summary(0, 0), documents: 0 }, nodes: [] })).toEqual([{ text: "还没有记住什么。" }]);
+  });
+  it("does not say nothing is remembered over a picture of documents and methods: it says what is there", () => {
+    expect(headline({ summary: summary(0, 0), nodes: [] })).toEqual([{ text: "胶囊里有 1 份资料，还没有记下关于你的事。" }]);
+    expect(headlineText(headline({ summary: { ...summary(0, 0), documents: 47, methods: 3 }, nodes: [] }))).toBe("胶囊里有 47 份资料、3 种做法，还没有记下关于你的事。");
+    expect(headlineText(headline({ summary: { ...summary(0, 0), documents: 0, methods: 2 }, nodes: [] }))).toBe("胶囊里有 2 种做法，还没有记下关于你的事。");
   });
 });
 

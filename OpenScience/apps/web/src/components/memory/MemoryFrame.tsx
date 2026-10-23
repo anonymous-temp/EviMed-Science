@@ -8,27 +8,32 @@ import type { ToolbarProps } from "@/components/ui/Toolbar";
 
 /** The memory page's three lists. */
 export type MemoryTab = "self" | "project" | "methods";
-/** The page's tab bar also holds 地图, which is a page of its own (`/app/memory/map`) read as one more tab of this one. */
-export type MemoryPageTab = MemoryTab | "map";
+/**
+ * The page's tab bar also holds 总览 and 地图, which are pages of their own (`/app/memory/overview`, `/app/memory/map`) read as two more tabs
+ * of this one: 总览 is the capsule as six parts, 地图 the explorer it drills into, and the lists are what each of them opens.
+ */
+export type MemoryPageTab = MemoryTab | "overview" | "map";
 
-export const MEMORY_TAB_NAMES: Record<MemoryPageTab, string> = { self: "关于你", project: "项目", methods: "做法", map: "地图" };
-const ORDER: readonly MemoryPageTab[] = ["map", "self", "project", "methods"];
+export const MEMORY_TAB_NAMES: Record<MemoryPageTab, string> = { overview: "总览", map: "地图", self: "关于你", project: "项目", methods: "做法" };
+const ORDER: readonly MemoryPageTab[] = ["overview", "map", "self", "project", "methods"];
+/** The tabs that are pictures of the capsule, offered where the deployment draws them (`OPEN_SCIENCE_MEMORY_MAP_ENABLED`): they read the map's document. */
+const PICTURES: ReadonlySet<MemoryPageTab> = new Set(["overview", "map"]);
 
-/** Where a tab goes: the lists are tabs of the memory page, the map is its own address. */
+/** Where a tab goes: the lists are tabs of the memory page, the overview and the map are their own addresses. */
 export function memoryTabAddress(tab: MemoryPageTab): string {
-  return tab === "map" ? "/app/memory/map" : `/app/memory?tab=${tab}`;
+  return tab === "map" ? "/app/memory/map" : tab === "overview" ? MEMORY_OVERVIEW_ADDRESS : `/app/memory?tab=${tab}`;
 }
 
-/** The map's time view — where the 「成长」 tab went (`?tab=growth` still arrives here). */
-export const MEMORY_TIME_ADDRESS = "/app/memory/map?view=time";
+/** Where 记忆胶囊 opens: the overview — the capsule as one picture, from the first day. */
+export const MEMORY_OVERVIEW_ADDRESS = "/app/memory/overview";
 
 /**
- * The visual overview leads 记忆胶囊, followed by its three editable lists. 地图 is drawn where the deployment draws the map (`useMemoryMapFeature`), and always
- * on the map page itself, where it is the tab in force. A tab with nothing in it carries no number.
+ * 总览 and 地图 lead 记忆胶囊, followed by its three editable lists. They are drawn where the deployment draws the map (`useMemoryMapFeature`),
+ * and always on their own page, where each is the tab in force. A tab with nothing in it carries no number.
  */
 export function memoryTabItems(value: MemoryPageTab, { map, counts = {} }: { map: boolean; counts?: Partial<Record<MemoryTab, number | undefined>> }): TabItem<MemoryPageTab>[] {
-  return ORDER.filter((tab) => tab !== "map" || map || value === "map")
-    .map((tab) => ({ value: tab, label: MEMORY_TAB_NAMES[tab], count: tab === "map" ? undefined : counts[tab] || undefined }));
+  return ORDER.filter((tab) => !PICTURES.has(tab) || map || value === tab)
+    .map((tab) => ({ value: tab, label: MEMORY_TAB_NAMES[tab], count: PICTURES.has(tab) ? undefined : counts[tab as MemoryTab] || undefined }));
 }
 
 /**
@@ -47,7 +52,8 @@ export function MemoryFrame({ tab, counts, map, onTab, toolbar, scope, actions, 
   /** Whether the map's tab is offered. */
   map: boolean;
   onTab?: (tab: MemoryPageTab) => void;
-  toolbar: ToolbarProps;
+  /** The tab's row of controls; `null` where the tab has none, so the band keeps the height it has on the tabs that do. */
+  toolbar: ToolbarProps | null;
   scope?: ScopeMenuProps;
   actions?: ReactNode;
   headline?: HeadlineProps;

@@ -11,7 +11,9 @@
  *   listed (a year of conversations is thousands of rows nobody opens).
  * - **`buckets` are always the last year, by day in the researcher's zone**, whatever range the page is narrowed to: the calendar
  *   is the picture of the whole year and a range is what it is read through. Each source counts what it holds and the aggregator
- *   adds the days up, so an account whose memories are in the native engine still has its conversations on the calendar.
+ *   adds the days up, so an account whose memories are in the native engine still has its conversations on the calendar. A day
+ *   also counts the `document`s added to the knowledge base (the documents source's), which the calendar's heat does not read and the
+ *   overview's growth strip does.
  * - This source holds the ledger's side: the conversations, the learned methods and the researcher's corrections. A part that
  *   cannot be read leaves its counts out and is named in `missing`; the rest stands.
  *
@@ -46,18 +48,18 @@ export function memoryEventsOf(records) {
 /**
  * The days, in a zone, and how many events of each kind fell on each: the calendar's counts.
  * @param {readonly { at: string, type: string }[]} events @param {string} timeZone @param {Date} now
- * @returns {{ t: string, memory: number, run: number, method: number, feedback: number }[]}
+ * @returns {{ t: string, memory: number, run: number, method: number, feedback: number, document: number }[]}
  */
 export function bucketsOf(events, timeZone, now) {
   const format = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
   const from = new Date(now.getTime() - MAP_BUCKET_DAYS * 86_400_000).toISOString();
-  /** @type {Map<string, { t: string, memory: number, run: number, method: number, feedback: number }>} */
+  /** @type {Map<string, { t: string, memory: number, run: number, method: number, feedback: number, document: number }>} */
   const days = new Map();
   for (const event of events) {
     if (event.at < from || event.at > now.toISOString()) continue;
     const t = dayOf(event.at, format);
-    const bucket = days.get(t) ?? { t, memory: 0, run: 0, method: 0, feedback: 0 };
-    if (event.type === "memory" || event.type === "run" || event.type === "method" || event.type === "feedback") bucket[event.type] += 1;
+    const bucket = days.get(t) ?? { t, memory: 0, run: 0, method: 0, feedback: 0, document: 0 };
+    if (event.type === "memory" || event.type === "run" || event.type === "method" || event.type === "feedback" || event.type === "document") bucket[event.type] += 1;
     days.set(t, bucket);
   }
   return [...days.values()].sort((left, right) => left.t.localeCompare(right.t));
