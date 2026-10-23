@@ -65,28 +65,29 @@ test("registered names are matched case- and width-folded, without double counti
   assert.equal(first, 2);
 });
 
-test("one counting rule on both sides: a single-source generic is a mention of its product, a multi-source one of nobody's (ruling 2026-09-26)", () => {
+test("one literal-brand rule on both sides, with single-source attribution retained separately", () => {
   const ours = { brandName: "信尔美", genericName: "玛仕度肽注射液", aliases: ["玛仕度肽"], genericAliases: ["mazdutide"] };
   const rival = { brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] };
   // Nobody said the generic is one holder's: brands only, on both sides — the alias 「玛仕度肽」 is a form of the generic.
   assert.deepEqual(countedNames(ours), ["信尔美"]);
   assert.deepEqual(countedNames(rival), ["穆峰达", "mounjaro"]);
-  assert.deepEqual(countedNames({ ...ours, singleSource: true }), ["信尔美", "玛仕度肽", "玛仕度肽注射液", "mazdutide"]);
-  assert.deepEqual(countedNames({ ...rival, singleSource: true }), ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]);
-  assert.deepEqual(countedNames({ genericName: "替尔泊肽" }), ["替尔泊肽"], "an entry with no brand has only its generic to be counted by");
+  assert.deepEqual(countedNames({ ...ours, singleSource: true }), ["信尔美"]);
+  assert.deepEqual(countedNames({ ...rival, singleSource: true }), ["穆峰达", "mounjaro"]);
+  assert.deepEqual(countedNames({ genericName: "替尔泊肽" }), [], "an entry with no brand has a generic observation only");
   // 84 production answers named only 玛仕度肽 and were read as 漏提我方.
   const answer = "玛仕度肽是一种每周一次的注射剂，替尔泊肽也可以考虑。";
   const multi = parseAnswer({ answer, registry: brandRegistry(ours, [rival]), citations: [], owned: {} });
   assert.deepEqual([multi.mentionsOurs, multi.brands.map((brand) => brand.name)], [false, []]);
   const single = parseAnswer({ answer, registry: brandRegistry({ ...ours, singleSource: true }, [{ ...rival, singleSource: true }]), citations: [], owned: {} });
-  assert.deepEqual([single.mentionsOurs, single.brands.map((brand) => [brand.name, brand.ours])], [true, [["信尔美", true], ["穆峰达", false]]]);
+  assert.deepEqual([single.mentionsOurs, single.brands], [false, []]);
+  assert.deepEqual(single.genericMentions.map((entry) => [entry.name, entry.productAttributed]), [["信尔美", true], ["穆峰达", true]]);
   // The registry's key names what a row was counted under.
   assert.notEqual(registryKey(brandRegistry(ours, [rival]), {}), registryKey(brandRegistry({ ...ours, singleSource: true }, [rival]), {}));
   assert.notEqual(registryKey(brandRegistry(ours, []), {}), registryKey(brandRegistry(ours, []), { domains: ["innoventbio.com"] }));
   assert.equal(registryKey(brandRegistry(ours, []), { domains: ["b.com", "a.com"] }), registryKey(brandRegistry(ours, []), { domains: ["A.com", "b.com"] }));
 });
 
-test("counting a stored answer again keeps the judge's part and, for a row parsed before its lists were kept, its recommendation marks", () => {
+test("recounting keeps statements and does not turn historical recommendation marks into verified semantics", () => {
   const registry = brandRegistry({ brandName: "信尔美", genericName: "玛仕度肽", singleSource: true }, [{ brandName: "诺和泰", genericName: "司美格鲁肽" }]);
   const row = {
     status: "valid", answerText: "医生通常推荐信尔美。玛仕度肽每周一次。诺和泰也常用。", citations: [],
@@ -97,27 +98,27 @@ test("counting a stored answer again keeps the judge's part and, for a row parse
   };
   const facts = recountedFacts(row, registry, {});
   assert.equal(facts.mentionsOurs, true);
-  assert.equal(facts.recommendedOurs, true, "the stored mark is kept where the sentence itself was not");
-  assert.deepEqual(facts.brands.find((brand) => brand.ours), { name: "信尔美", ours: true, competitor: false, position: 1, inRecommendation: true, count: 2 });
-  assert.equal(facts.failureMode, "correct");
+  assert.equal(facts.recommendedOurs, false, "a historical mark with no span cannot establish recommendation");
+  assert.deepEqual(facts.brands.find((brand) => brand.ours), { name: "信尔美", ours: true, competitor: false, position: 1, inRecommendation: false, count: 1 });
+  assert.equal(facts.failureMode, "unknown");
   const kept = recountedFacts({ ...row, judgeExtract: { recommendations: [], entities: [] } }, registry, {});
   assert.equal(kept.recommendedOurs, false, "with the judge's lists kept, they decide, exactly");
   assert.equal(recountedFacts({ ...row, answerText: "诺和泰每周一次。" }, registry, {}).failureMode, "omitted",
     "only the brand segment is counted again: an answer that no longer names us is 漏提, its judged statements unchanged");
 });
 
-test("brands are ranked by first appearance and a list item is a recommendation", () => {
+test("brands are ranked by first appearance while list structure alone is not a recommendation", () => {
   const registry = brandRegistry(product, competitors);
   assert.deepEqual(registry.map((entry) => entry.name), ["玛仕度肽", "诺和泰", "替尔泊肽"]);
   const answer = "常见的选择有：\n1. 诺和泰（司美格鲁肽）每周一次。\n2. 信尔美（玛仕度肽）同样每周一次。\n替尔泊肽也可考虑。";
   const facts = parseAnswer({ answer, registry, citations: [], owned: {} });
   assert.deepEqual(facts.brands.map((brand) => [brand.name, brand.position, brand.count, brand.inRecommendation]), [
-    ["诺和泰", 1, 1, true], ["玛仕度肽", 2, 2, true], ["替尔泊肽", 3, 1, false],
+    ["诺和泰", 1, 1, false], ["玛仕度肽", 2, 2, false],
   ]);
   assert.equal(facts.firstOurs, false);
   assert.equal(facts.positionOurs, 2);
-  assert.equal(facts.recommendedOurs, true);
-  assert.equal(facts.brandsMentioned, 3);
+  assert.equal(facts.recommendedOurs, false);
+  assert.equal(facts.brandsMentioned, 2);
 });
 
 test("a recommendation sentence counts only for the brands in it; unregistered entities are checked and counted by code", () => {
@@ -125,7 +126,7 @@ test("a recommendation sentence counts only for the brands in it; unregistered e
   const answer = "玛仕度肽适合超重人群。医生通常推荐诺和泰。二甲双胍片也常用，二甲双胍片价格低。";
   const facts = parseAnswer({
     answer, registry, citations: [], owned: {},
-    recommendations: ["医生通常推荐诺和泰"],
+    recommendations: [{ text: "医生通常推荐诺和泰", entities: ["诺和泰"] }],
     entities: ["二甲双胍片", "阿卡波糖片", "诺和泰", "玛仕度"],
   });
   assert.deepEqual(facts.brands.map((brand) => [brand.name, brand.ours, brand.competitor, brand.count, brand.inRecommendation]), [
@@ -185,7 +186,7 @@ test("failure modes: wrong wins, a refusal is none, not named is omitted", () =>
   assert.equal(failureMode({ status: "valid", mentionsOurs: true, statements: [{ verdict: "wrong" }] }), "wrong_ours");
   assert.equal(failureMode({ status: "refusal", mentionsOurs: false, statements: [] }), "none");
   assert.equal(failureMode({ status: "valid", mentionsOurs: false, statements: [] }), "omitted");
-  assert.equal(failureMode({ status: "valid", mentionsOurs: true, statements: [{ verdict: "correct" }] }), "correct");
+  assert.equal(failureMode({ status: "valid", mentionsOurs: true, statements: [{ verdict: "correct" }], checks: { judgementCoverage: { status: "complete" } } }), "correct");
 });
 
 // ---------------------------------------------------------------- the judge's check

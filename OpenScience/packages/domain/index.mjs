@@ -1467,7 +1467,7 @@ export {
   geoVisibleQuestionOfReason,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 「循证 GEO」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1478,6 +1478,9 @@ export {
 // vocabularies are geoVocabulary's.
 export {
   GEO_METRICS,
+  GEO_MEASUREMENT_METHOD_VERSION,
+  geoAnswerAccuracy,
+  geoJudgementCoverage,
   GEO_METRIC_IDS,
   GEO_METRIC_POOL_IDS,
   GEO_METRIC_SCOPES,

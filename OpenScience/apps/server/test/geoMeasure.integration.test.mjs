@@ -136,10 +136,11 @@ const judgeAnswers = (/** @type {{ answer: string, claimAlias: (fragment: string
     statements.push({ text: "玛仕度肽起始剂量为5 mg", verdict: "correct", claim: claimAlias("起始剂量"), evidence: "起始剂量为2 mg" });
   }
   return {
+    assessmentComplete: true,
     refusal: answer.includes("无法提供医疗建议") || answer.includes("我不便推荐具体药物"),
     statements,
     entities: answer.includes("二甲双胍片") ? ["二甲双胍片"] : [],
-    recommendations: answer.includes("医生通常推荐玛仕度肽") ? ["医生通常推荐玛仕度肽用于超重的糖尿病患者"] : [],
+    recommendations: answer.includes("医生通常推荐玛仕度肽") ? [{ text: "医生通常推荐玛仕度肽用于超重的糖尿病患者", entities: ["玛仕度肽"] }] : [],
     careHint: answer.includes("就医"),
     redFlagsExpected: ["F1"],
     redFlagsHit: answer.includes("剧烈腹痛") ? ["F1"] : [],
@@ -243,7 +244,7 @@ test("a round of 3 questions × 2 engines becomes answers, facts and numbers; a 
     assert.deepEqual(doubaoQ1.statements.map((/** @type {any} */ statement) => [statement.text, statement.verdict]), [["玛仕度肽每周注射一次", "correct"]],
       "the 5 mg verdict failed re-verification and is gone, not softened");
     assert.ok(doubaoQ1.warnings.includes("judge_dropped:statement:number_not_in_claim"));
-    assert.deepEqual(doubaoQ1.brands.map((/** @type {any} */ brand) => [brand.name, brand.position, brand.inRecommendation]), [["诺和泰", 1, true], ["玛仕度肽", 2, true]]);
+    assert.deepEqual(doubaoQ1.brands.map((/** @type {any} */ brand) => [brand.name, brand.position, brand.inRecommendation]), [["诺和泰", 1, false], ["玛仕度肽", 2, false]]);
     const refusals = await rows(`SELECT f.failure_mode FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id WHERE s.status = 'refusal'`);
     assert.deepEqual(refusals.map((row) => row.failure_mode), ["none", "none"]);
 
@@ -1388,7 +1389,7 @@ test("a changed registry counts the stored answers again in code: no judge call,
     assert.equal(h.model.calls.length, judged, "counting again asks no model");
     const after = await q2();
     assert.deepEqual(after.brands.filter((/** @type {any} */ brand) => brand.competitor).map((/** @type {any} */ brand) => [brand.name, brand.count]),
-      [["诺和泰", 2]], "a single-source generic is a mention of its product");
+      [["诺和泰", 1]], "single-source attribution does not alter literal brand counts");
     assert.deepEqual(after.statements, counted.statements, "the judge's verdicts are not touched");
     assert.notEqual(after.registry_key, counted.registry_key);
     assert.ok(after.reparsed_at);

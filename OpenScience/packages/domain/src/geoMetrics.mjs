@@ -15,7 +15,9 @@
  *   hard lines), and a golden test holds this port equal to that script's
  *   output cell by cell on a synthetic batch. Where the script and the yaml
  *   disagree, this port follows the script — it is what the owner's tests pin —
- *   and the disagreements are listed in the package M report.
+ *   and the disagreements are listed in the package M report. GEO V3's
+ *   geo-measurement-2 explicitly corrects mixed correct/unknown answers and
+ *   carries assessment coverage; the golden names those accuracy/index changes.
  * - **No fake numbers.** A metric that cannot be computed is
  *   `not_measurable` with a reason code, never 0: no retrieval means no
  *   citation rate, an unregistered owned domain means no hit rate, an
@@ -107,7 +109,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  */
 /**
  * One adjudicated statement about our product (`facts.statements[]`).
- * @typedef {{ text: string, verdict?: string|null, claimId?: string|null, errorType?: string|null, severity?: string|null, evidence?: string|null }} GeoStatement
+ * @typedef {{ text?: string, verdict?: string|null, claimId?: string|null, errorType?: string|null, severity?: string|null, evidence?: string|null }} GeoStatement
  */
 /**
  * The facts row of a snapshot. Counts and presence come from `brands`; the
@@ -116,6 +118,10 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  * lack `safetyTermsHit` gets M-12 `not_measurable`, never 0.
  * @typedef {object} GeoFacts
  * @property {GeoBrandMention[]} [brands]
+ * @property {string|null} [judgedAt]
+ * @property {string|null} [parserVersion]
+ * @property {{ judgementCoverage?: GeoJudgementCoverage, answerCut?: { chars: number, shown: number } }} [checks]
+ * @property {{ entityMentions?: number, genericMentions?: Array<{ name: string, count: number, matchedNames: string[], ours: boolean, competitor: boolean, productAttributed: boolean }> }} [judgeExtract]
  * @property {boolean|null} [firstOurs]      our product is the first registered brand in the answer
  * @property {number|null} [positionOurs]    1-based rank of our product among the registered brands
  * @property {boolean|null} [recommendedOurs]
@@ -174,6 +180,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  * @property {string|null} reason         a code when the status is not ok (`no_retrieval`, `coverage_below_min`, …)
  * @property {'measured'|'derived'} dataType
  * @property {number} snapshotCount       snapshots in the scope, repeats excluded
+ * @property {GeoAssessmentCounts} [assessment]  answer-level completeness for the measured property
  */
 /**
  * @typedef {object} GeoMetricsOptions
@@ -315,7 +322,7 @@ export function wilsonInterval(numerator, denominator) {
 
 /**
  * @typedef {{ value: number|null, measurable: boolean, numerator: number|null, denominator: number|null, reason: string|null,
- *   thin?: boolean }} CoreCell
+ *   thin?: boolean, assessment?: GeoAssessmentCounts }} CoreCell
  *   `thin`: a cell derived from cells that are `insufficient` is itself (a ratio carries the two rates, not the answers they were
  *   taken over, so the floor that holds a rate cannot see its denominators).
  */
@@ -379,6 +386,7 @@ function finish(metricId, core, where, snapshotCount) {
     reason: core.measurable ? null : core.reason,
     dataType: definition.channel === 'derived' ? 'derived' : 'measured',
     snapshotCount,
+    ...(core.assessment ? { assessment: core.assessment } : {}),
   }
 }
 
@@ -419,7 +427,8 @@ function emptyCell(metricId, where, status, reason) {
  * @property {Array<{ domain: string, ours: boolean, inBody: boolean|null }>} citations
  * @property {boolean} traceable  some citation carries a link
  * @property {Set<string>} ownedDomains
- * @property {string[]} verdicts
+ * @property {'correct'|'wrong'|'partial'|'unknown'} accuracy
+ * @property {'complete'|'partial'|'unknown'} judgementCoverage
  * @property {string[]} wrongTexts
  * @property {number} redFlagExpected
  * @property {number} redFlagHits
@@ -494,6 +503,41 @@ function citationIsOurs(citation, owned) {
  * @typedef {{ owned: OwnedSources, display: (engine: string) => string }} Context
  */
 
+/**
+ * @typedef {{ status: 'complete'|'partial'|'unknown', reasons: string[], answerChars: number, assessedChars: number }} GeoJudgementCoverage
+ * @typedef {{ methodVersion: string, completeAnswers: number, partialAnswers: number, unknownAnswers: number }} GeoAssessmentCounts
+ */
+export const GEO_MEASUREMENT_METHOD_VERSION = 'geo-measurement-2'
+
+/**
+ * Missing historical metadata is unknown, never retroactively complete. The
+ * old explicit cut remains usable evidence of partial coverage.
+ * @param {GeoFacts} facts
+ * @returns {'complete'|'partial'|'unknown'}
+ */
+export function geoJudgementCoverage(facts) {
+  if (facts.checks?.answerCut) return 'partial'
+  const status = facts.checks?.judgementCoverage?.status
+  if (facts.judgedAt === null) return 'unknown'
+  return status === 'complete' || status === 'partial' ? status : 'unknown'
+}
+
+/**
+ * Answer-level fact accuracy. A known wrong statement settles the answer;
+ * correct requires every applicable statement and the full assessment.
+ * @param {GeoFacts} facts
+ * @returns {'correct'|'wrong'|'partial'|'unknown'}
+ */
+export function geoAnswerAccuracy(facts) {
+  const statements = Array.isArray(facts.statements) ? facts.statements : []
+  if (statements.some((statement) => statement?.verdict === 'wrong')) return 'wrong'
+  const coverage = geoJudgementCoverage(facts)
+  if (coverage === 'partial') return 'partial'
+  if (coverage === 'unknown' || !statements.length) return 'unknown'
+  if (statements.every((statement) => statement?.verdict === 'correct')) return 'correct'
+  return statements.some((statement) => statement?.verdict === 'correct') ? 'partial' : 'unknown'
+}
+
 /** @param {GeoFactRow} row @param {Context} ctx @returns {GeoItem|null} null when a valid snapshot has no facts yet */
 function prepare(row, ctx) {
   if (!row || typeof row !== 'object') throw new TypeError('a GEO metric row must be an object')
@@ -530,7 +574,7 @@ function prepare(row, ctx) {
     noise: roundKind === PLATFORM.noise_round_kind,
     inclusion: row.surface?.mode === PLATFORM.inclusion_surface_mode,
     selfMentions: brands.filter((brand) => brand.ours).reduce((sum, brand) => sum + count(brand), 0),
-    entityMentions: brands.reduce((sum, brand) => sum + count(brand), 0),
+    entityMentions: isNumber(facts.judgeExtract?.entityMentions) ? facts.judgeExtract.entityMentions : brands.reduce((sum, brand) => sum + count(brand), 0),
     rivalCounts,
     withAnyBrand: brands.some((brand) => (brand.ours || brand.competitor) && count(brand) > 0),
     selfFirst: Boolean(facts.firstOurs),
@@ -544,7 +588,8 @@ function prepare(row, ctx) {
     // it is left out of the citation family, never read as a miss (G8).
     traceable: citations.some((citation) => citation.domain !== ''),
     ownedDomains: new Set(citations.filter((citation) => citation.ours && citation.domain).map((citation) => citation.domain)),
-    verdicts: judged.map((statement) => /** @type {string} */ (statement.verdict)),
+    accuracy: geoAnswerAccuracy(facts),
+    judgementCoverage: geoJudgementCoverage(facts),
     wrongTexts: judged.filter((statement) => statement.verdict === 'wrong').map((statement) => String(statement.text ?? '')),
     redFlagExpected: Array.isArray(facts.redFlagExpected) ? facts.redFlagExpected.length : 0,
     redFlagHits: Array.isArray(facts.redFlagHits) ? facts.redFlagHits.length : 0,
@@ -579,19 +624,31 @@ function scopeMetrics(items, ctx) {
   const wrongTexts = new Set()
   for (const item of valid) {
     for (const text of item.wrongTexts) wrongTexts.add(text)
-    if (!item.verdicts.length) continue
-    if (item.verdicts.includes('wrong')) wrong += 1
-    else if (item.verdicts.includes('correct')) right += 1
+    if (item.accuracy === 'wrong') wrong += 1
+    else if (item.accuracy === 'correct') right += 1
   }
   const adjudicated = right + wrong
+  const assessment = {
+    methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
+    completeAnswers: adjudicated,
+    partialAnswers: valid.filter((item) => item.accuracy === 'partial').length,
+    unknownAnswers: valid.filter((item) => item.accuracy === 'unknown').length,
+  }
+  const semantic = valid.filter((item) => item.judgementCoverage === 'complete' || item.status === 'refusal')
+  const semanticAssessment = {
+    methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
+    completeAnswers: semantic.length,
+    partialAnswers: valid.filter((item) => item.status !== 'refusal' && item.judgementCoverage === 'partial').length,
+    unknownAnswers: valid.filter((item) => item.status !== 'refusal' && item.judgementCoverage === 'unknown').length,
+  }
 
   /** @type {number[]} */
   const positions = []
   for (const item of mentioned) if (item.selfPosition) positions.push(item.selfPosition)
   const positionSum = positions.reduce((sum, position) => sum + position, 0)
-  const expectedFlags = valid.reduce((sum, item) => sum + item.redFlagExpected, 0)
-  const hitFlags = valid.reduce((sum, item) => sum + item.redFlagHits, 0)
-  const safetyExtracted = valid.some((item) => item.safetyHit !== null)
+  const expectedFlags = semantic.reduce((sum, item) => sum + item.redFlagExpected, 0)
+  const hitFlags = semantic.reduce((sum, item) => sum + item.redFlagHits, 0)
+  const safetyExtracted = semantic.some((item) => item.safetyHit !== null)
   const inline = retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable)
   // The citation family counts only what can be traced; retrieval with no
   // link at all is 「引用不可测」, not 0 %.
@@ -603,7 +660,7 @@ function scopeMetrics(items, ctx) {
   const out = {
     'M-01': rate(mentioned.length, nValid, 'no_valid_answers'),
     'M-02': rate(withAnyBrand.filter((item) => item.selfFirst).length, withAnyBrand.length, 'no_brand_mentioned'),
-    'M-03': rate(valid.filter((item) => item.recommended).length, nValid, 'no_valid_answers'),
+    'M-03': { ...rate(semantic.filter((item) => item.recommended).length, semantic.length, nValid ? 'judgement_incomplete' : 'no_valid_answers'), assessment: semanticAssessment },
     'M-04': coverage !== null && coverage >= SOV_COVERAGE_MIN
       ? rate(selfTotal, brandTotal, 'no_brand_mentions')
       : unmeasurable(coverage !== null ? 'coverage_below_min' : 'no_drug_entities'),
@@ -611,7 +668,7 @@ function scopeMetrics(items, ctx) {
     'M-05': positions.length
       ? measured(positionSum / positions.length, { numerator: positionSum, denominator: positions.length })
       : unmeasurable('not_mentioned'),
-    'M-06': rate(right, adjudicated, 'not_adjudicated'),
+    'M-06': { ...rate(right, adjudicated, 'not_adjudicated'), assessment },
     'M-07': adjudicated ? measured(wrongTexts.size, { numerator: wrongTexts.size }) : unmeasurable('not_adjudicated'),
     'M-08': !ctx.owned.registered
       ? unmeasurable('owned_not_registered')
@@ -631,10 +688,10 @@ function scopeMetrics(items, ctx) {
       : inline.length
         ? rate(inline.filter((item) => item.citations.some((c) => c.ours && c.inBody === true)).length, inline.length, 'no_inline_citation_engine')
         : unmeasurable('no_inline_citation_engine'),
-    'M-11': rate(hitFlags, expectedFlags, 'no_red_flag_expectations'),
-    'M-12': nValid && !safetyExtracted
+    'M-11': { ...rate(hitFlags, expectedFlags, semantic.length ? 'no_red_flag_expectations' : 'judgement_incomplete'), assessment: semanticAssessment },
+    'M-12': !semantic.length && nValid ? { ...unmeasurable('judgement_incomplete'), assessment: semanticAssessment } : nValid && !safetyExtracted
       ? unmeasurable('not_extracted')
-      : rate(valid.filter((item) => item.safetyHit === true).length, nValid, 'no_valid_answers'),
+      : { ...rate(semantic.filter((item) => item.safetyHit === true).length, semantic.length, 'no_valid_answers'), assessment: semanticAssessment },
     'M-20': rate(nValid, nValid + suspects, 'no_snapshots'),
   }
   // Rates over questions answered a different number of times are not one
@@ -1212,7 +1269,7 @@ export function noiseBand(noiseRows, { metricId = 'M-01' } = {}) {
   const byRepeat = new Map()
   for (const row of noiseRows) {
     const item = prepare(row, ctx)
-    if (!item || !item.inDenominator || item.inclusion || !item.pool) continue
+    if (!item || !item.inDenominator || item.inclusion || !item.pool || (metricId === 'M-03' && item.judgementCoverage !== 'complete')) continue
     const index = isNumber(row.repeatIndex) ? row.repeatIndex : 0
     const bucket = byRepeat.get(index) ?? []
     bucket.push(item)

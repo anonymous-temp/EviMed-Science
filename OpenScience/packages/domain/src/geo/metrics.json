@@ -75,6 +75,7 @@
     },
     "engines": "interfaces.yaml probe.engines + probe.planned_providers; citation_display decides M-08B (VF-G12)",
     "platform": {
+      "measurement_method": "geo-measurement-2 (GEO V3 N02/C01, 2026-10-23): literal brands and generic/product attribution are separate; recommendation requires anchored semantic entities; complete-answer accuracy excludes partial or unknown judgements, while known wrong answers remain wrong. Historical coverage is unknown unless recorded.",
       "snapshot_statuses": "snapshots.status (SPEC §2); compute_metrics.py's ok/refusal/suspect/error",
       "in_denominator_statuses": "metrics.yaml denominator: valid and refusal count, suspect does not (snapshots.status, SPEC §2)",
       "excluded_round_kinds": "compute_metrics.py _exclude_noise: noise and error-confirmation repeats never enter a round's denominators (rounds.kind, SPEC §2)",
@@ -124,6 +125,7 @@
       "id": "M-01",
       "name": "品牌提及率",
       "formula": "含本品品牌名的有效回答数 / 有效回答数",
+      "note": "Literal registered brand names and brand aliases only. Generic/form presence and optional single-source product attribution are separate facts; neither counts as a literal brand mention.",
       "unit": "percent",
       "channel": "measured",
       "measurable_when": "有效回答数 >= 1",
@@ -154,7 +156,8 @@
     {
       "id": "M-03",
       "name": "推荐位提及率",
-      "formula": "本品出现在明确推荐句或推荐列表项中的回答数 / 有效回答数",
+      "formula": "本品出现在语义明确的推荐中的回答数 / 已完成推荐判定的有效回答数",
+      "note": "The judge identifies the recommended entities inside preserved answer spans. Numbering, bullets, negation, comparison and care-seeking alone do not establish recommendation. Partial and unknown assessments are counted separately; refusals remain in the denominator.",
       "unit": "percent",
       "channel": "measured",
       "measurable_when": "有效回答数 >= 1",
@@ -217,6 +220,7 @@
       "id": "M-06",
       "name": "事实准确率",
       "formula": "讲对我方的回答数 / (讲对我方 + 讲错我方)",
+      "note": "Answer-level accuracy: right requires complete applicable assessment and every statement correct; any verified wrong statement makes the answer wrong. Empty, unassessed and mixed correct/unknown answers never become right. Partial and unknown counts accompany the rate.",
       "unit": "percent",
       "channel": "measured",
       "measurable_when": "(讲对我方 + 讲错我方) >= 1",

@@ -1,4 +1,4 @@
-import { GEO_VALUE_COVERAGE_STATUSES, geoValueJudged, geoValueList } from "@evimed/domain";
+import { GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -82,7 +82,7 @@ import { GEO_VALUE_COVERAGE_STATUSES, geoValueJudged, geoValueList } from "@evim
 import { createHash } from "node:crypto";
 import { GEO_CITATION_SUPPORTS, GEO_STATEMENT_TOPICS } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, parseAnswer, registryKey } from "./geoParse.mjs";
+import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, parseAnswer, registryKey, stripListItemMarkers } from "./geoParse.mjs";
 import { stripPageChrome } from "./geoSanity.mjs";
 import { recordErrorsFromFacts } from "./geoErrors.mjs";
 import { geoMeasureState, zonedDayStart } from "./geoProbeQueue.mjs";
@@ -140,7 +140,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "4. citationClaims：回答把某个事实说成出自链接清单里的某个链接：填 link（链接编号，如 L1）和 statement（回答原句，逐字）。最多 5 条；没有给空数组。",
   "5. refusal：回答是否在合规拒答（只说无法提供医疗建议、请咨询医生之类，而没有回答问题）。真正回答了问题的填 false。",
   "6. entities：回答里提到的具体药品或产品名称（品牌名或通用名，照抄原文），不含下面已登记的本品与竞品名称。",
-  "7. recommendations：回答中推荐、建议选用某个药品或产品的句子，逐字照抄。",
+  "7. recommendations：只提取语义上推荐选用的药品，每项 {text,entities}：text 是逐字摘录的原文片段，entities 是该片段实际推荐的具体药品名称（原文写法），来自已登记名称或 entities。列表、编号、单纯提及或比较不代表推荐；不推荐、禁忌、待医生评估和就医建议不能算推荐。条件性推荐须在 text 保留条件；比较句只能标实际推荐的对象，不能把同句被否定的对象一起标上。没有给空数组。",
   "8. careHint：回答是否提示了在某些情况下应当就医或咨询医生药师。",
   "9. redFlagsExpected：就医红旗清单中，这个问题的负责任回答应当提到的红旗编号（如 F2）；清单为空时给空数组。redFlagsHit：其中回答实际覆盖了的编号（意思到位即可，不要求字面一致）。",
   "10. safetyTerms：回答中提示禁忌、慎用或特殊人群（孕妇、哺乳期、儿童、老年人、肝肾功能不全等）的原文片段，逐字照抄，每段不超过 30 个字。",
@@ -148,8 +148,9 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "",
   "主张中的 population、elements、inLabel、validUntil、evidenceLevel 是判定适用条件；不同人群或分子证据不能直接当品牌优势。过期且没有当前依据时不可认定为当前已证实。",
   "只依据给出的主张库判定，不用你自己的知识补充；拿不准的判 unverifiable。编号只能用给出的编号。不要输出任何解释。",
+  "12. assessmentComplete：是否已处理所展示回答的全部适用陈述、推荐及安全信息。仍有未覆盖内容、触及条数上限或无法完成提取时为 false；逐条列出 unverifiable 不等于未处理。不得从正确的局部推断整体正确。",
   "输出格式（键名固定）：",
-  "{\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
+  "{\"assessmentComplete\":false,\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[],\"valueCoverage\":[{\"findingId\":\"给定发现的id\",\"status\":\"uncertain\",\"quote\":\"\",\"reason\":\"\",\"conditionsPreserved\":null}]}",
 ].join("\n");
 
 /** What one cited page is asked: does it say what the answer says it does. */
@@ -225,7 +226,7 @@ const IDENTIFIER = /[A-Za-z][A-Za-z0-9]*(?:[-–][A-Za-z0-9]+)*/g;
  * @returns {{ tokens: Set<string>, unread: Set<string>, numbers: Set<string> }}
  */
 export function readQuantities(value) {
-  const text = String(value ?? "").normalize("NFKC")
+  const text = stripListItemMarkers(String(value ?? "").normalize("NFKC"))
     .replace(CN_NUMERAL_BEFORE_UNIT, (match) => String(chineseNumber(match) ?? match))
     .replace(HALF_BEFORE_COUNT_UNIT, "0.5");
   /** @type {Set<string>} */
@@ -323,10 +324,10 @@ export function buildJudgeInput(input) {
   const project = {
     product: {
       brandName: input.product?.brandName ?? null, genericName: input.product?.genericName ?? null,
-      aliases: input.product?.aliases ?? [], form: input.product?.form ?? null, strength: input.product?.strength ?? null,
+      aliases: input.product?.aliases ?? [], genericAliases: input.product?.genericAliases ?? [], form: input.product?.form ?? null, strength: input.product?.strength ?? null,
       rx: input.product?.rx ?? null, indication: input.product?.indication ?? null,
     },
-    competitors: (input.competitors ?? []).map((competitor) => competitor?.brandName || competitor?.genericName).filter(Boolean),
+    competitors: (input.competitors ?? []).map((competitor) => ({ brandName: competitor?.brandName ?? null, genericName: competitor?.genericName ?? null, aliases: competitor?.aliases ?? [], genericAliases: competitor?.genericAliases ?? [] })),
     claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
       label: labelClaim(claim), population: claim.population ?? null, elements: claim.elements ?? {}, inLabel: claim.inLabel ?? null,
       evidenceLevel: claim.evidenceLevel ?? null, validUntil: claim.validUntil ?? null })),
@@ -360,7 +361,7 @@ export function buildJudgeInput(input) {
  *   cardClaimId: string | null, cardRevision: number | null }} GeoVerifiedStatement
  * @typedef {{ link: string, url: string, statement: string, exists: boolean | null, supports: string | null, evidence: string | null }} GeoCitationCheck
  * @typedef {{ offLabel: string[], omittedSafety: Array<{ claimId: string, claimKey: string | null, cardId: string | null, cardClaimId: string | null, cardRevision: number | null }>,
- *   citations: GeoCitationCheck[] }} GeoJudgeChecks
+ *   citations: GeoCitationCheck[], judgementCoverage?: { status: "complete"|"partial"|"unknown", reasons: string[], answerChars: number, assessedChars: number } }} GeoJudgeChecks
  * @typedef {object} GeoJudgement
  * @property {Array<Record<string, any>>} [valueCoverage]
  * @property {number} [valueBasisVersion]
@@ -368,7 +369,7 @@ export function buildJudgeInput(input) {
  * @property {boolean} refusal
  * @property {GeoVerifiedStatement[]} statements
  * @property {string[]} entities
- * @property {string[]} recommendations
+ * @property {import("./geoParse.mjs").GeoRecommendation[]} recommendations
  * @property {boolean} careHint
  * @property {string[]} redFlagExpected   flag texts
  * @property {string[]} redFlagHits       flag texts
@@ -507,10 +508,18 @@ export function verifyJudgement(answer, built, input) {
     if (present(name)) entities.push(name);
     else dropped.push({ what: "entity", reason: absent(name), text: name.slice(0, 100) });
   }
+  const knownEntities = new Set([...brandRegistry(input.product, input.competitors)
+    .flatMap((entry) => [...entry.aliases, ...(entry.genericAliases ?? [])]), ...entities.map(foldText)]);
   const recommendations = [];
-  for (const sentence of textList(answer.recommendations, LIMITS.recommendations)) {
-    if (present(sentence)) recommendations.push(sentence);
-    else dropped.push({ what: "recommendation", reason: absent(sentence), text: sentence.slice(0, 300) });
+  for (const raw of (Array.isArray(answer.recommendations) ? answer.recommendations : []).slice(0, LIMITS.recommendations)) {
+    const sentence = typeof raw === "string" ? raw : String(raw?.text ?? "").trim();
+    const drop = (/** @type {string} */ reason) => dropped.push({ what: "recommendation", reason, text: sentence.slice(0, 300) });
+    if (!present(sentence)) { drop(absent(sentence)); continue; }
+    if (typeof raw === "string" || !Array.isArray(raw?.entities)) { drop("entities_missing"); continue; }
+    const names = [...new Set(textList(raw.entities, LIMITS.entities))];
+    const anchored = names.filter((entity) => knownEntities.has(foldText(entity)) && compactText(sentence).includes(compactText(entity)));
+    if (anchored.length !== names.length || !anchored.length) { drop("entity_not_in_recommendation"); continue; }
+    recommendations.push({ text: sentence, entities: anchored });
   }
   const safetyTermsHit = [];
   for (const term of textList(answer.safetyTerms, LIMITS.safetyTerms)) {
@@ -533,6 +542,17 @@ export function verifyJudgement(answer, built, input) {
       : row.status === "represented" && row.conditionsPreserved === false ? "partial" : row.status, quote, reason: String(row.reason ?? "").slice(0, 1200),
       conditionsPreserved: typeof row.conditionsPreserved === "boolean" ? row.conditionsPreserved : null });
   }
+  const reasons = [];
+  if (built.truncated) reasons.push("answer_truncated");
+  if (answer.assessmentComplete === false) reasons.push("assessment_incomplete");
+  if (answer.assessmentComplete !== true && answer.assessmentComplete !== false) reasons.push("assessment_not_reported");
+  if (dropped.length) reasons.push("extractions_dropped");
+  if (Object.entries(LIMITS).some(([key, limit]) => Array.isArray(answer[key]) && answer[key].length >= limit)) reasons.push("extraction_limit_reached");
+  const partial = reasons.some((reason) => reason !== "assessment_not_reported");
+  const judgementCoverage = {
+    status: /** @type {"complete"|"partial"|"unknown"} */ (partial ? "partial" : answer.assessmentComplete === true ? "complete" : "unknown"),
+    reasons, answerChars: built.answerChars, assessedChars: built.shown.length,
+  };
   return {
     valueCoverage, valueBasisVersion: input.value?.version ?? 0,
     cut: built.truncated ? { chars: built.answerChars, shown: built.shown.length } : null,
@@ -545,7 +565,7 @@ export function verifyJudgement(answer, built, input) {
     redFlagHits: hitIds.map((id) => /** @type {string} */ (flags.get(id))),
     safetyTermsHit,
     dropped,
-    checks: { offLabel, omittedSafety, citations },
+    checks: { offLabel, omittedSafety, citations, judgementCoverage },
   };
 }
 
@@ -792,11 +812,13 @@ function factsOf({ snapshot, judged, registry, countedOwned, at }) {
   });
   const status = snapshot.status === "valid" && judged?.refusal ? "refusal" : snapshot.status;
   const statements = judged?.statements ?? [];
+  const checks = judged ? { ...judged.checks, ...(judged.cut ? { answerCut: judged.cut } : {}) }
+    : { judgementCoverage: { status: "unknown", reasons: ["not_judged"], answerChars: String(snapshot.answerText ?? "").length, assessedChars: 0 } };
   const facts = {
     ...code,
     careHint: judged ? judged.careHint : null,
     statements,
-    failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements }),
+    failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements, checks, judgedAt: judged ? at.toISOString() : null }),
     parserVersion: `${GEO_PARSER_VERSION}+${judged ? GEO_JUDGE_VERSION : "unjudged"}`,
     judgedAt: judged ? at.toISOString() : null,
     redFlagExpected: judged?.redFlagExpected ?? [],
@@ -805,11 +827,11 @@ function factsOf({ snapshot, judged, registry, countedOwned, at }) {
     // The three checks beside the statements: a claim beyond the label, safety information left out, what the cited links say; and,
     // when the answer was longer than the judge reads, where it was cut: the brands and the citations above are counted over all of
     // it, the judgement is of the part it was shown (Q-13).
-    checks: judged ? { ...judged.checks, ...(judged.cut ? { answerCut: judged.cut } : {}) } : {},
+    checks,
     // What it was counted under, and the judge's two lists it was counted
     // with: a later registry change counts it again from these, asking no model.
     registryKey: registryKey(registry, countedOwned),
-    judgeExtract: judged ? extract : null,
+    judgeExtract: { ...extract, genericMentions: code.genericMentions, entityMentions: code.entityMentions },
     // An unjudged row waits before it is judged again.
     rejudgeAfter: judged ? null : new Date(at.getTime() + GEO_REJUDGE_BACKOFF_MS).toISOString(),
   };
@@ -1030,10 +1052,9 @@ export const GEO_RECOUNT_PER_PASS = 2_000;
  * stay as they are.
  *
  * A row parsed before the judge's lists were kept has only its stored brands
- * to go by: the judge's unregistered entities are the stored names that were
- * neither ours nor a rival, and a brand stored as in a recommendation keeps
- * that — the recommendation sentences themselves were not kept, so a name
- * newly counted is in a recommendation only when it sits in a list item.
+ * to go by: its unregistered entities may be recounted, but recommendation
+ * booleans cannot prove which co-mentioned entity was recommended. Missing
+ * historical coverage stays unknown; no frozen exported report is rewritten.
  * @param {GeoParseDeps & { force?: boolean, geoProjectIds?: string[] | null }} deps
  * @returns {Promise<{ projects: number, facts: number, skipped: string | null }>}
  */
@@ -1070,7 +1091,8 @@ export async function recountRegistryFacts(deps) {
 
 /**
  * One stored answer counted under a registry, with its own judged statements.
- * @param {{ brands: any[], statements: any[], judgeExtract: { recommendations?: string[], entities?: string[] } | null, status: string,
+ * @param {{ brands: any[], statements: any[], judgeExtract: { recommendations?: Array<import("./geoParse.mjs").GeoRecommendation | string>, entities?: string[], sourceParserVersion?: string | null } | null, status: string,
+ *   checks?: Record<string, any>, judged?: boolean, parserVersion?: string | null,
  *   answerText: string | null, citations: any[] }} row
  * @param {ReturnType<typeof brandRegistry>} registry @param {{ domains?: string[], urls?: string[] }} owned
  */
@@ -1083,11 +1105,15 @@ export function recountedFacts(row, registry, owned) {
     answer: row.answerText, citations: row.citations, registry, owned,
     recommendations: Array.isArray(extract?.recommendations) ? extract.recommendations : [], entities,
   });
-  if (!extract) {
-    const recommended = new Set(stored.filter((brand) => brand?.inRecommendation === true).map((brand) => foldText(brand.name)));
-    for (const brand of code.brands) if (recommended.has(foldText(brand.name))) brand.inRecommendation = true;
-    code.recommendedOurs = code.brands.some((brand) => brand.ours && brand.inRecommendation);
-  }
   const statements = Array.isArray(row.statements) ? row.statements : [];
-  return { ...code, failureMode: failureMode({ status: row.status, mentionsOurs: code.mentionsOurs, statements }) };
+  const coverage = geoJudgementCoverage({ checks: row.checks, ...(row.judged === false ? { judgedAt: null } : {}) });
+  const checks = { ...row.checks, judgementCoverage: row.checks?.judgementCoverage ?? {
+    status: coverage, reasons: [coverage === "partial" ? "answer_truncated" : "historical_coverage_unknown"],
+    answerChars: String(row.answerText ?? "").length, assessedChars: row.checks?.answerCut?.shown ?? 0,
+  } };
+  const sourceParserVersion = extract?.sourceParserVersion ?? row.parserVersion ?? null;
+  const judgeVersion = String(row.parserVersion ?? "").split("+").slice(1).join("+") || "legacy-judge";
+  return { ...code, checks, parserVersion: `${GEO_PARSER_VERSION}+${judgeVersion}`,
+    judgeExtract: { ...extract, genericMentions: code.genericMentions, entityMentions: code.entityMentions, sourceParserVersion },
+    failureMode: failureMode({ status: row.status, mentionsOurs: code.mentionsOurs, statements, checks, ...(row.judged === false ? { judgedAt: null } : {}) }) };
 }

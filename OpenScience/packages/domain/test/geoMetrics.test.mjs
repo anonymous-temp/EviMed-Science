@@ -60,6 +60,7 @@ function row(overrides = {}, facts = {}) {
       recommendedOurs: false,
       retrievalTriggered: false,
       statements: [],
+      checks: { judgementCoverage: { status: "complete", reasons: [], answerChars: 1, assessedChars: 1 } },
       redFlagExpected: [],
       redFlagHits: [],
       safetyTermsHit: [],
@@ -618,14 +619,18 @@ test("standard names follow X-STDVIS: only metrics with the standard's formula c
 
 // ------------------------------------------------------------------ golden
 
-test("golden: every cell equals the owner's compute_metrics.py on the fixture batch", () => {
+test("golden arithmetic is unchanged except complete-answer accuracy and its dependent index", () => {
   assert.equal(fixture.source.sha256, expected.source.sha256, "fixture and expected come from one script");
   assert.match(expected.source.sha256, /^[0-9a-f]{64}$/);
   assert.equal(expected.source.version, GEO_METRICS._provenance.version);
   assert.equal(expected.source.metricsYamlSha256, GEO_METRICS._provenance.sha256["shared/rules/metrics.yaml"], "the table and the golden were made from the same yaml");
   assert.equal(expected.source.sha256, GEO_METRICS._provenance.sha256["shared/scripts/compute_metrics.py"]);
 
-  const result = computeGeoMetrics(fixture.rows, fixture.options);
+  // This synthetic arithmetic fixture represents fully assessed answers. Real
+  // historical rows without coverage stay unknown (tested in the semantic regressions).
+  const fullyAssessed = fixture.rows.map((entry) => ({ ...entry, facts: entry.facts ? { ...entry.facts,
+    checks: { judgementCoverage: { status: /** @type {const} */ ("complete"), reasons: [], answerChars: 1, assessedChars: 1 } } } : entry.facts }));
+  const result = computeGeoMetrics(fullyAssessed, fixture.options);
   /** @param {Record<string, any>} cell */
   const key = (cell) => [cell.metricId, cell.scope, cell.pool, cell.engine, cell.groupId, cell.arm, cell.rival, cell.variant].join("|");
   const got = new Map(result.cells.map((cell) => [key(cell), cell]));
@@ -648,6 +653,9 @@ test("golden: every cell equals the owner's compute_metrics.py on the fixture ba
   };
   for (const [cellKey, wanted] of want) {
     const cell = /** @type {Record<string, any>} */ (got.get(cellKey));
+    // The source script counted mixed correct/unverifiable answers as right.
+    // V2 excludes those five answers; all unrelated arithmetic remains golden.
+    if (cell.metricId === "M-06" || cell.metricId === "M-19") continue;
     for (const field of ["numerator", "denominator", "value", "ciLow", "ciHigh"]) {
       if (typeof wanted[field] === "number") {
         assert.ok(typeof cell[field] === "number" && Math.abs(cell[field] - wanted[field]) <= 1e-9, `${cellKey} ${field}: ${cell[field]} vs ${wanted[field]}`);
@@ -670,18 +678,22 @@ test("golden: every cell equals the owner's compute_metrics.py on the fixture ba
   assert.ok(risk.length > 0 && risk.every((cell) => cell.value !== null), "M-15 is measured in every P4 scope (geo-skills 3.0.1)");
 
   assert.deepEqual(result.denominators, expected.denominators);
-  /** @param {GeoGviResult} gvi */
-  const gviView = (gvi) => ({
-    value: gvi.value, status: gvi.status, poolsUsed: gvi.poolsUsed, poolsMissing: gvi.poolsMissing,
-    pools: Object.fromEntries(Object.entries(gvi.pools).map(([pool, index]) => [pool, {
-      value: index.value, rawValue: index.rawValue, status: index.status, cappedBy: index.cappedBy,
-      redistributed: index.redistributed, dimensions: index.dimensions,
-    }])),
+  const accuracy = cellOf(result.cells, { metricId: "M-06", scope: "project" });
+  assert.deepEqual([accuracy.numerator, accuracy.denominator, accuracy.value], [6, 23, 26.09],
+    "the fixture has six fully correct and seventeen wrong answers; five mixed answers are partial");
+  assert.deepEqual(accuracy.assessment, { methodVersion: "geo-measurement-2", completeAnswers: 23, partialAnswers: 5, unknownAnswers: 29 });
+  assert.deepEqual([result.gvi.project.value, result.gvi.arms.pilot?.value, result.gvi.arms.control?.value], [48.02, 43.25, 45.15]);
+  /** @param {any} gvi */
+  const unaffected = (gvi) => ({
+    status: gvi.status, poolsUsed: gvi.poolsUsed, poolsMissing: gvi.poolsMissing,
+    pools: Object.fromEntries(Object.entries(gvi.pools).map(([pool, index]) => {
+      const value = /** @type {any} */ (index);
+      return [pool, { status: value.status, cappedBy: value.cappedBy, redistributed: value.redistributed,
+        dimensions: Object.fromEntries(Object.entries(value.dimensions).filter(([dimension]) => dimension !== "accuracy")) }];
+    })),
   });
-  assert.deepEqual(gviView(result.gvi.project), expected.gvi.project);
-  for (const arm of /** @type {const} */ (["pilot", "control"])) {
-    assert.deepEqual(gviView(/** @type {GeoGviResult} */ (result.gvi.arms[arm])), expected.gvi.arms[arm]);
-  }
+  assert.deepEqual(unaffected(result.gvi.project), unaffected(expected.gvi.project));
+  for (const arm of /** @type {const} */ (["pilot", "control"])) assert.deepEqual(unaffected(result.gvi.arms[arm]), unaffected(expected.gvi.arms[arm]));
 });
 
 test("geoCellRows returns the snapshots behind a cell", () => {

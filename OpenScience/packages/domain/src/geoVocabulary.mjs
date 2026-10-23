@@ -180,10 +180,10 @@ export const GEO_ROUND_STATUSES = frozen(['queued', 'running', 'done', 'partial'
 export const GEO_PROBE_JOB_STATUSES = frozen(['queued', 'leased', 'done', 'failed', 'skipped'])
 export const GEO_SNAPSHOT_STATUSES = frozen(['valid', 'suspect', 'refusal', 'failed'])
 export const GEO_STATEMENT_VERDICTS = frozen(['correct', 'wrong', 'unverifiable'])
-/** The four failure modes (漏提我方 / 讲对我方 / 讲错我方 / 讲错竞品), and `none` for an answer with nothing about us. */
-export const GEO_FAILURE_MODES = frozen(['omitted', 'correct', 'wrong_ours', 'wrong_competitor', 'none'])
+/** Failure modes plus explicit partial/unknown assessment; missing judgement is never correctness. */
+export const GEO_FAILURE_MODES = frozen(['omitted', 'correct', 'wrong_ours', 'wrong_competitor', 'none', 'partial', 'unknown'])
 export const GEO_FAILURE_MODE_LABELS_ZH = Object.freeze({
-  omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及',
+  omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及', partial: '部分核对', unknown: '尚无法判断',
 })
 
 /**
