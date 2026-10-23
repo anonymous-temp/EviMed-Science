@@ -494,3 +494,13 @@ test("frozen observed references survive changes to unrelated current schedule a
   assert.equal(replay.selection.timeCoverage.plannedRounds, selected.selection.timeCoverage.plannedRounds + 1);
   assert.equal(replay.selection.timeCoverage.unknownTime, selected.selection.timeCoverage.unknownTime + 1);
 });
+
+test("a dated explicit-round selection with no matching observations replays its empty cohort", options, async () => {
+  const selected = await readGeoSelection(store, project, { round: "r1", from: "2026-10-02", to: "2026-10-02" });
+  assert.deepEqual(selected.rows, []);
+  assert.deepEqual(selected.selection.roundIds, []);
+  const replay = await readGeoSelection(store, project, { selectionRef: selected.selection.reference });
+  assert.deepEqual(replay.rows, []);
+  assert.equal(replay.selection.reference, selected.selection.reference);
+  await assert.rejects(readGeoSelection(store, project, { round: "no-such-round", from: "2026-10-02", to: "2026-10-02" }), (error) => error.status === 404);
+});

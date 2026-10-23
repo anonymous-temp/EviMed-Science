@@ -199,7 +199,7 @@ test("snapshot member pages reuse authorized exact day selections through HTTP",
   assert.notEqual(second.payload.data.items[0].id, first.payload.data.items[0].id);
   refused(await call("GET", `${url}?${query}`, { user: MALLORY }), 404, "geo_project_not_found");
   for (const bad of ["{", JSON.stringify({ ...point.members.metric, typo: true }), JSON.stringify({ ...point.members.metric, engine: 17 }),
-    JSON.stringify({ ...point.members.metric, observationDate: "2026-02-30" })]) {
+    JSON.stringify({ ...point.members.metric, observationDate: "2026-02-30" }), JSON.stringify({ ...point.members.metric, observationDate: "" })]) {
     const malformed = new URLSearchParams(query); malformed.set("member", bad);
     refused(await call("GET", `${url}?${malformed}`), 400, "geo_read_filter_invalid");
   }

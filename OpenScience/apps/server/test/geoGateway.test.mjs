@@ -88,6 +88,7 @@ test("exact member continuation can reach every observation in a bounded selecti
   const filter = { selectionRef: "gsel_one", member: { metricId: "M-06", scope: "project", observationDate: "2026-10-01" }, offset: 19_950, limit: 50 };
   assert.equal((await post("read", { what: "snapshots", filter })).status, 200);
   assert.deepEqual(calls[0][3], filter);
+  assert.equal((await post("read", { what: "snapshots", filter: { ...filter, member: { ...filter.member, observationDate: "" } } })).status, 400);
   assert.equal((await post("read", { what: "snapshots", filter: { ...filter, offset: 20_001 } })).status, 400);
   const sourceFilter = { selectionRef: "gsel_one", sourceId: "source_one", answerLimit: 1, answerOffset: 200 };
   assert.equal((await post("read", { what: "sources", filter: sourceFilter })).status, 200);

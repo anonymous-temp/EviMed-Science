@@ -156,6 +156,10 @@ class GeoReadTests(_GatewayCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["selection"], selection)
         self.assertEqual(_Gateway.seen[0]["body"]["filter"], scope)
+        before = len(_Gateway.seen)
+        invalid = self.server.call_tool("geo_read", {"what": "snapshots", "filter": {**scope, "member": {**scope["member"], "observationDate": ""}}})
+        self.assertEqual(invalid["status"], "error")
+        self.assertEqual(len(_Gateway.seen), before)
 
     def test_a_read_posts_the_what_and_filter_with_the_runtime_token_through_call_tool(self):
         _Gateway.answers["read"] = (200, {"data": {"what": "metrics", "items": [{"metricId": "M-01", "cell": {"value": 0.18, "numerator": 56,

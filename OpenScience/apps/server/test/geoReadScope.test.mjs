@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeGeoReadScope, geoScopeFromQuery, computeGeoSelection } from "../src/geoReadScope.mjs";
+import { normalizeGeoReadScope, normalizeGeoMember, geoScopeFromQuery, computeGeoSelection } from "../src/geoReadScope.mjs";
 import { balanceRows } from "../src/geoMetricsJob.mjs";
 
 test("scope has closed fields, inclusive local dates and compatible aliases", () => {
@@ -19,6 +19,15 @@ test("scope has closed fields, inclusive local dates and compatible aliases", ()
 test("URL tag lists accept JSON arrays without splitting commas inside labels", () => {
   assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: JSON.stringify(["a,b", "c"]) })).clientTags, ["a,b", "c"]);
   assert.throws(() => geoScopeFromQuery(new URLSearchParams({ clientTags: '["broken"' })), (error) => error.status === 400);
+});
+
+test("a provided daily member date is required to be a real nonempty day", () => {
+  const metric = { metricId: "M-01", scope: "project" };
+  assert.deepEqual(normalizeGeoMember(metric), metric);
+  assert.equal(normalizeGeoMember({ ...metric, observationDate: "2026-10-01" }).observationDate, "2026-10-01");
+  for (const observationDate of ["", " ", "2026-02-30", null]) {
+    assert.throws(() => normalizeGeoMember({ ...metric, observationDate }), (error) => error.code === "geo_read_filter_invalid");
+  }
 });
 
 const facts = { brands: [{ name: "Ours", ours: true, count: 2 }], statements: [{ text: "known", verdict: "correct" }],
