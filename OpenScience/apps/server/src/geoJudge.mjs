@@ -1,4 +1,4 @@
-import { geoClaimApplicability, geoClaimAssessmentIdentity, GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
+import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, GEO_VALUE_COVERAGE_STATUSES, geoJudgementCoverage, geoValueJudged, geoValueList } from "@evimed/domain";
 /**
  * The model's reading of a measured answer, and code's check of it (build
  * spec §5 "Parse + judge", plan §4.3).
@@ -305,7 +305,7 @@ export function quantityTokens(value) {
  * @property {{ text: string, pool?: string | null, journeyStage?: string | null }} question
  * @property {"geo" | "evolution"} [purpose]
  * @property {string} [missionId]
- * @property {{ statement: string, note: string }} [reviewFeedback]
+ * @property {{ statement: string, note: string, statementIdentity?: string, claim?: string }} [reviewFeedback]
  * @property {string} answer   the stored answer text
  */
 
@@ -820,7 +820,7 @@ export function factsOf({ snapshot, judged, registry, countedOwned, at, claims =
     : { judgementCoverage: { status: "unknown", reasons: ["not_judged"], answerChars: String(snapshot.answerText ?? "").length, assessedChars: 0 } };
   const facts = {
     ...code,
-    assessmentBasis: claims.filter(claim => statements.some(statement => statement.claimId === claim.id)),
+    assessmentBasis: claims.filter(claim => statements.some(statement => geoClaimForStatement(claims, statement) === claim)),
     careHint: judged ? judged.careHint : null,
     statements,
     failureMode: failureMode({ status, mentionsOurs: code.mentionsOurs, statements, checks, judgedAt: judged ? at.toISOString() : null }),

@@ -17,6 +17,7 @@ test("every file that records which version of a value profile something stood o
     "geoLearningSignals.mjs": "reads only evaluationBasis.claims; its assessment preserves those claims without retaining a value-profile version pointer",
     "geoMeasureStore.mjs": "rounds.ref.evaluationBasis.value.version: the profile a round froze when it started",
     "geoOrchestrator.mjs": "schedule_marks.detail.basisVersion: the version a research request was made on",
+    "geoReadScope.mjs": "reads only frozen evaluationBasis.claims to retain the exact error identity; no new value-profile version pointer is stored",
     "geoService.mjs": "the value read, which reports the basis version of the observations it counts",
     "geoStore.mjs": "articles.value_context.basisVersion: the version an article stands on",
     "geoValueImport.mjs": "the research result the profile itself holds, copied from the request",

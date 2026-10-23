@@ -1,3 +1,4 @@
+import { geoErrorOrigin } from "./geoErrors.mjs";
 /**
  * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
  * module's switch, readiness and metrics.
@@ -219,6 +220,7 @@ const spacedLabel = (engine) => {
 
 /** @param {any} row */
 function errorView(row) {
+  const preserved = geoErrorOrigin(row.origin_statements ?? [], { claimId: row.claim_id, fingerprint: row.fingerprint }, row.origin_claims ?? [], { includeNonWrong: true });
   return {
     id: String(row.id),
     engine: String(row.engine),
@@ -240,8 +242,8 @@ function errorView(row) {
     // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
     claimId: text(row.claim_id),
     evidenceQuote: text(row.evidence_quote),
-    applicability: row.applicability ?? null,
-    claimVersion: row.claim_version == null ? null : Number(row.claim_version),
+    applicability: preserved ? preserved.applicability ?? null : row.applicability ?? null,
+    claimVersion: preserved ? preserved.claimVersion ?? null : row.claim_version == null ? null : Number(row.claim_version),
     createdAt: iso(row.created_at),
   };
 }
@@ -1465,8 +1467,11 @@ export class GeoService {
             WHERE s.geo_project_id = $1 AND s.round_id = $2 AND s.question_id = $3
             ORDER BY s.engine, s.asked_at DESC`, [project.id, snapshot.round_id, snapshot.question_id])
         : { rows: [] },
-      this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND (first_snapshot_id = $2 OR last_snapshot_id = $2
-          OR (question_id = $3 AND engine = $4)) ORDER BY severity DESC NULLS LAST, updated_at DESC LIMIT 20`,
+      this.store.query(`SELECT e.*,f.statements AS origin_statements,r.ref->'evaluationBasis'->'claims' AS origin_claims FROM evimed_geo.errors e
+        LEFT JOIN evimed_geo.facts f ON f.snapshot_id=e.first_snapshot_id LEFT JOIN evimed_geo.snapshots original ON original.id=e.first_snapshot_id
+        LEFT JOIN evimed_geo.rounds r ON r.id=original.round_id
+        WHERE e.geo_project_id = $1 AND (e.first_snapshot_id = $2 OR e.last_snapshot_id = $2
+          OR (e.question_id = $3 AND e.engine = $4)) ORDER BY e.severity DESC NULLS LAST, e.updated_at DESC LIMIT 20`,
       [project.id, snapshot.id, snapshot.question_id, snapshot.engine]),
       snapshot.question_id
         ? this.store.query(`SELECT s.id, s.asked_at, r.sample_date FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.rounds r ON r.id = s.round_id

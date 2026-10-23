@@ -102,10 +102,14 @@ it('keeps same-text same-id variants separate and submits the selected full stat
   const first = { ...statement, claimVersion: 1 };
   const second = { ...statement, claimVersion: 2, applicability: { ...statement.applicability, population: 'Children', elements: { form: 'solution' } } };
   client.getGeoDiagnosisReview.mockResolvedValue({ ...saved(), original: { statements: [first, second] }, current: { statements: [{ ...first, verdict: 'correct' }, second] }, history: [] });
-  renderReview();
+  const errors = [first, second].map((item, index) => ({ ...answerFilled.errors[0], id: `variant_error_${index}`, claimId: item.claimId, claimVersion: item.claimVersion, applicability: item.applicability }));
+  render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={{ ...answerFilled, errors }} project={geoProject()} actions={[]} /></MemoryRouter>);
   expect(await screen.findAllByText('“An exact answer sentence.”')).toHaveLength(2);
   expect(screen.getByText(/原判定：讲错 · 当前判定：讲对/)).toBeVisible();
   expect(screen.getByText(/原判定：讲错 · 当前判定：讲错/)).toBeVisible();
+  await userEvent.click(screen.getAllByRole('button', { name: '更新项目结论或文章' })[1]);
+  expect(conversation.open.mock.calls[0][1]).toContain('variant_error_1');
+  expect(conversation.open.mock.calls[0][1]).not.toContain('variant_error_0');
   const buttons = screen.getAllByRole('button', { name: '反馈并复核判定' });
   await userEvent.click(buttons[1]);
   await userEvent.type(screen.getByRole('textbox', { name: '反馈理由与适用条件' }), 'Review the child solution only.');

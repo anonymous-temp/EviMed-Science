@@ -14,7 +14,7 @@ import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
-import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
+import { errorFingerprint, noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
@@ -456,7 +456,7 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
         created_at, updated_at)
       VALUES ('err_ms', 'user_geo_ms', 'geo_ms', 'dosing', 'deepseek', 'geo_ms_q1', $1, 'awaiting_remeasure', '{"status":"done"}'::jsonb,
         '2026-09-25T14:00:00Z', '2026-09-25T15:00:00.123456Z')`, [WRONG]);
-    await database.query("UPDATE evimed_geo.errors SET claim_id=$1,first_snapshot_id='snap_origin' WHERE id='err_ms'", [claim.id]);
+    await database.query("UPDATE evimed_geo.errors SET claim_id=$1,first_snapshot_id='snap_origin',fingerprint=$2 WHERE id='err_ms'", [claim.id, errorFingerprint(original)]);
     const answer = async (/** @type {string} */ id, /** @type {string} */ askedAt) => {
       await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, question_id, engine, asked_at, status, answer_text)
         VALUES ($1, 'user_geo_ms', 'geo_ms', 'geo_ms_q1', 'deepseek', $2, 'valid', $3)`, [id, askedAt, A_RIGHT]);

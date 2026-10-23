@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity } from '@evimed/domain';
+import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement } from '@evimed/domain';
 import { ProductDocuments, ProductJobs } from './productStore.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { preserveGeoAssessment } from './geoLearningSignals.mjs';
 import { GeoJudge, judgeInputOf, factsOf, geoJudgeBudget } from './geoJudge.mjs';
-import { errorFingerprint } from './geoErrors.mjs';
+import { errorFingerprint, geoErrorOrigin, geoErrorResolutionSatisfied } from './geoErrors.mjs';
 import { brandRegistry } from './geoParse.mjs';
 import { HttpError } from './security.mjs';
 
@@ -59,9 +59,9 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
     const history = historyRows.slice(0, historyLimit);
     const first = current ? (await database.query("SELECT payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='knowledge' AND id=$2 ORDER BY revision ASC LIMIT 1", [project.userId, current.id])).rows[0]?.payload?.assessment : null;
     const claimIds = [...new Set([...(first?.statements ?? []), ...(current?.payload.assessment.statements ?? []), ...history.flatMap(row => row.payload.assessment?.statements ?? []), ...feedback.map(row => row.payload.original)].map(row => row.claimId).filter(Boolean))];
-    const claimDetails = claimIds.length ? (await database.query(`SELECT id, version, population, elements, source_ref, source_label, statement, quote
+    const claimDetails = claimIds.length ? (await database.query(`SELECT id, version, population, elements, in_label, valid_until, evidence_level, source_ref, source_label, statement, quote
       FROM evimed_geo.claims WHERE geo_project_id=$1 AND user_id=$2 AND id=ANY($3::text[]) LIMIT 400`, [project.id, project.userId, claimIds])).rows.map(row => ({
-        id: row.id, version: row.version, population: row.population, elements: row.elements, sourceRef: row.source_ref, sourceLabel: row.source_label, statement: row.statement, quote: row.quote })) : [];
+        id: row.id, version: row.version, population: row.population, elements: row.elements, inLabel: row.in_label ?? null, validUntil: row.valid_until == null ? null : new Date(row.valid_until).toISOString(), evidenceLevel: row.evidence_level ?? null, sourceRef: row.source_ref, sourceLabel: row.source_label, statement: row.statement, quote: row.quote })) : [];
     return { claimDetails, original: first, assessmentVersion: current?.payload.assessmentVersion ?? null, current: current?.payload.assessment ?? null,
       state: current?.payload.state ?? 'unknown', history: history.map(row => ({ revision: row.revision, version: row.payload.assessmentVersion, assessment: row.payload.assessment, state: row.payload.state })),
       historyPage: { total: historyTotal, shown: history.length, more: historyRows.length > historyLimit, nextBefore: historyRows.length > historyLimit ? history.at(-1).revision : null },
@@ -72,10 +72,11 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
     if (typeof input.snapshotId !== 'string' || typeof input.statement !== 'string' || !input.statement.trim() || input.statement.length > 2000
       || typeof input.note !== 'string' || !input.note.trim() || input.note.length > 4000
       || typeof input.requestKey !== 'string' || !/^[A-Za-z0-9_-]{8,80}$/u.test(input.requestKey)
+      || input.statementIdentity != null && (typeof input.statementIdentity !== 'string' || input.statementIdentity.length > 20000)
       || typeof input.assessmentVersion !== 'string' || !/^[a-f0-9]{64}$/u.test(input.assessmentVersion)) throw new HttpError(400, 'geo_feedback_invalid', 'Feedback requires an exact assessment, statement, reason and request key.');
     await migrateProductStore(database);
     const id = `geo-feedback-${hash([project.id, input.requestKey])}`;
-    const content = { snapshotId: input.snapshotId, statement: input.statement, claimId: input.claimId ?? null, assessmentVersion: input.assessmentVersion, note: input.note.trim(), selectionRef: input.selectionRef ?? null };
+    const content = { snapshotId: input.snapshotId, statement: input.statement, claimId: input.claimId ?? null, assessmentVersion: input.assessmentVersion, note: input.note.trim(), selectionRef: input.selectionRef ?? null, ...(input.statementIdentity == null ? {} : { statementIdentity: input.statementIdentity }) };
     return database.transaction(client => database.withTransactionClient(client, async () => {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-geo-assessment:${input.snapshotId}`]);
       const old = await documents.get(project.userId, 'knowledge', id);
@@ -85,25 +86,26 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       }
       const current = await assessment(project, input.snapshotId, client);
       if (!current || current.payload.assessmentVersion !== input.assessmentVersion) throw conflict();
-      const original = (current.payload.assessment.statements ?? []).find(row => row.text === input.statement && (row.claimId ?? null) === content.claimId);
-      if (!original) throw conflict();
+      const matches = (current.payload.assessment.statements ?? []).filter(row => row.text === input.statement && (row.claimId ?? null) === content.claimId
+        && (input.statementIdentity == null || geoStatementAssessmentIdentity(row) === input.statementIdentity));
+      if (matches.length !== 1) throw conflict();
+      const original = matches[0];
       const job = await jobs.enqueue(project.userId, kind, { feedbackId: id, geoProjectId: project.id, snapshotId: input.snapshotId },
         { projectId: project.projectId, idempotencyKey: id, maxAttempts: 3, transactionClient: client });
       await documents.put(project.userId, 'knowledge', id, { recordType: 'geo-judgment-feedback', ...content, geoProjectId: project.id,
-        actorId: project.actorId ?? project.userId, requestDigest: hash(content), original, jobId: job.id },
+        actorId: project.actorId ?? project.userId, requestDigest: hash(content), statementIdentity: geoStatementAssessmentIdentity(original), original, jobId: job.id },
       { expectedRevision: 0, projectId: project.projectId, transactionClient: client });
       return { id, jobId: job.id, repeated: false };
     }));
   }
-  async function reconcileErrorJudgments(client, project, snapshot, previous, next, facts) {
+  async function reconcileErrorJudgments(client, project, snapshot, previous, next, facts, claims) {
     const candidates = [...(previous.assessment.statements ?? []), ...facts.statements].filter(statement => statement.claimId);
     const affectedIds = [...new Set(candidates.map(statement => statement.claimId))];
     if (!affectedIds.length) return;
     const errors = (await client.query(`SELECT * FROM evimed_geo.errors WHERE user_id=$1 AND geo_project_id=$2 AND engine=$3
       AND claim_id=ANY($4::text[]) ORDER BY id FOR UPDATE`, [project.userId, project.id, snapshot.engine, affectedIds])).rows;
     for (const error of errors) {
-      const original = candidates.find(statement => statement.claimId === error.claim_id && (errorFingerprint(statement) === error.fingerprint
-        || errorFingerprint({ claimKey: statement.claimKey, text: statement.text }) === error.fingerprint));
+      const original = geoErrorOrigin(candidates, { claimId: error.claim_id, fingerprint: error.fingerprint }, [], { includeNonWrong: true });
       if (!original) continue;
       const legacy = errorFingerprint(original) !== error.fingerprint || original.claimVersion == null;
       const identity = geoClaimAssessmentIdentity(original);
@@ -118,12 +120,20 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       const corrected = facts.statements.some(statement => statement.verdict === 'correct' && geoClaimAssessmentIdentity(statement) === identity);
       if (!residual && !corrected) continue;
       const state = residual ? 'active' : 'withdrawn';
-      if (state === error.judgment_state) continue;
-      const receipt = { kind: state === 'withdrawn' ? 'assessment_correction' : 'judgment_reactivated', snapshotId: snapshot.id,
+      const proof = { ...snapshot, ...facts };
+      const resolutionWithdrawn = error.status === 'closed' && error.closed_snapshot_id === snapshot.id
+        && error.question_id === snapshot.questionId && error.engine === snapshot.engine
+        && !geoErrorResolutionSatisfied(original, proof, geoClaimForStatement(claims, original));
+      if (state === error.judgment_state && !resolutionWithdrawn) continue;
+      const receipt = { kind: resolutionWithdrawn ? 'resolution_basis_withdrawn' : state === 'withdrawn' ? 'assessment_correction' : 'judgment_reactivated', snapshotId: snapshot.id,
+        ...(resolutionWithdrawn ? { previousClosedSnapshotId: error.closed_snapshot_id } : {}),
         previousAssessmentVersion: previous.assessmentVersion, assessmentVersion: next.payload.assessmentVersion,
         claimId: original.claimId, claimVersion: original.claimVersion ?? null, applicability: geoClaimApplicability(original), changedAt: new Date().toISOString() };
       await client.query(`UPDATE evimed_geo.errors SET judgment_state=$2,judgment_correction=$3::jsonb,judgment_history=judgment_history || jsonb_build_array($3::jsonb),
-        notified_at=CASE WHEN $2='active' THEN NULL ELSE notified_at END WHERE id=$1`, [error.id, state, JSON.stringify(receipt)]);
+        notified_at=CASE WHEN $2='active' AND judgment_state<>'active' THEN NULL ELSE notified_at END,
+        status=CASE WHEN $4::boolean THEN 'awaiting_remeasure' ELSE status END,
+        closed_snapshot_id=CASE WHEN $4::boolean THEN NULL ELSE closed_snapshot_id END,
+        updated_at=CASE WHEN $4::boolean THEN $5::timestamptz ELSE updated_at END WHERE id=$1`, [error.id, state, JSON.stringify(receipt), resolutionWithdrawn, receipt.changedAt]);
     }
   }
   async function tick() {
@@ -143,10 +153,13 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
       const context = await store.projectContext(project.id, snapshot.roundId);
       if (!context || !snapshot.roundId || !(await store.round(snapshot.roundId))?.ref?.evaluationBasis) throw new HttpError(409, 'geo_review_basis_unavailable', 'The original assessment basis is unavailable.');
       const basis = current.payload.assessment.basis;
-      if (basis.some(row => !context.claims.some(claim => claim.id === row.id && (claim.version ?? null) === row.version && hash(claim.quote ?? '') === row.quoteDigest && (claim.sourceRef ?? null) === row.sourceRef))) throw conflict();
+      if ((current.payload.assessment.statements ?? []).some(statement => statement.claimId && !geoClaimForStatement(context.claims, statement))) throw conflict();
+      if (basis.some(row => !context.claims.some(claim => claim.id === row.id && (claim.version ?? null) === row.version && (!row.identity || geoClaimAssessmentIdentity(claim) === row.identity) && hash(claim.quote ?? '') === row.quoteDigest && (claim.sourceRef ?? null) === row.sourceRef))) throw conflict();
       const question = snapshot.questionId ? (await store.questions(project.id, { ids: [snapshot.questionId] }))[0] : null;
       const input = /** @type {import("./geoJudge.mjs").GeoJudgeInput} */ (judgeInputOf(context, question, snapshot));
-      input.reviewFeedback = { statement: p.statement, note: p.note };
+      const targetClaim = geoClaimForStatement(context.claims, p.original);
+      if (!targetClaim) throw conflict();
+      input.reviewFeedback = { statement: p.statement, note: p.note, claim: `C${context.claims.indexOf(targetClaim) + 1}`, statementIdentity: p.statementIdentity ?? geoStatementAssessmentIdentity(p.original) };
       const judged = await evaluator.judge(input);
       const priorCitations = current.payload.assessment.checks?.citations ?? [];
       for (const prior of priorCitations) {
@@ -160,7 +173,7 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
         if (index < 0) judged.checks.citations.push(retained);
         else judged.checks.citations[index] = retained;
       }
-      const retained = current.payload.assessment.statements.filter(prior => !judged.statements.some(next => next.text === prior.text && next.claimId === prior.claimId));
+      const retained = current.payload.assessment.statements.filter(prior => !judged.statements.some(next => geoStatementAssessmentIdentity(next) === geoStatementAssessmentIdentity(prior)));
       if (retained.length) {
         judged.statements.push(...retained);
         judged.checks.judgementCoverage = { ...judged.checks.judgementCoverage, status: 'partial',
@@ -185,7 +198,7 @@ export function createGeoDiagnosisReview({ database, store, config = {}, judge =
         [snapshot.id, project.userId, project.id, ...entries.map(([key, value]) => jsonFields.has(key) ? JSON.stringify(value) : value)]);
         if (status !== snapshot.status) await client.query('UPDATE evimed_geo.snapshots SET status=$2 WHERE id=$1', [snapshot.id, status]);
         const saved = await preserveGeoAssessment({ database, client, snapshotId: snapshot.id, facts });
-        await reconcileErrorJudgments(client, project, snapshot, head.payload, saved, facts);
+        await reconcileErrorJudgments(client, project, { ...snapshot, status }, head.payload, saved, facts, context.claims);
       });
       completed = true;
       // Reconcile the existing withdrawal outbox before a later learning pass can reuse the replaced assessment.

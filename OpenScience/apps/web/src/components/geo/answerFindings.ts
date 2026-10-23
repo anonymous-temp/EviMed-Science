@@ -9,7 +9,7 @@
  *
  * Two sources for one claim are one finding: the correction is the claim's, not the source's.
  */
-import { canonicalJson, geoClaimApplicability, geoClaimAssessmentIdentity } from "@evimed/domain";
+import { geoClaimAssessmentIdentity } from "@evimed/domain";
 import type { GeoAnswer, GeoErrorRow, GeoStatementFact } from "@/lib/geoClient";
 import { markAnswer } from "./answerMarks";
 
@@ -50,9 +50,11 @@ export function answerFindings(data: Pick<GeoAnswer, "snapshot" | "facts" | "err
   const spoken = new Set<string>();
   for (const statement of statements) {
     if (findings.some((finding) => same(finding.sentence, statement.text) && geoClaimAssessmentIdentity(finding.statement) === geoClaimAssessmentIdentity(statement))) continue;
-    const candidates = rows.filter(row => ((statement.claimId && row.claimId === statement.claimId) || ((!statement.claimId || !row.claimId) && same(row.statement, statement.text)))
-      && (statement.claimVersion == null || row.claimVersion == null || statement.claimVersion === row.claimVersion)
-      && (!statement.applicability || !row.applicability || canonicalJson(geoClaimApplicability(statement)) === canonicalJson(geoClaimApplicability(row))));
+    const exact = rows.filter(row => geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement));
+    // An older transport omitted claim ids. Only one current identity may supply that missing association.
+    const unambiguous = new Set(current.filter(row => same(row.text, statement.text)).map(geoClaimAssessmentIdentity)).size === 1;
+    const candidates = exact.length ? exact : unambiguous ? rows.filter(row => !row.claimId && row.claimVersion == null
+      && row.applicability == null && same(row.statement, statement.text)) : [];
     const error = best(candidates);
     for (const row of candidates) spoken.add(claimKey(row));
     findings.push({ sentence: statement.text.trim(), statement, error });

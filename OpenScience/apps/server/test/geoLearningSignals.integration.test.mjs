@@ -175,3 +175,21 @@ test('a previously published customer contribution is withdrawn when its project
   const record = (await database.query("SELECT payload FROM evimed_product.documents WHERE payload->>'snapshotId'='later_internal_snapshot'")).rows[0].payload;
   assert.equal(record.state, 'excluded'); assert.equal(record.generation, record.publishedGeneration);
 });
+
+test('same-id claim variants keep separate source contributions and a withdrawal affects only its exact identity', options, async () => {
+  const a = { ...claim, id: 'shared_variant', key: 'shared', version: 1, population: 'Adults', elements: { form: 'tablet' }, quote: 'Only adults may use tablets.', sourceRef: 'doi:10.1234/variant-adult' };
+  const b = { ...a, version: 2, population: 'Children', elements: { form: 'solution' }, quote: 'Only children may use solution.', sourceRef: 'doi:10.1234/variant-child' };
+  const statement = c => ({ ...wrong, claimId: c.id, claimKey: c.key, claimVersion: c.version,
+    applicability: { population: c.population, elements: c.elements, inLabel: null, validUntil: null, evidenceLevel: null }, evidence: c.quote });
+  await store.writeFacts(await snapshot('identity_sources_snapshot'), { ...facts(), statements: [statement(a), statement(b)], assessmentBasis: [a, b] });
+  const corrected = createGeoLearningSignals({ database, signals: () => signals, sourceChanges: { getMany: async () => new Map([
+    [a.sourceRef, { state: 'changed', changes: [{ kind: 'retraction' }] }], [b.sourceRef, { state: 'clean', changes: [] }],
+  ]) } });
+  await corrected.reconcileDependencies();
+  const record = (await database.query("SELECT payload FROM evimed_product.documents WHERE payload->>'recordType'='geo-assessment' AND payload->>'snapshotId'='identity_sources_snapshot'")).rows[0].payload;
+  assert.equal(record.contributions.length, 2);
+  const adult = record.contributions.find(entry => JSON.parse(entry.claimIdentity).version === 1);
+  const child = record.contributions.find(entry => JSON.parse(entry.claimIdentity).version === 2);
+  assert.equal(adult.state, 'invalidated');
+  assert.equal(child.state ?? 'active', 'active');
+});

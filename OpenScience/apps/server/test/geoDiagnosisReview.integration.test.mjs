@@ -151,24 +151,31 @@ test('feedback beyond the first page remains reachable and assessment history co
 });
 
 test('same-id, same-word versions require an exact statement identity and unreviewed variants remain preserved', options, async () => {
-  const { geoClaimAssessmentIdentity } = await import('@evimed/domain');
+  const { geoStatementAssessmentIdentity } = await import('@evimed/domain');
   const first = { ...wrong, claimVersion: 1, applicability: { population: 'Adults', elements: { form: 'tablet' }, inLabel: true, validUntil: null, evidenceLevel: null } };
-  const secondClaim = { ...claim, version: 2, population: 'Children', elements: { form: 'solution' } };
-  const second = { ...first, claimVersion: 2, applicability: { ...first.applicability, population: 'Children', elements: { form: 'solution' } } };
-  await database.query("UPDATE evimed_geo.rounds SET ref=$1::jsonb WHERE id='review_round'", [JSON.stringify({ evaluationBasis: { claims: [claim, secondClaim], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
+  const firstClaim = { ...claim, inLabel: true, validUntil: null, evidenceLevel: null };
+  const secondClaim = { ...firstClaim, version: 2, population: 'Children', elements: { form: 'solution' }, quote: 'Only children may use the solution.' };
+  const second = { ...first, claimVersion: 2, evidence: secondClaim.quote, applicability: { ...first.applicability, population: 'Children', elements: { form: 'solution' } } };
+  await database.query("UPDATE evimed_geo.rounds SET ref=$1::jsonb WHERE id='review_round'", [JSON.stringify({ evaluationBasis: { claims: [firstClaim, secondClaim], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
   await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,answer_text) VALUES('version_review','review_owner','review_geo','review_round','review_question','deepseek','valid',$1)`, [wrong.text]);
-  await store.writeFacts({ id: 'version_review', userId: project.userId, geoProjectId: project.id }, { statements: [first, second], checks: { judgementCoverage: { status: 'complete' } }, judgedAt: '2026-10-24T01:00:00Z', assessmentBasis: [claim, secondClaim] });
-  const focused = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => ({ statements: [{ ...first, verdict: 'correct' }], checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }) } });
+  await store.writeFacts({ id: 'version_review', userId: project.userId, geoProjectId: project.id }, { statements: [first, second], checks: { judgementCoverage: { status: 'complete' } }, judgedAt: '2026-10-24T01:00:00Z', assessmentBasis: [firstClaim, secondClaim] });
+  const aliases = [];
+  const focused = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async input => { aliases.push(input.reviewFeedback.claim); return ({ statements: [{ ...first, verdict: 'correct' }], checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }); } } });
   const version = (await focused.read(project, 'version_review')).assessmentVersion;
   const request = { snapshotId: 'version_review', statement: first.text, claimId: first.claimId, assessmentVersion: version, note: 'Only the adult statement.', requestKey: 'ambiguous_legacy' };
   await assert.rejects(focused.submit(project, request), error => error.status === 409);
-  await focused.submit(project, { ...request, requestKey: 'precise_statement', statementIdentity: geoClaimAssessmentIdentity(first) });
+  await focused.submit(project, { ...request, requestKey: 'precise_statement', statementIdentity: geoStatementAssessmentIdentity(first) });
   // Use this factory's evaluator for all jobs, without relying on unrelated queued requests.
   for (let index = 0; index < 110; index += 1) {
     await focused.tick();
     if ((await focused.read(project, 'version_review')).feedback[0]?.status === 'succeeded') break;
   }
   const saved = await focused.read(project, 'version_review');
+  assert.equal(saved.feedback[0].status, 'succeeded');
   assert.ok(saved.current.statements.some(row => row.claimVersion === 2 && row.verdict === 'wrong'));
   assert.equal(saved.current.checks.judgementCoverage.status, 'partial');
+  assert.equal(aliases.at(-1), 'C1');
+  await focused.submit(project, { ...request, assessmentVersion: saved.assessmentVersion, requestKey: 'precise_second_statement', statementIdentity: geoStatementAssessmentIdentity(second) });
+  assert.deepEqual(await focused.tick(), { processed: 1 });
+  assert.equal(aliases.at(-1), 'C2');
 });

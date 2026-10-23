@@ -1,3 +1,4 @@
+import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoStatementAssessmentIdentity } from "@evimed/domain";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { getGeoDiagnosisReview, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
@@ -88,13 +89,13 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     finally { setReadingOlder(false); }
   };
   const original = ready.original?.statements ?? ready.history.at(-1)?.assessment?.statements ?? ready.current?.statements ?? data.facts?.statements ?? [];
-  const statements = [...new Map([...original, ...history.flatMap(row => row.assessment?.statements ?? []), ...feedbackRows.map(row => row.original), ...(ready.current?.statements ?? [])].map(row => [`${row.claimId}:${row.text}`, row])).values()];
+  const statements = [...new Map([...original, ...history.flatMap(row => row.assessment?.statements ?? []), ...feedbackRows.map(row => row.original), ...(ready.current?.statements ?? [])].map(row => [geoStatementAssessmentIdentity(row), row])).values()];
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const send = async (statement: GeoStatementFact) => {
     if (!ready.assessmentVersion || !note.trim()) return;
     setBusy(true); setError(null);
     try {
-      await submitGeoDiagnosisFeedback(geoId, { snapshotId: data.snapshot.id, statement: statement.text, claimId: statement.claimId,
+      await submitGeoDiagnosisFeedback(geoId, { snapshotId: data.snapshot.id, statement: statement.text, claimId: statement.claimId, statementIdentity: geoStatementAssessmentIdentity(statement),
         assessmentVersion: ready.assessmentVersion, note, requestKey, selectionRef: project.selection?.reference ?? null });
       setEditing(null); setNote(""); setRequestKey(crypto.randomUUID()); reloadReview();
     } catch (cause) {
@@ -103,23 +104,23 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     } finally { setBusy(false); }
   };
   const act = (statement: GeoStatementFact, action: "conclusion" | "treatment") => {
-    const rows = data.errors.filter(row => row.claimId === statement.claimId);
+    const rows = data.errors.filter(row => geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement));
     const claim = claimRows(rows)[0] ?? { engines: [data.snapshot.engine], statement: statement.text, evidenceQuote: statement.evidence, rows };
     const linked = actions.filter(action => action.need.errorIds.some(id => rows.some(row => row.id === id)));
     const context = { actionKeys: linked.map(action => action.key), articleIds: [...new Set(linked.flatMap(action => action.articleIds))], snapshotId: data.snapshot.id, questionId: data.question?.id ?? null, question: data.question?.text ?? null,
-      assessmentVersion: ready.assessmentVersion, claimId: statement.claimId, statement: statement.text, selectionRef: project.selection?.reference ?? null };
+      assessmentVersion: ready.assessmentVersion, claimId: statement.claimId, claimVersion: statement.claimVersion ?? null, applicability: geoClaimApplicability(statement), statementIdentity: geoStatementAssessmentIdentity(statement), statement: statement.text, selectionRef: project.selection?.reference ?? null };
     void open({ projectId: project.projectId, sessionId: project.sessionId }, `${correctionBrief(claim, product, action)}\n当前复核上下文：${JSON.stringify(context)}`);
   };
   return <Section title="逐句诊断与反馈" level="section">
     <div className="flex flex-col gap-6">
       {statements.map(statement => {
-        const prior = original.find(row => row.text === statement.text && row.claimId === statement.claimId);
-        const current = (ready.current?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId);
-        const claimDetail = ready.claimDetails?.find(row => row.id === statement.claimId);
-        const applicable = claimDetail ?? (statement as GeoStatementFact & { applicability?: { population?: string | null; elements?: Record<string, unknown> | null } }).applicability;
-        const feedback = feedbackRows.filter(row => row.statement === statement.text && row.original.claimId === statement.claimId);
-        const statementKey = `${statement.claimId}:${statement.text}`;
-        return <section key={`${statement.claimId}:${statement.text}`} className="flex flex-col gap-3 border-b border-border pb-4">
+        const prior = original.find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement));
+        const current = (ready.current?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement));
+        const claimDetail = geoClaimForStatement(ready.claimDetails ?? [], statement) as NonNullable<GeoDiagnosisReview["claimDetails"]>[number] | null;
+        const applicable = geoClaimApplicability(statement) ?? (claimDetail ? geoClaimApplicability(claimDetail) : null);
+        const feedback = feedbackRows.filter(row => geoStatementAssessmentIdentity(row.original) === geoStatementAssessmentIdentity(statement));
+        const statementKey = geoStatementAssessmentIdentity(statement);
+        return <section key={statementKey} className="flex flex-col gap-3 border-b border-border pb-4">
           <p className="text-body text-text">“{statement.text}”</p>
           <p className="text-ui text-text-2">原判定：{prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
           <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
@@ -131,9 +132,9 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
             <div className="flex gap-2"><Button size="sm" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>提交复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
           </div>}
           {canRun && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" onClick={() => act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
-          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && row.claimId === statement.claimId)))} canRun={canRun} onAsk={() => act(statement, "conclusion")} />
-          {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => row.text === statement.text && row.claimId === statement.claimId); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
-          {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => item.text === row.statement && item.claimId === row.original.claimId)?.verdict ?? "unverifiable"]}</p>}</div>)}
+          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canRun} onAsk={() => act(statement, "conclusion")} />
+          {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
+          {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => geoStatementAssessmentIdentity(item) === geoStatementAssessmentIdentity(row.original))?.verdict ?? "unverifiable"]}</p>}</div>)}
         </section>;
       })}
       {feedbackPage?.more && <Button variant="secondary" size="sm" loading={readingOlder} onClick={() => void earlier("feedback")}>读取更早反馈（已读取 {feedbackRows.length}/{feedbackPage.total}）</Button>}

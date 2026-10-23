@@ -157,6 +157,7 @@ export function errorRow(row) {
     userId: String(row.user_id),
     geoProjectId: String(row.geo_project_id),
     fingerprint: String(row.fingerprint),
+    errorRevision: row.error_revision ?? null,
     judgmentState: row.judgment_state ?? "active", judgmentCorrection: row.judgment_correction ?? null, judgmentHistory: list(row.judgment_history),
     engine: String(row.engine),
     questionId: row.question_id ?? null,
@@ -1034,7 +1035,7 @@ export class GeoMeasureStore {
 
   /** Open errors that have been acted on. @param {number} limit */
   async errorsToClose(limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE judgment_state='active' AND status IN ('acting', 'awaiting_remeasure') ORDER BY updated_at LIMIT $1`, [limit]);
+    const result = await this.query(`SELECT e.*,md5(to_jsonb(e)::text) AS error_revision FROM evimed_geo.errors e WHERE judgment_state='active' AND status IN ('acting', 'awaiting_remeasure') ORDER BY updated_at LIMIT $1`, [limit]);
     return result.rows.map(errorRow);
   }
 
@@ -1047,13 +1048,33 @@ export class GeoMeasureStore {
    * @param {string} errorId
    */
   async laterJudgedAnswers(errorId) {
-    const result = await this.query(`SELECT s.id, s.round_id, s.status, s.asked_at, s.answer_text, f.statements, f.checks, f.judged_at FROM evimed_geo.errors e
+    const result = await this.query(`SELECT s.id, s.round_id, s.status, s.asked_at, s.answer_text, f.statements, f.checks, f.judged_at, md5(to_jsonb(f)::text) AS facts_revision, md5(to_jsonb(s)::text) AS snapshot_revision FROM evimed_geo.errors e
         JOIN evimed_geo.snapshots s ON s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine
           AND s.asked_at > e.updated_at
         LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
       WHERE e.id = $1
       ORDER BY s.asked_at DESC,s.id DESC LIMIT 20`, [errorId]);
-    return result.rows.map((row) => ({ id: String(row.id), roundId: row.round_id ?? null, status: String(row.status), askedAt: iso(row.asked_at), answerText: row.answer_text ?? null, judgedAt: iso(row.judged_at), checks: row.checks ?? {}, statements: list(row.statements) }));
+    return result.rows.map((row) => ({ id: String(row.id), roundId: row.round_id ?? null, status: String(row.status), askedAt: iso(row.asked_at), answerText: row.answer_text ?? null, judgedAt: iso(row.judged_at), checks: row.checks ?? {}, factsRevision: row.facts_revision, snapshotRevision: row.snapshot_revision, statements: list(row.statements) }));
+  }
+
+  /** Close only the exact occurrence and assessment that were medically verified by the caller.
+   * Locks follow the facts → snapshot → error order used by assessment replacement and error recording.
+   * @param {any} observed @param {any} answer @param {Date} at */
+  async closeErrorIfCurrent(observed, answer, at) {
+    if (!observed.errorRevision || !answer.factsRevision || !answer.snapshotRevision) return false;
+    return this.transaction(async client => {
+      await client.query("SELECT snapshot_id FROM evimed_geo.facts WHERE snapshot_id=$1 FOR SHARE", [answer.id]);
+      await client.query("SELECT id FROM evimed_geo.snapshots WHERE id=$1 FOR SHARE", [answer.id]);
+      await client.query("SELECT id FROM evimed_geo.errors WHERE id=$1 FOR UPDATE", [observed.id]);
+      const result = await client.query(`UPDATE evimed_geo.errors e SET status='closed',closed_snapshot_id=$2,updated_at=$3
+        WHERE e.id=$1 AND e.user_id=$4 AND e.geo_project_id=$5 AND e.judgment_state='active' AND e.status IN ('acting','awaiting_remeasure')
+        AND md5(to_jsonb(e)::text)=$6 AND EXISTS(SELECT 1 FROM evimed_geo.snapshots s JOIN evimed_geo.facts f ON f.snapshot_id=s.id
+          WHERE s.id=$2 AND md5(to_jsonb(s)::text)=$7 AND md5(to_jsonb(f)::text)=$8)
+        AND $2=(SELECT s.id FROM evimed_geo.snapshots s WHERE s.geo_project_id=e.geo_project_id AND s.user_id=e.user_id
+          AND s.question_id=e.question_id AND s.engine=e.engine AND s.asked_at>e.updated_at ORDER BY s.asked_at DESC,s.id DESC LIMIT 1)
+        RETURNING e.id`, [observed.id, answer.id, at.toISOString(), observed.userId, observed.geoProjectId, observed.errorRevision, answer.snapshotRevision, answer.factsRevision]);
+      return Boolean(result.rows.length);
+    });
   }
 
   /** Open errors whose cited source is not attributed yet. @param {number} limit */

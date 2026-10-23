@@ -275,9 +275,11 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
   const live = (await store.query(`SELECT e.id, e.status, e.severity, e.cited_source FROM evimed_geo.errors e
     WHERE ${where.join(" AND ")} AND e.judgment_state='active' AND e.status <> 'closed'`, params)).rows;
   params.push(filter.limit, filter.offset);
-  const rows = (await store.query(`SELECT e.*, c.version AS claim_version,
+  const rows = (await store.query(`SELECT e.*, f.statements AS origin_statements,r.ref->'evaluationBasis'->'claims' AS origin_claims, c.version AS claim_version,
     CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object('population',c.population,'elements',c.elements,'inLabel',c.in_label,'validUntil',c.valid_until,'evidenceLevel',c.evidence_level) END AS applicability
-    FROM evimed_geo.errors e LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id WHERE ${where.join(" AND ")}
+    FROM evimed_geo.errors e LEFT JOIN evimed_geo.claims c ON c.id=e.claim_id AND c.geo_project_id=e.geo_project_id
+    LEFT JOIN evimed_geo.facts f ON f.snapshot_id=e.first_snapshot_id LEFT JOIN evimed_geo.snapshots original ON original.id=e.first_snapshot_id
+    LEFT JOIN evimed_geo.rounds r ON r.id=original.round_id WHERE ${where.join(" AND ")}
     ORDER BY (e.status = 'closed'), e.severity DESC NULLS LAST, e.updated_at DESC, e.id
     LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
   return { rows, live, claimRows: rows, counts, activeSummary: { unit: "error_rows", total: activeTotal, ...activeBreakdown, byGroup, sourcedOpen }, summary: { unit: "error_rows", total: counts.total, byGroup, ...breakdown, sourcedOpen },

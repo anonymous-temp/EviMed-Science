@@ -61,16 +61,25 @@ test('only an explicitly verified correct judgment for the same claim/version/ap
 test('origin matching selects the error fingerprint across same-id versions in either order', options, async () => {
   const secondClaim = { ...claim, version: 2, population: 'Children', elements: { form: 'solution' }, quote: 'Only children may use the solution.' };
   const wrong2 = { ...wrong, claimVersion: 2, text: 'All ages may use solutions.', applicability: { ...applicability, population: 'Children', elements: { form: 'solution' } }, evidence: secondClaim.quote };
-  await database.query("UPDATE evimed_geo.rounds SET ref=$1::jsonb WHERE id='resolution_round'", [JSON.stringify({ evaluationBasis: { claims: [claim, secondClaim], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
-  for (const [index, originStatements] of [[wrong, wrong2], [wrong2, wrong]].entries()) {
+  const versionOnly = { ...wrong, claimVersion: 2 };
+  await database.query("UPDATE evimed_geo.rounds SET ref=$1::jsonb WHERE id='resolution_round'", [JSON.stringify({ evaluationBasis: { claims: [claim, secondClaim, { ...claim, version: 2 }], product: {}, competitors: [], owned: {}, careFlags: [] } })]);
+  for (const [index, target] of [wrong2, wrong2, versionOnly, versionOnly].entries()) {
+    const originStatements = index % 2 ? [target, wrong] : [wrong, target];
     const originId = `identity_origin_${index}`, laterId = `identity_later_${index}`, errorId = `identity_error_${index}`;
     await insertAnswer(originId, 100 + index * 10, originStatements);
     await database.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,claim_id,statement,evidence_quote,status,confirm,updated_at)
       VALUES($1,'resolution_owner','resolution_geo',$2,'deepseek','resolution_question',$3,$3,$4,$5,$6,'awaiting_remeasure','{"status":"done"}',$7) ON CONFLICT(geo_project_id,fingerprint,engine) DO UPDATE SET first_snapshot_id=EXCLUDED.first_snapshot_id,last_snapshot_id=EXCLUDED.last_snapshot_id,status='awaiting_remeasure',closed_snapshot_id=null,updated_at=EXCLUDED.updated_at`,
-      [errorId, errorFingerprint(wrong2), originId, claim.id, wrong2.text, wrong2.evidence, new Date(Date.parse('2026-10-24T00:00:00Z') + (101 + index * 10) * 60000)]);
-    await insertAnswer(laterId, 102 + index * 10, [correct, wrong2]);
+      [errorId, errorFingerprint(target), originId, claim.id, target.text, target.evidence, new Date(Date.parse('2026-10-24T00:00:00Z') + (101 + index * 10) * 60000)]);
+    await insertAnswer(laterId, 102 + index * 10, [correct, target]);
     await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
-    const row = (await database.query('SELECT status FROM evimed_geo.errors WHERE fingerprint=$1', [errorFingerprint(wrong2)])).rows[0];
+    const row = (await database.query('SELECT status FROM evimed_geo.errors WHERE fingerprint=$1', [errorFingerprint(target)])).rows[0];
+    const { GeoStore } = await import('../src/geoStore.mjs');
+    const { GeoService } = await import('../src/geoService.mjs');
+    const service = new GeoService({ store: new GeoStore({ database }), config: { geoEnabled: true, geoAudience: 'all' } });
+    const answer = await service.answer({ id: 'resolution_owner' }, 'resolution_geo', laterId);
+    const preserved = answer.errors.find(error => error.fingerprint === errorFingerprint(target));
+    assert.equal(preserved.claimVersion, target.claimVersion);
+    assert.deepEqual(preserved.applicability, target.applicability);
     assert.equal(row.status, 'awaiting_remeasure', `origin order ${index}`);
   }
 });
@@ -95,4 +104,58 @@ test('a concurrent newer wrong occurrence cannot be overwritten by an observed o
     const row = (await database.query('SELECT status,last_snapshot_id,closed_snapshot_id FROM evimed_geo.errors WHERE id=$1', [errorId])).rows[0];
     assert.equal(interleaved, true); assert.equal(row.status, 'awaiting_remeasure'); assert.equal(row.last_snapshot_id, 'race_wrong'); assert.equal(row.closed_snapshot_id, null);
   } finally { store.projectContext = original; }
+});
+
+test('a concurrent replacement of the checked facts invalidates a resolution even when the error row itself is unchanged', options, async () => {
+  await database.query("UPDATE evimed_geo.errors SET status='awaiting_remeasure',updated_at='2026-10-24T05:00:00Z',first_snapshot_id='resolution_origin',last_snapshot_id='resolution_origin',closed_snapshot_id=null WHERE id='resolution_error'");
+  await insertAnswer('facts_race_correct', 400, [correct]);
+  const original = store.projectContext.bind(store);
+  let changed = false;
+  store.projectContext = async (...args) => {
+    const context = await original(...args);
+    if (!changed) {
+      changed = true;
+      await database.query("UPDATE evimed_geo.facts SET statements=$1::jsonb WHERE snapshot_id='facts_race_correct'", [JSON.stringify([wrong])]);
+    }
+    return context;
+  };
+  try {
+    await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
+    const row = (await database.query("SELECT status,closed_snapshot_id FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0];
+    assert.equal(changed, true); assert.equal(row.status, 'awaiting_remeasure'); assert.equal(row.closed_snapshot_id, null);
+  } finally { store.projectContext = original; }
+});
+
+test('a later review withdrawing the exact closing assessment restores the unresolved business state', options, async () => {
+  await database.query("UPDATE evimed_geo.errors SET status='awaiting_remeasure',updated_at='2026-10-24T07:00:00Z',first_snapshot_id='resolution_origin',last_snapshot_id='resolution_origin',closed_snapshot_id=null WHERE id='resolution_error'");
+  await insertAnswer('closing_assessment', 500, [correct]);
+  await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
+  assert.equal((await database.query("SELECT status FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0].status, 'closed');
+  const { createGeoDiagnosisReview } = await import('../src/geoDiagnosisReview.mjs');
+  const review = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => ({ statements: [{ ...correct, verdict: 'unverifiable', evidence: null }], checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }) } });
+  const project = await store.project('resolution_geo');
+  const unrelated = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => ({ statements: [correct, { ...correct, claimVersion: 2, applicability: { ...applicability, population: 'Children', elements: { form: 'solution' } }, verdict: 'unverifiable', evidence: null }], checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: 'complete' } }, dropped: [], entities: [], recommendations: [] }) } });
+  await unrelated.submit(project, { snapshotId: 'closing_assessment', statement: correct.text, claimId: correct.claimId, assessmentVersion: (await unrelated.read(project, 'closing_assessment')).assessmentVersion, note: 'Keep the adult conclusion while checking the child interpretation.', requestKey: 'unrelated_closing_condition' });
+  assert.deepEqual(await unrelated.tick(), { processed: 1 });
+  assert.equal((await database.query("SELECT status FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0].status, 'closed', 'an unrelated interpretation cannot withdraw the exact adult closing proof');
+  const { geoStatementAssessmentIdentity } = await import('@evimed/domain');
+  await review.submit(project, { snapshotId: 'closing_assessment', statement: correct.text, claimId: correct.claimId, statementIdentity: geoStatementAssessmentIdentity(correct), assessmentVersion: (await review.read(project, 'closing_assessment')).assessmentVersion, note: 'The closing evidence is uncertain.', requestKey: 'withdraw_closing_basis' });
+  assert.deepEqual(await review.tick(), { processed: 1 });
+  const row = (await database.query("SELECT status,closed_snapshot_id,judgment_correction FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0];
+  assert.equal(row.status, 'awaiting_remeasure');
+  assert.equal(row.closed_snapshot_id, null);
+  assert.equal(row.judgment_correction.kind, 'resolution_basis_withdrawn');
+  for (const [index, coverage] of ['partial', 'unknown', 'refusal'].entries()) {
+    await database.query("UPDATE evimed_geo.errors SET status='awaiting_remeasure',updated_at='2026-10-24T07:00:00Z',closed_snapshot_id=null WHERE id='resolution_error'");
+    const snapshotId = `closing_coverage_${coverage}`;
+    await insertAnswer(snapshotId, 600 + index * 10, [correct]);
+    await tickErrors({ store, config: {}, now: () => new Date('2026-10-26T00:00:00Z') });
+    assert.equal((await database.query("SELECT status FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0].status, 'closed');
+    const incomplete = createGeoDiagnosisReview({ database, store, judge: { available: true, judge: async () => ({ statements: [correct], refusal: coverage === 'refusal', checks: { citations: [], offLabel: [], omittedSafety: [], judgementCoverage: { status: coverage === 'refusal' ? 'complete' : coverage } }, dropped: [], entities: [], recommendations: [] }) } });
+    await incomplete.submit(project, { snapshotId, statement: correct.text, claimId: correct.claimId, statementIdentity: geoStatementAssessmentIdentity(correct), assessmentVersion: (await incomplete.read(project, snapshotId)).assessmentVersion, note: 'The closing coverage is no longer complete.', requestKey: `closing_coverage_${coverage}` });
+    assert.deepEqual(await incomplete.tick(), { processed: 1 });
+    const result = (await database.query("SELECT status,closed_snapshot_id,judgment_correction FROM evimed_geo.errors WHERE id='resolution_error'")).rows[0];
+    assert.equal(result.status, 'awaiting_remeasure', coverage); assert.equal(result.closed_snapshot_id, null, coverage);
+    assert.equal(result.judgment_correction.kind, 'resolution_basis_withdrawn', coverage);
+  }
 });

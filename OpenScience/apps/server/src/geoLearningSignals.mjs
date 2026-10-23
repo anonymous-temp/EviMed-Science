@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson, canonicalSourceIdentifier, GEO_ERROR_TYPES, GEO_STATEMENT_TOPICS } from '@evimed/domain';
+import { canonicalJson, canonicalSourceIdentifier, geoClaimAssessmentIdentity, geoClaimApplicability, geoClaimForStatement, GEO_ERROR_TYPES, GEO_STATEMENT_TOPICS } from '@evimed/domain';
 import { ProductDocuments } from './productStore.mjs';
 import { isInternalProject } from './internalProjects.mjs';
 
@@ -19,10 +19,10 @@ export async function preserveGeoAssessment({ database, client, snapshotId, fact
   const id = assessmentId(snapshotId);
   const previous = (await client.query("SELECT * FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND id=$2", [snapshot.user_id, id])).rows[0];
   const rawBasis = (Array.isArray(facts.assessmentBasis) ? facts.assessmentBasis : Array.isArray(snapshot.frozen_claims) ? snapshot.frozen_claims : [])
-    .filter(claim => (facts.statements ?? []).some(statement => statement.claimId === claim.id));
+    .filter((claim, _index, claims) => (facts.statements ?? []).some(statement => geoClaimForStatement(claims, statement) === claim));
   // Source bytes already belong to immutable claim/card or frozen round versions. Keep their identities and digests here,
   // not thirty repeated full sources that could exceed the shared ledger's record limit.
-  const basis = rawBasis.map(claim => ({ id: claim.id, key: claim.key ?? null, version: claim.version ?? null,
+  const basis = rawBasis.map(claim => ({ id: claim.id, key: claim.key ?? null, version: claim.version ?? null, identity: geoClaimAssessmentIdentity(claim), applicability: geoClaimApplicability(claim),
     cardId: claim.cardId ?? null, cardClaimId: claim.cardClaimId ?? null, cardRevision: claim.cardRevision ?? null,
     sourceRef: claim.sourceRef ?? null, quoteDigest: digest(claim.quote ?? ''), statementDigest: digest(claim.statement ?? '') }));
   const assessment = { parserVersion: facts.parserVersion ?? null, judgedAt: facts.judgedAt ?? null,
@@ -33,11 +33,11 @@ export async function preserveGeoAssessment({ database, client, snapshotId, fact
   if (previous?.payload.assessmentVersion === assessmentVersion && (!excluded || previous.payload.state === 'excluded')) return previous;
   const contributions = new Map();
   if (!excluded && facts.judgedAt && ['valid', 'refusal'].includes(snapshot.status)) for (const statement of assessment.statements) {
-    const claim = rawBasis.find(row => row.id === statement.claimId);
+    const claim = geoClaimForStatement(rawBasis, statement);
     if (statement.verdict !== 'wrong' || !claim || !compact(statement.evidence)
       || !compact(claim.quote).includes(compact(statement.evidence)) || !GEO_ERROR_TYPES.includes(statement.errorType)) continue;
-    const key = digest([claim.key ?? claim.id, statement.errorType]);
-    contributions.set(key, { eventId: `geo-assessment:${snapshotId}:${key}`, claimId: claim.id, errorType: statement.errorType,
+    const key = digest([geoClaimAssessmentIdentity(claim), statement.errorType]);
+    contributions.set(key, { eventId: `geo-assessment:${snapshotId}:${key}`, claimId: claim.id, claimIdentity: geoClaimAssessmentIdentity(claim), errorType: statement.errorType,
       topic: GEO_STATEMENT_TOPICS.includes(statement.topic) ? statement.topic : 'other' });
   }
   return new ProductDocuments(database).put(snapshot.user_id, 'knowledge', id, {
@@ -152,24 +152,30 @@ export function createGeoLearningSignals({ database, signals, sourceChanges = nu
       const cardIds = [...new Set(p.assessment.basis.map(claim => claim.cardId).filter(Boolean))];
       const cardsPresent = cardIds.length && (await database.query("SELECT to_regclass('evimed_frontier.evidence_cards') IS NOT NULL AS present")).rows[0]?.present;
       const withdrawnCards = new Set(cardsPresent ? (await database.query("SELECT id FROM evimed_frontier.evidence_cards WHERE id=ANY($1::text[]) AND withdrawn IS NOT NULL", [cardIds])).rows.map(card => card.id) : []);
-      const states = new Map();
+      const states = new Map(), legacyStates = new Map();
+      const priority = { active: 0, pending: 1, suspended: 2, invalidated: 3 };
       for (const basis of p.assessment.basis) {
-        const live = claims.find(claim => claim.id === basis.id);
+        const sameId = claims.filter(claim => claim.id === basis.id);
+        const live = sameId.find(claim => basis.version == null || String(claim.version) === String(basis.version));
+        let state;
         const identifier = canonicalSourceIdentifier(basis.sourceRef), fact = notices.get(identifier);
         const changes = fact?.changes ?? [];
-        if (changes.some(change => ['retraction', 'withdrawal'].includes(change.kind)) || live?.status === 'withdrawn' || withdrawnCards.has(basis.cardId)) states.set(basis.id, 'invalidated');
-        else if (changes.some(change => ['correction', 'concern'].includes(change.kind))
+        if (changes.some(change => ['retraction', 'withdrawal'].includes(change.kind)) || live?.status === 'withdrawn' || withdrawnCards.has(basis.cardId)) state = 'invalidated';
+        else if (sameId.length && !live || changes.some(change => ['correction', 'concern'].includes(change.kind))
           || (basis.cardId && (!live || live.card_id !== basis.cardId || live.card_claim_id !== basis.cardClaimId || live.card_revision == null))
           || (live && (String(live.version) !== String(basis.version) || digest(live.quote) !== basis.quoteDigest
-            || digest(live.statement) !== basis.statementDigest || live.source_ref !== basis.sourceRef || live.status !== 'active'))) states.set(basis.id, 'suspended');
-        else if (identifier && sourceChanges?.getMany && (!fact || fact.state === 'unknown')) states.set(basis.id, 'pending');
-        else states.set(basis.id, 'active');
+            || digest(live.statement) !== basis.statementDigest || live.source_ref !== basis.sourceRef || live.status !== 'active'))) state = 'suspended';
+        else if (identifier && sourceChanges?.getMany && (!fact || fact.state === 'unknown')) state = 'pending';
+        else state = 'active';
+        states.set(basis.identity ?? geoClaimAssessmentIdentity(basis), state);
+        const previousState = legacyStates.get(basis.id);
+        if (!previousState || priority[state] > priority[previousState]) legacyStates.set(basis.id, state);
       }
       changed += await transaction(p.snapshotId, async client => {
         const current = await documents.get(row.user_id, 'knowledge', row.id);
         if (!current || current.payload.assessmentVersion !== p.assessmentVersion || current.payload.state !== 'active') return 0;
         const contributions = current.payload.contributions.map(entry => {
-          const state = states.get(entry.claimId);
+          const state = entry.claimIdentity ? states.get(entry.claimIdentity) : legacyStates.get(entry.claimId);
           if (!state || entry.state === 'invalidated' || (entry.state === 'suspended' && state !== 'invalidated')) return entry;
           if (state === 'active' && entry.state !== 'pending') return entry;
           return { ...entry, state };
