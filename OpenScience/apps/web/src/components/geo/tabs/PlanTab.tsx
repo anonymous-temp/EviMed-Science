@@ -58,11 +58,11 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
         {plan.version == null && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>根据当前诊断范围制定内容、渠道和工作顺序；尚无引用信源也可以制定方案。</Note>}
         <Link to={destination(geoId, {tab:"actions",section:"budget"})} className="text-caption text-accent hover:underline">查看实际投放预算</Link>
         {plan.basis?.capturedAt && <FactList rows={[{label:plan.readingsKind === "submitted_input" ? "本次方案依据" : "方案依据日期",value:plan.basis.capturedAt.slice(0,10)}]} />}
-        {plan.summary && <p className="max-w-measure text-body">{plan.summary}</p>}
+        {plan.summary && <p className="max-w-measure text-ui">{plan.summary}</p>}
         {(plan.implementation?.actions ?? []).map(action => <div key={action.key} className="flex flex-col gap-2">
-          <p className="text-body">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</p>
+          <p className="text-ui">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</p>
           <PlanActionFacts action={action} basis={plan.basis} />
-          {action.need.judgment && <p className="max-w-measure text-body">{action.need.judgment}</p>}
+          {action.need.judgment && <p className="max-w-measure text-ui">{action.need.judgment}</p>}
           {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "候选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
 
           <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>
