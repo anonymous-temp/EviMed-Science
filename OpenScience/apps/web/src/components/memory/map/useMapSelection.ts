@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
-import { MAP_VIEWS, type MapView } from "@/lib/memoryMapClient";
+import { MAP_PARTS, MAP_VIEWS, type MapPart, type MapView } from "@/lib/memoryMapClient";
 
 /**
  * What the reader has chosen on the memory map, kept in the address: the one selection all five views share (spec §5.2), so a
@@ -31,11 +31,13 @@ export interface MapSelection {
   chain: boolean;
   /** Only what needs a second look. */
   look: boolean;
+  /** One part of the capsule, the way a card of the overview drills into the map: 关于你, 项目, 做法 or 知识. */
+  part: MapPart | null;
   q: string;
 }
 
 export const DEFAULT_SELECTION: MapSelection = {
-  view: "graph", project: null, range: "all", topic: null, kind: null, dimension: null, focus: null, depth: 1, chain: false, look: false, q: "",
+  view: "graph", project: null, range: "all", topic: null, kind: null, dimension: null, focus: null, depth: 1, chain: false, look: false, part: null, q: "",
 };
 
 const RANGE = /^(?:30d|90d|1y|all|\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})$/u;
@@ -61,6 +63,7 @@ export function parseSelection(params: URLSearchParams): MapSelection {
     depth: params.get("depth") === "2" ? 2 : 1,
     chain: params.get("chain") === "1",
     look: params.get("look") === "1",
+    part: MAP_PARTS.includes(params.get("part") as MapPart) ? (params.get("part") as MapPart) : null,
     q: (params.get("q") ?? "").slice(0, 80),
   };
 }
@@ -76,6 +79,7 @@ const WRITTEN: ReadonlyArray<[keyof MapSelection, (selection: MapSelection) => s
   ["depth", (s) => (s.focus && s.depth === 2 ? "2" : null)],
   ["chain", (s) => (s.focus && s.chain ? "1" : null)],
   ["look", (s) => (s.look ? "1" : null)],
+  ["part", (s) => s.part],
   ["q", (s) => s.q || null],
 ];
 

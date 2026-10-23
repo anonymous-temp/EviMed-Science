@@ -40,9 +40,11 @@ export const MAP_PREVIOUS_DAYS = 30;
  * (`SELF_SECTIONS` and a project's kinds on the memory page). Never a list of topics, which would change who is on an axis.
  */
 export const MEMORY_ASPECTS = Object.freeze([
-  { id: "aspect:background", label: "背景", kinds: Object.freeze(["profile"]) },
+  // The capsule's notes have kinds of their own beside the memory's (`expertise`, `writing_style`, `method_preference`, `tooling`): they are
+  // counted under the aspect the memory page files them under (`SECTION_OF_KIND`), so a note and a memory of one aspect are one bar.
+  { id: "aspect:background", label: "背景", kinds: Object.freeze(["profile", "expertise", "stance"]) },
   { id: "aspect:preference", label: "偏好", kinds: Object.freeze(["preference"]) },
-  { id: "aspect:habit", label: "工作与写作习惯", kinds: Object.freeze(["behavior"]) },
+  { id: "aspect:habit", label: "工作与写作习惯", kinds: Object.freeze(["behavior", "writing_style", "method_preference", "tooling"]) },
   { id: "aspect:correction", label: "纠正过的", kinds: Object.freeze(["correction"]) },
   { id: "aspect:project", label: "项目事实", kinds: Object.freeze(["project_fact", "analysis", "follow_up"]) },
   { id: "aspect:decision", label: "已定的决策", kinds: Object.freeze(["decision"]) },
@@ -197,10 +199,11 @@ export async function drawnLinks(request, researchMemory) {
  * @param {readonly any[]} found the memories, in the store's light shape (`publicRecord`)
  * @param {{ sources?: any[], conflicts?: any[], usage?: Record<string, { count: number }> }} links what they rest on, the open
  *   disagreements (`recordStatus` / `otherStatus` when known) and how often each was handed to a run
- * @param {{ now: Date, timeZone: string }} context
+ * @param {{ now: Date, timeZone: string, weigh?: (record: any) => number }} context `weigh`: what a mark's size says when the store has no
+ *   importance of its own to say it (the native engine's files all have the same): given, it replaces the importance-and-use weight
  * @returns {import("./common.mjs").MapContribution}
  */
-export function recordsContribution(found, links, { now, timeZone }) {
+export function recordsContribution(found, links, { now, timeZone, weigh = undefined }) {
   const records = found.filter(drawable);
   const inSet = new Set(records.map((record) => record.id));
   const live = (/** @type {string} */ id) => ["active", "pending"].includes(records.find((record) => record.id === id)?.status ?? "");
@@ -236,7 +239,7 @@ export function recordsContribution(found, links, { now, timeZone }) {
     nodes.push({
       id, type: "memory", subtype: record.kind, group: /** @type {Record<string, string>} */ (MEMORY_KIND_LABELS_ZH)[record.kind] ?? record.kind,
       label: excerpt(recordText(record), MAP_LABEL_CHARS),
-      weight: unit(0.5 * (Number(record.importance) || 0) + 0.5 * Math.min(1, Math.log1p(used) / Math.log1p(10))),
+      weight: weigh ? unit(weigh(record)) : unit(0.5 * (Number(record.importance) || 0) + 0.5 * Math.min(1, Math.log1p(used) / Math.log1p(10))),
       at: instant(record.createdAt),
       state: record.status === "superseded" ? "replaced" : reason ? "check" : "current",
       reason, projectId, open: { kind: "record", id: record.id },

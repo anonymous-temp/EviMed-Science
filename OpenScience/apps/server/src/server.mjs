@@ -171,6 +171,7 @@ import { MemoryTopics } from "./memoryTopics.mjs";
 import { createActivitySource } from "./memoryMapSources/activity.mjs";
 import { createDocumentsSource } from "./memoryMapSources/documents.mjs";
 import { createKnowledgeGraphSource } from "./memoryMapSources/knowledgeGraph.mjs";
+import { createCapsuleNotesSource } from "./memoryMapSources/capsuleNotes.mjs";
 import { createMethodsSource } from "./memoryMapSources/methods.mjs";
 import { createNativeMemorySource } from "./memoryMapSources/nativeMemory.mjs";
 import { createNativeRecordLinks, createRecordLinks } from "./memoryMapSources/recordLinks.mjs";
@@ -5003,10 +5004,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
       }),
     } : null });
-  // The timeline and the capsule page's growth line, derived when read from
-  // the records, the ledger, the methods and the researcher's own capsules.
-  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
-    capsules: capsuleService, handbooks: handbookLibrary, context,
+  // The timeline, derived when read from the records, the ledger and the methods (the capsule's growth is the map's own document).
+  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context,
     native: { store: nativeMemory, engine: (/** @type {string} */ userId) => researchMemory.memoryEngine(userId) } });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
   // links the memory drawer shows. An account on the native engine is drawn from its files; the compiled graph of the knowledge base comes from the ledger's mirror.
@@ -5026,6 +5025,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       createNativeMemorySource({ readMemories: (request) => nativeMemory.mapMemories(request.user.id) }),
       createDocumentsSource({ sources: sourceService, researchMemory }),
       createMethodsSource({ learning: learningService }),
+      // The notes of the account's own capsule (the 「项目笔记」 a conversation wrote), memories to the person, for both engines.
+      createCapsuleNotesSource({ capsules: capsuleService }),
       // The compiled graph and wiki of the project the map is drawn for, read from the ledger's mirror (knowledgePageService.fetchProducts).
       createKnowledgeGraphSource({ fetchProducts: (request) => (knowledgePages ? knowledgePages.fetchProducts(request) : Promise.resolve(null)) }),
       createActivitySource({ agentRuns, projectOf: memoryMapProjectOf, learning: learningService, feedbackEvents }),

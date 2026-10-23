@@ -25,6 +25,10 @@ import { edgeIdOf, isDismissable } from "./memoryMapEdges.mjs";
  *   by project and kind, those that need a second look are never folded, and `truncated` says how many were. A focus holds at
  *   most `MAP_FOCUS_NODES` marks around one mark (to a depth of one or two lines) or around one cluster's members, which is how a
  *   cluster is opened. Lines are capped at `MAP_EDGES`.
+ * - **The overview is drawn from this document too** (`/app/memory/overview`, one read of `summary,facets,nodes,buckets,events`): the
+ *   facets hold the inventories a card needs whole — `aboutYou` (the memories about the person by kind, counted before anything is
+ *   folded), `documentTypes` and each project's `documents` (the knowledge base's own count, not the page of marks), and a day's
+ *   `document` count in `buckets`. The notes of the account's own capsule are marks of the map (`capsuleNotes.mjs`), for both engines.
  * - **Range is a server filter and so is focus; topic, kind, dimension and the search are the page's.** A range keeps the marks
  *   that began inside it and whatever they are tied to; the calendar (`buckets`) is always the last year, whatever the range.
  *
@@ -40,6 +44,8 @@ export const MAP_EDGES = 600;
 /** The most lanes and events a read returns. */
 export const MAP_LANES = 40;
 export const MAP_EVENTS = 500;
+/** The kinds of memory the memory page files under a project (`PROJECT_KINDS` of the web's `memoryGroups.ts`); every other kind is about the person. */
+const PROJECT_KINDS = new Set(["project_fact", "analysis", "decision", "follow_up", "run_summary"]);
 /** How long one source is waited for. */
 export const MAP_SOURCE_TIMEOUT_MS = 8_000;
 /** The blocks of the document a caller may ask for, and the ones it gets by default. */
@@ -110,6 +116,28 @@ function layered(base, next) {
   // A later source's fields win; its explicit nothing (`open: null`) is only a value when no earlier source said anything.
   for (const [key, value] of Object.entries(next)) if (value !== undefined && (value !== null || merged[key] === undefined)) merged[key] = value;
   return merged;
+}
+
+/**
+ * The radars' dimensions, one for each id. Two sources may count the same aspects (the memories, and the notes of the capsule beside
+ * them): the axes of a dimension in counts add up, and the first of any other scale stands alone, because two shares cannot be summed.
+ * @param {any[]} found
+ */
+function mergedDimensions(found) {
+  /** @type {Map<string, any>} */
+  const by = new Map();
+  for (const dimension of found) {
+    const held = by.get(dimension.id);
+    if (!held) { by.set(dimension.id, { ...dimension, axes: dimension.axes.map((/** @type {any} */ axis) => ({ ...axis })) }); continue; }
+    if (held.scale !== "count" || dimension.scale !== "count") continue;
+    for (const axis of dimension.axes) {
+      const mine = held.axes.find((/** @type {any} */ candidate) => candidate.id === axis.id);
+      if (mine) { mine.value += axis.value; mine.previousValue += axis.previousValue; mine.count += axis.count; } else held.axes.push({ ...axis });
+    }
+    held.total += dimension.total;
+    held.previousTotal += dimension.previousTotal;
+  }
+  return ["work", "memory"].flatMap((id) => (by.has(id) ? [by.get(id)] : []));
 }
 
 /** How much a mark is worth keeping in view when the map has to fold some. @param {any} node @param {number} degree */
@@ -287,6 +315,10 @@ export async function buildMemoryMap({ sources }, request) {
   const dimensions = [];
   /** @type {any[]} */
   let topics = [];
+  /** @type {Map<string, { id: string, label: string, count: number }>} */
+  const documentTypes = new Map();
+  /** @type {Map<string, number>} */
+  const projectDocuments = new Map();
   let topicsStatus = "off";
   /** @type {string[]} */
   const since = [];
@@ -305,12 +337,18 @@ export async function buildMemoryMap({ sources }, request) {
     lanes.push(...(answer.lanes ?? []));
     events.push(...(answer.events ?? []));
     for (const bucket of answer.buckets ?? []) {
-      const held = days.get(bucket.t) ?? { t: bucket.t, memory: 0, run: 0, method: 0, feedback: 0 };
-      for (const key of ["memory", "run", "method", "feedback"]) held[key] += Number(bucket[key]) || 0;
+      const held = days.get(bucket.t) ?? { t: bucket.t, memory: 0, run: 0, method: 0, feedback: 0, document: 0 };
+      for (const key of ["memory", "run", "method", "feedback", "document"]) held[key] += Number(bucket[key]) || 0;
       days.set(bucket.t, held);
     }
     kinds.push(...(answer.facets?.kinds ?? []));
     dimensions.push(...(answer.facets?.dimensions ?? []));
+    // What the knowledge base holds, counted by it: by kind of document, and in each project.
+    for (const type of answer.facets?.documentTypes ?? []) {
+      const held = documentTypes.get(type.id);
+      documentTypes.set(type.id, { id: type.id, label: type.label, count: (held?.count ?? 0) + (Number(type.count) || 0) });
+    }
+    for (const row of answer.facets?.projectDocuments ?? []) projectDocuments.set(row.id, (projectDocuments.get(row.id) ?? 0) + (Number(row.count) || 0));
     if (answer.facets?.topics) topics = answer.facets.topics;
     if (answer.facts?.topicsStatus) topicsStatus = answer.facts.topicsStatus;
     if (answer.facts?.since) since.push(answer.facts.since);
@@ -380,15 +418,27 @@ export async function buildMemoryMap({ sources }, request) {
   };
   const counted = new Map();
   for (const node of memories) counted.set(node.subtype, { id: node.subtype, label: node.group ?? node.subtype, count: (counted.get(node.subtype)?.count ?? 0) + 1 });
+  // The memories about the person, by kind, as the memory page's 关于你 files them: none that sits in a project and none of a project's kinds.
+  // Counted here, before anything is folded into a cluster, so the overview's number is the list's.
+  /** @type {Map<string, { id: string, label: string, count: number }>} */
+  const aboutYou = new Map();
+  for (const node of memories) {
+    if (node.projectId || PROJECT_KINDS.has(node.subtype)) continue;
+    aboutYou.set(node.subtype, { id: node.subtype, label: node.group ?? node.subtype, count: (aboutYou.get(node.subtype)?.count ?? 0) + 1 });
+  }
+  const byCount = (/** @type {{ id: string, count: number }} */ left, /** @type {{ id: string, count: number }} */ right) => right.count - left.count || String(left.id).localeCompare(String(right.id));
   const facets = {
     projects: projects.filter((project) => !projectId || project.id === projectId).map((project) => ({
       id: project.id, name: project.name, kind: project.kind,
       memories: memories.filter((node) => node.projectId === project.id).length,
-      documents: nodes.filter((node) => node.type === "document" && node.projectId === project.id).length,
+      // The knowledge base's own count of the project's documents when it gave one, else the marks drawn for it.
+      documents: projectDocuments.get(project.id) ?? nodes.filter((node) => node.type === "document" && node.projectId === project.id).length,
     })),
-    kinds: [...counted.values()].sort((left, right) => right.count - left.count || String(left.id).localeCompare(String(right.id))),
+    kinds: [...counted.values()].sort(byCount),
+    aboutYou: [...aboutYou.values()].sort(byCount),
+    documentTypes: [...documentTypes.values()].sort(byCount),
     topics: shownTopics,
-    dimensions: ["work", "memory"].flatMap((id) => dimensions.filter((dimension) => dimension.id === id).slice(0, 1)),
+    dimensions: mergedDimensions(dimensions),
   };
 
   // ---- caps: an overview folds what does not fit; a focus shows what is around one mark ----

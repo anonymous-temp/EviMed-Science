@@ -10,12 +10,22 @@ import { productRequest } from "./productClient";
 export type MapView = "graph" | "topics" | "dims" | "time" | "activity";
 export const MAP_VIEWS: readonly MapView[] = ["graph", "topics", "dims", "time", "activity"];
 
+/**
+ * The parts of a capsule the overview's cards drill into the map by: what is about the person, what is in a project, what was learned to do,
+ * and what is known. 成长 is the time view and 收到的 is not on the map at all, so neither is a part.
+ */
+export type MapPart = "you" | "project" | "method" | "knowledge";
+export const MAP_PARTS: readonly MapPart[] = ["you", "project", "method", "knowledge"];
+
 export type MapNodeType = "you" | "project" | "memory" | "document" | "reference" | "method" | "entity" | "page" | "cluster";
 export type MapState = "current" | "check" | "replaced";
 export type MapReason = "source-retracted" | "conflict" | "source-changed" | "source-expired" | "expired";
 
-/** What a click on a mark opens: the memory drawer, the method drawer, or an address of its own. */
-export type MapOpen = { kind: "record"; id: string } | { kind: "method"; id: string } | { kind: "page"; href: string };
+/**
+ * What a click on a mark opens: the memory drawer, the drawer of a note of the researcher's own capsule (`entry`, which the memory page
+ * opens the same way), the method drawer, or an address of its own.
+ */
+export type MapOpen = { kind: "record"; id: string } | { kind: "entry"; id: string } | { kind: "method"; id: string } | { kind: "page"; href: string };
 
 export interface MapNode {
   id: string;
@@ -74,6 +84,8 @@ export interface MapTopic {
   trend: number;
   /** Mark ids, `memory:<id>`. */
   members: string[];
+  /** Made by the page, not grouped by the model (`derivedTopics`): it cannot be renamed, merged or dismissed, and is gone once the model's grouping exists. */
+  derived?: boolean;
 }
 export interface MapLaneSegment {
   recordId: string;
@@ -105,6 +117,8 @@ export interface MapDay {
   run: number;
   method: number;
   feedback: number;
+  /** The documents added to the knowledge base that day (the newest the map read of each project); absent from a control plane older than the overview. */
+  document?: number;
 }
 
 export interface MemoryMap {
@@ -117,6 +131,10 @@ export interface MemoryMap {
   facets: {
     projects: Array<{ id: string; name: string; kind: string; memories: number; documents: number }>;
     kinds: Array<{ id: string; label: string; count: number }>;
+    /** The memories about the person by kind, counted before any is folded into a cluster; absent from a control plane older than the overview. */
+    aboutYou?: Array<{ id: string; label: string; count: number }>;
+    /** The knowledge base's own count of its documents by kind, compiled pages left out, whole and not the page of marks. */
+    documentTypes?: Array<{ id: string; label: string; count: number }>;
     topics: MapTopic[];
     dimensions: MapDimension[];
   };
@@ -136,9 +154,14 @@ export interface MapQuery {
   depth: number;
 }
 
-/** The whole document, every block: the views switch between them without asking again. */
-export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): Promise<MemoryMap> {
-  const params = new URLSearchParams({ include: "summary,facets,nodes,edges,buckets,lanes,events", timeZone });
+/** Every block of the document: the views switch between them without asking again. */
+export const MAP_INCLUDE_ALL = "summary,facets,nodes,edges,buckets,lanes,events";
+/** What the overview reads: no lines and no lineages, which only the relation and time views draw. */
+export const MAP_INCLUDE_OVERVIEW = "summary,facets,nodes,buckets,events";
+
+/** The whole document, every block: the views switch between them without asking again. The overview asks for the blocks it draws. */
+export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, include = MAP_INCLUDE_ALL): Promise<MemoryMap> {
+  const params = new URLSearchParams({ include, timeZone });
   if (query.projectId) params.set("projectId", query.projectId);
   if (query.range && query.range !== "all") params.set("range", query.range);
   if (query.focus) {
