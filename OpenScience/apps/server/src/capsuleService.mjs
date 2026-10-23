@@ -376,7 +376,7 @@ export class CapsuleService {
       const current = await this.active(userId, projectId);
       const others = current.items.filter((x) => x.capsuleId !== capsuleId);
       const items = mode === "own"
-        ? [{ capsuleId, mode }, ...(clearGuests ? others.filter((x) => x.mode === "own") : others)]
+        ? [{ capsuleId, mode }, ...(clearGuests === true ? others.filter((x) => x.mode === "own") : others)]
         : [...others.filter((x) => x.mode === "own"), { capsuleId, mode }, ...others.filter((x) => x.mode !== "own")];
       if (items.length > 8) throw new HttpError(400, "capsule_activation_limit", "At most eight capsules may be active together.");
       try {

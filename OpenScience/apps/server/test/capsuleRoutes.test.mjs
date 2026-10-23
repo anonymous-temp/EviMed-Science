@@ -72,6 +72,18 @@ test("activation and recall reject projects the account does not own", async (t)
   assert.equal(calls[0].body.projectId, "owned-project");
 });
 
+test("making a capsule one's own turns the packs off only when asked to, and the ask is a boolean", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const activate = (body) => fetch(`${base}/api/capsules/capsule-one/activate`, { method: "POST", headers, body: JSON.stringify(body) });
+  assert.equal((await activate({ mode: "own" })).status, 200);
+  assert.equal(calls.at(-1).body.clearGuests, undefined, "not asked: the service keeps the packs");
+  assert.equal((await activate({ mode: "own", clearGuests: true })).status, 200);
+  assert.equal(calls.at(-1).body.clearGuests, true);
+  const refused = await activate({ mode: "own", clearGuests: "yes" });
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).code, "capsule_payload_invalid");
+});
+
 test("transfer routes bind export/import to the live user and require explicit body fields",async(t)=>{
   const calls=[];
   const store={ensureSessionUser:async()=>({user:{id:"transfer-owner",accountCreatedAt:"test-only-account-epoch"}}),assertCsrf:async()=>{}};

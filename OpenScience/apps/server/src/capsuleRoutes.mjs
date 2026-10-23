@@ -25,11 +25,12 @@ function pageOptions(url) {
  * enable, disable, a trial — writes an audit row (build spec §12; 2026-09-26
  * audit, M-6: none of them did). Counts and ids only, never an entry's text.
  *
- * Sharing inside the platform (plan §7, 2026-10-05) is five more families of route, all behind the same sign-in: a delivery to
- * named accounts and what became of it (`/:id/deliveries`), the recipient's side of one (`/deliveries/:id`), a share link and its
- * redemption (`/:id/links`, `/shared/:token`), a take-down (`/:id/exports/:snapshotId/takedown`, and the operator's
- * `/takedowns`), and the method pack in the Agent Skills format (`/:id/methods/export`). Another account's capsule, snapshot,
- * delivery or link is never readable through any of them: each reads by the signed-in account's own id.
+ * Sharing inside the platform (plan §7, 2026-10-05) is four more families of route, all behind the same sign-in and the sharing
+ * switch: a delivery to named accounts and what became of it (`/:id/deliveries`), the recipient's side of one (`/deliveries/:id`),
+ * a share link and its redemption (`/:id/links`, `/shared/:token`) and a take-down (`/:id/exports/:snapshotId/takedown`, and the
+ * operator's `/takedowns`). The method pack in the Agent Skills format (`/:id/methods/export`) is not among them: it hands nothing
+ * to anyone on this deployment, so it is served with sharing off too. Another account's capsule, snapshot, delivery or link is never
+ * readable through any of them: each reads by the signed-in account's own id.
  * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number,
  *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null,
  *   sharing?: import('./capsuleSharing.mjs').CapsuleSharing | null, links?: import('./capsuleShareLinks.mjs').CapsuleShareLinks | null,
@@ -274,7 +275,9 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       }
     }
     if (parts.length === 2 && action === "activate" && method === "POST") {
-      const body = await bodyOf(req, maxJsonBytes, ["mode", "projectId"]);
+      // `clearGuests` is how the received packs are turned off while one's own capsule is put in force: asked for, never a side effect.
+      const body = await bodyOf(req, maxJsonBytes, ["mode", "projectId", "clearGuests"]);
+      if (body.clearGuests !== undefined && typeof body.clearGuests !== "boolean") throw new HttpError(400, "capsule_payload_invalid", "Invalid clearGuests.");
       body.projectId = await project(body.projectId);
       return reply(await service.activate(user.id, capsuleId, body));
     }
