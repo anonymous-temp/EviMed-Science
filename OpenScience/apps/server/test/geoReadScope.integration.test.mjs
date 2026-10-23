@@ -475,6 +475,11 @@ test("dated trends pool actual day buckets across rounds and preserve exact day-
   }
   const overview = await service.projectView(user, daily.id, scope);
   assert.deepEqual(overview.overview.metrics.find((entry) => entry.key === "mention").trend, points);
+  const wholeRound = await service.monitoring(user, daily.id, { round: "daily-r1" });
+  const wholePoint = wholeRound.series.find((entry) => entry.key === "mention").points[0];
+  assert.equal(wholePoint.members.selectionRef, wholeRound.selection.reference);
+  const wholeDetail = await service.runtimeRead(daily, "snapshots", { selectionRef: wholePoint.members.selectionRef, member: wholePoint.members.metric });
+  assert.equal(wholeDetail.total, wholePoint.n);
 });
 
 test("frozen observed references survive changes to unrelated current schedule and undated context", options, async () => {
