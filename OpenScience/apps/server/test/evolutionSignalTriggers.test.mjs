@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { evolutionServiceFixture } from './helpers/evolutionServiceFixture.mjs';
+import { policyBasisFixture } from './helpers/evolutionPolicyBasisFixture.mjs';
+import { evolutionRecordPin } from '../src/evolutionRecordPins.mjs';
 import { createEvolutionMissions, evolutionFailureReproductionHash } from '../src/evolutionMissions.mjs';
 import { createEvolutionLoops } from '../src/evolutionLoops.mjs';
 import { createEvolutionGrowth } from '../src/evolutionGrowth.mjs';
@@ -48,9 +50,13 @@ test('withdrawal of a private trigger retains independently reproduced public re
       policy: { supplements: [{ capabilityId: 'geo-content', text: 'Preserve population qualifiers.' }] },
       proposal: { components: ['supplements'], mechanisms: ['population-qualifier'], change: 'Keep qualifiers.', reason: 'Avoid overgeneralization.', predictedBenefits: [], possibleHarms: [], costChange: 0 },
     }; } });
+  const fixture = await policyBasisFixture({ providedService: service }), task = fixture.tasks[0];
+  loops.configureModules({ sourceChanges: { getMany: async ids => new Map(ids.map(id => [id, { state: 'unknown', changes: [] }])) } });
   const baseline = await loops.policies.resolve('geo', { supplements: [] });
+  const replayResults = [0, 1].map(() => ({ units: [{ id: task.id, groupId: task.id, sourceHash: task.payload.sourceHash, score: 0 }] }));
+  for (const [index, result] of replayResults.entries()) await service.save('failure-replay', `receipt-attempt-${index}`, { taskRef: evolutionRecordPin(task), result });
   const proof = { basis: 'executed-baseline', missionId: 'public-mission', moduleId: 'geo', baselineHash: createHash('sha256').update(canonicalJson(baseline)).digest('hex'),
-    scope: 'public', independent: true, executed: true, baselineFailed: true, referenceVerified: true, taskId: 'public-task', sourceRoot: 'public-source', sourceHash: 'a'.repeat(64), executionReceiptHash: 'b'.repeat(64) };
+    scope: 'public', independent: true, executed: true, baselineFailed: true, referenceVerified: true, taskId: task.id, taskRef: evolutionRecordPin(task), sourceRoot: task.payload.sourceRoot, sourceHash: task.payload.sourceHash, executionReceiptHash: createHash('sha256').update(canonicalJson(replayResults)).digest('hex') };
   await service.save('failure-reproduction', 'receipt', { ...proof, receiptHash: evolutionFailureReproductionHash(proof) });
   await service.save('signal-summary', 'summary', { moduleId: 'geo', kind: 'geo-misconception', state: 'inactive', generation: 'new' });
   await service.save('dossier', 'dossier', { evidenceRoots: ['summary'], triggerRefs: [{ id: 'summary', generation: 'old' }] });

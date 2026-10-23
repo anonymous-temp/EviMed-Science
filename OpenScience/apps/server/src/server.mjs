@@ -1143,9 +1143,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evolutionSignals = {record: async input => evolution?.loops.signals.record(input)};
   const evolutionModulePolicies = createModuleEvolutionPolicies({readPolicy: async moduleId => {
     if(!evolution) return null;
+    if(moduleId==='geo') return evolution.loops.policyBasis.readActive();
     const row=await evolution.service.get(`evolution-module-policy-${moduleId}`);
     return row?.payload.status==='active'?{revisionId:`${row.id}:${row.revision}`,policy:row.payload.policy}:null;
-  }});
+  },validateRevision:async(moduleId,revisionId)=>moduleId!=='geo'||Boolean(await evolution?.loops.policyBasis.revisionUsable(revisionId))});
   /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
   let evidenceRecalculation = null;
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
@@ -5699,7 +5700,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, webReader,
     report: code => process.stderr.write(`evolution: ${code}\n`) });
   if (evolution) {
-    evolution.loops.configureModules({ editor: frontier?.editor, planner: autopilotPlanner, runtimeSession:evolution.runtimeSession, engineBuilder:evolution.engineBuilder,
+    evolution.loops.configureModules({ editor: frontier?.editor, planner: autopilotPlanner, runtimeSession:evolution.runtimeSession, engineBuilder:evolution.engineBuilder, sourceChanges,
       readAvailability:async()=>{
         const entries=[...await availability.service.capabilities(null),...await availability.service.tools(null)];
         return entries.map(({kind,id,version,state})=>({kind,id,version,state}));

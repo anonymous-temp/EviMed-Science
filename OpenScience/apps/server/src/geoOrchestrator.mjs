@@ -1037,7 +1037,7 @@ export class GeoOrchestrator {
         return project;
       }
       const current = await this.#step(project, "diagnosis", { status: questions === "minimal" ? "minimal" : "done", roundId: String(round.id) });
-      const wrong = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed'`,
+      const wrong = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed' AND judgment_state = 'active'`,
         [project.id])).rows[0]?.n ?? 0);
       const engines = Array.isArray(round.engines) && round.engines.length ? round.engines.length : project.engines.length;
       await this.#notice(current, `notice:diagnosis:${round.id}`,
@@ -1346,7 +1346,7 @@ export class GeoOrchestrator {
    */
   async #openErrors(project, assigned, limit, roundId = null, skipped = new Set()) {
     const rows = (await this.store.query(`SELECT e.id, e.engine, e.statement FROM evimed_geo.errors e
-      WHERE e.geo_project_id = $1 AND e.status IN ('open', 'acting')
+      WHERE e.geo_project_id = $1 AND e.status IN ('open', 'acting') AND e.judgment_state = 'active'
         AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.id = e.last_snapshot_id AND s.round_id = $2))
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT 100`, [project.id, roundId])).rows;
     return rows.filter((/** @type {any} */ row) => !skipped.has(String(row.id)) && (roundId || !assigned.has(String(row.id)))).slice(0, limit)
@@ -1510,6 +1510,10 @@ export class GeoOrchestrator {
         if (!await this.#update(project.id, spec.key, { detail: { policyContext,
           policyRevisionId: policyContext.supplements.length ? policyContext.revisionId : null } }, ["claimed"])) return { busy: true };
       }
+      if (policyContext.supplements.length && this.policies.revisionUsable && !await this.policies.revisionUsable('geo', policyContext.revisionId)) {
+        await this.#update(project.id, spec.key, { state: 'pending', detail: { policyContext: null, policyRevisionId: null } }, ['claimed']);
+        return { deferred: 'policy_basis_changed' };
+      }
       const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
       const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
@@ -1572,7 +1576,7 @@ export class GeoOrchestrator {
   async #notices(project) {
     if (!this.notifier) return;
     // An error the measurement already told (`notified_at`, its S3+ notice) is not told twice.
-    const errors = (await this.store.query(`SELECT e.* FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.status <> 'closed'
+    const errors = (await this.store.query(`SELECT e.* FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.status <> 'closed' AND e.judgment_state = 'active'
         AND e.notified_at IS NULL AND e.created_at >= now() - make_interval(days => $2)
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = e.geo_project_id AND m.key = 'notice:error:' || e.id)
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT $3`, [project.id, GEO_RUN_RULES.noticeScanDays, GEO_RUN_RULES.noticesPerTick])).rows;

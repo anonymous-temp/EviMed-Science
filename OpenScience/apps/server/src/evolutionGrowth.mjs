@@ -6,7 +6,7 @@ import {evolutionSignalTrigger} from './evolutionSignalTriggers.mjs';
 
 /** Signal vocabularies identify growth and contradiction opportunities as well as repairs. @param {string} kind */
 export function evolutionOpportunitySource(kind){
- if(kind==='unmet-demand')return 'demand';
+ if(kind==='unmet-demand'||kind==='geo-misconception')return 'demand';
  // Data whose deterministic checks came back clean (the dataset semantics write it). A source that parsed is not new data (review D-E18): it records nothing.
  if(kind==='availability')return 'data';
  if(['semantics-contested','semantics-correction'].includes(kind))return 'contradiction';

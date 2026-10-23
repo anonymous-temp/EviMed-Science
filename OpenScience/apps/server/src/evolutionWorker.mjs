@@ -175,6 +175,7 @@ export class EvolutionWorker {
     const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
     const MINUTE = 60_000, DAY = 86_400_000;
     await this.every('reconcile', { ms: MINUTE }, async () => { await this.service.reconcileQueued?.(); });
+    await this.every('module-policy-basis', { ms: MINUTE }, async () => { await this.service.callbacks?.reconcileModulePolicyBasis?.(); });
     await this.every('retirements', { ms: MINUTE }, async () => {
       for (const tool of await this.service.tools()) if (tool.payload.status === 'retired' && tool.payload.retirement?.state !== 'complete') {
         await this.service.enqueue('maintain', { action: 'retirement-reconcile', toolId: tool.id }, `retirement:${tool.id}:${day}`);

@@ -600,6 +600,28 @@ test("a native GEO dispatch records the matching policy revision and reuses it a
   assert.equal(mark.detail.policyContext.capabilityId, 'geo-insight');
 });
 
+test("a deferred native GEO task drops invalidated policy instructions before any retry is sent", options, async () => {
+  const world = harness(); const { project, user } = await newProject();
+  let valid = true;
+  world.orchestrator.policies = {
+    resolve: async () => valid ? { revisionId: 'policy-invalidated-later', policy: { supplements: [{ capabilityId: 'geo-insight', text: 'Expired public policy instruction.' }] } }
+      : { revisionId: 'default:current', policy: { supplements: [] } },
+    revisionUsable: async () => valid,
+  };
+  world.failures.push(new HttpError(409, 'runtime_busy', 'Admission deferred.'));
+  await world.orchestrator.runStep(user, project, 'evidence');
+  valid = false;
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 0, 'the old instructions must not reach the provider');
+  const waiting = (await q("SELECT state,detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND kind='run'", [project.id]))[0];
+  assert.equal(waiting.state, 'pending'); assert.equal(waiting.detail.policyContext, null);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1);
+  assert.doesNotMatch(world.dispatched[0].brief, /Expired public policy instruction/);
+  const sent = (await q("SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND kind='run'", [project.id]))[0];
+  assert.equal(sent.detail.policyRevisionId, null);
+});
+
 test("a baseline that measured no answer fails the diagnosis: no 「诊断完成」, no noise, no strategy; 「让 AI 做」 measures again", options, async () => {
   const { world, project, user } = await lockedProgram();
   const first = world.enqueued[0].id;
