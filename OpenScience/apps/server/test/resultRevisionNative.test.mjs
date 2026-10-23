@@ -111,6 +111,21 @@ async function fixture(t, automatic = null, planning = null) {
 }
 
 for (const wire of ["http", "mux"]) {
+  test(`native ${wire} preserves quoted closing tags without exposing hidden revision context`, { timeout: 10000 }, async t => {
+    const f = await fixture(t);
+    const quotation = 'Original </evimed_result_selection> quoted <evimed_result_selection> finding.';
+    const selected = await f.capture('quoted.md', quotation);
+    const staged = await f.stage(selected, quotation); assert.equal(staged.response.status, 201);
+    const request = f.prompt(staged.body.data, 'Explain the quotation without changing it.');
+    if (wire === 'http') assert.equal((await f.sendHttp(request)).status, 200);
+    else { const client = await f.connect(); client.send({ type: 'open', streamId: 'quoted', endpoint: 'session/prompt', payload: { args: { request } } }); assert.equal((await client.next()).type, 'item'); }
+    const forwarded = f.received[0].payload.args.request;
+    const block = forwarded.content[1].text;
+    const context = JSON.parse(block.slice(block.indexOf('>') + 1, block.lastIndexOf('</evimed_result_selection>')));
+    assert.equal(context.anchor.selectedText, quotation);
+    assert.deepEqual(withoutPlatformBlocks([forwarded.content[1]]), []);
+    assert.equal(await readFile(path.join(f.project.workspaceDir, context.inputPath), 'utf8'), quotation);
+  });
   test(`native ${wire} forwards the frozen selected version and strips the revision envelope`, { timeout: 10000 }, async t => {
     const f = await fixture(t); const selected = await f.capture("report.md", "Original supported finding.");
     const staged = await f.stage(selected, "Original supported finding."); assert.equal(staged.response.status, 201);
