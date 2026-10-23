@@ -229,31 +229,46 @@ describe("记忆胶囊", () => {
         <Routes>
           <Route path="/app/memory" element={<MemoryHubPage />} />
           <Route path="/app/memory/map" element={<p>地图页</p>} />
+          <Route path="/app/memory/overview" element={<p>总览页</p>} />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByRole("switch", { name: "记忆" });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["地图", "关于你", "项目", "做法"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "地图", "关于你", "项目", "做法"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
     await user.click(within(tabs).getByRole("tab", { name: "地图" }));
     expect(await screen.findByText("地图页")).toBeInTheDocument();
   });
 
-  it("opens the real map on the unqualified memory landing address", async () => {
+  it("opens the overview on the unqualified memory landing address", async () => {
     map.feature = "on";
     render(<MemoryRouter initialEntries={["/app/memory"]}><Routes>
       <Route path="/app/memory" element={<MemoryHubPage />} />
-      <Route path="/app/memory/map" element={<p>地图首页</p>} />
+      <Route path="/app/memory/overview" element={<p>总览首页</p>} />
     </Routes></MemoryRouter>);
-    expect(await screen.findByText("地图首页")).toBeInTheDocument();
+    expect(await screen.findByText("总览首页")).toBeInTheDocument();
   });
 
-  it("draws no 地图 tab where the deployment does not draw the map", async () => {
+  it("goes to the overview from its tab, and draws neither 总览 nor 地图 where the deployment does not draw the map", async () => {
+    const user = userEvent.setup();
+    map.feature = "on";
+    render(
+      <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
+        <Routes>
+          <Route path="/app/memory" element={<MemoryHubPage />} />
+          <Route path="/app/memory/overview" element={<p>总览页</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("tab", { name: "总览" }));
+    expect(await screen.findByText("总览页")).toBeInTheDocument();
+    cleanup();
     map.feature = "off";
     open();
     await screen.findByRole("switch", { name: "记忆" });
     expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "总览" })).toBeNull();
   });
 
   it("asks before the reset deletes anything, and says exactly what it clears and what it leaves", async () => {
@@ -564,14 +579,14 @@ describe("记忆胶囊", () => {
     });
   });
 
-  describe("成长 is the map's time view", () => {
-    function openOld(feature: "on" | "off" | "loading") {
+  describe("成长 is the overview's first card", () => {
+    function openOld(feature: "on" | "off" | "loading", tab = "growth") {
       map.feature = feature;
       return render(
-        <MemoryRouter initialEntries={["/app/memory?tab=growth"]}>
+        <MemoryRouter initialEntries={[`/app/memory?tab=${tab}`]}>
           <Routes>
             <Route path="/app/memory" element={<><MemoryHubPage /><Where /></>} />
-            <Route path="/app/memory/map" element={<><p>地图页</p><Where /></>} />
+            <Route path="/app/memory/overview" element={<><p>总览页</p><Where /></>} />
           </Routes>
         </MemoryRouter>,
       );
@@ -581,18 +596,21 @@ describe("记忆胶囊", () => {
       return <p data-testid="where">{location.pathname}{location.search}</p>;
     }
 
-    it("sends the old address of the tab to the time view, in place, where the deployment draws the map", async () => {
+    it("sends the old address of the tab, and `/app/capsules`'s, to the overview, in place, where the deployment draws it", async () => {
       openOld("on");
-      expect(await screen.findByText("地图页")).toBeInTheDocument();
-      expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/map?view=time");
-      // Nothing of the old tab is read: the map asks for its own document.
+      expect(await screen.findByText("总览页")).toBeInTheDocument();
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/overview");
+      // Nothing of the old tab is read: the overview asks for its own document.
       expect(fetchMyCapsule).not.toHaveBeenCalled();
+      cleanup();
+      openOld("on", "capsules");
+      expect(await screen.findByText("总览页")).toBeInTheDocument();
     });
 
     it("waits for the deployment's answer before it sends the address anywhere", async () => {
       openOld("loading");
       expect(await screen.findByTestId("where")).toHaveTextContent("/app/memory?tab=growth");
-      expect(screen.queryByText("地图页")).toBeNull();
+      expect(screen.queryByText("总览页")).toBeNull();
       expect(screen.queryByRole("tab", { name: "关于你" })).toBeNull();
     });
 

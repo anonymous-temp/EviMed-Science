@@ -14,11 +14,13 @@ const refreshTopics = vi.fn();
 const editTopic = vi.fn();
 const fetchRecordLinks = vi.fn();
 const fetchMemoryProfile = vi.fn();
+const fetchMyCapsule = vi.fn();
 const fetchMemorySettings = vi.fn();
 const updateMemorySettings = vi.fn();
 const writePrompt = vi.fn();
 
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => writePrompt() }));
+vi.mock("@/lib/memoryClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args) }));
 vi.mock("@/lib/memoryMapClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")),
   fetchMemoryMap: (...args: unknown[]) => fetchMemoryMap(...args),
@@ -85,6 +87,7 @@ function open(search = "") {
       <Routes>
         <Route path="/app/memory/map" element={<MemoryMapPage />} />
         <Route path="/app/memory" element={<p>记忆页</p>} />
+        <Route path="/app/chat" element={<p>对话页</p>} />
         <Route path="/app/files/open" element={<p>知识页的入口</p>} />
         <Route path="/app/files/:id" element={<p>资料页</p>} />
       </Routes>
@@ -102,6 +105,7 @@ beforeEach(() => {
   fetchRecordLinks.mockReset().mockResolvedValue({ rests: [], replaced: [], replacedBy: null, conflicts: [], usedIn: [] });
   fetchMemoryProfile.mockReset().mockResolvedValue({ records: Array.from({ length: 10 }, (_, index) => record(`m${index}`)), groups: {}, activeCount: 10, pendingCount: 0 });
   writePrompt.mockReset();
+  fetchMyCapsule.mockReset().mockResolvedValue({ capsule: { id: "cap_1" }, capsules: [], entries: [], forgotten: [] });
   fetchMemorySettings.mockReset().mockResolvedValue({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null });
   updateMemorySettings.mockReset().mockImplementation((patch: object) => Promise.resolve({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null, ...patch }));
 });
@@ -151,6 +155,78 @@ describe("the landing's header: the verbs of a capsule are on the map too", () =
     open();
     expect(await screen.findByText("胶囊里有 47 份资料，还没有记下关于你的事。")).toBeInTheDocument();
     expect(screen.queryByText("还没有记住什么。")).toBeNull();
+  });
+});
+
+describe("what the overview's cards open the map on, and what a small capsule has to read", () => {
+  const method = (id: string): MapNode => ({ id: `method:${id}`, type: "method", group: "做法", label: `做法 ${id}`, state: "current", at: "2026-09-12T00:00:00.000Z", open: { kind: "method", id } });
+
+  it("narrows to a part from the address and says so in a mark that lets go of it: 做法 lists the methods and nothing else", async () => {
+    const user = userEvent.setup();
+    fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [...busyMap().nodes, method("m1")], edges: [...busyMap().edges, edge("method:m1", "you:account")] }));
+    open("?part=method");
+    // The list is read first: the toolbar is redrawn when the document arrives, and a mark held from before it is gone.
+    const list = await screen.findByRole("list", { name: "标记" });
+    expect(within(list).getAllByRole("listitem").map((row) => row.textContent)).toEqual([expect.stringContaining("做法 m1")]);
+    const mark = screen.getByRole("button", { name: "只看：做法" });
+    expect(mark).toHaveAttribute("aria-pressed", "true");
+    await user.click(mark);
+    await waitFor(() => expect(where()).toBe("/app/memory/map"));
+    expect((await screen.findAllByRole("listitem")).length).toBeGreaterThan(1);
+  });
+
+  it("opens the drawer of a note of the researcher's own capsule from its mark, and says so when the note is gone", async () => {
+    const note = { id: "e1", revision: 2, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", deletedAt: null, projectId: null,
+      payload: { capsuleId: "cap_1", factKind: "writing_style", layer: "profile", content: "引用写到页码。", status: "approved", origin: "explicit", provenance: [] } };
+    fetchMyCapsule.mockResolvedValue({ capsule: { id: "cap_1" }, capsules: [], entries: [note], forgotten: [] });
+    open("?open=entry%3Ae1");
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("引用写到页码。")).toBeInTheDocument();
+    cleanup();
+    open("?open=entry%3Agone");
+    expect(await screen.findByText(/这条笔记已经不在了/u)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens a note's drawer from the map when the mark says so", async () => {
+    const user = userEvent.setup();
+    fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [...busyMap().nodes, memory("e1", { id: "memory:entry:e1", label: "引用写到页码", open: { kind: "entry", id: "e1" } })] }));
+    open();
+    await user.click(await screen.findByRole("button", { name: "引用写到页码" }));
+    expect(where()).toContain("open=entry%3Ae1");
+  });
+
+  it("draws topics of a capsule the model has not grouped — its kinds and its projects, in the memory page's words — instead of an empty card", async () => {
+    const user = userEvent.setup();
+    fetchMemoryMap.mockResolvedValue(busyMap({ status: { topics: "empty" }, facets: { ...busyMap().facets, topics: [] } }));
+    open("?view=topics");
+    expect(await screen.findByText(/记忆分成 1 个主题/u)).toBeInTheDocument();
+    const ranking = screen.getByRole("list", { name: "主题排行" });
+    expect(within(ranking).getByText(/偏好/u)).toBeInTheDocument();
+    // They are not the researcher's to rename or merge: no menu on a row; and a press narrows the map to the topic's memories.
+    expect(within(ranking).queryByRole("button", { name: /的操作/u })).toBeNull();
+    await user.click(within(ranking).getByRole("button", { name: "偏好" }));
+    expect(where()).toContain("topic=derived%3Akind%3A%E5%81%8F%E5%A5%BD");
+    expect(await screen.findByRole("button", { name: "主题：偏好" })).toBeInTheDocument();
+  });
+
+  it("prefers the model's topics once it has them", async () => {
+    open("?view=topics");
+    expect(await screen.findByText("回答风格")).toBeInTheDocument();
+    expect(screen.queryByText(/记忆分成 1 个主题，最多的是“偏好”/u)).toBeNull();
+  });
+
+  it("offers 就这个提问 in a row's 「⋯」, which begins a conversation in the composer rather than answering in a drawer", async () => {
+    const user = userEvent.setup();
+    const select = vi.fn((_id: string, then?: () => void) => { then?.(); return Promise.resolve(); });
+    useProjectStore.setState({ select: select as never, currentId: "prj_here" });
+    open();
+    const row = (await screen.findByRole("button", { name: "有研究称该药把再入院减半" })).closest("li")!;
+    await user.click(within(row).getByRole("button", { name: "更多" }));
+    await user.click(await screen.findByRole("menuitem", { name: "就这个提问" }));
+    expect(select).toHaveBeenCalledWith("prj_here", expect.any(Function));
+    expect(await screen.findByText("对话页")).toBeInTheDocument();
+    useProjectStore.setState({ currentId: "default" });
   });
 });
 
@@ -313,7 +389,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["地图", "关于你", "项目", "做法"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "地图", "关于你", "项目", "做法"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
     await user.click(within(tabs).getByRole("tab", { name: "做法" }));
     expect(where()).toBe("/app/memory?tab=methods");

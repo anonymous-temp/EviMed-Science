@@ -9,6 +9,8 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import { StateScreen } from "@/components/ui/StateScreen";
+import { workStyle } from "@/components/memory/overview/memoryOverviewModel";
+import { WorkStyleCard } from "@/components/memory/overview/WorkStyleCard";
 import {
   declineDelivery, importDelivery, importShareLink, openDelivery, openShareLink, type SharedPreview,
 } from "@/lib/capsuleShareClient";
@@ -116,6 +118,14 @@ export function SharedCapsulePage() {
             <p className="text-ui text-text-2">{[sender ? fromSender(sender) : null, preview.card?.summary ?? `${taken.length} 条`].filter(Boolean).join(" · ")}</p>
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
           </div>
+          {/* How the sender works, in the three categories of the 工作方式卡 the overview shows of this account's own: the same card, so a pack is read
+              as a person's way of working before it is read entry by entry. */}
+          {taken.length > 0 && (
+            <section aria-label={`${sender ?? "对方"}的工作方式`} className="space-y-2">
+              <p className="text-ui font-semibold text-text">{`${sender ?? "对方"}的工作方式`}</p>
+              <WorkStyleCard style={workStyle(taken)} label={`${sender ?? "对方"}的工作方式`} />
+            </section>
+          )}
           <ul className="space-y-1">
             {taken.map((entry, index) => { const shown = capsuleEntryPreview(entry); return <li key={entry.id}>
               {/* The first entry open: what was sent is read before it is taken, not guessed from a list of kinds. */}
