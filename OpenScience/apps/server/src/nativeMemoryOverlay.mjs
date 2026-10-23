@@ -118,6 +118,55 @@ export class NativeMemoryOverlay {
     return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at), migratedAt: instant(row?.migrated_at) };
   }
 
+  // ---------------------------------------------------------- consolidation
+
+  /** What the account's consolidation (`nativeMemoryConsolidation.mjs`) has recorded. @param {string} userId */
+  async consolidationState(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
+    const row = result.rows[0];
+    return {
+      consolidatedAt: instant(row?.consolidated_at), checkedAt: instant(row?.consolidation_checked_at), fingerprint: /** @type {string | null} */ (row?.consolidation_fingerprint ?? null),
+      task: /** @type {string | null} */ (row?.consolidation_task ?? null), startedAt: instant(row?.consolidation_started_at),
+    };
+  }
+
+  /**
+   * Take the account's consolidation for `leaseMs`, or learn that another worker holds it. A lease, not a lock: it runs out by itself.
+   * @param {string} userId @param {number} leaseMs @returns {Promise<boolean>}
+   */
+  async claimConsolidation(userId, leaseMs) {
+    const result = await this.#query(`INSERT INTO evimed_memory.native_accounts AS a (user_id, consolidation_lease_until) VALUES ($1, clock_timestamp() + ($2::int * interval '1 millisecond'))
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_lease_until = clock_timestamp() + ($2::int * interval '1 millisecond')
+        WHERE a.consolidation_lease_until IS NULL OR a.consolidation_lease_until < clock_timestamp()
+      RETURNING user_id`, [owner(userId), Math.max(1_000, Math.min(3_600_000, Math.trunc(Number(leaseMs)) || 60_000))]);
+    return result.rows.length === 1;
+  }
+
+  /** The files were looked at at `at` and nothing was asked of the engine; the lease is let go. @param {string} userId @param {Date} at */
+  async noteConsolidationChecked(userId, at) {
+    await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, consolidation_checked_at) VALUES ($1, $2::timestamptz)
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_checked_at=$2::timestamptz, consolidation_lease_until=NULL, updated_at=date_trunc('second', clock_timestamp())`, [owner(userId), at.toISOString()]);
+  }
+
+  /** A consolidation is in the engine's hands: its task, and the lease let go. @param {string} userId @param {string} taskId @param {Date} at */
+  async noteConsolidationSubmitted(userId, taskId, at) {
+    await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, consolidation_task, consolidation_started_at, consolidation_checked_at) VALUES ($1, $2, $3::timestamptz, $3::timestamptz)
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_task=$2, consolidation_started_at=$3::timestamptz, consolidation_checked_at=$3::timestamptz, consolidation_lease_until=NULL,
+        updated_at=date_trunc('second', clock_timestamp())`, [owner(userId), String(taskId), at.toISOString()]);
+  }
+
+  /**
+   * The task is over and its files are read in. `fingerprint` is the shape of what it left (the next consolidation waits for a change
+   * from it); a run that did not succeed records neither it nor a time of completion, and is asked again at the next due time.
+   * @param {string} userId @param {{ fingerprint?: string | null, succeeded: boolean, at: Date }} outcome
+   */
+  async noteConsolidationDone(userId, { fingerprint = null, succeeded, at }) {
+    await this.#query(`UPDATE evimed_memory.native_accounts SET consolidation_task=NULL, consolidation_started_at=NULL, consolidation_lease_until=NULL,
+        consolidation_checked_at=$4::timestamptz, consolidated_at=CASE WHEN $2 THEN $4::timestamptz ELSE consolidated_at END,
+        consolidation_fingerprint=CASE WHEN $2 THEN $3 ELSE consolidation_fingerprint END, updated_at=date_trunc('second', clock_timestamp())
+      WHERE user_id=$1`, [owner(userId), succeeded === true, fingerprint, at.toISOString()]);
+  }
+
   /** @param {string} userId @param {"registered_at" | "scanned_at" | "migrated_at"} column */
   async #stamp(userId, column) {
     await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, ${column}) VALUES ($1, clock_timestamp())

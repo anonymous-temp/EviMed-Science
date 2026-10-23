@@ -413,6 +413,7 @@ import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
@@ -1359,6 +1360,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     rejectionJudge: createRejectionJudge({ config, usageLedger }),
     // The runtime manager is composed further down; the worker asks only after boot.
     runtimeManager: { releaseMemoryEngineRuntimes: (/** @type {string | undefined} */ userId) => runtimeManager.releaseMemoryEngineRuntimes(userId) },
+    report: (line) => process.stderr.write(`${line}\n`),
+  });
+  // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
+  // revisions (`nativeMemoryConsolidation.mjs`). Off unless `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`; the worker's pass asks it.
+  nativeMemoryWorker.consolidation = new NativeMemoryConsolidation({
+    config, researchMemory, sessions: openVikingSessions, resources: openVikingResources, overlay: nativeMemoryOverlay,
+    ingest: (userId, task) => nativeMemoryWorker.ingestConsolidation(userId, task),
     report: (line) => process.stderr.write(`${line}\n`),
   });
   /**

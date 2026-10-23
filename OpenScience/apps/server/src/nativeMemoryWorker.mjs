@@ -134,6 +134,8 @@ export class NativeMemoryWorker {
     this.runtimeManager = runtimeManager;
     this.projectOfSession = projectOfSession;
     this.rejectionJudge = rejectionJudge;
+    /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {{ tick: (userId: string) => Promise<string> } | null} */
+    this.consolidation = null;
     this.now = now;
     this.report = report;
     this.replayAttempts = Math.max(0, Math.trunc(Number(this.config.nativeMemoryReplayAttempts ?? 5)));
@@ -185,6 +187,8 @@ export class NativeMemoryWorker {
           await this.#register(userId);
           await this.scanArchives(userId);
           commits += await this.processCommits({ userId });
+          // The weekly consolidation of the account's memories, where it is switched on (`nativeMemoryConsolidation.mjs`).
+          await this.consolidation?.tick(userId);
         } catch (error) {
           this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
         }
@@ -452,10 +456,63 @@ export class NativeMemoryWorker {
   }
 
   /**
+   * What the engine's consolidation of an account's memories did, read into the overlay (`nativeMemoryConsolidation.mjs`). The engine
+   * lists the files it added, updated and deleted and no content, so each file is read as it is now and set beside what the overlay held:
+   * a revision by the engine (`reason: "consolidation"`, one per file and task) with the text before and after, which is what the
+   * memory page's undo restores from. The checks after the fact hold what a consolidation wrote as they hold what an extraction wrote —
+   * a merge can bring back a line the person removed, in its words or in others' — and a file that is unchanged from what the overlay
+   * held is not a change however the engine lists it.
+   * @param {string} userId @param {{ taskId: string, adds?: readonly string[], updates?: readonly string[], deletes?: readonly string[] }} task
+   * @returns {Promise<{ added: number, updated: number, deleted: number }>}
+   */
+  async ingestConsolidation(userId, { taskId, adds = [], updates = [], deletes = [] }) {
+    const root = this.sessions.memoryRoot(userId);
+    const held = await this.overlay.files(userId);
+    // One revision per file and task, however often the same task is read (the revisions' own uniqueness key).
+    const archiveUri = `consolidation:${taskId}`;
+    const counts = { added: 0, updated: 0, deleted: 0 };
+    for (const uri of deletes) {
+      const file = nativeMemoryFile(uri, root);
+      if (!file || await this.sessions.read(userId, uri) !== null) continue;
+      const prior = held.get(uri);
+      const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: "deleted", actor: "engine", reason: "consolidation",
+        before: prior?.body ?? null, after: null, archiveUri, projectId: PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null });
+      await this.overlay.removeFile(userId, uri);
+      if (recorded) counts.deleted += 1;
+    }
+    /** @type {{ uri: string, type: string, projectId: string | null, before: string, after: string }[]} */
+    const written = [];
+    for (const uri of new Set([...adds, ...updates])) {
+      const file = nativeMemoryFile(uri, root);
+      if (!file) continue;
+      const current = await this.sessions.read(userId, uri);
+      if (current === null) continue;
+      const prior = held.get(uri);
+      const before = prior?.body ?? null;
+      if (before !== null && contentHash(before) === contentHash(current)) continue;
+      const projectId = PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null;
+      const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: before === null ? "added" : "updated", actor: "engine", reason: "consolidation",
+        before, after: current, archiveUri, projectId });
+      if (recorded) counts[before === null ? "added" : "updated"] += 1;
+      written.push({ uri, type: file.type, projectId, before: before ?? "", after: current });
+    }
+    const rewordings = await this.#rewordings({ userId, projectId: null, archiveUri: null }, {
+      adds: written.filter((entry) => !entry.before).map(({ uri, after }) => ({ uri, after })),
+      updates: written.filter((entry) => entry.before).map(({ uri, before, after }) => ({ uri, before, after })),
+    }).catch((error) => {
+      this.report(`native memory rewordings: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return new Map();
+    });
+    // The tag of a project's file is put back: a rewrite is not known to keep it.
+    for (const entry of written) await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, rewordings });
+    return counts;
+  }
+
+  /**
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
    * @param {string} userId @param {string} uri @param {string} type
-   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string, rewordings?: Map<string, { rejected: string, via: "contained" | "judged" }> }} context
+   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, rewordings?: Map<string, { rejected: string, via: "contained" | "judged" }> }} context
    */
   async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, rewordings = new Map() }) {
     const current = await this.sessions.read(userId, uri);
@@ -581,8 +638,9 @@ export class NativeMemoryWorker {
     return found;
   }
 
-  /** What the person wrote in an archive's conversation, a few messages of it, as plain text. @param {string} userId @param {string} archiveUri @returns {Promise<string[]>} */
+  /** What the person wrote in an archive's conversation, a few messages of it, as plain text. @param {string} userId @param {string | null} archiveUri @returns {Promise<string[]>} */
   async #userWords(userId, archiveUri) {
+    if (!archiveUri) return [];
     const raw = await this.sessions.read(userId, `${archiveUri}/messages.jsonl`).catch(() => null);
     /** @type {string[]} */
     const said = [];
@@ -599,9 +657,10 @@ export class NativeMemoryWorker {
 
   /**
    * Which of these lines one of the person's own messages of an archive carries word for word.
-   * @param {string} userId @param {string} archiveUri @param {readonly string[]} lines @returns {Promise<string[]>}
+   * @param {string} userId @param {string | null} archiveUri @param {readonly string[]} lines @returns {Promise<string[]>}
    */
   async #statedByThePerson(userId, archiveUri, lines) {
+    if (!archiveUri) return [];
     const raw = await this.sessions.read(userId, `${archiveUri}/messages.jsonl`);
     if (!raw) return [];
     const flat = (/** @type {string} */ text) => text.replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();

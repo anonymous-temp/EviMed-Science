@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
   migrated_at timestamptz(3),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+-- The consolidation of an account's memories (nativeMemoryConsolidation.mjs), kept on its account row: when the last one ended and
+-- the shape of the files it left (a consolidation is asked for again only after they changed), when the files were last looked at, the
+-- engine task in flight, and the lease that keeps two workers from submitting one account twice.
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidated_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_checked_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_fingerprint text CHECK (consolidation_fingerprint IS NULL OR consolidation_fingerprint ~ '^[a-f0-9]{64}$');
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_task text CHECK (consolidation_task IS NULL OR consolidation_task ~ '^[A-Za-z0-9_-]{8,128}$');
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_started_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_lease_until timestamptz(3);
 CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   archive_uri text NOT NULL CHECK (char_length(archive_uri) BETWEEN 1 AND 600),

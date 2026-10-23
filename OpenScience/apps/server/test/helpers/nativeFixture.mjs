@@ -9,10 +9,12 @@ import { randomUUID } from "node:crypto";
 import { after, before } from "node:test";
 
 import { ControlPlaneDatabase } from "../../src/controlPlaneDatabase.mjs";
+import { NativeMemoryConsolidation } from "../../src/nativeMemoryConsolidation.mjs";
 import { NativeMemoryOverlay } from "../../src/nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "../../src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../../src/nativeMemoryWorker.mjs";
 import { OpenVikingClient } from "../../src/openVikingClient.mjs";
+import { OpenVikingResources } from "../../src/openVikingResources.mjs";
 import { OpenVikingSessions } from "../../src/openVikingSessions.mjs";
 import { ResearchMemoryStore } from "../../src/researchMemory.mjs";
 import { migrateResearchMemory } from "../../src/researchMemoryPersistence.mjs";
@@ -44,14 +46,14 @@ export function nativeIntegration({ config: settings = {} } = {}) {
   /**
    * A user, an engine stub, and the native pieces over them.
    * @param {import("node:test").TestContext} t
-   * @param {{ extract?: (input: any) => any, config?: Record<string, any>, conversationTitles?: import("../../src/nativeMemoryStore.mjs").ConversationTitles | null }} [override]
+   * @param {{ extract?: (input: any) => any, consolidate?: (input: any) => any, config?: Record<string, any>, conversationTitles?: import("../../src/nativeMemoryStore.mjs").ConversationTitles | null }} [override]
    */
-  async function fixture(t, { extract = () => ({}), config: extra = {}, conversationTitles = null } = {}) {
+  async function fixture(t, { extract = () => ({}), consolidate = () => ({}), config: extra = {}, conversationTitles = null } = {}) {
     resetNativeMemoryMetrics();
     const userId = `nm_${randomUUID().slice(0, 8)}`;
     users.push(userId);
     await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Native memory test','development')", [userId]);
-    const stub = await startOpenVikingStub(t, { extract });
+    const stub = await startOpenVikingStub(t, { extract, consolidate });
     const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
     const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
     const overlay = new NativeMemoryOverlay({ database });
@@ -60,6 +62,10 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     let clock = new Date("2026-10-13T08:00:00.000Z");
     const store = new NativeMemoryStore({ sessions, overlay, now: () => clock, conversationTitles });
     const worker = new NativeMemoryWorker({ config: merged, researchMemory, sessions, overlay, now: () => clock });
+    const resources = new OpenVikingResources({ client });
+    // The consolidation reads times the database wrote (its own clock): its `now` is the real one, turned forward by hand.
+    let skew = 0;
+    const consolidation = new NativeMemoryConsolidation({ config: merged, researchMemory, sessions, resources, overlay, ingest: (id, task) => worker.ingestConsolidation(id, task), now: () => new Date(Date.now() + skew) });
     const root = sessions.memoryRoot(userId);
     const engineUser = sessions.engineUser(userId);
     /** @param {string} relPath @param {string} text @param {{ type?: string, tags?: string[] }} [how] */
@@ -80,7 +86,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
       return { session, ...committed };
     }
     return {
-      userId, stub, sessions, overlay, researchMemory, store, worker, root, engineUser, seed, commitConversation,
+      userId, stub, sessions, overlay, researchMemory, store, worker, resources, consolidation, advanceConsolidation: (/** @type {number} */ ms) => { skew += ms; }, root, engineUser, seed, commitConversation,
       database, config: merged, advance: (/** @type {number} */ ms) => { clock = new Date(clock.getTime() + ms); }, now: () => clock,
     };
   }

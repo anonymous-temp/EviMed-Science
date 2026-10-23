@@ -595,7 +595,9 @@ export class NativeMemoryStore {
   async changes(userId, { since = null, sessionId = null, limit = 20 } = {}) {
     if (since && !Number.isFinite(Date.parse(since))) throw new HttpError(400, "memory_payload_invalid", "since is invalid.");
     if (sessionId && !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new HttpError(400, "memory_payload_invalid", "sessionId is invalid.");
-    const revisions = await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null, actors: ["engine"], limit: 50 });
+    // What the engine's consolidation did to the files is its tidying, not something it just learned: 「刚记住了」 does not say it.
+    const revisions = (await this.overlay.recentRevisions(userId, { since, engineSession: sessionId ? `dsh-${sessionId}` : null, actors: ["engine"], limit: 50 }))
+      .filter((revision) => revision.reason !== "consolidation");
     const files = await this.overlay.files(userId);
     /** @type {Set<string>} */
     const seen = new Set();

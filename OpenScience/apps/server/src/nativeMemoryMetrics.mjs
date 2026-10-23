@@ -43,6 +43,14 @@ export const NATIVE_EXTRACTION_OUTCOMES = Object.freeze(["wrote", "wrote_and_ski
 export const NATIVE_SKIP_REASONS = Object.freeze([
   "memory_type_filtered", "self_memory_disabled", "invalid_ranges", "ambiguous_target", "no_writable_target", "page_id_type_mismatch", "other",
 ]);
+/**
+ * What became of a pass of the memory consolidation over one account (`nativeMemoryConsolidation.mjs`): nothing to do yet (not due),
+ * the files had not changed since the last one, too few to consolidate, held back (learning paused, a commit still working, another
+ * worker's lease), a task submitted, one finished (and read in), failed or lost.
+ */
+export const NATIVE_CONSOLIDATION_OUTCOMES = Object.freeze(["not_due", "unchanged", "too_few", "held_back", "submitted", "completed", "failed", "lost"]);
+/** What a finished consolidation did to the account's files. */
+export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "deleted"]);
 /** Where a native account's turn was found on a runtime that was launched without the memory gateway's address. */
 export const NATIVE_RUNTIME_GATEWAY_PLACES = Object.freeze(["dispatch", "turn_end"]);
 /**
@@ -81,6 +89,8 @@ const runtimeWithoutGateway = table(NATIVE_RUNTIME_GATEWAY_PLACES);
 const runtimeSwitches = table(NATIVE_RUNTIME_SWITCH_OUTCOMES);
 const rejectionJudge = table(NATIVE_REJECTION_JUDGE_OUTCOMES);
 const rejectionLines = table(NATIVE_REJECTION_LINE_VERDICTS);
+const consolidations = table(NATIVE_CONSOLIDATION_OUTCOMES);
+const consolidatedFiles = table(NATIVE_CONSOLIDATION_CHANGES);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
@@ -131,6 +141,12 @@ export function recordNativeExtraction(operations, { skipped = 0, skipReasons = 
 export function recordRuntimeWithoutGateway(at) { bump(runtimeWithoutGateway, at); }
 /** What became of a runtime launched for the other engine than its account is on. @param {string} outcome */
 export function recordRuntimeEngineSwitch(outcome) { bump(runtimeSwitches, outcome); }
+/** One pass of the consolidation over an account. @param {string} outcome */
+export function recordNativeConsolidation(outcome) { bump(consolidations, outcome); }
+/** The files a finished consolidation changed. @param {{ added?: number, updated?: number, deleted?: number }} changes */
+export function recordNativeConsolidatedFiles({ added = 0, updated = 0, deleted = 0 }) {
+  bump(consolidatedFiles, "added", added); bump(consolidatedFiles, "updated", updated); bump(consolidatedFiles, "deleted", deleted);
+}
 /** One call of the rejection judge. @param {string} outcome */
 export function recordRejectionJudge(outcome) { bump(rejectionJudge, outcome); }
 /** Lines that were near a removed one, by what became of them. @param {string} verdict @param {number} [count] */
@@ -144,7 +160,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, rejectionJudge, rejectionLines, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -157,7 +173,7 @@ export function nativeMemoryCounters() {
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
-    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
 
@@ -204,6 +220,10 @@ export function nativeMemoryMetricFamilies() {
       help: "Calls to the model that judges whether a line the engine wrote repeats one the person removed (one call a commit at most): asked, failed (unreachable, or not the one answer shape: the lines are kept), over the account's day, or unavailable." },
     { name: "open_science_native_memory_rejection_lines_total", type: "counter", series: series(rejectionLines, "verdict"),
       help: "Lines near one the person removed, by what became of them: contained (a removed line with something added, decided in code), judged the same by the model, judged different, or kept because the judge could not say." },
+    { name: "open_science_native_memory_consolidation_total", type: "counter", series: series(consolidations, "outcome"),
+      help: "Passes of the memory consolidation over a native account (OpenViking's own `compile --skill memory`, weekly at most and only after the files changed): not due, unchanged since the last one, too few files, held back (learning paused, a commit still working, another worker's lease), submitted, completed, failed or lost (the engine no longer holds the task)." },
+    { name: "open_science_native_memory_consolidated_files_total", type: "counter", series: series(consolidatedFiles, "change"),
+      help: "Memory files a finished consolidation added (a split), updated (a merge target, a compaction) and deleted (merged away); each is an overlay revision by the engine that the memory page can undo." },
     { name: "open_science_native_memory_checks_total", type: "counter", series: series(checkActions, "reason"),
       help: "Memories the deterministic after-the-fact checks deleted or restored: an identifier shape, platform-injected text or a platform identifier, or a line the person had removed coming back verbatim." },
     { name: "open_science_native_memory_writes_total", type: "counter", series: series(workerWrites, "what"),
