@@ -1,5 +1,6 @@
 /** One authorized observation selection for GEO pages, the native read tool and exports. No metric formulas live here. */
 import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
   GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
@@ -17,6 +18,30 @@ const hasControls = (/** @type {string} */ value) => [...value].some((character)
 const idShape = /^[A-Za-z0-9_-]{1,80}$/u;
 const digest = (/** @type {unknown} */ value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const invalid = (/** @type {string} */ message, status = 400) => new HttpError(status, "geo_read_filter_invalid", message);
+const readTransactions = new AsyncLocalStorage();
+
+/** @param {import('./geoStore.mjs').GeoStore} store */
+export const geoReadTransactionActive = (store) => readTransactions.getStore()?.database === store.database;
+
+/** Keep selection, aggregates and drilldown detail on one snapshot. Persist references after committing the read so concurrent
+ * first readers of the same selection can safely converge on its deterministic id.
+ * @template T @param {import('./geoStore.mjs').GeoStore} store @param {() => Promise<T>} operation @returns {Promise<T>}
+ */
+export async function withGeoReadTransaction(store, operation) {
+  if (geoReadTransactionActive(store)) return operation();
+  const database = /** @type {any} */ (store.database);
+  await new GeoMeasureStore(database).ready();
+  /** @type {Map<string, any>} */ const references = new Map();
+  const result = await database.transaction(async (/** @type {any} */ client) => {
+    await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    return database.withTransactionClient(client, () => readTransactions.run({ database, references }, operation));
+  });
+  for (const { selected, project } of references.values()) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision)
+    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6) ON CONFLICT (id) DO NOTHING`,
+  [selected.selection.reference, project.userId, project.id, JSON.stringify(selected.scope), JSON.stringify(selected.selection.roundIds), selected.selection.dataRevision]);
+  return result;
+}
 
 /** @param {unknown} raw @param {string} field @param {readonly string[] | null} [vocabulary] @param {boolean} [tags] */
 function values(raw, field, vocabulary = null, tags = false) {
@@ -70,6 +95,10 @@ export function geoScopeFromQuery(query, extra = GEO_ERROR_FILTER_FIELDS) {
     const all = query.getAll(key);
     if (!lists.has(key) && all.length !== 1) throw invalid(`${key} may only be given once.`);
     raw[key] = lists.has(key) ? key === "clientTags" ? all : all.flatMap((value) => value.split(",")) : all[0];
+    if (key === "clientTags" && all.length === 1 && all[0].trim().startsWith("[")) {
+      try { raw[key] = JSON.parse(all[0]); } catch { throw invalid("clientTags must be repeated labels or a JSON array."); }
+      if (!Array.isArray(raw[key])) throw invalid("clientTags must be repeated labels or a JSON array.");
+    }
     if (["questionVersion", "version", "errorLimit", "errorOffset"].includes(key)) {
       if (!/^\d+$/u.test(raw[key])) throw invalid(`${key} must be a whole number.`);
       raw[key] = Number(raw[key]);
@@ -171,20 +200,11 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
  * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any}>}
  */
 export async function readGeoSelection(store, project, input = {}, options = {}) {
-  const measure = new GeoMeasureStore(store.database);
-  await measure.ready();
-  const selected = await store.database.transaction(async (client) => {
-    await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    const scopedStore = Object.create(store);
-    const scopedMeasure = measure;
-    scopedStore.query = scopedMeasure.query = (/** @type {string} */ sql, /** @type {any[]} */ params = []) => client.query(sql, params);
-    return selectGeoRows(scopedStore, scopedMeasure, project, input, options);
+  return withGeoReadTransaction(store, async () => {
+    const selected = await selectGeoRows(store, new GeoMeasureStore(store.database), project, input, options);
+    if (options.persist !== false) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
+    return selected;
   });
-  if (options.persist !== false) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision)
-    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6) ON CONFLICT (id) DO NOTHING`,
-  [selected.selection.reference, project.userId, project.id, JSON.stringify(selected.scope), JSON.stringify(selected.selection.roundIds), selected.selection.dataRevision]);
-  return selected;
 }
 
 /** @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project @param {any} input

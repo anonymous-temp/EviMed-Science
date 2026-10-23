@@ -49,7 +49,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
@@ -650,6 +650,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async projectViewOf(project, scope = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.projectViewOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
     return this.#applySelection(project, await this.#projectViewBase(project), selected, "project", scope);
   }
@@ -1113,6 +1114,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {any} scope */
   async diagnosisOf(project, scope = null) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.diagnosisOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
     const view = await this.#diagnosisBase(project, selected.rounds[0]?.id ?? null);
     return this.#applySelection(project, view, selected, "diagnosis", scope);
@@ -1407,6 +1409,7 @@ export class GeoService {
    * @param {{ id: string }} user @param {string} id @param {string} sourceId @param {any} [input]
    */
   async source(user, id, sourceId, input = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.source(user, id, sourceId, input));
     const project = await this.requireProject(user, id);
     const selected = await readGeoSelection(this.store, project, input);
     const engine = selected.scope.engines.length === 1 ? selected.scope.engines[0] : null;
@@ -1416,7 +1419,7 @@ export class GeoService {
     const domain = source.domain.toLowerCase();
     const historySelection = !selected.scope.round && !selected.scope.from && !selected.scope.to && !input.selectionRef
       ? await readGeoSelection(this.store, project, { ...selected.scope, compareFrom: null, compareTo: null }, { history: true, persist: false }) : selected;
-    const rounds = historySelection.rounds.slice(0, 6);
+    const rounds = historySelection === selected ? selected.rounds : historySelection.rounds.slice(0, 6);
     const round = selected.rounds[0] ?? null;
     // Each round's answers are read once, and the latest round's are the list: the history's last point IS the detail's counts.
     const allAnswers = this.#selectionAnswers(historySelection);
@@ -1474,6 +1477,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async sourcesOf(project, scope = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.sourcesOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
     return this.#applySelection(project, await this.#sourcesBase(project), selected, "sources", scope);
   }
@@ -1706,6 +1710,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async monitoringOf(project, scope = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.monitoringOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
     return this.#applySelection(project, await this.#monitoringBase(project), selected, "monitoring", scope);
   }
@@ -1828,6 +1833,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async clustersOf(project, scope = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.clustersOf(project, scope));
     const selected = await readGeoSelection(this.store, project, scope);
     const { spine, derived } = await this.#spineOf(project);
     return this.#applySelection(project, this.spine.clusters(spine, derived), selected, "clusters", scope);
@@ -1838,6 +1844,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string} groupId */
   async clusterOf(project, groupId, scope = {}) {
+    if (!geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.clusterOf(project, groupId, scope));
     const row = (await this.store.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND user_id = $2 AND id = $3`,
       [project.id, project.userId, groupId])).rows[0];
     if (!row) throw failure(404, "geo_cluster_not_found", "Question group not found.");
@@ -2002,6 +2009,8 @@ export class GeoService {
    * @param {Record<string, any>} filter
    */
   async runtimeRead(project, what, filter = {}) {
+    if (["project", "diagnosis", "metrics", "snapshots", "errors", "sources", "monitoring", "clusters", "targets"].includes(what)
+      && !geoReadTransactionActive(this.store)) return withGeoReadTransaction(this.store, () => this.runtimeRead(project, what, filter));
     this.counters.reads += 1;
     const limit = Math.min(filter.limit ?? 20, GEO_READ_MAX_ITEMS);
     const offset = filter.offset ?? 0;
