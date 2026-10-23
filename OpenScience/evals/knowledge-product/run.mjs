@@ -10,13 +10,14 @@ import { verifyLiveBudgetWiring,armSharedBudget,verifyBoundCollector } from './s
 import { readTranscript } from './native_probe.mjs';
 import { memoryHash,collectIndependentCells,fatalCollectionError } from './protocol.mjs';
 import { contextId } from './coverage.mjs';
+import {selectedArms,experimentIdentity,openExecution,beginArm,sealArm,saveExecution,assertActiveRuntime} from './arm_execution.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 export async function verifyCorpus(b) {
   validateBenchmark(b);
   for (const source of b.sources) if (sha(await fs.readFile(path.join(root, source.path))) !== source.sha256) throw new Error(`Frozen corpus changed: ${source.id}`);
 }
-export async function preflight(bindings) {
+export async function preflight(bindings,{activeArms=['baseline','candidate']}={}) {
   const missing = [];
   for (const arm of ['baseline', 'candidate']) {
     const binding = bindings?.[arm];
@@ -24,8 +25,10 @@ export async function preflight(bindings) {
     try {
       const bound = await verifyBoundCollector(binding.base,arm,bindings.sharedBudget);
       binding.listenerProof=bound.binding;binding.sharedBudget=bindings.sharedBudget;
-      const response = await fetch(`${binding.base}/api/ready`, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) missing.push(`${arm}: readiness HTTP ${response.status}`);
+      const active=activeArms.includes(arm);
+      const response = await fetch(`${binding.base}${active?'/api/ready':'/api/health'}`, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) missing.push(`${arm}: ${active?'runtime readiness':'instrumented web health'} HTTP ${response.status}`);
+      if(active)binding.actualRuntimeProof=assertActiveRuntime(binding);
     } catch (e) { missing.push(`${arm}: product readiness unavailable (${e.cause?.code ?? e.name})`); }
     if (!binding.runtimeEvidence?.dshVersion || !binding.runtimeEvidence?.openVikingVersion || !binding.runtimeEvidence?.model || !binding.runtimeEvidence?.revision) missing.push(`${arm}: engine/model/revision identity receipt missing`);
     if (!bindings.sharedBudget?.sharedBudgetId || binding.sharedBudgetId !== bindings.sharedBudget.sharedBudgetId) missing.push(`${arm}: same live aggregate budget identity missing`);
@@ -42,6 +45,7 @@ async function execute(c, binding, repetition, arm, out) {
   const partial={caseId:c.id,arm,repetition,prompt:c.prompt,status:'inconclusive'};
   try {
   binding.listenerProof=(await verifyBoundCollector(binding.base,arm,binding.sharedBudget)).binding;
+  assertActiveRuntime(binding);
   const projectScope = binding.accounts[c.actor]?.projects[c.project];
   const scope = c.evaluation && projectScope?.contexts ? projectScope.contexts[contextId(c.evaluation)] : projectScope;
   if (!scope) throw new Error(`Missing real fixture scope ${arm}/${c.actor}/${c.project}`);
@@ -95,43 +99,55 @@ export async function main() {
   const out = process.env.KNOWLEDGE_EVAL_OUT ?? path.join(root, 'results', new Date().toISOString().replaceAll(':','-'));
   await fs.mkdir(out, { recursive: true });
   const bindings = process.env.KNOWLEDGE_EVAL_BINDINGS ? JSON.parse(await fs.readFile(process.env.KNOWLEDGE_EVAL_BINDINGS, 'utf8')) : {};
-  const missing = await preflight(bindings);
-  const protocol = { benchmarkSha256: sha(JSON.stringify(b)), budgetCny: 50, expectedCells: 540, lifecycleDenominator: 30, independentUnit: 'question', ci: 'paired percentile bootstrap, 10000 draws, 95%', noninferiority: 'general and medical independently: lower CI > -0.02; otherwise inconclusive', missing, status: missing.length ? 'blocked' : 'ready', spendCny: 0 };
-  await fs.writeFile(path.join(out, 'execution.json'), JSON.stringify(protocol, null, 2));
+  const arms=selectedArms(process.argv);
+  const missing = await preflight(bindings,{activeArms:arms});
+  const protocol = { benchmarkSha256: sha(JSON.stringify(b)), budgetCny: 50, expectedCells: 540, lifecycleDenominator: 30, independentUnit: 'question', ci: 'paired percentile bootstrap, 10000 draws, 95%', noninferiority: 'general and medical independently: lower CI > -0.02; otherwise inconclusive', missing, status: missing.length ? 'blocked' : 'ready',activeArms:arms,inactiveArms:['baseline','candidate'].filter(a=>!arms.includes(a)),spendCny:0 };
+  // Preflight never overwrites a prior arm's durable execution or measured evidence.
+  await fs.writeFile(path.join(out, 'preflight.json'), JSON.stringify(protocol, null, 2));
   if (missing.length) { console.log(JSON.stringify(protocol)); return; }
   // Scoring is a separate explicit review stage; raw runs never imply quality pass.
   if (!process.argv.includes('--execute')) { console.log('Preflight ready. Use --execute to collect real runs.'); return; }
-  await armSharedBudget(bindings.sharedBudget);
-  delete protocol.spendCny;protocol.status='collecting';await fs.writeFile(path.join(out,'execution.json'),JSON.stringify(protocol,null,2)); // Recheck immediately before provisioning can start paid background work.
+  delete protocol.spendCny;
+  const execution=await openExecution(out,experimentIdentity(bindings,protocol.benchmarkSha256),protocol);
+  // Safety checks precede fixtures/model dispatch even when resuming the candidate after baseline.
+  // Both instrumented web listeners and native engine remain mandatory under the same coordinator.
   const { provision, runLifecycle } = await import('./provision.mjs');
   const os = await import('node:os');
   const privateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'knowledge-eval-private-'));
-  const contexts = {};
-  try {
-    for (const arm of ['baseline','candidate']) {
+  for(const arm of arms){
+   let ctx=null;
+   try {
+      await beginArm(out,execution,arm);
+      await armSharedBudget(bindings.sharedBudget);
       if (!bindings[arm].dataDir) throw new Error(`${arm}: isolated product dataDir is required for automatic fixture setup`);
       bindings[arm].listenerProof=(await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget)).binding;
-      const ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,sharedBudget:bindings.sharedBudget,runtimeMode:'kernel',runtimeEvidence:bindings[arm].runtimeEvidence,databaseBindingsFile:bindings[arm].databaseBindingsFile});
-      contexts[arm] = ctx;ctx.evidenceDir=path.join(out,arm,'lifecycle-native');
+      ctx = await provision({base:bindings[arm].base,dataDir:bindings[arm].dataDir,privateDir:path.join(privateDir,arm),benchmark:b,arm,coverage:true,sharedBudget:bindings.sharedBudget,runtimeMode:'kernel',runtimeEvidence:bindings[arm].runtimeEvidence,databaseBindingsFile:bindings[arm].databaseBindingsFile});
+      ctx.evidenceDir=path.join(out,arm,'lifecycle-native');
       bindings[arm].accounts = ctx.bindings.accounts;
       for (const repetition of [1,2,3]) {
         const lifecycle = await runLifecycle(b,ctx);
         await fs.writeFile(path.join(out,`${arm}-lifecycle-${repetition}.json`),JSON.stringify(lifecycle,null,2));
       }
-    }
-    const cells=b.cases.filter(c=>c.stratum!=='lifecycle').flatMap(c=>['baseline','candidate'].flatMap(arm=>[1,2,3].map(repetition=>({caseId:c.id,arm,repetition}))));
-    const outcomes=await collectIndependentCells(cells,cell=>execute(b.cases.find(c=>c.id===cell.caseId),bindings[cell.arm],cell.repetition,cell.arm,out),row=>fs.appendFile(path.join(out,'cell-outcomes.jsonl'),JSON.stringify(row)+'\n'));
-    protocol.inconclusiveCells=outcomes.filter(r=>r.status==='inconclusive').length;
-    const {reviewDirectory}=await import('./automatic_judge.mjs');
-    protocol.review=await reviewDirectory(out,{benchmark:b,sharedBudget:bindings.sharedBudget});
-  } catch(error) {
-    protocol.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';protocol.error=error.message;delete protocol.spendCny;await fs.writeFile(path.join(out,'execution.json'),JSON.stringify(protocol,null,2));throw error;
-  } finally {
-    for (const ctx of Object.values(contexts)) await ctx.cleanup();
-    await fs.rm(privateDir,{recursive:true,force:true});
+      const cells=b.cases.filter(c=>c.stratum!=='lifecycle').flatMap(c=>[1,2,3].map(repetition=>({caseId:c.id,arm,repetition})));
+      const outcomes=await collectIndependentCells(cells,cell=>execute(b.cases.find(c=>c.id===cell.caseId),bindings[arm],cell.repetition,arm,out),row=>fs.appendFile(path.join(out,`${arm}-cell-outcomes.jsonl`),JSON.stringify(row)+'\n'));
+      const inconclusiveCells=outcomes.filter(r=>r.status==='inconclusive').length;
+      const {reviewDirectory}=await import('./automatic_judge.mjs');
+      const review=await reviewDirectory(out,{benchmark:b,sharedBudget:bindings.sharedBudget});
+      const reviewed=(await fs.readFile(path.join(out,'reviewed-observations.jsonl'),'utf8')).split('\n').filter(Boolean).map(JSON.parse).filter(r=>r.arm===arm);
+      await fs.writeFile(path.join(out,`${arm}-reviewed-observations.jsonl`),reviewed.map(r=>JSON.stringify(r)).join('\n')+'\n');
+      bindings[arm].listenerProof=(await verifyBoundCollector(bindings[arm].base,arm,bindings.sharedBudget)).binding;
+      await sealArm(out,execution,arm,assertActiveRuntime(bindings[arm]),{inconclusiveCells,review,budget:await verifyLiveBudgetWiring(bindings.sharedBudget)});
+   }catch(error){
+      if(execution.arms[arm].status==='collecting'){
+       execution.arms[arm]={...execution.arms[arm],status:fatalCollectionError(error)?'stopped-safety':'inconclusive',error:error.message};
+       execution.status=fatalCollectionError(error)?'stopped-safety':'inconclusive';execution.error=error.message;await saveExecution(out,execution);
+      }
+      throw error;
+   }finally{
+      if(ctx)await ctx.cleanup();
+      await fs.rm(path.join(privateDir,arm),{recursive:true,force:true});
+   }
   }
-  protocol.status = protocol.inconclusiveCells?'collected-with-inconclusive-cells':'collected-and-automatically-reviewed';
-  delete protocol.spendCny; // Real spend must be imported from the control-plane usage ledger, never estimated as zero.
-  await fs.writeFile(path.join(out, 'execution.json'), JSON.stringify(protocol, null, 2));
+  await fs.rm(privateDir,{recursive:true,force:true});
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

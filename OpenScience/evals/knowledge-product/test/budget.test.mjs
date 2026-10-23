@@ -63,3 +63,21 @@ test('native DashScope compatible-mode path reaches the unarmed coordinator and 
 test('unknown provider accounting retains reservation and halts further admission',()=>{
  const b=new SharedBudget({capCny:50,models:{flash:{input:2,output:8,maxOutput:100}}});const id=b.reserve({scope:'baseline',model:'flash',inputTokens:10,maxOutputTokens:10});b.holdUncertain(id);assert.equal(b.status().pending,1);assert.equal(b.status().halted,true);assert.throws(()=>b.reserve({scope:'candidate',model:'flash',inputTokens:1,maxOutputTokens:1}),/halted/);
 });
+test('bounded operator preflight preserves documented reasoning effort and refuses missing output limits',async()=>{
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');const {createBudgetProxy}=await import('../budget_proxy.mjs');
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'eval-effort-'));let calls=0;
+ const p=await createBudgetProxy({models:{'deepseek-flash':{input:2,output:8,maxOutput:4096}},providers:{deepseek:{url:'https://provider.test/chat/completions',keyFile:path.join(dir,'unused')}},token:'unit-token',ledgerFile:path.join(dir,'ledger'),fetchImpl:()=>{calls++;throw new Error('No provider request allowed');}});
+ const post=(route,body)=>fetch(p.url+route,{method:'POST',headers:{Authorization:'Bearer unit-token','content-type':'application/json'},body:JSON.stringify(body)});
+ try{
+  for(const effort of ['none','low','high','max','minimal','medium','xhigh','ultra']){
+   await post('/__eval/probe',{scope:'baseline',processId:process.pid,nonce:'effort'});
+   const body={model:'deepseek-flash',messages:[{role:'user',content:'Unit preflight'}],reasoning_effort:effort,max_tokens:4096};
+   await post('/provider',{scope:'baseline',provider:'deepseek',request:body});assert.equal(p.wiring.baseline.providerBoundary,true);
+  }
+  for(const change of [{reasoning_effort:'unbounded'},{reasoning_effort:{high:true}},{max_tokens:undefined},{max_tokens:4097}]){
+   await post('/__eval/probe',{scope:'baseline',processId:process.pid,nonce:'invalid'});
+   await post('/provider',{scope:'baseline',provider:'deepseek',request:{model:'deepseek-flash',messages:[{role:'user',content:'Unit preflight'}],reasoning_effort:'high',max_tokens:4096,...change}});assert.equal(p.wiring.baseline.providerBoundary,undefined);
+  }
+  assert.equal(calls,0);assert.equal(p.budget.status().pending,0);
+ }finally{await p.close();await fs.rm(dir,{recursive:true,force:true});}
+});
