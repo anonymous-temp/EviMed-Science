@@ -1,3 +1,4 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { pythonRound } from "@evimed/domain";
@@ -26,7 +27,6 @@ import { Section } from "@/components/ui/Section";
 import { SeverityBadge, isSeverityLevel } from "@/components/ui/SeverityBadge";
 import { Tag } from "@/components/ui/Tag";
 import { useGeoDiagnosis } from "../geoProjectData";
-import { geoDestinationPath } from "../geoTabs";
 import {
   engineName,
   GEO_ORDER_CANCELLABLE,
@@ -351,6 +351,7 @@ function ActionBody({
 /* --------------------------------------------------------------------- gap */
 
 function Gap({ action, claims, geoId }: { action: GeoAction; claims: GeoClusterView["claims"]; geoId: string }) {
+  const geoDestinationPath = useGeoDestinationPath();
   // A wrong statement the action closes is the way to the claim's record, where the diagnosis holds the row that names its claim.
   const diagnosis = useGeoDiagnosis(geoId);
   const claimOfError = useMemo(() => new Map((diagnosis.state.kind === "ready" && Array.isArray(diagnosis.state.data?.errors) ? diagnosis.state.data.errors : []).map((row) => [row.id, claimKeyOf(row)])), [diagnosis.state]);

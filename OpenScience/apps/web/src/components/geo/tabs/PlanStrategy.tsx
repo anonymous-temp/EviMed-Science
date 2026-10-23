@@ -1,3 +1,4 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { Fragment, useState } from "react";
 import { Link } from "react-router";
 import { Check } from "lucide-react";
@@ -22,7 +23,7 @@ import { BulletBar } from "@/components/ui/StatTile";
 import { Tag } from "@/components/ui/Tag";
 import { formatGeoValue, GeoCellText } from "../GeoCellText";
 import { useGeoFrame } from "../geoFrame";
-import { geoDestinationPath, geoSectionId } from "../geoTabs";
+import { geoSectionId } from "../geoTabs";
 import {
   engineName,
   GEO_ASSUMPTION_BASIS_WORDS,
@@ -237,6 +238,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
 
 /** A group by its name, a link to its question group where it is one the plan resolved; plain text where it is not. */
 function GroupLinks({ geoId, groups }: { geoId: string; groups: ReadonlyArray<{ id: string | null; name: string }> }) {
+  const geoDestinationPath = useGeoDestinationPath();
   return (
     <>
       {groups.map((group, index) => (

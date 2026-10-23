@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,6 +39,27 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/so
     </MemoryRouter>,
   );
 }
+
+it("keeps source search and sorting through a delayed scope read without exposing old rows", async () => {
+  const project = geoProject();
+  const user = userEvent.setup();
+  let finish: (value: typeof sourcesFilled) => void = () => undefined;
+  const delayed = new Promise<typeof sourcesFilled>(resolve => { finish = resolve; });
+  client.getGeoSources.mockResolvedValueOnce(sourcesFilled).mockReturnValueOnce(delayed);
+  const node = (engine: string) => <MemoryRouter initialEntries={["/app/geo/geo_1/sources"]}>
+    <GeoFrameHarness geoId="geo_1" project={project} tab="sources" scope={{ engines: [engine] }}><SourcesTab geoId="geo_1" project={project} /></GeoFrameHarness>
+  </MemoryRouter>;
+  const shown = render(node("deepseek"));
+  const search = await screen.findByLabelText("搜索信源");
+  await user.type(search, "丁香");
+  await user.click(screen.getByRole("button", { name: "按讲错的回答排序" }));
+  shown.rerender(node("kimi"));
+  await waitFor(() => expect(client.getGeoSources).toHaveBeenLastCalledWith("geo_1", { engines: ["kimi"] }));
+  expect(screen.queryByRole("button", { name: /丁香医生/ })).not.toBeInTheDocument();
+  await act(async () => { finish(sourcesFilled); await delayed; });
+  expect(await screen.findByLabelText("搜索信源")).toHaveValue("丁香");
+  expect(screen.getByRole("button", { name: "按讲错的回答排序，当前从多到少" })).toBeVisible();
+});
 
 const site = (overrides: Partial<GeoActionSource> & Pick<GeoActionSource, "domain">): GeoActionSource => ({
   channel: null, name: null, kind: null, layer: null, why: null, citedFor: {}, conditions: {}, price: null, available: null,
@@ -86,6 +107,22 @@ const rowOf = (domain: string): HTMLElement | null => (document.querySelector(`[
 const domains = () => [...document.querySelectorAll("[data-geo-source]")].map((node) => node.getAttribute("data-geo-source"));
 
 describe("信源: two views in the band", () => {
+  it("retains other project platforms when the returned citations only include the selected platform", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, sources: sourcesFilled.sources.map(source => ({ ...source, cited: { deepseek: source.cited.deepseek ?? 1 } })) });
+    renderTab(geoProject(), "/app/geo/geo_1/sources?engine=deepseek");
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^引擎/ }));
+    expect(await screen.findByRole("menuitemradio", { name: "豆包" })).toBeVisible();
+  });
+  it("clears an empty-result search and its column filters in one URL update", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/sources?engine=deepseek&only=wrong&sourceSearch=not-found&session=s1");
+    const clear = await screen.findAllByRole("button", { name: "清除筛选" });
+    await userEvent.click(clear[clear.length - 1]);
+    const query = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+    expect(query.has("engine")).toBe(false); expect(query.has("only")).toBe(false); expect(query.has("sourceSearch")).toBe(false);
+    expect(query.get("session")).toBe("s1");
+    expect(await screen.findByLabelText("搜索信源")).toHaveValue("");
+  });
   it("switches between who the engines cite and where an article could go, in the address", async () => {
     renderTab();
     await screen.findByText("3 个信源");

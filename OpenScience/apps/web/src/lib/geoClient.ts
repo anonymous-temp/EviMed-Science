@@ -23,6 +23,7 @@
  *    “样本不足”, never the number (`GeoCellText` enforces it).
  */
 import { useEffect, useState } from "react";
+import { geoReadScopeQuery, type GeoReadScope, type GeoScopedView, type GeoMetricMembers, type GeoMetricSelector } from "./geoReadScope";
 import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { formatRelativeTime } from "./format";
 import { productRequest } from "./productClient";
@@ -83,6 +84,7 @@ export interface GeoCell {
   assessment?: { methodVersion: string; completeAnswers: number; partialAnswers: number; unknownAnswers: number; decidableAnswers?: number };
   /** Null identifies a preserved historical calculation whose method is not recorded. */
   methodVersion?: string | null;
+  members?: GeoMetricMembers;
 }
 
 /** One step of the program (`projects.steps[key]`, SPEC §2.2). */
@@ -193,7 +195,7 @@ export interface GeoOverview {
 }
 
 /** One project (`GET /api/geo/projects/:id`). */
-export interface GeoProject {
+export interface GeoProject extends GeoScopedView {
   id: string;
   projectId: string;
   name: string;
@@ -291,6 +293,12 @@ export interface GeoJourney {
 export interface GeoQuestion {
   id: string;
   text: string;
+  originalId?: string | null;
+  originalGroup?: string | null;
+  originalRowIndex?: number | null;
+  clientTags?: string[];
+  classificationStatus?: "unclassified" | "suggested" | "confirmed";
+  collectedAt?: string | null;
   kind: "typical" | "real" | "label_safety" | "client";
   platform: string | null;
   sourceUrl: string | null;
@@ -303,7 +311,8 @@ export interface GeoQuestion {
 }
 export interface GeoQuestionGroup {
   id: string;
-  pool: GeoPool;
+  pool: GeoPool | null;
+  version?: number | null;
   name: string;
   typicalQuestion: string;
   journeyStage: string | null;
@@ -315,7 +324,7 @@ export interface GeoQuestionGroup {
   signal: "collected" | "partial" | "no_signal" | "client" | null;
   questions: GeoQuestion[];
 }
-export interface GeoQuestions {
+export interface GeoQuestions extends GeoScopedView {
   sets: Array<{ version: number; lockedAt: string | null; measuredCount: number | null }>;
   version: number | null;
   groups: GeoQuestionGroup[];
@@ -399,7 +408,7 @@ export interface GeoErrorCounts {
   closed: number;
   severe: number;
 }
-export interface GeoDiagnosis {
+export interface GeoDiagnosis extends GeoScopedView {
   round: (GeoRoundRef & {
     surface: Record<string, unknown> | null;
     planned: number | null;
@@ -552,7 +561,8 @@ export interface GeoSourceHistoryPoint {
 }
 
 /** What a source row stands for: the answers its three numbers count. */
-export interface GeoSourceDetail {
+export interface GeoSourceDetail extends GeoScopedView {
+  answerPage?: { total: number; shown: number; more: boolean; nextOffset: number | null; offset?: number; limit?: number };
   source: Pick<GeoSourceRow, "id" | "domain" | "name" | "kind" | "layer" | "conditions" | "impostor" | "market">;
   round: { id: string; kind: string; sampleDate: string | null } | null;
   /** The engine the list was narrowed to, when it was. */
@@ -571,7 +581,7 @@ export interface GeoTier {
   placements: number | null;
   budgetCny: number | null;
 }
-export interface GeoSources {
+export interface GeoSources extends GeoScopedView {
   /** Engines whose citations of the latest full measurement had no links at all. */
   linklessEngines?: GeoEngine[];
   sources: GeoSourceRow[];
@@ -671,7 +681,7 @@ export interface GeoSeriesPoint {
   /** What the point's round measured (engines that answered, question set and pools, probe surface); null: no answer to name it from. Absent from an older server. */
   coverage?: string | null;
 }
-export interface GeoMonitoring {
+export interface GeoMonitoring extends GeoScopedView {
   series: Array<{ key: string; points: GeoSeriesPoint[] }>;
   arms: {
     pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
@@ -733,7 +743,7 @@ export interface GeoClusterRow {
   articles: { total: number; byStatus: Partial<Record<GeoArticleStatus, number>> };
 }
 
-export interface GeoClustersView {
+export interface GeoClustersView extends GeoScopedView {
   version: number | null;
   locked: boolean;
   /** The platform's floor: a rate is drawn only over this many answers. */
@@ -852,7 +862,7 @@ export interface GeoActionsView {
   unmatched: Array<Record<string, unknown>>;
 }
 
-export interface GeoClusterView {
+export interface GeoClusterView extends GeoScopedView {
   group: GeoClusterRow;
   questions: Array<{
     id: string;
@@ -1025,6 +1035,7 @@ export function readGeoCell(raw: unknown): GeoCell {
   const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const status = typeof value.status === "string" && CELL_STATUSES.has(value.status) ? value.status as GeoCellStatus : "not_measurable";
   const assessment = readGeoAssessment(value.assessment);
+  const members = readGeoMembers(value.members);
   return {
     value: finite(value.value),
     numerator: finite(value.numerator),
@@ -1035,11 +1046,20 @@ export function readGeoCell(raw: unknown): GeoCell {
     dataType: typeof value.dataType === "string" && DATA_TYPES.has(value.dataType) ? value.dataType as GeoDataType : "measured",
     ...(typeof value.reason === "string" && value.reason ? { reason: value.reason } : {}),
     ...(assessment ? { assessment } : {}),
+    ...(members ? { members } : {}),
     ...("methodVersion" in value ? { methodVersion: typeof value.methodVersion === "string" && value.methodVersion ? value.methodVersion : null } : {}),
     ...(Array.isArray(value.snapshotIds)
       ? { snapshotIds: value.snapshotIds.filter((snapshot): snapshot is string => typeof snapshot === "string" && snapshot.length > 0) }
       : {}),
   };
+}
+
+function readGeoMembers(raw: unknown): GeoMetricMembers | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = raw as GeoMetricMembers;
+  if (typeof value.selectionRef !== "string" || !value.selectionRef || typeof value.metric?.metricId !== "string"
+    || typeof value.metric.scope !== "string" || !Number.isSafeInteger(value.total) || value.total < 0) return undefined;
+  return value;
 }
 
 function readGeoAssessment(raw: unknown): GeoCell["assessment"] {
@@ -1131,8 +1151,8 @@ export function createGeoProject(input: { brandName?: string; coverageDays?: num
   return productRequest<{ id: string; projectId: string; sessionId: string }>("/geo/projects", "POST", input);
 }
 
-export async function getGeoProject(geoId: string): Promise<GeoProject> {
-  return readProject(await productRequest<GeoProject>(project(geoId)));
+export async function getGeoProject(geoId: string, scope?: GeoReadScope): Promise<GeoProject> {
+  return readProject(await productRequest<GeoProject>(`${project(geoId)}${geoReadScopeQuery(scope)}`));
 }
 
 /** Who speaks for the product: a company, or a doctor about their own specialty; the relation to the product is read at the top of every card. */
@@ -1215,21 +1235,36 @@ export function getGeoJourney(geoId: string) {
   return productRequest<GeoJourney>(`${project(geoId)}/journey`);
 }
 
-export function getGeoQuestions(geoId: string, version?: number | null) {
-  return productRequest<GeoQuestions>(`${project(geoId)}/questions${version == null ? "" : `?version=${id(String(version))}`}`);
+export function getGeoQuestions(geoId: string, version?: number | GeoReadScope | null) {
+  const query = version && typeof version === "object" ? geoReadScopeQuery(version) : version == null ? "" : `?version=${id(String(version))}`;
+  return productRequest<GeoQuestions>(`${project(geoId)}/questions${query}`);
 }
 
 /** “移出测量问句”: the server writes a new question-set version without it. */
 export function unmeasureGeoQuestion(geoId: string, questionId: string) {
-  return productRequest<unknown>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
+  return productRequest<{ version: number }>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
 }
 
-export function getGeoDiagnosis(geoId: string, round?: string | null) {
-  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${round ? `?round=${id(round)}` : ""}`);
+export function getGeoDiagnosis(geoId: string, scope?: GeoReadScope | string | null) {
+  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${geoReadScopeQuery(typeof scope === "string" ? { round: scope } : scope)}`);
 }
 
 export function getGeoAnswer(geoId: string, snapshotId: string) {
   return productRequest<GeoAnswer>(`${project(geoId)}/answers/${id(snapshotId)}`);
+}
+
+export interface GeoObservationPage extends GeoScopedView {
+  items: Array<{ id: string; roundId: string | null; questionId: string | null; question: string | null; engine: string;
+    askedAt: string | null; status: string; answerText: string; answerTruncated: boolean }>;
+  total: number;
+  nextOffset: number | null;
+}
+
+/** Exact denominator contributors, using the cell's own saved reference and metric rather than a new latest read. */
+export function getGeoObservations(geoId: string, selectionRef: string, member?: GeoMetricSelector, offset = 0) {
+  const query = new URLSearchParams({ selectionRef, limit: "30", offset: String(offset) });
+  if (member) query.set("member", JSON.stringify(member));
+  return productRequest<GeoObservationPage>(`${project(geoId)}/snapshots?${query}`);
 }
 
 /**
@@ -1241,13 +1276,16 @@ export function geoScreenshotUrl(geoId: string, sha256: string): string {
   return `${root}${project(geoId)}/screenshots/${id(sha256)}`;
 }
 
-export function getGeoSources(geoId: string) {
-  return productRequest<GeoSources>(`${project(geoId)}/sources`);
+export function getGeoSources(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoSources>(`${project(geoId)}/sources${geoReadScopeQuery(scope)}`);
 }
 
 /** One source's detail: the answers of the latest round that cite it, one engine's when `engine` is given. */
-export function getGeoSource(geoId: string, sourceId: string, engine?: string | null) {
-  return productRequest<GeoSourceDetail>(`${project(geoId)}/sources/${id(sourceId)}${engine ? `?engine=${encodeURIComponent(engine)}` : ""}`);
+export function getGeoSource(geoId: string, sourceId: string, scope?: GeoReadScope | string | null, page?: { answerLimit?: number; answerOffset?: number }) {
+  const query = new URLSearchParams(geoReadScopeQuery(typeof scope === "string" ? { engines: [scope] } : scope));
+  if (page?.answerLimit != null) query.set("answerLimit", String(page.answerLimit));
+  if (page?.answerOffset != null) query.set("answerOffset", String(page.answerOffset));
+  return productRequest<GeoSourceDetail>(`${project(geoId)}/sources/${id(sourceId)}${query.size ? `?${query}` : ""}`);
 }
 
 export function setGeoTier(geoId: string, tier: GeoTierId) {
@@ -1257,13 +1295,13 @@ export function setGeoTier(geoId: string, tier: GeoTierId) {
 /* ----------------------------------------------- the question group as the spine (R19) */
 
 /** Every question group with what the engines say about it, the errors against it, what is being done and what stands. */
-export function getGeoClusters(geoId: string) {
-  return productRequest<GeoClustersView>(`${project(geoId)}/clusters`);
+export function getGeoClusters(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoClustersView>(`${project(geoId)}/clusters${geoReadScopeQuery(scope)}`);
 }
 
 /** One group in full: its questions with each engine's state, the sources its answers cite, its gaps, actions and effect. */
-export function getGeoCluster(geoId: string, groupId: string) {
-  return productRequest<GeoClusterView>(`${project(geoId)}/clusters/${id(groupId)}`);
+export function getGeoCluster(geoId: string, groupId: string, scope?: GeoReadScope) {
+  return productRequest<GeoClusterView>(`${project(geoId)}/clusters/${id(groupId)}${geoReadScopeQuery(scope)}`);
 }
 
 /** The actions, each carrying its group, with the page's lead sentence. */
@@ -1344,8 +1382,8 @@ export function cancelGeoOrder(geoId: string, orderId: string) {
   return productRequest<unknown>(`${project(geoId)}/orders/${id(orderId)}/cancel`, "POST", {});
 }
 
-export function getGeoMonitoring(geoId: string) {
-  return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring`);
+export function getGeoMonitoring(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring${geoReadScopeQuery(scope)}`);
 }
 
 /**

@@ -1,6 +1,7 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { getGeoCluster, getGeoSources, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
+import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
 import { BarList } from "@/components/charts/BarList";
 import { concentrationFacts, concentrationTitle, SourceConcentration } from "@/components/charts/SourceConcentration";
 import { Button } from "@/components/ui/Button";
@@ -11,10 +12,11 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import { List, ListHeader, ListRow, type ListColumn } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
-import { useGeoToolbar } from "../geoFrame";
-import { useSharedGeoLoad } from "../geoProjectData";
+import { useGeoReadScope, useGeoToolbar } from "../geoFrame";
+import { geoReadScopeQuery } from "@/lib/geoReadScope";
+import { useGeoSources, useScopedGeoLoad } from "../geoProjectData";
 import { engineName, GEO_SOURCE_LAYER_WORDS, zh } from "../geoText";
-import { GEO_VIEW_PARAM, geoDestinationPath } from "../geoTabs";
+import { GEO_VIEW_PARAM } from "../geoTabs";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
@@ -31,7 +33,7 @@ import {
   OTHER_KIND,
   type Candidate,
 } from "../spine/sourceModel";
-import { useGeoActions, useGeoClusters } from "../spine/spineData";
+import { useGeoActions, useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { sourceKindWord, yuan } from "./geoTabText";
 import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { GeoSourceDrawer } from "./GeoSourceDrawer";
@@ -89,9 +91,10 @@ const KIND_PARAM = "kind";
  * and the open site is `?source=<domain>`, so a link from a group or a wrong claim lands on it.
  */
 export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const { state, reload } = useSharedGeoLoad(`sources:${geoId}`, () => getGeoSources(geoId));
+  const { state, reload } = useGeoSources(geoId);
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
+  const catalog = useGeoQuestionCatalog(geoId);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
@@ -99,10 +102,13 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (sources.length === 0) return <StepPending geoId={geoId} project={project} step="sources" />;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
-  const groups = clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : [];
+  const groups = [...new Map([
+    ...(catalog.state.kind === "ready" ? catalog.state.data.groups : []),
+    ...(clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : []),
+  ].map(group => [group.id, group])).values()];
   return (
     <div data-geo-tab="sources" className="flex flex-col gap-6">
-      <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} actions={everyAction} groups={groups} />
+      <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} actions={everyAction} groups={groups} selectionRef={data.selection?.reference} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}
       {linkless.length > 0 && (
@@ -149,6 +155,7 @@ function matchesOnly(source: GeoSourceRow, counts: SourceCounts, only: Only | nu
 
 interface Opened {
   key: string;
+  scopeKey: string;
   /** The engine filter when it was opened: the drawer lists the answers the row counted. */
   engine: string;
   focus: "wrong" | null;
@@ -156,7 +163,7 @@ interface Opened {
 
 /** The domains a group is related to: those its actions send articles to, and the sites cited most in answers to its questions. */
 function useRelatedDomains(geoId: string, cluster: string | null, actions: readonly GeoAction[]): ReadonlySet<string> | null {
-  const detail = useSharedGeoLoad<GeoClusterView | null>(`cluster:${geoId}:${cluster ?? "-"}`, () => (cluster ? getGeoCluster(geoId, cluster) : Promise.resolve(null)));
+  const detail = useScopedGeoLoad<GeoClusterView | null>(`cluster:${geoId}:${cluster ?? "-"}`, scope => (cluster ? scope ? getGeoCluster(geoId, cluster, scope) : getGeoCluster(geoId, cluster) : Promise.resolve(null)));
   return useMemo(() => {
     if (!cluster) return null;
     const domains = domainsOfGroup(actions, cluster);
@@ -172,6 +179,7 @@ function SourceList({
   engines,
   actions,
   groups,
+  selectionRef,
 }: {
   geoId: string;
   project: GeoProject;
@@ -179,7 +187,9 @@ function SourceList({
   engines: string[];
   actions: readonly GeoAction[];
   groups: ReadonlyArray<{ id: string; name: string }>;
+  selectionRef?: string;
 }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const change = useGeoSearchChange();
@@ -188,13 +198,18 @@ function SourceList({
   const [kindParam, setKindParam] = useGeoSearchParam(KIND_PARAM);
   const [onlyParam, setOnlyParam] = useGeoSearchParam("only");
   const view: SourcesView = params.get(GEO_VIEW_PARAM) === "placeable" ? "placeable" : "cited";
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "cited", descending: true });
+  const [queryValue, setQueryValue] = useGeoSearchParam("sourceSearch");
+  const query = queryValue ?? "";
+  const setQuery = (value: string) => setQueryValue(value || null);
+  const sortKey: SortKey = ["cited", "wrong", "mentions"].includes(params.get("sourceSort") ?? "") ? params.get("sourceSort") as SortKey : "cited";
+  const sort = useMemo(() => ({ key: sortKey, descending: params.get("sourceOrder") !== "asc" }), [sortKey, params]);
   const [opened, setOpened] = useState<Opened | null>(null);
+  const scopeKey = geoReadScopeQuery(useGeoReadScope());
+  const currentOpened = opened?.scopeKey === scopeKey ? opened : null;
   const addressed = params.get(GEO_SOURCE_PARAM);
 
   const cited = useMemo(() => new Set(sources.flatMap((source) => Object.keys(source.cited ?? {}))), [sources]);
-  const listed = [...engines.filter((key) => cited.has(key)), ...[...cited].filter((key) => !engines.includes(key))];
+  const listed = [...engines, ...[...cited].filter((key) => !engines.includes(key))];
   const options: FilterOption<string>[] = [
     { value: "all", label: "全部引擎" },
     ...listed.map((key) => ({ value: key, label: engineName(key) })),
@@ -231,10 +246,10 @@ function SourceList({
     .filter((candidate) => !needle || `${candidate.name} ${candidate.domain ?? ""}`.toLowerCase().includes(needle)), [candidates, cluster, needle]);
   const { visible, remaining, more } = useShowMore(rows, { first: SOURCES_SHOWN, step: SOURCES_SHOWN, resetKey: `${view}|${current}|${only}|${kind}|${cluster}|${needle}|${sort.key}|${sort.descending}` });
 
-  const activeKey = opened?.key ?? addressed;
+  const activeKey = currentOpened?.key ?? addressed;
   const drawerRow = activeKey ? sources.find((source) => source.domain === activeKey || (source.id || source.domain) === activeKey) ?? null : null;
   const openSource = (source: GeoSourceRow, engine: string, focus: "wrong" | null) => {
-    setOpened({ key: source.id || source.domain, engine, focus });
+    setOpened({ key: source.id || source.domain, engine, focus, scopeKey });
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.set(GEO_SOURCE_PARAM, source.domain);
@@ -250,7 +265,7 @@ function SourceList({
     }, { replace: true });
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
-  const sortBy = (key: string) => setSort((now) => (now.key === key ? { key: now.key, descending: !now.descending } : { key: key as SortKey, descending: true }));
+  const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });
   const narrowed = (view === "cited" && (current !== "all" || only !== null || kind !== null)) || cluster !== null;
   const summary = view === "cited"
     ? `${needle ? "匹配 " : ""}${rows.length.toLocaleString("zh-CN")} 个信源`
@@ -291,7 +306,7 @@ function SourceList({
         <>
           <SourcePictures kinds={kinds} selected={kind} onSelect={setKindParam} facts={concentration} />
           {rows.length === 0 ? (
-            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => { change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setQuery(""); }}>清除筛选</Button> : undefined}>
+            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, sourceSearch: null })}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
             </Note>
           ) : (
@@ -351,8 +366,9 @@ function SourceList({
           geoId={geoId}
           project={project}
           source={drawerRow}
-          engine={opened?.engine ?? "all"}
-          focus={opened?.focus ?? null}
+          engine={currentOpened?.engine ?? "all"}
+          selectionRef={selectionRef}
+          focus={currentOpened?.focus ?? null}
           served={served}
           onClose={closeSource}
         />

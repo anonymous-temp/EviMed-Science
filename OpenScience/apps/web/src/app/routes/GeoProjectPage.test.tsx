@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,8 +51,9 @@ vi.mock("@/components/geo/geoScroll", () => scroll);
 // The tabs other than 总览 have their own tests; here each is a marker that says the layout gave it the project — and, through the
 // toolbar hook, one filter, so what the band does with a tab's controls can be read.
 const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown) => void) => ({ geoId, project }: { geoId: string; project: { name: string } }) => {
+  const [choice, setChoice] = useState("初始视图");
   useGeoToolbar({ filters: [{ kind: "chips", label: `${name} 的筛选`, options: [{ value: "a", label: "甲" }, { value: "b", label: "乙" }], value: "a", onChange: () => undefined }] });
-  return <div data-testid={`${name}-tab`}>{geoId}:{project.name}</div>;
+  return <div data-testid={`${name}-tab`}>{geoId}:{project.name}<button onClick={() => setChoice("已选择的视图")}>{`${name} 调整视图`}</button><span>{choice}</span></div>;
 });
 const toolbarHook = vi.hoisted(() => async () => (await import("@/components/geo/geoFrame")).useGeoToolbar as (toolbar: unknown) => void);
 // 总览 draws 可见度's ranking card (one implementation), so this module keeps its other exports.
@@ -99,6 +101,39 @@ function Routed() {
 function renderProject(path = "/app/geo/geo_masi") {
   return render(<MemoryRouter initialEntries={[path]}><Routed /></MemoryRouter>);
 }
+
+describe("GEO analytical scope", () => {
+  it("keeps the current workbench's local choices while changing a platform scope", async () => {
+    const user = userEvent.setup();
+    renderProject("/app/geo/geo_masi/visibility");
+    await user.click(await screen.findByRole("button", { name: "visibility 调整视图" }));
+    await user.click(screen.getByRole("button", { name: "修改平台筛选" }));
+    await waitFor(() => expect(client.getGeoProject).toHaveBeenLastCalledWith("geo_masi", { engines: ["deepseek"] }));
+    expect(await screen.findByText("已选择的视图")).toBeVisible();
+  });
+  it("carries a copied range into project, diagnosis and monitoring reads", async () => {
+    renderProject("/app/geo/geo_masi?from=2026-10-01&to=2026-10-02&engine=kimi&cluster=g1&session=ses_keep");
+    const scope = { from: "2026-10-01", to: "2026-10-02", engines: ["kimi"], groupIds: ["g1"] };
+    await waitFor(() => expect(client.getGeoProject).toHaveBeenCalledWith("geo_masi", scope));
+    await waitFor(() => expect(client.getGeoDiagnosis).toHaveBeenCalledWith("geo_masi", scope));
+    await waitFor(() => expect(client.getGeoMonitoring).toHaveBeenCalledWith("geo_masi", scope));
+    expect(await screen.findByRole("button", { name: "分析范围 · 已筛选" })).toBeVisible();
+  });
+
+  it("does not label a previous range's metrics as the new range while the new project read is pending", async () => {
+    const user = userEvent.setup();
+    let finish: (project: typeof GEO_PROJECT) => void = () => undefined;
+    const delayed = new Promise<typeof GEO_PROJECT>(resolve => { finish = resolve; });
+    client.getGeoProject.mockResolvedValueOnce(GEO_PROJECT).mockReturnValueOnce(delayed);
+    renderProject();
+    await screen.findByRole("button", { name: "分析范围" });
+    await user.click(screen.getByRole("button", { name: "修改平台筛选" }));
+    await waitFor(() => expect(client.getGeoProject).toHaveBeenLastCalledWith("geo_masi", { engines: ["deepseek"] }));
+    expect(document.querySelector('[data-geo-tab="overview"]')).not.toBeVisible();
+    await act(async () => { finish(GEO_PROJECT); await delayed; });
+    await screen.findByRole("button", { name: "分析范围 · 已筛选" });
+  });
+});
 
 /** The measured round, with one statement severe enough to reach a patient. */
 const severeDiagnosis = diagnosisWith([
@@ -386,7 +421,7 @@ describe("a GEO project's page", () => {
     expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
 
     await chooseResult("信源");
-    await waitFor(() => expect(buttons()).toEqual(["选目标档"]));
+    await waitFor(() => expect(buttons()).toEqual(["分析范围", "选目标档"]));
     await userEvent.click(within(toolbar()).getByRole("button", { name: "选目标档" }));
     const planned = new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test");
     expect(planned.pathname).toBe("/app/geo/geo_masi/plan");
@@ -394,11 +429,11 @@ describe("a GEO project's page", () => {
     expect(planned.searchParams.get("step")).toBe("sources");
     expect(planned.searchParams.get("session")).toBe("ses_geo_masi");
 
-    // 准确与安全 and 可见度 are measured by the schedule: no button.
+    // Measured views offer the range, without starting another sampling run.
     await chooseResult("准确与安全");
-    await waitFor(() => expect(buttons()).toEqual([]));
+    await waitFor(() => expect(buttons()).toEqual(["分析范围"]));
     await chooseResult("可见度");
-    await waitFor(() => expect(buttons()).toEqual([]));
+    await waitFor(() => expect(buttons()).toEqual(["分析范围"]));
 
     await chooseResult("行动");
     await waitFor(() => expect(buttons()).toEqual(["让 AI 写下一批"]));

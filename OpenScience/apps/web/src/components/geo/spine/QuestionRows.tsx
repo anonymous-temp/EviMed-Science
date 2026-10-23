@@ -6,6 +6,7 @@ import { List } from "@/components/ui/ListRow";
 import { Menu, type MenuItem } from "@/components/ui/Menu";
 import { engineName } from "../geoText";
 import { answerPath } from "../tabs/geoTabText";
+import { useGeoPath } from "../useGeoPath";
 import { answerOf, answerStance, type AnswerStance } from "./clusterModel";
 
 const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
@@ -60,6 +61,7 @@ export function QuestionRows({
   menuFor?: (question: GeoClusterView["questions"][number]) => MenuItem[] | null;
   label?: string;
 }) {
+  const path = useGeoPath();
   if (questions.length === 0) return null;
   return (
     <div data-geo-cluster-questions="">
@@ -93,7 +95,7 @@ export function QuestionRows({
                   return (
                     <span key={engine} className={cn("flex h-7 w-14 shrink-0 items-center justify-center rounded max-sm:w-auto max-sm:gap-1 max-sm:px-1", focus === engine && "bg-accent-soft")}>
                       {answer?.snapshotId
-                        ? <Link to={answerPath(geoId, answer.snapshotId)} data-geo-answer-link={answer.snapshotId} className="flex h-7 w-full items-center justify-center gap-1 rounded hover:bg-surface-2">{body}<EngineWord engine={engine} /></Link>
+                        ? <Link to={path(answerPath(geoId, answer.snapshotId))} data-geo-answer-link={answer.snapshotId} className="flex h-7 w-full items-center justify-center gap-1 rounded hover:bg-surface-2">{body}<EngineWord engine={engine} /></Link>
                         : <>{body}<EngineWord engine={engine} /></>}
                     </span>
                   );

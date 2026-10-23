@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useGeoPath } from "../useGeoPath";
+import { useGeoDestinationPath } from "../useGeoPath";
+import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -19,13 +21,14 @@ import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { useSharedGeoLoad } from "../geoProjectData";
-import { geoDestinationPath, geoQuestionsView, GEO_VIEW_PARAM, type GeoQuestionsView } from "../geoTabs";
+import { geoReadScopeQuery } from "@/lib/geoReadScope";
+import { geoQuestionsView, GEO_VIEW_PARAM, type GeoQuestionsView } from "../geoTabs";
 import { GEO_POOL_KINDS, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
 import { clusterName, groupsByStage, groupTally, mentionText } from "../spine/clusterModel";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { ClusterLink } from "../spine/ClusterLink";
-import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress } from "../spine/drawerParams";
-import { useGeoClusters } from "../spine/spineData";
+import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { answerPath } from "./geoTabText";
 import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { JourneyTab } from "./JourneyTab";
@@ -72,10 +75,19 @@ const COLUMNS: ReadonlyArray<ListColumn & { key: SortKey }> = [
  */
 export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const frame = useGeoFrame();
-  const [version, setVersion] = useState<number | null>(null);
-  const questions = useSharedGeoLoad<GeoQuestions>(`questions:${geoId}:${version ?? "latest"}`, () => getGeoQuestions(geoId, version));
-  const clusters = useGeoClusters(geoId);
   const [params, setParams] = useSearchParams();
+  const version = params.has("questionVersion") ? Number(params.get("questionVersion")) : null;
+  const scope = frame?.scope;
+  const questions = useSharedGeoLoad<GeoQuestions>(scope
+    ? `questions:${geoId}:selected:${geoReadScopeQuery(scope)}:${frame?.project.selection?.dataRevision ?? ""}`
+    : `questions:${geoId}:${version ?? "latest"}`, () => getGeoQuestions(geoId, scope ?? version));
+  const clusters = useGeoClusters(geoId);
+  const setVersion = (next: number | null) => setParams(previous => {
+    const copy = new URLSearchParams(previous);
+    if (next == null) copy.delete("questionVersion"); else copy.set("questionVersion", String(next));
+    copy.delete("selectionRef"); copy.delete("groupIds"); copy.delete("cluster");
+    return copy;
+  }, { replace: true });
   const view = geoQuestionsView(params.get(GEO_VIEW_PARAM));
   const switcher = {
     kind: "chips" as const,
@@ -146,28 +158,40 @@ function QuestionPage({
   onVersion: (version: number | null) => void;
   onChanged: () => void;
 }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const navigate = useNavigate();
   const drawer = useGeoDrawerAddress();
   const frame = useGeoFrame();
-  const [pool, setPool] = useState<PoolFilter>("all");
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; descending: boolean } | null>(null);
+  const catalog = useGeoQuestionCatalog(geoId);
+  const change = useGeoSearchChange();
+  const [params] = useSearchParams();
+  const [poolParam, setPoolParam] = useGeoSearchParam("pool");
+  const pool: PoolFilter = GEO_POOLS.includes(poolParam as GeoPool) ? poolParam as GeoPool : "all";
+  const setPool = (value: PoolFilter) => setPoolParam(value === "all" ? null : value);
+  const [queryParam, setQueryParam] = useGeoSearchParam("questionSearch");
+  const query = queryParam ?? "";
+  const setQuery = (value: string) => setQueryParam(value || null);
+  const sort = useMemo(() => {
+    const key = params.get("questionSort");
+    return key && ["mention", "wrong", "actions", "articles"].includes(key) ? { key: key as SortKey, descending: params.get("questionOrder") !== "asc" } : null;
+  }, [params]);
   const needle = query.trim().toLowerCase();
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
 
-  const pools = GEO_POOLS.filter((key) => groups.some((group) => group.pool === key));
+  const pools = GEO_POOLS.filter(key => groups.some(group => group.pool === key)
+    || catalog.state.kind === "ready" && catalog.state.data.groups.some(group => group.pool === key));
   const options: FilterOption<PoolFilter>[] = [
     { value: "all", label: "全部" },
     ...pools.map((key) => ({ value: key, label: GEO_POOL_KINDS[key] })),
   ];
   const sets = Array.isArray(data.sets) ? data.sets.filter((set) => set && typeof set.version === "number") : [];
   const latest = sets.reduce<number | null>((top, set) => (top === null || set.version > top ? set.version : top), null);
-  const current = data.version ?? latest;
-  const editable = current === latest;
+  const current = data.version ?? (data.selection ? null : latest);
+  const editable = current !== null && current === latest;
   const shownPools = pool === "all" || !pools.includes(pool as GeoPool) ? pools : [pool as GeoPool];
 
   const matches = useMemo(() => new Map(groups.map((group) => [group.id, matchGroup(group, needle)])), [groups, needle]);
-  const found = groups.filter((group) => matches.get(group.id) && shownPools.includes(group.pool));
+  const found = groups.filter(group => matches.get(group.id) && (group.pool === null ? pool === "all" : shownPools.includes(group.pool)));
   const counts = useMemo(() => {
     const questions = groups.flatMap((group) => list(group.questions));
     return { groups: groups.length, measured: questions.filter((question) => question.isMeasured).length };
@@ -186,7 +210,7 @@ function QuestionPage({
           label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
         })),
         value: current === null ? null : String(current),
-        onChange: (value: string | null) => onVersion(value === null || Number(value) === latest ? null : Number(value)),
+        onChange: (value: string | null) => onVersion(value === null ? null : Number(value)),
       }] : []),
     ],
     search: { label: "搜索问题", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
@@ -195,17 +219,17 @@ function QuestionPage({
 
   const remove = (id: string) => {
     void unmeasureGeoQuestion(geoId, id)
-      .then(() => {
+      .then(written => {
         toast.success("已移出，之后的测量不再问这一句。");
         // A removal writes a new set and moves every count taken over the old one: the project's reads are stale (read once, behind
         // the page). Without a project above, the two this page holds are read again.
         if (frame) frame.data.invalidate(); else onChanged();
-        onVersion(null);
+        onVersion(written?.version ?? null);
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一句无法移出，请稍后重试。" })));
   };
   const go = (path: string) => () => navigate(path);
-  const sortBy = (key: string) => setSort((now) => (now?.key === key ? { key: now.key, descending: !now.descending } : { key: key as SortKey, descending: true }));
+  const sortBy = (key: string) => change({ questionSort: key, questionOrder: sort?.key === key && sort.descending ? "asc" : "desc" });
   const order = (inPool: GeoQuestionGroup[]): GeoQuestionGroup[] => {
     if (!sort) return inPool;
     const value = (group: GeoQuestionGroup): number => {
@@ -240,13 +264,13 @@ function QuestionPage({
       {needle && found.length === 0 && (
         <p className="py-10 text-center text-ui text-text-3">{`没有包含“${query.trim()}”的问题。`}</p>
       )}
-      {shownPools.map((key) => {
+      {[...shownPools, ...(pool === "all" && found.some(group => group.pool === null) ? [null] : [])].map((key) => {
         const inPool = order(found.filter((group) => group.pool === key));
         if (inPool.length === 0) return null;
         return (
-          <Section key={key} title={GEO_POOL_KINDS[key]} count={`${inPool.length} 个`} level="sub" className="mt-0">
+          <Section key={key ?? "unclassified"} title={key ? GEO_POOL_KINDS[key] : "未分类原题"} count={`${inPool.length} 个`} level="sub" className="mt-0">
             <ListHeader label="按数字排序" columns={COLUMNS} sort={sort ?? undefined} onSort={sortBy} className="mb-1" />
-            <List label={`${GEO_POOL_KINDS[key]}的问题群`} divided>
+            <List label={`${key ? GEO_POOL_KINDS[key] : "未分类原题"}的问题群`} divided>
               {inPool.map((group) => {
                 const row = rowById.get(group.id) ?? null;
                 const match = matches.get(group.id)!;
@@ -376,6 +400,7 @@ function EveryQuestion({
   onRemove: (id: string) => void;
   resetKey: string;
 }) {
+  const path = useGeoPath();
   const all = useMemo(() => groups.flatMap((group) => list(group.questions)
     .filter((question) => !needle || question.text.toLowerCase().includes(needle) || groupName(group.name).toLowerCase().includes(needle))
     .map((question) => ({ question, group }))), [groups, needle]);
@@ -394,7 +419,7 @@ function EveryQuestion({
               key={question.id}
               title={<span className="max-w-measure">{question.text}{answered && <span className="sr-only">，看回答</span>}</span>}
               titleProps={{ "data-geo-question": question.id }}
-              to={answered ? answerPath(geoId, answered.snapshotId) : undefined}
+              to={answered ? path(answerPath(geoId, answered.snapshotId)) : undefined}
               meta={(
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
                   <ClusterLink groupId={group.id} className="relative z-sticky">{row ? clusterName(row) : groupName(group.name)}</ClusterLink>

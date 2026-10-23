@@ -33,6 +33,8 @@ import { GEO_METRIC_NAMES, monthDay } from "../geoText";
 import { geoTabPath } from "../geoTabs";
 import { roundKindWord } from "./geoTabText";
 import { Ranking } from "./VisibilityTab";
+import { GeoComparison } from "../GeoComparison";
+import { useGeoPath } from "../useGeoPath";
 
 /**
  * 总览 — the first screen, and the only one most readers will look at (fusion plan §4.8, mockup m10; R19 audit C §2.3).
@@ -47,6 +49,7 @@ import { Ranking } from "./VisibilityTab";
  * band, not in each cell — and 未测 is still a word with a reason rather than a zero.
  */
 export function OverviewTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const path = useGeoPath();
   const diagnosis = useGeoDiagnosis(geoId);
   const monitoring = useGeoMonitoring(geoId);
   // The plan gives each target the day it falls due; without it the band still reads, just without that date.
@@ -68,6 +71,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-6">
+      <GeoComparison geoId={geoId} view={project} />
       {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
@@ -98,7 +102,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             rank={tile.rank ?? undefined}
             tone={tile.tone}
             placeholder={tile.placeholder}
-            to={tile.tab ? geoTabPath(geoId, tile.tab) : undefined}
+            to={tile.tab ? path(geoTabPath(geoId, tile.tab)) : undefined}
             loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
             note={tile.triple ? undefined : tile.note}
@@ -176,6 +180,7 @@ function TripleLine({ triple, unit }: { triple: MetricTriple; unit: "index" | "p
 
 /** What changed since the last look, each line landing on the thing it is about. */
 function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const path = useGeoPath();
   const items = project.overview.week ?? [];
   if (items.length === 0) return null;
   return (
@@ -186,7 +191,7 @@ function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
           return (
             <ListRow
               key={`${index}:${item.text}`}
-              to={to ?? undefined}
+              to={to ? path(to) : undefined}
               leading={<span className="w-16 text-caption text-text-3">{dayWord(item.at) ?? ""}</span>}
               title={item.text}
               trailing={GEO_ALERT_KINDS.has(item.kind) ? <Tag tone="safety">需处理</Tag> : undefined}

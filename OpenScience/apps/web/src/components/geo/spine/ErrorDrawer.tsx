@@ -1,3 +1,5 @@
+import { useGeoPath } from "../useGeoPath";
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Link } from "react-router";
@@ -8,7 +10,6 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { SeverityBadge, SEVERITY_WORDS } from "@/components/ui/SeverityBadge";
-import { geoDestinationPath } from "../geoTabs";
 import { useGeoLoad } from "../geoProjectData";
 import {
   engineName,
@@ -57,6 +58,8 @@ export function ErrorDrawer({
   basis?: string | null;
   onClose: () => void;
 }) {
+  const path = useGeoPath();
+  const geoDestinationPath = useGeoDestinationPath();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -119,7 +122,7 @@ export function ErrorDrawer({
                   key={row.id}
                   title={<span className="max-w-measure">“{row.statement}”</span>}
                   titleProps={{ "data-geo-error-row": row.id }}
-                  to={answer ? answerPath(geoId, answer) : undefined}
+                  to={answer ? path(answerPath(geoId, answer)) : undefined}
                   meta={(
                     <span className="inline-flex flex-wrap items-baseline gap-x-2">
                       <span className="text-text-2">{engineName(row.engine)}</span>
@@ -208,6 +211,7 @@ function Corrections({
 }
 
 function CorrectionList({ geoId, project, corrections }: { geoId: string; project: GeoProject; corrections: readonly GeoAction[] }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const articles = useGeoLoad(`articles:${geoId}`, () => getGeoArticles(geoId));
   const articleActions = useArticleActions(geoId, project, articles.reload);
   const list: GeoArticle[] = articles.state.kind === "ready" && Array.isArray(articles.state.data?.articles) ? articles.state.data.articles : [];

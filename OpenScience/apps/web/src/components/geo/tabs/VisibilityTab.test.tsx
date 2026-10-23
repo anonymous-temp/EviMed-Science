@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GeoProject } from "@/lib/geoClient";
+import type { GeoEngine, GeoProject } from "@/lib/geoClient";
 import { cell, diagnosisFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
 import { clustersFilled, clusterViewFixture, G_BRAND, G_CONTROL, G_EFFECT, G_SAFETY } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
@@ -13,6 +13,7 @@ const client = vi.hoisted(() => ({
   getGeoMonitoring: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
+  getGeoQuestions: vi.fn(),
   runGeoStep: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
@@ -43,7 +44,7 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/vi
 const withEngines = {
   ...diagnosisFilled,
   byEngine: ["doubao", "qianwen", "deepseek"].map((engine, index) => ({
-    engine: engine as "doubao",
+    engine: engine as GeoEngine,
     mention: cell(30 + index, 10 + index, 40),
     accuracy: cell(90 + index, 36 + index, 40),
     citation: cell(10 + index, 4, 40),
@@ -63,6 +64,7 @@ beforeEach(() => {
   client.getGeoDiagnosis.mockResolvedValue(withEngines);
   client.getGeoMonitoring.mockResolvedValue(monitoring);
   client.getGeoClusters.mockResolvedValue(clustersFilled);
+  client.getGeoQuestions.mockResolvedValue({ sets: [], groups: clustersFilled.groups, version: 1 });
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
 });
@@ -71,6 +73,20 @@ const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
+  it("retains platform, pool and group choices after the measured rows have been narrowed", async () => {
+    const group = clustersFilled.groups.find(row => row.id === G_EFFECT)!;
+    client.getGeoClusters.mockResolvedValue({ ...clustersFilled, engines: ["deepseek"], groups: [group] });
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, byEngine: withEngines.byEngine.filter(row => row.engine === "deepseek") });
+    renderTab(geoProject(), `/app/geo/geo_1/visibility?engine=deepseek&pool=${group.pool}&cluster=${group.id}`);
+    await screen.findByRole("heading", { name: /综合可见度指数/ });
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^引擎/ }));
+    expect(await screen.findByRole("menuitemradio", { name: "豆包" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^问句池/ }));
+    expect((await screen.findAllByRole("menuitemradio")).length).toBeGreaterThan(2);
+    await userEvent.keyboard("{Escape}");
+    expect(within(toolbar()).getByRole("button", { name: /^问题群/ })).toBeVisible();
+  });
   it("keeps the risk rate in ordinary sentence flow with its sample, direction and answer link", async () => {
     client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, more: [...withEngines.more, { metricId: "M-15", name: "风险问句被推荐率", cell: cell(30, 36, 120, { snapshotIds: ["risk_answer"] }) }] });
     renderTab();

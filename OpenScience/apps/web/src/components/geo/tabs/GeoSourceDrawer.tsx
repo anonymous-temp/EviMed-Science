@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
+import { webErrorMessage, WebApiError } from "@/lib/apiClient";
+import { geoReadScopeQuery } from "@/lib/geoReadScope";
+import { useGeoFrame, useGeoReadScope } from "../geoFrame";
+import { useGeoPath } from "../useGeoPath";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
@@ -12,6 +16,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { List, ListHeader, ListRow } from "@/components/ui/ListRow";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 import { Tag } from "@/components/ui/Tag";
+import { Note } from "@/components/ui/Note";
 import { engineName, GEO_SOURCE_LAYER_WORDS, monthDay } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath, sourceDraft, sourceKindWord, yuan } from "./geoTabText";
@@ -49,6 +54,7 @@ export function GeoSourceDrawer({
   project,
   source,
   engine,
+  selectionRef,
   focus,
   served,
   onClose,
@@ -58,6 +64,8 @@ export function GeoSourceDrawer({
   source: GeoSourceRow;
   /** The engine the list was narrowed to, or `all`: the drawer lists the same answers the row counted. */
   engine: string;
+  /** The exact observation set whose source count was pressed. */
+  selectionRef?: string;
   /** Opened from the red count: the drawer rests on the answers that misstated us. */
   focus: "wrong" | null;
   /** What the project's actions say about sending an article here: the market's ranking carried by them, and the groups they are for. */
@@ -65,7 +73,14 @@ export function GeoSourceDrawer({
   onClose: () => void;
 }) {
   const narrowed = engine === "all" ? null : engine;
-  const { state, reload } = useGeoLoad(`source:${geoId}:${source.id}:${engine}`, () => getGeoSource(geoId, source.id, narrowed));
+  const frame = useGeoFrame();
+  const scope = useGeoReadScope();
+  const selected = selectionRef ? { selectionRef } : scope ? { ...scope, ...(narrowed ? { engines: [narrowed] } : {}) } : narrowed;
+  const { state, reload } = useGeoLoad(`source:${geoId}:${source.id}:${engine}:${selectionRef ?? geoReadScopeQuery(scope)}:${project.selection?.dataRevision ?? ""}`, () => getGeoSource(geoId, source.id, selected));
+  const refreshView = () => {
+    if (frame?.refreshScope) frame.refreshScope(); else { frame?.reload(); frame?.data.invalidate(); }
+    onClose();
+  };
   const kind = sourceKindWord(source.kind);
   return (
     <Drawer
@@ -89,8 +104,8 @@ export function GeoSourceDrawer({
           <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
           <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
-          {state.kind === "error" && <TabError message={state.message} onRetry={reload} />}
-          {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} />}
+          {state.kind === "error" && (state.stale ? <ChangedSource onRefresh={refreshView} /> : <TabError message={state.message} onRetry={reload} />)}
+          {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} onRefresh={refreshView} />}
           {state.kind === "ready" && <Pages detail={state.data} />}
           {state.kind === "ready" && <History detail={state.data} />}
         </div>
@@ -100,7 +115,37 @@ export function GeoSourceDrawer({
   );
 }
 
-function Answers({ geoId, project, detail, focus }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; focus: "wrong" | null }) {
+function ChangedSource({ onRefresh }: { onRefresh(): void }) {
+  return <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={onRefresh}>更新信源列表</Button>}>引用回答已有更新，请从更新后的信源列表重新查看。</Note>;
+}
+
+function Answers({ geoId, project, detail: first, focus, onRefresh }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; focus: "wrong" | null; onRefresh(): void }) {
+  const [extension, setExtension] = useState<{ first: GeoSourceDetail; detail: GeoSourceDetail } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [stale, setStale] = useState(false);
+  const alive = useRef(true);
+  const latest = useRef(first); latest.current = first;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const detail = extension?.first === first ? extension.detail : first;
+  const more = async () => {
+    const offset = detail.answerPage?.nextOffset;
+    if (busy || offset == null) return;
+    setBusy(true); setError("");
+    try {
+      const page = await getGeoSource(geoId, detail.source.id, detail.selection ? { selectionRef: detail.selection.reference } : detail.engine, { answerOffset: offset });
+      if (alive.current && latest.current === first) {
+        setExtension({ first, detail: { ...page,
+          answers: [...detail.answers, ...page.answers.filter(answer => !detail.answers.some(row => row.snapshotId === answer.snapshotId))] } });
+        shownWrong.more(); shownOthers.more();
+      }
+    } catch (caught) {
+      if (alive.current && latest.current === first) {
+        setStale(caught instanceof WebApiError && caught.status === 409);
+        setError(webErrorMessage(caught, { fallback: "回答明细暂时无法继续读取。" }));
+      }
+    } finally { if (alive.current) setBusy(false); }
+  };
   const answers = Array.isArray(detail.answers) ? detail.answers : [];
   const misstated = answers.filter((answer) => answer.misstated);
   const others = answers.filter((answer) => !answer.misstated);
@@ -117,14 +162,14 @@ function Answers({ geoId, project, detail, focus }: { geoId: string; project: Ge
     if (focus === "wrong" && node && typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "start" });
   }, [focus, detail.source.id]);
 
-  if (!detail.round) return <p data-geo-source-none="" className="text-ui text-text-2">还没有完成的测量，这个站被引用的情况要等第一轮测量做完才有。</p>;
+  if (!detail.round && !detail.selection?.roundIds.length) return <p data-geo-source-none="" className="text-ui text-text-2">所选范围内还没有完成的测量。</p>;
   if (answers.length === 0) {
-    return <p data-geo-source-none="" className="text-ui text-text-2">{`最近一轮测量${when ? `（${when}）` : ""}里，没有回答引用这个站。`}</p>;
+    return <p data-geo-source-none="" className="text-ui text-text-2">{`${detail.scope ? "所选范围" : "最近一轮测量"}${when ? `（${when}）` : ""}里，没有回答引用这个站。`}</p>;
   }
   return (
     <>
       <p data-geo-source-counts="" className="text-caption text-text-3">
-        {`最近一轮测量${when ? `（${when}）` : ""}：${detail.counts.cited.toLocaleString("zh-CN")} 个回答引用了这个站，其中 ${detail.counts.wrongOurs.toLocaleString("zh-CN")} 个讲错了${product}，${detail.counts.mentionsOurs.toLocaleString("zh-CN")} 个提到了${product}。`}
+        {`${detail.scope ? "所选范围" : "最近一轮测量"}${when ? `（${when}）` : ""}：${detail.counts.cited.toLocaleString("zh-CN")} 个回答引用了这个站，其中 ${detail.counts.wrongOurs.toLocaleString("zh-CN")} 个讲错了${product}，${detail.counts.mentionsOurs.toLocaleString("zh-CN")} 个提到了${product}。`}
       </p>
       {misstated.length > 0 && (
         <section ref={wrongSection} aria-label="讲错的回答" data-geo-source-section="wrong">
@@ -150,6 +195,10 @@ function Answers({ geoId, project, detail, focus }: { geoId: string; project: Ge
           <ShowMore remaining={shownOthers.remaining} unit="个" onMore={shownOthers.more} />
         </section>
       )}
+      {stale ? <ChangedSource onRefresh={onRefresh} /> : error && <TabError message={error} onRetry={() => { void more(); }} />}
+      {detail.answerPage?.nextOffset != null && !stale && !shownWrong.remaining && !shownOthers.remaining && <Button variant="secondary" size="sm" loading={busy} onClick={() => { void more(); }}>
+        继续读取回答（已载入 {answers.length} / {detail.answerPage.total}）
+      </Button>}
     </>
   );
 }
@@ -256,13 +305,14 @@ function History({ detail }: { detail: GeoSourceDetail }) {
 
 /** 「引擎 · 问题 · 日期」, the wrong sentences under it as the answer page draws them; the row opens the answer. */
 function AnswerRow({ geoId, answer }: { geoId: string; answer: GeoSourceAnswer }) {
+  const path = useGeoPath();
   const line = [engineName(answer.engine), answer.question, monthDay(answer.askedAt)].filter(Boolean).join(" · ");
   const wrong = Array.isArray(answer.wrong) ? answer.wrong : [];
   return (
     <ListRow
       title={<span className="line-clamp-2">{line}</span>}
       titleProps={{ "data-geo-source-answer": answer.snapshotId }}
-      to={answerPath(geoId, answer.snapshotId)}
+      to={path(answerPath(geoId, answer.snapshotId))}
       meta={wrong.length > 0 ? (
         <span className="mt-1 flex flex-col gap-1.5">
           {wrong.map((sentence) => (

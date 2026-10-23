@@ -35,6 +35,8 @@ import { Note } from "@/components/ui/Note";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
 import { TabSkeleton } from "@/components/geo/tabs/geoTabKit";
+import { GeoScopeDialog } from "@/components/geo/GeoScopeDialog";
+import { geoReadScopeFromSearch, geoReadScopeQuery, geoSearchWithScope } from "@/lib/geoReadScope";
 import { GeoSettingsDrawer } from "@/components/geo/GeoSettingsDrawer";
 import { MembersDialog } from "@/components/geo/MembersDialog";
 import { ProducerDialog } from "@/components/geo/ProducerDialog";
@@ -84,7 +86,7 @@ type Loaded =
   | { kind: "off" }
   | { kind: "missing" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; project: GeoProject; refreshError?: string };
+  | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; scopeError?: string };
 
 /**
  * Every workbench can change while it is open. Active work refreshes more often; quiet visible projects still discover scheduled work.
@@ -124,6 +126,8 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   const { tab: tabParam, snapshotId, sessionId: addressedSession } = useParams();
   const location = useLocation();
   const navigationType = useNavigationType();
+  const scopeKey = geoReadScopeQuery(geoReadScopeFromSearch(location.search));
+  const scope = useMemo(() => scopeKey ? geoReadScopeFromSearch(scopeKey) : undefined, [scopeKey]);
   const onChat = /\/chat(?:\/[^/]+)?\/?$/.test(location.pathname);
   const navigate = useNavigate();
   const feature = useGeoFeature();
@@ -168,8 +172,9 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     const epoch = ++readEpoch.current;
     reading.current = true;
     reloadQueued.current = false;
+    setLoaded(current => current.kind === "ready" && current.scopeError ? { ...current, scopeError: undefined } : current);
     setConversationError(null);
-    void getGeoProject(geoId).then(
+    void (scope ? getGeoProject(geoId, scope) : getGeoProject(geoId)).then(
       async (project) => {
         if (!live) return;
         try {
@@ -188,7 +193,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         const state = stepsState(project);
         if (shown.current !== null && document.visibilityState !== "hidden") data.invalidate();
         shown.current = state;
-        setLoaded({ kind: "ready", project });
+        setLoaded({ kind: "ready", project, scopeKey });
       },
       (error: unknown) => {
         if (!live) return;
@@ -198,7 +203,9 @@ function GeoProjectView({ geoId }: { geoId: string }) {
         else {
           const message = webErrorMessage(error, { fallback: "项目暂时无法读取。" });
           const denied = error instanceof WebApiError && [401, 403].includes(error.status);
-          setLoaded((current) => (current.kind === "ready" && !denied ? { ...current, refreshError: message } : { kind: "error", message }));
+          setLoaded(current => current.kind === "ready" && !denied
+            ? current.scopeKey === scopeKey ? { ...current, refreshError: message } : { ...current, scopeError: message }
+            : { kind: "error", message });
         }
       },
     ).finally(() => {
@@ -210,7 +217,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
       }
     });
     return () => { live = false; };
-  }, [feature, geoId, reloads, data, onChat]);
+  }, [feature, geoId, reloads, data, onChat, scope, scopeKey]);
 
   const reload = useCallback(() => {
     if (reading.current) { reloadQueued.current = true; return; }
@@ -239,8 +246,16 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   }, [geoId]);
 
   const api = useMemo<GeoFrameApi | null>(
-    () => (loaded.kind === "ready" ? { geoId, project: loaded.project, tab, step: viewedStep, refreshError: loaded.refreshError, reload, openPanel, data, setToolbar } : null),
-    [geoId, loaded, tab, viewedStep, reload, openPanel, data],
+    () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
+      project: loaded.project, tab, step: viewedStep, refreshError: loaded.refreshError, reload, openPanel, data, setToolbar,
+      refreshScope: () => {
+        if (scope?.selectionRef && loaded.project.scope) {
+          navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, { ...loaded.project.scope, selectionRef: undefined }) }, { replace: true });
+        } else reload();
+        data.invalidate();
+      },
+    } : null),
+    [geoId, loaded, tab, viewedStep, reload, openPanel, data, scope, scopeKey, navigate, location.pathname, location.search],
   );
 
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
@@ -254,7 +269,10 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   if (loaded.kind !== "ready" || !api) {
     return (
       <PageShell title="循证 GEO" width="wide">
-        {loaded.kind === "error" ? <LoadError message={loaded.message} onRetry={reload} /> : <GeoProjectSkeleton />}
+        {loaded.kind === "error" ? <>
+          <LoadError message={loaded.message} onRetry={reload} />
+          {scopeKey && <Button variant="text" onClick={() => navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, {}) }, { replace: true })}>清除分析范围</Button>}
+        </> : <GeoProjectSkeleton />}
       </PageShell>
     );
   }
@@ -287,6 +305,7 @@ function GeoBand({
   onPanel: (panel: GeoPanel | null) => void;
 }) {
   const { geoId, project, tab, reload } = api;
+  const [scopeOpen, setScopeOpen] = useState(false);
   const { snapshotId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -437,7 +456,7 @@ function GeoBand({
         onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.filters ?? []),
     ],
-    actions: <>{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
+    actions: <>{!onChat && ["overview", "visibility", "accuracy", "sources", "questions"].includes(tab) && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
   };
 
   return (
@@ -477,8 +496,16 @@ function GeoBand({
         // One answer, read inside the band: the route's own element, which may still be on its way.
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
       ) : (
-        <GeoTab api={api} />
+        <>
+          {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
+          <div hidden={api.scopePending}><GeoTab api={api} /></div>
+        </>
       )}
+      {scopeOpen && <GeoScopeDialog geoId={geoId} project={project} initial={api.scope?.selectionRef && project.scope ? { ...project.scope, selectionRef: api.scope.selectionRef } : api.scope} onClose={() => setScopeOpen(false)} onApply={next => {
+        setScopeOpen(false);
+        const query = geoSearchWithScope(location.search, next);
+        navigate({ pathname: location.pathname, search: query ? `?${query}` : "", hash: location.hash }, { replace: true });
+      }} />}
       {panel === "settings" && (
         <GeoSettingsDrawer
           geoId={geoId}

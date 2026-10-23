@@ -1,3 +1,5 @@
+import { useGeoPath } from "./useGeoPath";
+import { useGeoDestinationPath } from "./useGeoPath";
 import { useState } from "react";
 import { PenLine } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -10,7 +12,7 @@ import { Section } from "@/components/ui/Section";
 import { isSeverityLevel, SeverityBadge } from "@/components/ui/SeverityBadge";
 import { useGeoFrame } from "./geoFrame";
 import { engineName, GEO_STEP_NAMES, zh } from "./geoText";
-import { geoDestinationPath, GEO_STEP_HOME } from "./geoTabs";
+import { GEO_STEP_HOME } from "./geoTabs";
 import { answerPath } from "./tabs/geoTabText";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
 
@@ -36,6 +38,8 @@ export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProjec
 }
 
 function NeedsYouRow({ geoId, project, item }: { geoId: string; project: GeoProject; item: GeoNeedsYou }) {
+  const path = useGeoPath();
+  const geoDestinationPath = useGeoDestinationPath();
   const frame = useGeoFrame();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
@@ -69,7 +73,7 @@ function NeedsYouRow({ geoId, project, item }: { geoId: string; project: GeoProj
     return (
       <ListRow
         title={<span className="max-w-measure">{`“${item.statement ?? ""}”`}</span>}
-        to={answer ? answerPath(geoId, answer) : undefined}
+        to={answer ? path(answerPath(geoId, answer)) : undefined}
         meta={(
           <span className="inline-flex flex-wrap items-center gap-x-2">
             {isSeverityLevel(item.severity) && <SeverityBadge level={item.severity} />}

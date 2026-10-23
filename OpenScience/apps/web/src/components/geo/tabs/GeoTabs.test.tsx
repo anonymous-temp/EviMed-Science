@@ -424,6 +424,26 @@ describe("信源", () => {
     expect(conditions.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("continues a source's answer list using its frozen selection and server cursor", async () => {
+    const dxy = sourcesFilled.sources[0];
+    const first = sourceDetailOf(dxy);
+    const last = { ...first.answers[0], snapshotId: "source_last", question: "最后一条原题" };
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValueOnce({ ...first, round: null, scope: { from: "2026-10-01", to: "2026-10-02" },
+      selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answerPage: { total: first.answers.length + 1, nextOffset: 200 } })
+      .mockResolvedValueOnce({ ...first, selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answers: [last], answerPage: { total: first.answers.length + 1, nextOffset: null } });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const drawer = await screen.findByRole("dialog", { name: "丁香医生" });
+    await within(drawer).findByRole("region", { name: "引用它的回答" });
+    while (within(drawer).queryByRole("button", { name: /显示更多/ })) await userEvent.click(within(drawer).getByRole("button", { name: /显示更多/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /继续读取回答/ }));
+    expect(await screen.findByRole("link", { name: /最后一条原题/ })).toBeVisible();
+    expect(client.getGeoSource).toHaveBeenLastCalledWith("geo_1", dxy.id, { selectionRef: "gsel_source" }, { answerOffset: 200 });
+    expect(screen.queryByRole("button", { name: /继续读取回答/ })).not.toBeInTheDocument();
+  });
+
   it("says so when the latest round has no answer citing the site, and when nothing has been measured", async () => {
     const dxy = sourcesFilled.sources[0];
     client.getGeoSources.mockResolvedValue(sourcesFilled);

@@ -25,13 +25,20 @@ export const GEO_DRAWER_ENGINE_PARAM = "on";
 export const GEO_CLUSTER_FILTER_PARAM = "cluster";
 export const GEO_POOL_PARAM = "pool";
 export const GEO_SOURCE_PARAM = "source";
+const SCOPE_ALIASES: Readonly<Record<string, string>> = { engine: "engines", cluster: "groupIds", pool: "pools" };
+
+function setParameter(params: URLSearchParams, name: string, value: string | null | undefined) {
+  const canonical = SCOPE_ALIASES[name];
+  if (canonical) { params.delete(canonical); params.delete("selectionRef"); params.delete("errorOffset"); params.delete("answerOffset"); }
+  if (value === null || value === undefined || value === "") params.delete(name);
+  else params.set(name, value);
+}
 
 /** The query string after the named changes (`null` removes a parameter); every other parameter is kept as it is. */
 export function searchWith(search: string, changes: Readonly<Record<string, string | null | undefined>>): string {
   const params = new URLSearchParams(search);
   for (const [name, value] of Object.entries(changes)) {
-    if (value === null || value === undefined || value === "") params.delete(name);
-    else params.set(name, value);
+    setParameter(params, name, value);
   }
   const text = params.toString();
   return text ? `?${text}` : "";
@@ -74,12 +81,13 @@ export function useGeoDrawerAddress() {
 /** One parameter of the address as state: read, and written in place (a filter is not a step in the history). */
 export function useGeoSearchParam(name: string): [string | null, (value: string | null) => void] {
   const [params, setParams] = useSearchParams();
-  const value = params.get(name);
+  const canonical = SCOPE_ALIASES[name];
+  const choices = canonical ? params.getAll(canonical).flatMap(value => value.split(",")) : [];
+  const value = params.get(name) ?? (choices.length === 1 ? choices[0] : null);
   const set = useCallback((next: string | null) => {
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
-      if (next === null || next === "") copy.delete(name);
-      else copy.set(name, next);
+      setParameter(copy, name, next);
       return copy;
     }, { replace: true });
   }, [name, setParams]);
@@ -97,8 +105,7 @@ export function useGeoSearchChange(): (changes: Readonly<Record<string, string |
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       for (const [name, value] of Object.entries(changes)) {
-        if (value === null || value === undefined || value === "") copy.delete(name);
-        else copy.set(name, value);
+        setParameter(copy, name, value);
       }
       return copy;
     }, { replace: true });

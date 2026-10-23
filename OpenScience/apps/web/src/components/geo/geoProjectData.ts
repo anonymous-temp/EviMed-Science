@@ -4,16 +4,19 @@ import {
   getGeoDiagnosis,
   getGeoEvidence,
   getGeoMonitoring,
+  getGeoSources,
   getGeoStrategy,
   getGeoValue,
   isGeoOff,
   type GeoDiagnosis,
   type GeoEvidence,
   type GeoMonitoring,
+  type GeoSources,
   type GeoStrategyView,
   type GeoValue,
 } from "@/lib/geoClient";
-import { GeoFrameContext } from "./geoFrame";
+import { GeoFrameContext, useGeoReadScope } from "./geoFrame";
+import { geoReadScopeQuery, type GeoReadScope } from "@/lib/geoReadScope";
 
 /**
  * One project's data, read once (R19, audit C class 4.5).
@@ -36,7 +39,7 @@ import { GeoFrameContext } from "./geoFrame";
 export type GeoLoad<T> =
   | { kind: "loading" }
   /** `off`: the module is not open to this account; `missing`: nothing at that address. */
-  | { kind: "error"; message: string; off: boolean; missing: boolean }
+  | { kind: "error"; message: string; off: boolean; missing: boolean; stale?: boolean }
   | { kind: "ready"; data: T; refreshError?: string };
 
 export interface GeoLoadResult<T> {
@@ -55,6 +58,7 @@ function failed(error: unknown): GeoLoad<never> {
     message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }),
     off: isGeoOff(error),
     missing: error instanceof WebApiError && error.status === 404 && !isGeoOff(error),
+    ...(error instanceof WebApiError && error.status === 409 ? { stale: true } : {}),
   };
 }
 
@@ -188,7 +192,7 @@ function useStandaloneLoad<T>(key: string, load: () => Promise<T>, enabled: bool
   }, [key, round, enabled]);
 
   const reload = useCallback(() => setRound((value) => value + 1), []);
-  return { state, reload };
+  return { state: shownKey.current === key ? state : LOADING, reload };
 }
 
 /**
@@ -218,8 +222,15 @@ export function useSharedGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoa
 
 /* ----------------------------------------------------- what every tab shares */
 
-export const useGeoDiagnosis = (geoId: string) => useSharedGeoLoad<GeoDiagnosis>(`diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
-export const useGeoMonitoring = (geoId: string) => useSharedGeoLoad<GeoMonitoring>(`monitoring:${geoId}`, () => getGeoMonitoring(geoId));
+/** Shared aggregate reads are keyed by the complete selected range, never only by project. */
+export function useScopedGeoLoad<T>(key: string, load: (scope?: GeoReadScope) => Promise<T>): GeoLoadResult<T> {
+  const scope = useGeoReadScope();
+  const revision = useContext(GeoFrameContext)?.project?.selection?.dataRevision ?? "";
+  return useSharedGeoLoad(`${key}${geoReadScopeQuery(scope)}${revision ? `#${revision}` : ""}`, () => load(scope));
+}
+export const useGeoDiagnosis = (geoId: string) => useScopedGeoLoad<GeoDiagnosis>(`diagnosis:${geoId}`, scope => scope ? getGeoDiagnosis(geoId, scope) : getGeoDiagnosis(geoId));
+export const useGeoMonitoring = (geoId: string) => useScopedGeoLoad<GeoMonitoring>(`monitoring:${geoId}`, scope => scope ? getGeoMonitoring(geoId, scope) : getGeoMonitoring(geoId));
+export const useGeoSources = (geoId: string) => useScopedGeoLoad<GeoSources>(`sources:${geoId}`, scope => scope ? getGeoSources(geoId, scope) : getGeoSources(geoId));
 export const useGeoValue = (geoId: string) => useSharedGeoLoad<GeoValue>(`value:${geoId}`, () => getGeoValue(geoId));
 export const useGeoEvidence = (geoId: string) => useSharedGeoLoad<GeoEvidence>(`evidence:${geoId}`, () => getGeoEvidence(geoId));
 export const useGeoStrategy = (geoId: string) => useSharedGeoLoad<GeoStrategyView>(`strategy:${geoId}`, () => getGeoStrategy(geoId));

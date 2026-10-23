@@ -55,6 +55,19 @@ beforeEach(() => {
 });
 
 describe("one answer", () => {
+  it("keeps the selected dates, multi-platform scope and session through day, engine and return links", async () => {
+    renderAnswer("snap_deepseek", "?from=2026-09-01&engines=deepseek&engines=yuanbao&session=s1");
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
+    const back = new URL(screen.getByRole("link", { name: "返回准确与安全" }).getAttribute("href")!, "https://example.test");
+    expect(back.searchParams.getAll("engines")).toEqual(["deepseek", "yuanbao"]);
+    expect(back.searchParams.get("session")).toBe("s1");
+    await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("from=2026-09-01"));
+    const sibling = within(screen.getByRole("navigation", { name: "AI 引擎" })).getByRole("link", { name: /元宝/ });
+    expect(sibling.getAttribute("href")).toContain("session=s1");
+    expect(sibling.getAttribute("href")).toContain("engines=deepseek&engines=yuanbao");
+  });
   it("heads the page with the way back, the question and its one action; the date switcher and the screenshot are the band's toolbar", async () => {
     renderAnswer();
     expect(await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
