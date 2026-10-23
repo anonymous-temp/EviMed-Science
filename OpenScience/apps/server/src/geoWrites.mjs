@@ -55,7 +55,7 @@ import {
   GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
-import { enqueueRound } from "./geoProbeQueue.mjs";
+import { enqueueRound, GEO_ROUND_MAX_ASKS } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
 /** @typedef {{ index?: number, indexes?: number[], count?: number, path?: string, group?: number, field?: string, code: string, message: string }} GeoIssue */
@@ -463,7 +463,11 @@ function validatedClaims(items, issues) {
 
 /** Deterministic preview shared by HTTP and the native runtime. @param {unknown} data */
 export function geoQuestionImportPreview(data) {
-  try { return previewGeoQuestionImport(data); }
+  try {
+    const preview = previewGeoQuestionImport(data);
+    if (preview.plannedCalls > GEO_ROUND_MAX_ASKS) throw new TypeError(`This diagnosis would require ${preview.plannedCalls} calls; a round permits at most ${GEO_ROUND_MAX_ASKS}. Reduce questions, engines or repeats before saving.`);
+    return preview;
+  }
   catch (error) { throw failure(400, "geo_question_import_invalid", String(/** @type {Error} */ (error).message)); }
 }
 

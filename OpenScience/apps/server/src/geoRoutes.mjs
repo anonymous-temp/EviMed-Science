@@ -350,7 +350,13 @@ export function createGeoRoutes(dependencies) {
       return reply(await service.startDiagnosis(user, id, body));
     }
     if (tab === "diagnosis" && parts.length === 5 && parts[4] === "progress" && method === "GET") {
-      return reply(await service.diagnosisProgress(user, id, parts[3]));
+      const page = /** @type {Record<string, number>} */ ({});
+      for (const key of url.searchParams.keys()) {
+        const values = url.searchParams.getAll(key);
+        if (!["limit", "offset"].includes(key) || values.length !== 1 || !/^\d+$/u.test(values[0])) throw new HttpError(400, "geo_read_filter_invalid", "Progress takes only whole-number limit and offset.");
+        page[key] = Number(values[0]);
+      }
+      return reply(await service.diagnosisProgress(user, id, parts[3], page));
     }
     if (tab === "diagnosis" && parts.length === 5 && parts[4] === "recover" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["requestKey", "jobIds", "acknowledgeUnknown"]);

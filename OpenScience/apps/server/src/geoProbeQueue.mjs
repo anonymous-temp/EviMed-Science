@@ -433,7 +433,6 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
     throw new HttpError(400, "geo_round_engine_invalid", `Round engines must be drawn from: ${GEO_MEASURE_ENGINES.join(", ")}.`);
   }
   const channels = measurableEngines(deps);
-  const jobEngines = requested.filter((engine) => channels.includes(engine));
 
   const { setVersion, questions: measured } = await store.measuredQuestions(geoProjectId);
   let questions;
@@ -454,25 +453,39 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
   } else {
     questions = measured;
   }
+  const sets = (await store.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND version=ANY($2::integer[])`,
+    [geoProjectId, [...new Set(questions.map((question) => question.setVersion))]])).rows;
+  const saved = sets.filter((set) => set.contract);
+  if (saved.length && (sets.length !== 1 || saved.length !== 1)) {
+    throw new HttpError(409, "geo_round_question_invalid", "A measurement agreement cannot mix questions from different versions.");
+  }
+  const agreement = saved[0]?.contract;
+  if (agreement) {
+    if (contract && Object.keys(agreement).some((key) => JSON.stringify(agreement[key]) !== JSON.stringify(contract[key]))) {
+      throw new HttpError(409, "geo_round_question_invalid", "Use the saved question version's measurement agreement without an implicit override.");
+    }
+    if (agreement.samplingMode === "one_shot" && !(contract?.samplingMode === "one_shot" && requestKey)) {
+      throw new HttpError(409, "geo_round_question_invalid", "One-shot questions require an explicit diagnosis start or recovery; automatic confirmation and monitoring cannot add calls.");
+    }
+    contract = { ...agreement, questionVersion: Number(saved[0].version) };
+    if (engines == null) requested.splice(0, requested.length, ...agreement.engines);
+    if (requested.some((engine) => !agreement.engines.includes(engine))) {
+      throw new HttpError(409, "geo_round_engine_invalid", "Round engines must belong to the saved measurement agreement.");
+    }
+  }
   if (contract?.questionVersion != null && questions.some((question) => question.setVersion !== contract.questionVersion)) {
     throw new HttpError(400, "geo_round_question_invalid", "Round questions must belong to the measurement agreement's version.");
   }
-  if (!(contract?.samplingMode === "one_shot" && requestKey)) {
-    const sets = await store.query(`SELECT contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND version=ANY($2::integer[])`,
-      [geoProjectId, [...new Set(questions.map((question) => question.setVersion))]]);
-    if (sets.rows.some((set) => set.contract?.samplingMode === "one_shot")) {
-      throw new HttpError(409, "geo_round_question_invalid", "One-shot questions require an explicit diagnosis start or recovery; automatic confirmation and monitoring cannot add calls.");
-    }
-  }
+  const admittedEngines = requested.filter((engine) => channels.includes(engine));
   const defaultRepeat = kind === "noise" ? catalogue("PROBE_NOISE_SAMPLE_N", 5) : kind === "confirm" ? catalogue("EC_CONFIRM_REPEATS", 10) : 1;
-  const repeats = contract?.samplingMode === "one_shot" ? 1 : repeat == null ? defaultRepeat : Number(repeat);
+  const repeats = agreement ? agreement.repeats : contract?.samplingMode === "one_shot" ? 1 : repeat == null ? defaultRepeat : Number(repeat);
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20) throw new HttpError(400, "geo_round_repeat_invalid", "A round repeats each ask 1 to 20 times.");
 
   /** @type {Array<{ questionId: string, engine: string, repeatIndex: number }>} */
   const jobs = [];
   for (const question of questions) {
     for (let repeatIndex = 0; repeatIndex < repeats; repeatIndex += 1) {
-      for (const engine of jobEngines) jobs.push({ questionId: question.id, engine, repeatIndex });
+      for (const engine of admittedEngines) jobs.push({ questionId: question.id, engine, repeatIndex });
     }
   }
   if (!jobs.length) throw new HttpError(409, "geo_round_empty", "Nothing to ask: no measured question or no engine this deployment can ask.");
@@ -487,7 +500,7 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
     engines: requested, surface: { ...DEFAULT_SURFACE, ...(contract ? { measurementContract: contract } : {}) }, planned: jobs.length,
     ref: requestKey ? { ...ref, requestKey } : ref ?? null, now,
   }, jobs);
-  return { roundId: createdId ?? roundId, planned: jobs.length, engines: jobEngines, absentEngines: requested.filter((engine) => !jobEngines.includes(engine)),
+  return { roundId: createdId ?? roundId, planned: jobs.length, engines: admittedEngines, absentEngines: requested.filter((engine) => !admittedEngines.includes(engine)),
     setVersion: questionIds?.length ? (questions[0]?.setVersion ?? setVersion) : setVersion };
 }
 
@@ -865,7 +878,6 @@ async function inclusionPass(deps, state, engines, counts) {
       });
       continue;
     }
-    const project = await store.project(job.geoProjectId);
     const snapshotId = randomId("gs_");
     const valid = result.status === "valid" && typeof result.hit === "boolean";
     await store.insertSnapshot({
@@ -876,7 +888,8 @@ async function inclusionPass(deps, state, engines, counts) {
       latencyMs: null, warnings: valid ? [] : ["inclusion_failed"], probeJobId: job.id,
     });
     if (valid) {
-      const name = String(project?.product?.brandName ?? "").trim() || "本品";
+      const frozen = await store.projectContext(job.geoProjectId, job.roundId);
+      const name = String(frozen?.judgeProduct?.brandName ?? "").trim() || "本品";
       await store.writeFacts({ id: snapshotId, userId: job.userId, geoProjectId: job.geoProjectId }, {
         // The channel says only whether the brand words were found.
         brands: result.hit ? [{ name, ours: true, competitor: false, position: null, inRecommendation: false, count: 1 }] : [],
@@ -922,7 +935,7 @@ async function inclusionPass(deps, state, engines, counts) {
       if (job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
         await store.requeueJob(job.id, { now: at, runAfter: new Date(at.getTime() + RETRY_DELAY_MS * job.attempts), errorCode: code });
       } else {
-        await store.finishJob(job.id, { now: at, status: "failed", errorCode: job.samplingMode === "one_shot" ? "delivery_unknown_no_automatic_retry" : code });
+        await store.finishJob(job.id, { now: at, status: "failed", errorCode: job.samplingMode === "one_shot" && !["media_market_request_invalid", "media_market_unconfigured", "geo_inclusion_disabled", "geo_inclusion_engine_not_allowed", "media_market_unauthorized", "media_market_rate_limited", "media_market_refused"].includes(code) ? "delivery_unknown_no_automatic_retry" : code });
       }
       counts.inclusion.failed += 1;
       break;

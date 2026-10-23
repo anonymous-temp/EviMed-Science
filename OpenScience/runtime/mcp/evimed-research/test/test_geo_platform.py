@@ -115,6 +115,19 @@ class GeoToolDefinitionTests(unittest.TestCase):
 
 
 class GeoReadTests(_GatewayCase):
+    def test_diagnosis_progress_follows_its_page_cursor_without_losing_the_round(self):
+        _Gateway.answers["read"] = (200, {"data": {"roundId": "round_one", "cells": [{"jobId": "job_first"}],
+            "page": {"total": 51, "more": True, "nextOffset": 50}}})
+        first = self.server.call_tool("geo_read", {"what": "diagnosis_progress", "filter": {"round": "round_one", "limit": 50}})
+        self.assertTrue(any("filter.offset=50" in action for action in first["next_actions"]))
+        self.assertFalse(any("errorOffset" in action for action in first["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"roundId": "round_one", "cells": [{"jobId": "job_last"}],
+            "page": {"total": 51, "more": False, "nextOffset": None}}})
+        second = self.server.call_tool("geo_read", {"what": "diagnosis_progress", "filter": {"round": "round_one", "limit": 50, "offset": 50}})
+        self.assertEqual(second["next_actions"], [])
+        self.assertEqual(second["data"]["cells"], [{"jobId": "job_last"}])
+        self.assertEqual(_Gateway.seen[-1]["body"]["filter"], {"round": "round_one", "limit": 50, "offset": 50})
+
     def test_error_and_source_pages_name_their_authoritative_continuation_offsets(self):
         cases = [
             ("errors", "page", "errorOffset", {"errorLimit": 2, "errorOffset": 0}),

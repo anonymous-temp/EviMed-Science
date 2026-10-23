@@ -864,9 +864,9 @@ export class GeoStore {
   /**
    * @param {any} client @param {string} userId @param {string} geoId
    * @param {{ groups: Array<Record<string, any> & { questions: Array<Record<string, any>> }>, note: string | null, runId: string | null,
-   *   lockedAt: string | null, measuredCount: number | null, contract?: any, requestKey?: string | null }} input
+   *   lockedAt: string | null, measuredCount: number | null, contract?: any, requestKey?: string | null, expectedBaseVersion?: number | null }} input
    */
-  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount, contract = null, requestKey = null }) {
+  async #insertSet(client, userId, geoId, { groups, note, runId, lockedAt, measuredCount, contract = null, requestKey = null, expectedBaseVersion = null }) {
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
     const digest = createHash("sha256").update(geoValueCanonical({ groups, note, contract })).digest("hex");
     if (requestKey) {
@@ -878,8 +878,14 @@ export class GeoStore {
         return { version: Number(existing.version), groupIds: savedGroups.map((/** @type {any} */ g) => String(g.id)), questionIds: savedGroups.map((/** @type {any} */ g) => savedQuestions.filter((/** @type {any} */ q) => q.group_id === g.id).map((/** @type {any} */ q) => String(q.id))) };
       }
     }
-    const version = Number((await client.query(`SELECT coalesce(max(version), 0) + 1 AS next FROM evimed_geo.question_sets
-      WHERE geo_project_id = $1`, [geoId])).rows[0].next);
+    const latest = (await client.query(`SELECT version, contract FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND user_id=$2 ORDER BY version DESC LIMIT 1`, [geoId, userId])).rows[0];
+    if (expectedBaseVersion != null && Number(latest?.version ?? 0) !== expectedBaseVersion) {
+      throw new HttpError(409, "geo_question_not_current", "The question set changed while this edit was being prepared. Read the current version and apply the edit there.");
+    }
+    if (latest?.contract && !contract) {
+      throw new HttpError(409, "geo_contract_missing", "Revise this imported question set with rows and its measurement agreement; a legacy write cannot discard the current agreement.");
+    }
+    const version = Number(latest?.version ?? 0) + 1;
     await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id, contract, request_key, request_digest)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`, [geoId, version, userId, lockedAt, measuredCount, note, runId, contract ? JSON.stringify(contract) : null, requestKey, digest]);
     const groupRows = [];
@@ -962,7 +968,7 @@ export class GeoStore {
     }
     return this.transaction(async (client) => {
       const written = await this.#insertSet(client, userId, geoId, {
-        groups: copied, contract: source.contract, note: `unmeasure:${questionId}`, runId: null,
+        groups: copied, expectedBaseVersion: source.version, contract: source.contract, note: `unmeasure:${questionId}`, runId: null,
         lockedAt: source?.lockedAt ? new Date().toISOString() : null, measuredCount: source?.lockedAt ? measured : null,
       });
       return { version: written.version };

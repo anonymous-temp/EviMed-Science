@@ -1042,3 +1042,33 @@ test("HTTP original import, scoped planned questions, diagnosis progress and rec
   assert.equal(recovered.status, 200, JSON.stringify(recovered.payload));
   assert.equal((await call("GET", progressPath)).payload.data.cells[0].recoverable, false);
 });
+
+test("large diagnosis progress pages share native and HTTP continuation while retaining whole-round counts", options, async () => {
+  const created = await call("POST", "/api/geo/projects", { body: { brandName: "Progress pagination" } });
+  const id = created.payload.data.id;
+  const root = `/api/geo/projects/${id}`;
+  const contract = { samplingMode: "recurring", engines: ["deepseek", "kimi"], repeats: 20, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const saved = await service.saveQuestions({ id: ALICE }, id, { requestKey: "large-progress", contract, rows: Array.from({ length: 40 }, (_, index) => ({ text: `${index}`.padEnd(4000, "q") })) });
+  assert.equal(saved.actualRows, 40);
+  const started = await call("POST", `${root}/diagnosis/start`, { body: { version: 1, requestKey: "start-large-progress" } });
+  const roundId = started.payload.data.roundId;
+  const endpoint = `${root}/diagnosis/${roundId}/progress`;
+  const first = (await call("GET", `${endpoint}?limit=1&offset=100`)).payload.data;
+  assert.equal(first.cells.length, 1);
+  assert.equal(first.total, 1600);
+  assert.equal(first.counts.queued, 1600);
+  assert.equal(first.page.nextOffset, 101);
+  assert.deepEqual(first.absentEngines, []);
+  assert.ok(Buffer.byteLength(JSON.stringify(first)) < 32_000);
+  const p = await store.getProject(ALICE, id);
+  const native = await service.runtimeRead(p, "diagnosis_progress", { round: roundId, limit: 1, offset: 100 });
+  assert.deepEqual(native, first);
+  const next = (await call("GET", `${endpoint}?limit=1&offset=${first.page.nextOffset}`)).payload.data;
+  assert.notEqual(next.cells[0].jobId, first.cells[0].jobId);
+  const last = (await call("GET", `${endpoint}?limit=500&offset=1500`)).payload.data;
+  assert.equal(last.cells.length, 100);
+  assert.equal(last.page.nextOffset, null);
+  assert.equal(last.counts.queued, 1600);
+  refused(await call("GET", `${endpoint}?limit=501`), 400, "geo_read_filter_invalid");
+  refused(await call("GET", `${endpoint}?engines=deepseek`), 400, "geo_read_filter_invalid");
+});

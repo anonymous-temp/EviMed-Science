@@ -212,3 +212,128 @@ test("known local non-dispatch failures recover without an unknown-charge acknow
   const recovered = await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "recover-known", jobIds: [progress.cells[0].jobId] });
   assert.equal(recovered.planned, 1);
 });
+
+test("an interleaved legacy groups write cannot discard a newly imported contract", options, async () => {
+  const p = await project("legacy-race");
+  const original = store.questionSets.bind(store);
+  let observed, release;
+  const read = new Promise((resolve) => { observed = resolve; });
+  const resume = new Promise((resolve) => { release = resolve; });
+  store.questionSets = async (id) => { const sets = await original(id); if (id === p.id) { observed(); await resume; } return sets; };
+  const pending = geoRuntimeWrite({ store, project: await store.getProject(owner.id, p.id), what: "questions", body: { data: { groups: [{ name: "Legacy", pool: "P2", questions: [{ text: "Legacy replacement", isMeasured: true }] }] } } });
+  try {
+    await read;
+    await service.saveQuestions(owner, p.id, input);
+    release();
+    await assert.rejects(pending, { status: 409, code: "geo_contract_missing" });
+  } finally { release(); store.questionSets = original; }
+  assert.equal((await store.questionSets(p.id)).length, 1);
+});
+
+test("unmeasure refuses a stale base when an import commits after its source was read", options, async () => {
+  const p = await project("unmeasure-race");
+  await service.saveQuestions(owner, p.id, input);
+  const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
+  const original = store.questionMap.bind(store);
+  let observed, release;
+  const read = new Promise((resolve) => { observed = resolve; });
+  const resume = new Promise((resolve) => { release = resolve; });
+  store.questionMap = async (id, version) => { const groups = await original(id, version); if (id === p.id && version === 1) { observed(); await resume; } return groups; };
+  const pending = service.unmeasureQuestion(owner, p.id, questionId);
+  try {
+    await read;
+    await service.saveQuestions(owner, p.id, { ...input, requestKey: "new-base", contract: { ...contract, samplingMode: "recurring", repeats: 2 }, rows: [{ text: "Current imported question" }] });
+    release();
+    await assert.rejects(pending, { status: 409, code: "geo_question_not_current" });
+  } finally { release(); store.questionMap = original; }
+  const sets = await store.questionSets(p.id);
+  assert.equal(sets.length, 2);
+  assert.equal(sets[0].contract.samplingMode, "recurring");
+  assert.equal((await store.questionMap(p.id, 2))[0].questions[0].text, "Current imported question");
+});
+
+test("automatic recurring confirmations honor the saved repeat agreement", options, async () => {
+  const p = await project("recurring-confirm");
+  await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, samplingMode: "recurring", repeats: 2 }, rows: [{ text: "Recurring question" }] });
+  const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
+  const started = await enqueueRound({ store: measure }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"], repeat: 10 });
+  assert.equal(started.planned, 2);
+  const progress = await service.diagnosisProgress(owner, p.id, started.roundId);
+  assert.equal(progress.contract.repeats, 2);
+});
+
+test("definitive local inclusion validation failures retain known non-dispatch state", options, async () => {
+  const p = await project("inclusion-local-failure");
+  const { GeoInclusionClient } = await import("../src/geoInclusionClient.mjs");
+  const { MediaMarketClient } = await import("../src/mediaMarketClient.mjs");
+  let requests = 0;
+  const market = new MediaMarketClient({ baseUrl: "https://fake.invalid", apiKey: "fake-test-key", minIntervalMs: 0, fetchImpl: async () => { requests += 1; throw new Error("must not call"); } });
+  const inclusion = new GeoInclusionClient({ market, config: { geoInclusionEngines: ["baidu"] } });
+  service.inclusion = inclusion;
+  try {
+    await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, engines: ["baidu"] }, rows: [{ text: "No brand words" }] });
+    const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "start-local-inclusion" });
+    await tickProbe({ store: measure, inclusion, config: {}, state: geoMeasureState(), maxAsks: 10 });
+    const progress = await service.diagnosisProgress(owner, p.id, started.roundId);
+    assert.equal(requests, 0);
+    assert.equal(progress.cells[0].errorCode, "media_market_request_invalid");
+    assert.equal(progress.cells[0].deliveryUnknown, false);
+    await service.recoverDiagnosis(owner, p.id, started.roundId, { requestKey: "recover-known-local", jobIds: [progress.cells[0].jobId] });
+  } finally { service.inclusion = null; }
+});
+
+test("a preserved inclusion hit rebuilds missing facts before expired lease completion without another paid call", options, async () => {
+  for (const hit of [true, false]) {
+    const p = await project(`inclusion-preserved-hit-${hit}`);
+    await store.query("UPDATE evimed_geo.probe_jobs SET status='skipped' WHERE engine='baidu'");
+    service.inclusion = { engines: () => ["baidu"] };
+    try {
+      await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, engines: ["baidu"] }, rows: [{ text: "Hit question" }] });
+      const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "start-preserved-hit" });
+      await store.query("UPDATE evimed_geo.rounds SET ref=ref||$2::jsonb WHERE id=$1", [started.roundId, JSON.stringify({ evaluationBasis: { product: { brandName: "Frozen brand" } } })]);
+      const job = (await store.query("SELECT * FROM evimed_geo.probe_jobs WHERE round_id=$1", [started.roundId])).rows[0];
+      await store.query("UPDATE evimed_geo.probe_jobs SET status='leased',external_ref='held-request',lease_until=now()-interval '1 minute' WHERE id=$1", [job.id]);
+      await measure.insertSnapshot({ id: `preserved-${job.id}`, userId: owner.id, roundId: started.roundId, geoProjectId: p.id, questionId: job.question_id, engine: "baidu", askedAt: new Date(), status: "valid", answerText: null, answerSha256: null, citations: [], screenshotSha256: null, surface: { mode: "inclusion", hit }, latencyMs: null, warnings: [], probeJobId: job.id });
+      await store.query("UPDATE evimed_geo.projects SET product=$2::jsonb WHERE id=$1", [p.id, JSON.stringify({ brandName: "Renamed later" })]);
+      let calls = 0;
+      await tickProbe({ store: measure, inclusion: { engines: () => ["baidu"], submit: async () => { calls += 1; throw new Error("must not submit"); }, poll: async () => { calls += 1; throw new Error("must not poll"); } }, config: {}, state: geoMeasureState(), maxAsks: 10 });
+      assert.equal(calls, 0);
+      const rows = await measure.roundFactRows(started.roundId);
+      if (hit) assert.equal(rows[0].facts.brands[0].name, "Frozen brand");
+      else assert.deepEqual(rows[0].facts.brands, []);
+      const { computeGeoMetrics } = await import("@evimed/domain");
+      const cell = computeGeoMetrics(rows, { engines: ["baidu"], samplingMode: "one_shot" }).cells.find((entry) => entry.scope === "engine" && entry.engine === "baidu" && entry.metricId === "M-01");
+      assert.equal(cell.value, hit ? 100 : 0);
+      assert.equal((await service.diagnosisProgress(owner, p.id, started.roundId)).cells[0].status, "done");
+    } finally { service.inclusion = null; }
+  }
+});
+
+test("normal inclusion completion uses the frozen brand after a project rename", options, async () => {
+  const p = await project("inclusion-normal-frozen");
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='skipped' WHERE engine='baidu'");
+  await store.query("UPDATE evimed_geo.projects SET product=$2::jsonb WHERE id=$1", [p.id, JSON.stringify({ brandName: "Original brand" })]);
+  const inclusion = { engines: () => ["baidu"], submit: async () => ({ requestId: "frozen-request" }), poll: async () => ({ status: "valid", hit: true }) };
+  service.inclusion = inclusion;
+  try {
+    await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, engines: ["baidu"] }, rows: [{ text: "Normal completed hit" }] });
+    const started = await service.startDiagnosis(owner, p.id, { version: 1, requestKey: "start-normal-frozen" });
+    const now = new Date();
+    const deps = { store: measure, inclusion, config: {}, state: geoMeasureState(), now: () => now, maxAsks: 10 };
+    await tickProbe(deps);
+    await store.query("UPDATE evimed_geo.projects SET product=$2::jsonb WHERE id=$1", [p.id, JSON.stringify({ brandName: "Changed brand" })]);
+    now.setTime(now.getTime() + 5 * 60_000);
+    await tickProbe(deps);
+    assert.equal((await measure.roundFactRows(started.roundId))[0].facts.brands[0].name, "Original brand");
+  } finally { service.inclusion = null; }
+});
+
+test("preview and save share the real round call budget before storing an impossible agreement", options, async () => {
+  const p = await project("preview-budget");
+  const body = { ...input, contract: { ...contract, samplingMode: "recurring", engines: ["deepseek", "kimi"], repeats: 20 }, rows: Array.from({ length: 126 }, (_, i) => ({ text: `Question ${i}` })) };
+  await assert.rejects(service.previewQuestions(owner, p.id, body), { status: 400, code: "geo_question_import_invalid" });
+  await assert.rejects(service.saveQuestions(owner, p.id, body), { status: 400, code: "geo_question_import_invalid" });
+  assert.equal((await store.questionSets(p.id)).length, 0);
+  const admitted = await service.previewQuestions(owner, p.id, { ...body, rows: body.rows.slice(0, 125) });
+  assert.equal(admitted.plannedCalls, 5000);
+});

@@ -470,6 +470,18 @@ export class GeoMeasureStore {
    * @param {Date} now
    */
   async recoverExpiredLeases(now) {
+    // A crash between inclusion snapshot preservation and fact writing must not lose the purchased hit or ask again.
+    await this.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,brands,mentions_ours,brands_mentioned,parser_version,failure_mode,created_at)
+      SELECT s.id,s.user_id,s.geo_project_id,
+        CASE WHEN s.surface->'hit'='true'::jsonb THEN jsonb_build_array(jsonb_build_object('name',CASE WHEN r.ref#>'{evaluationBasis,product}' IS NOT NULL THEN coalesce(nullif(btrim(r.ref#>>'{evaluationBasis,product,brandName}'),''),'本品') ELSE coalesce(nullif(btrim(p.product->>'brandName'),''),'本品') END,
+          'ours',true,'competitor',false,'position',NULL,'inRecommendation',false,'count',1)) ELSE '[]'::jsonb END,
+        s.surface->'hit'='true'::jsonb, CASE WHEN s.surface->'hit'='true'::jsonb THEN 1 ELSE 0 END, 'inclusion-1',
+        CASE WHEN s.surface->'hit'='true'::jsonb THEN NULL ELSE 'omitted' END, $1
+      FROM evimed_geo.snapshots s JOIN evimed_geo.rounds r ON r.id=s.round_id AND r.geo_project_id=s.geo_project_id AND r.user_id=s.user_id
+        JOIN evimed_geo.projects p ON p.id=s.geo_project_id AND p.user_id=s.user_id
+      WHERE s.status='valid' AND s.surface->>'mode'='inclusion' AND s.surface->'hit' IN ('true'::jsonb,'false'::jsonb)
+        AND r.surface->'measurementContract'->>'samplingMode'='one_shot' AND NOT EXISTS (SELECT 1 FROM evimed_geo.facts f WHERE f.snapshot_id=s.id)
+      ON CONFLICT (snapshot_id) DO NOTHING`, [now.toISOString()]);
     const completed = await this.query(`UPDATE evimed_geo.probe_jobs j SET status='done', lease_owner=NULL, lease_until=NULL,
       snapshot_id=(SELECT s.id FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal') ORDER BY s.asked_at DESC NULLS LAST,s.id DESC LIMIT 1), updated_at=$1
       FROM evimed_geo.rounds r WHERE r.id=j.round_id AND r.surface->'measurementContract'->>'samplingMode'='one_shot'
