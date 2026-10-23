@@ -255,3 +255,30 @@ test("native A-to-B uploads return version paths whose actual previews and downl
     assert.ok(source.items.some(row => row.payload.paths.includes(next)));
   } finally { await ctx.close(); }
 });
+
+test("the note PUT route refuses uploaded documents and web snapshots with logical paths without changing bytes or versions", options, async () => {
+  const ctx = await signedIn({ webReadHostIntervalMs: 0, webReadTransport: async ({ url }) => {
+    if (url.pathname === "/robots.txt") return { status: 404, headers: {}, body: Buffer.alloc(0) };
+    return { status: 200, headers: { "content-type": "text/html" }, body: Buffer.from(
+      `<html><head><title>Reference page</title></head><body><main><h1>Reference page</h1><p>${"Public source material. ".repeat(30)}</p></main></body></html>`) };
+  } });
+  try {
+    const uploaded = (await post(ctx, "/api/files/upload", { root: "base", path: "knowledge-base/ordinary.pdf", data: "%PDF-1.4 original", encoding: "utf8" })).source;
+    const linked = (await post(ctx, "/api/sources/links", { projectId: ctx.project.id, url: "https://example.org/reference" })).source;
+    for (const source of [uploaded, linked]) {
+      assert.ok(source.payload.logicalPath);
+      const original = await readFile(path.join(ctx.project.baseDir, source.payload.paths[0]));
+      const response = await fetch(`${ctx.base}/api/sources/${source.id}/note`, { method: "PUT", headers: ctx.headers,
+        body: JSON.stringify({ title: "Invalid note rewrite", body: "replacement" }) });
+      assert.equal(response.status, 409);
+      assert.equal((await response.json()).code, "source_note_required");
+      const current = await ctx.app.sourceService.documents.get(ctx.user.id, "source", source.id);
+      assert.equal(current.revision, source.revision);
+      assert.equal(current.payload.generation, source.payload.generation);
+      assert.equal(current.payload.version, source.payload.version);
+      assert.deepEqual(await readFile(path.join(ctx.project.baseDir, current.payload.paths[0])), original);
+      const family = await ctx.app.sourceService.documents.list(ctx.user.id, "source", { projectId: ctx.project.id, filter: { familyId: source.payload.familyId } });
+      assert.deepEqual(family.items.map(row => row.id), [source.id]);
+    }
+  } finally { await ctx.close(); }
+});
