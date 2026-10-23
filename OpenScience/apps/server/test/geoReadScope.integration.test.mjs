@@ -326,3 +326,29 @@ test("view dates use the observation day when a selected round has no sample dat
   const monitoring = await service.monitoring(user, undated.id, scope);
   assert.equal(monitoring.series[0].points[0].date, "2026-10-02");
 });
+
+test("GVI comparisons reject a changed measurable component basis even for identical answers", options, async () => {
+  const composite = await store.createProject({ userId: user.id, projectId: "gvi-basis-project", engines: ["deepseek"], coverageDays: 90, product: { brandName: "Ours" } });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ('gvi-basis-group',$1,$2,1,'P2','Group')`, [user.id, composite.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured)
+    SELECT 'gvi-basis-q-' || n,$1,$2,'gvi-basis-group',1,'P2','Which brand ' || n,true FROM generate_series(1,40) n`, [user.id, composite.id]);
+  for (const [roundId, date, coverage] of [["gvi-basis-before", "2026-10-01", "partial"], ["gvi-basis-after", "2026-10-02", "complete"]]) {
+    await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,surface)
+      VALUES ($1,$2,$3,'baseline','done',1,'{deepseek}',$4::date,$4::date,'{"mode":"web"}')`, [roundId, user.id, composite.id, date]);
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+      SELECT $1 || '-' || n,$2,$3,$1,'gvi-basis-q-' || n,'deepseek',$4::date,'valid','Identical answer','{"mode":"web"}' FROM generate_series(1,40) n`, [roundId, user.id, composite.id, date]);
+    await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,first_ours,position_ours,recommended_ours,mentions_ours,retrieval_triggered,statements,checks)
+      SELECT $1 || '-' || n,$2,$3,$4::date,'[{"name":"Ours","ours":true,"count":1}]',true,1,true,true,false,
+      '[{"text":"Correct","verdict":"correct"}]',jsonb_build_object('judgementCoverage',jsonb_build_object('status',$5::text)) FROM generate_series(1,40) n`, [roundId, user.id, composite.id, date, coverage]);
+  }
+  const filter = { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01" };
+  const result = await readGeoSelection(store, composite, filter);
+  const gvi = result.comparison.cells.find((cell) => cell.metricId === "M-19" && cell.scope === "project");
+  assert.notEqual(gvi.current.value, gvi.previous.value, "different measurable ingredients still retain their actual values");
+  assert.equal(gvi.comparable, false);
+  assert.equal(gvi.delta, null);
+  await store.query(`UPDATE evimed_geo.facts SET checks = '{"judgementCoverage":{"status":"complete"}}' WHERE snapshot_id LIKE 'gvi-basis-before-%'`);
+  const equal = (await readGeoSelection(store, composite, filter)).comparison.cells.find((cell) => cell.metricId === "M-19" && cell.scope === "project");
+  assert.equal(equal.comparable, true);
+  assert.equal(equal.delta, 0);
+});
