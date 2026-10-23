@@ -8,7 +8,7 @@ import { validateBenchmark } from './scorer.mjs';
 import { collectRetrieval } from './evidence.mjs';
 import { verifyLiveBudgetWiring,armSharedBudget,verifyBoundCollector } from './shared_budget.mjs';
 import { readTranscript } from './native_probe.mjs';
-import { memoryHash,collectIndependentCells,fatalCollectionError } from './protocol.mjs';
+import { memoryHash,collectIndependentCells,fatalCollectionError,cancelAndConfirmTerminal } from './protocol.mjs';
 import { contextId } from './coverage.mjs';
 import {selectedArms,experimentIdentity,openExecution,beginArm,sealArm,saveExecution,assertActiveRuntime} from './arm_execution.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -71,7 +71,7 @@ async function execute(c, binding, repetition, arm, out) {
   let run = dispatched.json.data;partial.run=run;
   const deadline = Date.now() + 180_000;
   while (['queued','running','planned','dispatching','starting','waiting'].includes(run.status)) {
-    if (Date.now() >= deadline) { await api.call('POST', `/api/agent-runs/${run.id}/cancel`, {}); throw new Error('Real DSH run timed out'); }
+    if (Date.now() >= deadline) { partial.cancellation=await cancelAndConfirmTerminal(api,run); throw new Error('Real DSH run timed out'); }
     await new Promise(resolve => setTimeout(resolve, 1000));
     const runs = await call(api, 'GET', '/api/agent-runs');
     run = (Array.isArray(runs) ? runs : runs.items ?? runs.runs ?? []).find(r => r.id === run.id) ?? run;partial.run=run;
@@ -90,7 +90,7 @@ async function execute(c, binding, repetition, arm, out) {
   if(run.status!=='succeeded')throw new Error(`Real product run ended ${run.status}`);
   return evidence;
   } catch(error) {
-    const file=`${arm}-${c.id}-${repetition}.failure.json`;await fs.writeFile(path.join(out,file),JSON.stringify({...partial,reason:error.message,fatal:fatalCollectionError(error)},null,2));error.partialFile=file;throw error;
+    const file=`${arm}-${c.id}-${repetition}.failure.json`;await fs.writeFile(path.join(out,file),JSON.stringify({...partial,reason:error.message,cancellation:error.cancellationEvidence??partial.cancellation??null,fatal:fatalCollectionError(error)},null,2));error.partialFile=file;throw error;
   }
 }
 export async function main() {

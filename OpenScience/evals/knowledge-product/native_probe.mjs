@@ -1,6 +1,7 @@
 // Genuine setup probes: inspect native tool results, never the model's asserted verdict.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { cancelAndConfirmTerminal } from './protocol.mjs';
 import { collectRetrieval } from './evidence.mjs';
 import { verifyBoundCollector } from './shared_budget.mjs';
 export const transcriptFile=(scope,runId)=>path.join(scope.projectDir??path.dirname(scope.workspace),'.openscience','transcripts',`${runId}.jsonl`);
@@ -26,7 +27,7 @@ export async function runNativeToolProbe(api,scope,tool,input,{timeoutMs=180000}
   let run=(await call('POST','/api/agent-runs/dispatch',{sessionId,dispatchId:sessionId,automated:true,text:prompt})).json.data;
   const deadline=Date.now()+timeoutMs;
   while(['queued','running','planned','dispatching','starting','waiting'].includes(run.status)){
-   if(Date.now()>deadline){await api.call('POST',`/api/agent-runs/${run.id}/cancel`,{});throw new Error('Native runtime tool probe timed out');}
+   if(Date.now()>deadline){const cancellation=await cancelAndConfirmTerminal(api,run);const error=new Error('Native runtime tool probe timed out');error.cancellationEvidence=cancellation;throw error;}
    await new Promise(r=>setTimeout(r,500));const listed=(await call('GET','/api/agent-runs')).json.data;run=(Array.isArray(listed)?listed:listed.items??listed.runs??[]).find(r=>r.id===run.id)??run;
   }
   const transcript=await readTranscript(scope,run.id),tools=collectRetrieval(transcript.split('\n').filter(Boolean).map(JSON.parse));
