@@ -20,7 +20,7 @@ import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 import { errorCodeMessage, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
-const mocks = vi.hoisted(() => ({ saveToKnowledgeBase: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ getSourceScope: vi.fn(), saveToKnowledgeBase: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources, saveToKnowledgeBase: mocks.saveToKnowledgeBase }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 // The run's event stream, held by the test: the frame's run view follows it.
@@ -37,7 +37,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
   listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
-  fetchWebResearchAllowance: mocks.allowance,
+  fetchWebResearchAllowance: mocks.allowance, getWebSessionSourceScope: mocks.getSourceScope,
   // The strip for a data source a run went without reads the account's connectors, saves one, and posts the follow-up.
   fetchWebConnectors: mocks.connectors, saveWebConnectorCredential: mocks.saveConnector, dispatchWebAgentRun: mocks.dispatch,
 }));
@@ -139,6 +139,19 @@ beforeEach(() => {
   mocks.saveConnector.mockReset(); mocks.dispatch.mockReset(); window.sessionStorage.clear();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+describe("source selection scope semantics", () => {
+  it.each([{ sourceScope: null, mode: "project" }, { sourceScope: [], mode: "selected" }])("retains $mode scope in the native response", async ({ sourceScope, mode }) => {
+    mocks.getSourceScope.mockResolvedValue({ sourceScope });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    emit(frame, { type: "evimed.runtime-ui.source-scope", seq: 2, requestId: "scope-check", sessionId: "session-a" });
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "evimed.runtime-ui.source-scope-result", sourceIds: [], sourceScopeMode: mode }), expect.any(String)));
+  });
+});
 
 describe("native frame identity and readiness", () => {
   async function establishedClockFrame() {
