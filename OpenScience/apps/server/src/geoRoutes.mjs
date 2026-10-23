@@ -517,6 +517,9 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
     }
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "versions") {
+      return reply(await service.articleVersions(user, id, parts[3]));
+    }
     // What the platform reads in an article's claim references: each against the card revision it cites, and the ones a card's change
     // log says have moved since. A card-layer article is read as the card renders it now.
     if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "references") {

@@ -354,6 +354,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
@@ -2291,6 +2292,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
+  /** @type {GeoArticleResults | null} */
+  let geoArticleResults = null;
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
@@ -2320,6 +2323,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       members: geoMembers,
       refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore,
+        beforeImport: async (project, run) => {
+          if (!resultProvenance || internalFor(project.userId, project.id)) return;
+          await resultCaptureQueue.drain();
+          await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt });
+        },
+        afterImport: (project, run) => geoArticleResults?.complete(project, run),
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
         // An attempt that lost a write is on the audit record as well as stderr, and in the metrics (`open_science_geo_run_import_total`).
@@ -2483,7 +2492,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           else if (article.path) {
             const owner = await store.userById(project.userId);
             const control = owner ? await store.requireProject(owner, project.projectId) : null;
-            if (control) text = await geoSourceReaderOf(control)(article.path);
+            if (control && article.currentResultVersionId && geoArticleResults) text = (await geoArticleResults.readVersion(control, article.currentResultVersionId)).text;
+            else if (control) text = await geoSourceReaderOf(control)(article.path);
           }
           if (text == null) throw new HttpError(404, "geo_article_text_unavailable", "The article's text is not available.");
           return { article, text };
@@ -2594,6 +2604,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   const resultRevisions = resultProvenance ? new ResultRevisionService({ results: resultProvenance,
     documents: productDocuments, config, mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes) }) : null;
+  if (geo && resultProvenance && resultRevisions) geoArticleResults = new GeoArticleResults({ store: geo.store, service: geo.service,
+    results: resultProvenance, revisions: resultRevisions, documents: productDocuments, cards: geo.cards, parser: documentParser,
+    report: code => process.stderr.write(`geo article results: ${code}\n`) });
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
       authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
@@ -3678,14 +3691,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
       if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
-      // A finished run in a GEO project: the claim library its geo-insight
-      // deliverable holds is registered from the file (geoDeliveryImport.mjs).
-      // Not awaited here: the orchestrator asks for the same import when it
-      // folds the run, waits for this one or tries again if it failed, and only
-      // then reads what the run wrote (D-24).
-      if (geo && !internalFor(project.userId, project.id)) {
-        independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
-      }
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
@@ -3784,7 +3789,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
             runId: run.id, code: error?.code ?? "result_capture_failed" });
         }
-        // The run's files and bindings are captured: what each revision it answered left is settled now.
+      }
+      // Import business metadata only after immutable bytes exist; even a cached import replays the idempotent result join.
+      if (geo && !internalFor(project.userId, project.id)) await step("geo.import", () => geo.importDelivery(project, run));
+      // The run's files, bindings and business links are captured: settle the corrections now.
+      if (resultProvenance) {
         try { await resultCorrections?.settle(project, run); } catch { /* the revision record stays as it was */ }
       }
       await attributeLateCalls(project, run);
@@ -5248,6 +5257,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const owner = await store.userById(geoProject.userId);
       if (!owner || !article?.path) throw new HttpError(404, "geo_article_not_found", "The article's file is not available.");
       const project = await store.requireProject(owner, geoProject.projectId);
+      if (article.currentResultVersionId && geoArticleResults) {
+        const read = await geoArticleResults.readVersion(project, article.currentResultVersionId);
+        if (read.version.digest !== article.contentSha256) throw new HttpError(409, "geo_article_bytes_changed", "Article version changed.");
+        return { markdown: read.text, sourceDigest: read.version.digest };
+      }
       const file = resolveScopedPath(project.workspaceDir, article.path);
       return { markdown: String(await readFileNoFollow(project.workspaceDir, file, "utf8")) };
     };
@@ -8104,7 +8118,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
-    bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
+    bindResultRevision: resultRevisions ? async (user, project, request) => {
+      if (geoArticleResults) {
+        const bound = await geoArticleResults.bind(user, project, request);
+        if (bound || request.evimedResultRevision === undefined) return bound;
+      }
+      return resultRevisions.bind(user.id, project, request);
+    } : null,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted

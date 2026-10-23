@@ -5,9 +5,11 @@ import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ArticleTextDialog } from "../ArticleTextDialog";
 import { useOpenArticle } from "./useOpenArticle";
+import { useOpenGeoConversation } from "../useOpenGeoConversation";
+import { getResultVersion, requestResultRevision } from "@/lib/resultProvenance";
 
 /** What the page needs of an article to act on it: its identity and where its text is. */
-export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path"> & { cardId?: string | null };
+export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path" | "currentResultVersionId"> & { cardId?: string | null };
 
 /**
  * What a person may do with an article, once, for every place that lists one (the actions page, an action's drawer, a group's
@@ -17,6 +19,7 @@ export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path"> & {
  */
 export function useArticleActions(geoId: string, project: GeoProject, onChanged: () => void) {
   const openFile = useOpenArticle(project);
+  const openConversation = useOpenGeoConversation();
   const [pending, setPending] = useState<{ kind: "withdraw" | "release"; article: ArticleRef } | null>(null);
   const [reading, setReading] = useState<ArticleRef | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,6 +70,16 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
     open: (article: ArticleRef) => {
       if (openFile(article)) return;
       if (article.cardId) setReading(article);
+    },
+    continueInConversation: async (article: ArticleRef) => {
+      if (!article.currentResultVersionId) return;
+      try {
+        const version = await getResultVersion(article.currentResultVersionId);
+        const sessionId = version.producer.sessionId;
+        if (!sessionId) throw new Error("Article conversation unavailable");
+        const prepared = await requestResultRevision(version, { kind: "file", elementId: "file", selectedText: "" }, sessionId);
+        await openConversation({ projectId: project.projectId, geoId, sessionId, resultRevision: { referenceId: prepared.referenceId } });
+      } catch (error: unknown) { toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
     },
     release: (article: ArticleRef) => setPending({ kind: "release", article }),
     withdraw: (article: ArticleRef) => setPending({ kind: "withdraw", article }),

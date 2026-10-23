@@ -1707,6 +1707,15 @@ export class GeoService {
   /** `GET …/:id/articles`. @param {{ id: string }} user @param {string} id */
   async articles(user, id) { return this.articlesOf(await this.requireProject(user, id)); }
 
+  /** Immutable business associations beside shared result versions. */
+  async articleVersions(user, id, articleId) {
+    const project = await this.requireProject(user, id);
+    const article = await this.store.getArticle(project.id, articleId);
+    if (!article) throw failure(404, "geo_article_not_found", "Article not found.");
+    return { articleId, currentResultVersionId: article.currentResultVersionId,
+      versions: await this.store.articleVersions(project.id, articleId) };
+  }
+
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async articlesOf(project) {
     const articles = await this.store.listArticles(project.id);
@@ -1731,7 +1740,7 @@ export class GeoService {
         question: article.groupId ? questions.get(article.groupId) ?? null : null,
         // Written for a control group: it is out of the control arm, and the platform never places for it (said once when registered).
         groupIsControl: Boolean(article.groupId && controlGroups.has(article.groupId)),
-        status: article.status, gate: article.gate,
+        status: article.status, gate: article.gate, currentResultVersionId: article.currentResultVersionId, onlineUpdateNeeded: article.onlineUpdateNeeded,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
         // The evidence chain: the card a card-layer article is made from, whether the claim references the platform read in the

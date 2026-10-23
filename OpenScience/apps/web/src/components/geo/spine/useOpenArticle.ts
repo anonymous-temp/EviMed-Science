@@ -11,11 +11,11 @@ import { toast } from "@/lib/toast";
  * (the reader reads the project's runs), then goes to the file. It answers whether it could: an article made from a card has no
  * file of its own (its text is read in a dialog), and a draft nobody wrote a file for has nothing to open.
  */
-export function useOpenArticle(project: GeoProject): (article: { runId?: string | null; path?: string | null }) => boolean {
+export function useOpenArticle(project: GeoProject): (article: { runId?: string | null; path?: string | null; currentResultVersionId?: string | null }) => boolean {
   const navigate = useNavigate();
   return useCallback((article) => {
     if (!article.runId || !article.path) return false;
-    const href = snapshotHref(article.runId, article.path);
+    const href = snapshotHref(article.runId, article.path) + (article.currentResultVersionId ? `?version=${encodeURIComponent(article.currentResultVersionId)}` : "");
     void useProjectStore.getState().select(project.projectId, () => navigate(href))
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "稿件暂时无法打开，请稍后重试。" })));
     return true;

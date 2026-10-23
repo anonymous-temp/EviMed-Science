@@ -264,6 +264,7 @@ export function OtherArticles({
   reachable,
   onOpen,
   onWithdraw,
+  onContinue,
   canEdit,
 }: {
   articles: readonly GeoArticle[];
@@ -271,6 +272,7 @@ export function OtherArticles({
   reachable: (article: ArticleRef) => { label: string } | null;
   onOpen: (article: GeoArticle) => void;
   onWithdraw: (article: GeoArticle) => void;
+  onContinue?: (article: GeoArticle) => void;
   canEdit: boolean;
 }) {
   if (articles.length === 0) return null;
@@ -294,7 +296,10 @@ export function OtherArticles({
                   </span>
                 )}
                 trailing={article.groupIsControl ? <Tag tone="warn">对照群</Tag> : undefined}
-                actions={canEdit && article.status !== "withdrawn" ? <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button> : undefined}
+                actions={canEdit ? <>
+                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" onClick={() => onContinue(article)}>继续在对话中处理</Button>}
+                  {article.status !== "withdrawn" && <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button>}
+                </> : undefined}
               />
             );
           })}

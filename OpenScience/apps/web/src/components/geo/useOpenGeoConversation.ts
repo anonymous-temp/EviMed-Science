@@ -13,6 +13,7 @@ export interface GeoConversationTarget {
   projectId: string;
   geoId?: string;
   sessionId?: string | null;
+  resultRevision?: { referenceId: string };
 }
 
 /**
@@ -65,6 +66,7 @@ export function useOpenGeoConversation() {
       await useProjectStore.getState().select(target.projectId, () => {
         opened = true;
         const intent = newRuntimeUiIntent(draft, sessionId);
+        if (target.resultRevision) { intent.kind = "open"; intent.resultRevision = target.resultRevision; }
         const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
         const params = new URLSearchParams(sameProject ? location.search : "");
         if (sameProject && !location.pathname.includes("/chat")) {

@@ -594,6 +594,8 @@ export interface GeoSources extends GeoScopedView {
 }
 
 export interface GeoArticle {
+  currentResultVersionId?: string | null;
+  onlineUpdateNeeded?: boolean;
   id: string;
   layer: GeoArticleLayer;
   title: string;

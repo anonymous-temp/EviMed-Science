@@ -248,6 +248,8 @@ const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code ===
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
  *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null,
  *   refreshCards?: ((geoProject: any, controlProject: any) => Promise<{ cards: unknown[], held: unknown[], failed: unknown[] } | null>) | null,
+ *   beforeImport?: ((project:any,run:any)=>Promise<any>|undefined)|null,
+ *   afterImport?: ((project:any,run:any)=>Promise<any>|undefined)|null,
  *   checkReferences?: ((geoProject: any, article: any, text: string) => Promise<unknown>) | null }} deps
  *   `audit` is where an attempt that lost a write is recorded for an operator (`geo.import`, failed). `refreshCards` writes the
  *   project's verified claims into its product zone as cards (geoCards.mjs); what it refuses (no named
@@ -256,7 +258,7 @@ const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code ===
  *   article whose text is the one it last read is not read again.
  */
 export function createGeoDeliveryImport({ store, report = () => {}, audit = null, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
-  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null, capabilityOutputs = async () => [] }) {
+  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null, refreshCards = null, checkReferences = null, capabilityOutputs = async () => [], beforeImport = null, afterImport = null }) {
   /** Runs this process has imported whole (or has given up on: `MAX_TRIES`); the writes are idempotent either way. */
   const done = new Set();
   /** The imports under way, by run: a caller that meets one waits for it instead of repeating it or reading ahead of it. */
@@ -384,7 +386,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       // Read again: the card write above may have made the project's product zone, which the references resolve against.
       const current = await store.projectByControlProject(project.userId, project.id) ?? geoProject;
       for (const article of await store.listArticles(geoProject.id)) {
-        if (!article.path || !GEO_CITING_LAYERS.includes(/** @type {any} */ (article.layer))) continue;
+        if (!article.path || !/\.(?:md|markdown|txt)$/i.test(article.path) || !GEO_CITING_LAYERS.includes(/** @type {any} */ (article.layer))) continue;
         try {
           const body = String(await readFile(project.workspaceDir, article.path));
           if (createHash("sha256").update(body).digest("hex") === article.refCheckedSha) continue;
@@ -540,8 +542,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
   async function importDelivery(project, run) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? ""))) return null;
     const id = String(run.id);
+    await beforeImport?.(project, run);
     while (running.has(id)) await running.get(id)?.catch(() => {});
-    if (done.has(id)) return null;
+    if (done.has(id)) { await afterImport?.(project, run); return null; }
     const attempt = (async () => {
       /** @type {string[]} */
       const failed = [];
@@ -570,7 +573,9 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
       }
     })().finally(() => { running.delete(id); });
     running.set(id, attempt);
-    return attempt;
+    const result = await attempt;
+    await afterImport?.(project, run);
+    return result;
   }
   importDelivery.counters = counters;
   return importDelivery;

@@ -27,12 +27,12 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal
 
 vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
 
-function Opener({ sessionId, draft }: { sessionId: string | null; draft?: string }) {
+function Opener({ sessionId, draft, resultRevision }: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }) {
   const open = useOpenGeoConversation();
   const [result, setResult] = useState("");
   return (
     <>
-      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId }, draft).then((opened) => setResult(String(opened))); }}>open</button>
+      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId, resultRevision }, draft).then((opened) => setResult(String(opened))); }}>open</button>
       <span data-testid="result">{result}</span>
     </>
   );
@@ -43,7 +43,7 @@ function Probe() {
   return <pre data-testid="probe">{JSON.stringify({ path: location.pathname, intent: location.state?.runtimeUiIntent ?? null })}</pre>;
 }
 
-function renderOpener(props: { sessionId: string | null; draft?: string }) {
+function renderOpener(props: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }) {
   render(
     <MemoryRouter initialEntries={["/app/geo"]}>
       <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
@@ -85,6 +85,16 @@ describe("opening a GEO project's conversation", () => {
     expect(mocks.fetchWebMe).toHaveBeenCalledWith({ projectId: "p-new" });
     expect(screen.getByTestId("result")).toHaveTextContent("true");
     expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it("brings an immutable whole file into the existing GEO conversation without replacing its native draft", async () => {
+    mocks.projects = [...mocks.projects, { id: "p-new", name: "Existing project" }];
+    const referenceId = `rr_${"a".repeat(64)}`;
+    renderOpener({ sessionId: "ses_existing", resultRevision: { referenceId } });
+    await userEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_existing"));
+    expect(probe().intent).toMatchObject({ kind: "open", projectId: "p-new", sessionId: "ses_existing", resultRevision: { referenceId } });
+    expect(probe().intent?.draft).toBeUndefined();
   });
 
   it("opens a new conversation in the project when it has none yet", async () => {

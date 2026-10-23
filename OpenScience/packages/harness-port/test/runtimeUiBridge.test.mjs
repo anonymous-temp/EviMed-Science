@@ -683,7 +683,7 @@ test('malformed or altered revision references cannot reuse a navigation acknowl
 test('whole-file conversation context leaves the existing native draft intact', async () => {
   const f = fixture();
   /** @type {any[]} */ const stages = [];
-  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear() {}, stage: value => stages.push(value) };
+  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear() {}, stage: (/** @type {any} */ value) => stages.push(value) };
   apply(f.ctx, {}, f.target); await settle();
   const referenceId = `rr_${'c'.repeat(64)}`;
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', resultRevision: { referenceId } } }); await settle();

@@ -238,6 +238,8 @@ export function geoArticleFromRow(row) {
     gate: text(row.gate),
     safety: String(row.safety),
     contentSha256: text(row.content_sha256),
+    currentResultVersionId: text(row.current_result_version_id),
+    onlineUpdateNeeded: row.online_update_needed === true,
     protectedSha256: text(row.protected_sha256),
     status: String(row.status),
     // The claim references the platform read in the text (card, card claim, card revision), what it found, and the hash of the text
@@ -265,6 +267,7 @@ export function geoOwnedLinkFromRow(row) {
     title: String(row.title),
     publishedAt: iso(row.published_at),
     articleId: text(row.article_id),
+    articleResultVersionId: text(row.article_result_version_id), articleDigest: text(row.article_digest),
     groupId: text(row.group_id),
     status: String(row.status),
     retiredAt: iso(row.retired_at),
@@ -312,7 +315,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members", "value_profiles",
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "article_versions", "articles", "owned_links", "members", "value_profiles",
   "action_choices"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
@@ -1156,6 +1159,49 @@ export class GeoStore {
     return result.rows[0] ? geoArticleFromRow(result.rows[0]) : null;
   }
 
+  /** @param {string} geoId @param {string} articleId */
+  async articleVersions(geoId, articleId) {
+    return (await this.query(`SELECT result_version_id AS "resultVersionId", parent_version_id AS "parentVersionId", digest,
+      path, run_id AS "runId", session_id AS "sessionId", request_id AS "requestId", association, created_at AS "createdAt"
+      FROM evimed_geo.article_versions WHERE geo_project_id = $1 AND article_id = $2 ORDER BY created_at, result_version_id`, [geoId, articleId])).rows;
+  }
+
+  /** One article's head is advanced atomically; a losing output remains available in shared results. */
+  async linkArticleVersion(geoId, articleId, { version, expectedHeadVersionId = null, requestId = null, checks = null }) {
+    return this.transaction(async client => {
+      const article = (await client.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id=$1 AND id=$2 FOR UPDATE`, [geoId, articleId])).rows[0];
+      if (!article) throw new HttpError(404, "geo_article_not_found", "Article not found.");
+      const exists = (await client.query(`SELECT digest FROM evimed_geo.article_versions WHERE geo_project_id=$1 AND article_id=$2 AND result_version_id=$3`,
+        [geoId, articleId, version.versionId])).rows[0];
+      if (exists) {
+        if (exists.digest !== version.digest) throw new HttpError(409, "geo_article_version_changed", "Article version changed.");
+        return { linked: false, replay: true };
+      }
+      if ((article.current_result_version_id ?? null) !== expectedHeadVersionId) throw new HttpError(409, "geo_article_head_changed", "The article has a newer version.");
+      const changed = expectedHeadVersionId != null;
+      if (!changed && (article.path !== version.path || article.content_sha256 !== version.digest)) throw new HttpError(409, "geo_article_bytes_changed", "Article bytes changed.");
+      if (changed && (version.supersedesVersionId !== expectedHeadVersionId || version.digest === article.content_sha256)) throw new HttpError(409, "geo_article_ancestry_invalid", "The output is not a changed successor.");
+      const association = { ...geoArticleFromRow(article), currentResultVersionId: version.versionId, contentSha256: version.digest, path: version.path,
+        runId: version.producer?.runId ?? null, ...(changed ? { gate: "unverified", safety: "open", protectedSha256: null,
+        claimRefs: checks?.references ?? [], refStatus: checks?.status ?? "unchecked", refCheckedSha: checks ? version.digest : null } : {}) };
+      await client.query(`INSERT INTO evimed_geo.article_versions (geo_project_id,article_id,user_id,result_version_id,parent_version_id,digest,path,run_id,session_id,request_id,association)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`, [geoId,articleId,article.user_id,version.versionId,expectedHeadVersionId,version.digest,version.path,
+        version.producer?.runId ?? null,version.producer?.sessionId ?? null,requestId,JSON.stringify(association)]);
+      await client.query(`UPDATE evimed_geo.articles SET current_result_version_id=$3, content_sha256=$4, path=$5,
+        run_id=CASE WHEN $7 THEN $6 ELSE run_id END,
+        gate=CASE WHEN $7 THEN 'unverified' ELSE gate END, safety=CASE WHEN $7 THEN 'open' ELSE safety END,
+        protected_sha256=CASE WHEN $7 THEN NULL ELSE protected_sha256 END,
+        claim_refs=CASE WHEN $7 THEN $8::jsonb ELSE claim_refs END, ref_status=CASE WHEN $7 THEN $9 ELSE ref_status END,
+        ref_checked_sha=CASE WHEN $7 THEN $10 ELSE ref_checked_sha END,
+        status=CASE WHEN $7 AND status IN ('draft','publishable') THEN 'draft' ELSE status END,
+        online_update_needed=online_update_needed OR ($7 AND (status IN ('placed','published') OR
+          EXISTS (SELECT 1 FROM evimed_geo.owned_links WHERE geo_project_id=$1 AND article_id=$2 AND status='active'))), updated_at=clock_timestamp()
+        WHERE geo_project_id=$1 AND id=$2`, [geoId,articleId,version.versionId,version.digest,version.path,version.producer?.runId ?? null,changed,
+        JSON.stringify(checks?.references ?? []),checks?.status ?? "unchecked",checks ? version.digest : null]);
+      return { linked: true, replay: false };
+    });
+  }
+
   /**
    * Register validated articles by their path. A draft or publishable article
    * is publishable exactly when its gate passed and no safety finding is open
@@ -1406,15 +1452,17 @@ export class GeoStore {
       /** @type {string[]} */
       const ids = [];
       for (const link of links) {
+        const pinned = link.articleId ? (await client.query(`SELECT current_result_version_id, content_sha256 FROM evimed_geo.articles
+          WHERE geo_project_id=$1 AND id=$2 FOR SHARE`, [geoId, link.articleId])).rows[0] : null;
         const result = await client.query(`INSERT INTO evimed_geo.owned_links (id, user_id, geo_project_id, url, url_key, platform, title, published_at,
-            article_id, group_id, run_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            article_id, group_id, run_id, article_result_version_id, article_digest)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (geo_project_id, url_key) DO UPDATE SET url = EXCLUDED.url, platform = EXCLUDED.platform, title = EXCLUDED.title,
             published_at = EXCLUDED.published_at, article_id = EXCLUDED.article_id, group_id = EXCLUDED.group_id,
             run_id = coalesce(EXCLUDED.run_id, owned_links.run_id), status = 'active', retired_at = NULL, updated_at = now()
           RETURNING id`,
         [randomId("gol_"), userId, geoId, link.url, link.urlKey, link.platform, link.title, link.publishedAt, link.articleId, link.groupId,
-          link.runId ?? null]);
+          link.runId ?? null, pinned?.current_result_version_id ?? null, pinned?.current_result_version_id ? pinned.content_sha256 : null]);
         ids.push(String(result.rows[0].id));
       }
       return ids;

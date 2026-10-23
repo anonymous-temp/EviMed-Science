@@ -325,6 +325,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
         reachable={articleActions.reachable}
         onOpen={articleActions.open}
         onWithdraw={articleActions.withdraw}
+        onContinue={articleActions.continueInConversation}
         canEdit={can("edit")}
       />}
 

@@ -80,7 +80,7 @@ export const GEO_SCHEMA = "evimed_geo";
  */
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
-  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
+  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
   "action_choices", "read_selections",
 ]);
@@ -515,6 +515,26 @@ CREATE TABLE IF NOT EXISTS evimed_geo.media_outcomes (
   PRIMARY KEY (media_type, resource_id, engine)
 );
 
+-- Business associations only; immutable bytes remain in the shared result store.
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS current_result_version_id text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS online_update_needed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS evimed_geo.article_versions (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id),
+  article_id text NOT NULL REFERENCES evimed_geo.articles(id),
+  user_id text NOT NULL,
+  result_version_id text NOT NULL,
+  parent_version_id text,
+  digest text NOT NULL CHECK (digest ~ '^[a-f0-9]{64}$'),
+  path text NOT NULL,
+  run_id text,
+  session_id text,
+  request_id text,
+  association jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (geo_project_id, article_id, result_version_id)
+);
+CREATE INDEX IF NOT EXISTS geo_article_versions_session_idx ON evimed_geo.article_versions (geo_project_id, session_id);
+
 CREATE TABLE IF NOT EXISTS evimed_geo.orders (
   id               text PRIMARY KEY,
   user_id          text NOT NULL,
@@ -754,6 +774,10 @@ CREATE TABLE IF NOT EXISTS evimed_geo.owned_links (
   retired_at     timestamptz,
   UNIQUE (geo_project_id, url_key)
 );
+ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_result_version_id text;
+ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_digest text;
+ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_result_version_id text;
+ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_digest text;
 CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links (geo_project_id, status, published_at DESC);
 
 -- What a strategy run writes beyond the first cut's four parts (rectification 2026-10-14, G2): the tiers' words (what each buys, what
