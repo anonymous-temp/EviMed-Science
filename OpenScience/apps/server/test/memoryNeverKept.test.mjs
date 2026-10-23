@@ -2,6 +2,7 @@
 // through its eight type templates and the legacy extraction through its instruction. A rule edited in one place only is how the
 // two came to disagree about the assistant's own words (2026-10-14); this holds them to the same sentence.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -112,4 +113,28 @@ test("the legacy extraction states the same text, and it names what an assistant
   // The sentence the legacy extraction lacked until 2026-10-14, and the engine's templates always had.
   assert.match(MEMORY_NEVER_KEPT_TEXT, /Anything the assistant proposed, floated, summarised or inferred that the user did not themselves state or confirm in a user-role message/);
   assert.match(system, /Both must cite a message the person wrote themselves/);
+});
+
+test("the lab variant says the never-kept block once, in the profile, and is never rendered over what is deployed", async () => {
+  const full = renderMemoryTemplates();
+  const lab = renderMemoryTemplates({ variant: "short-never" });
+  const never = indent(MEMORY_NEVER_KEPT_TEXT);
+  const decide = indent(MEMORY_DECIDE_TEXT);
+  assert.deepEqual(Object.keys(lab).sort(), Object.keys(full).sort());
+  assert.ok(lab["profile.yaml"].includes(never), "the profile carries the whole block");
+  for (const [name, text] of Object.entries(lab)) {
+    assert.ok(text.includes(decide), `${name}: how a line is chosen stays in every type, it is the positive half`);
+    if (name !== "profile.yaml") {
+      assert.ok(!text.includes(never), `${name} carries the reminder, not the whole block`);
+      assert.match(text, /the full rules are in the profile type/);
+    }
+  }
+  const size = (texts) => Object.values(texts).reduce((sum, text) => sum + text.length, 0);
+  assert.ok(size(lab) < size(full) * 0.8, `${size(lab)} against ${size(full)}: the variant is the shorter text`);
+  // The deployed directory is what the default renders: the variant never gets there without being asked for elsewhere.
+  assert.deepEqual(renderMemoryTemplates({ variant: "full" }), full);
+  const build = path.join(root, "deploy/web/openviking/memory-templates-src/build.mjs");
+  const refused = spawnSync(process.execPath, [build, "--variant", "short-never"], { encoding: "utf8" });
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /never over the deployed templates/);
 });

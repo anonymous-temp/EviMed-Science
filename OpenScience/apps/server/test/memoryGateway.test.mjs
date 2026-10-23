@@ -599,6 +599,17 @@ test("a capsule half that fails or says nothing costs the search nothing, and th
   }
 });
 
+test("a capsule half that hangs is waited for only as long as the engine is, and the engine's answer goes back with nothing added", async (t) => {
+  const { stub, mcp } = await fixture(t, { config: { memoryGatewayTimeoutMs: 300 }, capsuleSearch: () => new Promise(() => {}) });
+  stub.seedMemory(OV_USER, "preferences/self/回答结构.md", "- 先给结论。", { type: "preferences" });
+  const started = Date.now();
+  const found = await search(mcp, { query: "回答结构" });
+  const waited = Date.now() - started;
+  assert.equal(found.status, 200);
+  assert.equal(textsOf(found).some((text) => /胶囊笔记/.test(text)), false);
+  assert.ok(waited < 2_000, `${waited} ms: the search was not held by the capsule half beyond the gateway's own deadline`);
+});
+
 test("the capsule block is bounded: a few entries, each cut, with the platform's tags taken out of the text", () => {
   const many = Array.from({ length: 12 }, (_, index) => ({ source: "capsule", factKind: "preference", mode: "own", content: `条目 ${index}` }));
   assert.equal(capsuleSearchText(many).split("\n").length, 1 + 8, "the header and at most eight entries");

@@ -266,6 +266,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
   const commitsPerHour = Math.max(0, Number(config.memoryGatewayCommitsPerHour ?? 120) || 0);
+  const capsuleWaitMs = Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4_000);
   /** @type {Map<string, { until: number, count: number }>} */
   const requestWindows = new Map();
   /** @type {Map<string, { until: number, count: number }>} */
@@ -595,7 +596,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories` && message.id !== undefined) {
               const capsule = Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit })).catch(() => []);
               afterCall.set(message.id, async (answer) => {
-                const text = capsuleSearchText(await capsule);
+                // Waited for as long as the engine is (`memoryGatewayTimeoutMs`), and no longer: a capsule half that hangs is
+                // one that said nothing, and the engine's answer goes back at once.
+                /** @type {ReturnType<typeof setTimeout> | undefined} */
+                let timer;
+                const items = await Promise.race([capsule, new Promise((resolve) => { timer = setTimeout(() => resolve([]), capsuleWaitMs); })]);
+                clearTimeout(timer);
+                const text = capsuleSearchText(/** @type {any} */ (items));
                 if (text && Array.isArray(answer?.result?.content)) answer.result.content.push({ type: "text", text });
               });
             }

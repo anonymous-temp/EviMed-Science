@@ -237,6 +237,10 @@ OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE=<key file> node evals/memory-write-quality/ru
 ```
 
 A change to the shared text (`packages/domain/src/memoryNeverKept.mjs`) is rendered into the eight templates with
-`node deploy/web/openviking/memory-templates-src/build.mjs`. The lab engine must mount the rendered directory. Corrections are
+`node deploy/web/openviking/memory-templates-src/build.mjs`. The shipped text states the never-kept block in every type
+(about two thirds of all template text, as before). If the baseline shows the engine still keeping too little, the lab variant
+says it once, in the profile, with a short reminder in the other seven (research G variant B, about 30% less text):
+`node deploy/web/openviking/memory-templates-src/build.mjs --variant short-never --out <dir>`, mounted on the lab engine
+instead of the deployed directory; it is never rendered over the deployed one. The lab engine must mount the rendered directory. Corrections are
 written under `preferences/corrections/` since this change (the plugin lists `preferences/` at a session's start), and the
 runner counts both places as the `correction` kind.
