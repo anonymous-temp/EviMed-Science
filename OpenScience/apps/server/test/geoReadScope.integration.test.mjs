@@ -376,3 +376,47 @@ test("GVI comparisons reject a changed measurable component basis even for ident
   assert.equal(equal.comparable, true);
   assert.equal(equal.delta, 0);
 });
+
+test("date ranges select actual answer occurrences across midnight without dating unknown observations", options, async () => {
+  const timed = await store.createProject({ userId: user.id, projectId: "occurrence-date-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,sample_date,started_at,created_at,finished_at)
+    VALUES ('occurrence-round',$1,$2,'baseline','done','2026-10-01','2026-10-01T12:00Z','2026-10-01T12:00Z','2026-10-02T01:00Z')`, [user.id, timed.id]);
+  for (const [suffix, askedAt] of [["first", "2026-10-01T15:59:59Z"], ["second", "2026-10-01T16:00:00Z"], ["unknown", null]]) {
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status,asked_at)
+      VALUES ($1,$2,$3,'occurrence-round','deepseek','failed',$4)`, [`occurrence-${suffix}`, user.id, timed.id, askedAt]);
+  }
+  for (const [date, suffix] of [["2026-10-01", "first"], ["2026-10-02", "second"]]) {
+    const scope = { from: date, to: date };
+    const selected = await readGeoSelection(store, timed, scope);
+    assert.deepEqual(selected.rows.map((row) => row.snapshotId), [`occurrence-${suffix}`]);
+    assert.equal(selected.selection.timeCoverage.unknownTime, 1);
+    assert.equal(selected.selection.timeCoverage.basis, "answer_asked_at");
+    const diagnosis = await service.diagnosis(user, timed.id, scope);
+    assert.equal(diagnosis.round.sampleDate, date);
+    assert.equal((await service.monitoring(user, timed.id, scope)).series[0].points[0].date, date);
+  }
+  const whole = await readGeoSelection(store, timed, { round: "occurrence-round" });
+  assert.equal(whole.rows.length, 3, "an explicit round without dates still includes undated records");
+  assert.equal(whole.selection.timeCoverage.unknownTime, 1);
+  const ny = await readGeoSelection(store, timed, { from: "2026-10-01", to: "2026-10-01", timeZone: "America/New_York" });
+  assert.equal(ny.rows.length, 2);
+});
+
+test("observation caps apply after engine and question-dimension filters", options, async () => {
+  const wide = await store.createProject({ userId: user.id, projectId: "filtered-cap-project", engines: ["deepseek", "kimi"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name)
+    VALUES ('cap-g1',$1,$2,1,'P2','First'),('cap-g2',$1,$2,1,'P3','Second')`, [user.id, wide.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text)
+    VALUES ('cap-q1',$1,$2,'cap-g1',1,'P2','First?'),('cap-q2',$1,$2,'cap-g2',1,'P3','Second?')`, [user.id, wide.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,sample_date,finished_at)
+    VALUES ('filtered-cap-round',$1,$2,'baseline','done',1,'2026-10-01','2026-10-01')`, [user.id, wide.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at)
+    SELECT 'filtered-cap-many-' || n,$1,$2,'filtered-cap-round','cap-q2','kimi','failed','2026-10-01T00:00Z' FROM generate_series(1,20001) n`, [user.id, wide.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at)
+    VALUES ('filtered-cap-one',$1,$2,'filtered-cap-round','cap-q1','deepseek','failed','2026-10-02T00:00Z')`, [user.id, wide.id]);
+  await assert.rejects(readGeoSelection(store, wide), (error) => error.status === 422);
+  for (const scope of [{ engines: ["deepseek"] }, { groupIds: ["cap-g1"] }, { pools: ["P2"] }, { from: "2026-10-02", to: "2026-10-02" }]) {
+    const selected = await readGeoSelection(store, wide, scope);
+    assert.deepEqual(selected.rows.map((row) => row.snapshotId), ["filtered-cap-one"]);
+  }
+});
