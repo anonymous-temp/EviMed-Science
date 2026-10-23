@@ -88,7 +88,7 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
   const state = async () => ({
     owned: (await q(`SELECT domain FROM evimed_geo.sources WHERE geo_project_id = $1 AND layer = 'owned' ORDER BY domain`, [ID])).map((row) => row.domain),
     product: (await q(`SELECT product, competitors FROM evimed_geo.projects WHERE id = $1`, [ID]))[0],
-    facts: await q(`SELECT snapshot_id, mentions_ours, failure_mode, reparsed_at FROM evimed_geo.facts ORDER BY snapshot_id`),
+    facts: await q(`SELECT snapshot_id, mentions_ours, failure_mode, reparsed_at, judge_extract, checks, statements FROM evimed_geo.facts ORDER BY snapshot_id`),
     errors: await q(`SELECT id, status, jsonb_array_length(materials) AS materials FROM evimed_geo.errors ORDER BY id`),
     collected: (await q(`SELECT collected_at FROM evimed_geo.questions WHERE id = 'q1'`))[0].collected_at,
     strategies: Number((await q(`SELECT count(*) AS n FROM evimed_geo.strategy WHERE geo_project_id = $1`, [ID]))[0].n),
@@ -119,8 +119,14 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
   assert.deepEqual(now.owned, ["innoventbio.com"]);
   assert.deepEqual([now.product.product.singleSource, now.product.product.genericAliases], [true, ["玛仕度肽"]]);
   assert.deepEqual(now.product.competitors.map((/** @type {any} */ entry) => [entry.brandName, entry.singleSource]), [["穆峰达", true], ["诺和盈", false]]);
-  assert.deepEqual(now.facts.map((/** @type {any} */ row) => [row.mentions_ours, row.failure_mode]), [[true, "correct"], [true, "correct"]],
-    "玛仕度肽 is one holder's: the answers that named only it mention us");
+  assert.deepEqual(now.facts.map((/** @type {any} */ row) => [row.mentions_ours, row.failure_mode]), [[false, "omitted"], [false, "omitted"]],
+    "single-source generic attribution does not invent a literal brand mention");
+  assert.ok(now.facts.every((/** @type {any} */ row) => row.judge_extract.genericMentions.some((/** @type {any} */ entry) =>
+    entry.ours && entry.productAttributed && entry.matchedNames.includes("玛仕度肽"))), "the generic observations retain their product attribution");
+  assert.ok(now.facts.every((/** @type {any} */ row) => row.checks.judgementCoverage.status === "unknown"),
+    "historical judgments with no coverage metadata never become complete during recount");
+  assert.deepEqual(now.facts.map((/** @type {any} */ row) => row.statements), untouched.facts.map((/** @type {any} */ row) => row.statements),
+    "recount preserves the recorded statement judgments");
   assert.ok(now.facts.every((/** @type {any} */ row) => row.reparsed_at));
   assert.deepEqual(now.errors, [{ id: "e1", status: "acting", materials: 1 }, { id: "e2", status: "open", materials: 0 }]);
   assert.equal(new Date(now.collected).toISOString(), "2026-09-25T09:40:00.000Z");

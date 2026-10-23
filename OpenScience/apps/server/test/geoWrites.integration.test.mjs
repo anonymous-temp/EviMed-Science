@@ -182,18 +182,18 @@ test("the product merges field by field, a competitor is refused alone, and a br
   // is refused leaves the registered rivals alone, and only [] clears them.
   await write(/** @type {any} */ (merged), "product", { data: { competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] }] } });
   const aliased = await store.getProject(USER, project.id);
-  // One rule on both sides (ruling 2026-09-26): a generic that more than one
-  // holder may market — or one nobody said is single-source — names no brand.
+  // One literal-brand rule on both sides: generic forms stay separate,
+  // whether or not the project records single-source product attribution.
   assert.deepEqual(brandRegistry(aliased?.product, aliased?.competitors).filter((entry) => entry.competitor).map((entry) => entry.aliases),
     [["穆峰达", "mounjaro"]], "folded, as the parser matches them; the generic's short form is not the brand's");
   const single = await write(/** @type {any} */ (aliased), "product", { data: { singleSource: true, misspellings: [], approvalNo: "国药准字H20250037",
     competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"], singleSource: true }] } });
   assert.deepEqual(single.issues, [], "the identity is complete");
   const counted = await store.getProject(USER, project.id);
-  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases]), [
-    ["玛仕度肽", ["玛仕度肽", "信尔美", "玛仕度肽注射液"]],
-    ["穆峰达", ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]],
-  ], "a single-source generic counts on both sides");
+  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases, entry.genericAliases, entry.singleSource]), [
+    ["玛仕度肽", ["玛仕度肽", "信尔美"], ["玛仕度肽注射液"], true],
+    ["穆峰达", ["穆峰达", "mounjaro"], ["替尔泊肽注射液", "替尔泊肽"], true],
+  ], "both products retain separate literal brand aliases, generic forms and single-source attribution");
   const refused = await write(/** @type {any} */ (aliased), "product", { data: { competitors: [{ name: "诺和盈" }] } });
   assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.code === "missing"));
   assert.deepEqual((await store.getProject(USER, project.id))?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["穆峰达"]);

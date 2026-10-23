@@ -376,8 +376,9 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(p1.topCompetitor, "替尔泊肽");
   assert.equal(p1.mainIssue, "讲错我方", "the page's words, never the code");
   assert.deepEqual(Object.fromEntries(Object.entries(diagnosis.failureModes).map(([mode, cell]) => [mode, [/** @type {any} */ (cell).numerator,
-    /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1] },
-  "a suspect answer is out of the tally");
+    /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1],
+      unknown: [0, 1], partial: [0, 1], refused: [0, 1] },
+  "the known wrong answer remains wrong and the suspect is excluded from every tally");
   assert.deepEqual(diagnosis.failureModes.wrongOurs.snapshotIds, [`s1-${id}`], "a failure mode opens on its answers");
   assert.equal(diagnosis.errors[0].stability, "stable");
   assert.equal(diagnosis.errors[0].snapshotId, `s1-${id}`);
