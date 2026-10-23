@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { computeGeoMetrics } from "@evimed/domain";
 import { brandRegistry, failureMode, parseAnswer } from "../src/geoParse.mjs";
-import { buildJudgeInput, GEO_JUDGE_ANSWER_CHARS, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
+import { buildJudgeInput, GEO_JUDGE_ANSWER_CHARS, readQuantities, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
 
 const product = { brandName: "康舒宁", genericName: "示例成分片", genericAliases: ["示例成分"], singleSource: true };
 const competitors = [{ brandName: "康舒安", genericName: "另一成分片" }];
@@ -114,6 +114,17 @@ test("dropped statements, missing completeness, or a reached extraction limit ne
   assert.equal(judged(correct.text, { assessmentComplete: undefined, statements: [correct] }).checks.judgementCoverage.status, "unknown");
   assert.equal(judged(correct.text, { statements: [correct, { ...correct, text: "not in answer" }] }).checks.judgementCoverage.status, "partial");
   assert.equal(judged(correct.text, { statements: Array.from({ length: 30 }, () => correct) }).checks.judgementCoverage.status, "partial");
+});
+
+test("list numbering is structural, while decimal doses remain clinical quantities", () => {
+  for (const marker of ["1. ", "２、", "(3) ", "四、", "- "]) {
+    const text = `${marker}${correct.text}`;
+    const reading = judged(text, { statements: [{ ...correct, text }] });
+    assert.equal(reading.statements[0]?.verdict, "correct", marker);
+    assert.equal(reading.checks.judgementCoverage.status, "complete", marker);
+  }
+  assert.deepEqual([...readQuantities("1.5 mg").tokens], ["1.5mg"]);
+  assert.deepEqual([...readQuantities("1. 1.5 mg").tokens], ["1.5mg"]);
 });
 
 test("legacy recommendation booleans and correct statements are preserved as history, never upgraded to new complete facts", () => {
