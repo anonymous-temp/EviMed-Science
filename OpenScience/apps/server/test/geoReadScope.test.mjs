@@ -31,7 +31,7 @@ test("balance keeps one observation per round, question, engine and repeat", () 
 
 test("selection computes pooled counts and uses the actual denominator for drilldowns", () => {
   const result = computeGeoSelection([row("s1", "r1"), row("s2", "r2"), row("s3", "r2", "deepseek", { questionId: "q2", facts: null }),
-    row("s4", "r2", "deepseek", { questionId: "q3", status: "refusal", facts: null })], { engines: ["deepseek"], competitors: [], owned: {}, arms: { pilot: ["g1"], control: [] } });
+    row("s4", "r2", "deepseek", { questionId: "q3", status: "refusal", facts })], { engines: ["deepseek"], competitors: [], owned: {}, arms: { pilot: ["g1"], control: [] } });
   const cell = result.cells.find((entry) => entry.scope === "project" && entry.metricId === "M-06");
   assert.equal(cell.denominator, 2);
   assert.deepEqual(cell.snapshotIds, ["s1", "s2"]);
