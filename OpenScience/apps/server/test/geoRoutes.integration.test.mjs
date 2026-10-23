@@ -173,6 +173,44 @@ async function seededProject() {
   return { project, claims, questions, articles };
 }
 
+test("snapshot member pages reuse authorized exact day selections through HTTP", options, async () => {
+  const project = await store.createProject({ userId: ALICE, projectId: "http-members", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ('http-member-g',$1,$2,1,'P2','Group')`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text)
+    SELECT 'http-member-q' || n,$1,$2,'http-member-g',1,'P2','Question ' || n FROM generate_series(1,3) n`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,surface)
+    VALUES ('http-member-round',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01','2026-10-02','{"mode":"web"}')`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,surface)
+    SELECT 'http-member-s' || n,$1,$2,'http-member-round','http-member-q' || n,'deepseek','valid',
+      CASE WHEN n < 3 THEN timestamp with time zone '2026-10-01T01:00Z' ELSE timestamp with time zone '2026-10-02T01:00Z' END,'{"mode":"web"}' FROM generate_series(1,3) n`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,checks)
+    SELECT 'http-member-s' || n,$1,$2,'2026-10-03','[{"name":"Ours","ours":true,"count":1}]','{"judgementCoverage":{"status":"complete"}}' FROM generate_series(1,3) n`, [ALICE,project.id]);
+  const view = await service.monitoring({ id: ALICE }, project.id, { from: "2026-10-01", to: "2026-10-02" });
+  const point = view.series.find((entry) => entry.key === "mention").points[0];
+  const query = new URLSearchParams({ selectionRef: point.members.selectionRef, member: JSON.stringify(point.members.metric), limit: "1" });
+  const url = `/api/geo/projects/${project.id}/snapshots`;
+  const first = await call("GET", `${url}?${query}`);
+  assert.equal(first.status, 200, JSON.stringify(first.payload));
+  assert.equal(first.payload.data.total, 2);
+  assert.equal(first.payload.data.items.length, 1);
+  query.set("offset", String(first.payload.data.nextOffset));
+  const second = await call("GET", `${url}?${query}`);
+  assert.equal(second.payload.data.more, false);
+  assert.notEqual(second.payload.data.items[0].id, first.payload.data.items[0].id);
+  refused(await call("GET", `${url}?${query}`, { user: MALLORY }), 404, "geo_project_not_found");
+  for (const bad of ["{", JSON.stringify({ ...point.members.metric, typo: true }), JSON.stringify({ ...point.members.metric, engine: 17 }),
+    JSON.stringify({ ...point.members.metric, observationDate: "2026-02-30" })]) {
+    const malformed = new URLSearchParams(query); malformed.set("member", bad);
+    refused(await call("GET", `${url}?${malformed}`), 400, "geo_read_filter_invalid");
+  }
+  for (const [key,value] of [["limit","51"],["offset","20001"]]) {
+    const malformed = new URLSearchParams(query); malformed.set(key,value);
+    refused(await call("GET", `${url}?${malformed}`), 400, "geo_read_filter_invalid");
+  }
+  await store.query(`UPDATE evimed_geo.snapshots SET answer_text = 'Changed' WHERE id = 'http-member-s1'`);
+  refused(await call("GET", `${url}?${query}`), 409, "geo_read_filter_invalid");
+});
+
 test("off, every GEO path answers 404 geo_not_enabled, and an account outside the audience gets the same", options, async () => {
   const off = createGeoRoutes({ store: { async ensureSessionUser() { return { user: { id: ALICE } }; }, async assertCsrf() {} },
     service, config: { ...config, geoEnabled: false }, maxJsonBytes: 1024 });

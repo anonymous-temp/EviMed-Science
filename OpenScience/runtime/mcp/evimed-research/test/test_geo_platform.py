@@ -151,7 +151,7 @@ class GeoReadTests(_GatewayCase):
         self.assertGreaterEqual(schema["properties"]["offset"]["maximum"], 20000)
         selection = {"reference": "gsel_one", "dataRevision": "revision-one"}
         _Gateway.answers["read"] = (200, {"data": {"selection": selection, "items": [], "more": False, "total": 20000}})
-        scope = {"selectionRef": "gsel_one", "member": {"metricId": "M-06", "scope": "project", "pool": None}, "offset": 19950, "limit": 50}
+        scope = {"selectionRef": "gsel_one", "member": {"metricId": "M-06", "scope": "project", "pool": None, "observationDate": "2026-10-01"}, "offset": 19950, "limit": 50}
         result = self.server.call_tool("geo_read", {"what": "snapshots", "filter": scope})
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["selection"], selection)

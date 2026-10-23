@@ -85,7 +85,7 @@ const on = { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreview
 test("exact member continuation can reach every observation in a bounded selection", async (t) => {
   const { geo, calls } = geoDouble(on);
   const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
-  const filter = { selectionRef: "gsel_one", member: { metricId: "M-06", scope: "project" }, offset: 19_950, limit: 50 };
+  const filter = { selectionRef: "gsel_one", member: { metricId: "M-06", scope: "project", observationDate: "2026-10-01" }, offset: 19_950, limit: 50 };
   assert.equal((await post("read", { what: "snapshots", filter })).status, 200);
   assert.deepEqual(calls[0][3], filter);
   assert.equal((await post("read", { what: "snapshots", filter: { ...filter, offset: 20_001 } })).status, 400);
