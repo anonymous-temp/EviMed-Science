@@ -326,6 +326,10 @@
         "value": "#5f686f",
         "type": "color"
       },
+      "title-ink": {
+        "value": "#0e305f",
+        "type": "color"
+      },
       "text-graphic": {
         "value": "#939ca6",
         "type": "color"
@@ -522,6 +526,10 @@
       },
       "text-3": {
         "value": "#8d96a0",
+        "type": "color"
+      },
+      "title-ink": {
+        "value": "#dde9f9",
         "type": "color"
       },
       "text-graphic": {
@@ -961,6 +969,48 @@
         },
         "lineHeight": {
           "value": "1.75",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "reading": {
+        "fontSize": {
+          "value": "16px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.8",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "reading-lg": {
+        "fontSize": {
+          "value": "18px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.8",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "reading-xl": {
+        "fontSize": {
+          "value": "20px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.8",
           "type": "lineHeights"
         },
         "fontFamily": {

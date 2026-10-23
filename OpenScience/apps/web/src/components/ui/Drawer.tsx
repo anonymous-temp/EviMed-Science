@@ -20,6 +20,10 @@ import { IconButton } from "@/components/ui/IconButton";
  * window's bottom edge (design reference §5.2, R13 V-12). `env()` is 0 unless
  * the page's viewport meta says `viewport-fit=cover`, which this shell does
  * not; the `max()` keeps the 16 either way.
+ *
+ * `placement="bottom"` is the same dialog as a sheet that rises from the
+ * window's bottom edge (a phone's filter panel, 2026-10-23): as wide as the
+ * window, at most 85 % of its height, its top corners rounded.
  */
 export function Drawer({
   title,
@@ -31,6 +35,7 @@ export function Drawer({
   className,
   widthClassName = "max-w-xl",
   bare = false,
+  placement = "right",
 }: {
   /** Names the dialog; with `bare`, it must be text (it becomes the label). */
   title: ReactNode;
@@ -46,7 +51,10 @@ export function Drawer({
   widthClassName?: string;
   /** The content brings its own header and close control (a file preview, say). */
   bare?: boolean;
+  /** `bottom`: a sheet rising from the window's bottom edge. */
+  placement?: "right" | "bottom";
 }) {
+  const sheet = placement === "bottom";
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -87,7 +95,7 @@ export function Drawer({
     // equivalent, bound above; role="presentation" keeps it out of the tree.
     <div
       role="presentation"
-      className="fixed inset-0 z-drawer flex justify-end bg-scrim"
+      className={cn("fixed inset-0 z-drawer flex bg-scrim", sheet ? "items-end justify-center" : "justify-end")}
       onClick={(event) => { if (event.target === event.currentTarget) close.current(); }}
     >
       <div
@@ -101,8 +109,8 @@ export function Drawer({
         className={cn(
           // Slides in 24 px; a pure fade under reduced motion (the distance
           // token is 0 there), which is why this is not `motion-safe:` only.
-          "flex h-full w-full flex-col border-l border-border bg-surface shadow-e3 animate-drawer-in focus:outline-none",
-          widthClassName,
+          "flex w-full flex-col border-border bg-surface shadow-e3 focus:outline-none",
+          sheet ? "max-h-[85vh] rounded-t-panel border-t animate-toast-in" : cn("h-full border-l animate-drawer-in", widthClassName),
           className,
         )}
       >
@@ -110,7 +118,7 @@ export function Drawer({
           <div className="min-h-0 flex-1">{children}</div>
         ) : (
           <>
-            <header className="flex items-start gap-3 border-b border-border px-6 py-4">
+            <header className={cn("flex items-start gap-3 border-b border-border", sheet ? "px-4 py-3" : "px-6 py-4")}>
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className="text-title font-semibold text-text">{title}</h2>
                 {description && <p id={descriptionId} className="mt-1 text-caption text-muted">{description}</p>}
@@ -120,9 +128,9 @@ export function Drawer({
               <IconButton ref={closeRef} icon={X} label="关闭" onClick={() => close.current()} />
 
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{children}</div>
+            <div className={cn("min-h-0 flex-1 overflow-y-auto", sheet ? "px-4 py-4" : "px-6 py-6")}>{children}</div>
             {footer && (
-              <footer className="shrink-0 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</footer>
+              <footer className={cn("shrink-0 border-t border-border bg-surface pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]", sheet ? "px-4" : "px-6")}>{footer}</footer>
             )}
           </>
         )}

@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { FrontierSkeleton } from "./FrontierSkeleton";
-import { groupByDay } from "./frontierText";
+import { dayHeading, groupByDay } from "./frontierText";
 
 /** A page of the feed as it is on screen, with the query it answers and when it was read. */
 export interface Listing {
@@ -26,10 +26,15 @@ export const FEED_PAGE_SIZE = 30;
 
 /**
  * The feed itself (plan 2026-09-23 §6.2): its four states, 「有 N 条新的」, the
- * day groups and 「加载更多」. A day is headed by its date and, once the whole
- * day is on screen, how many items it holds — the last day may continue on
- * the next page, so its count waits. Search results are one list in
- * relevance or time order, so they are not cut into days.
+ * day groups and 「加载更多」. A day is headed by its date — 「今天 · 10月23日
+ * 周四 · 11 条」 — and, once the whole day is on screen, how many items it holds
+ * (the last day may continue on the next page, so its count waits); the heading
+ * stays under the page's band while its day scrolls by. Search results are one
+ * list in relevance or time order, so they are not cut into days, and each card
+ * says its own date.
+ *
+ * The list is a stacking context of its own (`isolate`): a sticky heading rises
+ * over the cards under it, and the band rises over both.
  */
 export function FeedList({
   view, q, filtered, empty, listing, error, fresh, firstRun, loadingMore, renderItem,
@@ -60,7 +65,7 @@ export function FeedList({
   }
   const days = q ? [] : groupByDay(listing.items);
   return (
-    <div id="frontier-list-top" className="space-y-8">
+    <div id="frontier-list-top" className="isolate space-y-8">
       {error && (
         <div role="alert" className="flex flex-wrap items-center gap-3 text-ui text-text-2">
           <span>未能刷新</span>
@@ -89,9 +94,9 @@ export function FeedList({
         const whole = index < days.length - 1 || !listing.nextCursor;
         return (
           <section key={group.key} aria-labelledby={`frontier-day-${group.key}`}>
-            <h2 id={`frontier-day-${group.key}`} className="flex items-baseline gap-2">
-              <span className="text-body font-semibold leading-6 text-text">{group.label}</span>
-              {whole && <span className="text-caption tabular-nums text-text-3">{group.items.length} 条</span>}
+            <h2 id={`frontier-day-${group.key}`} className="sticky top-[var(--page-chrome-h,0px)] z-sticky -mx-1 flex items-baseline gap-1 bg-bg px-1 py-2">
+              <span className="text-body font-semibold leading-6 text-text">{dayHeading(group, false)}</span>
+              {whole && <span className="text-caption tabular-nums text-text-3">· {group.items.length} 条</span>}
             </h2>
             <ul>{group.items.map((item) => renderItem(item, true))}</ul>
           </section>

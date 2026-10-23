@@ -56,7 +56,7 @@ under the more-contrast layer too, and for the rival greys a chart draws. The co
 unrounded: a pair at 4.4995 does not pass a 4.5 floor. The notes used to be typed by hand and went
 stale silently; two of them were already fiction when the check first ran, and eight more by
 2026-10-08 — so the build now reads back every figure a note quotes ("N on the page", "N on the
-sidebar", "white on it N", "on <role>: N") and fails on a stale one. 47 rules × light / dark ×
+sidebar", "white on it N", "on <role>: N") and fails on a stale one. 49 rules × light / dark ×
 standard / more contrast.
 
 ### Roles
@@ -75,6 +75,7 @@ standard / more contrast.
 | `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
 | `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
 | `text-3` | `#5f686f` | `#8d96a0` | metadata, 5.48:1 — **nothing lighter carries text** |
+| `title-ink` | `#0e305f` | `#dde9f9` | the title of a list row that opens a document (前沿动态's cards, 2026-10-23): the brand's deep blue (brand-900 / brand-100), not black and not the bright accent — 12.62:1, 11.43:1 on a hovered row. **List titles in title-ink; hover accent; read text-2** |
 | `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word, and never a status** (a mark that says something wears a `dot-*` or `border-control` step; the build fails a `dot-*` that borrows this grey) |
 | `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
 | `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
@@ -220,6 +221,7 @@ ones was a sixth pair. The release walk holds both (`typePairs` in the `data` an
 | `compact` | 13 / 20px | held in reserve for a dense grid whose 12 px cells would be too small; nothing sets it since R19.2 — a control is `ui`, a table head and a heat cell `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
+| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its AI 导读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
 | `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |
 | `section` | 18 / 26px | a section heading inside an answer or a report |
 | `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
@@ -350,9 +352,9 @@ bordered pill or bordered `<button>` outside it:
 
 | Component | What it is |
 |---|---|
-| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」) |
+| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle; and the **slots** a page is composed of — `scope`, `steps`, `activity`, `tabs`, `toolbar`, `headline` — which the shell renders in one fixed order, steps/tabs/toolbar in one sticky band (see 「页面结构」); a reading page adds `eyebrow` (the line over its title) and `aside` (a sticky right column from 1024 px whose top is the back row's, under the body below) |
 | `Tabs` | a page's views: underlined tabs over a hairline; `trailing` puts the open view's controls (filters, a search box) at the row's right on the same hairline, dropping under the tabs below 640 px; the open tab is always scrolled whole into its row |
-| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 14 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾” |
+| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 14 px (no border; selected sits on grey, at the same weight — told by ground and colour, as a selected tab is), the rest in “更多 ▾”; `iconEnd` draws a mark a press lets go of after the words (「#肝细胞癌 ×」) |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
@@ -361,7 +363,8 @@ bordered pill or bordered `<button>` outside it:
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible. A row that can be pressed says so: hover `surface-2`, `selected` `accent-soft`, and a trailing mark the row draws itself (› opens a drawer or page, ⌄ expands in place, ↗ leaves); `trailing` text lets the press through. Numbers of one measure are `columns` under a `ListHeader` |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has — or, in place of a button, the `reason` there is none. Carries `data-empty` |
-| `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle — drawn by the toolbar, folded into one 「筛选」 chip below 640 px), `search`, `summary`, `actions`. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
+| `Toolbar` | the one row of controls above the content they control: `views`, declared `filters` (select, chips, toggle, and `panel` — a chip that opens labelled groups of those, a group of chips one value or `multi` several, 「专科 ▾」), `search` (with `suggestions`: a list under the box), `summary`, `actions`. Below 640 px, and where a band's row runs out of room, everything but the `pinned` filters folds into one 「筛选」 chip that opens a **filter panel** — every dimension a labelled group of chips, toggles as switches — as a sheet from the bottom on a phone (「重置」, 「查看结果」) and a card under the chip on a wide screen; never a menu that stacks dimensions (owner, 2026-10-23). A `scroll` chip group gives way to its row by scrolling. `controlsBelow` (前沿动态 only) puts the views and the search on one row and the open view's controls on a second, drawn only where the view has any. `PageShell`'s `toolbar` slot is where it stands; inside a `Section` it is that block's own |
+| `Score` | a score as a pill — its name small, a hairline, the number (`ScorePill`, 「AI 评分 86」), its tier its ground (accent, accent tint, grey outline) — and its parts as thin bars (`ScoreBars`), opened on hover, keyboard focus or a tap; without parts a label |
 | `StepRail` | a module's program as one 40 px row at the top of **every** tab: a dot and a name per step, state as glyph, tooltip word and screen-reader word, `activeSteps` underlined (in the accent, by the rule and the colour only: a step is drawn like a tab of the row below it — 14 / 400, square — whatever its state), a 「现在」 sentence at the end; below 640 px 「已完成 7/8 步 ▾」. Extends `ProgressRail`'s marks |
 | `StepState` | the body of a step's tab while it has nothing to show: `empty` (a recipe: what it uses, what it gives, one verb-and-object button), `queued`, `running`, `failed`, `credits`. Props are facts; the sentences are composed once |
 | `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
@@ -370,13 +373,13 @@ bordered pill or bordered `<button>` outside it:
 | `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot |
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
 | `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
-| `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below; read off the headings the page rendered |
+| `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below, or the bare list (`inline`) in a column that already sticks (the frontier reader's 「本文目录」); read off the headings the page rendered |
 | `MasterDetail` | a list column (320–360 px) and one record; below the room for both, the record is a `Drawer` — or, for a conversation, replaces the list |
 | `ScopeMenu` | whose things the page shows (a project, a kind of project, everyone's), in the header after the title or as a chip in a toolbar |
 | `StateScreen` | a whole page's failure or wrong address: an icon, one sentence, one action, 「回到原处」 |
 
 Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`
-(its `footer` is the one bar stuck to the panel's bottom), `ConfirmDialog`, `FormDialog` (a form in a
+(its `footer` is the one bar stuck to the panel's bottom; `placement="bottom"` is the phone's sheet), `ConfirmDialog`, `FormDialog` (a form in a
 16 px panel on the modal tier — no page draws its own), `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
 above a feed, a tool in a grid — and never for a list of like things.
 
@@ -515,6 +518,17 @@ screen of a data page holds at most twenty rows, so the list under two pictures 
 more. A data file is a window of lines, a page of four sections has its contents, and a scroll box is a named stop (`KnowledgePageView`).
 The operator's console is one card (`OpsCard`): a good state has no colour (amber for a thing to look at, red for a failure), an
 identifier is a copy button and never page text, and a list that holds nothing is not a tab.
+
+**前沿动态's list and reader (2026-10-23, the owner's screenshots).** The band is two rows: the views and the search, then the open
+view's controls — 栏目 as nine chips, 「专科 ▾」 (the thirty in their five groups, several at once, then their 热门标签), 「更多筛选 ▾」
+(来源, 证据类型, 时间, 只看收藏, 只看未读) and the chosen tag with its 「关注」; 与我相关 has no second row. A card is one link to its reader:
+the title's link stretches over it, the ground lightens under the pointer and the title — `title-ink` — turns the accent; the summary
+is three lines (two on a phone) and never expands; the meta row ends in the 「AI 评分」 pill and the footer holds three tags that
+narrow the feed, 「另有 N 家报道」, ☆ and ⋯ (深入研究 first). A day-grouped list has its clock in a column and a heading per day that
+stays under the band; any other list says the date after the source. The reader is two columns from 1024 px: the article on one
+edge (back, byline, title, 导读, text) and a sticky column whose top is the back row's — 「打开原文 ↗」 with ☆ and ⋯, 「深入研究」,
+推荐理由 with the score's parts, 专科 and 标签 (one chip, every one a link) and 本文目录 at three sections; below 1024 px the notes
+follow the text and the actions are a bar at the window's bottom.
 
 Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
 (identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
@@ -695,7 +709,7 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 
 The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
 
-Frontier evidence zones belong to the peer navigation. Article titles and Details open one addressed reader; the publisher link is separate and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Method libraries lead to configuration, existing versioned jobs and results. Refer to `docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
 
 ## Workflow correction adopted 2026-10-20
 

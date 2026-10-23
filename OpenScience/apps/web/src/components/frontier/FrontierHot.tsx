@@ -140,8 +140,10 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
       </div>
       {event.heat !== null && (
         <div className="w-16 shrink-0 sm:w-28">
-          <p className="flex h-control items-center justify-end gap-0.5">
+          {/* 「405 热度」: the number with its unit, a typed space between them. */}
+          <p className="flex h-control items-baseline justify-end gap-1">
             <span className="text-title font-semibold tabular-nums text-text">{event.heat}</span>
+            <span className="sr-only"> </span>
             <span className="text-caption text-text-3">热度</span>
           </p>
           <div className="flex h-7 justify-end max-sm:hidden"><Sparkline points={event.trend} /></div>

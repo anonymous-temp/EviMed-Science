@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
 import { FrontierCard } from "./FrontierCard";
@@ -33,7 +33,8 @@ function renderCard(item = frontierItem(), props: Partial<Parameters<typeof Fron
   return handlers;
 }
 
-const scored = (overrides: Record<string, unknown> = {}) => frontierItem({ score: 86, scoreBand: "high", ...overrides });
+const PARTS = { authority: 27, impact: 25, novelty: 18, relevance: 16 };
+const scored = (overrides: Record<string, unknown> = {}) => frontierItem({ score: 86, scoreBand: "high", scoreParts: PARTS, ...overrides });
 
 beforeEach(() => {
   client.fetchFrontierAbstractZh.mockReset();
@@ -56,58 +57,110 @@ describe("a card of the platform's own content", () => {
 });
 
 describe("a card", () => {
-  it("says who said it, how hard the evidence is, and what it says, under a title that is the row's one title", () => {
-    renderCard(scored({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }], alsoReportedCount: 3,
-      entities: { drugs: [], trials: [], orgs: [], diseases: ["高胆固醇血症"] } }));
+  const tagged = (overrides: Record<string, unknown> = {}) => scored({
+    tags: [{ slug: "hypercholesterolemia", name: "高胆固醇血症" }, { slug: "pcsk9", name: "PCSK9 抑制剂" }, { slug: "mace", name: "心血管事件" }, { slug: "fourth", name: "第四个" }],
+    ...overrides,
+  });
+
+  it("says who said it, what it is, and what it says, under a title that is the row's one title, in the brand's deep ink", () => {
+    renderCard(tagged({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }], alsoReportedCount: 3 }));
     const card = screen.getByRole("article", { name: "口服 PCSK9 抑制剂降低主要心血管事件" });
     const title = within(card).getByRole("heading", { level: 3 });
     expect(title).toHaveAttribute("data-row-title");
-    expect(within(title).getByRole("link")).toHaveClass("text-text");
-    for (const text of ["NEJM", "RCT", "多中心双盲试验纳入 12000 例患者。", "另有 3 家报道 ›", "#心血管", "#高胆固醇血症"]) {
+    expect(within(title).getByRole("link")).toHaveClass("text-title-ink", "group-hover:text-accent");
+    for (const text of ["NEJM", "RCT", "多中心双盲试验纳入 12000 例患者。", "另有 3 家报道 ›", "#高胆固醇血症", "#PCSK9 抑制剂", "#心血管事件"]) {
       expect(card).toHaveTextContent(text);
     }
+    // Three of its tags at most; the specialties are not tags.
+    expect(card).not.toHaveTextContent("#第四个");
+    expect(card).not.toHaveTextContent("#心血管 ");
     expect(within(card).getByText("RCT")).toHaveClass("rounded-tag");
   });
 
-  it("carries none of what the plan took off it", () => {
+  it("says the lane in the eyebrow where it is not a paper", () => {
+    renderCard(scored({ evidenceType: null, evidenceTypeLabel: null, lane: "regulatory", laneLabel: "审批监管" }));
+    expect(within(screen.getByRole("article")).getByText("审批监管")).toHaveClass("rounded-tag");
+  });
+
+  it("carries none of what the plan took off it, and no 展开摘要 or 详情", () => {
     renderCard(scored({ facts: { journal: "The New England Journal of Medicine", impact_factor: 78.5, authors_short: "Ray KK, et al." } }));
     const card = screen.getByRole("article");
     // The reason box, the two folds, the original title, the facts line, the source type and the 精选 chip.
     for (const gone of ["为什么值得看", "首个口服 PCSK9 抑制剂的硬终点证据。", "为什么入选", "评估与核对", "因为你在做",
-      "Oral PCSK9 Inhibition and Cardiovascular Outcomes", "影响因子", "Ray KK", "期刊", "精选", "来源权威"]) {
+      "Oral PCSK9 Inhibition and Cardiovascular Outcomes", "影响因子", "Ray KK", "期刊", "精选", "来源权威", "展开摘要", "收起摘要", "详情", "编辑评分"]) {
       expect(card).not.toHaveTextContent(gone);
     }
-    // No dimension's number either; only the total, 86.
-    for (const score of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(score);
+    // The summary is cut by its lines, two on a phone and three from 640 px: there is nothing to expand.
+    expect(within(card).getByText("多中心双盲试验纳入 12000 例患者。")).toHaveClass("line-clamp-2", "sm:line-clamp-3");
   });
 
-  it("puts the editorial score at the top right, a grey number after a dot in its band's colour, and names it for assistive technology", () => {
+  it("puts 「AI 评分」 at the right of the meta row as a pill with its name and its number, in its tier's ground", () => {
     renderCard(scored());
-    // Review L-9: a dot and a number with no name of their own. The visible number stays a bare number; what it is is its name.
-    const score = screen.getByRole("img", { name: "编辑评分 86" });
-    expect(score).toHaveAccessibleDescription("编辑评分 · 满分 100");
-    expect(score).toHaveTextContent(/^86$/);
-    expect(score).toHaveClass("tabular-nums", "text-text-3");
-    expect(score.querySelector("[data-band]")).toHaveClass("bg-accent");
+    const pill = within(screen.getByRole("article")).getByRole("button", { name: "AI 评分 86，查看构成" });
+    expect(pill).toHaveTextContent(/^AI 评分\s*86$/);
+    expect(pill).toHaveAttribute("data-score", "high");
+    expect(pill).toHaveClass("bg-accent", "text-accent-fg");
+    // ☆ and ⋯ follow it on the same row; a card with no tags and no other reports has no footer line for them.
+    const row = pill.closest("div.ml-auto");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+  });
+
+  it("draws no footer line when there is nothing for it", () => {
+    renderCard(scored({ tags: [], alsoReportedCount: 0, alsoReportedBy: [] }));
+    const card = screen.getByRole("article");
+    expect(within(card).queryByText(/^#/)).not.toBeInTheDocument();
+    expect(card.querySelectorAll(":scope > div")).toHaveLength(2);
   });
 
   it.each([
-    ["medium", 68, "bg-text-2"],
-    ["low", 42, "bg-text-3"],
-  ])("dots a %s score in its own grey", (band, value, dot) => {
-    renderCard(scored({ score: value, scoreBand: band }));
-    expect(screen.getByRole("img", { name: `编辑评分 ${value}` }).querySelector("[data-band]")).toHaveClass(dot);
+    ["medium", 74, "bg-accent-soft"],
+    ["low", 52, "bg-surface-3"],
+  ])("draws a %s score in its own ground", (band, value, ground) => {
+    renderCard(scored({ score: value, scoreBand: band, scoreParts: { authority: 20, impact: 20, novelty: (value - 40) / 2, relevance: (value - 40) / 2 } }));
+    expect(screen.getByRole("button", { name: `AI 评分 ${value}，查看构成` })).toHaveClass(ground);
+  });
+
+  it("is a label and not a control where the server sent no parts", () => {
+    renderCard(scored({ scoreParts: null }));
+    const card = screen.getByRole("article");
+    expect(within(card).queryByRole("button", { name: /AI 评分/ })).not.toBeInTheDocument();
+    expect(card.querySelector("[data-score='high']")).toHaveTextContent(/^AI 评分\s*86$/);
+  });
+
+  it("opens the score's four parts on keyboard focus, with what it measures, and never a dimension elsewhere", async () => {
+    renderCard(scored({ scoreParts: { authority: 27, impact: 25, novelty: 18, relevance: 16 } }));
+    const card = screen.getByRole("article");
+    // Closed, no part's number is on the card.
+    for (const part of ["27/30", "25/30", "18/20", "16/20"]) expect(card.textContent).not.toContain(part);
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "AI 评分 86，查看构成" })).toHaveFocus();
+    const breakdown = await screen.findByRole("dialog", { name: "AI 评分构成" });
+    expect(breakdown).toHaveTextContent("实践影响25/30权威性27/30新颖性18/20国内相关性16/20");
+    expect(breakdown).toHaveTextContent("衡量对临床和科研读者的重要程度，不代表证据等级");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "AI 评分构成" })).not.toBeInTheDocument();
+  });
+
+  it("opens the parts on a tap too, and the press does not open the article", async () => {
+    renderCard(scored({ scoreParts: { authority: 27, impact: 25, novelty: 18, relevance: 16 } }));
+    await userEvent.pointer({ keys: "[TouchA]", target: screen.getByRole("button", { name: "AI 评分 86，查看构成" }) });
+    expect(await screen.findByRole("dialog", { name: "AI 评分构成" })).toBeInTheDocument();
+    expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
   it("scores no safety notice, and says 安全警示 first", () => {
     renderCard(frontierItem({ score: 90, scoreBand: "high", safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告",
       sourceType: "regulator", sourceTypeLabel: "监管", source: { id: "fda-recalls", name: "FDA" } }));
     const card = screen.getByRole("article");
-    expect(screen.queryByRole("img", { name: /编辑评分/ })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /AI 评分/ })).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent("AI 评分");
     expect(card.textContent?.indexOf("安全警示")).toBe(0);
     expect(within(card).getByText("安全警示")).toHaveClass("bg-danger-soft");
-    // The safety tag already says what the evidence type would.
+    // The safety tag already says what the evidence type would, and the lane.
     expect(card).not.toHaveTextContent("安全通告");
+    expect(card).not.toHaveTextContent("药物安全");
   });
 
   it("steps a read card's title down to the secondary colour", () => {
@@ -122,12 +175,25 @@ describe("a card", () => {
     expect(screen.queryByText(/无摘要/)).not.toBeInTheDocument();
   });
 
-  it("puts the time in its own column with a dot, teal for 精选, and says 精选 where not every item is", () => {
-    renderCard(frontierItem({ timelineAt: new Date(2026, 8, 22, 9, 5).toISOString() }), { markSelected: true });
+  it("in a day group, puts the clock in its own column with a dot, the accent for 精选, and says 精选 where not every item is", () => {
+    renderCard(frontierItem({ timelineAt: new Date(2026, 8, 22, 9, 5).toISOString() }), { markSelected: true, grouped: true });
     const item = screen.getByRole("listitem");
-    expect(within(item).getByText("09:05")).toHaveClass("tabular-nums");
-    expect(item.querySelector(".bg-accent")).not.toBeNull();
+    const column = item.querySelector(".w-14");
+    expect(within(column as HTMLElement).getByText("09:05")).toHaveClass("tabular-nums");
+    expect(column?.querySelector(".bg-accent")).not.toBeNull();
+    expect(column).toHaveClass("hidden", "sm:flex");
+    // On a phone the column is not drawn and the clock joins the source line.
+    const line = within(within(item).getByRole("article")).getAllByText("09:05").find((node) => node.closest(".sm\\:hidden"));
+    expect(line).toBeDefined();
     expect(within(item).getByText("精选")).toHaveClass("sr-only");
+  });
+
+  it("in a list not cut into days, has no time column and says the date in its meta row after the source", () => {
+    renderCard(frontierItem({ timelineAt: new Date(2026, 9, 20, 9, 5).toISOString(), source: { id: "annonc", name: "肿瘤学年鉴" } }));
+    const item = screen.getByRole("listitem");
+    expect(item.querySelector(".w-14")).toBeNull();
+    expect(within(item).getByRole("article")).toHaveTextContent("肿瘤学年鉴 · 10月20日");
+    expect(within(item).getByText("10月20日").tagName).toBe("TIME");
   });
 });
 
@@ -139,32 +205,41 @@ describe("its actions", () => {
     expect(star).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(star);
     expect(handlers.onStar).toHaveBeenCalledWith(item);
+    expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
-  it("shows its star, 深入研究 and 「⋯」 without a pointer over it, and no second 原文 control", () => {
+  it("shows its star and 「⋯」 without a pointer over it, no 深入研究 button, and no second link to the article or the original", () => {
     renderCard();
     const card = screen.getByRole("article");
-    for (const name of ["收藏", "深入研究", "更多操作"]) {
+    for (const name of ["收藏", "更多操作"]) {
       let node: HTMLElement | null = within(card).getByRole("button", { name });
       for (; node && node !== card; node = node.parentElement) expect(node.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
     }
+    expect(within(card).queryByRole("button", { name: "深入研究" })).not.toBeInTheDocument();
     expect(within(card).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("opens its addressed reader from the title and records the reading", async () => {
+  it("is one link to its addressed reader, stretched over the whole card, which records the reading", async () => {
     const item = frontierItem();
     const handlers = renderCard(item);
     const original = within(screen.getByRole("heading", { level: 3 })).getByRole("link", { name: item.title });
     expect(original).toHaveAttribute("href", `/app/frontier/items/${encodeURIComponent(item.id)}`);
     expect(original).not.toHaveAttribute("target");
+    // The link's box covers the card (`after:inset-0` in the card's `relative` box); what sits above it presses on its own.
+    expect(original).toHaveClass("after:absolute", "after:inset-0");
+    expect(screen.getByRole("article")).toHaveClass("relative", "hover:bg-surface-2");
+    expect(screen.getByRole("button", { name: "收藏" }).closest(".z-sticky")).not.toBeNull();
     await userEvent.click(original);
     expect(handlers.onOpened).toHaveBeenCalledWith(item);
+    expect(await screen.findByTestId("probe")).toHaveTextContent(`/app/frontier/items/${item.id}`);
   });
 
-  it("opens a new conversation with the draft in the composer at once, and sends nothing", async () => {
+  it("has 深入研究 first in 「⋯」: a new conversation with the draft in the composer at once, and nothing sent", async () => {
     renderCard();
-    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const entries = await screen.findAllByRole("menuitem");
+    expect(entries[0]).toHaveTextContent("深入研究");
+    await userEvent.click(entries[0]);
     const probe = await screen.findByTestId("probe");
     expect(probe.textContent?.startsWith("/app/chat|create|这项研究可靠吗？")).toBe(true);
     expect(probe).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
@@ -176,7 +251,9 @@ describe("its actions", () => {
     const item = frontierItem();
     const handlers = renderCard(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    expect((await screen.findAllByRole("menuitem")).map((entry) => entry.textContent)).toEqual(expect.arrayContaining(["详情", "存入知识库", "复制为 Markdown", "不感兴趣", `关注 ${item.source.name}`, `屏蔽 ${item.source.name}`]));
+    const entries = (await screen.findAllByRole("menuitem")).map((entry) => entry.textContent);
+    expect(entries).toEqual(expect.arrayContaining(["深入研究", "存入知识库", "复制为 Markdown", "不感兴趣", `关注 ${item.source.name}`, `屏蔽 ${item.source.name}`]));
+    expect(entries).not.toContain("详情");
     await userEvent.click(screen.getByRole("menuitem", { name: "存入知识库" }));
     expect(handlers.onSave).toHaveBeenCalledWith(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
@@ -210,70 +287,17 @@ describe("its actions", () => {
     open.mockRestore();
   });
 
-  it("narrows the feed by a #tag: a specialty filters, a disease searches", async () => {
-    const handlers = renderCard(frontierItem({ entities: { drugs: [], trials: [], orgs: [], diseases: ["高胆固醇血症"] } }));
-    await userEvent.click(screen.getByRole("button", { name: "#心血管" }));
-    expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "specialty", key: "cardiology", label: "心血管" });
-    await userEvent.click(screen.getByRole("button", { name: "#高胆固醇血症" }));
-    expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "term", key: "高胆固醇血症", label: "高胆固醇血症" });
-  });
-});
-
-describe("the card's footer", () => {
-  // jsdom lays nothing out: a summary is cut where the test says its text overflows.
-  const spies: Array<{ mockRestore: () => void }> = [];
-  const cutAt = (overflowing: boolean) => {
-    spies.push(vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(overflowing ? 120 : 60));
-    spies.push(vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(60));
-  };
-  afterEach(() => { spies.splice(0).forEach((spy) => spy.mockRestore()); });
-  /** An item the drawer would add nothing to: a newsroom's report, in the reader's own language, with no abstract or facts. */
-  const plain = (overrides: Record<string, unknown> = {}) => frontierItem({ sourceType: "media", titleZh: null, doi: null, pmid: null, facts: {}, openAccess: null, ...overrides });
-
-  it("offers 「展开摘要」 only where the summary is really cut, and 「收起摘要」 once it is open", async () => {
-    cutAt(true);
-    const handlers = renderCard(plain(), { expanded: false, onExpand: vi.fn() });
-    expect(screen.getByRole("button", { name: "展开摘要" })).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(screen.getByRole("button", { name: "展开摘要" }));
-    expect(handlers.onStar).not.toHaveBeenCalled();
+  it("narrows the feed by one of its tags, and a tag never opens the item", async () => {
+    const handlers = renderCard(frontierItem({ tags: [{ slug: "hcc", name: "肝细胞癌" }] }));
+    await userEvent.click(screen.getByRole("button", { name: "#肝细胞癌" }));
+    expect(handlers.onTag).toHaveBeenLastCalledWith({ slug: "hcc", name: "肝细胞癌" });
+    expect(handlers.onOpened).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
   });
 
-  it("has no 「展开摘要」 for a summary that fits, but keeps 「收起摘要」 for one that was opened", () => {
-    cutAt(false);
-    const { unmount } = render(<MemoryRouter><ul><FrontierCard item={plain()} onExpand={vi.fn()} onStar={vi.fn()} onHide={vi.fn()} /></ul></MemoryRouter>);
-    expect(screen.queryByRole("button", { name: "展开摘要" })).not.toBeInTheDocument();
-    unmount();
-    render(<MemoryRouter><ul><FrontierCard item={plain()} expanded onExpand={vi.fn()} onStar={vi.fn()} onHide={vi.fn()} /></ul></MemoryRouter>);
-    expect(screen.getByRole("button", { name: "收起摘要" })).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("says 「详情」 only where the drawer holds something the card does not, and never 「阅读详情」", () => {
-    renderCard(plain());
-    const card = screen.getByRole("article");
-    expect(within(card).getByRole("button", { name: "详情" })).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "阅读详情" })).not.toBeInTheDocument();
-    // What it still shows: the star, 「深入研究」 and 「⋯」 (and the details in 「⋯ › 详情」, below).
-    expect(within(card).getByRole("button", { name: "收藏" })).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "更多操作" })).toBeInTheDocument();
-  });
-
-  it.each([
-    ["a paper, which may have an abstract", { sourceType: "journal" }],
-    ["facts the card left out", { facts: { journal: "NEJM", impact_factor: 78.5 } }],
-    ["an original title behind a translated one", { titleRaw: "Original title", titleZh: "译名" }],
-    ["a free full text", { openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }],
-  ])("offers 「详情」 for %s", async (_name, overrides) => {
-    renderCard(plain(overrides));
-    await userEvent.click(within(screen.getByRole("article")).getByRole("button", { name: "详情" }));
-    expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/items/");
-  });
-
-  it("keeps the details reachable from 「⋯」 for the item that shows no button", async () => {
-    renderCard(plain());
-    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "详情" }));
-    expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/items/");
+  it("links a tag to 全部 with it where the page does not narrow in place", () => {
+    render(<MemoryRouter><ul><FrontierCard item={frontierItem({ tags: [{ slug: "hcc", name: "肝细胞癌" }] })} onStar={vi.fn()} onHide={vi.fn()} /></ul></MemoryRouter>);
+    expect(screen.getByRole("link", { name: "#肝细胞癌" })).toHaveAttribute("href", "/app/frontier?view=all&tag=hcc");
   });
 });
 

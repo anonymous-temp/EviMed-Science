@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 2.1.4 — the light theme: every role resolved to a value. One Figma mode.",
+  "$description": "EviMed 2.2.0 — the light theme: every role resolved to a value. One Figma mode.",
   "role": {
     "bg": {
       "$type": "color",
@@ -173,6 +173,20 @@
         "hex": "#5f686f"
       },
       "$description": "5.48 on the page, 5.29 on the sidebar — nothing lighter carries text"
+    },
+    "title-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.0549,
+          0.1882,
+          0.3725
+        ],
+        "alpha": 1,
+        "hex": "#0e305f"
+      },
+      "$description": "12.62 on the page, 11.43 on a hovered row"
     },
     "text-graphic": {
       "$type": "color",

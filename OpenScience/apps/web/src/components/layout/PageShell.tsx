@@ -69,7 +69,11 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  *    toolbar passes `toolbar={null}` for the tabs without one: the row keeps its
  *    44 px, and the band does not jump. Omitted (`undefined`) means no tab of
  *    the page has a toolbar, and no row is reserved;
- *  - `headline` (`HeadlineProps`) — the one sentence over a data page's body.
+ *  - `headline` (`HeadlineProps`) — the one sentence over a data page's body;
+ *  - `eyebrow` — a reading page's line over its title (who published the article, when);
+ *  - `aside` — a reading page's right column (the frontier reader's actions, 推荐理由, 专科, 标签 and contents, 2026-10-23): from
+ *    `lg` a sticky column of 15.5 rem beside everything from the way back down, its top on the back row; below `lg` it follows the
+ *    body. The title, the eyebrow and the text share the left column's edge.
  *
  * The band is sticky at `top-0` of the page's scroll container, covers the
  * gutters (`-mx-4 px-4 md:-mx-6 md:px-6`) so content does not show at its sides,
@@ -168,6 +172,12 @@ export interface PageShellProps<V extends string = string> {
   toolbar?: ToolbarProps | null;
   /** The one sentence over a data page's body. */
   headline?: HeadlineProps;
+  /** A reading page's line over its title. */
+  eyebrow?: ReactNode;
+  /** A reading page's right column, sticky beside the page from `lg`. */
+  aside?: ReactNode;
+  /** The right column's accessible name. */
+  asideLabel?: string;
   children: ReactNode;
 }
 
@@ -190,6 +200,9 @@ export function PageShell<V extends string = string>({
   tabs,
   toolbar,
   headline,
+  eyebrow,
+  aside,
+  asideLabel,
   children,
 }: PageShellProps<V>) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -231,53 +244,66 @@ export function PageShell<V extends string = string>({
     console.warn("PageShell: a page has one view-switch row — `tabs` and `toolbar.views` are both set.");
   }
 
-  // The tab list's own hairline closes the band when it is the last row; otherwise the band draws one once it is stuck.
-  const lastRowRuled = toolbar ? Boolean(toolbar.views) : toolbar === null ? false : Boolean(tabs);
+  // The tab list's own hairline closes the band when it is the last row; otherwise the band draws one once it is stuck. A toolbar whose
+  // controls stand under its views has a row under the tab list.
+  const lastRowRuled = toolbar ? Boolean(toolbar.views) && !toolbar.controlsBelow : toolbar === null ? false : Boolean(tabs);
   const panel = tabs ?? toolbar?.views;
+
+  const page = (
+    <>
+      {back && <div className="mb-2">{back}</div>}
+      {eyebrow && <div className="mb-2">{eyebrow}</div>}
+      <PageHeader
+        title={title}
+        meta={meta}
+        actions={actions}
+        scope={scope && <ScopeMenu {...scope} />}
+        titleVariant={titleVariant}
+        documentTitle={documentTitle}
+      />
+      {hasBand && (
+        <div
+          ref={band}
+          data-page-chrome=""
+          data-stuck={stuck ? "" : undefined}
+          className={cn(
+            "sticky top-0 z-sticky -mx-4 bg-bg px-4 md:-mx-6 md:px-6",
+            // The hairline is as wide as the content, not the band: it is drawn only once the header has gone from over it.
+            !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
+          )}
+        >
+          {steps && <StepRail {...steps} />}
+          {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
+          {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
+          {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
+          {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} inBand /></div>}
+        </div>
+      )}
+      {headline && <Headline {...headline} className={cn("mt-4", headline.className)} />}
+      <div
+        data-page-body=""
+        id={panel?.panelId}
+        role={panel?.panelId ? "tabpanel" : undefined}
+        aria-labelledby={panel?.panelId ? `${panel.panelId}-tab-${panel.value}` : undefined}
+        className={cn("mt-6", contentClassName)}
+      >
+        {children}
+      </div>
+    </>
+  );
 
   return (
     // `scroll-pt`: an anchor, a `scrollIntoView` and the browser's scroll to a focused control all stop below the band, not under it.
     <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", className)}>
       {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
           the header and the body cannot disagree about where the left edge is. */}
-      <div className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width])}>
-        {back && <div className="mb-2">{back}</div>}
-        <PageHeader
-          title={title}
-          meta={meta}
-          actions={actions}
-          scope={scope && <ScopeMenu {...scope} />}
-          titleVariant={titleVariant}
-          documentTitle={documentTitle}
-        />
-        {hasBand && (
-          <div
-            ref={band}
-            data-page-chrome=""
-            data-stuck={stuck ? "" : undefined}
-            className={cn(
-              "sticky top-0 z-sticky -mx-4 bg-bg px-4 md:-mx-6 md:px-6",
-              // The hairline is as wide as the content, not the band: it is drawn only once the header has gone from over it.
-              !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
-            )}
-          >
-            {steps && <StepRail {...steps} />}
-            {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
-            {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}
-            {toolbar === null && <div aria-hidden="true" className={TOOLBAR_ROW} />}
-            {toolbar && <div className={toolbar.views ? undefined : cn(TOOLBAR_ROW, "py-2")}><Toolbar {...toolbar} inBand /></div>}
-          </div>
-        )}
-        {headline && <Headline {...headline} className={cn("mt-4", headline.className)} />}
-        <div
-          data-page-body=""
-          id={panel?.panelId}
-          role={panel?.panelId ? "tabpanel" : undefined}
-          aria-labelledby={panel?.panelId ? `${panel.panelId}-tab-${panel.value}` : undefined}
-          className={cn("mt-6", contentClassName)}
-        >
-          {children}
-        </div>
+      <div className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
+        {aside != null ? (
+          <>
+            <div className="min-w-0">{page}</div>
+            <aside aria-label={asideLabel} className="mt-10 min-w-0 lg:sticky lg:top-6 lg:mt-0 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto">{aside}</aside>
+          </>
+        ) : page}
       </div>
     </div>
   );

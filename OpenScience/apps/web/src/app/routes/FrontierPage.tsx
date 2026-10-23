@@ -13,7 +13,6 @@ import {
   frontierErrorMessage,
   FRONTIER_LANES,
   FRONTIER_FOLLOWS_CHANGED,
-  FRONTIER_SPECIALTIES,
   FRONTIER_WINDOWS,
   hideFrontierItem,
   listFrontierItems,
@@ -29,6 +28,7 @@ import {
   type FrontierItemState,
   type FrontierItemsQuery,
   type FrontierStatus,
+  type FrontierTagRef,
   type FrontierWindow,
 } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
@@ -37,7 +37,8 @@ import { frontierToolbar, type PageView } from "@/components/frontier/FrontierCo
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
-import { readChannel, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import { NO_FILTERS, readChannel, readEvidence, readSpecialties, readTag, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import { rememberTagName, useHotTags, useTagFollow, useTagName, useTagSuggestions } from "@/components/frontier/useFrontierTags";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
@@ -47,11 +48,13 @@ import { SourcesLink } from "@/components/frontier/SourcesList";
 import { FollowingView, followControls, useFollowing } from "@/components/frontier/FollowingView";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { Drawer } from "@/components/ui/Drawer";
-import type { CardTag } from "@/components/frontier/frontierText";
 import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryControls, type ZoneScope } from "@/components/frontier/EvidenceZoneDirectory";
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
 const STATUS_POLL_MS = 120_000;
+
+/** The views whose list the feed's filters narrow: a tag chosen anywhere else opens 全部 with it. */
+const FEED_VIEWS: ReadonlySet<PageView> = new Set(["selected", "all", "following"]);
 
 /** The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did. */
 function readView(value: string | null): PageView {
@@ -81,10 +84,12 @@ function readDay(value: string | null): string | null {
  * Hidden knowledge:
  *
  *  - Everything that describes the reader's position lives in the URL
- *    (`?view=&q=&channel=&lane=&specialty=&window=&starred=&sort=&day=&scope=`), so a
+ *    (`?view=&q=&lane=&specialty=a,b&tag=&channel=&evidence=&window=&starred=1&unread=1&sort=&day=&scope=`), so a
  *    notification's link (`?view=daily&day=…`), Back and a shared address all
  *    land on the same screen. `window` is the 全部 view's time range there and
- *    the 热榜's ranking (`week`, `month`) here; a view change clears it.
+ *    the 热榜's ranking (`week`, `month`) here; a view change clears it. An older
+ *    link's single `specialty=` still reads, and a retired specialty reads as its
+ *    successor (`readSpecialties`).
  *  - Searching widens to 全部 (plan §4.2); the dot marks which results are
  *    精选, and the view the reader searched from comes back when the box is
  *    cleared.
@@ -116,6 +121,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const location = useLocation();
   const restore = useRef(readFrontierPosition((location.state as { frontierReading?: unknown } | null)?.frontierReading));
   const pages = useRef(1);
+  // What a digest (日报, 周报) has opened of itself, kept for the way back.
   const [expanded, setExpanded] = useState<string[]>(restore.current?.query === params.toString() ? restore.current.expanded ?? [] : []);
   const pageRoot = useRef<HTMLDivElement>(null);
   const restoreObserver = useRef<ResizeObserver | null>(null);
@@ -132,8 +138,12 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const q = (params.get("q") ?? "").trim();
   const channel = readChannel(params.get("channel"));
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
-  const specialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
+  const specialtyParam = params.get("specialty");
+  const specialties = useMemo(() => readSpecialties(specialtyParam), [specialtyParam]);
+  const tag = readTag(params.get("tag"));
+  const evidence = readEvidence(params.get("evidence"));
   const starred = params.get("starred") === "1";
+  const unread = params.get("unread") === "1";
   const windowFilter = view === "all" ? readWindow(params.get("window")) : "";
   const hotWindowParam = params.get("window");
   const hotWindow: FrontierHotWindow = view === "hot" && isHotWindow(hotWindowParam) ? hotWindowParam : "current";
@@ -141,19 +151,22 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const day = readDay(params.get("day"));
   const zoneScope = readZoneScope(params.get("scope"));
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
-  const filtered = Boolean(channel || lane || specialty || starred || windowFilter || (follow && follow !== "all"));
+  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (follow && follow !== "all"));
 
   const query = useMemo<FrontierItemsQuery>(() => ({
     view: view === "all" || view === "following" ? "all" : "selected",
     follow,
     channel: channel || null,
     lane: lane || null,
-    specialty: specialty || null,
+    specialties,
+    tag: tag || null,
+    evidence: evidence || null,
     window: windowFilter || null,
     q: q || null,
     starred,
+    unread,
     ...(byTime ? { sort: "time" as const } : {}),
-  }), [view, follow, channel, lane, specialty, windowFilter, q, starred, byTime]);
+  }), [view, follow, channel, lane, specialties, tag, evidence, windowFilter, q, starred, unread, byTime]);
   const key = JSON.stringify(query);
 
   /* ------------------------------------------------------------- status */
@@ -549,8 +562,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     };
     assign("channel", change.channel);
     assign("lane", change.lane);
-    assign("specialty", change.specialty);
+    if (change.specialties !== undefined) assign("specialty", change.specialties.join(","));
+    assign("tag", change.tag);
+    assign("evidence", change.evidence);
     assign("starred", change.starred);
+    assign("unread", change.unread);
     assign("window", change.window);
     if (change.byTime !== undefined) {
       if (change.byTime) updated.set("sort", "time"); else updated.delete("sort");
@@ -571,40 +587,67 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     setParams(updated);
   };
 
-  // A #tag narrows the feed: a specialty is a filter, a disease is a search.
-  const onTag = (tag: CardTag) => {
-    if (tag.kind === "specialty") setFilters({ specialty: tag.key });
-    else setDraft(tag.label);
+  /**
+   * A #tag — a card's, a suggestion's — narrows the feed to it, and only that (it never opens the item): in a feed view the tag joins
+   * its filters; anywhere else (与我相关, a search) it opens 全部 with it. The search lets go, and the view it began in comes back.
+   */
+  const chooseTag = (chosen: FrontierTagRef) => {
+    rememberTagName(chosen.slug, chosen.name);
+    const updated = new URLSearchParams(params);
+    const origin = searchOrigin.current;
+    searchOrigin.current = null;
+    const target: PageView = q ? (origin && FEED_VIEWS.has(origin) ? origin : "all") : FEED_VIEWS.has(view) ? view : "all";
+    for (const name of ["q", "sort", "day", "week", "item", "scope", "request"]) updated.delete(name);
+    if (target === "selected") updated.delete("view"); else updated.set("view", target);
+    if (target !== "all") updated.delete("window");
+    if (target !== "following") updated.delete("follow");
+    updated.set("tag", chosen.slug);
+    setDraft("");
+    setParams(updated, { replace: target === view });
   };
+  // A tag merged into another reads as that one: the address follows it.
+  const onTagMerged = useCallback((slug: string) => setParams((current) => {
+    const updated = new URLSearchParams(current);
+    updated.set("tag", slug);
+    return updated;
+  }, { replace: true }), [setParams]);
+  const tagName = useTagName(tag, onTagMerged);
+  const tagFollow = useTagFollow(tag, tagName);
+  const hotTags = useHotTags(FEED_VIEWS.has(view) ? specialties : []);
+  const suggestions = useTagSuggestions(draft, ready && view !== "zones" && !composing.current);
+
+  /** What the box holds, as the address's search: at once on Enter, a moment after the typing stops otherwise. */
+  const commitSearch = useCallback((raw: string) => {
+    const text = raw.trim().slice(0, 200);
+    if (text === q) return;
+    const updated = new URLSearchParams(params);
+    if (view === "zones") {
+      // The zones' own search: it stays in 证据专区.
+      if (text) updated.set("q", text); else updated.delete("q");
+    } else if (text) {
+      if (!q) searchOrigin.current = view;
+      updated.set("q", text);
+      updated.set("view", "all");
+      updated.delete("day");
+    } else {
+      updated.delete("q");
+      updated.delete("sort");
+      const origin = searchOrigin.current;
+      searchOrigin.current = null;
+      if (origin && origin !== "all") {
+        if (origin === "selected") updated.delete("view"); else updated.set("view", origin);
+        updated.delete("window");
+      }
+    }
+    setParams(updated, { replace: true });
+  }, [params, q, setParams, view]);
 
   useEffect(() => { setDraft(q); }, [q]);
   useEffect(() => {
-    const text = draft.trim().slice(0, 200);
-    if (composing.current || text === q) return;
-    const timer = setTimeout(() => {
-      const updated = new URLSearchParams(params);
-      if (view === "zones") {
-        // The zones' own search: it stays in 证据专区.
-        if (text) updated.set("q", text); else updated.delete("q");
-      } else if (text) {
-        if (!q) searchOrigin.current = view;
-        updated.set("q", text);
-        updated.set("view", "all");
-        updated.delete("day");
-      } else {
-        updated.delete("q");
-        updated.delete("sort");
-        const origin = searchOrigin.current;
-        searchOrigin.current = null;
-        if (origin && origin !== "all") {
-          if (origin === "selected") updated.delete("view"); else updated.set("view", origin);
-          updated.delete("window");
-        }
-      }
-      setParams(updated, { replace: true });
-    }, 300);
+    if (composing.current || draft.trim().slice(0, 200) === q) return;
+    const timer = setTimeout(() => commitSearch(draft), 300);
     return () => clearTimeout(timer);
-  }, [draft, composed, q, params, setParams, view]);
+  }, [draft, composed, q, commitSearch]);
 
   useEffect(() => {
     const position = restore.current;
@@ -647,17 +690,16 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       key={item.id}
       item={item}
       grouped={grouped}
-      expanded={expanded.includes(item.id)}
-      onExpand={() => setExpanded((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
       markSelected={view !== "selected"}
       onStar={(target) => void toggleStar(target)}
       onHide={hide}
       onSave={saveOffered ? (target) => void save(target) : undefined}
       saving={savingId === item.id}
       onOpened={opened}
-      onTag={onTag}
+      onTag={chooseTag}
     />
   );
+  const clearFilters = () => setFilters({ ...NO_FILTERS, byTime: false });
 
   const feed = (
     <FeedList
@@ -675,7 +717,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       onFresh={() => { if (fresh) { pages.current = 1; show(fresh.listing); scrollToListTop(); } }}
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
-      onClear={() => { setFilters({ channel: "", lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); }}
+      onClear={() => { clearFilters(); setDraft(""); }}
     />
   );
 
@@ -685,16 +727,28 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const toolbar = frontierToolbar({
     view,
     onView: setView,
-    filters: { channel, lane, specialty, starred, window: windowFilter, byTime },
+    filters: { channel, lane, specialties, tag, evidence, starred, unread, window: windowFilter, byTime },
     onFilters: setFilters,
     showWindow: view === "all",
     searching: Boolean(q),
+    tag: tag ? { slug: tag, name: tagName, followed: tagFollow.followed, following: tagFollow.following, onFollow: tagFollow.follow } : null,
+    hotTags,
     search: {
       label: "搜索",
       value: draft,
       maxLength: 200,
       onChange: setDraft,
       onClear: () => setDraft(""),
+      onSubmit: () => commitSearch(draft),
+      // Typing offers the tags whose name holds the words; choosing one narrows the feed to it, and Enter still searches the words.
+      suggestions: view === "zones" ? undefined : {
+        label: "标签建议",
+        items: suggestions.map((entry) => ({ value: entry.slug, label: `#${entry.name}` })),
+        onPick: (slug) => {
+          const picked = suggestions.find((entry) => entry.slug === slug);
+          if (picked) chooseTag(picked);
+        },
+      },
       inputProps: {
         onCompositionStart: () => { composing.current = true; },
         onCompositionEnd: (event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); },
@@ -717,7 +771,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
       onCreate: zones.canCreate ? () => zones.setCreating(!zones.creating) : null,
     },
-    onClear: () => { setFilters({ channel: "", lane: "", specialty: "", starred: false, window: "", byTime: false }); setDraft(""); },
+    onClear: () => { clearFilters(); setDraft(""); },
+    onReset: () => setFilters(NO_FILTERS),
   });
 
   const main = (() => {

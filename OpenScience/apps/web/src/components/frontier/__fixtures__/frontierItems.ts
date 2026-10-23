@@ -52,7 +52,7 @@ export function frontierItemDetail(overrides: Record<string, unknown> = {}): Fro
 
 const MEDIA = (letter: string) => letter.repeat(64);
 
-/** An X post with every block of the reader: author, pictures, a quoted post, the translation, topics, tags and its event's follow-ups. */
+/** An X post with every block of the reader: author, pictures, a quoted post, the translation, its score's parts, tags and its event's follow-ups. */
 export function rawXPost(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return rawFrontierItem({
     id: "x-post-0001",
@@ -86,8 +86,11 @@ export function rawXPost(overrides: Record<string, unknown> = {}): Record<string
       url: "https://x.com/arena/status/0",
     },
     metrics: { likes: 1200, reposts: 300, replies: 45, views: 98000 },
-    topics: [{ slug: "deepseek", name: "DeepSeek", group: "organisation" }, { slug: "ai-agents", name: "Agent 智能体", group: "genre" }, { slug: "benchmarks", name: "评测基准", group: "genre" }],
-    tags: ["评测/基准", "Agent", "DeepSeek"],
+    // The retired `topics` is still on this fixture: the reader must not draw it.
+    topics: [{ slug: "deepseek", name: "DeepSeek", group: "organisation" }, { slug: "ai-agents", name: "Agent 智能体", group: "genre" }],
+    specialties: [],
+    tags: [{ slug: "benchmarks", name: "评测/基准" }, { slug: "agent", name: "Agent" }, { slug: "deepseek", name: "DeepSeek" }],
+    scoreParts: { authority: 22, impact: 22, novelty: 16, relevance: 14 },
     sameEvent: null,
     followups: { eventId: "ev1", more: false, rows: [
       { itemId: "f-1", title: "DeepSeek V4.1 Flash 1017 发布，Artificial Analysis 智能指数得分 45 并列开源模型第二", sourceName: "Artificial Analysis", at: new Date(Date.now() - 2 * 86_400_000).toISOString(), relation: "follows" },
@@ -115,7 +118,7 @@ export function rawChineseNews(overrides: Record<string, unknown> = {}): Record<
     reason: null, score: 58, scoreBand: "low", selected: false,
     body: { zh: "国家药品监督管理局近日批准口服司美格鲁肽片上市。\n\n该药用于在饮食控制和运动基础上改善成人 2 型糖尿病患者的血糖控制。", original: null, zhKind: "original-zh", complete: true },
     media: [{ id: MEDIA("c"), width: 800, height: 600, alt: "药品包装" }],
-    topics: [{ slug: "endocrinology", name: "内分泌", group: "specialty" }],
+    specialties: [{ key: "endocrinology", label: "内分泌代谢" }],
     tags: [],
     followups: null,
     ...overrides,

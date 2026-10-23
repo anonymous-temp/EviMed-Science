@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "react-router";
-import { RefreshCw } from "lucide-react";
+import { ArrowUpRight, MessageSquareText, MoreHorizontal, RefreshCw, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
-  FRONTIER_SPECIALTIES,
   fetchFrontierAbstractZh,
   frontierErrorMessage,
   type FrontierBody,
@@ -14,30 +13,52 @@ import {
   type FrontierMedia,
   type FrontierPlatform,
   type FrontierQuoted,
-  type FrontierTopic,
 } from "@/lib/frontierClient";
 import { dayKey } from "@/lib/inboxGroups";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { filterChipClasses } from "@/components/ui/FilterChips";
+import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Note } from "@/components/ui/Note";
+import { Outline, type OutlineEntry } from "@/components/ui/Outline";
+import { ScoreBars, ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
 import { Toolbar } from "@/components/ui/Toolbar";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cardFacts } from "./frontierFacts";
 import { FrontierLightbox } from "./FrontierLightbox";
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { CARD_FLAG_KEYS, EXTERNAL, INLINE_ACTION, PLATFORM_LABELS, dateClock, evidenceTag, isSocialItem, shortDate, sinceText } from "./frontierText";
+import {
+  CARD_FLAG_KEYS,
+  EXTERNAL,
+  INLINE_ACTION,
+  PLATFORM_LABELS,
+  SCORE_LABEL,
+  dateClock,
+  evidenceTag,
+  isSocialItem,
+  originalLinkLabel,
+  sameAddress,
+  scoreBand,
+  scoreBreakdown,
+  shortDate,
+  shortUrl,
+  sinceText,
+  splitUrls,
+} from "./frontierText";
 
 /*
  * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
- * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 主题 and 标签, 事件后续; later that evening the
- * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supports one, and a full text with its sections).
- * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's: the serif title at 24 / 600, the 导读
- * and a full text's section headings at 18, the reading text at 16, the interface at 14 and every block's label at 12, all 400 — a
- * block is named by its colour and its rule, not a weight — and one 600 in the text, the run-in heading of a structured abstract's
- * paragraph (「Background:」), as a journal sets it.
+ * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 专科 and 标签, 事件后续; later that evening the
+ * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supports one, and a full text with its sections;
+ * 2026-10-23 the right column of actions and notes, a text that reads its addresses, lists and quotes, and a reading size).
+ * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's: the serif title at 24 / 600, the
+ * reading text at 16 below 1280 px and 18 from there (`text-reading` / `-lg`, line height 1.8), the 导读 and a full text's section
+ * headings a step above it (18 / 20), the interface at 14 and every block's label at 12, all 400 — a block is named by its colour and
+ * its rule, not a weight — and one 600 in the text, the run-in heading of a structured abstract's paragraph (「Background:」), as a
+ * journal sets it.
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -180,13 +201,13 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
 const AI_LABEL = "text-caption text-accent";
 
 /**
- * 「AI 导读」: one paragraph, answer first, set a size above the reading text (18, at the text's own 1.75) as AIHOT sets its lead — the
- * first thing read, and plainly not the article.
+ * 「AI 导读」: one paragraph, answer first, set a size above the reading text (18 below 1280 px, 20 from there, at 1.8) as AIHOT sets its
+ * lead — the first thing read, and plainly not the article.
  */
 export function ReaderLead({ text, className }: { text: string; className?: string }) {
   return (
     <Block label="AI 导读" labelClassName={AI_LABEL} className={className}>
-      <p className="max-w-measure-body whitespace-pre-line break-words text-section leading-8 text-text">{text}</p>
+      <p className="max-w-measure-body whitespace-pre-line break-words text-reading-lg text-text xl:max-w-read xl:text-reading-xl">{text}</p>
     </Block>
   );
 }
@@ -229,7 +250,7 @@ export function ReaderInsight({ insight, item, className }: { insight: FrontierI
   const cited = insight.refs.filter((ref) => parts.includes(ref));
   return (
     <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
-      <p className="max-w-measure-body whitespace-pre-line break-words text-body text-text">
+      <p className="max-w-measure-body whitespace-pre-line break-words text-reading text-text xl:max-w-read xl:text-reading-lg">
         {parts.map((part, index) => (typeof part === "string" ? part : (
           <sup key={index}>
             {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
@@ -262,10 +283,16 @@ const FOLD_AT = 3_000;
 const FOLDED_LENGTH = 1_800;
 
 /**
- * One paragraph of a text as the reader sets it: a section heading of a full text, or a paragraph — an abstract's with its own
- * heading run in at its start (`runIn`, 「Background:」 / 「背景：」).
+ * One block of a text as the reader sets it: a section heading of a full text; a paragraph — an abstract's with its own heading run in
+ * at its start (`runIn`, 「Background:」 / 「背景：」); a list (its lines all start 「1.」「1、」「•」「-」); a quotation (it starts 「> 」);
+ * or a source line — an address on a paragraph of its own and the short lines that name it, drawn as one small line.
  */
-export type ReaderParagraph = { kind: "heading"; text: string } | { kind: "paragraph"; runIn: string | null; text: string };
+export type ReaderParagraph =
+  | { kind: "heading"; text: string }
+  | { kind: "paragraph"; runIn: string | null; text: string }
+  | { kind: "list"; ordered: boolean; start: number; items: string[] }
+  | { kind: "quote"; text: string }
+  | { kind: "source"; words: string[]; url: string };
 
 /** A full text's section heading: a paragraph of its own written `## Heading` (rt-contract); nothing else starts so. */
 const SECTION = /^##[ \t]+(\S.*)$/;
@@ -276,58 +303,155 @@ const SECTION = /^##[ \t]+(\S.*)$/;
  */
 const RUN_IN = /^([^:：\n]{1,40}?)(:[ \t]+|：[ \t]*)(?=\S)/u;
 const SENTENCE_END = /[.。!?！？;；]/;
+/** A list's line: a number and 「.」 or 「、」 (not a decimal), or a bullet — and its words after. */
+const LIST_LINE = /^\s*(?:(\d{1,3})(?:[.．](?!\d)|[、)）])\s*|[•·▪●◦]\s*|[-*]\s+)(\S.*)$/u;
+/** A paragraph that is nothing but an address. */
+const ONLY_URL = /^https?:\/\/\S+$/;
+/** A line short enough to be a source's name or its lead-in (「（美国FDA网站）」「原文链接：」): a position-and-length rule, not a word list. */
+const SOURCE_WORDS_MAX = 30;
+const ANY_SENTENCE_END = /[。！？.!?]/;
 
-/** The text's paragraphs, split at blank lines; with `abstract`, each one's run-in heading found. */
-export function readerParagraphs(text: string, { abstract = false }: { abstract?: boolean } = {}): ReaderParagraph[] {
-  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).flatMap((part): ReaderParagraph[] => {
+/** Lines that are all of one list — all numbered or all bulleted — as that list; null otherwise. */
+function listOf(lines: readonly string[]): ReaderParagraph | null {
+  const listed = lines.map((line) => LIST_LINE.exec(line));
+  if (lines.length === 0 || !listed.every(Boolean)) return null;
+  const ordered = listed.every((match) => match![1] !== undefined);
+  if (!ordered && !listed.every((match) => match![1] === undefined)) return null;
+  return { kind: "list", ordered, start: ordered ? Number(listed[0]![1]) : 1, items: listed.map((match) => match![2].trim()) };
+}
+
+/** One paragraph, as its own shape: a quotation, a list (or the line that leads into one, then the list), or words. */
+function paragraphOf(part: string, abstract: boolean): ReaderParagraph[] {
+  const lines = part.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.every((line) => /^>\s?/.test(line))) {
+    return [{ kind: "quote", text: lines.map((line) => line.replace(/^>\s?/, "")).join("\n") }];
+  }
+  const list = listOf(lines);
+  if (list) return [list];
+  // 「本次发布实现了：」 and two or more items under it: the line, then the list.
+  const after = lines.length >= 3 ? listOf(lines.slice(1)) : null;
+  if (after && !LIST_LINE.test(lines[0])) return [{ kind: "paragraph", runIn: null, text: lines[0] }, after];
+  const runIn = abstract ? RUN_IN.exec(part) : null;
+  if (runIn && !SENTENCE_END.test(runIn[1])) {
+    const heading = runIn[1].trim();
+    return [{ kind: "paragraph", runIn: `${heading}${runIn[2].trim()}`, text: `${runIn[2].startsWith(":") ? " " : ""}${part.slice(runIn[0].length)}` }];
+  }
+  return [{ kind: "paragraph", runIn: null, text: part }];
+}
+
+/** A short paragraph that may name the address after it: plain words, at most 30 characters, no sentence's end, no address. */
+function namesSource(block: ReaderParagraph | undefined): block is { kind: "paragraph"; runIn: null; text: string } {
+  return block?.kind === "paragraph" && block.runIn === null && block.text.length <= SOURCE_WORDS_MAX
+    && !ANY_SENTENCE_END.test(block.text) && !/https?:\/\//.test(block.text);
+}
+
+/**
+ * The text's blocks, split at blank lines; with `abstract`, each paragraph's run-in heading found. An address on a paragraph of its
+ * own takes up to two short paragraphs right before it into one source line; where it is the item's own address (`ownUrl`) the line
+ * is dropped, because the end of the article has it.
+ */
+export function readerParagraphs(text: string, { abstract = false, ownUrl }: { abstract?: boolean; ownUrl?: string } = {}): ReaderParagraph[] {
+  const blocks = text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).flatMap((part): ReaderParagraph[] => {
     const [first, ...lines] = part.split("\n");
     const section = SECTION.exec(first.trim());
     if (section) {
       // A heading the text runs straight on from keeps its text as the paragraph under it.
       const after = lines.join("\n").trim();
-      return [{ kind: "heading", text: section[1].trim() }, ...(after ? readerParagraphs(after, { abstract }) : [])];
+      return [{ kind: "heading", text: section[1].trim() }, ...(after ? readerParagraphs(after, { abstract, ownUrl }) : [])];
     }
-    const runIn = abstract ? RUN_IN.exec(part) : null;
-    if (runIn && !SENTENCE_END.test(runIn[1])) {
-      const heading = runIn[1].trim();
-      return [{ kind: "paragraph", runIn: `${heading}${runIn[2].trim()}`, text: `${runIn[2].startsWith(":") ? " " : ""}${part.slice(runIn[0].length)}` }];
-    }
-    return [{ kind: "paragraph", runIn: null, text: part }];
+    return paragraphOf(part, abstract);
   });
+  const out: ReaderParagraph[] = [];
+  for (const block of blocks) {
+    const address = block.kind === "paragraph" && block.runIn === null && ONLY_URL.test(block.text.trim()) ? splitUrls(block.text.trim()) : null;
+    const url = address && address.length === 1 && typeof address[0] !== "string" ? address[0].url : null;
+    if (!url) { out.push(block); continue; }
+    const words: string[] = [];
+    while (words.length < 2 && namesSource(out[out.length - 1])) words.unshift((out.pop() as { text: string }).text.trim());
+    if (ownUrl && sameAddress(url, ownUrl)) continue;
+    out.push({ kind: "source", words, url });
+  }
+  return out;
+}
+
+/** How long a block reads, for the fold. */
+function blockLength(block: ReaderParagraph): number {
+  if (block.kind === "list") return block.items.join("").length;
+  if (block.kind === "source") return block.url.length;
+  return block.text.length;
+}
+
+/** An address in the text: its site and the start of its path, the whole address its tooltip, opening in a new tab. */
+function TextLink({ url }: { url: string }) {
+  return (
+    <Tooltip content={url}>
+      <a href={url} {...EXTERNAL} className="rounded text-accent [overflow-wrap:anywhere] hover:underline">
+        {shortUrl(url)}<span aria-hidden="true"> ↗</span>
+      </a>
+    </Tooltip>
+  );
+}
+
+/** Words with their addresses as links. */
+function Linked({ text }: { text: string }) {
+  return <>{splitUrls(text).map((piece, index) => (typeof piece === "string" ? piece : <TextLink key={index} url={piece.url} />))}</>;
+}
+
+/** The ids a text's section headings take, in order: the contents (`readerOutline`) and the text agree on them. */
+const sectionId = (prefix: string, index: number) => `${prefix}-sec-${index + 1}`;
+
+/** What a text shows in a language: the Chinese, the original, or whichever there is. */
+export function shownText(text: FrontierBody, language: ReaderLanguage): { showing: ReaderLanguage; text: string; switchable: boolean } {
+  const switchable = Boolean(text.zh && text.original && text.zhKind === "translation");
+  const showing: ReaderLanguage = !text.zh ? "original" : !text.original ? "zh" : switchable ? language : "zh";
+  return { showing, switchable, text: (showing === "zh" ? text.zh : text.original) ?? "" };
+}
+
+/** A text's contents: its section headings, with the ids the text gives them (`ReaderText` with the same `idPrefix`). */
+export function readerOutline(text: FrontierBody, language: ReaderLanguage, idPrefix: string): OutlineEntry[] {
+  return readerParagraphs(shownText(text, language).text).filter((block): block is { kind: "heading"; text: string } => block.kind === "heading")
+    .map((block, index) => ({ id: sectionId(idPrefix, index), text: block.text, level: 2 }));
 }
 
 /**
  * The text itself — the article or the post (`正文`), or a paper's abstract (`摘要`) — in Chinese or in the original. Where there is a
  * translation and an original the block's row has 中文 · 原文 and names what is on screen (「正文 · AI 翻译」, 「正文 · 原文」); a
  * translation the server says is partial says so once, with the way to the whole original. A full text's `## ` paragraphs are its
- * section headings, in either language; an abstract's paragraph that starts with its own heading has it set in 600. A text over three
- * thousand characters opens at its first paragraphs, and 「展开全文」 shows the rest in place.
+ * section headings, in either language; an abstract's paragraph that starts with its own heading has it set in 600; lists and quotations
+ * are set as such, and a bare address is a short link. A text over three thousand characters opens at its first paragraphs, and
+ * 「展开全文」 shows the rest in place (`open` / `onOpen` when the page's contents must open it).
  */
-export function ReaderText({ kind, text, lang, language, onLanguage, className }: {
+export function ReaderText({ kind, text, lang, language, onLanguage, ownUrl, idPrefix, open: openProp, onOpen, className }: {
   kind: "正文" | "摘要";
   text: FrontierBody;
   /** The original's language (`lang` on its paragraphs); `und` is not said. */
   lang: string;
   language: ReaderLanguage;
   onLanguage: (language: ReaderLanguage) => void;
+  /** The item's own address: a paragraph that is only it is not drawn. */
+  ownUrl?: string;
+  /** The ids its section headings take (`readerOutline`). */
+  idPrefix?: string;
+  open?: boolean;
+  onOpen?: () => void;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const switchable = Boolean(text.zh && text.original && text.zhKind === "translation");
-  const showing: ReaderLanguage = !text.zh ? "original" : !text.original ? "zh" : switchable ? language : "zh";
-  const shown = (showing === "zh" ? text.zh : text.original) ?? "";
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const { showing, switchable, text: shown } = shownText(text, language);
   const translated = showing === "zh" && text.zhKind === "translation";
   const originalIsChinese = /^zh/i.test(lang);
   const label = translated ? `${kind} · AI 翻译` : showing === "original" && !originalIsChinese && text.zhKind !== "original-zh" ? `${kind} · 原文` : kind;
-  const all = readerParagraphs(shown, { abstract: kind === "摘要" });
+  const all = readerParagraphs(shown, { abstract: kind === "摘要", ownUrl });
   let visible = all;
   if (!open && shown.length > FOLD_AT) {
     let length = 0;
-    visible = all.filter((part) => { const keep = length < FOLDED_LENGTH; length += part.text.length; return keep; });
+    visible = all.filter((part) => { const keep = length < FOLDED_LENGTH; length += blockLength(part); return keep; });
     // A section is folded whole: its heading is never the last line before 展开全文.
     while (visible.length > 1 && visible[visible.length - 1].kind === "heading") visible = visible.slice(0, -1);
   }
   const textLang = showing === "original" && lang !== "und" ? lang : undefined;
+  let headings = 0;
   return (
     <Block
       ruled
@@ -344,13 +468,34 @@ export function ReaderText({ kind, text, lang, language, onLanguage, className }
       {translated && !text.complete && text.original && (
         <Note className="mb-4" action={<Button variant="text" size="sm" onClick={() => onLanguage("original")}>看原文</Button>}>译文尚不完整</Note>
       )}
-      <div data-prose="" lang={textLang} className="max-w-measure-body space-y-4 text-body text-text">
-        {visible.map((part, index) => (part.kind === "heading"
-          ? <h3 key={index} className="break-words pt-4 text-section text-text first:pt-0">{part.text}</h3>
-          : <p key={index} className="whitespace-pre-line break-words">{part.runIn && <span className="font-semibold">{part.runIn}</span>}{part.text}</p>))}
+      <div data-prose="" lang={textLang} className="max-w-measure-body space-y-5 text-reading text-text xl:max-w-read xl:text-reading-lg">
+        {visible.map((part, index) => {
+          if (part.kind === "heading") {
+            const id = idPrefix ? sectionId(idPrefix, headings) : undefined;
+            headings += 1;
+            return <h3 key={index} id={id} className="break-words pt-4 text-section text-text first:pt-0 xl:text-heading">{part.text}</h3>;
+          }
+          if (part.kind === "list") {
+            const items = part.items.map((item, at) => <li key={at} className="break-words pl-1"><Linked text={item} /></li>);
+            return part.ordered
+              ? <ol key={index} start={part.start} className="list-decimal space-y-1.5 pl-6">{items}</ol>
+              : <ul key={index} className="list-disc space-y-1.5 pl-6">{items}</ul>;
+          }
+          if (part.kind === "quote") {
+            return <blockquote key={index} className="whitespace-pre-line break-words border-l-2 border-border pl-4 text-text-2"><Linked text={part.text} /></blockquote>;
+          }
+          if (part.kind === "source") {
+            return (
+              <p key={index} className="break-words text-caption text-text-3">
+                {part.words.map((words) => `${words} `).join("")}<TextLink url={part.url} />
+              </p>
+            );
+          }
+          return <p key={index} className="whitespace-pre-line break-words">{part.runIn && <span className="font-semibold">{part.runIn}</span>}<Linked text={part.text} /></p>;
+        })}
       </div>
       {visible.length < all.length && (
-        <Button variant="secondary" size="sm" className="mt-4" onClick={() => setOpen(true)}>展开全文</Button>
+        <Button variant="secondary" size="sm" className="mt-4" onClick={() => { setOpenState(true); onOpen?.(); }}>展开全文</Button>
       )}
     </Block>
   );
@@ -476,7 +621,7 @@ export function ReaderQuote({ quoted, platform, language, className }: {
         <span className="text-text">{quoted.author.name}</span>
         {quoted.author.handle && <span>@{quoted.author.handle}</span>}
       </figcaption>
-      <blockquote className="mt-2 whitespace-pre-line break-words text-body text-text-2">{zh ?? quoted.text}</blockquote>
+      <blockquote className="mt-2 whitespace-pre-line break-words text-ui text-text-2">{zh ?? quoted.text}</blockquote>
       {zh && (
         <details className="mt-2">
           <summary className="cursor-pointer select-none rounded text-caption text-text-3 hover:text-text">原文</summary>
@@ -493,8 +638,8 @@ export function ReaderQuote({ quoted, platform, language, className }: {
 }
 
 /**
- * Where it came from: 「来源：NEJM · nejm.org」 with the free full text and the other institutions that reported it; then what the card
- * left out of a paper — its journal, authors, impact factor, the trial — as one list of facts.
+ * Where it came from, at the end of the article: 「来源：NEJM · nejm.org · 打开原文 ↗」 with the free full text and the other institutions
+ * that reported it; then what the card left out of a paper — its journal, authors, impact factor, the trial — as one list of facts.
  */
 export function ReaderSource({ item, reports, className }: {
   item: FrontierItemDetail;
@@ -510,8 +655,11 @@ export function ReaderSource({ item, reports, className }: {
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-ui text-text-3">
-        <span>来源：<a href={item.url} {...EXTERNAL} className="rounded text-text-2 hover:text-accent hover:underline">{name}</a></span>
+        <span>来源：<span className="text-text-2">{name}</span></span>
         {host && <span>· {host}</span>}
+        <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "ml-2 px-1.5 text-link")}>
+          {originalLinkLabel(item)}<span aria-hidden="true"> ↗</span>
+        </a>
         {pdf && (
           <a href={pdf} {...EXTERNAL} className={cn(INLINE_ACTION, "ml-2 px-1.5 text-link")}>
             免费全文<span aria-hidden="true"> ↗</span>
@@ -583,28 +731,8 @@ export function ReaderSameEvent({ item, className }: { item: FrontierItemDetail;
   );
 }
 
-/** A topic the feed can be narrowed to: a specialty it filters by. Any other topic is a label (DESIGN.md rule 5). */
-const SPECIALTY_KEYS: ReadonlySet<string> = new Set(FRONTIER_SPECIALTIES.map((specialty) => specialty.key));
-
-/** The topics an older server did not send: the item's specialties. */
-function topicsOf(item: FrontierItemDetail): FrontierTopic[] {
-  return item.topics ?? item.specialties.map((specialty) => ({ slug: specialty.key, name: specialty.label, group: "specialty" as const }));
-}
-
-/** The #tags an older server did not send: what the item is, and the diseases and drugs it names. */
-function tagsOf(item: FrontierItemDetail): string[] {
-  if (item.tags) return item.tags;
-  const evidence = evidenceTag(item);
-  return [...new Set([...(evidence ? [evidence] : []), ...item.entities.diseases, ...item.entities.drugs])].slice(0, 8);
-}
-
 /** 推荐理由 is drawn: the item has a reason or a score, and it is not the other report of an occurrence selected through another one. */
 const hasVerdict = (item: FrontierItemDetail) => !item.sameEvent && Boolean(item.reason || item.score !== null);
-
-/** Whether the right column has anything to show: a page without it keeps its text column, and no empty column is drawn. */
-export function hasReaderNotes(item: FrontierItemDetail): boolean {
-  return hasVerdict(item) || topicsOf(item).length > 0 || tagsOf(item).length > 0;
-}
 
 function RailBlock({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
@@ -616,49 +744,189 @@ function RailBlock({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
+/** The one chip of the right column: every 专科 and 标签 is this, and every one is a link to the feed narrowed to it. */
+const RAIL_CHIP = filterChipClasses({ selected: true });
+
+/** Where a chip of the right column leads: 全部, narrowed to a specialty or a tag. */
+const feedBy = (name: "specialty" | "tag", value: string) => `/app/frontier?view=all&${name}=${encodeURIComponent(value)}`;
+
 /**
- * The reader's right column (folded under the text on a phone): 推荐理由 — 「精选」, 「AI 评分 N」 and the sentence of what a clinician
- * or a researcher can do with it — then 主题 and 标签. An item whose occurrence was selected through another report has no 推荐理由:
- * the line over its text sends the reader to that one.
+ * The reader's notes, in the right column on a wide screen and under the text on a narrower one: 推荐理由 — 「精选」, the 「AI 评分」 pill,
+ * its four parts as bars and the sentence of what a clinician or a researcher can do with it — then 专科 and 标签, each a link to the
+ * feed narrowed to it, and 本文目录 where the text has three sections or more. An item whose occurrence was selected through another
+ * report has no 推荐理由: the line over its text sends the reader to that one.
  */
-export function ReaderNotes({ item }: { item: FrontierItemDetail }) {
+export function ReaderNotes({ item, outline }: { item: FrontierItemDetail; outline?: ReactNode }) {
   const verdict = hasVerdict(item);
-  const topics = topicsOf(item);
-  const tags = tagsOf(item);
-  if (!hasReaderNotes(item)) return null;
+  const band = scoreBand(item);
+  const parts = scoreBreakdown(item);
   return (
     <div className="flex flex-col gap-8">
       {verdict && (
-        <RailBlock label={item.reason ? "推荐理由" : "AI 评分"}>
+        <RailBlock label={item.reason ? "推荐理由" : SCORE_LABEL}>
           <div className="flex flex-wrap items-center gap-2">
             {item.selected && (
               <Tag><span aria-hidden="true" className="mr-1 h-1.5 w-1.5 rounded-full bg-accent" />精选</Tag>
             )}
-            {item.score !== null && <Tag className="tabular-nums">AI 评分 {item.score}</Tag>}
+            {band && item.score !== null && <ScorePill label={SCORE_LABEL} value={item.score} tier={band} />}
           </div>
+          {parts.length > 0 && <ScoreBars parts={parts} className="mt-3" />}
           {item.reason && <p className="mt-3 text-ui text-text-2">{item.reason}</p>}
         </RailBlock>
       )}
-      {topics.length > 0 && (
-        <RailBlock label="主题">
+      {item.specialties.length > 0 && (
+        <RailBlock label="专科">
           <ul className="flex flex-wrap gap-1.5">
-            {topics.map((topic) => (
-              <li key={topic.slug}>
-                {topic.group === "specialty" && SPECIALTY_KEYS.has(topic.slug) ? (
-                  <Link to={`/app/frontier?view=all&specialty=${encodeURIComponent(topic.slug)}`} className={filterChipClasses({ selected: true })}>{topic.name}</Link>
-                ) : <Tag>{topic.name}</Tag>}
-              </li>
+            {item.specialties.map((specialty) => (
+              <li key={specialty.key}><Link to={feedBy("specialty", specialty.key)} className={RAIL_CHIP}>{specialty.label}</Link></li>
             ))}
           </ul>
         </RailBlock>
       )}
-      {tags.length > 0 && (
+      {item.tags.length > 0 && (
         <RailBlock label="标签">
           <ul className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => <li key={tag}><Tag>#{tag}</Tag></li>)}
+            {item.tags.map((tag) => <li key={tag.slug}><Link to={feedBy("tag", tag.slug)} className={RAIL_CHIP}>#{tag.name}</Link></li>)}
           </ul>
         </RailBlock>
       )}
+      {outline && <RailBlock label="本文目录">{outline}</RailBlock>}
     </div>
   );
+}
+
+/**
+ * The right column's head (owner, 2026-10-23: 「查看原文又跑到右上角去了」): the way to the original as one full-width button — 「打开原文 ↗」,
+ * a post's 「在 X 查看原帖 ↗」 — with ☆ and ⋯ beside it, and 「深入研究」 under it. Its top is the back row's.
+ */
+export function ReaderActions({ item, more, onStar, onResearch }: {
+  item: FrontierItem;
+  more: MenuEntry[];
+  onStar: () => void;
+  onResearch: () => void;
+}) {
+  const starred = item.state.starred;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary", className: "min-w-0 flex-1" })}>
+          <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
+        </a>
+        <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
+        <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
+      </div>
+      <Button variant="secondary" className="w-full" onClick={onResearch}>深入研究</Button>
+    </div>
+  );
+}
+
+/** True while the page's own ground scrolls down through the text (not near its top or its end): the phone's bar steps aside. */
+function useReadingDown(anchor: RefObject<HTMLElement | null>): boolean {
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    const scroller = anchor.current?.closest<HTMLElement>(".overflow-y-auto");
+    if (!scroller) return undefined;
+    let last = scroller.scrollTop;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const y = scroller.scrollTop;
+      const end = scroller.scrollHeight - scroller.clientHeight;
+      if (y < 80 || y > end - 120) { setDown(false); last = y; }
+      else if (Math.abs(y - last) > 6) { setDown(y > last); last = y; }
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => { cancelAnimationFrame(frame); scroller.removeEventListener("scroll", onScroll); };
+  }, [anchor]);
+  return down;
+}
+
+const BAR_TOOL = "flex flex-col items-center justify-center gap-0.5 rounded text-caption text-text-2 outline-none transition-colors duration-fast hover:text-text";
+
+/**
+ * Below 1024 px the article's own bar at the window's bottom (AIHOT `ReaderTools`, MIT): 收藏, 深入研究, the way to the original and ⋯.
+ * It steps aside while the reader scrolls down through the text and comes back on the way up and at either end.
+ */
+export function ReaderBar({ item, more, onStar, onResearch }: {
+  item: FrontierItem;
+  more: MenuEntry[];
+  onStar: () => void;
+  onResearch: () => void;
+}) {
+  const bar = useRef<HTMLElement>(null);
+  const hidden = useReadingDown(bar);
+  const starred = item.state.starred;
+  return (
+    <nav
+      ref={bar}
+      aria-label="阅读工具"
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-sticky border-t border-border bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] transition-transform duration-base ease-standard",
+        hidden && "translate-y-full",
+      )}
+    >
+      <div className="mx-auto grid h-14 max-w-read grid-cols-4 px-2">
+        <button type="button" aria-pressed={starred} onClick={onStar} className={cn(BAR_TOOL, starred && "text-accent [&_svg]:fill-current")}>
+          <Star size={20} aria-hidden="true" />{starred ? "已收藏" : "收藏"}
+        </button>
+        <button type="button" onClick={onResearch} className={BAR_TOOL}>
+          <MessageSquareText size={20} aria-hidden="true" />深入研究
+        </button>
+        <a href={item.url} {...EXTERNAL} className={BAR_TOOL}>
+          <ArrowUpRight size={20} aria-hidden="true" />{isSocialItem(item) ? "查看原帖" : "打开原文"}
+        </a>
+        <Menu label="更多操作" items={more}>
+          <button type="button" className={BAR_TOOL}><MoreHorizontal size={20} aria-hidden="true" />更多</button>
+        </Menu>
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * 本文目录: the text's section headings, the one being read marked, each a press away (the page's own ground scrolls to it, under
+ * nothing). A heading still in the folded part of a long text opens the text first.
+ */
+export function ReaderOutline({ entries, layout, onReveal }: {
+  entries: readonly OutlineEntry[];
+  layout: "inline" | "folded";
+  /** Opens the folded rest of the text, where the heading asked for is not drawn yet. */
+  onReveal: () => void;
+}) {
+  const [active, setActive] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const ids = entries.map((entry) => entry.id).join(" ");
+  useEffect(() => {
+    if (!ids || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((seen) => {
+      const visible = seen.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible[0]) setActive(visible[0].target.id);
+    }, { rootMargin: "0px 0px -70% 0px" });
+    for (const id of ids.split(" ")) {
+      const heading = document.getElementById(id);
+      if (heading) observer.observe(heading);
+    }
+    return () => observer.disconnect();
+  }, [ids, pending]);
+  const go = useCallback((id: string) => {
+    const heading = document.getElementById(id);
+    if (!heading) return false;
+    const scroller = heading.closest<HTMLElement>(".overflow-y-auto");
+    if (scroller && typeof scroller.scrollTo === "function") {
+      scroller.scrollTo({ top: heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16 });
+    }
+    setActive(id);
+    return true;
+  }, []);
+  // The heading asked for while folded is drawn in the same commit as the opened text: go to it then.
+  useEffect(() => {
+    if (pending && go(pending)) setPending(null);
+  }, [pending, go]);
+  const select = (id: string) => {
+    if (go(id)) return;
+    setPending(id);
+    onReveal();
+  };
+  return <Outline entries={entries} active={active} onSelect={select} layout={layout} label={layout === "folded" ? "目录" : "本文目录"} />;
 }
