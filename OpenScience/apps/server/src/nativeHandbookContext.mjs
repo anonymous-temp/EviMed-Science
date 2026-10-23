@@ -191,11 +191,10 @@ export class NativeHandbookContext {
 
   /** The immutable route can be reused when the committed input becomes a run. */
   async routeFor(project, sessionId, requestIds, text) {
-    for (const requestId of (requestIds ?? []).slice(0, 16)) {
-      const envelope = await this.envelope(project, sessionId, requestId);
-      if (envelope?.routeTextDigest === routeDigest(text)) return envelope.route;
-    }
-    return null;
+    // The ledger owns the first committed human input. A later equal-text queued input cannot route it.
+    const requestId = Array.isArray(requestIds) ? requestIds[0] : null;
+    const envelope = await this.envelope(project, sessionId, requestId);
+    return envelope?.routeTextDigest === routeDigest(text) ? envelope.route : null;
   }
 
   /** Return only confirmed attachments consumed by this owner/capability run. */

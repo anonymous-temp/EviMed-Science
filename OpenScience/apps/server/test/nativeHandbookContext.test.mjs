@@ -179,3 +179,10 @@ test("a modified stored route cannot be read or adopted under the original envel
   assert.deepEqual(await context.read(project,{sessionId:"session",inputs:[{requestId:"owned",textDigest:hash("owned")}]}),{routes:[],contexts:[]});
   assert.equal(await context.routeFor(project,"session",["owned"],"owned"),null);
 }));
+
+
+test("adoption never borrows a later queued route when the initiating input has no envelope",async()=>fixture(async({context,project})=>{
+  await context.prepare(project,request("later","Same forwarded text"));
+  assert.equal(await context.routeFor(project,"session",["initiating","later"],"Same forwarded text"),null);
+  assert.equal((await context.routeFor(project,"session",["later","initiating"],"Same forwarded text")).effectiveAgentId,"geo-content");
+}));

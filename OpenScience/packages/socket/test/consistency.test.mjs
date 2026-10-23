@@ -3775,6 +3775,10 @@ test('selected native batches use the first initiating input and reject forged a
   f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>[...inputs].reverse().map(input=>({...input,digest:'d'.repeat(64),route:input.requestId==='first'?{effectiveAgentId:'open-domain-answer'}:route})));
   await f.step(4,{inputs:[message('first'),message('later')]});
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'),'a later routed input cannot add a grant to the initiating ordinary input');
+  f.ctx.provide('evimedNativeRoute',async(/** @type {string} */ _session,/** @type {any[]} */ inputs)=>inputs.slice(1).map(input=>({...input,digest:'d'.repeat(64),route})));
+  const sameText=(/** @type {string} */ id)=>({...message(id),content:[{type:'text',text:'Same forwarded text'}]});
+  await f.step(5,{inputs:[sameText('missing-initiator'),sameText('qualified-later')]});
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__geo_read'),'an equal-text later envelope cannot substitute for a missing initiating envelope');
 });
 
 
