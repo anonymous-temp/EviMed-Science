@@ -135,3 +135,33 @@ test("date-only bounds include the local final day and oversized computation ask
     SELECT 'bounded-' || n, $1, $2, 'r-bounded', 'deepseek', 'failed' FROM generate_series(1,20001) n`, [user.id,other.id]);
   await assert.rejects(readGeoSelection(store, other, { round: "r-bounded" }), (error) => error.status === 422 && /shorter date range/u.test(error.message));
 });
+
+test("a diagnosis keeps its error page on the selection snapshot during a concurrent correction", options, async () => {
+  const original = store.query.bind(store);
+  let corrected = false;
+  store.query = async (sql, params) => {
+    if (!corrected && sql.includes("SELECT e.status, e.severity")) {
+      corrected = true;
+      await database.pool.query("UPDATE evimed_geo.errors SET statement = 'Concurrent correction' WHERE id = 'e2'");
+    }
+    return original(sql, params);
+  };
+  try {
+    const result = await service.diagnosis(user, project.id, { round: "r2" });
+    assert.equal(corrected, true);
+    assert.equal(result.errors.find((error) => error.id === "e2").statement, "Dose mistake");
+    await assert.rejects(readGeoSelection(store, project, { selectionRef: result.selection.reference }), (error) => error.status === 409);
+  } finally {
+    store.query = original;
+    await store.query("UPDATE evimed_geo.errors SET statement = 'Dose mistake' WHERE id = 'e2'");
+  }
+});
+
+test("source history includes every round selected by an explicit date range", options, async () => {
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at)
+    SELECT 'history-' || n,$1,$2,'weekly','done',1,'{deepseek}',date '2026-10-03' + n,date '2026-10-03' + n
+    FROM generate_series(0,4) n`, [user.id, project.id]);
+  const result = await service.source(user, project.id, "source1", { from: "2026-10-01", to: "2026-10-07" });
+  assert.equal(result.selection.roundIds.length, 7);
+  assert.equal(result.history.length, 7);
+});

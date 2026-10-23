@@ -16,6 +16,11 @@ test("scope has closed fields, inclusive local dates and compatible aliases", ()
   assert.deepEqual(geoScopeFromQuery(new URLSearchParams("engines=kimi,deepseek&clientTags=a%2Cb&clientTags=c")).clientTags, ["a,b", "c"]);
 });
 
+test("URL tag lists accept JSON arrays without splitting commas inside labels", () => {
+  assert.deepEqual(geoScopeFromQuery(new URLSearchParams({ clientTags: JSON.stringify(["a,b", "c"]) })).clientTags, ["a,b", "c"]);
+  assert.throws(() => geoScopeFromQuery(new URLSearchParams({ clientTags: '["broken"' })), (error) => error.status === 400);
+});
+
 const facts = { brands: [{ name: "Ours", ours: true, count: 2 }], statements: [{ text: "known", verdict: "correct" }],
   checks: { judgementCoverage: { status: "complete" } }, judgedAt: "2026-10-01T00:00:00Z" };
 const row = (id, roundId, engine = "deepseek", extra = {}) => ({ snapshotId: id, questionId: "q1", roundId, engine, status: "valid",
