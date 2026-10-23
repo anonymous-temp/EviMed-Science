@@ -1610,10 +1610,12 @@ export class GeoStore {
    * Move an article's status or safety, only from the states given (a
    * compare-and-set, so a market transition in between is not overwritten).
    * @param {string} geoId @param {string} articleId
-   * @param {{ status?: string, safety?: string, fromStatuses?: readonly string[], fromSafety?: readonly string[] }} change
+   * @param {{ status?: string, safety?: string, fromStatuses?: readonly string[], fromSafety?: readonly string[], expectedResultVersionId?:string|null, expectedDigest?:string|null }} change
    * @returns {Promise<ReturnType<typeof geoArticleFromRow> | null>} null when the article was not in an allowed state
    */
-  async changeArticle(geoId, articleId, { status, safety, fromStatuses, fromSafety }) {
+  async changeArticle(geoId, articleId, { status, safety, fromStatuses, fromSafety, expectedResultVersionId, expectedDigest }) {
+    const expected = expectedResultVersionId !== undefined && expectedDigest !== undefined;
+    if ((expectedResultVersionId !== undefined || expectedDigest !== undefined) && !expected) throw new HttpError(400, "geo_article_review_invalid", "Invalid article review reference.");
     const update = await this.query(`UPDATE evimed_geo.articles
       SET safety = coalesce($4, safety),
           status = CASE
@@ -1625,7 +1627,11 @@ export class GeoStore {
       WHERE geo_project_id = $1 AND id = $2
         AND ($5::text[] IS NULL OR status = ANY($5::text[]))
         AND ($6::text[] IS NULL OR safety = ANY($6::text[]))
-      RETURNING *`, [geoId, articleId, status ?? null, safety ?? null, fromStatuses ? [...fromStatuses] : null, fromSafety ? [...fromSafety] : null]);
+        AND ($4::text IS DISTINCT FROM 'released' OR
+          ($7::boolean AND current_result_version_id IS NOT DISTINCT FROM $8::text AND content_sha256 IS NOT DISTINCT FROM $9::text)
+          OR (NOT $7::boolean AND current_result_version_id IS NULL))
+      RETURNING *`, [geoId, articleId, status ?? null, safety ?? null, fromStatuses ? [...fromStatuses] : null, fromSafety ? [...fromSafety] : null,
+      expected, expectedResultVersionId ?? null, expectedDigest ?? null]);
     return update.rows[0] ? geoArticleFromRow(update.rows[0]) : null;
   }
 }

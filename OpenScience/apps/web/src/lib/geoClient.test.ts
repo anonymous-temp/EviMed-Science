@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("./productClient", () => ({ productRequest: network.productRequest }));
 
-import { exportGeo, getGeoProgrammeRuns, runGeoStep } from "./geoClient";
+import { exportGeo, getGeoProgrammeRuns, releaseGeoArticle, runGeoStep } from "./geoClient";
 
 beforeEach(() => network.productRequest.mockReset());
 
@@ -36,4 +36,12 @@ describe("starting work, and reading what the programme did", () => {
     network.productRequest.mockResolvedValue({});
     expect(await getGeoProgrammeRuns("geo_1")).toEqual([]);
   });
+});
+
+
+it("sends the observed immutable article version and digest with a release", async () => {
+  network.productRequest.mockResolvedValue({ safety: "released" });
+  const observed = { expectedResultVersionId: `rv_${"a".repeat(64)}`, expectedDigest: "a".repeat(64) };
+  await releaseGeoArticle("geo_1", "article_1", observed);
+  expect(network.productRequest).toHaveBeenCalledWith("/geo/projects/geo_1/articles/article_1/release", "POST", observed);
 });

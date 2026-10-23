@@ -449,7 +449,21 @@ describe("行动: what stands apart from the actions", () => {
     expect(within(block).getByText("合并 2 型糖尿病的人能不能用？")).toBeInTheDocument();
     await userEvent.click(within(block).getByRole("button", { name: "放行" }));
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
-    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held"));
+    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held", { expectedResultVersionId: null, expectedDigest: null }));
+  });
+
+  it("keeps the reviewed version and digest from the opened confirmation while newer article data arrives", async () => {
+    const version0 = `rv_${"a".repeat(64)}`;
+    const held = article("art_held", { title: "Review this version", safety: "open", currentResultVersionId: version0, contentSha256: "a".repeat(64) });
+    client.getGeoArticles.mockResolvedValue({ articles: [held] });
+    renderTab();
+    const block = await screen.findByRole("region", { name: "等你放行的稿件" });
+    await userEvent.click(within(block).getByRole("button", { name: "放行" }));
+    held.currentResultVersionId = `rv_${"b".repeat(64)}`;
+    Object.assign(held, { contentSha256: "b".repeat(64) });
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
+    await waitFor(() => expect(client.releaseGeoArticle).toHaveBeenCalledWith("geo_1", "art_held",
+      { expectedResultVersionId: version0, expectedDigest: "a".repeat(64) }));
   });
 
   it("lists the articles no action holds, so nothing a person wrote is out of sight, and 撤回 asks first", async () => {

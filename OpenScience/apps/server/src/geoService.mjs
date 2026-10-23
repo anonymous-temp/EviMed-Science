@@ -1741,7 +1741,7 @@ export class GeoService {
         // Written for a control group: it is out of the control arm, and the platform never places for it (said once when registered).
         groupIsControl: Boolean(article.groupId && controlGroups.has(article.groupId)),
         status: article.status, gate: article.gate, currentResultVersionId: article.currentResultVersionId, onlineUpdateNeeded: article.onlineUpdateNeeded,
-        safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
+        safety: article.safety, contentSha256: article.contentSha256, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
         // The evidence chain: the card a card-layer article is made from, whether the claim references the platform read in the
         // text resolve, the references a card's change log says moved since, and the label a paid placement carries.
@@ -1769,13 +1769,30 @@ export class GeoService {
     return { id: changed.id, status: changed.status };
   }
 
-  /** `POST …/:id/articles/:aid/release`: 「放行」 an open safety finding after a person looked. @param {{ id: string }} user @param {string} id @param {string} articleId */
-  async releaseArticle(user, id, articleId) {
-    // 「放行」 is a person looking at what the platform could not clear: the owner or the medical reviewer, not an editor.
+  /** `POST …/:id/articles/:aid/release`: a review applies to the version the person actually observed.
+   * @param {{ id: string }} user @param {string} id @param {string} articleId
+   * @param {{expectedResultVersionId?:string|null,expectedDigest?:string|null}} [input] */
+  async releaseArticle(user, id, articleId, input = {}) {
     const project = await this.requireProject(user, id, "review");
-    if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
-    const changed = await this.store.changeArticle(project.id, articleId, { safety: "released", fromSafety: ["open"] });
-    if (!changed) throw failure(409, "geo_article_state_invalid", "Only an article with an open safety finding can be released.");
+    const article = await this.store.getArticle(project.id, articleId);
+    if (!article) throw failure(404, "geo_article_not_found", "Article not found.");
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw failure(400, "geo_article_review_invalid", "Invalid article review reference.");
+    const supplied = Object.hasOwn(input, "expectedResultVersionId");
+    if (supplied !== Object.hasOwn(input, "expectedDigest")
+      || supplied && ((input.expectedResultVersionId !== null && !/^rv_[a-f0-9]{64}$/.test(String(input.expectedResultVersionId)))
+        || (input.expectedDigest !== null && !SHA256.test(String(input.expectedDigest))))) throw failure(400, "geo_article_review_invalid", "Invalid article review reference.");
+    const stale = () => failure(409, "geo_article_review_stale", "The article changed. Reopen the version before releasing it.");
+    if (article.currentResultVersionId && (!supplied || !input.expectedDigest)) throw stale();
+    if (supplied && (input.expectedResultVersionId !== article.currentResultVersionId || input.expectedDigest !== article.contentSha256)) throw stale();
+    // Unversioned legacy clients remain compatible. Their observed row is still held by SQL CAS against a newly arriving head.
+    const expected = { expectedResultVersionId: supplied ? input.expectedResultVersionId : null,
+      expectedDigest: supplied ? input.expectedDigest : article.contentSha256 };
+    const changed = await this.store.changeArticle(project.id, articleId, { safety: "released", fromSafety: ["open"], ...expected });
+    if (!changed) {
+      const current = await this.store.getArticle(project.id, articleId);
+      if (current?.currentResultVersionId !== expected.expectedResultVersionId || current?.contentSha256 !== expected.expectedDigest) throw stale();
+      throw failure(409, "geo_article_state_invalid", "Only an article with an open safety finding can be released.");
+    }
     return { id: changed.id, safety: changed.safety, status: changed.status };
   }
 

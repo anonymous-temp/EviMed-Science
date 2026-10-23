@@ -538,8 +538,8 @@ export function createGeoRoutes(dependencies) {
       return reply(await service.withdrawArticle(user, id, parts[3]));
     }
     if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "release") {
-      await bodyOf(req, maxJsonBytes, []);
-      const result = await service.releaseArticle(user, id, parts[3]);
+      const body = await bodyOf(req, maxJsonBytes, ["expectedResultVersionId", "expectedDigest"]);
+      const result = await service.releaseArticle(user, id, parts[3], body);
       await audit("geo.article.release", "completed", { userId: user.id, code: parts[3], detail: id });
       return reply(result);
     }

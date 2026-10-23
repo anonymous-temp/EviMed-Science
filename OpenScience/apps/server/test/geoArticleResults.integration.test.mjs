@@ -203,7 +203,7 @@ test("unavailable Word parsing preserves new bytes with unknown checks and never
 test("publication uses a later review of the pinned same bytes without copying review from another version", options, async t => {
   const f = await fixture(t, "article.md", { gate: "unverified", safety: "open" });
   const market = new GeoMarketStore(f.accounts.database);
-  await f.store.changeArticle(f.geo.id, f.articleId, { safety: "released", fromSafety: ["open"] });
+  await f.store.changeArticle(f.geo.id, f.articleId, { safety: "released", fromSafety: ["open"], expectedResultVersionId: f.original.versionId, expectedDigest: f.original.digest });
   await f.store.refreshArticleGate(f.geo.id, f.articleId, "passed");
   await f.store.query(`UPDATE evimed_geo.projects SET status='active',budget='{"totalCny":1000,"dailyCny":1000}'::jsonb WHERE id=$1`, [f.geo.id]);
   const at = new Date().toISOString();
@@ -235,4 +235,46 @@ test("an exact preserved migrated article acquires its business head before the 
   const revised = await f.output(bound, "Revised migrated article [claim]");
   await f.adapter.complete(f.project, f.run);
   assert.equal((await f.store.getArticle(f.geo.id, f.articleId)).currentResultVersionId, revised.versionId);
+});
+
+test("a pending V0 release cannot attest V1 bytes after a conversational revision", options, async t => {
+  const f = await fixture(t, "article.md", { gate: "passed", safety: "open" });
+  const observed = { expectedResultVersionId: f.original.versionId, expectedDigest: f.original.digest };
+  await f.store.query(`UPDATE evimed_geo.articles SET status='published' WHERE id=$1`, [f.articleId]);
+  f.run = { ...f.run, id: "review-race", kernelRequestIds: ["request-review-race"] };
+  const bound = await f.adapter.bind(f.user, f.project, f.request("Revise this conclusion"));
+  const next = await f.output(bound, "The new conclusion [claim]");
+  await f.adapter.complete(f.project, f.run);
+  await assert.rejects(f.service.releaseArticle(f.user, f.geo.id, f.articleId, observed), { code: "geo_article_review_stale" });
+  await assert.rejects(f.service.releaseArticle(f.user, f.geo.id, f.articleId), { code: "geo_article_review_stale" });
+  const held = await f.store.getArticle(f.geo.id, f.articleId);
+  assert.equal(held.currentResultVersionId, next.versionId); assert.equal(held.safety, "open");
+  assert.equal(await f.store.changeArticle(f.geo.id, f.articleId, { safety: "released", fromSafety: ["open"], ...observed }), null);
+  assert.equal(await f.store.changeArticle(f.geo.id, f.articleId, { safety: "released", fromSafety: ["open"] }), null);
+  const released = await f.service.releaseArticle(f.user, f.geo.id, f.articleId, { expectedResultVersionId: next.versionId, expectedDigest: next.digest });
+  assert.equal(released.safety, "released");
+});
+
+test("release SQL compares the reviewed version and digest even if the head changes after service authorization", options, async t => {
+  const f = await fixture(t, "article.md", { gate: "passed", safety: "open" });
+  f.run = { ...f.run, id: "review-cas", kernelRequestIds: ["request-review-cas"] };
+  const bound = await f.adapter.bind(f.user, f.project, f.request("Revise this conclusion"));
+  const next = await f.output(bound, "The concurrent conclusion [claim]");
+  const change = f.store.changeArticle.bind(f.store);
+  f.store.changeArticle = async (...args) => { await f.adapter.complete(f.project, f.run); return change(...args); };
+  await assert.rejects(f.service.releaseArticle(f.user, f.geo.id, f.articleId,
+    { expectedResultVersionId: f.original.versionId, expectedDigest: f.original.digest }), { code: "geo_article_review_stale" });
+  const held = await f.store.getArticle(f.geo.id, f.articleId);
+  assert.equal(held.currentResultVersionId, next.versionId); assert.equal(held.safety, "open");
+});
+
+test("legacy release remains compatible but cannot cross a concurrent transition from an unversioned article to a versioned head", options, async t => {
+  const f = await fixture(t, "article.md", { gate: "passed", safety: "open" });
+  await f.store.query(`DELETE FROM evimed_geo.article_versions WHERE article_id=$1`, [f.articleId]);
+  await f.store.query(`UPDATE evimed_geo.articles SET current_result_version_id=NULL WHERE id=$1`, [f.articleId]);
+  const change = f.store.changeArticle.bind(f.store);
+  f.store.changeArticle = async (...args) => { await f.adapter.complete(f.project, f.run); return change(...args); };
+  await assert.rejects(f.service.releaseArticle(f.user, f.geo.id, f.articleId), { code: "geo_article_review_stale" });
+  const held = await f.store.getArticle(f.geo.id, f.articleId);
+  assert.equal(held.currentResultVersionId, f.original.versionId); assert.equal(held.safety, "open");
 });

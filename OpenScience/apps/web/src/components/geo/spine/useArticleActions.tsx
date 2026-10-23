@@ -9,7 +9,7 @@ import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { getResultVersion, requestResultRevision } from "@/lib/resultProvenance";
 
 /** What the page needs of an article to act on it: its identity and where its text is. */
-export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path" | "currentResultVersionId"> & { cardId?: string | null };
+export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path" | "currentResultVersionId" | "contentSha256"> & { cardId?: string | null };
 
 /**
  * What a person may do with an article, once, for every place that lists one (the actions page, an action's drawer, a group's
@@ -29,7 +29,7 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
     const { kind, article } = pending;
     setPending(null);
     setBusy(article.id);
-    const work = kind === "withdraw" ? withdrawGeoArticle(geoId, article.id) : releaseGeoArticle(geoId, article.id);
+    const work = kind === "withdraw" ? withdrawGeoArticle(geoId, article.id) : releaseGeoArticle(geoId, article.id, { expectedResultVersionId: article.currentResultVersionId ?? null, expectedDigest: article.contentSha256 ?? null });
     void work
       .then(() => {
         toast.success(kind === "withdraw" ? "已撤回，这篇不再投放。" : "已放行，这篇可以投放了。");
@@ -81,7 +81,7 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
         await openConversation({ projectId: project.projectId, geoId, sessionId, resultRevision: { referenceId: prepared.referenceId } });
       } catch (error: unknown) { toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
     },
-    release: (article: ArticleRef) => setPending({ kind: "release", article }),
+    release: (article: ArticleRef) => setPending({ kind: "release", article: { ...article } }),
     withdraw: (article: ArticleRef) => setPending({ kind: "withdraw", article }),
     busy,
     dialogs,

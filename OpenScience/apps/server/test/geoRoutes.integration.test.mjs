@@ -1072,3 +1072,27 @@ test("large diagnosis progress pages share native and HTTP continuation while re
   refused(await call("GET", `${endpoint}?limit=501`), 400, "geo_read_filter_invalid");
   refused(await call("GET", `${endpoint}?engines=deepseek`), 400, "geo_read_filter_invalid");
 });
+
+test("article release carries the version and digest the reviewer observed over HTTP", options, async () => {
+  const { project } = await seededProject();
+  const path = "deliverables/review/article.md";
+  const [articleId] = await store.registerArticles(ALICE, project.id, [{ path, layer: "popular", claimIds: [], gate: "passed", safety: "open", contentSha256: "a".repeat(64), runId: "review-v0" }]);
+  const original = { versionId: `rv_${"a".repeat(64)}`, digest: "a".repeat(64), path, producer: { runId: "review-v0", sessionId: "review-session" } };
+  await store.linkArticleVersion(project.id, articleId, { version: original });
+  await store.query(`UPDATE evimed_geo.articles SET status='published' WHERE id=$1`, [articleId]);
+  const observed = (await call("GET", `/api/geo/projects/${project.id}/articles`)).payload.data.articles.find(article => article.id === articleId);
+  assert.equal(observed.currentResultVersionId, original.versionId); assert.equal(observed.contentSha256, original.digest);
+  const route = `/api/geo/projects/${project.id}/articles/${articleId}/release`;
+  refused(await call("POST", route, { body: {} }), 409, "geo_article_review_stale");
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId } }), 400, "geo_article_review_invalid");
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId, expectedDigest: "b".repeat(64) } }), 409, "geo_article_review_stale");
+  const next = { versionId: `rv_${"b".repeat(64)}`, digest: "b".repeat(64), path: "artifacts/result-revisions/review/output/article.md", supersedesVersionId: original.versionId,
+    producer: { runId: "review-v1", sessionId: "review-session" } };
+  await store.linkArticleVersion(project.id, articleId, { version: next, expectedHeadVersionId: original.versionId });
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId, expectedDigest: original.digest } }), 409, "geo_article_review_stale");
+  assert.equal((await store.getArticle(project.id, articleId)).safety, "open");
+  const native = await geoRuntimeWrite({ store, project, what: "articles", body: { items: [{ path: next.path, layer: "popular", claimIds: [], safety: "released", contentSha256: next.digest }] } });
+  assert.equal(native.ids.length, 0); assert.ok(native.issues.some(issue => issue.field === "safety" && issue.code === "unknown_value"));
+  const released = await call("POST", route, { body: { expectedResultVersionId: next.versionId, expectedDigest: next.digest } });
+  assert.equal(released.status, 200); assert.equal(released.payload.data.safety, "released");
+});

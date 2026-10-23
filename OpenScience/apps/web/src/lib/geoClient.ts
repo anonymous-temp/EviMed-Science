@@ -595,6 +595,7 @@ export interface GeoSources extends GeoScopedView {
 
 export interface GeoArticle {
   currentResultVersionId?: string | null;
+  contentSha256?: string | null;
   onlineUpdateNeeded?: boolean;
   id: string;
   layer: GeoArticleLayer;
@@ -1368,8 +1369,8 @@ export function getGeoArticleText(geoId: string, articleId: string) {
 }
 
 /** “放行”: the safety stop, after a person has looked at the article. */
-export function releaseGeoArticle(geoId: string, articleId: string) {
-  return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", {});
+export function releaseGeoArticle(geoId: string, articleId: string, observed: { expectedResultVersionId: string | null; expectedDigest: string | null }) {
+  return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", observed);
 }
 
 export function getGeoDistribution(geoId: string) {
