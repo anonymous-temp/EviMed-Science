@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
+import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { CAPSULE_ENTRY_TYPES, fromSender } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
@@ -102,11 +103,16 @@ function PendingDeliveries() {
   );
 }
 
-/** The shelf: what is waiting to be taken in, then what was taken in. Each says nothing while it has nothing to say. */
+/**
+ * The shelf: what is waiting to be taken in, then what was taken in. Each says nothing while it has nothing to say. What is waiting is a
+ * delivery between accounts, which only a deployment with sharing on has: asked of one that has not, the server answers 404 by name and
+ * the shelf showed a red error for a thing that does not exist, for good (2026-10-23), so there it is not asked.
+ */
 export function ReceivedShelf() {
+  const sharing = useCapsuleShareFeature() === "on";
   return (
     <>
-      <PendingDeliveries />
+      {sharing && <PendingDeliveries />}
       <ReceivedPacks />
     </>
   );

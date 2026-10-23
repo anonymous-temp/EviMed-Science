@@ -51,3 +51,8 @@ export function fromSender(author: string): string {
  * (`SIGNATURE_MAX_CHARS` in `capsuleShareLabel.mjs`; a server test holds the two equal).
  */
 export const CAPSULE_SIGNATURE_MAX_CHARS = 60;
+
+/** The names a person typed, one per line or separated by commas: exact account ids or exact display names, each once, at most thirty-two. */
+export function recipientsOf(text: string): string[] {
+  return [...new Set(text.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 32);
+}

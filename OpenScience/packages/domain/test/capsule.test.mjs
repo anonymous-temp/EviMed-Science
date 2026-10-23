@@ -47,3 +47,15 @@ test("a capsule is used as one's own or as a reference, and the retired third mo
   assert.equal(capsuleActivationMode("merge"), null);
   assert.equal(capsuleActivationMode(undefined), null);
 });
+
+test("a share's scopes and paths are the ones a share is made of, so a manifest cannot declare what no share carries", async () => {
+  const { CAPSULE_SHARE_SCOPES, SHARE_SCOPE_ENTRIES } = await import("../index.mjs");
+  assert.deepEqual([...CAPSULE_SHARE_SCOPES], ["workstyle", "+profile", "+knowledge"]);
+  assert.deepEqual(SHARE_SCOPE_ENTRIES, { workstyle: ["standards.jsonl", "methods/", "provenance.json"], "+profile": ["profile.md"], "+knowledge": ["knowledge/chunks.jsonl"] });
+  const entry = fixture().entries[0];
+  // An undeclared scope is refused by name, and so is a path the old format spoke of that no share ever wrote.
+  assert.ok(validateCapsuleManifest(fixture({ scope: ["workstyle", "+documents"] })).issues.some((issue) => /unknown share scope "\+documents"/.test(issue.message)));
+  for (const path of ["lessons.jsonl", "exemplars/note.md", "timeline.jsonl", "knowledge/claims.jsonl", "documents/table.csv"]) {
+    assert.ok(validateCapsuleManifest(fixture({ entries: [{ ...entry, path, layer: "methods" }] })).issues.some((issue) => issue.code === "capsule_scope_violation"), path);
+  }
+});

@@ -1,5 +1,5 @@
 /**
- * Whether this deployment shares capsules between accounts (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`, off until turned on).
+ * Whether this deployment shares capsules between accounts (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`, on unless an operator turns it off).
  *
  * Its own module, like `frontierFeature.ts`: the share panel asks, and `/api/me` is what answers. Presentation only: the share
  * routes answer 404 `capsule_share_not_enabled` themselves, so a browser that flips this gains a panel that says so, never the data.

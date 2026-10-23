@@ -309,15 +309,25 @@ test("an archive that carries anything but the declared text entries is refused 
       passwordWrap: container.passwordWrap.toString("base64"), payload: Object.fromEntries(Object.entries(container.payload).map(([name, bytes]) => [name, bytes.toString("base64")])) });
   };
   const preview = (extra) => archive(extra).then((text) => transfers.preview(alice, { archive: text, password: "test-only-share-passphrase" }));
-  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method, a file
-  // that is not one of the five a pack is made of, a method's extra file, a tool definition kept as JSON.
+  // Entries the container's own share scope would let through, and the share still refuses: an executable under a method and a
+  // method's extra file.
   const method = randomUUID();
   for (const extra of [
     [{ path: `methods/${method}/scripts/a.py`, mime: "text/x-python", content: "print(1)", layer: "methods" }],
     [{ path: `methods/${method}/notes.md`, mime: "text/markdown", content: "a second file in a method", layer: "methods" }],
-    [{ path: "exemplars/attachment.md", mime: "text/markdown", content: "an attachment named like text", layer: "methods" }],
-    [{ path: "lessons.jsonl", mime: "application/x-ndjson", content: "{\"tool\":\"search\"}\n", layer: "methods" }],
   ]) await assert.rejects(preview(extra), { code: "capsule_share_not_text_only" }, extra[0].path);
+  // A file that is not one of the five a pack is made of, and a tool definition kept as JSON. The container no longer lets a sender
+  // declare these paths at all (its table holds exactly the files a share is made of), so they are declared in a hand-made manifest:
+  // the share's own check reads the manifest and the payload's names first, and still refuses them by name before any key is derived.
+  for (const [path, mime, content] of [["exemplars/attachment.md", "text/markdown", "an attachment named like text"], ["lessons.jsonl", "application/x-ndjson", "{\"tool\":\"search\"}\n"]]) {
+    const envelope = JSON.parse(await archive([]));
+    envelope.manifest.entries.push({ path, mime, layer: "methods", bytes: content.length, sha256: "0".repeat(64) });
+    envelope.payload[path] = Buffer.from(content).toString("base64");
+    await assert.rejects(transfers.preview(alice, { archive: JSON.stringify(envelope), password: "test-only-share-passphrase" }), { code: "capsule_share_not_text_only" }, path);
+    await assert.rejects(packCapsule({ capsuleId: snapshotId, version: 1, createdAt: new Date().toISOString(),
+      issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
+      scope: ["workstyle"], layers: ["methods"], password: "test-only-share-passphrase", entries: [{ path, mime, content, layer: "methods" }] }), { code: "capsule_scope_violation" }, `${path} cannot be packed`);
+  }
   const clean = await archive([]);
   // Not hosted by anyone here, so nothing could be imported from it — but it is read, which is the point: no refusal by name.
   const read = await transfers.preview(alice, { archive: clean, password: "test-only-share-passphrase" });

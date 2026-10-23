@@ -770,8 +770,8 @@ services:
       # accounts must keep a new author's pack before it counts for platform
       # learning and for how long, how old an account must be and how many runs it
       # must have finished to be one of them, the daily ceiling on deliveries to
-      # other accounts, and the evidence-zone subscription (each switch off until
-      # turned on).
+      # other accounts, and the evidence-zone subscription (sharing between accounts
+      # is on unless turned off; the zone subscription is off until turned on).
       # Value-less: unset keeps config.mjs's defaults.
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:

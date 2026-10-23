@@ -38,7 +38,7 @@ const mallory = generateCapsuleIdentity();
 const entries = [
   { path: "standards.jsonl", content: '{"rule":"报告效应量而非显著性措辞"}\n', mime: "application/x-ndjson", layer: "profile" },
   { path: "methods/systematic-review/SKILL.md", content: "---\nname: systematic-review\n---\n\n先 PROSPERO 登记。\n", mime: "text/markdown", layer: "methods" },
-  { path: "lessons.jsonl", content: '{"lesson":"结论要区分人群"}\n', mime: "application/x-ndjson", layer: "episodes" },
+  { path: "provenance.json", content: '{"note":"结论要区分人群"}', mime: "application/json", layer: "methods" },
 ];
 
 function packForBob(overrides = {}) {
@@ -48,7 +48,7 @@ function packForBob(overrides = {}) {
     createdAt: "2026-08-23T00:00:00Z",
     issuer: { userId: "alice", signingKeyId: alice.signing.keyId, signingPrivateKey: alice.signing.privateKey },
     scope: ["workstyle"],
-    layers: ["profile", "methods", "episodes"],
+    layers: ["profile", "methods"],
     entries,
     recipients: [{ encKeyId: bob.encryption.keyId, publicKey: bob.encryption.publicKey }],
     prevManifestSha256: null,
@@ -133,9 +133,9 @@ test("the right key id with the wrong private key still fails", async () => {
 test("one changed byte fails verification", async () => {
   const container = await packForBob();
   const tampered = { ...container, payload: { ...container.payload } };
-  const target = Buffer.from(tampered.payload["lessons.jsonl"]);
+  const target = Buffer.from(tampered.payload["provenance.json"]);
   target[target.length - 20] ^= 0x01;
-  tampered.payload["lessons.jsonl"] = target;
+  tampered.payload["provenance.json"] = target;
   const opened = await openCapsule(tampered, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey },
@@ -177,7 +177,7 @@ test("an entry moved to another path inside the same container fails", async () 
   const container = await packForBob();
   const moved = {
     manifest: container.manifest,
-    payload: { ...container.payload, "lessons.jsonl": container.payload["standards.jsonl"] },
+    payload: { ...container.payload, "provenance.json": container.payload["standards.jsonl"] },
   };
   const opened = await openCapsule(moved, {
     issuer: { signingPublicKey: alice.signing.publicKey },
@@ -204,7 +204,7 @@ test("a password copy opens the same container offline, and a wrong password doe
     password: "correct horse battery staple",
   });
   assert.ok(opened.ok, JSON.stringify(opened.issues ?? []));
-  assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
+  assert.equal(opened.entries["provenance.json"], entries[2].content);
   await assert.rejects(async () => unwrapWithPassword(container.passwordWrap, "wrong"), /unable to authenticate|bad decrypt|Unsupported/i);
 });
 
@@ -272,7 +272,7 @@ test("a new password wrap is written at the cost OWASP asks of scrypt, and a pac
   legacy.manifest.signature.value = sign(null, Buffer.from(signablePayload(legacy.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
   const opened = await openCapsule(legacy, { ...keys, passwordWrap: wrapped });
   assert.ok(opened.ok, JSON.stringify(opened.issues ?? []));
-  assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
+  assert.equal(opened.entries["provenance.json"], entries[2].content);
 });
 
 test("a password wrap records the cost it used, so a later build can reproduce it", async () => {
@@ -425,7 +425,7 @@ test("password-only containers authenticate their wrapping metadata and roundtri
   assert.ok(validateCapsuleManifest(container.manifest).ok);
   const opened = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, password: "test-only-offline-placeholder", passwordWrap: container.passwordWrap });
   assert.equal(opened.ok, true);
-  assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
+  assert.equal(opened.entries["provenance.json"], entries[2].content);
 });
 
 test("password KDF rejects unbounded work and malformed framing before derivation", async () => {
@@ -628,28 +628,47 @@ test("caller identity claims are not promoted to trusted authorship", async () =
 });
 
 test("import supports only explicit UTF-8 text formats and matching MIME types", async () => {
-  for (const [path, mime] of [
-    ["exemplars/start.cjs", "application/javascript"], ["exemplars/run.ps1", "text/plain"],
-    ["exemplars/run.bat", "text/plain"], ["exemplars/safe.txt", "application/javascript"],
-    ["documents/report.pdf", "application/pdf"], ["methods/tool/SKILL.md", "application/javascript"],
+  // Inside the paths a share is made of, a file in a format that does something by itself, or whose MIME type is not its format's, is refused.
+  for (const [path, mime, scope] of [
+    ["standards.jsonl", "application/javascript", ["workstyle"]], ["provenance.json", "text/x-python", ["workstyle"]],
+    ["profile.md", "application/pdf", ["workstyle", "+profile"]], ["knowledge/chunks.jsonl", "application/x-sh", ["workstyle", "+knowledge"]],
+    ["methods/tool/SKILL.md", "application/javascript", ["workstyle"]], ["methods/run.py", "text/x-python", ["workstyle"]],
   ]) {
-    const hostile = signedPlainContainer({ scope: ["workstyle", "+documents"], entries: [{ path, mime, layer: "methods", content: "Synthetic unsupported content." }] });
+    const hostile = signedPlainContainer({ scope, entries: [{ path, mime, layer: "methods", content: "Synthetic unsupported content." }] });
     assert.equal(checkImportSafety(hostile.manifest).ok, false, path);
     const opened = await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } });
     assert.equal(opened.ok, false, path);
-    assert.ok(opened.issues.some(issue => issue.code === "capsule_executable_content"));
+    assert.ok(opened.issues.some(issue => issue.code === "capsule_executable_content"), path);
   }
-  for (const [path, mime] of [["exemplars/method.md", "text/markdown"], ["documents/table.csv", "text/csv"], ["documents/note.txt", "text/plain"]]) {
-    const allowed = signedPlainContainer({ scope: ["workstyle", "+documents"], entries: [{ path, mime, layer: "knowledge", content: "Synthetic supported text." }] });
-    assert.ok(checkImportSafety(allowed.manifest).ok);
-    assert.ok((await openCapsule(allowed, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok);
+  for (const [path, mime, scope, layer] of [
+    ["standards.jsonl", "application/x-ndjson", ["workstyle"], "profile"], ["provenance.json", "application/json", ["workstyle"], "methods"],
+    ["methods/tool/SKILL.md", "text/markdown", ["workstyle"], "methods"], ["profile.md", "text/markdown", ["workstyle", "+profile"], "profile"],
+    ["knowledge/chunks.jsonl", "application/x-ndjson", ["workstyle", "+knowledge"], "knowledge"],
+  ]) {
+    const allowed = signedPlainContainer({ scope, entries: [{ path, mime, layer, content: "Synthetic supported text." }] });
+    assert.ok(checkImportSafety(allowed.manifest).ok, path);
+    assert.ok((await openCapsule(allowed, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok, path);
   }
+});
+
+// The paths the old format spoke of — a lessons file, exemplars, a timeline, claims, whole documents — were never written by a share, and
+// the table that let a manifest declare them was looser than the transfer service that refuses them (2026-10-23): the validator now holds
+// exactly the files a share is made of, and a scope the transfer service does not accept is not a scope.
+test("a container declares only the paths and scopes a share is made of", async () => {
+  for (const path of ["lessons.jsonl", "exemplars/note.md", "timeline.jsonl", "knowledge/claims.jsonl", "documents/table.csv"]) {
+    const hostile = signedPlainContainer({ entries: [{ path, mime: "text/plain", layer: "methods", content: "Synthetic text." }] });
+    assert.ok(validateCapsuleManifest(hostile.manifest).issues.some(issue => issue.code === "capsule_scope_violation"), path);
+    assert.equal((await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok, false, path);
+    await assert.rejects(packForBob({ entries: [{ path, mime: "text/plain", layer: "methods", content: "Synthetic text." }] }), error => error.code === "capsule_scope_violation", path);
+  }
+  const documents = signedPlainContainer({ scope: ["workstyle", "+documents"], entries: [{ path: "documents/table.csv", mime: "text/csv", layer: "knowledge", content: "a,b" }] });
+  assert.ok(validateCapsuleManifest(documents.manifest).issues.some(issue => /unknown share scope "\+documents"/.test(issue.message)));
 });
 
 test("an extension that is also a property of every object is a file name like any other, not a crash (review C-12)", async () => {
   // The format table was looked up with `formats[extension]`, which for `.constructor` answers Object itself.
   for (const name of ["constructor", "toString", "hasOwnProperty", "__proto__", "valueOf", "prototype"]) {
-    const path = `exemplars/note.${name}`;
+    const path = `methods/note.${name}`;
     const manifest = signedPlainContainer({ scope: ["workstyle"], entries: [{ path, mime: "text/plain", layer: "methods", content: "Synthetic text." }] }).manifest;
     let safety;
     assert.doesNotThrow(() => { safety = checkImportSafety(manifest); }, path);
@@ -657,7 +676,7 @@ test("an extension that is also a property of every object is a file name like a
     assert.equal(safety.issues[0].code, "capsule_executable_content", path);
   }
   // Opening it is the same answer: a refusal that names the entry.
-  const hostile = signedPlainContainer({ scope: ["workstyle"], entries: [{ path: "exemplars/note.constructor", mime: "text/plain", layer: "methods", content: "Synthetic text." }] });
+  const hostile = signedPlainContainer({ scope: ["workstyle"], entries: [{ path: "methods/note.constructor", mime: "text/plain", layer: "methods", content: "Synthetic text." }] });
   const opened = await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } });
   assert.equal(opened.ok, false);
   assert.ok(opened.issues.some((issue) => issue.code === "capsule_executable_content"));

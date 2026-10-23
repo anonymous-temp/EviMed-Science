@@ -1864,8 +1864,9 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
 
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
-  // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: false, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
+  // (2026-10-23).
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);

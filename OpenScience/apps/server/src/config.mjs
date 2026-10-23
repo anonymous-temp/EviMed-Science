@@ -703,10 +703,12 @@ function evidenceFlywheelSettings(overrides) {
  * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
  * start with the variable's name.
  *
- * - Every line has its own switch, and each is off until an operator turns it on (2026-10-06): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a
- *   capsule with other accounts (deliveries, links, take-downs, the Agent Skills method pack: off, those routes answer 404
- *   `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is hidden through `features.capsuleShare`), and
- *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED` for subscribing a project to an evidence zone, which also needs the frontier on.
+ * - Every line has its own switch. Sharing is on (owner ruling 2026-10-10, "memory-capsule sharing stays on"; the default was false until
+ *   2026-10-23, which contradicted it): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a capsule with other accounts (deliveries, links,
+ *   take-downs: off, those routes answer 404 `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is
+ *   hidden through `features.capsuleShare`). The API-only stack pins it off (`docker-compose.api-only.yml`: it has no people to share
+ *   between), and the Agent Skills method pack and the encrypted file export are not behind it. The zone subscription is still off until an
+ *   operator turns it on, `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`, which also needs the frontier on.
  * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
  *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
  *   a link that never ends is a pack nobody can take back without remembering it exists.
@@ -743,7 +745,7 @@ function memorySharingSettings(overrides, frontierEnabled) {
     return number;
   };
   return {
-    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", false),
+    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", true),
     capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
     capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
     capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),

@@ -133,6 +133,10 @@ services:
       OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ${OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:-false}
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ${OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:-false}
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: ${OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:-false}
+      # Sharing between accounts is on by default everywhere else (config.mjs, `.env.example`, 2026-10-23); this shape has an institution
+      # and the subjects it made, no people to hand a capsule to, so it stays off here. As with the lines above, a `.env` made from
+      # `.env.example` (which says true) turns it on here too: remove that line from it. (A literal would end the question, and
+      # `deploymentEnvReachesTheContainer.test.mjs` refuses a lever written down: an operator must be able to move it.)
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ${OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:-false}
       OPEN_SCIENCE_REVIEW_ENABLED: ${OPEN_SCIENCE_REVIEW_ENABLED:-false}
       OPEN_SCIENCE_IM_ENABLED: ${OPEN_SCIENCE_IM_ENABLED:-false}

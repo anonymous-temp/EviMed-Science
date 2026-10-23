@@ -1637,7 +1637,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // every control-plane model call.
   const capsuleScanner = new CapsuleScanner(config, { usageLedger, fetchImpl: overrides.capsuleScanFetch ?? globalThis.fetch });
   const capsuleService = productDocuments
-    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
+    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner,
+      // Enabling or disabling a pack reaches the runtimes that are up (the methods they mounted at launch change before the next
+      // turn, no restart). `projectId` null is the account's list: every project's runtime. Asked at request time: the manager is
+      // composed further down, and a manager that does not have the refresh (package `mount`'s `refreshCapsuleMethods`) answers nothing.
+      onActivationChanged: ({ userId, projectId }) => /** @type {any} */ (runtimeManager).refreshCapsuleMethods?.({ userId, projectId }) })
     : null;
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
