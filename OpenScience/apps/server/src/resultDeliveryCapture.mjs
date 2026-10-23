@@ -109,6 +109,13 @@ function unreceiptedEntries(files, receipt) {
   return [...byDeliverable].map(([deliverableId, paths]) => ({ deliverableId, unbound: /** @type {const} */ (true), files: paths.map(file => ({ path: file })) }));
 }
 
+/** A prior independently bound capture is a byte witness; an observed path or presentation is not one. */
+async function boundRunVersion(results, project, run, relativePath, bytes) {
+  const prior = await results.list?.(project.userId, { projectId: project.id, path: relativePath, runId: run.id, limit: 100 });
+  return prior?.items.find(version => version.digest === sha(bytes) && version.producer?.sessionId === run.sessionId
+    && version.producer?.kind !== "workspace" && version.coverage?.producer === "bound") ?? null;
+}
+
 /**
  * Internal only. `receipt` has already passed readDeliveryReceipt; hashes are rechecked at publication.
  * Partial capture never withholds the delivered report. A failed matrix capture cannot promote its claims.
@@ -227,10 +234,13 @@ export async function captureResultDelivery({ results, project, run, receipt = n
           try { output = await results.captureFile(input); }
           catch (error) {
             if (error?.code !== "result_capture_changed") throw error;
-            // Changed after its receipt: still the file the run produced. It
-            // is captured as the bytes it is now, with nothing the receipt
-            // vouched for — no digest binding, no claim links, no review.
-            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer: fileProducer, findings,
+            // A receipt for the old bytes cannot assign different current bytes to this session.
+            const bytes = await stableBytes(project, file.path, results.maxSnapshotBytes ?? 100 * 1024 * 1024);
+            const witness = await boundRunVersion(results, project, run, file.path, bytes);
+            const revision = file.path.startsWith("artifacts/result-revisions/")
+              ? await results.resolveCaptureContext?.(project, { relativePath: file.path, producer, actualDigest: sha(bytes) }) : null;
+            output = witness ?? await results.captureFile({ userId: project.userId, project, relativePath: file.path,
+              producer: revision ? producer : { ...producer, kind: "workspace", sessionId: null }, findings,
               inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
             unbound.push(file.path);
           }
@@ -285,9 +295,7 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
   for (const relativePath of new Set(ordinary)) {
     try {
       const bytes = await stableBytes(project, relativePath, results.maxSnapshotBytes ?? 100 * 1024 * 1024);
-      const prior = await results.list?.(project.userId, { projectId: project.id, path: relativePath, runId: run.id, limit: 100 });
-      const witnessed = prior?.items.find(version => version.digest === sha(bytes) && version.producer?.sessionId === run.sessionId
-        && version.producer?.kind !== "workspace");
+      const witnessed = await boundRunVersion(results, project, run, relativePath, bytes);
       if (witnessed && !relativePath.startsWith(prefix)) { ordinaryItems.push(witnessed); continue; }
       const producer = { kind: "deliverable", runId: run.id, sessionId: run.sessionId, eventId: "ordinary-output" };
       const revision = relativePath.startsWith("artifacts/result-revisions/")

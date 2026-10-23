@@ -167,3 +167,20 @@ test("an actual native presentation gives a shell-written ordinary Word file its
   assert.equal(captured.items[0].producer.kind, "deliverable");
   assert.equal(captured.items[0].producer.sessionId, f.run.sessionId);
 });
+
+test("a changed receipt still honors the actual request's owned revision output namespace", async t => {
+  const f = await fixture(t);
+  const original = await f.capture("article.md", "The immutable original.");
+  const bound = await f.revisions.bindConversation("owner", f.project, { sessionId: f.run.sessionId, requestId: "submitted-request",
+    content: [{ type: "text", text: "Clarify this article." }] }, { versionId: original.versionId, digest: original.digest, target: null, expectedHeadVersionId: null });
+  const outputPath = `artifacts/result-revisions/${bound.id}/output/article.md`;
+  const revised = "The clarified revised article.";
+  await mkdir(path.dirname(path.join(f.project.workspaceDir, outputPath)), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, outputPath), revised);
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project, run: { ...f.run, outputFiles: [outputPath] },
+    readReceipt: async () => ({ entries: [{ deliverableId: "revised", files: [{ path: outputPath, sha256: original.digest }] }] }) });
+  assert.equal(captured.items[0].producer.sessionId, f.run.sessionId);
+  assert.equal(captured.items[0].supersedesVersionId, original.versionId);
+  assert.equal((await f.results.raw("owner", "p", captured.items[0].versionId)).bytes.toString(), revised);
+});
