@@ -1516,7 +1516,8 @@ export class SourceService {
       WHERE r.user_id=$1 AND r.kind='source' AND d.project_id=$2 AND d.deleted_at IS NULL AND r.deleted_at IS NULL
         AND (r.payload->'publication'->'bindings' ? $3 OR r.payload->>'familyId'=$3)
     ), occurrences AS (
-      SELECT DISTINCT ON (id,(binding->>'publicationRevision')::bigint) *
+      SELECT DISTINCT ON (id,(binding->>'publicationRevision')::bigint) *,
+        min(recorded_at) OVER (PARTITION BY id,(binding->>'publicationRevision')::bigint) AS published_at
       FROM snapshots WHERE binding->>'current'='true'
       ORDER BY id,(binding->>'publicationRevision')::bigint,revision DESC
     ) SELECT * FROM occurrences ORDER BY (binding->>'publicationRevision')::bigint DESC,id LIMIT $4`,
@@ -1530,7 +1531,7 @@ export class SourceService {
       const key = `${row.id}:${version}`;
       if (occurrences.has(key)) continue;
       const live = { id: row.id, userId, projectId: row.project_id, kind: "source", payload: row.live_payload,
-        createdAt: productTime(row.created_at), updatedAt: productTime(row.updated_at), deletedAt: null };
+        createdAt: productTime(row.published_at), updatedAt: productTime(row.updated_at), deletedAt: null };
       const liveBinding = sourcePublicationBindings(live)[familyId];
       const current = liveBinding?.current && Number(liveBinding.publicationRevision) === version;
       if (current) currentVersion = Math.max(currentVersion, version);

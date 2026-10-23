@@ -31,6 +31,14 @@ test('note A to B to A preserves owned immutable history and only publishes the 
         logicalPath: meta.logicalPath, title: meta.title, link: meta.link, sha256, size: buffer.length, mimeType: 'text/markdown', mtime: '2026-10-24T00:00:00Z' });
     } });
   const a = await entries.addNote({ user, project, title: 'History', body: 'Body A' });
+  assert.ok(Number.isFinite(Date.parse(a.source.createdAt)), 'registration has a creation timestamp');
+  assert.ok(Number.isFinite(Date.parse((await sources.get(user.id, a.source.id)).createdAt)), 'ordinary source get has a creation timestamp');
+  const initialList = await sources.list(user.id, { projectId: project.id });
+  assert.ok(initialList.items.length > 0);
+  for (const row of initialList.items) {
+    assert.equal(typeof row.createdAt, 'string', 'public source listing retains the ordinary creation timestamp');
+    assert.ok(Number.isFinite(Date.parse(row.createdAt)));
+  }
   a.source = await sources.documents.put(user.id, 'source', a.source.id, { ...a.source.payload, status: 'complete' }, { expectedRevision: a.source.revision, projectId: project.id });
   assert.equal(sourceReadable(a.source.payload), true);
   const b = await entries.saveNote({ user, project, source: a.source, title: 'History', body: 'Body B' });
@@ -97,6 +105,7 @@ test('note A to B to A preserves owned immutable history and only publishes the 
   assert.deepEqual(await eligible(), [aliasA.id, aliasC.id].sort());
   const pHistory = await sources.family(user.id, aliasA.id, { familyId: familyP });
   assert.deepEqual(pHistory.items.map(row => [row.id, row.payload.version]), [[aliasA.id, 3], [aliasB.id, 2], [aliasA.id, 1]]);
+  assert.ok(Date.parse(pHistory.items[0].createdAt) > Date.parse(pHistory.items[2].createdAt), 'republication time differs from original occurrence');
   const qHistory = await sources.family(user.id, aliasA.id, { familyId: familyQ });
   assert.deepEqual(qHistory.items.map(row => row.id), [aliasC.id, aliasA.id]);
   await assert.rejects(sources.family(user.id, aliasB.id, { familyId: familyQ }), { code: 'source_family_not_found' });

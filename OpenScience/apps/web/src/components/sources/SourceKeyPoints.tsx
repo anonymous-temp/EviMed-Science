@@ -379,9 +379,9 @@ function MaterialList({ entries, openable, onShowPage }: { entries: MaterialEntr
 /** The versions before this one, folded; and, for an old version, the way to the newest. */
 function Versions({ source, family, versionPath }: { source: SourceRecord; family: SourceFamily | null; versionPath: (sourceId: string) => string }) {
   if (!family || family.items.length < 2) return null;
-  const mine = Number(source.payload.version) || 0;
+  const mine = Number(source.payload.publication?.bindings?.[family.familyId ?? ""]?.publicationRevision ?? source.payload.version) || 0;
   const versionOf = (item: SourceRecord) => Number(item.payload.version) || 0;
-  const older = family.items.filter((item) => item.id !== source.id && versionOf(item) < mine);
+  const older = family.items.filter((item) => versionOf(item) < mine);
   const newest = family.items.find((item) => versionOf(item) > mine);
   if (!newest && older.length === 0) return null;
   return (
@@ -396,7 +396,9 @@ function Versions({ source, family, versionPath }: { source: SourceRecord; famil
           <ul className="space-y-1">
             {older.map((item) => (
               <li key={`${item.id}:${versionOf(item)}`}>
-                <Link to={versionPath(item.id)} className="text-link hover:underline">第 {versionOf(item)} 版 · {formatDay(item.createdAt)}</Link>
+                {item.id === source.id
+                  ? <span>第 {versionOf(item)} 版 · {formatDay(item.createdAt)}（内容相同）</span>
+                  : <Link to={versionPath(item.id)} className="text-link hover:underline">第 {versionOf(item)} 版 · {formatDay(item.createdAt)}</Link>}
               </li>
             ))}
           </ul>

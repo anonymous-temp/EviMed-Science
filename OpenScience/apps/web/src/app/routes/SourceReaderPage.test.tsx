@@ -783,6 +783,20 @@ describe("a document's page", () => {
       expect(mocks.saveSourceNote).not.toHaveBeenCalled();
     });
 
+    it("shows same-content occurrences and uses the selected family's publication revision", async () => {
+      const current = { ...note, payload: { ...note.payload, version: 1, familyId: "fam_note", publication: { current: true, bindings: { fam_note: { current: true, logicalPath: "note.md", publicationRevision: 3 } } } } };
+      const prior = { ...current, id: "src_note_b", payload: { ...current.payload, version: 2 } };
+      const first = { ...current, payload: { ...current.payload, version: 1 } };
+      mocks.getSource.mockResolvedValue(current);
+      mocks.getSourceFamily.mockResolvedValue({ sourceId: current.id, familyId: "fam_note", currentVersion: 3, items: [{ ...current, payload: { ...current.payload, version: 3 } }, prior, first], nextCursor: null });
+      resize(TWO_COLUMN_MIN_WIDTH);
+      renderReader(readerAt(current.id));
+      await userEvent.click(await screen.findByText("以前的版本（2）"));
+      expect(await screen.findByText(/第 1 版.*内容相同/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /第 2 版/ })).toHaveAttribute("href", "/app/files/src_note_b");
+      expect(screen.queryByRole("link", { name: "打开最新版本" })).not.toBeInTheDocument();
+    });
+
     it("keeps note version navigation beside its independently loaded preview", async () => {
       const old = { ...note, payload: { ...note.payload, familyId: "fam_note", version: 1 } };
       const latest = { ...old, id: "src_note_latest", payload: { ...old.payload, version: 2 } };
