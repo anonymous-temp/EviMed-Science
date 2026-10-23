@@ -9,18 +9,19 @@ import kgMedical from "./knowledgeFixtures/graph-kg-medical.json";
 import wikiMedical from "./knowledgeFixtures/graph-wiki-medical.json";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 
-const mocks = vi.hoisted(() => ({ graph: vi.fn(), chart: { current: null as null | { on: { click: (params: object) => void }; option: { series: Array<{ links: Array<{ source: number; target: number }> }> } | null } } }));
+const mocks = vi.hoisted(() => ({ graph: vi.fn(), exportImage: vi.fn(() => "data:image/png;base64,AA=="), chart: { current: null as null | { on: { click: (params: object) => void }; option: { series: Array<{ links: Array<{ source: number; target: number }> }> } | null } } }));
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getKnowledgeGraph: mocks.graph }));
 // The canvas cannot be painted here; the chart's option and the events it forwards are what the page hands it.
 vi.mock("@/components/charts/MapChart", () => ({
-  MapChart: (props: { on: { click: (params: object) => void }; option: { series: Array<{ links: Array<{ source: number; target: number }> }> } | null; label: string }) => {
+  MapChart: (props: { on: { click: (params: object) => void }; option: { series: Array<{ links: Array<{ source: number; target: number }> }> } | null; label: string; chart?: { current: unknown } }) => {
+    if (props.chart) props.chart.current = { getDataURL: mocks.exportImage };
     mocks.chart.current = props;
     return <div role="img" aria-label={props.label} />;
   },
 }));
 
 const selectSpy = vi.fn(async (_projectId: string, land?: () => void) => { land?.(); });
-function Where() { const location = useLocation(); return <p data-testid="where">{location.pathname}{location.search}{JSON.stringify((location.state as { runtimeUiIntent?: { references?: unknown } } | null)?.runtimeUiIntent?.references ?? null)}</p>; }
+function Where() { const location = useLocation(); return <><p data-testid="where">{location.pathname}{location.search}{JSON.stringify((location.state as { runtimeUiIntent?: { references?: unknown } } | null)?.runtimeUiIntent?.references ?? null)}</p><pre data-testid="draft">{(location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent?.draft}</pre></>; }
 
 const base: KnowledgeListState = { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg" };
 function view(state: Partial<KnowledgeListState> = {}, onChange = vi.fn(), kind: "wiki" | "kg" = "kg") {
@@ -75,6 +76,70 @@ describe("KnowledgeGraphView", () => {
     expect(within(controls).getByRole("button", { name: "收起视图" })).toBeInTheDocument();
     await userEvent.click(within(controls).getByRole("button", { name: "回到全图" }));
     expect(mocks.chart.current!.option!.series[0]).toHaveProperty("zoom", 1);
+  });
+
+  it("removes project A links before a delayed or failed project B load", async () => {
+    let rejectB: (reason: Error) => void = () => undefined;
+    mocks.graph.mockImplementation((id: string) => id === "A" ? Promise.resolve(kgMedical) : new Promise((_resolve, reject) => { rejectB = reject; }));
+    const props = { kind: "kg" as const, listState: base, version: "1", onChange: vi.fn(), empty: <p>Empty</p> };
+    const content = (projectId: string) => <MemoryRouter><KnowledgeGraphView {...props} projectId={projectId} /></MemoryRouter>;
+    const rendered = render(content("A"));
+    await screen.findByRole("list", { name: "实体" });
+    rendered.rerender(content("B"));
+    expect(screen.queryByRole("list", { name: "实体" })).toBeNull();
+    await act(async () => { rejectB(new Error("B unavailable")); });
+    expect(await screen.findByText(/无法画出图谱/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: rocket.title })).toBeNull();
+  });
+
+  it("exports the currently displayed graph with its project scope", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function(this: HTMLAnchorElement) {
+      expect(this.download).toBe("entities-p1.png");
+      expect(this.href).toBe("data:image/png;base64,AA==");
+    });
+    view();
+    await screen.findByRole("list", { name: "实体" });
+    await userEvent.click(screen.getByRole("button", { name: "导出图片" }));
+    expect(mocks.exportImage).toHaveBeenCalledWith({ type: "png", pixelRatio: 2 });
+    expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+  });
+
+  it("lets a keyboard select a relationship and prepares its supplied evidence without inventing missing passages", async () => {
+    const sourceId = `src_${"a".repeat(32)}`;
+    const unavailableId = `src_${"b".repeat(32)}`;
+    const node = (id: string) => ({ id, title: id, path: id, degree: 1, sourceId: null, description: "", sources: [], stale: [] });
+    mocks.graph.mockResolvedValue({ kind: "kg", nodes: [node("Alpha"), node("Beta")], links: [{ source: "Alpha", target: "Beta", label: "supports", evidence: [
+      { sourceId, title: "Trial paper", sourceVersion: 4, locator: { page: 7, sheet: "Results", cell: "B4" }, quote: "The exact supplied evidence.", available: true },
+      { sourceId: unavailableId, title: "Earlier paper", sourceVersion: 2, available: false },
+    ] }], unresolved: 0, problems: [] });
+    view();
+    const relationship = await screen.findByRole("button", { name: "Alpha supports Beta" });
+    relationship.focus();
+    await userEvent.keyboard("{Enter}");
+    const evidence = await screen.findByRole("region", { name: "连线的依据" });
+    expect(evidence).toHaveTextContent("Trial paper");
+    await userEvent.click(within(evidence).getByRole("button", { name: "在对话中使用这条关系" }));
+    const draft = await screen.findByTestId("draft");
+    expect(draft).toHaveTextContent("Trial paper · 第 4 版");
+    expect(draft).toHaveTextContent("第 7 页");
+    expect(draft).toHaveTextContent("Results · B4");
+    expect(draft).toHaveTextContent("The exact supplied evidence.");
+    expect(draft).toHaveTextContent("Earlier paper · 第 2 版 · 当前不可读取 · 未提供原文位置 · 未提供引文");
+    expect(screen.getByTestId("where")).toHaveTextContent(JSON.stringify([{ id: sourceId, title: "Trial paper" }]));
+  });
+
+  it("carries the evidence passage and source version from a canvas edge into the draft", async () => {
+    const sourceId = `src_${"c".repeat(32)}`;
+    const graph = kgMedical as unknown as KnowledgeGraph;
+    mocks.graph.mockResolvedValue({ ...graph, links: graph.links.map((entry) => ({ ...entry, evidence: [{ sourceId, title: "Versioned trial", sourceVersion: 8, quote: "Preserved trial passage", locator: { page: 11 } }] })) });
+    view();
+    await screen.findByRole("list", { name: "实体" });
+    const link = mocks.chart.current!.option!.series[0]!.links[0]!;
+    act(() => { mocks.chart.current!.on.click({ dataType: "edge", data: { source: link.source, target: link.target } }); });
+    await userEvent.click(within(await screen.findByRole("region", { name: "连线的依据" })).getByRole("button", { name: "在对话中使用这条关系" }));
+    expect(await screen.findByTestId("draft")).toHaveTextContent("Versioned trial · 第 8 版 · 第 11 页");
+    expect(screen.getByTestId("draft")).toHaveTextContent("Preserved trial passage");
   });
 
   it("shows the hits of the search alone in the list", async () => {
