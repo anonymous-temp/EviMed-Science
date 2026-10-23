@@ -2,7 +2,7 @@ import { GEO_METRICS } from '@evimed/domain';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { getGeoQuestions, type GeoProject, type GeoQuestions } from '@/lib/geoClient';
-import { webErrorMessage } from '@/lib/apiClient';
+import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, webErrorMessage } from '@/lib/apiClient';
 import { mapQuestionRows, readQuestionWorkbook, type QuestionWorkbook, type QuestionMapping } from '@/lib/geoQuestionImport';
 import { getGeoDiagnosisProgress, importGeoQuestions, previewGeoQuestions, recoverGeoDiagnosis, startGeoDiagnosis, type GeoDiagnosisProgress, type GeoImportInput, type GeoImportPreview, type GeoMeasurementContract, type GeoQuestionImportRow } from '@/lib/geoQuestionWorkbenchClient';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +21,9 @@ const key = () => crypto.randomUUID();
 /** Version editing and diagnosis are deliberate writes; viewing or importing never starts sampling. */
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
   const [params, setParams] = useSearchParams();
+  const identityGeneration = useRef(0);
+  const [identityVersion, setIdentityVersion] = useState(0);
+  const [storageScope, setStorageScope] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [book, setBook] = useState<QuestionWorkbook | null>(null);
   const [sheet, setSheet] = useState(0);
@@ -33,19 +36,45 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [error, setError] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
   const pendingImport = useRef<(GeoImportInput & { requestKey: string }) | null>(null);
+  useEffect(() => {
+    const reset = () => { identityGeneration.current++; setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false); setSaved(null); };
+    const started = () => { reset(); setIdentityVersion(value => value + 1); };
+    window.addEventListener(WEB_SESSION_ENDED_EVENT, reset); window.addEventListener(WEB_SESSION_STARTED_EVENT, started);
+    return () => { window.removeEventListener(WEB_SESSION_ENDED_EVENT, reset); window.removeEventListener(WEB_SESSION_STARTED_EVENT, started); };
+  }, []);
+  useEffect(() => {
+    setStorageScope(null); pendingImport.current = null; setRows([]); setPreview(null); setEditing(false);
+    let live = true; const generation = ++identityGeneration.current;
+    void fetchWebMe().then(me => {
+      if (!live || generation !== identityGeneration.current || !me?.user?.id) return;
+      const scoped = `geo-question-import:${me.tenant?.id ?? me.user.tenantId ?? me.user.id}:${me.user.id}:${project.projectId}:${geoId}`;
+      const raw = localStorage.getItem(scoped);
+      if (raw) {
+        const held = JSON.parse(raw) as { input?: GeoImportInput & { requestKey: string }; preview?: GeoImportPreview };
+        if (held.input?.requestKey && Array.isArray(held.input.rows) && held.input.rows.length <= 400 && held.input.contract && held.preview) {
+          pendingImport.current = held.input; setRows(held.input.rows); setContract(held.input.contract); setPreview(held.preview); setEditing(true);
+        }
+      }
+      setStorageScope(scoped);
+    }).catch(() => { if (live) setError('账户或上次保存记录无法读取，请刷新后重试。'); });
+    return () => { live = false; };
+  }, [geoId, project.projectId, identityVersion]);
   const pendingStart = useRef<{ version: number; requestKey: string } | null>(null);
+  useEffect(() => { pendingStart.current = null; }, [storageScope]);
   const canEdit = !project.access || project.access.abilities.includes('edit');
   const canRun = !project.access || project.access.abilities.includes('run');
   const version = saved ?? data.version;
+  const activeContract = saved != null ? contract : data.contract;
   const round = params.get('diagnosisRound');
   const target = { geoId, projectId: project.projectId, sessionId: project.sessionId };
-  const selectRound = (roundId: string) => { sessionStorage.setItem(`geo-diagnosis:${geoId}`, roundId); setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', roundId); return next; }, { replace: true }); };
-  useEffect(() => { const prior = sessionStorage.getItem(`geo-diagnosis:${geoId}`); if (!round && prior) setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', prior); return next; }, { replace: true }); }, [geoId, round, setParams]);
+  const selectRound = (roundId: string) => { sessionStorage.setItem(`${storageScope}:diagnosis`, roundId); setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', roundId); return next; }, { replace: true }); };
+  useEffect(() => { if (!storageScope) return; const prior = sessionStorage.getItem(`${storageScope}:diagnosis`); if (!round && prior) setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', prior); return next; }, { replace: true }); }, [storageScope, round, setParams]);
   useEffect(() => { if (!editing) setContract(data.contract ?? initialContract); }, [data.contract, editing]);
   const act = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (cause) { setError(failure(cause)); } finally { setBusy(false); } };
   const updateRow = (index: number, patch: Partial<GeoQuestionImportRow>) => { setRows(previous => previous.map((row, at) => at === index ? { ...row, ...patch } : row)); changed(); };
   const changed = () => { setPreview(null); pendingImport.current = null; };
-  const editExisting = () => { void act(async () => {
+  const editExisting = () => { if (pendingImport.current) return; void act(async () => {
+    if (!data.contract) throw new Error('这个历史题库不支持原表编辑，请导入完整原题创建新的采样版本。');
     if (data.version == null) throw new Error('请先选择一个问句版本再编辑。');
     const complete = data.selection ? await getGeoQuestions(geoId, data.version) : data;
     setBook(null); setContract(complete.contract ?? initialContract);
@@ -57,47 +86,48 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const loadFile = (file: File) => { void act(async () => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('请选择 Excel 或 CSV 文件。');
     if (file.size > 10 * 1024 * 1024) throw new Error('文件超过 10 MB，请拆分后导入。');
-    const next = await readQuestionWorkbook(await file.arrayBuffer()); setBook(next); setSheet(0); setMapping({}); setRows([]); changed();
+    const next = await readQuestionWorkbook(await file.arrayBuffer(), /\.csv$/i.test(file.name) ? 'csv' : 'excel'); setBook(next); setSheet(0); setMapping({}); setRows([]); changed();
   }); };
   const start = () => { void act(async () => {
+    if (!storageScope) throw new Error('请等待账户确认后再开始。');
     if (version == null) throw new Error('请先保存问句版本。');
     // Keep the same opaque key on a lost response: the server returns the existing round.
-    if (!pendingStart.current || pendingStart.current.version !== version) { const stored = sessionStorage.getItem(`geo-diagnosis-start:${geoId}:${version}`); pendingStart.current = { version, requestKey: stored ?? key() }; sessionStorage.setItem(`geo-diagnosis-start:${geoId}:${version}`, pendingStart.current.requestKey); }
+    if (!pendingStart.current || pendingStart.current.version !== version) { const stored = sessionStorage.getItem(`${storageScope}:start:${version}`); pendingStart.current = { version, requestKey: stored ?? key() }; sessionStorage.setItem(`${storageScope}:start:${version}`, pendingStart.current.requestKey); }
     const result = await startGeoDiagnosis(geoId, version, pendingStart.current.requestKey);
     await getGeoDiagnosisProgress(geoId, result.roundId);
     selectRound(result.roundId);
   }); };
   return <Section title="问句整理与诊断" level="sub">
     <div className="flex flex-wrap items-center gap-2">
-      {canEdit && <Button size="sm" onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
-      {canEdit && data.groups.length > 0 && data.version != null && <Button size="sm" variant="text" onClick={editExisting}>编辑为新版本</Button>}
+      {canEdit && <Button size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
+      {canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
       {version != null && <AskAi project={target} label="建议分类" draft={`/geo-insight 请读取第 ${version} 版完整原题，仅建议测量池、人群、阶段与分类状态。保留原题、编号、客户分组与原标签，输出带原编号的可导入表格，建议不覆盖客户原分类；用户采用后另存新版本。`} />}{version != null && <AskAi project={target} label="检查覆盖" draft={`/geo-insight 请检查第 ${version} 版问句覆盖，读取该版本原题、已有资料和旅程人群，指出具体缺口与依据，不编造配额。保留原分类，建议另列，输出可编辑的新版本问句表，不自动采样。`} />}
-      {version != null && canRun && <Button size="sm" disabled={busy} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
+      {version != null && activeContract != null && canRun && <Button size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
     </div>
-    {version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${data.contract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(data.contract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit ? <Button size="sm" variant="text" onClick={editExisting}>调整口径</Button> : undefined} />}
+    {version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" onClick={editExisting}>调整口径</Button> : undefined} />}
     {editing && <div className="my-4 flex flex-col gap-4">
-      <Input type="file" label="选择 Excel / CSV（首行为列名，最多 400 题、10 MB）" accept=".xlsx,.xls,.csv" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if (file) loadFile(file); }} />
+      <Input type="file" label="选择 Excel / CSV（首行为列名，最多 400 题、10 MB）" accept=".xlsx,.xls,.csv" disabled={busy || !!pendingImport.current} onChange={event => { const file = event.target.files?.[0]; if (file) loadFile(file); }} />
       {book && <>
-        <label className="text-ui text-text">工作表<select aria-label="工作表" className={inputClasses()} value={sheet} onChange={event => { setSheet(Number(event.target.value)); setRows([]); setMapping({}); changed(); }}>{book.sheets.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select></label>
-        <div className="grid gap-3 md:grid-cols-2">{(['text', 'originalId', 'originalGroup', 'clientTags'] as const).map((field, index) => <label key={field} className="text-ui text-text">{['原题文本', '原编号', '客户原分类', '客户原标签'][index]}<select className={inputClasses()} value={mapping[field] ?? ''} onChange={event => { setMapping(previous => ({ ...previous, [field]: event.target.value === '' ? undefined : Number(event.target.value) })); changed(); setRows([]); }}><option value="">请选择列</option>{book.sheets[sheet].rows[0]?.map((name, column) => <option key={column} value={column}>{column + 1} · {name || '未命名'}</option>)}</select></label>)}</div>
-        <Button size="sm" disabled={busy} onClick={() => { void act(async () => { const mapped = mapQuestionRows(book.sheets[sheet].rows, mapping); setRows(mapped.rows); setBlank(mapped.excludedBlankRows); changed(); }); }}>读取映射行</Button>
+        <label className="text-ui text-text">工作表<select disabled={busy || !!pendingImport.current} aria-label="工作表" className={inputClasses()} value={sheet} onChange={event => { setSheet(Number(event.target.value)); setRows([]); setMapping({}); changed(); }}>{book.sheets.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select></label>
+        <div className="grid gap-3 md:grid-cols-2">{(['text', 'originalId', 'originalGroup', 'clientTags', 'pool', 'audience', 'journeyStage', 'kind', 'sourceUrl', 'collectedAt', 'classificationStatus', 'isMeasured'] as const).map((field, index) => <label key={field} className="text-ui text-text">{['原题文本', '原编号', '客户原分类', '客户原标签', '测量池（P1–P4）', '人群（patient / physician 等）', '旅程阶段', '问句性质（client / typical / real / label_safety）', '来源链接', '采集日期', '分类状态（unclassified / suggested / confirmed）', '参与测量（true / false / 1 / 0）'][index]}<select disabled={busy || !!pendingImport.current} className={inputClasses()} value={mapping[field] ?? ''} onChange={event => { setMapping(previous => ({ ...previous, [field]: event.target.value === '' ? undefined : Number(event.target.value) })); changed(); setRows([]); }}><option value="">请选择列</option>{book.sheets[sheet].rows[0]?.map((name, column) => <option key={column} value={column}>{column + 1} · {name || '未命名'}</option>)}</select></label>)}</div>
+        <Button size="sm" disabled={busy || !!pendingImport.current} onClick={() => { void act(async () => { const mapped = mapQuestionRows(book.sheets[sheet].rows, mapping); setRows(mapped.rows); setBlank(mapped.excludedBlankRows); changed(); }); }}>读取映射行</Button>
       </>}
       <ContractFields value={contract} disabled={busy || !!pendingImport.current} onChange={next => { setContract(next); changed(); }} />
       {rows.length > 0 && <>
         <Note result={[`实际 ${rows.length} 题 · 已排除全空行 `, { n: blank }, " 行。重复原题保留；客户标签与平台分类分列。"]} />
         <div className="max-h-96 overflow-auto"><table className="w-full text-caption"><thead><tr>{['原编号 / 客户分类 / 原标签', '原题（完整文本）', '平台补充分类', '参与测量'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>
-          <td className="p-2 align-top whitespace-pre-wrap">{row.originalId ?? '—'} / {row.originalGroup ?? '—'} / {row.clientTags?.join('、') || '—'}</td>
+          <td className="p-2 align-top whitespace-pre-wrap"><fieldset disabled={busy || !!pendingImport.current}><Input label={`第 ${index + 1} 题原编号`} value={row.originalId ?? ''} onChange={event => updateRow(index, { originalId: event.target.value || null })} /><Input label={`第 ${index + 1} 题客户原分类`} value={row.originalGroup ?? ''} onChange={event => updateRow(index, { originalGroup: event.target.value || null })} />{row.clientTags?.map((tag, at) => <Textarea key={at} label={`第 ${index + 1} 题原标签 ${at + 1}`} value={tag} onChange={event => updateRow(index, { clientTags: row.clientTags?.map((item, position) => position === at ? event.target.value : item) })} />)}</fieldset></td>
           <td className="p-2"><Textarea aria-label={`第 ${index + 1} 题文本`} value={row.text} disabled={busy || !!pendingImport.current} onChange={event => { setRows(previous => previous.map((item, at) => at === index ? { ...item, text: event.target.value } : item)); changed(); }} /></td>
           <td className="p-2"><select aria-label={`第 ${index + 1} 题测量池`} className={inputClasses()} value={row.pool ?? ''} disabled={busy || !!pendingImport.current} onChange={event => { const pool = (event.target.value || null) as GeoQuestionImportRow['pool']; setRows(previous => previous.map((item, at) => at === index ? { ...item, pool, classificationStatus: 'confirmed' } : item)); changed(); }}><option value="">未分类</option>{['P1', 'P2', 'P3', 'P4'].map(pool => <option key={pool}>{pool}</option>)}</select><details><summary>人群、阶段与来源</summary><fieldset disabled={busy || !!pendingImport.current}><Input label={`第 ${index + 1} 题旅程阶段`} value={row.journeyStage ?? ''} onChange={event => updateRow(index, { journeyStage: event.target.value || null, classificationStatus: 'confirmed' })} /><label>人群<select className={inputClasses()} value={row.audience ?? ''} onChange={event => updateRow(index, { audience: (event.target.value || null) as GeoQuestionImportRow['audience'], classificationStatus: 'confirmed' })}><option value="">未分类</option>{Object.entries({ patient: '患者', physician: '医生', caregiver: '照护者', pharmacist: '药师', institution: '机构', other: '其他' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>问句性质<select className={inputClasses()} value={row.kind ?? 'client'} onChange={event => updateRow(index, { kind: event.target.value as GeoQuestionImportRow['kind'] })}><option value="client">客户原题</option><option value="typical">典型 / 模型建议</option><option value="real">有来源真实问法</option><option value="label_safety">说明书安全题</option></select></label><Input label={`第 ${index + 1} 题来源链接`} value={row.sourceUrl ?? ''} onChange={event => updateRow(index, { sourceUrl: event.target.value || null })} /><Input label={`第 ${index + 1} 题采集日期`} value={row.collectedAt ?? ''} onChange={event => updateRow(index, { collectedAt: event.target.value || null })} /><label>分类状态<select className={inputClasses()} value={row.classificationStatus ?? 'unclassified'} onChange={event => updateRow(index, { classificationStatus: event.target.value as GeoQuestionImportRow['classificationStatus'] })}><option value="unclassified">未分类</option><option value="suggested">建议，待采用</option><option value="confirmed">已采用</option></select></label></fieldset></details></td>
           <td className="p-2"><input type="checkbox" aria-label={`测量第 ${index + 1} 题`} checked={row.isMeasured !== false} disabled={busy || !!pendingImport.current} onChange={event => { setRows(previous => previous.map((item, at) => at === index ? { ...item, isMeasured: event.target.checked } : item)); changed(); }} /></td>
         </tr>)}</tbody></table></div>
         <Button size="sm" disabled={busy} onClick={() => { void act(async () => { setPreview(await previewGeoQuestions(geoId, { rows, contract })); }); }}>核对导入预览</Button>
-        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || preview.plannedCalls > 5000} onClick={() => { void act(async () => { pendingImport.current ??= { rows, contract, requestKey: key() }; const result = await importGeoQuestions(geoId, pendingImport.current); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
+        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!storageScope) throw new Error('请等待账户确认后再保存。'); pendingImport.current ??= { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: pendingImport.current, preview })); const result = await importGeoQuestions(geoId, pendingImport.current); localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
       </>}
       <Button size="sm" variant="text" disabled={busy} onClick={() => setEditing(false)}>收起整理</Button>
     </div>}
     {error && <p role="alert" className="my-3 text-ui text-error">{error}</p>}
-    {round && <DiagnosisProgress key={round} geoId={geoId} round={round} canRun={canRun} onRound={selectRound} />}
+    {round && storageScope && <DiagnosisProgress storageScope={storageScope} key={round} geoId={geoId} round={round} canRun={canRun} onRound={selectRound} />}
   </Section>;
 }
 
@@ -122,12 +152,12 @@ function storedRecovery(storageKey: string): RecoveryRequest | null {
   } catch { return null; }
 }
 
-function DiagnosisProgress({ geoId, round, canRun, onRound }: { geoId: string; round: string; canRun: boolean; onRound: (round: string) => void }) {
+function DiagnosisProgress({ storageScope, geoId, round, canRun, onRound }: { storageScope: string; geoId: string; round: string; canRun: boolean; onRound: (round: string) => void }) {
   const location = useLocation();
   const [progress, setProgress] = useState<GeoDiagnosisProgress | null>(null);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
-  const storageKey = `geo-diagnosis-recover:${geoId}:${round}`;
+  const storageKey = `${storageScope}:recover:${round}`;
   const pending = useRef<RecoveryRequest | null>(storedRecovery(storageKey));
   const [selected, setSelected] = useState<string[]>(pending.current?.jobIds ?? []);
   const [ack, setAck] = useState(pending.current?.acknowledgeUnknown ?? false);
@@ -138,6 +168,7 @@ function DiagnosisProgress({ geoId, round, canRun, onRound }: { geoId: string; r
     read(); const timer = window.setInterval(read, 5000);
     return () => { live = false; window.clearInterval(timer); };
   }, [geoId, round, offset]);
+  const selectedUnknown = progress?.cells.some(cell => selected.includes(cell.jobId) && cell.deliveryUnknown) || pending.current?.acknowledgeUnknown === true;
   const recover = async () => {
     setBusy(true); setError('');
     try {
@@ -146,7 +177,7 @@ function DiagnosisProgress({ geoId, round, canRun, onRound }: { geoId: string; r
         const eligible = current.cells.filter(cell => selected.includes(cell.jobId) && cell.recoverable);
         if (eligible.length !== selected.length) throw new Error('所选任务状态已改变，请重新选择。');
         if (eligible.some(cell => cell.deliveryUnknown) && !ack) throw new Error('请确认可能已有计费后再恢复。');
-        pending.current = { requestKey: key(), jobIds: [...selected], acknowledgeUnknown: ack };
+        pending.current = { requestKey: key(), jobIds: [...selected], ...(eligible.some(cell => cell.deliveryUnknown) ? { acknowledgeUnknown: ack } : {}) };
         sessionStorage.setItem(storageKey, JSON.stringify(pending.current));
       }
       const result = await recoverGeoDiagnosis(geoId, round, pending.current); sessionStorage.removeItem(storageKey); onRound(result.roundId);
@@ -165,7 +196,7 @@ function DiagnosisProgress({ geoId, round, canRun, onRound }: { geoId: string; r
         <td className="p-2">{cell.snapshotId && <Link className="text-accent hover:underline" to={`${answerPath(geoId, cell.snapshotId)}${location.search}`}>查看回答</Link>}</td>
       </tr>)}</tbody></table></div>
       <div className="my-3 flex flex-wrap gap-3"><Button size="sm" disabled={offset === 0 || busy || !!pending.current} onClick={() => { setOffset(Math.max(0, offset - 100)); setSelected([]); }}>上一页</Button><span className="text-caption">{offset + 1}–{offset + progress.page.shown} / {progress.page.total}</span><Button size="sm" disabled={!progress.page.more || busy || !!pending.current} onClick={() => { setOffset(progress.page.nextOffset ?? offset); setSelected([]); }}>下一页</Button></div>
-      {canRun && selected.length > 0 && <div className="flex flex-col gap-3"><label className="text-ui"><input type="checkbox" disabled={busy || !!pending.current} checked={ack} onChange={event => setAck(event.target.checked)} /> 我确认结果未知的任务可能已产生计费，再次调用可能重复计费。</label><Button disabled={busy} onClick={() => { void recover(); }}>仅恢复所选 {selected.length} 项</Button></div>}
+      {canRun && selected.length > 0 && <div className="flex flex-col gap-3">{selectedUnknown && <label className="text-ui"><input type="checkbox" disabled={busy || !!pending.current} checked={ack} onChange={event => setAck(event.target.checked)} /> 我确认结果未知的任务可能已产生计费，再次调用可能重复计费。</label>}<Button disabled={busy} onClick={() => { void recover(); }}>仅恢复所选 {selected.length} 项</Button></div>}
     </>}
   </Section>;
 }

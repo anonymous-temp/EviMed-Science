@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { readQuestionWorkbook, mapQuestionRows } from './geoQuestionImport';
+import { File as NodeFile } from 'node:buffer';
 import * as XLSX from 'xlsx';
 
 describe('original question import', () => {
+  it('decodes BOMless Chinese CSV from actual file bytes without corrupting headers or original text', async () => {
+    const file = new NodeFile(['编号,问题,标签\r\n001,"原题，为什么？\n 下一行 ","[a,b]\n 原标签"\r\n0,零号原题,原类'], '原题.csv');
+    const book = await readQuestionWorkbook(await file.arrayBuffer(), 'csv');
+    expect(book.sheets[0].rows[0]).toEqual(['编号', '问题', '标签']);
+    const mapped = mapQuestionRows(book.sheets[0].rows, { text: 1, originalId: 0, clientTags: 2 });
+    expect(mapped.rows.map(row => row.originalId)).toEqual(['001', '0']);
+    expect(mapped.rows[0].text).toBe('原题，为什么？\n 下一行 ');
+    expect(mapped.rows[1].text).toBe('零号原题');
+    expect(mapped.rows[0].clientTags).toEqual(['[a,b]\n 原标签']);
+  });
+  it('maps explicit AI adoption and provenance columns without guessing enum values or splitting client labels', () => {
+    const result = mapQuestionRows([['Q','kind','pool','who','stage','url','date','status','measured'], ['来源原话','real','P2','patient','就诊','https://example.org/q','2026-10-24','suggested','false']], { text: 0, kind: 1, pool: 2, audience: 3, journeyStage: 4, sourceUrl: 5, collectedAt: 6, classificationStatus: 7, isMeasured: 8 });
+    expect(result.rows[0]).toMatchObject({ kind: 'real', pool: 'P2', audience: 'patient', journeyStage: '就诊', sourceUrl: 'https://example.org/q', collectedAt: '2026-10-24', classificationStatus: 'suggested', isMeasured: false });
+    expect(() => mapQuestionRows([['Q','kind'], ['原话','模型猜测']], { text: 0, kind: 1 })).toThrow(/kind/);
+  });
   it('keeps quoted CSV newlines, whitespace, leading zeros and duplicate originals', async () => {
-    const book = await readQuestionWorkbook(new TextEncoder().encode('ID,Question,Group\r\n001,"  What, why?\nAgain  ", A\r\n0,"  What, why?\nAgain  ",B\r\n,,\r\n').buffer);
+    const book = await readQuestionWorkbook(new TextEncoder().encode('ID,Question,Group\r\n001,"  What, why?\nAgain  ", A\r\n0,"  What, why?\nAgain  ",B\r\n,,\r\n').buffer, 'csv');
     const result = mapQuestionRows(book.sheets[0].rows, { text: 1, originalId: 0, originalGroup: 2 });
     expect(result.rows).toHaveLength(2);
     expect(result.rows.map(row => row.originalId)).toEqual(['001', '0']);
