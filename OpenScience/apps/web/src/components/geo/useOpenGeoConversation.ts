@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { getGeoProject, listGeoProjects } from "@/lib/geoClient";
-import { geoChatPath } from "@/lib/geoLocation";
+import { geoChatPath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { resolveGeoTab } from "./geoTabs";
@@ -14,6 +14,7 @@ export interface GeoConversationTarget {
   geoId?: string;
   sessionId?: string | null;
   resultRevision?: { referenceId: string };
+  geoPlanContext?: { referenceId: string };
 }
 
 /**
@@ -61,13 +62,14 @@ export function useOpenGeoConversation() {
       if (!current()) return false;
       if (project.projectId !== target.projectId) throw new Error("GEO project mismatch");
       const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
-      const selectedSession = sameProject ? new URLSearchParams(location.search).get("session") : null;
+      const selectedSession = sameProject ? geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") : null;
       const sessionId = selectedSession || target.sessionId || project.sessionId || undefined;
       unsubscribe();
       let opened = false;
       await useProjectStore.getState().select(target.projectId, () => {
         opened = true;
         const intent = newRuntimeUiIntent(draft, sessionId);
+        if (target.geoPlanContext) { intent.kind = "open"; intent.geoPlanContext = target.geoPlanContext; }
         if (target.resultRevision) { intent.kind = "open"; intent.resultRevision = target.resultRevision; }
         const params = new URLSearchParams(sameProject ? location.search : "");
         if (sameProject && !location.pathname.includes("/chat")) {

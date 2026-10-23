@@ -10,6 +10,8 @@ import { headRows } from "./PlanStrategy";
 
 const client = vi.hoisted(() => ({
   getGeoStrategy: vi.fn(),
+  getGeoProject: vi.fn(),
+  stageGeoPlanContext: vi.fn(),
   getGeoSources: vi.fn(),
   getGeoValue: vi.fn(),
   getGeoEvidence: vi.fn(),
@@ -41,6 +43,8 @@ beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   open.mockReset().mockResolvedValue(true);
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
+  client.getGeoProject.mockResolvedValue({...project,sessionId:"current-native-session"});
+  client.stageGeoPlanContext.mockResolvedValue({referenceId:`gpc_${"a".repeat(64)}`,sessionId:"current-native-session",draft:"Selected plan draft"});
 });
 
 /** The headings of the page, by text, in document order. */
@@ -285,8 +289,8 @@ describe("方案: before there is a plan, and when it cannot be read", () => {
       tiers: [], battlefield: null, noGo: [], engines: [], layout: { layers: null, constraints: [], clientActions: [] }, assumptions: [],
     });
     renderPlan();
-    expect(await screen.findByText("还没有信源分析")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "分析引用的信源" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "生成方案" })).toBeInTheDocument();
+    expect(screen.getByText(/尚无引用信源也可以制定方案/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/档[一二三]/);
   });
 
@@ -304,4 +308,41 @@ describe("headRows", () => {
     const onlyPools: GeoStrategyView["targets"]["rows"] = strategyFilled.targets.rows.filter((row) => row.pool !== "all");
     expect(headRows(onlyPools).map((row) => row.metricId)).toEqual(["M-01"]);
   });
+});
+
+
+it("stages a versioned action as an unsent draft in the current native conversation without changing actual budget", async () => {
+  const action = {key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain the finding"},what:{title:"Selected content"},sources:[],work:{mode:"new",outputs:["article.md"]}};
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:[action]},freshness:{status:"unknown",reasons:["basis_unavailable"]}});
+  renderPlan();
+  await userEvent.click(await screen.findByRole("button",{name:"用于内容"}));
+  await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalled());
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({mode:"content",strategyVersion:7,sessionId:"current-native-session",groupIds:["g1"],actionKeys:[action.key]});
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({sessionId:"current-native-session",geoPlanContext:{referenceId:`gpc_${"a".repeat(64)}`}}),"Selected plan draft");
+  expect(client.setGeoTier).not.toHaveBeenCalled(); expect(client.runGeoStep).not.toHaveBeenCalled();
+  expect(screen.getByRole("link",{name:"查看实际投放预算"}).getAttribute("href")).toContain("/actions#geo-budget");
+  expect(screen.getByText(/金额未估/)).toBeInTheDocument();
+});
+
+
+it("shows supported time, workload, audience and price basis as estimates",async()=>{
+  const action={key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain"},what:{title:"Plan content",layer:"popular",channel:"wechat_mp"},sources:[],
+    work:{mode:"new",audience:"patient",outputs:["article.md"]},timing:{durationDays:{low:2,high:4},basis:"Supplied schedule"},effort:{unit:"hours",low:3,high:5,basis:"Editorial workload"},
+    estimate:{currency:"CNY",low:50,high:80,basis:[{kind:"source_price",id:"quote"}],assumption:"One placement",observedAt:"2026-10-24"}};
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,implementation:{actions:[action]},basis:{priceReferences:[{id:"quote",name:"Source quotation"}]}});
+  renderPlan();
+  expect(await screen.findByText(/2–4天/)).toBeInTheDocument();
+  expect(screen.getByText(/Editorial workload/)).toBeInTheDocument();
+  expect(screen.getByText(/患者 · 科普稿件 · 微信公众号/)).toBeInTheDocument();
+  expect(screen.getByText(/Source quotation.*One placement.*2026-10-24/)).toBeInTheDocument();
+});
+
+
+it("labels frozen historical readings as plan-time values instead of current readings",async()=>{
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,readingsKind:"frozen_basis",basis:{capturedAt:"2026-10-01T00:00:00Z"}});
+  renderPlan();
+  await screen.findByText("方案依据日期");
+  expect(screen.getByText("2026-10-01")).toBeInTheDocument();
+  expect(document.body.textContent).toContain("方案时");
+  expect(document.body.textContent).not.toContain("现在 21%");
 });

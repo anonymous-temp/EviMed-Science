@@ -743,6 +743,11 @@ const LAYOUT_PARTS = Object.freeze({ layers: "layers", byEngine: "byEngine", by_
  */
 export const GEO_NOT_STORED = Object.freeze({
   "strategy.json": Object.freeze({
+    basis: "the control plane owns the frozen planning input",
+    scopeKey: "the control plane computes planning scope",
+    owner: "the authenticated project owns the plan",
+    revisions: "versions are allocated by the platform",
+    budgetsPaid: "actual payment belongs to the market ledger",
     schema: "the file's own format tag",
     deliverableId: "the deliverable's id is the run ledger's",
     contractKind: "the contract is the run ledger's",
@@ -847,9 +852,15 @@ export const GEO_STORED_FIELDS = Object.freeze({
   tierTarget: Object.freeze(["metricId", "pool", "note", "level", "hardLine", "engineScope"]),
   assumption: Object.freeze(["field", "value", "basis", "reason", "howToChange", "affects"]),
   noGo: Object.freeze(["item", "reason"]),
-  action: Object.freeze(["gapId", "groupId", "group", "gapClass", "class", "errorIds", "kind", "what", "engines", "sources", "promise", "basis", "reason", "metricId"]),
+  action: Object.freeze(["gapId", "groupId", "group", "gapClass", "class", "errorIds", "kind", "what", "engines", "sources", "promise", "basis", "reason", "metricId", "work", "sequence", "timing", "effort", "estimate"]),
+  actionWork: Object.freeze(["mode", "articleId", "resultVersionId", "digest", "audience", "outputs"]),
+  actionTiming: Object.freeze(["earliest", "latest", "durationDays", "basis"]),
+  actionRange: Object.freeze(["low", "high"]),
+  actionEffort: Object.freeze(["unit", "low", "high", "basis"]),
+  actionEstimate: Object.freeze(["currency", "low", "high", "basis", "assumption", "observedAt"]),
+  actionEstimateRef: Object.freeze(["kind", "id", "digest"]),
   actionWhat: Object.freeze(["layer", "title", "channel"]),
-  actionSource: Object.freeze(["domain", "why"]),
+  actionSource: Object.freeze(["domain", "why", "url"]),
 });
 
 /** The measured parts of the method's per-engine record: the platform's own rows, never stored twice (the measured lines of `GEO_NOT_STORED`). */
@@ -1073,6 +1084,37 @@ function validatedGap(raw, index, issues) {
  * words the platform checks against its own rows and annotates, never refuses.
  * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
  */
+/** Validate planning estimates without converting absent values into zero. */
+function validatedImplementation(given, issues, index) {
+  const notice = field => issues.push({ field: `actions[${index}].${field}`, code: "notice", message: "The planning value needs a supported reference and an ordered nonnegative range; it remains unestimated." });
+  const bounded = value => typeof value === "string" && value.length <= 1000 ? value : null;
+  const range = value => value && Number.isFinite(value.low) && Number.isFinite(value.high) && value.low >= 0 && value.high >= value.low;
+  let work = null, timing = null, effort = null, estimate = null;
+  const nestedFields = /** @type {Array<[string, readonly string[]]>} */ ([["work",GEO_STORED_FIELDS.actionWork],["timing",GEO_STORED_FIELDS.actionTiming],["effort",GEO_STORED_FIELDS.actionEffort],["estimate",GEO_STORED_FIELDS.actionEstimate]]);
+  for (const [name, stored] of nestedFields) {
+    if (isObject(given[name])) fields(given[name],issues,{index,path:`actions.${name}`}).unknown(stored);
+  }
+  if (isObject(given.timing?.durationDays)) fields(given.timing.durationDays,issues,{index,path:"actions.timing.durationDays"}).unknown(GEO_STORED_FIELDS.actionRange);
+  for (const ref of Array.isArray(given.estimate?.basis) ? given.estimate.basis : []) if (isObject(ref)) fields(ref,issues,{index,path:"actions.estimate.basis"}).unknown(GEO_STORED_FIELDS.actionEstimateRef);
+  if (given.work && ["new", "modify_existing"].includes(given.work.mode)
+    && Array.isArray(given.work.outputs) && given.work.outputs.length <= 20 && given.work.outputs.every(value => bounded(value))
+    && (given.work.audience == null || GEO_AUDIENCES.includes(given.work.audience))) {
+    work = { mode: given.work.mode, outputs: given.work.outputs, audience: given.work.audience ?? null,
+      articleId: bounded(given.work.articleId), resultVersionId: bounded(given.work.resultVersionId), digest: bounded(given.work.digest) };
+  } else if (given.work != null) notice("work");
+  if (given.timing && bounded(given.timing.basis) && (given.timing.durationDays == null || range(given.timing.durationDays))
+    && [given.timing.earliest, given.timing.latest].every(value => value == null || typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)))
+    && !(given.timing.earliest && given.timing.latest && given.timing.earliest > given.timing.latest)) timing = { earliest: given.timing.earliest ?? null, latest: given.timing.latest ?? null, durationDays: given.timing.durationDays ? {low:given.timing.durationDays.low,high:given.timing.durationDays.high} : null, basis: given.timing.basis };
+  else if (given.timing != null) notice("timing");
+  if (range(given.effort) && ["hours", "days"].includes(given.effort.unit) && bounded(given.effort.basis)) effort = { unit: given.effort.unit, low: given.effort.low, high: given.effort.high, basis: given.effort.basis };
+  else if (given.effort != null) notice("effort");
+  if (range(given.estimate) && given.estimate.currency === "CNY" && Array.isArray(given.estimate.basis) && given.estimate.basis.length > 0 && given.estimate.basis.length <= 20
+    && given.estimate.basis.every(ref => ["source_price", "supplied_quote"].includes(ref.kind) && bounded(ref.id) && (ref.digest == null || /^[a-f0-9]{64}$/.test(ref.digest)))) estimate = { currency: "CNY", low: given.estimate.low, high: given.estimate.high, basis: given.estimate.basis.map(ref => ({kind:ref.kind,id:ref.id,digest:ref.digest ?? null})),
+      assumption: bounded(given.estimate.assumption), observedAt: bounded(given.estimate.observedAt) };
+  else if (given.estimate != null) notice("estimate");
+  return { work, timing, effort, estimate, sequence: Number.isSafeInteger(given.sequence) && given.sequence >= 0 ? given.sequence : null };
+}
+
 function validatedAction(raw, index, issues) {
   const label = raw.gapClass ?? raw.class;
   /** @type {Record<string, any>} */
@@ -1099,10 +1141,11 @@ function validatedAction(raw, index, issues) {
     const reader = fields(/** @type {Record<string, any>} */ (source), issues, { index, path: `actions.sources[${position}]` });
     reader.unknown(GEO_STORED_FIELDS.actionSource);
     const domain = reader.text("domain", 253);
-    const value = { domain: domain ? domain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : null, why: reader.text("why", 300) };
+    const value = { domain: domain ? domain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : null, why: reader.text("why", 300), url: reader.text("url", 2000) };
     return value.domain && HOSTNAME.test(value.domain) ? value : null;
   }).filter((source) => source !== null) : [];
   const value = {
+    ...validatedImplementation(given, issues, index),
     gapId: item.text("gapId", 40),
     groupId: item.text("groupId", 80),
     group: item.text("group", 120),
@@ -1358,6 +1401,17 @@ export function geoStrategyFileCoverage(file) {
   each("noGo", source.noGo ?? source.no_go, GEO_STORED_FIELDS.noGo, {});
   each("secondary", source.secondary, GEO_STORED_FIELDS.secondary, {});
   each("actions", source.actions, GEO_STORED_FIELDS.action, GEO_NOT_STORED["actions[]"]);
+  (Array.isArray(source.actions) ? source.actions : []).forEach((action,index)=>{
+    const prefix = `actions[${index}]`;
+    walk(`${prefix}.what`,action?.what,GEO_STORED_FIELDS.actionWhat,{});
+    each(`${prefix}.sources`,action?.sources,GEO_STORED_FIELDS.actionSource,{});
+    walk(`${prefix}.work`,action?.work,GEO_STORED_FIELDS.actionWork,{});
+    walk(`${prefix}.timing`,action?.timing,GEO_STORED_FIELDS.actionTiming,{});
+    walk(`${prefix}.timing.durationDays`,action?.timing?.durationDays,GEO_STORED_FIELDS.actionRange,{});
+    walk(`${prefix}.effort`,action?.effort,GEO_STORED_FIELDS.actionEffort,{});
+    walk(`${prefix}.estimate`,action?.estimate,GEO_STORED_FIELDS.actionEstimate,{});
+    each(`${prefix}.estimate.basis`,action?.estimate?.basis,GEO_STORED_FIELDS.actionEstimateRef,{});
+  });
   walk("battlefield", source.battlefield, GEO_STORED_FIELDS.battlefield, {});
   return { dropped: [...new Set(dropped)], declined };
 }
@@ -1800,7 +1854,7 @@ const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code 
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
- *   researchMaxOpen?: number | null, inclusion?: any }} input
+ *   researchMaxOpen?: number | null, inclusion?: any, planningContext?:any }} input
  *   `articleGate` reads an article's gate from the run ledger, for the bytes the run declares (`contentSha256`); without it every article is `unverified`.
  *   `researchMaxOpen` is the most research tasks a project holds queued or running (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`)
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
@@ -1818,13 +1872,35 @@ export async function geoRuntimeWrite(input) {
   }
 }
 
+/** Project-owned input identity and price provenance apply to both strategy and incremental action writes. */
+async function validatePlanningReferences(store, project, actions, planningContext, issues) {
+  for (const action of actions) {
+        if (action.work?.mode === "modify_existing") {
+          const article = await store.getArticle(project.id, action.work.articleId);
+          if (!article || article.currentResultVersionId !== action.work.resultVersionId || article.contentSha256 !== action.work.digest) {
+            issues.push({ field: "actions.work", code: "notice", message: "The existing article version is unavailable; choose the current project-owned result." });
+            action.work = null;
+          }
+        }
+        if (action.estimate && !action.estimate.basis.every(ref => planningContext?.basis?.priceReferences?.some(saved => saved.kind === ref.kind && saved.id === ref.id && saved.digest === ref.digest))) {
+          issues.push({ field: "actions.estimate", code: "notice", message: "No preserved price or supplied quote supports this estimate; the amount remains unknown." }); action.estimate = null;
+        }
+        for (const source of action.sources ?? []) if (source.url && !planningContext?.basis?.sources.some(ref => ref.url === source.url)) {
+          issues.push({ field: "actions.sources.url", code: "notice", message: "This page is a placement candidate, not an observed citation in the selected input." });
+        }
+      }
+
+}
+
 /** @param {Parameters<typeof geoRuntimeWrite>[0]} input */
-async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null, inclusion = null }) {
+async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null, inclusion = null, planningContext = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
   const issues = [];
   const userId = project.userId;
+  const planFields = planningContext ? { scopeKey: planningContext.scopeKey, basis: planningContext.basis, runId: planningContext.runId } : {};
+  const planOptions = { scopeKey: planningContext?.scopeKey ?? null };
   const done = (/** @type {string[]} */ ids, extra = {}) => {
     // The fields the platform has said it does not keep (`GEO_NOT_STORED`) are counted, never listed as issues: the run is told what
     // is kept once, in its capability's text, and an operator reads the count.
@@ -1966,7 +2042,7 @@ async function writeToProject({ store, project, what, body, renameProject = null
     }
     case "strategy": {
       const data = dataOf(body);
-      if (!(await baselineMeasured(store, project.id))) { issues.push({ ...BASELINE_MISSING }); return done([]); }
+      if (!planningContext && !(await baselineMeasured(store, project.id))) { issues.push({ ...BASELINE_MISSING }); return done([]); }
       const strategy = validatedStrategy(data, issues);
       /** @type {string[]} */
       let sourceIds = [];
@@ -1985,31 +2061,33 @@ async function writeToProject({ store, project, what, body, renameProject = null
       // strategy version (G4 — sixteen versions, the last one empty, and the
       // page and the program read only the last).
       if (!Object.keys(strategy).length) {
-        const latest = await store.latestStrategy(project.id);
+        const latest = await store.latestStrategy(project.id, planOptions);
         return done(sourceIds, { version: latest?.version ?? null, sourceIds });
       }
       // What the strategy's own gaps and actions say about each other, said to the run that wrote them while it is in its turn: a
       // gap nobody answers, a number without its basis. Notices, never a refusal.
       if (strategy.gaps !== undefined || strategy.actions !== undefined) {
-        const held = strategy.gaps !== undefined && strategy.actions !== undefined ? null : await store.latestStrategy(project.id);
+        const held = strategy.gaps !== undefined && strategy.actions !== undefined ? null : await store.latestStrategy(project.id, planOptions);
         for (const notice of geoActionNotices({ gaps: strategy.gaps ?? held?.gaps ?? [], actions: strategy.actions ?? held?.actions ?? [] })) {
           issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
         }
       }
-      const written = await store.writeStrategy(userId, project.id, strategy);
+      await validatePlanningReferences(store, project, strategy.actions ?? [], planningContext, issues);
+      const written = await store.writeStrategy(userId, project.id, { ...strategy, ...planFields });
       return done([String(written.version)], { version: written.version, sourceIds, ...(written.unchanged ? { unchanged: true } : {}) });
     }
     case "actions": {
-      if (!(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.actions); issues.push({ ...BASELINE_MISSING }); return done([]); }
+      if (!planningContext && !(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.actions); issues.push({ ...BASELINE_MISSING }); return done([]); }
       const given = objectList({ actions: itemsOf(body, GEO_WRITE_LIMITS.actions) }, "actions", GEO_WRITE_LIMITS.actions, issues,
         (entry, index) => validatedAction(entry, index, issues)) ?? [];
       if (!given.length) return done([]);
-      const held = await store.latestStrategy(project.id);
+      const held = await store.latestStrategy(project.id, planOptions);
+      await validatePlanningReferences(store, project, given, planningContext, issues);
       const merged = mergedActions(held?.actions ?? [], given);
       for (const notice of geoActionNotices({ gaps: held?.gaps ?? [], actions: merged })) {
         issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
       }
-      const written = await store.writeStrategy(userId, project.id, { actions: merged });
+      const written = await store.writeStrategy(userId, project.id, { actions: merged, ...planFields });
       return done([String(written.version)], { version: written.version, actions: merged.length, ...(written.unchanged ? { unchanged: true } : {}) });
     }
     case "sources": {

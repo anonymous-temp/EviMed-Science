@@ -233,4 +233,4 @@ export const useGeoMonitoring = (geoId: string) => useScopedGeoLoad<GeoMonitorin
 export const useGeoSources = (geoId: string) => useScopedGeoLoad<GeoSources>(`sources:${geoId}`, scope => scope ? getGeoSources(geoId, scope) : getGeoSources(geoId));
 export const useGeoValue = (geoId: string) => useSharedGeoLoad<GeoValue>(`value:${geoId}`, () => getGeoValue(geoId));
 export const useGeoEvidence = (geoId: string) => useSharedGeoLoad<GeoEvidence>(`evidence:${geoId}`, () => getGeoEvidence(geoId));
-export const useGeoStrategy = (geoId: string) => useSharedGeoLoad<GeoStrategyView>(`strategy:${geoId}`, () => getGeoStrategy(geoId));
+export const useGeoStrategy = (geoId: string, options: {strategyVersion?:number;sourceId?:string;url?:string;selectionRef?:string} = {}) => useScopedGeoLoad<GeoStrategyView>(`strategy:${geoId}:${JSON.stringify(options)}`, scope => options.selectionRef ? getGeoStrategy(geoId, options) : scope || Object.keys(options).length ? getGeoStrategy(geoId, { ...scope, ...options }) : getGeoStrategy(geoId));

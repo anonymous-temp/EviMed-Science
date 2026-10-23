@@ -51,7 +51,7 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze([...new Set([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "key", "limit", "offset", "member"])]);
+const readFilterFields = Object.freeze([...new Set([...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "url", "key", "limit", "offset", "member"])]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
 const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
@@ -126,6 +126,9 @@ function readRequest(body) {
     if (!geoRowIdShape(raw[key])) throw gatewayError(400, "geo_read_filter_invalid", `filter.${key} is not an id.`);
     /** @type {any} */ (filter)[key] = raw[key];
   }
+  for (const name of ["strategyVersion", "planContextRef", "url"]) if (raw[name] != null) filter[name] = raw[name];
+  if (raw.strategyVersion != null && (!Number.isSafeInteger(raw.strategyVersion) || raw.strategyVersion < 1)) throw gatewayError(400, "geo_read_filter_invalid", "strategyVersion must be positive.");
+  if (raw.planContextRef != null && !/^gpc_[a-f0-9]{64}$/.test(raw.planContextRef)) throw gatewayError(400, "geo_read_filter_invalid", "Invalid plan context.");
   if (raw.version != null) {
     if (!Number.isSafeInteger(raw.version) || raw.version < 1) throw gatewayError(400, "geo_read_filter_invalid", "version must be a positive integer.");
     filter.version = raw.version;
@@ -158,12 +161,12 @@ function readRequest(body) {
 
 /** @param {Record<string, any>} body */
 function writeRequest(body) {
-  onlyFields(body, ["what", "items", "data"]);
+  onlyFields(body, ["what", "items", "data", "planContextRef", "promptRequestId"]);
   if (typeof body.what !== "string" || !GEO_WRITE_WHATS.includes(body.what)) {
     throw gatewayError(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   }
   if (body.items != null && body.data != null) throw gatewayError(400, "geo_write_payload_invalid", "A write carries items or data, not both.");
-  return { what: body.what, body: { items: body.items, data: body.data } };
+  return { what: body.what, body: { items: body.items, data: body.data }, planContextRef: body.planContextRef, promptRequestId: body.promptRequestId };
 }
 
 /** @param {Record<string, any>} body */
@@ -266,6 +269,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       } else if (operation === "write") {
         const request = writeRequest(body);
         work = async () => {
+          if (request.planContextRef || ["strategy", "actions", "targets"].includes(request.what) && await geo.service.planContexts?.activeScoped(project)) throw gatewayError(409, "geo_plan_file_required", "Scoped plan writes require the producing run's strategy.json deliverable. Preserve it in the normal deliverable folder; run-end import binds the actual request. A project token cannot attest a native tool call's origin.");
           const result = await geoRuntimeWrite({ inclusion: geo.service.inclusion ?? null, store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
             articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false),
             researchMaxOpen: Number.isSafeInteger(config.geoResearchMaxOpen) ? config.geoResearchMaxOpen : null });

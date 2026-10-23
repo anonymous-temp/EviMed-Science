@@ -270,13 +270,13 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -349,6 +349,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
     if (!request) return;
+    if (request.geoPlanContext !== undefined) {
+      if (!bindGeoPlan) throw new HttpError(503, "geo_plan_context_unavailable", "Planning context is unavailable.");
+      await bindGeoPlan(user, project, request);
+      delete request.geoPlanContext;
+    }
     if (!bindResultRevision && request.evimedResultRevision === undefined) return;
     if (!bindResultRevision) throw new HttpError(503, "result_revision_unavailable", "Result revision is unavailable.");
     await bindResultRevision(user, project, request);

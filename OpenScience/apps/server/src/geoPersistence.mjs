@@ -788,6 +788,9 @@ CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links
 -- What a strategy run writes beyond the first cut's four parts (rectification 2026-10-14, G2): the tiers' words (what each buys, what
 -- it does not promise), the things not to do, the assumptions with how to change each, and the actions the run wrote by gap. Versioned
 -- with the rest of the strategy and carried forward by a write that does not name them. The numbers of a tier stay in \`targets\`.
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS basis jsonb;
+ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS scope_key text;
+CREATE INDEX IF NOT EXISTS strategy_scope_version ON evimed_geo.strategy(geo_project_id,scope_key,version DESC);
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS tiers jsonb;
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS no_go jsonb;
 ALTER TABLE evimed_geo.strategy ADD COLUMN IF NOT EXISTS assumptions jsonb;

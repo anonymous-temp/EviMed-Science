@@ -421,6 +421,8 @@ export function mergedExpectations(previous, given) {
 export function strategyFromRow(row) {
   return {
     version: Number(row.version),
+    scopeKey: row.scope_key ?? null,
+    basis: row.basis ?? null,
     battlefield: row.battlefield ?? null,
     expectations: row.expectations ?? null,
     gaps: row.gaps ?? null,
@@ -1008,9 +1010,9 @@ export class GeoStore {
   /** @param {string} userId @param {string} geoId @param {Record<string, any>} data @param {string | null} [runId] */
   writePlacementPlan(userId, geoId, data, runId = null) { return this.#writeDocument("placement_plans", userId, geoId, data, runId); }
 
-  /** @param {string} geoId */
-  async latestStrategy(geoId) {
-    const row = (await this.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0];
+  /** @param {string} geoId @param {{scopeKey?:string|null,strategyVersion?:number}} [options] */
+  async latestStrategy(geoId, options = {}) {
+    const row = (await this.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 AND ${options.strategyVersion != null ? "version = $2" : "scope_key IS NOT DISTINCT FROM $2"} ORDER BY version DESC LIMIT 1`, [geoId, options.strategyVersion ?? options.scopeKey ?? null])).rows[0];
     return row ? strategyFromRow(row) : null;
   }
 
@@ -1027,17 +1029,19 @@ export class GeoStore {
    * strategy twice): the answer is the latest version with `unchanged: true`.
    * @param {string} userId @param {string} geoId
    * @param {{ battlefield?: any, expectations?: any, gaps?: any, layout?: any, summary?: string | null, tiers?: any, noGo?: any,
-   *   assumptions?: any, actions?: any, runId?: string | null }} fields
+   *   assumptions?: any, actions?: any, runId?: string | null, scopeKey?:string|null, basis?:any }} fields
    * @returns {Promise<{ version: number, unchanged?: boolean }>}
    */
   async writeStrategy(userId, geoId, fields) {
     return this.transaction(async (client) => {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-doc:strategy:' || $1))`, [geoId]);
       const latest = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0] ?? null;
-      const before = latest ? strategyFromRow(latest) : null;
+      const scoped = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id=$1 AND scope_key IS NOT DISTINCT FROM $2 ORDER BY version DESC LIMIT 1`, [geoId, fields.scopeKey ?? null])).rows[0];
+      const before = scoped ? strategyFromRow(scoped) : null;
       const carried = (/** @type {"battlefield" | "gaps" | "layout" | "tiers" | "noGo" | "assumptions" | "actions"} */ key) =>
         (fields[key] !== undefined ? fields[key] : before?.[key] ?? null);
       const next = {
+        basis: fields.basis !== undefined ? fields.basis : before?.basis ?? null,
         battlefield: carried("battlefield"),
         expectations: mergedExpectations(before?.expectations ?? null, fields.expectations),
         gaps: carried("gaps"),
@@ -1048,17 +1052,17 @@ export class GeoStore {
         actions: carried("actions"),
         summary: fields.summary !== undefined ? fields.summary : before?.summary ?? null,
       };
-      if (before && canonicalJson(next) === canonicalJson({ battlefield: before.battlefield, expectations: before.expectations, gaps: before.gaps,
+      if (before && canonicalJson(next) === canonicalJson({ basis: before.basis, battlefield: before.battlefield, expectations: before.expectations, gaps: before.gaps,
         layout: before.layout, tiers: before.tiers, noGo: before.noGo, assumptions: before.assumptions, actions: before.actions, summary: before.summary })) {
         return { version: before.version, unchanged: true };
       }
       const version = Number(latest?.version ?? 0) + 1;
       const json = (/** @type {unknown} */ value) => (value === undefined || value === null ? null : JSON.stringify(value));
       await client.query(`INSERT INTO evimed_geo.strategy (geo_project_id, version, user_id, battlefield, expectations, gaps, layout, summary, run_id,
-          tiers, no_go, assumptions, actions)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)`,
+          tiers, no_go, assumptions, actions, scope_key, basis)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15::jsonb)`,
       [geoId, version, userId, json(next.battlefield), json(next.expectations), json(next.gaps), json(next.layout), next.summary, fields.runId ?? null,
-        json(next.tiers), json(next.noGo), json(next.assumptions), json(next.actions)]);
+        json(next.tiers), json(next.noGo), json(next.assumptions), json(next.actions), fields.scopeKey ?? null, json(next.basis)]);
       return { version };
     });
   }

@@ -11,6 +11,7 @@ export interface RuntimeUiIntent {
   originReference?: NonNullable<ReturnType<typeof conversationReference>>;
   references?: Array<{ id: string; title: string }>;
   resultRevision?: { referenceId: string };
+  geoPlanContext?: { referenceId: string };
 }
 
 /**
@@ -38,6 +39,7 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
     || typeof intent.requestId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(intent.requestId)
     || typeof intent.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
     || (intent.draft !== undefined && (typeof intent.draft !== "string" || intent.draft.length > 100_000))) return null;
+  if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return null;
   if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== "string"
     || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return null;
   if (intent.originReference && !conversationReference(intent.originReference)) return null;

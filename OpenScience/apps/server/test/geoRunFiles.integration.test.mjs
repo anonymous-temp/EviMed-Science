@@ -382,3 +382,26 @@ test("a person's choices are two reversible words per action and nothing else", 
   assert.equal(cleared, null, "nothing decided is no row");
   assert.deepEqual(await store.actionChoices(geo.id), []);
 });
+
+test('delayed scoped strategy import uses the actual producing run basis and plain outputFiles, and retries do not create versions', options, async () => {
+  const {geo,control} = await projectWithBaseline();
+  const original = {schemaVersion:1,capturedAt:'2026-10-24T00:00:00Z',selection:{dataRevision:'original'},priceReferences:[{kind:'source_price',id:'media-quote',digest:'a'.repeat(64)}],marker:'selected group at submission'};
+  const context = {referenceId:'gpc_actual',scopeKey:'gps_group_a',basis:original,runId:'scoped-real-run',mode:'strategy'};
+  const action = {gapId:'missing',kind:'fill_gap',what:{layer:'popular',title:'Native content'},work:{mode:'new',audience:'patient',outputs:['article.md']},sequence:2,timing:{durationDays:{low:2,high:4},basis:'Supplied schedule'},effort:{unit:'hours',low:2,high:3,basis:'Supplied workload'},estimate:{currency:'CNY',low:50,high:80,basis:[{kind:'source_price',id:'media-quote',digest:'a'.repeat(64)}]}};
+  const files = new Map([['deliverables/native-plan/strategy.json',JSON.stringify({summary:'Produced from original input',actions:[action]})]]);
+  const captured = new Map(files);
+  const readRunFile = async (_project,actualRun,path)=>{assert.equal(actualRun.id,'scoped-real-run');return captured.get(path);};
+  const {importDelivery} = importerOf(files,{readRunFile,planningContext:async (_project,actualRun)=>actualRun.id==='scoped-real-run'?context:null});
+  const produced = {id:'scoped-real-run',startedAt:'2026-10-23T00:00:00Z',status:'succeeded',sessionId:'native-session',kernelRequestIds:['actual-native-request'],outputFiles:[{path:'deliverables/native-plan/strategy.json'}]};
+  await store.writeStrategy(USER,geo.id,{summary:'Unrelated global plan after generation'});
+  await store.writeStrategy(USER,geo.id,{scopeKey:context.scopeKey,basis:{marker:'another newer run'},summary:'Other run in same scope',runId:'other-run'});
+  files.set('deliverables/native-plan/strategy.json',JSON.stringify({summary:'Mutable workspace changed after producer finished'}));
+  await importDelivery(control,produced);
+  const plan = await store.latestStrategy(geo.id,{scopeKey:context.scopeKey});
+  assert.equal(plan.summary,'Produced from original input'); assert.deepEqual(plan.basis,original);
+  assert.equal(plan.actions[0].work.mode,'new'); assert.equal(plan.actions[0].sequence,2);
+  assert.equal(plan.actions[0].timing.durationDays.high,4);assert.equal(plan.actions[0].effort.high,3);assert.equal(plan.actions[0].estimate.high,80);
+  assert.equal((await store.latestStrategy(geo.id)).summary,'Unrelated global plan after generation');
+  const retry = importerOf(files,{readRunFile,planningContext:async()=>context}); await retry.importDelivery(control,produced);
+  assert.equal((await store.latestStrategy(geo.id,{scopeKey:context.scopeKey})).version,plan.version);
+});

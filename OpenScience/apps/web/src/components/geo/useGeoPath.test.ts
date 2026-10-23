@@ -17,3 +17,10 @@ describe("GEO record navigation keeps the selected observations", () => {
     expect(geoPathWithContext("/app/geo/other", from)).toBe("/app/geo/other");
   });
 });
+
+it("carries the actual addressed native session through source and plan navigation",()=>{
+  const path=geoPathWithContext("/app/geo/g/sources",{pathname:"/app/geo/g/chat/current-session",search:"?session=older-default&groupIds=g1"});
+  const url=new URL(path,"https://example.test");
+  expect(url.searchParams.get("session")).toBe("current-session");
+  expect(url.searchParams.getAll("groupIds")).toEqual(["g1"]);
+});

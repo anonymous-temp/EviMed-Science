@@ -340,6 +340,10 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const tab = parts[2];
+    if (tab === "strategy" && parts.length === 4 && parts[3] === "context" && method === "POST") {
+      if (!service.planContexts) throw UNAVAILABLE();
+      return reply(await service.planContexts.stage(user, id, await readJson(req)));
+    }
     // --- members: colleagues and outside agencies, by role (the owner alone manages them) ---
     if (method === "POST" && tab === "questions" && (parts.length === 3 || parts.length === 4 && parts[3] === "preview")) {
       const body = await bodyOf(req, maxJsonBytes, ["rows", "contract", "requestKey", "note"]);
@@ -431,7 +435,7 @@ export function createGeoRoutes(dependencies) {
       // strategy page's one read.
       if (tab === "clusters") return reply(await service.clusters(user, id, geoScopeFromQuery(url.searchParams, [])));
       if (tab === "actions") return reply(await service.actions(user, id));
-      if (tab === "strategy") return reply(await service.strategy(user, id));
+      if (tab === "strategy") return reply(await service.strategy(user, id, geoScopeFromQuery(url.searchParams, ["strategyVersion", "planContextRef", "sourceId", "url"])));
       if (tab === "articles") return reply(await service.articles(user, id));
       if (tab === "distribution") {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;

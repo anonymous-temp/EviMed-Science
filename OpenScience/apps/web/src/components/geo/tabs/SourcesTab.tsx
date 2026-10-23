@@ -1,3 +1,4 @@
+import { PlanTab } from "./PlanTab";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -92,6 +93,7 @@ const KIND_PARAM = "kind";
  */
 export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoSources(geoId);
+  const [planParams] = useSearchParams();
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
   const catalog = useGeoQuestionCatalog(geoId);
@@ -99,7 +101,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <StepPending geoId={geoId} project={project} step="sources" />;
+  if (sources.length === 0) return <><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = [...new Map([
@@ -116,6 +118,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
           {zh`${linkless.map(engineName).join("、")}的引用只有标题、没有链接，引用了哪些信源测不出`}
         </p>
       )}
+      <PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl") ?? undefined} sourceId={planParams.get("planSource") ?? sources.find(source => source.domain === planParams.get("source") || source.id === planParams.get("source"))?.id} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );

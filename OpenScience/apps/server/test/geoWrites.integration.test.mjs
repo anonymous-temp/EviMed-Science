@@ -791,3 +791,15 @@ test("a project holds at most five hundred live owned links; a page already live
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]).filter(([, code]) => code !== "notice"), [[0, "limit"]]);
   assert.deepEqual(result.registered, [`gol_cap_${project.id}_7`]);
 });
+
+test('both action writers retain supported planning fields and leave unsupported amounts and foreign revision targets unknown', options, async () => {
+  const project = await measured(await freshProject());
+  const body = {items:[{gapId:'bad',kind:'fill_gap',what:{layer:'popular',title:'Useful supported prose'},work:{mode:'modify_existing',articleId:'foreign-article',resultVersionId:'foreign-result',digest:'a'.repeat(64),outputs:['article.md']},sequence:3,
+    effort:{unit:'hours',low:-1,high:2,basis:'Invalid workload'},timing:{durationDays:{low:4,high:2},basis:'Inverted'},estimate:{currency:'CNY',low:1,high:3,basis:[{kind:'source_price',id:'unpreserved-price',digest:'b'.repeat(64)}]}}]};
+  const result = await write(project,'actions',body);
+  const saved = await store.latestStrategy(project.id);
+  assert.equal(saved.actions[0].sequence,3);assert.equal(saved.actions[0].what.title,'Useful supported prose');
+  assert.equal(saved.actions[0].work,null);assert.equal(saved.actions[0].estimate,null);
+  assert.equal(saved.actions[0].effort,undefined);assert.equal(saved.actions[0].timing,undefined);
+  assert.ok(result.issues.some(issue=>issue.field==='actions.estimate'));
+});

@@ -300,3 +300,20 @@ test("native import and explicit recovery refusals retain actionable messages wi
     assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, "geo_write_payload_invalid", message]);
   }
 });
+
+test('a project token cannot turn an active other-session plan hint into scoped authority or omit the hint to mutate legacy plans', async t => {
+  const {geo,calls} = geoDouble(on);
+  let active = false;
+  geo.service.planContexts = {activeScoped:async()=>active};
+  const {post} = await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  const hint = await post('write',{what:'strategy',data:{summary:'Forged'},planContextRef:`gpc_${'a'.repeat(64)}`,promptRequestId:'other-active-request'});
+  assert.equal(hint.status,409); assert.equal(hint.body.code,'geo_plan_file_required');
+  active = true;
+  for (const what of ['strategy','actions','targets']) {
+    const refused = await post('write',{what,data:{summary:'No hint'}});
+    assert.equal(refused.status,409); assert.equal(refused.body.code,'geo_plan_file_required');
+  }
+  assert.equal(calls.some(call=>String(call[0]).includes('Strategy')),false);
+  active = false;
+  assert.notEqual((await post('write',{what:'actions',items:[]})).status,409,'legacy unbound path remains available');
+});

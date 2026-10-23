@@ -10,7 +10,7 @@ export const PRODUCT_KINDS = Object.freeze([
   // project. Its own kind rather than a field on `method`, because it is a
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
-  "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
+  "geo-plan-context", "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
   "dataset-semantics",
   // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new
@@ -115,6 +115,13 @@ BEGIN
   END IF;
 END $document_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-product-digest-kind-v1') ON CONFLICT DO NOTHING;
+DO $geo_plan_context_kind$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='evimed_product.documents'::regclass AND conname='product_documents_kind_check' AND position('geo-plan-context' in pg_get_constraintdef(oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $geo_plan_context_kind$;
 DO $method_trial_kind$
 BEGIN
   -- The same shape as the block above, and it needs its own: that one only

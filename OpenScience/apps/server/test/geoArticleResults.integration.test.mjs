@@ -278,3 +278,40 @@ test("legacy release remains compatible but cannot cross a concurrent transition
   const held = await f.store.getArticle(f.geo.id, f.articleId);
   assert.equal(held.currentResultVersionId, f.original.versionId); assert.equal(held.safety, "open");
 });
+
+test('a selected plan survives native submission and joins the real captured article version once', options, async t => {
+  const f = await fixture(t);
+  const {GeoPlanContext,freezeGeoPlanBasis,geoPlanScopeKey} = await import('../src/geoPlanContext.mjs');
+  const frozen = await freezeGeoPlanBasis(f.store,f.geo,{});
+  const {geoRuntimeWrite} = await import('../src/geoWrites.mjs');
+  const written = await geoRuntimeWrite({store:f.store,project:f.geo,what:'strategy',planningContext:{scopeKey:geoPlanScopeKey(frozen.basis.scope),basis:frozen.basis,runId:'actual-planning-run'},body:{data:{
+    gaps:[{gapId:'missing',class:'missing_evidence',text:'Explain the supported finding'}],
+    actions:[{gapId:'missing',gapClass:'missing_evidence',kind:'fill_gap',what:{layer:'popular',title:'Explain the evidence'},work:{mode:'new',outputs:['article.md']}}]}}});
+  const contexts = new GeoPlanContext({documents:f.documents,store:f.store,service:f.service,authorizeSession:async()=>{},runs:async()=>[f.run]});
+  f.service.planContexts = contexts;
+  const plan = await f.service.strategy(f.user,f.geo.id,{strategyVersion:written.version});
+  assert.ok(plan.implementation.actions.length);
+  const action = plan.implementation.actions.find(item=>item.need.gapId==='missing');
+  assert.equal(action.work.mode,'new');
+  const staged = await contexts.stage(f.user,f.geo.id,{requestKey:'selected-content',sessionId:f.run.sessionId,mode:'content',strategyVersion:written.version,actionKeys:[action.key]});
+  const request = {requestId:'plan-content-request',sessionId:f.run.sessionId,content:[{type:'text',text:staged.draft}],geoPlanContext:{referenceId:staged.referenceId}};
+  await contexts.bind(f.user,f.project,request);
+  assert.equal(request.geoPlanContext,undefined);
+  f.run = {id:'plan-content-run',sessionId:'native-session',status:'succeeded',kernelRequestIds:[request.requestId]};
+  const path = 'deliverables/native-content/article.md';
+  const output = await f.capture(path,'# Supported content\nThe finding [claim].');
+  const [articleId] = await f.store.registerArticles(f.user.id,f.geo.id,[{path,layer:'popular',title:'Supported content',groupId:null,claimIds:['claim'],gate:'unverified',safety:'open',contentSha256:output.digest,runId:f.run.id}]);
+  await f.adapter.complete(f.project,f.run);
+  await Promise.all([contexts.complete(f.project,f.run),contexts.complete(f.project,f.run)]);
+  const links = await contexts.outputLinks(f.geo,articleId,output.versionId);
+  assert.equal(links.length,1); assert.equal(links[0].contextRef,staged.referenceId);
+  assert.equal(links[0].strategyVersion,written.version); assert.deepEqual(links[0].actionKeys,[action.key]);
+  assert.equal(links[0].runId,f.run.id); assert.equal(links[0].requestId,request.requestId);
+  assert.equal((await contexts.outputLinks(f.geo,f.articleId,f.original.versionId)).length,0,'a previous file in the same conversation is not this task output');
+  const before = await f.documents.get(f.user.id,'geo-plan-context',staged.referenceId);
+  await contexts.complete(f.project,f.run);
+  assert.equal((await f.documents.get(f.user.id,'geo-plan-context',staged.referenceId)).revision,before.revision,'same completion cannot duplicate a task or association');
+  assert.equal((await f.service.articleVersions(f.user,f.geo.id,articleId)).planningLinks[0].resultVersionId,output.versionId);
+  assert.equal((await f.store.getArticle(f.geo.id,articleId)).gate,'unverified','content completion does not prove remeasurement or clinical release');
+  assert.equal((await f.results.raw(f.user.id,f.project.id,f.original.versionId)).bytes.toString(),f.initialBytes.toString());
+});

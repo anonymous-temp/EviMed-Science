@@ -1,3 +1,4 @@
+import { freezeGeoPlanBasis, geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
 import { geoErrorOrigin } from "./geoErrors.mjs";
 /**
  * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
@@ -348,6 +349,7 @@ export function compactAction(action) {
 }
 
 export class GeoService {
+  /** @type {any} */ planContexts = null;
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
    *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function, blockedBy?: Function } | null }} options
@@ -1740,11 +1742,13 @@ export class GeoService {
     const article = await this.store.getArticle(project.id, articleId);
     if (!article) throw failure(404, "geo_article_not_found", "Article not found.");
     return { articleId, currentResultVersionId: article.currentResultVersionId,
+      planningLinks: await this.planContexts?.outputLinks(project, articleId) ?? [],
       versions: await this.store.articleVersions(project.id, articleId) };
   }
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async articlesOf(project) {
+    const planningLinks = await this.planContexts?.outputLinks(project) ?? [];
     const articles = await this.store.listArticles(project.id);
     const [groups, placements, cited] = await Promise.all([
       this.store.query(`SELECT id, typical_question, is_control FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
@@ -1761,6 +1765,7 @@ export class GeoService {
     const stale = await this.cards?.staleReferences?.(project, articles).catch(() => null) ?? new Map();
     return {
       articles: articles.map((article) => ({
+        planningLinks: planningLinks.filter(link => link.articleId === article.id && link.resultVersionId === article.currentResultVersionId),
         valueContext: article.valueContext, id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
         // Where it is to be published and for whom, as the run said it: a closed word, or the run's own words as a note.
         channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote,
@@ -2207,12 +2212,72 @@ export class GeoService {
   }
 
   /** `GET …/:id/strategy`. @param {{ id: string }} user @param {string} id */
-  async strategy(user, id) { return this.strategyOf(await this.requireProject(user, id)); }
+  async strategy(user, id, scope = {}) { return this.strategyOf(await this.requireProject(user, id), scope); }
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
-  async strategyOf(project) {
-    const { spine, derived } = await this.#spineOf(project);
-    return this.spine.strategy(spine, derived);
+  async strategyOf(project, input = {}) {
+    const filter = /** @type {any} */ (input);
+    if (filter.strategyVersion != null && (!Number.isSafeInteger(filter.strategyVersion) || filter.strategyVersion < 1)) throw new HttpError(400, "geo_strategy_version_invalid", "Choose a valid plan version.");
+    if (filter.planContextRef && !this.planContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning context is unavailable.");
+    let selected = null, context = null;
+    if (filter.planContextRef && this.planContexts) {
+      const row = await this.planContexts.documents.get(project.userId, "geo-plan-context", filter.planContextRef);
+      if (!row || row.projectId !== project.projectId || row.payload.geoId !== project.id) throw new HttpError(404, "geo_plan_context_not_found", "The plan is unavailable.");
+      context = row.payload;
+    }
+    const scoped = Object.entries(geoReadScopeInput(filter)).some(([key, value]) => {
+      if (key === "selectionRef") return Boolean(value);
+      if (["timeZone", "timezone", "comparisonMode"].includes(key)) return false;
+      return Array.isArray(value) ? value.length > 0 : value != null;
+    });
+    let scopeKey = null;
+    if ((scoped || filter.sourceId || filter.url) && filter.strategyVersion == null && !context) {
+      selected = await readGeoSelection(this.store, project, geoReadScopeInput(filter));
+      scopeKey = geoPlanScopeKey(geoPlanCanonicalScope(selected.scope, selected.questions), filter);
+    }
+    const strategy = await this.store.latestStrategy(project.id, { ...(filter.strategyVersion != null || context?.strategyVersion ? { strategyVersion: Number(filter.strategyVersion ?? context.strategyVersion) } : { scopeKey: context?.scopeKey ?? scopeKey }) });
+    if (filter.strategyVersion != null && !strategy) throw new HttpError(404, "geo_strategy_not_found", "This plan version is unavailable.");
+    const basis = context?.basis ?? strategy?.basis ?? null;
+    if (filter.strategyVersion != null && scoped) {
+      try { selected = await readGeoSelection(this.store, project, geoReadScopeInput(filter)); } catch { /* historical basis stays available */ }
+    }
+    if (!selected && basis && !scoped) {
+      try { selected = await readGeoSelection(this.store, project, { selectionRef: basis.selection.reference }); } catch { /* historical frozen basis remains readable */ }
+    }
+    const base = await this.spine.load(project, { answers: false });
+    const groups = basis?.groups ?? (selected ? (await freezeGeoPlanBasis(this.store, project, { selectionRef: selected.selection.reference })).basis.groups : null);
+    const spine = { ...base, strategy, ...(basis ? { targets: basis.targets } : {}),
+      ...(groups ? { groups: groups.map(group => ({ ...(base.groups.find(item => item.id === group.id) ?? { ...group,
+        questions: (selected?.questions ?? []).filter(question => question.group_id === group.id).map(questionFromRow), weight: null, isControl: false }), aliasIds: [] })), currentOf: new Map(groups.map(group => [group.id, group.id])) } : {}) };
+    if (groups && strategy) {
+      const exactIds = new Set(groups.map(group=>group.id));
+      const exactGroup = entry => entry?.groupId && !exactIds.has(entry.groupId) ? {...entry,group:null,groupName:null} : entry;
+      spine.strategy = {...strategy,actions:(strategy.actions ?? []).map(exactGroup),gaps:(strategy.gaps ?? []).map(exactGroup)};
+    }
+    const measured = basis && (filter.strategyVersion != null || context?.strategyVersion || !selected) ? { computed: { cells: basis.readings.selected.cells } } : selected;
+    if (measured) {
+      const rounds = basis?.readings.selected.rounds ?? selected.rounds.map(round => ({ id: round.id, date: rowDay(round, selected.scope.timeZone), kind: round.kind }));
+      spine.rounds = { ...spine.rounds, baseline: null, latest: rounds.length === 1 ? { id: rounds[0].id, sampleDate: rounds[0].date, kind: rounds[0].kind } : null };
+    }
+    if (measured) {
+      const cells = measured.computed.cells.filter(cell => !cell.engine && !cell.variant && !cell.rival && !cell.arm);
+      spine.readings = cells.filter(cell => cell.scope === "group").map(cell => ({ groupId: cell.groupId, metricId: cell.metricId, k:cell.numerator, n:cell.denominator, value:cell.value, status:cell.status, roundId:spine.rounds.latest?.id ?? null, date:spine.rounds.latest?.sampleDate ?? null, kind:spine.rounds.latest?.kind ?? "single_step" }));
+      spine.poolReadings = cells.filter(cell => cell.scope === "pool" || cell.scope === "project").map(cell => ({ pool:cell.pool ?? "all",metricId:cell.metricId,k:cell.numerator,n:cell.denominator,value:cell.value,status:cell.status,roundId:spine.rounds.latest?.id ?? null }));
+    }
+    if (selected) {
+      const errorData = await readGeoSelectionErrors(this.store,project,selected,{errorLimit:1});
+      const selectedErrorIds = new Set(errorData.live.map(error=>String(error.id)));
+      const questionGroups = new Map(selected.questions.map(question=>[String(question.id),String(question.group_id)]));
+      spine.errors = base.errors.filter(error=>selectedErrorIds.has(error.id)).map(error=>({...error,groupId:questionGroups.get(error.questionId) ?? error.groupId}));
+    } else if (basis) {
+      const authoredErrors = new Set([...(basis.focus.errorIds ?? []),...(strategy?.actions ?? []).flatMap(action=>action.errorIds ?? [])]);
+      spine.errors = base.errors.filter(error=>authoredErrors.has(error.id));
+    }
+    const derived = await this.spine.actions(spine);
+    const view = await this.spine.strategy(spine, derived, measured);
+    const freshness = await geoPlanFreshness(this.store, project, strategy?.basis, scoped ? selected ? geoPlanCanonicalScope(selected.scope, selected.questions) : geoReadScopeInput(filter) : null, {sourceId:filter.sourceId,url:filter.url});
+    return { ...view, scope: selected?.scope ?? basis?.scope ?? null, selection: selected?.selection ?? null, scopeKey: strategy?.scopeKey ?? scopeKey,
+      basis, readingsKind: context ? "submitted_input" : filter.strategyVersion != null || !selected && basis ? "frozen_basis" : selected ? "selected_current" : "project_current", previousPlanBasis: context?.mode === "strategy" ? strategy?.basis ?? null : null, inputContext: context ? {referenceId:filter.planContextRef,mode:context.mode} : null, basisDigest: basis ? geoPlanDigest(basis) : null, currentComparison: selected ? {selection:selected.selection, cells:selected.computed.cells} : null, freshness, implementation: { actions: derived.actions }, actualBudget: { href: "distribution" } };
   }
 
   // --- the runtime's reads (geo_read) -----------------------------------------------------
@@ -2334,10 +2399,12 @@ export class GeoService {
         return { ...view, sources: sources.items, total: sources.total, more: sources.more };
       }
       case "strategy": {
-        const [strategy, plan] = await Promise.all([this.store.latestStrategy(project.id), this.store.latestPlacementPlan(project.id)]);
-        return { strategy, placementPlan: plan };
+        const view = await this.strategyOf(project, filter);
+        const strategy = view.version == null ? null : await this.store.latestStrategy(project.id, { strategyVersion: view.version });
+        return { strategy, placementPlan: await this.store.latestPlacementPlan(project.id), view };
       }
       case "targets": {
+        if (filter.strategyVersion || filter.planContextRef) { const plan = await this.strategyOf(project, filter); return { tiers: plan.targets, chosenTier: plan.chosenTier, basis: plan.basis }; }
         const view = await this.sourcesOf(project, geoReadScopeInput(filter));
         return { tiers: view.tiers, chosenTier: view.chosenTier };
       }

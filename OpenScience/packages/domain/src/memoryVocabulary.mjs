@@ -49,6 +49,7 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string, upstream?: string }[]}
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
+  { tag: 'evimed_geo_plan_context', role: 'injected', emitters: ['apps/server/src/geoPlanContext.mjs'] },
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
   { tag: 'evimed-handbook', role: 'injected', emitters: ['apps/server/src/capabilityHandbooks.mjs'] },
   // A platform handbook on probation, served to a sampled share of runs so its harm test can observe it (2026-10-10).

@@ -43,9 +43,9 @@ function Probe() {
   return <pre data-testid="probe">{JSON.stringify({ path: location.pathname, intent: location.state?.runtimeUiIntent ?? null })}</pre>;
 }
 
-function renderOpener(props: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }) {
+function renderOpener(props: { sessionId: string | null; draft?: string; resultRevision?: { referenceId: string } }, initial = "/app/geo") {
   render(
-    <MemoryRouter initialEntries={["/app/geo"]}>
+    <MemoryRouter initialEntries={[initial]}>
       <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
     </MemoryRouter>,
   );
@@ -159,4 +159,13 @@ describe("opening a GEO project's conversation", () => {
     expect(probe().path).toBe("/app/geo");
   });
 
+});
+
+
+it("keeps the actual addressed native conversation ahead of a stale project default", async () => {
+  mocks.projects = [...mocks.projects, { id:"p-new", name:"Existing GEO" }];
+  renderOpener({sessionId:"stale-project-default",draft:"Selected plan remains unsent"},"/app/geo/geo_new/chat/actual-native-session");
+  await userEvent.click(screen.getByRole("button",{name:"open"}));
+  await waitFor(()=>expect(probe().path).toBe("/app/geo/geo_new/chat/actual-native-session"));
+  expect(probe().intent).toMatchObject({sessionId:"actual-native-session",draft:"Selected plan remains unsent"});
 });

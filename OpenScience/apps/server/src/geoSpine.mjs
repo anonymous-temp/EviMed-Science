@@ -54,8 +54,8 @@ const GROUP_ID_SHAPE = /^ggr_[0-9a-f]+$/i;
  */
 function cellOf(row) {
   if (!row) return { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured", reason: null };
-  return { value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low), ciHigh: num(row.ci_high),
-    status: String(row.status), dataType: String(row.data_type ?? "measured"), reason: text(row.reason) };
+  return { value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low ?? row.ciLow), ciHigh: num(row.ci_high ?? row.ciHigh),
+    status: String(row.status), dataType: String(row.data_type ?? row.dataType ?? "measured"), reason: text(row.reason) };
 }
 
 /**
@@ -509,7 +509,7 @@ export class GeoSpine {
    * It replaces the page's use of the all-sources endpoint.
    * @param {Awaited<ReturnType<GeoSpine["load"]>>} spine @param {Awaited<ReturnType<GeoSpine["actions"]>>} derived
    */
-  async strategy(spine, derived) {
+  async strategy(spine, derived, selected = null) {
     const strategy = spine.strategy;
     const geoId = spine.project.id;
     const tier = String(spine.project.tier);
@@ -517,7 +517,7 @@ export class GeoSpine {
     const roundIds = [...new Set(rounds.map((round) => /** @type {{ id: string }} */ (round).id))];
     /** @type {Map<string, any>} */
     const readings = new Map();
-    if (roundIds.length) {
+    if (!selected && roundIds.length) {
       const rows = (await this.#query(`SELECT DISTINCT ON (m.round_id, m.scope, coalesce(m.pool, ''), m.metric_id) m.round_id, m.scope, m.pool, m.metric_id, m.numerator,
           m.denominator, m.value, m.ci_low, m.ci_high, m.status, m.data_type, m.reason
         FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.round_id = ANY($2::text[]) AND m.scope IN ('project', 'pool') AND m.variant IS NULL AND m.rival IS NULL
@@ -525,8 +525,13 @@ export class GeoSpine {
         ORDER BY m.round_id, m.scope, coalesce(m.pool, ''), m.metric_id, m.computed_at DESC`, [geoId, roundIds])).rows;
       for (const row of rows) readings.set(`${row.round_id}\u0000${row.scope === "project" ? "all" : row.pool}\u0000${row.metric_id}`, row);
     }
-    /** @param {{ id: string, sampleDate: string | null } | null} round @param {string} pool @param {string} metricId */
-    const readingOf = (round, pool, metricId) => {
+    /** @param {{ id: string, sampleDate: string | null } | null} round @param {string} pool @param {string} metricId @param {boolean} [selectedLatest] */
+    const readingOf = (round, pool, metricId, selectedLatest = false) => {
+      if (selected) {
+        if (!selectedLatest) return null;
+        const row = selected.computed.cells.find(cell => cell.metricId === metricId && !cell.engine && !cell.variant && !cell.rival && !cell.arm && (pool === "all" ? cell.scope === "project" : cell.scope === "pool" && cell.pool === pool));
+        return row ? { ...cellOf({ ...row, numerator: row.numerator, denominator: row.denominator }), date: round?.sampleDate ?? null, roundId: round?.id ?? null } : null;
+      }
       if (!round) return null;
       const row = readings.get(`${round.id}\u0000${pool}\u0000${metricId}`);
       return row ? { ...cellOf(row), date: round.sampleDate, roundId: round.id } : null;
@@ -544,10 +549,10 @@ export class GeoSpine {
       const chosen = entry.tiers[tier] ?? null;
       const dueAt = baselineDate && chosen?.horizonWeeks != null ? new Date(Date.parse(`${baselineDate}T00:00:00Z`) + chosen.horizonWeeks * 7 * 86_400_000).toISOString().slice(0, 10) : null;
       return { ...entry, target: chosen?.target ?? null, horizonWeeks: chosen?.horizonWeeks ?? null, dueAt,
-        baseline: readingOf(spine.rounds.baseline, entry.pool, entry.metricId), latest: readingOf(spine.rounds.latest, entry.pool, entry.metricId) };
+        baseline: readingOf(spine.rounds.baseline, entry.pool, entry.metricId), latest: readingOf(spine.rounds.latest, entry.pool, entry.metricId, true) };
     }).sort((left, right) => left.metricId.localeCompare(right.metricId) || left.pool.localeCompare(right.pool));
 
-    const retrieval = (await this.#query(`SELECT DISTINCT ON (m.engine) m.* FROM evimed_geo.metrics m
+    const retrieval = selected ? selected.computed.cells.filter(cell => cell.metricId === GEO_VIEW_METRIC_IDS.retrieval && cell.scope === "engine") : (await this.#query(`SELECT DISTINCT ON (m.engine) m.* FROM evimed_geo.metrics m
         JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2 AND m.pool IS NULL AND m.arm IS NULL AND m.variant IS NULL AND m.rival IS NULL
         AND m.group_id IS NULL AND m.status <> 'absent' ORDER BY m.engine, m.computed_at DESC`, [geoId, GEO_VIEW_METRIC_IDS.retrieval, [...HEADLINE_KINDS]])).rows;

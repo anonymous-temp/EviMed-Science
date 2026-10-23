@@ -111,9 +111,14 @@ def tool_definitions():
                             "groupIds": {"type": "array", "items": ID, "maxItems": 100},
                             "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
                             "selectionRef": ID,
+                            "planContextRef": {"type": "string", "pattern": "^gpc_[a-f0-9]{64}$"},
+                            "strategyVersion": {"type": "integer", "minimum": 1},
+                            "url": {"type": "string", "maxLength": 2000},
                             "sourceId": ID,
                             "answerLimit": {"type": "integer", "minimum": 1, "maximum": 500},
                             "answerOffset": {"type": "integer", "minimum": 0, "maximum": 20000},
+                            "errorTrace": {"type":"string","enum":["traced","unattributable","noRetrieval"]},
+                            "errorJudgmentState": {"type":"string","enum":["active","withdrawn"]},
                             "errorStatuses": {"type": "array", "items": {"type": "string", "enum": ["open", "acting", "awaiting_remeasure", "closed"]}},
                             "errorSeverities": {"type": "array", "items": {"type": "string", "enum": ["S0", "S1", "S2", "S3", "S4"]}},
                             "errorTypes": {"type": "array", "items": {"type": "string", "enum": ["label_conflict", "number", "dropped_condition", "unfounded", "attribute_swap"]}},
@@ -156,6 +161,8 @@ def tool_definitions():
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "planContextRef": {"type": "string", "description": "Exact control-plane context from the submitted native request; attribution hint only."},
+                    "promptRequestId": {"type": "string", "description": "Actual submitted native request ID accompanying planContextRef."},
                     "what": {"type": "string", "enum": list(WRITE_WHATS)},
                     "items": {"type": "array", "minItems": 1, "maxItems": WRITE_MAX_ITEMS, "items": {"type": "object"}},
                     "data": {"type": "object", "description": (
@@ -278,6 +285,9 @@ def read(arguments: dict) -> dict:
     if what not in READ_WHATS:
         raise GeoPlatformError("geo_read_what_invalid", "what must be one of: %s." % ", ".join(READ_WHATS))
     payload = {"what": what}
+    for field in ("planContextRef", "promptRequestId"):
+        if arguments.get(field) is not None:
+            payload[field] = arguments[field]
     if isinstance(arguments.get("filter"), dict) and arguments["filter"]:
         payload["filter"] = arguments["filter"]
     try:
@@ -318,7 +328,7 @@ def write(arguments: dict) -> dict:
     if "items" in arguments and "data" in arguments:
         raise GeoPlatformError("geo_write_payload_invalid", "A write carries items or data, not both.")
     payload = {"what": what}
-    for key in ("items", "data"):
+    for key in ("items", "data", "planContextRef", "promptRequestId"):
         if key in arguments:
             payload[key] = arguments[key]
     try:

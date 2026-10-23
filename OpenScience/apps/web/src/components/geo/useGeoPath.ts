@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useLocation } from "react-router";
 import { geoReadScopeFromSearch, geoReadScopeQuery } from "@/lib/geoReadScope";
+import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { geoDestinationPath } from "./geoTabs";
 
 /** Carry analytical context inside this project only; a destination's own narrowing takes precedence. */
@@ -10,7 +11,7 @@ export function geoPathWithContext(path: string, from: { pathname: string; searc
   const targetParts = target.pathname.split("/");
   if (sourceParts[2] !== "geo" || targetParts[2] !== "geo" || !sourceParts[3] || sourceParts[3] !== targetParts[3]) return path;
   const kept = new URLSearchParams(geoReadScopeQuery(geoReadScopeFromSearch(from.search)));
-  const session = new URLSearchParams(from.search).get("session");
+  const session = geoSessionIdFromChatPath(from.pathname) || new URLSearchParams(from.search).get("session");
   if (session) kept.set("session", session);
   for (const [alias, canonical] of [["engine", "engines"], ["cluster", "groupIds"], ["pool", "pools"]]) {
     if (target.searchParams.has(alias) || target.searchParams.has(canonical)) { kept.delete(alias); kept.delete(canonical); kept.delete("selectionRef"); }

@@ -343,3 +343,25 @@ test('whole-file optional context uses the native words with no required draft p
   assert.deepEqual(forwarded.evimedResultRevision, { referenceId }); assert.deepEqual(forwarded.content, request.content);
   hooks.dispose();
 });
+
+test('a GEO context and artifact revision coexist only on the matching request, and retries retain both', async () => {
+  const { target, calls, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `gpc_${'b'.repeat(64)}`, revisionId = `rr_${'a'.repeat(64)}`;
+  target.__EVIMED_GEO_PLAN__.stage({ sessionId: 's', referenceId, draft: 'Selected plan: ' });
+  target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 's', referenceId: revisionId, draft: 'Selected plan: ' });
+  const request = { sessionId:'s',requestId:'r',content:[{type:'text',text:'Selected plan: revise this file'}] };
+  const body = JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request}}});
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body});
+  const sent = JSON.parse(calls[0][1].body).payload.args.request;
+  assert.deepEqual(sent.geoPlanContext,{referenceId}); assert.deepEqual(sent.evimedResultRevision,{referenceId:revisionId});
+  const stream = hooks.openStream('session/prompt',{args:{request}},new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await settleTransport();
+  assert.deepEqual(sockets[0].sent[0].payload.args.request.geoPlanContext,{referenceId});
+  sockets[0].message({type:'end',streamId:sockets[0].sent[0].streamId}); await pending;
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body:body.replace('"r"','"next"')});
+  assert.equal(JSON.parse(calls[1][1].body).payload.args.request.geoPlanContext,undefined);
+  target.__EVIMED_GEO_PLAN__.stage({sessionId:'s',referenceId,draft:'Selected plan: '});
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body:body.replace('Selected plan: revise this file','An unrelated draft')});
+  assert.equal(JSON.parse(calls[2][1].body).payload.args.request.geoPlanContext,undefined);
+  hooks.dispose();
+});

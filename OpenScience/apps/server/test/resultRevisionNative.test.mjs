@@ -21,7 +21,7 @@ import { HttpError } from "../src/security.mjs";
 const UI_ORIGIN = "https://science.example:8443";
 const sha = value => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t, automatic = null) {
+async function fixture(t, automatic = null, planning = null) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "result-native-revision-"));
   const config = loadConfig({ dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     publicUrl: "https://science.example", runtimeUiPublicOrigin: UI_ORIGIN });
@@ -73,6 +73,7 @@ async function fixture(t, automatic = null) {
     received.push(JSON.parse(req.__openScienceProxyBody.toString())); res.writeHead(200, { "Content-Type": "application/json" }); res.end("{}");
   };
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager,
+    bindGeoPlan: planning,
     bindResultRevision: (actor, current, request) => automatic?.version ? revisions.bindConversation(actor.id, current, request, { versionId: automatic.version.versionId, digest: automatic.version.digest, target: null, expectedHeadVersionId: null }) : revisions.bind(actor.id, current, request) });
   const address = await ui.listen(0, "127.0.0.1"); const origin = `http://127.0.0.1:${address.port}`;
   const reuseRoutes = createResultReuseRoutes({ store, revisions, exporter: null });
@@ -183,3 +184,19 @@ for (const wire of ["http", "mux"]) {
     assert.deepEqual(withoutPlatformBlocks(forwarded.content), [request.content[0]]);
   });
 }
+
+for (const wire of ['http','mux']) test(`native ${wire} strips a GEO context only after its authenticated actual request binding`, {timeout:10000}, async t => {
+  const referenceId = `gpc_${'a'.repeat(64)}`; const bound = [];
+  const f = await fixture(t,null,async (user,project,request)=>{
+    assert.equal(user.id,f.user.id); assert.equal(project.id,f.project.id);
+    assert.equal(request.geoPlanContext.referenceId,referenceId);
+    if (request.requestId!=='selected-plan-request') throw Object.assign(new Error('wrong request'),{status:409,code:'geo_plan_context_mismatch'});
+    bound.push(request.requestId); request.content.push({type:'text',text:'Frozen selected plan input'});
+  });
+  const request = {requestId:'selected-plan-request',sessionId:'session-1',content:[{type:'text',text:'Use this selected plan'}],geoPlanContext:{referenceId}};
+  if (wire==='http') assert.equal((await f.sendHttp(request)).status,200);
+  else {const client = await f.connect();client.send({type:'open',streamId:'selected-plan',endpoint:'session/prompt',payload:{args:{request}}});assert.equal((await client.next()).type,'item');}
+  assert.deepEqual(bound,['selected-plan-request']);
+  assert.equal(f.received[0].payload.args.request.geoPlanContext,undefined);
+  assert.equal(f.received[0].payload.args.request.content[1].text,'Frozen selected plan input');
+});

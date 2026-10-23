@@ -354,6 +354,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { GeoPlanContext } from "./geoPlanContext.mjs";
 import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
@@ -2297,6 +2298,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let geo = null;
   /** @type {GeoArticleResults | null} */
   let geoArticleResults = null;
+  /** @type {GeoPlanContext | null} */ let geoPlanContexts = null;
+  const geoPlanRevisionInputs = new WeakMap();
+  const geoPlanOwnWork = new WeakSet();
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
@@ -2331,7 +2335,21 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await resultCaptureQueue.drain();
           await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt });
         },
-        afterImport: (project, run) => geoArticleResults?.complete(project, run),
+        afterImport: async (project, run) => { await geoArticleResults?.complete(project, run); await geoPlanContexts?.complete(project, run); },
+        planningContext: (project, run) => geoPlanContexts?.forRun(project, run),
+        readRunFile: async (project, run, relative) => {
+          if (!resultProvenance) throw new HttpError(503, "geo_plan_output_unavailable", "The producing run's preserved output is unavailable.");
+          let cursor = null;
+          const candidates = [];
+          do {
+            const page = await resultProvenance.list(project.userId, { projectId: project.id, path:relative, runId:run.id, limit:100, cursor });
+            candidates.push(...page.items.filter(version => version.path === relative && version.producer?.runId === run.id && version.producer?.sessionId === run.sessionId && version.producer?.kind !== "workspace"));
+            cursor = page.nextCursor;
+          } while (cursor);
+          const selected = candidates.sort((left,right)=>String(right.capturedAt).localeCompare(String(left.capturedAt)))[0];
+          if (!selected) throw new HttpError(409, "geo_plan_output_unavailable", "No preserved output of this actual request is available; keep the file and refresh its result capture.");
+          return (await resultProvenance.raw(project.userId,project.id,selected.versionId)).bytes;
+        },
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
         // An attempt that lost a write is on the audit record as well as stderr, and in the metrics (`open_science_geo_run_import_total`).
@@ -2610,6 +2628,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (geo && resultProvenance && resultRevisions) geoArticleResults = new GeoArticleResults({ store: geo.store, service: geo.service,
     results: resultProvenance, revisions: resultRevisions, documents: productDocuments, cards: geo.cards, parser: documentParser,
     report: code => process.stderr.write(`geo article results: ${code}\n`) });
+  if (geo && productDocuments) {
+    geoPlanContexts = new GeoPlanContext({ documents: productDocuments, store: geo.store, service: geo.service,
+      authorizeSession: async (user, project, sessionId) => {
+        const control = await store.requireProject(await store.userById(project.userId), project.projectId);
+        if (!control) throw new HttpError(404, "project_not_found", "Project unavailable.");
+        await authorizeOwnedNativeSession(await store.userById(project.userId), control, sessionId);
+      },
+      runs: async project => { const control = await store.requireProject(await store.userById(project.userId), project.projectId); return control ? agentRuns.list(control) : []; },
+      articleResults: geoArticleResults });
+    geo.service.planContexts = geoPlanContexts;
+  }
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
       authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
@@ -8126,7 +8155,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
+    bindGeoPlan: async (user, project, request) => {
+      if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
+      const planInput = await geoPlanContexts.bind(user, project, request);
+      geoPlanOwnWork.add(request);
+      const existing = (planInput?.actions ?? []).filter(action => action.work?.mode === "modify_existing");
+      if (existing.length === 1) geoPlanRevisionInputs.set(request, { versionId: existing[0].work.resultVersionId, digest: existing[0].work.digest,
+        target: { kind: "geo-article", geoProjectId: planInput.geoId, articleId: existing[0].work.articleId }, expectedHeadVersionId: existing[0].work.resultVersionId });
+    },
     bindResultRevision: resultRevisions ? async (user, project, request) => {
+      if (geoPlanRevisionInputs.has(request) && request.evimedResultRevision === undefined) return resultRevisions.bindConversation(user.id, project, request, geoPlanRevisionInputs.get(request));
+      if (geoPlanOwnWork.has(request) && request.evimedResultRevision === undefined) return null;
       if (geoArticleResults) {
         const bound = await geoArticleResults.bind(user, project, request);
         if (bound || request.evimedResultRevision === undefined) return bound;

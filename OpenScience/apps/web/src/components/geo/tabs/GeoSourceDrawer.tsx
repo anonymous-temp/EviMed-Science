@@ -1,3 +1,4 @@
+import { useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
@@ -72,6 +73,8 @@ export function GeoSourceDrawer({
   served?: { groups: Array<{ id: string; name: string }>; candidate: Candidate | null } | null;
   onClose: () => void;
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const narrowed = engine === "all" ? null : engine;
   const frame = useGeoFrame();
   const scope = useGeoReadScope();
@@ -80,6 +83,11 @@ export function GeoSourceDrawer({
   const refreshView = () => {
     if (frame?.refreshScope) frame.refreshScope(); else { frame?.reload(); frame?.data.invalidate(); }
     onClose();
+  };
+  const showPlan = (url?:string) => {
+    const params = new URLSearchParams(location.search); params.set("planSource", source.id); params.delete("source"); params.delete("strategyVersion");
+    if (url) params.set("planUrl", url); else params.delete("planUrl");
+    onClose(); navigate(`${location.pathname}?${params}#implementation-plan`);
   };
   const kind = sourceKindWord(source.kind);
   return (
@@ -102,11 +110,12 @@ export function GeoSourceDrawer({
         <div className="flex flex-1 flex-col gap-6">
           {/* What an article here needs and costs, and the groups it serves, are the first screen: the answers behind the counts follow. */}
           <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
+          <Button onClick={() => showPlan()}>查看相关实施方案</Button>
           <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
           {state.kind === "error" && (state.stale ? <ChangedSource onRefresh={refreshView} /> : <TabError message={state.message} onRetry={reload} />)}
           {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} onRefresh={refreshView} />}
-          {state.kind === "ready" && <Pages detail={state.data} />}
+          {state.kind === "ready" && <Pages detail={state.data} onPlan={showPlan} />}
           {state.kind === "ready" && <History detail={state.data} />}
         </div>
         <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
@@ -212,7 +221,7 @@ function displayUrl(url: string): string {
  * 被引用的页面 (R14 N-11): the specific pages of this site that the latest round's answers cited — the page's title, its address
  * as an outside link, how many answers cited it and how many of those misstated us. The most cited eight, then all of them.
  */
-function Pages({ detail }: { detail: GeoSourceDetail }) {
+function Pages({ detail, onPlan }: { detail: GeoSourceDetail; onPlan:(url:string)=>void }) {
   const pages = Array.isArray(detail.pages) ? detail.pages : [];
   const [all, setAll] = useState(false);
   if (pages.length === 0) return null;
@@ -225,7 +234,7 @@ function Pages({ detail }: { detail: GeoSourceDetail }) {
       </h3>
       <ListHeader label="页面的数字" columns={[{ key: "cited", label: "被引用" }, { key: "wrong", label: "讲错的回答" }]} className="mt-2 max-sm:hidden" />
       <List divided label="被引用的页面">
-        {shown.map((page) => <PageRow key={page.url} page={page} />)}
+        {shown.map((page) => <div key={page.url}><PageRow page={page} /><Button variant="text" size="sm" onClick={() => onPlan(page.url)}>将此页面用于方案</Button></div>)}
       </List>
       {pages.length > PAGES_SHOWN && (
         <div className="mt-2 flex justify-center">

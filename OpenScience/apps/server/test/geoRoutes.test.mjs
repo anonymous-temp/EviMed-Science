@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
+import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
 import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
@@ -409,4 +409,15 @@ test('structured judgment feedback keeps its exact fields and review history sta
   assert.deepEqual(calls[1].page, { historyBefore: 8, feedbackBefore: 'feedback1' });
   await assert.rejects(routes(request('GET', '/api/geo/projects/geo_1/diagnosis/reviews/snap1?unknown=1'), response()), { status: 400 });
   await assert.rejects(routes(request('POST', '/api/geo/projects/geo_1/diagnosis/feedback', { ...body, resolved: true }), response()), { status: 400 });
+});
+
+
+test("planning boundary errors belong to the closed registry and tell the person how to recover", async()=>{
+  const emitted = new Set();
+  for (const file of ["../src/geoPlanContext.mjs","../src/geoService.mjs","../src/geoGateway.mjs","../src/runtimeUiServer.mjs","../src/server.mjs"]) {
+    const source = await readFile(new URL(file,import.meta.url),"utf8");
+    for (const [,code] of source.matchAll(/["'](geo_(?:plan_|strategy_)[a-z0-9_]+)["']/g)) emitted.add(code);
+  }
+  assert.ok(emitted.size>=15);
+  for (const code of emitted) {assert.ok(ALL_ERROR_CODES.includes(code),code);assert.match(knownErrorCodeMessage(code) ?? "",/[\u4e00-\u9fff]/,code);}
 });

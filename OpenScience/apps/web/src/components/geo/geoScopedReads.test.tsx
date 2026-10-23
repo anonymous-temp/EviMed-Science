@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GeoFrameContext, type GeoFrameApi } from "./geoFrame";
-import { GeoDataCache, useGeoDiagnosis, useGeoMonitoring, useGeoSources } from "./geoProjectData";
+import { GeoDataCache, useGeoDiagnosis, useGeoMonitoring, useGeoSources, useGeoStrategy } from "./geoProjectData";
 import { useGeoClusters } from "./spine/spineData";
-const reads = vi.hoisted(() => ({ getGeoDiagnosis: vi.fn(), getGeoMonitoring: vi.fn(), getGeoSources: vi.fn(), getGeoClusters: vi.fn() }));
+const reads = vi.hoisted(() => ({ getGeoDiagnosis: vi.fn(), getGeoMonitoring: vi.fn(), getGeoSources: vi.fn(), getGeoClusters: vi.fn(), getGeoStrategy:vi.fn() }));
 vi.mock("@/lib/geoClient", async (original) => ({ ...await original<typeof import("@/lib/geoClient")>(), ...reads }));
 
 function View() {
@@ -11,7 +11,8 @@ function View() {
   const monitoring = useGeoMonitoring("g");
   const sources = useGeoSources("g");
   const clusters = useGeoClusters("g");
-  return <div>{[diagnosis, monitoring, sources, clusters].map((read, i) => <output key={i} data-testid={`read-${i}`}>
+  const strategy = useGeoStrategy("g");
+  return <div>{[diagnosis, monitoring, sources, clusters, strategy].map((read, i) => <output key={i} data-testid={`read-${i}`}>
     {read.state.kind === "ready" ? JSON.stringify(read.state.data) : read.state.kind}
   </output>)}</div>;
 }
@@ -31,6 +32,6 @@ describe("measured GEO reads share the frame's scope", () => {
     for (const read of Object.values(reads)) await waitFor(() => expect(read).toHaveBeenLastCalledWith("g", scopeB));
     await waitFor(() => expect(screen.getByTestId("read-0")).toHaveTextContent("range-b"));
     await act(async () => { resolveOld({ marker: "range-a" }); await old; });
-    for (let i = 0; i < 4; i++) expect(screen.getByTestId(`read-${i}`)).toHaveTextContent("range-b");
+    for (let i = 0; i < 5; i++) expect(screen.getByTestId(`read-${i}`)).toHaveTextContent("range-b");
   });
 });

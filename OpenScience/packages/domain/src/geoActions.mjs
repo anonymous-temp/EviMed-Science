@@ -340,6 +340,7 @@ export function geoActionEntry(entry) {
   const value = record(entry)
   const what = value.what && typeof value.what === 'object' ? record(value.what) : null
   return {
+    work: value.work ?? null, timing: value.timing ?? null, effort: value.effort ?? null, estimate: value.estimate ?? null, sequence: finite(value.sequence),
     gapId: text(value.gapId),
     groupId: text(value.groupId),
     group: text(value.group),
@@ -350,7 +351,7 @@ export function geoActionEntry(entry) {
     engines: list(value.engines).map(String).filter(Boolean),
     sources: list(value.sources).filter((source) => source && typeof source === 'object').map((source) => {
       const domain = text(record(source).domain)
-      return { domain: domain ? bareDomain(domain) : null, why: text(record(source).why) }
+      return { url: text(record(source).url), domain: domain ? bareDomain(domain) : null, why: text(record(source).why) }
     }).filter((source) => source.domain),
     promise: text(value.promise),
     basis: text(value.basis),
@@ -367,7 +368,7 @@ export function geoActionEntry(entry) {
  *
  * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
  *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
- *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }>, info?: Record<string, Record<string, any>> }} choice
+ *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null, url?: string | null }>, info?: Record<string, Record<string, any>> }} choice
  */
 function rankedSources(candidates, { swapped, placed, modelSources, info = {} }) {
   /** @type {Map<string, Record<string, any>>} */
@@ -398,6 +399,7 @@ function rankedSources(candidates, { swapped, placed, modelSources, info = {} })
     const swappedTo = swapped ? bareDomain(swapped) : null
     return {
       domain,
+      url: domain ? modelSources.find(entry => entry.domain === domain)?.url ?? null : null,
       channel: text(candidate.channel),
       name: text(candidate.name),
       kind: text(candidate.kind),
@@ -714,6 +716,7 @@ export function deriveGeoActions(input) {
         safetyPinned: gap?.safetyPinned === true,
         handoff: text(gap?.handoff ?? gap?.handoffTo),
       },
+      work: entry?.work ?? null, timing: entry?.timing ?? null, effort: entry?.effort ?? null, estimate: entry?.estimate ?? null, sequence: entry?.sequence ?? null,
       what: { layer, title: entry?.what?.title ?? text(latestArticle?.title), channel, channelNote: channel ? null : text(latestArticle?.channelNote) },
       engines,
       sources,

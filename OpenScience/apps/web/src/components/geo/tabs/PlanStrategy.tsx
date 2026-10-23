@@ -90,6 +90,7 @@ function dueDay(baselineDay: string | null | undefined, weeks: number | null | u
 /* ------------------------------------------------------------------ targets */
 
 export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStrategyView; onChosen: () => void }) {
+  const currentLabel = plan.readingsKind === "frozen_basis" ? "方案时" : plan.readingsKind === "submitted_input" ? "本次依据" : "现在";
   const frame = useGeoFrame();
   const [busy, setBusy] = useState<GeoTierId | null>(null);
   const tiers = plan.tiers.filter((tier) => tier.tier === "1" || tier.tier === "2" || tier.tier === "3");
@@ -141,7 +142,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                 {tier.summary && <p className="mt-2 text-ui text-text-2">{tier.summary}</p>}
                 <ul className="mt-4 flex flex-col gap-4">
                   {head.map((row) => (
-                    <TargetBarRow key={`${row.metricId}|${row.pool}`} row={row} tier={tier.tier} baselineDay={baselineDay} latestDay={plan.targets.latestRound?.sampleDate ?? null} />
+                    <TargetBarRow key={`${row.metricId}|${row.pool}`} row={row} tier={tier.tier} currentLabel={currentLabel} baselineDay={baselineDay} latestDay={plan.targets.latestRound?.sampleDate ?? null} />
                   ))}
                 </ul>
                 <p className="mt-4 text-caption tabular-nums text-text-3">
@@ -170,7 +171,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
               columns={[
                 { key: "name", header: "指标", rowHeader: true, cell: (row) => targetRowName(row) },
                 { key: "baseline", header: "基线", align: "right", cell: (row) => <GeoCellText cell={row.baseline} unit={unitOf(row)} hideSample /> },
-                { key: "latest", header: "现在", align: "right", cell: (row) => <GeoCellText cell={row.latest} unit={unitOf(row)} hideSample /> },
+                { key: "latest", header: currentLabel, align: "right", cell: (row) => <GeoCellText cell={row.latest} unit={unitOf(row)} hideSample /> },
                 ...tiers.map((tier) => ({
                   key: `tier-${tier.tier}`,
                   header: tier.tier === plan.chosenTier ? `${TIER_WORDS[tier.tier]}（已选）` : TIER_WORDS[tier.tier],
@@ -190,7 +191,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
 }
 
 /** One head metric in one tier's column: this tier's target, and where the reading stands against it, from where it began. */
-function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyTargetRow; tier: GeoTierId; baselineDay: string | null; latestDay: string | null }) {
+function TargetBarRow({ row, tier, baselineDay, latestDay, currentLabel }: { row: GeoStrategyTargetRow; tier: GeoTierId; baselineDay: string | null; latestDay: string | null; currentLabel:string }) {
   const unit = unitOf(row);
   const target = row.tiers[tier]?.target ?? null;
   const baseline = row.baseline?.status === "ok" ? row.baseline.value : null;
@@ -227,7 +228,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay }: { row: GeoStrategyT
       <p className="mt-1 text-caption tabular-nums text-text-3">
         {[
           baseline !== null ? `基线 ${formatGeoValue(baseline, unit)}${baselineDay ? ` · ${monthDay(baselineDay)}` : ""}` : "基线 未测",
-          latest !== null ? `现在 ${formatGeoValue(latest, unit)}${latestDay ? ` · ${monthDay(latestDay)}` : ""}` : null,
+          latest !== null ? `${currentLabel} ${formatGeoValue(latest, unit)}${latestDay ? ` · ${monthDay(latestDay)}` : ""}` : null,
         ].filter(Boolean).join(" → ")}
       </p>
     </li>

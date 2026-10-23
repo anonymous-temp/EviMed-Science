@@ -135,7 +135,7 @@ function withoutPlatformText(text, tags) {
  * @param {{ injected: readonly string[], wrappers: readonly string[] }} [tags] the frame's vocabulary; the result selection alone when omitted
  * @returns {any}
  */
-export function withoutPlatformBlocks(content, tags = { injected: ['evimed_result_selection'], wrappers: [] }) {
+export function withoutPlatformBlocks(content, tags = { injected: ['evimed_result_selection', 'evimed_geo_plan_context'], wrappers: [] }) {
   if (!Array.isArray(content)) return content;
   let changed = false;
   /** @type {any[]} */

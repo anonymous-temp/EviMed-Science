@@ -986,7 +986,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };

@@ -614,3 +614,139 @@ test("saved diagnosis references alone replay historical, date, engine, group an
     }
   }
 });
+
+test("scoped plan versions merge in scope and never become the legacy default", options, async () => {
+  const a = await store.writeStrategy(user.id, project.id, { scopeKey: 'plan-a', basis: { schemaVersion: 1, marker: 1 }, summary: 'A', actions: [{ groupId: 'g1' }] });
+  const b = await store.writeStrategy(user.id, project.id, { scopeKey: 'plan-b', basis: { schemaVersion: 1, marker: 1 }, summary: 'B' });
+  const patch = await store.writeStrategy(user.id, project.id, { scopeKey: 'plan-b', summary: 'B patched' });
+  assert.equal((await store.latestStrategy(project.id, { scopeKey: 'plan-b' })).actions, null);
+  assert.equal((await store.latestStrategy(project.id, { strategyVersion: a.version })).summary, 'A');
+  assert.notEqual((await store.latestStrategy(project.id))?.version, patch.version);
+  const same = await store.writeStrategy(user.id, project.id, { scopeKey: 'plan-a', basis: { schemaVersion: 1, marker: 1 }, summary: 'A' });
+  assert.equal(same.unchanged, true);
+  const changed = await store.writeStrategy(user.id, project.id, { scopeKey: 'plan-a', basis: { schemaVersion: 1, marker: 2 }, summary: 'A' });
+  assert.ok(changed.version > b.version);
+});
+
+test("scoped strategy preserves selected cells and historical basis when its selection becomes stale", options, async () => {
+  const { freezeGeoPlanBasis, geoPlanScopeKey } = await import('../src/geoPlanContext.mjs');
+  const frozen = await freezeGeoPlanBasis(store, project, { round:'r1',engines:['kimi'],groupIds:['g1'] });
+  const plan = await store.writeStrategy(user.id,project.id,{scopeKey:geoPlanScopeKey(frozen.basis.scope),basis:frozen.basis,summary:'Frozen exact group'});
+  const read = await service.strategy(user,project.id,{selectionRef:frozen.basis.selection.reference});
+  assert.equal(read.version,plan.version);
+  assert.equal(read.basis.observations.snapshotIds.length,1);
+  const native = await service.runtimeRead(project,'strategy',{selectionRef:frozen.basis.selection.reference});
+  assert.deepEqual(native.view.basis,read.basis);
+  assert.equal(read.targets.baselineRound,null);
+  const raw = await store.latestStrategy(project.id,{strategyVersion:plan.version});
+  await store.query(`UPDATE evimed_geo.questions SET text=text || ' changed after plan' WHERE id='q1'`);
+  const historical = await service.strategy(user,project.id,{strategyVersion:plan.version});
+  assert.equal(historical.selection,null);
+  assert.equal(historical.freshness.status,'needs_update');
+  assert.ok(historical.freshness.reasons.includes('question_set_changed'));
+  assert.deepEqual(await store.latestStrategy(project.id,{strategyVersion:plan.version}),raw);
+});
+
+test("native plan input references enforce actor/session/request identity and immutable retry", options, async () => {
+  const { GeoPlanContext } = await import('../src/geoPlanContext.mjs');
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  const documents = new ProductDocuments(database);
+  const adapter = new GeoPlanContext({documents,store,service,authorizeSession:async (actor,geo,sessionId) => { assert.equal(sessionId,'native-session'); assert.equal(geo.id,project.id); },runs:async()=>[]});
+  const selected = await readGeoSelection(store,project,{round:'r2',groupIds:['g1']});
+  const body = {requestKey:'stage-one',sessionId:'native-session',mode:'strategy',selectionRef:selected.selection.reference,groupIds:['g1']};
+  assert.equal(await adapter.activeScoped(project),false,'staging alone is not an active plan lock');
+  const staged = await adapter.stage(user,project.id,body);
+  adapter.runs = async()=>[{id:'actual-run',sessionId:'native-session',status:'running',kernelRequestIds:['native-request']}];
+  assert.equal(await adapter.activeScoped(project),false,'a staged input with a running unrelated request cannot lock legacy writes');
+  assert.deepEqual(await adapter.stage(user,project.id,body),staged);
+  await assert.rejects(adapter.stage(user,project.id,{...body,groupIds:['g2']}),error=>error.code==='geo_plan_context_conflict');
+  await assert.rejects(adapter.stage(user,project.id,{...body,requestKey:'outside',groupIds:['g2']}),error=>error.code==='geo_plan_focus_invalid');
+  await assert.rejects(adapter.stage({id:'other'},project.id,body),error=>error.status===404);
+  const request = () => ({requestId:'native-request',sessionId:'native-session',content:[{type:'text',text:staged.draft}],geoPlanContext:{referenceId:staged.referenceId}});
+  const control = {id:project.projectId,userId:project.userId};
+  const first = request(), simultaneous = request(); await Promise.all([adapter.bind(user,control,first),adapter.bind(user,control,simultaneous)]); assert.equal(first.geoPlanContext,undefined);
+  assert.deepEqual(first.content,simultaneous.content);
+  const {withoutPlatformBlocks} = await import('../../../packages/harness-port/src/runtimeUiTranscript.mjs');
+  const {FRAME_VOCABULARY} = await import('../../../packages/harness-port/src/runtimeUiFrame.mjs');
+  assert.deepEqual(withoutPlatformBlocks(first.content),[{type:'text',text:staged.draft}]);
+  assert.deepEqual(withoutPlatformBlocks(first.content,FRAME_VOCABULARY.platformTags),[{type:'text',text:staged.draft}]);
+  const mixed = [{type:'text',text:first.content.map(part=>part.text).join('\n')}];
+  assert.deepEqual(withoutPlatformBlocks(mixed,FRAME_VOCABULARY.platformTags),[{type:'text',text:staged.draft}]);
+  assert.equal(await adapter.activeScoped(project),true);
+  const different = await adapter.stage(user,project.id,{...body,requestKey:'another-input'});
+  await assert.rejects(adapter.bind(user,control,{...request(),geoPlanContext:{referenceId:different.referenceId}}),error=>error.code==='geo_plan_context_conflict');
+  const retry = request(); await adapter.bind(user,control,retry);
+  assert.deepEqual(retry.content,first.content);
+  await assert.rejects(adapter.bind(user,control,{...request(),requestId:'forged-other-request'}),error=>error.code==='geo_plan_context_consumed');
+  assert.equal(await adapter.forRun(project,{id:'wrong-run',sessionId:'other-session',kernelRequestIds:['native-request']}),null);
+  await documents.createBatch(user.id,Array.from({length:105},(_,index)=>({kind:'geo-plan-context',id:`gpc_noise_${index}`,projectId:project.projectId,payload:{recordType:'geo-plan-context',state:'bound',sessionId:'native-session',actorId:user.id,geoId:project.id,requestId:`unrelated-${index}`}})));
+  const origin = await adapter.forRun(project,{id:'actual-run',sessionId:'native-session',kernelRequestIds:['native-request']});
+  assert.equal(origin.referenceId,staged.referenceId); assert.equal(origin.runId,'actual-run');
+});
+
+test('plan dependency freshness keeps frozen targets and source metadata while disclosing later changes', options, async () => {
+  const {freezeGeoPlanBasis,geoPlanScopeKey,geoPlanFreshness} = await import('../src/geoPlanContext.mjs');
+  await store.writeTargets(user.id,project.id,[{tier:'2',metricId:'M-01S',pool:'P2',target:60,dataType:'forecast'}]);
+  const frozen = await freezeGeoPlanBasis(store,project,{round:'r1',groupIds:['g1'],engines:['kimi']});
+  const written = await store.writeStrategy(user.id,project.id,{scopeKey:geoPlanScopeKey(frozen.basis.scope),basis:frozen.basis,summary:'Historical targets'});
+  const raw = await store.latestStrategy(project.id,{strategyVersion:written.version});
+  assert.equal((await geoPlanFreshness(store,project,raw.basis)).status,'unknown','a citation URL alone does not prove preserved source bytes');
+  await store.writeTargets(user.id,project.id,[{tier:'2',metricId:'M-01S',pool:'P2',target:85,dataType:'forecast'}]);
+  await store.query(`UPDATE evimed_geo.sources SET name='Changed source metadata' WHERE id='source1'`);
+  const view = await service.strategy(user,project.id,{strategyVersion:written.version});
+  assert.ok(view.freshness.reasons.includes('targets_changed')); assert.ok(view.freshness.reasons.includes('source_changed'));
+  assert.equal(view.targets.rows[0].target,60); assert.equal(view.targets.targetsVersion,raw.basis.targets.version);
+  assert.deepEqual(await store.latestStrategy(project.id,{strategyVersion:written.version}),raw);
+  const {GeoPlanContext} = await import('../src/geoPlanContext.mjs');
+  const {ProductDocuments} = await import('../src/productStore.mjs');
+  const adapter = new GeoPlanContext({documents:new ProductDocuments(database),store,service,authorizeSession:async()=>{},runs:async()=>[]});
+  service.planContexts = adapter;
+  const fresh = await readGeoSelection(store,project,{round:'r1',groupIds:['g1'],engines:['kimi']});
+  const staged = await adapter.stage(user,project.id,{requestKey:'refresh-targets',sessionId:'native-session',mode:'strategy',selectionRef:fresh.selection.reference});
+  const browser = await service.strategy(user,project.id,{planContextRef:staged.referenceId});
+  const native = await service.runtimeRead(project,'targets',{planContextRef:staged.referenceId});
+  assert.equal(browser.targets.rows[0].target,85);assert.equal(native.tiers.rows[0].target,85);
+  assert.equal(browser.basis.targets.version,native.basis.targets.version);
+  assert.equal(browser.previousPlanBasis.targets.rows[0].target,60,'previous plan basis remains separately inspectable');
+  assert.deepEqual(await store.latestStrategy(project.id,{strategyVersion:written.version}),raw);
+  const mismatch = await service.strategy(user,project.id,{strategyVersion:written.version,round:'r2',groupIds:['g2']});
+  assert.ok(mismatch.freshness.reasons.includes('view_scope_differs'));
+  const changedFocus = await service.strategy(user,project.id,{strategyVersion:written.version,url:'https://different.example/page'});
+  assert.ok(changedFocus.freshness.reasons.includes('view_scope_differs'));
+  const unavailable = await geoPlanFreshness({database:store.database,query:async()=>{throw new Error('database outage');}},project,raw.basis);
+  assert.equal(unavailable.status,'unknown');
+});
+
+test('a group with no cited answer still has an exact planning input without an invented baseline', options, async () => {
+  const {freezeGeoPlanBasis} = await import('../src/geoPlanContext.mjs');
+  const frozen = await freezeGeoPlanBasis(store,project,{round:'r2',groupIds:['g2'],engines:['doubao']});
+  assert.equal(frozen.basis.observations.snapshotIds.length,0);
+  assert.equal(frozen.basis.groups[0].id,'g2'); assert.equal(frozen.basis.readings.baseline,null);
+  assert.equal(frozen.basis.sources.length,0);
+});
+
+test('multi-round strategy selections keep the baseline unknown and expose the selected aggregate only as latest', options, async () => {
+  await store.writeTargets(user.id,project.id,[{tier:'2',metricId:'M-01S',pool:'all',target:70,dataType:'forecast'}]);
+  const filter={from:'2026-10-01',to:'2026-10-02',groupIds:['g1'],engines:['kimi']};
+  const view=await service.strategy(user,project.id,filter);
+  assert.equal(view.targets.baselineRound,null);assert.equal(view.targets.latestRound,null);
+  const row=view.targets.rows.find(item=>item.metricId==='M-01S'&&item.pool==='all');
+  assert.equal(row.baseline,null);assert.equal(row.latest.numerator,1);assert.equal(row.latest.denominator,2);
+  const native=await service.runtimeRead(project,'strategy',filter);
+  assert.equal(native.view.targets.rows.find(item=>item.metricId==='M-01S'&&item.pool==='all').baseline,null);
+});
+
+test('plan scope never maps an earlier question-version group ID onto a current same-name group', options, async () => {
+  const {freezeGeoPlanBasis,geoPlanScopeKey}=await import('../src/geoPlanContext.mjs');
+  await store.query(`INSERT INTO evimed_geo.question_sets(geo_project_id,version,user_id) VALUES($1,98,$2),($1,99,$2)`,[project.id,user.id]);
+  await store.query(`INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('n09-old',$1,$2,98,'P2','Repeated name'),('n09-current',$1,$2,99,'P2','Repeated name')`,[user.id,project.id]);
+  await store.query(`INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) VALUES('n09-old-q',$1,$2,'n09-old',98,'P2','Old question',true),('n09-current-q',$1,$2,'n09-current',99,'P2','New question',true)`,[user.id,project.id]);
+  const frozen=await freezeGeoPlanBasis(store,project,{questionVersion:99,groupIds:['n09-current']});
+  const written=await store.writeStrategy(user.id,project.id,{scopeKey:geoPlanScopeKey(frozen.basis.scope),basis:frozen.basis,
+    gaps:[{gapId:'old-id',groupId:'n09-old',group:'Repeated name',class:'missing_evidence',text:'Historical explicit identity'}],
+    actions:[{gapId:'old-id',groupId:'n09-old',group:'Repeated name',kind:'fill_gap',what:{layer:'popular',title:'Old group plan'}}]});
+  const view=await service.strategy(user,project.id,{strategyVersion:written.version});
+  const action=view.implementation.actions.find(item=>item.what.title==='Old group plan');
+  assert.equal(action.group,null);
+  assert.equal((await store.latestStrategy(project.id,{strategyVersion:written.version})).actions[0].groupId,'n09-old','historical authored identity is retained without rewriting it');
+});

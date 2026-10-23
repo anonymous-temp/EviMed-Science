@@ -617,7 +617,12 @@ export interface GeoSources extends GeoScopedView {
   chosenTier: GeoTierId | null;
 }
 
+export interface GeoPlanOutputLink {
+  contextRef:string; strategyVersion:number; basisDigest:string; actionKeys:string[]; groupIds:string[];
+  runId:string; requestId:string; articleId:string; resultVersionId:string; digest:string;
+}
 export interface GeoArticle {
+  planningLinks?: GeoPlanOutputLink[];
   currentResultVersionId?: string | null;
   contentSha256?: string | null;
   onlineUpdateNeeded?: boolean;
@@ -789,6 +794,7 @@ export interface GeoClustersView extends GeoScopedView {
  * list it (see `unavailableBecause`). A source row always carries the same sixteen keys; only their values move.
  */
 export interface GeoActionSource {
+  url?: string | null;
   domain: string | null;
   channel: string | null;
   name: string | null;
@@ -998,7 +1004,23 @@ export interface GeoStrategyEngine {
 }
 
 /** The plan page's one read (`GET …/strategy`): it replaces the page's use of the all-sources endpoint. */
+export interface GeoImplementationAction extends GeoAction {
+  work?: { mode: "new" | "modify_existing"; articleId?: string | null; resultVersionId?: string | null; digest?: string | null; audience?: string | null; outputs: string[] } | null;
+  sequence?: number | null;
+  timing?: { earliest?: string | null; latest?: string | null; durationDays?: { low: number; high: number } | null; basis: string } | null;
+  effort?: { unit: "hours" | "days"; low: number; high: number; basis: string } | null;
+  estimate?: { currency: "CNY"; low: number; high: number; basis: Array<{ kind: "source_price" | "supplied_quote"; id: string; digest: string | null }>; assumption: string | null; observedAt: string | null } | null;
+}
 export interface GeoStrategyView {
+  readingsKind?: "submitted_input" | "frozen_basis" | "selected_current" | "project_current";
+  scope?: GeoReadScope | null;
+  selection?: GeoScopedView["selection"] | null;
+  scopeKey?: string | null;
+  basisDigest?: string | null;
+  basis?: { priceReferences?:Array<{id:string;domain?:string|null;name?:string|null}>; schemaVersion: 1; capturedAt: string; selection: GeoScopedView["selection"]; scope: GeoReadScope; groups: Array<{id:string;name:string;setVersion:number;pool:string|null}>; targets: {version:number|null;rows:unknown[]}; focus:{sourceId:string|null;url:string|null;errorIds:string[]} } | null;
+  freshness?: { status: "current" | "needs_update" | "unknown"; reasons: string[] };
+  implementation?: { actions: GeoImplementationAction[] };
+  actualBudget?: {href:string};
   version: number | null;
   createdAt: string | null;
   runId: string | null;
@@ -1389,8 +1411,11 @@ export function createGeoOwnedLink(
 }
 
 /** The plan page's one read: targets as baseline → now → target with dates, battlefield, each engine's promise, the client's to-dos. */
-export function getGeoStrategy(geoId: string) {
-  return productRequest<GeoStrategyView>(`${project(geoId)}/strategy`);
+export function getGeoStrategy(geoId: string, scope?: GeoReadScope & {strategyVersion?:number;planContextRef?:string;sourceId?:string;url?:string}) {
+  const query = geoReadScopeQuery(scope);
+  const params = new URLSearchParams(query.replace(/^\?/, ""));
+  for (const key of ["strategyVersion", "planContextRef", "sourceId", "url"] as const) if (scope?.[key] != null) params.set(key, String(scope[key]));
+  return productRequest<GeoStrategyView>(`${project(geoId)}/strategy${params.size ? `?${params}` : ""}`);
 }
 
 export function getGeoArticles(geoId: string) {
@@ -1554,3 +1579,7 @@ export const resolveGeoMarketOrder = (orderId: string, input: { created: boolean
 export const markGeoMarketOrderLost = (orderId: string, reason: string) =>
   productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/lost`, "POST", { reason });
 export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: boolean; day?: string }>("/geo/market/clear-stop", "POST", { note });
+
+export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[]}) {
+  return productRequest<{referenceId:string;sessionId:string;draft:string}>(`${project(geoId)}/strategy/context`, "POST", input);
+}
