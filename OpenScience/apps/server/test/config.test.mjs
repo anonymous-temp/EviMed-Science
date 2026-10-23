@@ -135,6 +135,8 @@ const HOSTED_ENV = Object.freeze({ NODE_ENV: "production", OPEN_SCIENCE_AUTH_MOD
 const UNDER_THE_TOOL_CALL_CEILING = "the kernel abandons an MCP call at 180 s; a longer deadline means the gateway's own error never arrives";
 const ON_THE_DISPATCH_PATH = "recall runs before a run starts; longer holds every dispatch while the index is down";
 const FALLBACK_RULES = {
+  // Explicit operator endpoint enables only the receipt/controller release-gate profile.
+  OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL: ["deployment", "url"],
   OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ["gte", "runtimePidsLimit", "256 killed three runs with fork(): EAGAIN"],
   OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ["gte", "runtimeMemoryLimit", "4g OOM-killed the kernel on 2026-08-26"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ["gte", "memoryExtractionTimeoutMs", "30 s aborted a deep run's extraction on 2026-09-19"],

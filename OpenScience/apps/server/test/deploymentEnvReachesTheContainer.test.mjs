@@ -501,6 +501,7 @@ test("the operator levers reach the services that read them", async () => {
  *  travel), and a secret's value form whose `_FILE` form the web API receives
  *  (a secret travels as a mounted file). */
 const notForTheContainer = {
+  OPEN_SCIENCE_RELEASE_GATE_MODEL_GATEWAY_INTERNAL_URL: "operator-only receipt/controller endpoint; ordinary web runtimes use the normal model gateway",
   // A checkout's development shortcuts: the sibling 项目代码/ engines run in
   // place, and .evimed-local/ supplies the rest. A hosted deployment reaches
   // each engine through its adapter's URL (EVIMED_*_URL), which is passed.

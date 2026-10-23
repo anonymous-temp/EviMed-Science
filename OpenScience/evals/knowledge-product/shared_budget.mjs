@@ -1,8 +1,9 @@
 // Evaluation-only aggregate budget. Uncertain calls keep their full reservation; no budget is silently released.
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 export const REQUIRED_PROVIDER_SCOPES=Object.freeze(['baseline','candidate','openviking']);
+export const BUDGET_SCOPES=Object.freeze([...REQUIRED_PROVIDER_SCOPES,'C','judge']);
 export class SharedBudget {
   constructor({capCny=50,models,ledgerFile=null,id=randomBytes(12).toString('hex')}) {
     if(!(capCny>0&&capCny<=50)||!models||!Object.keys(models).length)throw new Error('Invalid aggregate budget configuration');
@@ -30,6 +31,62 @@ export class SharedBudget {
     this.record({type:'settled',id,inputTokens,outputTokens,amount});this.pending.delete(id);this.committed+=amount;
   }
   status(){return {id:this.id,capCny:this.cap/1e6,committedCny:this.committed/1e6,reservedCny:[...this.pending.values()].reduce((s,r)=>s+r.amount,0)/1e6,halted:this.halted,pending:this.pending.size};}
+}
+// Explicit recovery is deliberately separate from the new-ledger constructor.
+export function replaySharedBudget({bytes,id,capCny,models,configurationSha256}) {
+  const fail=()=>{throw new Error('Invalid or inconsistent budget replay');};
+  if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.at(-1)!==10||!Buffer.from(bytes.toString('utf8')).equals(bytes))fail();
+  const priceHash=createHash('sha256').update(JSON.stringify(Object.entries(models).sort())).digest('hex');
+  // Reuse configuration validation without touching any ledger.
+  const state=new SharedBudget({id,capCny,models});
+  const seen=new Set();const checkpoints=new Set();let opened=false;let offset=0;let recoverySeen=false;
+  for(const line of bytes.toString('utf8').split('\n').slice(0,-1)) {
+    let r;try{r=JSON.parse(line);}catch{fail();}
+    if(!r||r.budgetId!==id||typeof r.at!=='string'||!Number.isFinite(Date.parse(r.at)))fail();
+    const fields={opened:['capMicroCny'],reserved:['id','scope','model','inputTokens','maxOutputTokens','amount'],settled:['id','inputTokens','outputTokens','amount'],'uncertain-halted':['id'],halted:['id'],resumed:['ledgerSha256','priceHash','checkpointId']};
+    fields['unspent-recovery']=['priorLedgerSha256','configurationSha256'];
+    const prefixHash=createHash('sha256').update(bytes.subarray(0,offset)).digest('hex');offset+=Buffer.byteLength(line+'\n');
+    const allowed=fields[r.type];if(!allowed||Object.keys(r).sort().join()!==['at','budgetId','type',...allowed].sort().join())fail();
+    if(!opened){if(r.type!=='opened'||r.capMicroCny!==state.cap)fail();opened=true;continue;}
+    if(r.type==='opened')fail();
+    if(r.type==='unspent-recovery') {
+      if(recoverySeen||seen.size||state.committed||state.pending.size||state.halted||r.priorLedgerSha256!==prefixHash||!/^([a-f0-9]{64})$/.test(configurationSha256??'')||r.configurationSha256!==configurationSha256)fail();recoverySeen=true;
+    } else if(r.type==='reserved') {
+      if(state.halted||!/^([a-f0-9]{24})$/.test(r.id)||seen.has(r.id)||!BUDGET_SCOPES.includes(r.scope))fail();
+      const p=models[r.model];if(!p||!Number.isSafeInteger(r.inputTokens)||r.inputTokens<0||!Number.isSafeInteger(r.maxOutputTokens)||r.maxOutputTokens<0||r.maxOutputTokens>p.maxOutput||r.amount!==Math.ceil(r.inputTokens*p.input+r.maxOutputTokens*p.output))fail();
+      seen.add(r.id);state.pending.set(r.id,{scope:r.scope,model:r.model,inputTokens:r.inputTokens,maxOutputTokens:r.maxOutputTokens,amount:r.amount});
+    } else if(r.type==='settled') {
+      const p=state.pending.get(r.id);if(!p||!Number.isSafeInteger(r.inputTokens)||r.inputTokens<0||r.inputTokens>p.inputTokens||!Number.isSafeInteger(r.outputTokens)||r.outputTokens<0||r.outputTokens>p.maxOutputTokens||r.amount!==Math.ceil(r.inputTokens*models[p.model].input+r.outputTokens*models[p.model].output))fail();
+      state.pending.delete(r.id);state.committed+=r.amount;
+    } else if(r.type==='halted'||r.type==='uncertain-halted') {
+      if(!state.pending.has(r.id))fail();state.halted=true;
+    } else if(r.type==='resumed') {
+      if(checkpoints.has(r.checkpointId)||state.pending.size||state.halted||r.priceHash!==priceHash||!r.checkpointId||!/^([a-f0-9]{64})$/.test(r.ledgerSha256))fail();
+      if(prefixHash!==r.ledgerSha256)fail();checkpoints.add(r.checkpointId);
+    }
+    if(!Number.isSafeInteger(state.committed)||[...state.pending.values()].some(p=>!Number.isSafeInteger(p.amount)||p.amount<0)||state.committed+[...state.pending.values()].reduce((n,p)=>n+p.amount,0)>state.cap)fail();
+  }
+  return {state,priceHash,checkpointIds:[...checkpoints],ledgerSha256:createHash('sha256').update(bytes).digest('hex')};
+}
+export function resumeSharedBudget({ledgerFile,checkpoint,...config}) {
+  const bytes=fs.readFileSync(ledgerFile);
+  // Validate all history first, including any terminal recovery audit.
+  const full=replaySharedBudget({bytes,...config});
+  const lines=bytes.toString('utf8').trimEnd().split('\n');
+  const terminal=JSON.parse(lines.at(-1));
+  const repeated=terminal.type==='resumed'&&terminal.checkpointId===checkpoint?.checkpointId;
+  if(!repeated&&full.checkpointIds.includes(checkpoint?.checkpointId))throw new Error('Recovery checkpoint identity was already used');
+  const checkpointBytes=repeated?Buffer.from(lines.slice(0,-1).join('\n')+'\n'):bytes;
+  const result=replaySharedBudget({bytes:checkpointBytes,...config});
+  const {state,priceHash,ledgerSha256}=result;
+  if(!checkpoint||checkpoint.ledgerSha256!==ledgerSha256||checkpoint.priceHash!==priceHash||checkpoint.configurationSha256!==config.configurationSha256||!/^([a-f0-9]{64})$/.test(config.configurationSha256??'')||checkpoint.id!==state.id||checkpoint.capMicroCny!==state.cap||checkpoint.committedMicroCny!==state.committed||checkpoint.pending!==0||checkpoint.halted!==false||!checkpoint.checkpointId||state.pending.size||state.halted)throw new Error('Live checkpoint does not match safe replay');
+  // Caller must own the exclusive coordinator lock and verify the old PID/start identity.
+  // Recheck bytes immediately before append; never truncate or replace history.
+  if(!fs.readFileSync(ledgerFile).equals(bytes))throw new Error('Ledger changed during recovery');
+  if(repeated){full.state.ledgerFile=ledgerFile;return full.state;}
+  state.ledgerFile=ledgerFile;
+  state.record({type:'resumed',ledgerSha256,priceHash,checkpointId:checkpoint.checkpointId});
+  return state;
 }
 export function nativeConfigBinding(command,environment,file){
  return /openviking[-\s]+(serve|server)|python.*openviking/i.test(command)&&(command.includes(file)||environment.OPENVIKING_CONFIG_FILE===file);

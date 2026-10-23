@@ -51,3 +51,21 @@ Historical B records, original C thresholds and their limitations are unchanged.
 The PDF and original-only ZIP were uploaded and downloaded through the real local product HTTP routes with byte-for-byte SHA256 identity; the PDF also opens in pypdf and the ZIP contains its genuine policy.txt original. This validates storage/format integrity only. The local HTTP exercise does not run the external parser or a real DSH answer. Rebuild authored office inputs with build_fixtures.mjs, then run build_original_fixtures.py for deterministic PDF/ZIP material; medical source bytes and the 90 question groups are preserved.
 
 Native lifecycle adapters now execute the seven engine-dependent scenarios when their actual APIs and runtime are available: official compiled-page deletion/revocation, native memory isolation/deletion/recall, shared-source recall revocation, signed capsule import without source grants, and expiry of an actual AgentMemory credential. Expiry advances only the owned test-key row in a database whose name starts evimed_test_knowledge_evaluation_; the arm must supply its private databaseBindingsFile. API minimum TTL is one day, so the controlled timestamp fixture is explicit. Exact restore reuploads the downloaded original bytes at the same logical path and requires the same source ID/hash plus a newer generation. A fully completed kernel run can set qualityEligible=true; mock HTTP remains false. Raw native probe transcripts are retained in the result evidence directory, including failures. All probe dispatches are automated:true; no product admission policy is relaxed.
+
+Pinned DSH Messages calls need a separate trusted provider entry with `protocol:"messages"`,
+`url:"https://api.deepseek.com/anthropic/v1/messages"`, a private `keyFile`, and the expected
+`responseModel`. Keep the Chat entry for compatibility probes. Configure the interceptor's
+exact `providerRoutes["https://api.deepseek.com/anthropic/v1/messages"]` as
+`{provider:"<messages-provider-name>",protocol:"messages"}`. Messages calls never fall back
+to a Chat mapping. The proxy preserves the structured request and uses `x-api-key` plus
+`anthropic-version: 2023-06-01`. A streaming receipt requires start input usage, delta
+output usage, the expected model identity and `message_stop`; incomplete receipts retain
+the full reservation and halt further admission.
+
+Coordinator recovery is explicit: `createBudgetProxy({resumeCheckpoint,
+historicalConfigurationSha256, ...})` replays the existing ledger through
+`resumeSharedBudget`. The historical hash is the original attested budget configuration,
+not a replacement routing hash. The operator must hold the lifetime lock and verify the
+old PID/start identity before invoking recovery. The resumed proxy starts unarmed with
+no collector wiring; admission requires fresh proofs and arming. Omitting the checkpoint
+keeps new-ledger behavior and never resets an existing ledger.
