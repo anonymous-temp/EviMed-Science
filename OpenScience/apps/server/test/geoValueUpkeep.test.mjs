@@ -15,6 +15,7 @@ test("every file that records which version of a value profile something stood o
     "geoErrors.mjs": "reads only frozen evaluationBasis.claims to match a historical claim identity, without storing a value-profile version",
     "geoJudge.mjs": "facts.judge_extract.valueBasisVersion: the version an answer was judged against",
     "geoLearningSignals.mjs": "reads only evaluationBasis.claims; its assessment preserves those claims without retaining a value-profile version pointer",
+    "geoLegacyErrorIdentity.mjs": "reads only immutable frozen evaluationBasis.claims for identity promotion, never stores a value-profile version pointer",
     "geoMeasureStore.mjs": "rounds.ref.evaluationBasis.value.version: the profile a round froze when it started",
     "geoOrchestrator.mjs": "schedule_marks.detail.basisVersion: the version a research request was made on",
     "geoReadScope.mjs": "reads only frozen evaluationBasis.claims to retain the exact error identity; no new value-profile version pointer is stored",
