@@ -66,3 +66,33 @@ test("unavailable native engine fails closed on external records and recall", as
   await assert.rejects(substrate.recall("u1", "preference"), error => error.code === "memory_engine_unavailable");
   assert.deepEqual(f.calls, []);
 });
+
+test("native confirmation admits one candidate revision once through the native session", async () => {
+  const { NativeMemoryStore } = await import("../src/nativeMemoryStore.mjs");
+  const admissions = new Map();
+  const commits = [];
+  const messages = [];
+  let committed = 0;
+  const overlay = { configured: true,
+    async queueAdmission(userId, input) { const key = `${userId}/${input.candidateId}/${input.revision}`; if (!admissions.has(key)) admissions.set(key, { ...input, userId, state: "queued", archiveUri: null }); return admissions.get(key); },
+    async updateAdmission(userId, candidateId, revision, patch) { const key = `${userId}/${candidateId}/${revision}`; const row = { ...admissions.get(key), ...patch }; admissions.set(key, row); return row; },
+    async commitsOfSession() { return commits; },
+    async recordCommit(input) { const row = { ...input, state: "pending" }; commits.push(row); return row; },
+    async noteSession() {},
+  };
+  const sessions = { configured: true,
+    async register() {}, async createSession() {},
+    async readSession() { return { result: { message_count: messages.length, commit_count: committed } }; },
+    async addMessage(_user, _session, message) { messages.push(message); },
+    async commit() { committed++; return { result: { status: "accepted", archive_uri: "viking://user/test/sessions/test/history/archive_001", task_id: "task-123456" } }; },
+  };
+  const store = new NativeMemoryStore({ sessions, overlay });
+  const candidate = { candidateId: "candidate", revision: 2, projectId: "default", text: "Use numbered references." };
+  const first = await store.admitCandidate("u1", candidate);
+  const duplicate = await store.admitCandidate("u1", candidate);
+  assert.equal(first.taskId, "task-123456");
+  assert.equal(duplicate.taskId, first.taskId);
+  assert.equal(messages.length, 1);
+  assert.equal(committed, 1);
+  assert.equal(first.state, "pending");
+});

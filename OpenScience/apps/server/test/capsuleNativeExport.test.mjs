@@ -128,3 +128,15 @@ test("an edit to a migrated profile line does not adopt the other statements in 
   const preview = await service.exportPreview(userId, "own-capsule", { scopes: ["workstyle", "+profile"] });
   assert.equal(preview.empty, true);
 });
+
+test("native capsule snapshot refuses a body changed while the database snapshot is assembled", async () => {
+  const { service, nativeMemory } = fixture();
+  const original = service.documents.database.transaction;
+  service.documents.database.transaction = async callback => {
+    const value = await original(callback);
+    const read = nativeMemory.sessions.read;
+    nativeMemory.sessions.read = async (owner, uri) => `${await read(owner, uri)} changed concurrently`;
+    return value;
+  };
+  await assert.rejects(service.exportPreview(userId, "own-capsule"), { code: "capsule_native_snapshot_changed" });
+});
