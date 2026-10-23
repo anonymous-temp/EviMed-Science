@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { PROJECT_CARD_SLOT_LABELS_ZH, SOCKET_TOOL_NAMES } from "@evimed/domain";
 import { CAPSULE_PROFILE_FACT_KINDS, CAPSULE_PROFILE_MAX_TOKENS, capsuleFactMemos } from "./capsuleProfile.mjs";
 import { isInternalProjectOf } from "./internalProjects.mjs";
-import { recordResidentOmitted, recordResidentProfile } from "./memoryMetrics.mjs";
+import { recordResidentCard, recordResidentOmitted, recordResidentProfile } from "./memoryMetrics.mjs";
 import { estimatePromptTokens } from "./modelGateway.mjs";
 import { renderMemoryContext } from "./researchContext.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
@@ -160,8 +160,25 @@ export class ResidentProfiles {
    */
   async #card(userId, projectId, attended, engine) {
     if (!attended || !this.projectCard || !projectId || projectId === CATCH_ALL_PROJECT_ID || isInternalProjectOf(this.config, userId, projectId)) return null;
-    try { return projectCardMemo(projectId, await this.projectCard(userId, projectId, engine)); }
-    catch { return null; }
+    // Bounded: the card of a native account is a read of the engine, and a dispatch is not to wait on an engine that hangs
+    // (`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`). A card read late is not read; the next message asks again.
+    const deadline = Math.max(100, Math.trunc(Number(this.config?.memoryResidentCardTimeoutMs ?? 1_500)) || 1_500);
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    try {
+      const rows = await Promise.race([
+        this.projectCard(userId, projectId, engine),
+        new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("the project card was not read in time"), { code: "resident_card_timeout" })), deadline); }),
+      ]);
+      const memo = projectCardMemo(projectId, /** @type {any} */ (rows));
+      recordResidentCard(memo ? "read" : "empty");
+      return memo;
+    } catch (error) {
+      recordResidentCard(/** @type {any} */ (error)?.code === "resident_card_timeout" ? "timeout" : "unread");
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

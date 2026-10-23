@@ -348,6 +348,29 @@ test("a card that cannot be read is no reason to fail a dispatch, and a deployme
   assert.deepEqual([paused.text, paused.reason], ["", "paused"]);
 });
 
+const cardOutcome = (/** @type {string} */ label) => memoryMetricFamilies().find((family) => family.name === "open_science_memory_resident_card_total")
+  ?.series.find((item) => item.labels?.outcome === label)?.value;
+
+test("a dispatch does not wait on a card the engine is slow to give: past the deadline the conversation goes on without it, and the counter says so", async () => {
+  // A native account's card is a read of the engine, and an engine that hangs would hold every message of a project's conversation.
+  const hung = () => new Promise(() => {});
+  const out = await new ResidentProfiles({ config: { memoryResidentCardTimeoutMs: 100 }, store: store(), projectCard: hung })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "ses_1", attended: true });
+  assert.deepEqual(out.memories.map((memo) => memo.id), ["record:p1"], "the profile is handed, the card is not");
+  assert.equal(cardOutcome("timeout"), 1);
+  const failing = await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => { throw new Error("engine down"); } })
+    .forDispatch("u1", { projectId: "proj_1", sessionId: "ses_2", attended: true });
+  assert.deepEqual(failing.memories.map((memo) => memo.id), ["record:p1"]);
+  assert.equal(cardOutcome("unread"), 1);
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => [] }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_3", attended: true });
+  assert.equal(cardOutcome("empty"), 1);
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => cardRows }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_4", attended: true });
+  assert.equal(cardOutcome("read"), 1);
+  // A turn that is not asked for a card counts nothing, and the deadline is the configured one (a floor of 100 ms).
+  await new ResidentProfiles({ config: {}, store: store(), projectCard: async () => cardRows }).forDispatch("u1", { projectId: "proj_1", sessionId: "ses_5" });
+  assert.equal(cardOutcome("read"), 1);
+});
+
 /** A store of an account on the native engine: its records are the engine's, so this store must not be asked for them. */
 function nativeStore(options = {}) {
   const double = store(options);
