@@ -194,7 +194,12 @@ function dayIn(date, timeZone) {
  * @param {any} row @param {string} timeZone */
 function rowDay(row, timeZone) {
   const localDay = row.sample_date ?? row.observation_date;
-  if (localDay) return typeof localDay === "string" ? localDay.slice(0, 10) : dayIn(new Date(localDay), timeZone);
+  if (localDay) {
+    if (typeof localDay === "string") return localDay.slice(0, 10);
+    // pg represents DATE as a Date at host-local midnight. Its civil components are already the requested day, not an instant to re-zone.
+    const date = new Date(localDay);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
   return dayIn(new Date(row.observed_at ?? row.started_at ?? row.created_at ?? row.computed_at), timeZone);
 }
 
@@ -442,7 +447,7 @@ export class GeoService {
     if (!geoIds.length) return byProject;
     const result = await this.store.query(`SELECT * FROM (
         SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant)
-          m.*, r.sample_date, r.created_at AS observed_at
+          m.*, r.sample_date, coalesce(r.started_at, r.created_at) AS observed_at
         FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($4::text[])
         WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${scope === "engine" ? "m.rival IS NULL AND m.group_id IS NULL" : PLAIN_ROW}
         ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant, m.computed_at DESC
@@ -475,7 +480,7 @@ export class GeoService {
    */
   async #rivalSeries(geoId) {
     const rows = (await this.store.query(`SELECT * FROM (
-        SELECT DISTINCT ON (m.round_id, m.rival) m.*, r.sample_date, r.created_at AS observed_at
+        SELECT DISTINCT ON (m.round_id, m.rival) m.*, r.sample_date, coalesce(r.started_at, r.created_at) AS observed_at
         FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
         WHERE m.geo_project_id = $1 AND m.scope = 'project' AND m.metric_id = $2 AND m.rival IS NOT NULL AND m.pool IS NULL
           AND m.variant IS NULL AND m.group_id IS NULL AND m.arm IS NULL
