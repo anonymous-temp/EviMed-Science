@@ -30,7 +30,8 @@ const table = JSON.parse(readFileSync(join(here, "../../../../scripts/ops/page-t
 };
 const entry = table.views.find((view) => view.view === "memory-overview")!;
 
-const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), preview: vi.fn() }));
+const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), preview: vi.fn(), methods: vi.fn() }));
+vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: reads.methods }));
 vi.mock("@/lib/memoryMapClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")), fetchMemoryMap: reads.map }));
 vi.mock("@/lib/memoryClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), fetchReceivedCapsules: reads.received, fetchMyCapsule: reads.mine,
@@ -116,14 +117,21 @@ function probeRead(root: Element) {
   };
 }
 
+const learned = (id: string, title: string, at: string) => ({
+  id, projectId: null, revision: 1, name: `method-${id}`, title, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
+  promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at,
+});
+
 const ACCOUNTS: Array<[string, () => void]> = [
   ["the owner's first day", () => {
     reads.map.mockResolvedValue(ownerFirstDay());
+    reads.methods.mockResolvedValue([]);
     reads.received.mockResolvedValue([]);
     reads.preview.mockResolvedValue({ scopes: [], empty: true, tooMany: false, card: null, entries: [] });
   }],
   ["an account that has lived a while", () => {
     reads.map.mockResolvedValue(livedIn());
+    reads.methods.mockResolvedValue([learned("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learned("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
     reads.received.mockResolvedValue([receivedPack("a"), receivedPack("b", { enabled: true })]);
     reads.preview.mockResolvedValue({ scopes: [], empty: false, tooMany: false, card: null, entries: handoverEntries({ methods: 3, standards: 5, background: 12 }) });
   }],

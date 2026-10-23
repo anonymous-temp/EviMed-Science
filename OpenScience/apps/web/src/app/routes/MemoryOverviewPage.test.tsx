@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { legacyRecord } from "@/components/memory/__fixtures__/memoryProfiles";
 import { handoverEntries, livedIn, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
 import type { MemoryMap } from "@/lib/memoryMapClient";
+import type { WebMethod } from "@/lib/methodsClient";
 import { expectComposed } from "@/test/expectComposed";
 import { MemoryOverviewPage } from "./MemoryOverviewPage";
 
 const reads = vi.hoisted(() => ({
   fetchMemoryMap: vi.fn(), fetchReceivedCapsules: vi.fn(), fetchMyCapsule: vi.fn(), previewCapsuleExport: vi.fn(), fetchProjectOverview: vi.fn(),
-  fetchMemorySettings: vi.fn(), fetchMemoryProfile: vi.fn(), enableReceivedCapsule: vi.fn(), disableCapsule: vi.fn(), feature: { value: "on" as "on" | "off" | "loading" },
+  fetchMemorySettings: vi.fn(), fetchMemoryProfile: vi.fn(), enableReceivedCapsule: vi.fn(), disableCapsule: vi.fn(), listAllMethods: vi.fn(), feature: { value: "on" as "on" | "off" | "loading" },
 }));
 vi.mock("@/lib/memoryMapClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")), fetchMemoryMap: reads.fetchMemoryMap }));
 vi.mock("@/lib/memoryClient", async () => ({
@@ -25,7 +26,7 @@ vi.mock("@/lib/apiClient", async () => ({
 }));
 vi.mock("@/lib/memoryMapFeature", () => ({ useMemoryMapFeature: () => reads.feature.value }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
-vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: () => Promise.resolve([]) }));
+vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: reads.listAllMethods }));
 vi.mock("./CapsuleTransferPanel", () => ({
   ShareDrawer: ({ onClose, initialTab }: { onClose: () => void; initialTab?: string }) => <div role="dialog" aria-label="分享与导入" data-tab={initialTab}><button onClick={onClose}>关闭</button></div>,
 }));
@@ -52,6 +53,10 @@ function open(search = "") {
 const where = () => screen.getByTestId("where").textContent;
 const card = (part: string) => document.querySelector<HTMLElement>(`[data-overview-card="${part}"]`)!;
 const PARTS = ["growth", "you", "projects", "methods", "knowledge", "received"];
+const learnedMethod = (id: string, title: string, at: string): WebMethod => ({
+  id, projectId: null, revision: 1, name: `method-${id}`, title, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
+  promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at,
+});
 /** The page's one sentence: its text is broken up by the links that are its numbers, so it is read whole. */
 const sentenceOf = async () => {
   await waitFor(() => expect(document.querySelector("[data-headline]")).not.toBeNull());
@@ -73,6 +78,7 @@ beforeEach(() => {
   reads.fetchProjectOverview.mockReset().mockResolvedValue({ projectId: "prj_b", paused: false, card: [{ slot: "field", label: "领域", recordId: "r1", text: "心血管", updatedAt: null }], capabilities: [], works: [], timeZone: "Asia/Shanghai" });
   reads.fetchMemorySettings.mockReset().mockResolvedValue({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null });
   reads.fetchMemoryProfile.mockReset().mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0 });
+  reads.listAllMethods.mockReset().mockResolvedValue([]);
   reads.enableReceivedCapsule.mockReset().mockResolvedValue(null);
   reads.disableCapsule.mockReset().mockResolvedValue({ disabled: true, lists: 0 });
 });
@@ -140,6 +146,7 @@ describe("总览 of an account that has lived a while", () => {
   beforeEach(() => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn());
     reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a"), receivedPack("b", { importedAt: "2026-09-30T02:00:00.000Z", enabled: true })]);
+    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learnedMethod("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
     reads.previewCapsuleExport.mockResolvedValue({ scopes: [], empty: false, tooMany: false, card: null, entries: handoverEntries({ methods: 3, standards: 5, background: 12 }) });
   });
 
@@ -242,6 +249,7 @@ describe("总览 of an account that has lived a while", () => {
 describe("a read that failed is said, on its own card, and is never a zero", () => {
   it("names a card whose source failed and leaves the rest drawn; the sentence leaves that number out", async () => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn({ missing: ["documents"] }));
+    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learnedMethod("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
     open();
     await ready();
     for (const part of ["projects", "knowledge", "growth"]) {
@@ -264,18 +272,44 @@ describe("a read that failed is said, on its own card, and is never a zero", () 
     expect(screen.queryByText(/还没有记下关于你的事/u)).toBeNull();
   });
 
-  it("fails all five cards of the map's document together when it cannot be read, each with 重试, and the received card is its own", async () => {
+  it("fails the four cards of the map's document together when it cannot be read, each with 重试, and the methods and the packs are each their own", async () => {
     reads.fetchMemoryMap.mockRejectedValueOnce(new Error("down")).mockResolvedValue(livedIn());
     reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a")]);
+    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
     const user = userEvent.setup();
     open();
     await waitFor(() => expect(card("growth")).toHaveAttribute("data-state", "error"));
-    for (const part of ["growth", "you", "projects", "methods", "knowledge"]) expect(card(part)).toHaveAttribute("data-state", "error");
+    for (const part of ["growth", "you", "projects", "knowledge"]) expect(card(part)).toHaveAttribute("data-state", "error");
     expect(card("received")).toHaveAttribute("data-state", "content");
-    expect(screen.queryByText(/胶囊里有/u)).toBeNull();
+    expect(card("methods")).toHaveAttribute("data-state", "content");
+    // The sentence names what was read: the methods, and nothing the map was to say.
+    expect(await sentenceOf()).toHaveTextContent("胶囊里有 1 种做法。");
     await user.click(within(card("you")).getByRole("button", { name: /重试/u }));
     await waitFor(() => expect(card("you")).toHaveAttribute("data-state", "content"));
     expect(card("growth")).toHaveAttribute("data-state", "content");
+  });
+
+  it("reads the learned methods on their own: a map that folded every method mark away still has a card of them, and a failed read of them is the card's and the strip's, never a card with none", async () => {
+    // The map folds its marks to a hundred and fifty and a method is among the first it folds: the document has no method mark at all.
+    reads.fetchMemoryMap.mockResolvedValue(livedIn({ nodes: livedIn().nodes.filter((node) => node.type !== "method") }));
+    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learnedMethod("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
+    const user = userEvent.setup();
+    open();
+    await ready();
+    expect(card("methods")).toHaveAttribute("data-count", "2");
+    expect(within(card("methods")).getByRole("button", { name: "证据矩阵先行" })).toBeInTheDocument();
+    expect(card("growth").querySelector("h2")!.textContent).toContain("学会 2 种做法");
+    cleanup();
+    reads.listAllMethods.mockRejectedValueOnce(new Error("methods down")).mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
+    open();
+    await waitFor(() => expect(card("methods")).toHaveAttribute("data-state", "error"));
+    expect(within(card("methods")).getByRole("alert")).toHaveTextContent("暂时读不到学到的做法。");
+    expect(card("growth")).toHaveAttribute("data-state", "error");
+    for (const part of ["you", "projects", "knowledge"]) expect(card(part)).toHaveAttribute("data-state", "content");
+    expect((await sentenceOf()).textContent).not.toMatch(/种做法/u);
+    await user.click(within(card("methods")).getByRole("button", { name: /重试/u }));
+    await waitFor(() => expect(card("methods")).toHaveAttribute("data-state", "content"));
+    await waitFor(() => expect(card("growth")).toHaveAttribute("data-state", "content"));
   });
 
   it("fails the received card alone, and the hand-over half alone: each has its own retry", async () => {

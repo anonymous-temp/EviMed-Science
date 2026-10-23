@@ -22,6 +22,7 @@ import { Section } from "@/components/ui/Section";
 import { dayIn } from "@/components/charts/map/zone";
 import { formatDay } from "@/lib/format";
 import { fetchMyCapsule, fetchReceivedCapsules } from "@/lib/memoryClient";
+import { listAllMethods } from "@/lib/methodsClient";
 import { useMemoryMapFeature } from "@/lib/memoryMapFeature";
 import { fetchMemoryMap, MAP_INCLUDE_OVERVIEW, type MapOpen } from "@/lib/memoryMapClient";
 import { previewCapsuleExport } from "@/lib/productClient";
@@ -67,8 +68,10 @@ function Overview() {
   const [header, setHeader] = useState<HeaderDrawer | null>(null);
   const map = useCapsuleData(() => fetchMemoryMap({ projectId: null, range: "all", focus: null, depth: 1 }, undefined, MAP_INCLUDE_OVERVIEW));
   const received = useCapsuleData(fetchReceivedCapsules);
+  // The learned methods are their own read: the map folds its marks to a hundred and fifty and a method is among the first it folds (see `ReadPart`).
+  const learned = useCapsuleData(() => listAllMethods("approved"));
   const handover = useCapsuleData(readHandover);
-  const reloadAll = useCallback(() => { map.reload(); received.reload(); handover.reload(); }, [map, received, handover]);
+  const reloadAll = useCallback(() => { map.reload(); received.reload(); learned.reload(); handover.reload(); }, [map, received, learned, handover]);
 
   const doc: OverviewDoc | null = map.data;
   const native = doc?.engine === "native";
@@ -84,7 +87,7 @@ function Overview() {
   const toChat = () => navigate("/app/chat");
 
   // ---- what each card draws, from what was read ----
-  const events = useMemo(() => (doc ? growthEvents(doc, received.data ?? []) : []), [doc, received.data]);
+  const events = useMemo(() => (doc ? growthEvents(doc, received.data ?? [], learned.data ?? []) : []), [doc, received.data, learned.data]);
   const growth = useMemo(() => {
     if (!doc) return null;
     // Today is the day the document was read, in the researcher's zone: the strip ends there, and the last thirty days are counted back from it.
@@ -93,21 +96,29 @@ function Overview() {
   }, [doc, events]);
   const you = doc ? aboutYouCard(doc) : null;
   const projects = doc ? projectsCard(doc) : null;
-  const methods = doc ? methodsCard(doc) : null;
+  const methods = learned.data ? methodsCard(learned.data) : null;
   const knowledge = doc ? knowledgeCard(doc) : null;
   const look = doc ? needsLook(doc) : null;
   const receivedView = received.data ? receivedCard(received.data) : null;
   const handoverRead: WorkStyleRead = handover.data ? { state: "content", style: handover.data } : handover.failed ? { state: "error" } : { state: "loading" };
 
-  // The sentence names only what was read: a part whose source failed leaves its number out, and is not a zero in its place.
-  const headline = doc && growth ? overviewHeadline({
-    memories: readable(doc, "memories") ? doc.summary.memories : null,
-    methods: methods && readable(doc, "methods") ? methods.count : null,
-    documents: knowledge && readable(doc, "knowledge") ? knowledge.count : null,
-    recent: readable(doc, "growth") ? recentGains(events, growth.today) : null,
-  }, { memories: "/app/memory/map", methods: partAddress("method"), documents: partAddress("knowledge"), recent: partAddress("growth") }) : null;
+  // The sentence names only what was read: a part whose source failed leaves its number out, and is not a zero in its place — and the methods are
+  // their own read, so a map that could not be read does not take the number of the methods with it.
+  const headline = overviewHeadline({
+    memories: doc && readable(doc, "memories") ? doc.summary.memories : null,
+    methods: methods ? methods.count : null,
+    documents: doc && knowledge && readable(doc, "knowledge") ? knowledge.count : null,
+    recent: doc && growth && readable(doc, "growth") ? recentGains(events, growth.today) : null,
+  }, { memories: "/app/memory/map", methods: partAddress("method"), documents: partAddress("knowledge"), recent: partAddress("growth") });
 
-  const growthState = stateOf("growth");
+  // The strip is made of four reads — the map's document, the learned methods, the packs received — and says nothing about a lane it could not read:
+  // a strip without 学会 is not a strip of an account that learned nothing.
+  const growthState: CardState = (() => {
+    const mapState = stateOf("growth");
+    if (mapState !== "content") return mapState;
+    if ((received.failed && !received.data) || (learned.failed && !learned.data)) return "error";
+    return received.data && learned.data ? "content" : "loading";
+  })();
   const lookRows = look && doc && readable(doc, "memories") ? look : null;
   const projectName = (id: string | null) => (id ? labels.get(id) ?? null : null);
 
@@ -121,7 +132,8 @@ function Overview() {
         <ChartGrid rows={[
           [{ key: "growth", span: 2, node: (
             <GrowthCard
-              state={growthState} growth={growth} events={events} timeZone={doc?.scope.timeZone ?? "UTC"} errorMessage={failure} onRetry={map.reload} onChat={toChat}
+              state={growthState} growth={growth} events={events} timeZone={doc?.scope.timeZone ?? "UTC"} errorMessage={failure}
+              onRetry={() => { map.reload(); received.reload(); learned.reload(); }} onChat={toChat}
               onOpen={(target, event) => {
                 if (target) open(target);
                 else if (event.lane === "documents") navigate(partAddress("knowledge"));
@@ -135,7 +147,7 @@ function Overview() {
             { key: "projects", node: <ProjectsCardView state={stateOf("projects")} card={projects} errorMessage={failure} onRetry={map.reload} onChat={toChat} /> },
           ],
           [
-            { key: "methods", node: <MethodsCardView state={stateOf("methods")} card={methods} errorMessage={failure} onRetry={map.reload} onOpen={open} onChat={toChat} /> },
+            { key: "methods", node: <MethodsCardView state={learned.data ? "content" : learned.failed ? "error" : "loading"} card={methods} errorMessage="暂时读不到学到的做法。" onRetry={learned.reload} onOpen={open} onChat={toChat} /> },
             { key: "knowledge", node: <KnowledgeCardView state={stateOf("knowledge")} card={knowledge} errorMessage={failure} onRetry={map.reload} onUpload={() => navigate("/app/files")} /> },
           ],
           [{ key: "received", span: 2, node: (

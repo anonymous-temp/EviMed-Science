@@ -114,10 +114,10 @@ export function ProjectsCardView({ state, card, onRetry, onChat, errorMessage }:
       drill={{ to: partAddress("project"), label: "在地图里看" }} errorMessage={errorMessage} onRetry={onRetry}
     >
       {!content && <Recipe action={<RecipeButton onPress={onChat}>去对话</RecipeButton>}>有了项目，记忆和资料会按项目放在一起，各自看得到。</Recipe>}
-      {content && content.shape === "single" && content.single && <SingleProject row={content.single} />}
+      {content && content.shape === "single" && content.single && <SingleProject key={content.single.id} row={content.single} />}
       {content && content.shape === "table" && (
         <div>
-          <DataTable label="各个项目" columns={columns} rows={content.rows} rowKey={(row) => row.id} ground="surface" />
+          <DataTable label="各个项目" columns={columns} rows={content.rows} rowKey={(row) => row.id} minWidth="min-w-96" ground="surface" />
           {content.more > 0 && (
             <p className="mt-2 text-caption text-text-3">
               <Link to="/app/memory?tab=project" className="rounded text-link hover:underline hover:underline-offset-4">全部 {content.count} 个</Link>

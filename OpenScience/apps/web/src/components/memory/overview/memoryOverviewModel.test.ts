@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReceivedCapsule } from "@/lib/memoryClient";
 import type { MapDay, MapEvent, MapNode } from "@/lib/memoryMapClient";
+import type { WebMethod } from "@/lib/methodsClient";
 import {
   aboutYouCard, amountOf, DOT_LIMIT, FEW_MAX, growthCard, growthEvents, growthOf, knowledgeCard, methodsCard, monthCounts, needsLook, overviewHeadline, partAddress,
   projectsCard, readable, receivedCard, recentGains, SOME_MAX, workStyle, type OverviewDoc,
@@ -9,7 +10,10 @@ import {
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({
   id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, state: "current", at: "2026-10-01T00:00:00.000Z", projectId: null, open: { kind: "record", id }, ...over,
 });
-const method = (id: string, at: string): MapNode => ({ id: `method:${id}`, type: "method", label: `做法 ${id}`, state: "current", at, open: { kind: "method", id } });
+const method = (id: string, at: string, over: Partial<WebMethod> = {}): WebMethod => ({
+  id, projectId: null, revision: 1, name: `method-${id}`, title: `做法 ${id}`, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
+  promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at, ...over,
+});
 const document = (id: string, over: Partial<MapNode> = {}): MapNode => ({ id: `document:${id}`, type: "document", subtype: "literature", group: "文献与指南", label: `资料 ${id}`, state: "current", at: "2026-09-20T00:00:00.000Z", open: { kind: "page", href: `/app/files/${id}` }, ...over });
 const many = <T,>(count: number, make: (index: number) => T): T[] => Array.from({ length: count }, (_, index) => make(index));
 
@@ -34,11 +38,12 @@ describe("the amounts a card is drawn for", () => {
 describe("a part that could not be read is not a part with nothing in it", () => {
   it("is not readable when a source it is made of failed, and is when only another failed", () => {
     expect(readable(doc({ missing: ["native-memory"] }), "memories")).toBe(false);
-    expect(readable(doc({ missing: ["native-memory"] }), "methods")).toBe(true);
+    expect(readable(doc({ missing: ["native-memory"] }), "knowledge")).toBe(true);
     expect(readable(doc({ missing: ["documents"] }), "knowledge")).toBe(false);
     expect(readable(doc({ missing: ["documents"] }), "projects")).toBe(false);
     expect(readable(doc({ missing: ["documents"] }), "growth")).toBe(false);
-    expect(readable(doc({ missing: ["topics", "knowledge-graph", "runs"] }), "growth")).toBe(true);
+    // The learned methods are their own read, not the map's: a failed methods source of the map costs the strip nothing.
+    expect(readable(doc({ missing: ["methods", "topics", "knowledge-graph", "runs"] }), "growth")).toBe(true);
     expect(readable(doc({ missing: ["capsule-notes"] }), "memories")).toBe(false);
   });
 });
@@ -126,7 +131,7 @@ describe("项目", () => {
 });
 
 describe("我的做法", () => {
-  const methods = (count: number) => doc({ nodes: many(count, (index) => method(`m${index}`, `2026-${String(1 + (index % 9)).padStart(2, "0")}-15T00:00:00.000Z`)) });
+  const methods = (count: number) => many(count, (index) => method(`m${index}`, `2026-${String(1 + (index % 9)).padStart(2, "0")}-15T00:00:00.000Z`));
 
   it("is a recipe at 0, rows at 1 and 5, dots on a month axis at 6 and 30, monthly bars at 31, the newest three beside them", () => {
     expect(methodsCard(methods(0))).toMatchObject({ count: 0, shape: "recipe", marks: null });
@@ -140,10 +145,17 @@ describe("我的做法", () => {
     expect(methodsCard(methods(31))).toMatchObject({ count: 31, shape: "months", marks: "bars" });
   });
 
-  it("puts the newest first and shows no count of use", () => {
-    const card = methodsCard(doc({ nodes: [method("old", "2026-01-01T00:00:00.000Z"), method("new", "2026-09-01T00:00:00.000Z")] }));
+  it("puts the newest first, opens the method's own drawer, and shows no count of use", () => {
+    const card = methodsCard([method("old", "2026-01-01T00:00:00.000Z"), method("new", "2026-09-01T00:00:00.000Z", { counts: { eligible: 9, loaded: 9, invoked: 9, succeeded: 9, read: 9 } })]);
     expect(card.rows.map((row) => row.title)).toEqual(["做法 new", "做法 old"]);
-    expect(JSON.stringify(card)).not.toMatch(/usage|used|invoked|loaded/);
+    expect(card.rows[0]!.open).toEqual({ kind: "method", id: "new" });
+    expect(JSON.stringify(card)).not.toMatch(/usage|used|invoked|loaded|eligible/);
+  });
+
+  it("is made of the approved methods only, by the researcher's own line and else the method's name", () => {
+    const card = methodsCard([method("a", "2026-01-01T00:00:00.000Z", { title: null }), method("b", "2026-02-01T00:00:00.000Z", { status: "retired" }), method("c", "2026-03-01T00:00:00.000Z", { status: "candidate" })]);
+    expect(card.rows.map((row) => row.title)).toEqual(["method-a"]);
+    expect(card.count).toBe(1);
   });
 
   it("draws every month between the first and the last, a month with none as a gap", () => {
@@ -244,7 +256,7 @@ describe("成长", () => {
 
   it("counts gains only: the memories noted, the methods learned, the documents added, the packs taken in — and not what was replaced, forgotten or merely changed", () => {
     const events = growthEvents(grown({
-      nodes: [memory("a"), memory("b", { state: "replaced" }), method("m", "2026-09-24T03:00:00Z")],
+      nodes: [memory("a"), memory("b", { state: "replaced" })],
       events: [
         created("a", "2026-09-22T02:00:00Z"), created("b", "2026-09-20T02:00:00Z"),
         { id: "memory:a:v2", at: "2026-09-23T02:00:00Z", type: "memory", change: "updated", ref: "memory:a", lane: "account" },
@@ -252,7 +264,7 @@ describe("成长", () => {
         { id: "run:1", at: "2026-09-26T02:00:00Z", type: "run", change: "completed", ref: "run:1", lane: "account" },
       ],
       buckets: { unit: "day", series: days(["2026-09-21", 2]) },
-    }), [pack("2026-09-27T01:00:00Z"), pack(null)]);
+    }), [pack("2026-09-27T01:00:00Z"), pack(null)], [method("m", "2026-09-24T03:00:00Z"), method("gone", "2026-09-25T03:00:00Z", { status: "retired" })]);
     expect(events.map((event) => [event.lane, event.day])).toEqual([
       ["documents", "2026-09-21"], ["documents", "2026-09-21"], ["noted", "2026-09-22"], ["learned", "2026-09-24"], ["received", "2026-09-27"],
     ]);
@@ -294,7 +306,7 @@ describe("成长", () => {
   });
 
   it("is read from the document: its zone's today, its events, nodes and days — and a card's own growth equals its own sentence", () => {
-    const card = growthCard(grown({ nodes: [memory("a")], events: [created("a", "2026-10-10T02:00:00Z")] }), [], new Date("2026-10-12T05:00:00Z"));
+    const card = growthCard(grown({ nodes: [memory("a")], events: [created("a", "2026-10-10T02:00:00Z")] }), [], [], new Date("2026-10-12T05:00:00Z"));
     expect(card).toMatchObject({ total: 1, shape: "dots", today: "2026-10-12", axis: "days" });
     expect(card.title).toBe("自10月10日起，记下 1 件");
   });

@@ -5,6 +5,7 @@ import { formatDay } from "@/lib/format";
 import { SELF_SECTIONS, selfSection, type SelfSection } from "@/lib/memoryGroups";
 import type { ReceivedCapsule } from "@/lib/memoryClient";
 import type { MapNode, MapOpen, MapPart, MapReason, MemoryMap } from "@/lib/memoryMapClient";
+import { methodTitle, type WebMethod } from "@/lib/methodsClient";
 import type { NotePart } from "@/components/ui/Note";
 
 /**
@@ -46,8 +47,12 @@ export function amountOf(count: number): Amount {
 /** The document the overview reads: the map's, without its lines and lineages. */
 export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "buckets" | "events" | "missing" | "scope"> & { engine?: MemoryMap["engine"] };
 
-/** The parts of the capsule the one read of the map answers for. */
-export type ReadPart = "memories" | "projects" | "methods" | "knowledge" | "growth";
+/**
+ * The parts of the capsule the one read of the map answers for. 我的做法 is not one of them: the map folds its marks to a hundred and fifty, and
+ * a learned method is among the first to be folded into a group (it has no weight and ranks under the documents), so a card made of the map's
+ * method marks would say 「还没有做法」 of an account that has them. The methods are their own read (`methodsCard`, the list the 做法 tab reads).
+ */
+export type ReadPart = "memories" | "projects" | "knowledge" | "growth";
 
 /**
  * The map's sources each part is made of. A source that failed is named in `missing`, and a part that needs it was not read: it says so,
@@ -56,9 +61,8 @@ export type ReadPart = "memories" | "projects" | "methods" | "knowledge" | "grow
 const READ_FROM: Readonly<Record<ReadPart, readonly string[]>> = {
   memories: ["records", "native-memory", "capsule-notes"],
   projects: ["records", "native-memory", "capsule-notes", "documents"],
-  methods: ["methods"],
   knowledge: ["documents"],
-  growth: ["records", "native-memory", "capsule-notes", "documents", "methods"],
+  growth: ["records", "native-memory", "capsule-notes", "documents"],
 };
 
 /** Whether every source a part is made of answered. */
@@ -204,12 +208,20 @@ export function monthCounts(days: readonly string[]): Array<{ month: string; cou
   return out;
 }
 
+/** The day a method was learned, as its row says it: when it was first written. */
+const learnedAt = (method: Pick<WebMethod, "createdAt" | "statusChangedAt" | "updatedAt">): string | null => method.createdAt || method.statusChangedAt || method.updatedAt || null;
+
+/** A learned method as a row of a card: its own line (a title), the day it was learned, and the drawer a press opens — the one the memory page opens. */
+function methodRow(method: Pick<WebMethod, "id" | "title" | "name" | "createdAt" | "statusChangedAt" | "updatedAt">): MarkRow {
+  return { id: `method:${method.id}`, title: methodTitle(method), at: learnedAt(method), node: { type: "method", subtype: null, state: "current" }, open: { kind: "method", id: method.id }, projectId: null };
+}
+
 /**
- * 我的做法: what the platform learned to do for this person — the approved methods the map draws, the newest first. No usage count is in
- * it (owner ruling, 2026-09-23: counts of use are the back office's): a method is a title and the day it was learned.
+ * 我的做法: what the platform learned to do for this person — the approved methods, as the 做法 tab reads them (`listAllMethods("approved")`), a title and
+ * the day it was learned, never a count of use (owner ruling, 2026-09-23: counts of use are the back office's).
  */
-export function methodsCard(doc: Pick<OverviewDoc, "nodes">): MethodsCard {
-  const rows = newestFirst(doc.nodes.filter((node) => node.type === "method").map(rowOf));
+export function methodsCard(methods: ReadonlyArray<Pick<WebMethod, "id" | "title" | "name" | "createdAt" | "statusChangedAt" | "updatedAt" | "status">>): MethodsCard {
+  const rows = newestFirst(methods.filter((method) => method.status === "approved").map(methodRow));
   const count = rows.length;
   const amount = amountOf(count);
   return {
@@ -340,10 +352,14 @@ export interface GrowthEvent {
 
 /**
  * The gains of the capsule, one event each: the memories noted (a memory replaced since is not counted twice — what replaced it carries
- * on), the methods learned, the documents added (the knowledge base's own days) and the packs received. A lane is drawn only when it has
+ * on), the methods learned (the 做法 tab's own list), the documents added (the knowledge base's own days) and the packs received. A lane is drawn only when it has
  * events; what was replaced or forgotten is the map's 时间 view, not this one.
  */
-export function growthEvents(doc: Pick<OverviewDoc, "nodes" | "events" | "buckets" | "scope">, received: readonly Pick<ReceivedCapsule, "title" | "importedAt">[]): GrowthEvent[] {
+export function growthEvents(
+  doc: Pick<OverviewDoc, "nodes" | "events" | "buckets" | "scope">,
+  received: readonly Pick<ReceivedCapsule, "title" | "importedAt">[],
+  methods: ReadonlyArray<Pick<WebMethod, "id" | "title" | "name" | "createdAt" | "statusChangedAt" | "updatedAt" | "status">> = [],
+): GrowthEvent[] {
   const zone = doc.scope.timeZone;
   const byId = new Map(doc.nodes.map((node) => [node.id, node]));
   const events: GrowthEvent[] = [];
@@ -355,10 +371,11 @@ export function growthEvents(doc: Pick<OverviewDoc, "nodes" | "events" | "bucket
     const day = dayOf(event.at);
     if (day) events.push({ lane: "noted", day, title: event.text || node?.label || null, open: node?.open ?? null });
   }
-  for (const node of doc.nodes) {
-    if (node.type !== "method" || !node.at) continue;
-    const day = dayOf(node.at);
-    if (day) events.push({ lane: "learned", day, title: node.label, open: node.open ?? null });
+  for (const method of methods) {
+    if (method.status !== "approved") continue;
+    const at = learnedAt(method);
+    const day = at ? dayOf(at) : null;
+    if (day) events.push({ lane: "learned", day, title: methodTitle(method), open: { kind: "method", id: method.id } });
   }
   for (const bucket of doc.buckets.series) {
     for (let index = 0; index < (Number(bucket.document) || 0); index += 1) events.push({ lane: "documents", day: bucket.t, title: null, open: null });
@@ -416,8 +433,13 @@ export function growthOf(events: readonly GrowthEvent[], today: string, formatDa
 }
 
 /** The strip of a capsule, from what the overview read: the gains and what they add up to. */
-export function growthCard(doc: Pick<OverviewDoc, "nodes" | "events" | "buckets" | "scope">, received: readonly Pick<ReceivedCapsule, "title" | "importedAt">[], now: Date = new Date()): Growth {
-  return growthOf(growthEvents(doc, received), dayIn(now.getTime(), doc.scope.timeZone), (day) => formatDay(day, now));
+export function growthCard(
+  doc: Pick<OverviewDoc, "nodes" | "events" | "buckets" | "scope">,
+  received: readonly Pick<ReceivedCapsule, "title" | "importedAt">[],
+  methods: Parameters<typeof growthEvents>[2] = [],
+  now: Date = new Date(),
+): Growth {
+  return growthOf(growthEvents(doc, received, methods), dayIn(now.getTime(), doc.scope.timeZone), (day) => formatDay(day, now));
 }
 
 /** How many gains fell in the last thirty days, in the researcher's zone. */
