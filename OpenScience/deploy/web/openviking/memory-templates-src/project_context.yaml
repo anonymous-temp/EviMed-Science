@@ -10,7 +10,10 @@ description: |
   has been decided, where it stands and what is open, what limits it. A question the user
   asks, a paper, trial, product or law they ask about, a document they paste, a request
   scoped to one answer, and anything the assistant proposed are NOT a description of their
-  project: they never create a card and never change one.
+  project: they never create a card and never change one. One deliverable asked for in a
+  single message (an email, a slide deck, a table, a poster) is a request, not a project: a
+  card is written only when the conversation is held inside one of the user's named projects,
+  or the user describes a piece of work that goes on beyond this one deliverable.
 
   The card has up to six sections and every one is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.
