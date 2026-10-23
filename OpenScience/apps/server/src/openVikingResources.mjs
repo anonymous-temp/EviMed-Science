@@ -145,9 +145,19 @@ export class OpenVikingResources {
     const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, ...(state ? [`state=${state}`] : [])];
     const body = { uri, content: String(text ?? ""), wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
     try {
-      // `replace` creates a file that is not there, and has done on every pin; from v0.5.1 `create` is only an alias of
-      // it (no 409 on an existing file), so the create-then-replace pair this used to be would be one call twice.
-      const written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "replace" }, timeoutMs: WRITE_TIMEOUT_MS });
+      // `replace` first. From v0.5.1 it creates a file that is not there and `create` is only its alias (no 409 on an existing
+      // file), so the create-then-replace pair this used to be is one call. What v0.5.0 does with `replace` on a missing
+      // resource file is in no recorded fixture (only the memory index's own paths are known to create), so a 404 is
+      // answered with `create`, which v0.5.0 does take. That branch is dead from v0.5.1.1 and goes with the pin.
+      const write = (/** @type {"replace" | "create"} */ mode) => this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode }, timeoutMs: WRITE_TIMEOUT_MS });
+      /** @type {any} */
+      let written;
+      try {
+        written = await write("replace");
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
+        written = await write("create");
+      }
       this.counters.pushes += 1;
       return { uri, bytes: Number(written?.result?.written_bytes) || Buffer.byteLength(body.content) };
     } catch (error) { this.counters.failures += 1; throw error; }
