@@ -16,8 +16,11 @@
  *    loses every tag), whether recall leaves it out, the hash of the body last seen (the page's compare-and-swap; the
  *    engine has none), the body as last ingested, and the source labels currently written into it.
  *  - `native_sources` — the sources a file names (a DOI, a knowledge-base document id), found in its text.
- *  - `native_rejections` — fingerprints of the lines a person removed, so that a line the engine writes back verbatim
- *    is removed again. A fingerprint is a hash: what was forgotten is not kept in order to recognise it.
+ *  - `native_rejections` — the lines a person removed, as a fingerprint (a line the engine writes back verbatim is removed
+ *    again) and, since 2026-10-23, as the line's normalised words: a reworded repeat is recognised by containing them or by a
+ *    model judging it to say the same (`nativeMemoryRejections.mjs`). The words are the account's own, read by nothing else, and
+ *    go when the rejection does (the person's restatement, a reset, the account); the revisions' text of a hard delete is still
+ *    scrubbed from the history.
  *
  * What this does not hold, and the legacy path did (owner-accepted, README §5.4 of the course correction): a line of
  * `profile.md` has no origin, no validity interval, no confidence and no conflict record of its own — those were
@@ -145,9 +148,13 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
   memory_type text NOT NULL CHECK (char_length(memory_type) <= 64),
   fingerprint text NOT NULL CHECK (fingerprint ~ '^[a-f0-9]{64}$'),
   uri text NOT NULL CHECK (char_length(uri) <= 600),
+  -- The line's normalised words, so that a reworded repeat can be recognised (a line that contains it, or that a model judges to say
+  -- the same). Null for a rejection made before 2026-10-23, which only an exact repeat meets.
+  text text CHECK (text IS NULL OR char_length(text) <= 400),
   rejected_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, memory_type, fingerprint)
 );
+ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text CHECK (text IS NULL OR char_length(text) <= 400);
 `;
 
 /** @param {any} database */

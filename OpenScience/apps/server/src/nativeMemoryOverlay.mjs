@@ -32,14 +32,22 @@ export function memoryLines(body) {
 }
 
 /**
- * What identifies one statement whatever it is dressed in: lower-cased, whitespace collapsed, without the trailing
- * `(as of YYYY-MM-DD)` the profile template writes. Exact equality after that and nothing looser — whether two differently
- * worded lines say the same thing is language, and is not decided here.
+ * A statement as it is compared: lower-cased, whitespace collapsed, without the trailing `(as of YYYY-MM-DD)` the profile template
+ * writes. What `lineFingerprint` hashes, and what a rejected line keeps so that a reworded version can be recognised.
+ * @param {unknown} line @returns {string}
+ */
+export function normalisedStatement(line) {
+  return String(line ?? "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * What identifies one statement whatever it is dressed in: `normalisedStatement`, hashed. Exact equality after that and nothing
+ * looser — whether two differently worded lines say the same thing is language, and is decided elsewhere
+ * (`nativeMemoryRejections.mjs`: a containing line in code, a similar one by the model).
  * @param {unknown} line @returns {string} sha256 hex
  */
 export function lineFingerprint(line) {
-  const text = String(line ?? "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
-  return createHash("sha256").update(text).digest("hex");
+  return createHash("sha256").update(normalisedStatement(line)).digest("hex");
 }
 
 const bounded = (/** @type {unknown} */ value, /** @type {number} */ limit) => (value == null ? null : String(value).slice(0, limit));
@@ -513,13 +521,23 @@ export class NativeMemoryOverlay {
 
   // -------------------------------------------------------------- rejections
 
-  /** The person removed these lines from a memory of this type. @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines */
+  /**
+   * The person removed these lines from a memory of this type. Each is kept as its fingerprint (exact repeats) and as its normalised
+   * text (`normalisedStatement`, at most 400 characters), because recognising a reworded repeat needs the words: a line that contains
+   * it, or that a model judges to say the same, is taken out again. The text is the account's own, read by nothing but that
+   * recognition, and goes with the rejection (a restatement by the person, a reset, the account).
+   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines
+   */
   async reject(userId, memoryType, uri, lines) {
-    const prints = [...new Set(lines.map(lineFingerprint))].slice(0, 500);
+    /** @type {Map<string, string>} */
+    const unique = new Map();
+    for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line).slice(0, 400)); }
+    const prints = [...unique.keys()].slice(0, 500);
     if (!prints.length) return 0;
-    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri)
-      SELECT $1, $2, print, $3 FROM unnest($4::text[]) AS print ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp()`,
-    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints]);
+    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text)
+      SELECT $1, $2, print, $3, text FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
+      ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text)`,
+    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? "")]);
     return prints.length;
   }
 
@@ -528,6 +546,24 @@ export class NativeMemoryOverlay {
     const prints = [...new Set(lines.map(lineFingerprint))];
     if (!prints.length) return;
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 AND fingerprint = ANY($3::text[])", [owner(userId), String(memoryType), prints]);
+  }
+
+  /** One rejection lifted by its fingerprint: the person said the same again in their own words. @param {string} userId @param {string} memoryType @param {readonly string[]} fingerprints */
+  async unrejectFingerprints(userId, memoryType, fingerprints) {
+    const prints = [...new Set(fingerprints.map(String))].filter((print) => /^[a-f0-9]{64}$/.test(print));
+    if (!prints.length) return;
+    await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 AND fingerprint = ANY($3::text[])", [owner(userId), String(memoryType), prints]);
+  }
+
+  /**
+   * The lines the person removed from memories of this type, with the words each had when there are any (a rejection made before the
+   * words were kept has only its fingerprint and can only be met by an exact repeat). Newest first.
+   * @param {string} userId @param {string} memoryType @param {{ limit?: number }} [options] @returns {Promise<{ fingerprint: string, text: string | null }[]>}
+   */
+  async rejectedLines(userId, memoryType, { limit = 300 } = {}) {
+    const result = await this.#query("SELECT fingerprint, text FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 ORDER BY rejected_at DESC LIMIT $3",
+      [owner(userId), String(memoryType), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
+    return result.rows.map((/** @type {any} */ row) => ({ fingerprint: String(row.fingerprint), text: typeof row.text === "string" && row.text ? row.text : null }));
   }
 
   /** @param {string} userId @param {string} memoryType @returns {Promise<Set<string>>} */

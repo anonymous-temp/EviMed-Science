@@ -3,8 +3,9 @@ import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } fro
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import {
-  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeOperations, recordNativePass, recordNativeWrite,
+  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeOperations, recordNativePass, recordNativeWrite, recordRejectionLines,
 } from "./nativeMemoryMetrics.mjs";
+import { containsRemoved, nearRemoved } from "./nativeMemoryRejections.mjs";
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 
@@ -50,20 +51,23 @@ const statementOf = (/** @type {string} */ line) => line.trim().replace(/^(?:[-*
 
 /**
  * Why one line may not stay, or null. Closed, decidable checks only (principle 5): an identifier's shape, a platform tag or
- * identifier, or a line the person removed.
- * @param {string} line @param {Set<string>} rejected fingerprints
- * @returns {"identifier_shape" | "platform_text" | "rejected_line" | null}
+ * identifier, or a line the person removed — a verbatim repeat (`rejected` a set of fingerprints), or one decided by
+ * `nativeMemoryRejections.mjs` (`rejected` a map from fingerprint to the reason: a removed line with something added, or one a model
+ * judged to say the same).
+ * @param {string} line @param {Set<string> | Map<string, string>} rejected
+ * @returns {"identifier_shape" | "platform_text" | "rejected_line" | "rejected_reworded" | "rejected_judged" | null}
  */
 export function lineRefusal(line, rejected) {
   const text = statementOf(line);
   if (!text || isLabelLine(line) || /^#{1,6}\s/.test(line.trim())) return null;
   if (identifierShapesIn(text).length) return "identifier_shape";
   if (carriesPlatformContext(text) || platformIdentifiersIn(text).length) return "platform_text";
-  if (rejected.has(lineFingerprint(text))) return "rejected_line";
-  return null;
+  const print = lineFingerprint(text);
+  if (rejected instanceof Map) return /** @type {any} */ (rejected.get(print) ?? null);
+  return rejected.has(print) ? "rejected_line" : null;
 }
 
-/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string>} rejected */
+/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string> | Map<string, string>} rejected */
 export function cleanBody(body, rejected) {
   const kept = [];
   /** @type {string[]} */
@@ -116,16 +120,20 @@ export class NativeMemoryWorker {
    * @param {{ config: any, researchMemory: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
    *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any,
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
+   *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
    *   `projectOfSession` names the project a platform conversation belongs to, for a commit the gateway never saw.
+   *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
+   *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, projectOfSession = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
     this.researchMemory = researchMemory;
     this.sessions = sessions;
     this.overlay = overlay;
     this.runtimeManager = runtimeManager;
     this.projectOfSession = projectOfSession;
+    this.rejectionJudge = rejectionJudge;
     this.now = now;
     this.report = report;
     this.replayAttempts = Math.max(0, Math.trunc(Number(this.config.nativeMemoryReplayAttempts ?? 5)));
@@ -415,6 +423,12 @@ export class NativeMemoryWorker {
     const counts = { added: 0, updated: 0, deleted: 0 };
     const changedAt = typeof diff?.extracted_at === "string" && Number.isFinite(Date.parse(diff.extracted_at)) ? new Date(diff.extracted_at).toISOString() : null;
     const base = { userId, archiveUri: commit.archiveUri, engineSession: commit.engineSession, changedAt };
+    // What the commit brought that repeats, in other words, a line the person removed: decided once for the whole commit.
+    const rewordings = await this.#rewordings(commit, operations).catch((error) => {
+      // Never a reason to lose the commit: the lines are kept, as they were before the rewording was looked for. But said.
+      this.report(`native memory rewordings: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return new Map();
+    });
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
         const uri = String(operation?.uri ?? "");
@@ -430,7 +444,7 @@ export class NativeMemoryWorker {
         const after = String(operation?.after ?? "");
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, fresh: recorded !== null, archiveUri: commit.archiveUri });
+        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, rewordings });
       }
     }
     recordNativeOperations(counts);
@@ -440,29 +454,46 @@ export class NativeMemoryWorker {
   /**
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
-   * @param {string} userId @param {string} uri @param {string} type @param {{ projectId: string | null, diffAfter: string, fresh: boolean, archiveUri: string }} context
+   * @param {string} userId @param {string} uri @param {string} type
+   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string, rewordings?: Map<string, { rejected: string, via: "contained" | "judged" }> }} context
    */
-  async #afterWrite(userId, uri, type, { projectId, diffAfter, fresh, archiveUri }) {
+  async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, rewordings = new Map() }) {
     const current = await this.sessions.read(userId, uri);
     if (current === null) return;
     const rejected = await this.overlay.rejectedFingerprints(userId, type);
-    // Only what this write brought is held to the checks.
-    const broughtLines = memoryLines(diffAfter);
+    // Only what this write brought is held to the checks: the lines of the text it left that the text it found did not have (a line the
+    // person wrote themselves, or the engine wrote earlier and the checks let stay, is not this write's to be asked about again).
+    const found = new Set(memoryLines(diffBefore).map(lineFingerprint));
+    const broughtLines = memoryLines(diffAfter).filter((line) => !found.has(lineFingerprint(line)));
     const brought = new Set(broughtLines.map(lineFingerprint));
-    const relevant = new Set([...rejected].filter((print) => brought.has(print)));
-    // The person's own words win over their earlier deletion: a line they said again in this very conversation, word for word,
-    // is theirs, and is taken off the rejection list. Exact containment of the line in one of their messages and nothing looser
-    // — whether a reworded line means the same is language, and the engine's own extraction already decided that.
-    const stated = relevant.size ? await this.#statedByThePerson(userId, archiveUri, broughtLines.filter((line) => relevant.has(lineFingerprint(line)))) : [];
-    if (stated.length) {
-      for (const line of stated) relevant.delete(lineFingerprint(line));
-      await this.overlay.unreject(userId, type, stated);
+    /** @type {Map<string, string>} the fingerprints of the lines to take out, by why */
+    const refused = new Map();
+    /** @type {Map<string, string>} each of them to the removed line it repeats */
+    const repeats = new Map();
+    for (const print of rejected) if (brought.has(print)) { refused.set(print, "rejected_line"); repeats.set(print, print); }
+    for (const line of broughtLines) {
+      const print = lineFingerprint(line);
+      const hit = refused.has(print) ? null : rewordings.get(`${type}\u0000${print}`);
+      if (hit) { refused.set(print, hit.via === "judged" ? "rejected_judged" : "rejected_reworded"); repeats.set(print, hit.rejected); }
     }
-    const cleaned = cleanBody(current, relevant);
+    // The person's own words win over their earlier deletion: a line they said again in this very conversation, word for word,
+    // is theirs, and the removal it repeats is lifted. Exact containment of the line in one of their messages and nothing looser
+    // here; a restatement in other words than the engine's is the judge's to see (it is shown what the person said).
+    const stated = refused.size ? await this.#statedByThePerson(userId, archiveUri, broughtLines.filter((line) => refused.has(lineFingerprint(line)))) : [];
+    if (stated.length) {
+      for (const line of stated) refused.delete(lineFingerprint(line));
+      await this.overlay.unrejectFingerprints(userId, type, stated.map((line) => repeats.get(lineFingerprint(line)) ?? lineFingerprint(line)));
+    }
+    const cleaned = cleanBody(current, refused);
     const reasons = [...new Set(cleaned.reasons)];
     let body = current;
     if (reasons.length) {
       for (const reason of cleaned.reasons) recordNativeCheck(reason);
+      const contained = cleaned.reasons.filter((reason) => reason === "rejected_reworded").length;
+      if (contained) recordRejectionLines("contained", contained);
+      // A reworded line that was taken out is remembered as removed in its own words too: the next repeat of it is exact.
+      const reworded = broughtLines.filter((line) => ["rejected_reworded", "rejected_judged"].includes(refused.get(lineFingerprint(line)) ?? ""));
+      if (reworded.length) await this.overlay.reject(userId, type, uri, reworded);
       if (cleaned.hasStatements) {
         await this.sessions.replace(userId, uri, cleaned.text);
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason: reasons.join(","), before: current, after: cleaned.text, projectId });
@@ -487,6 +518,83 @@ export class NativeMemoryWorker {
     for (const source of await this.overlay.sources(userId, [uri])) {
       if (source.state in LABEL_WORDS) await this.#writeLabel(userId, uri, type, source, source.state);
     }
+  }
+
+  /**
+   * The lines a commit brought that repeat, in other words, a line the person removed from memories of that type. A line that contains
+   * a removed line's words is decided here in code; a line that is only near one is put, with the others of the commit, to one model
+   * call (`nativeMemoryRejections.mjs`), which is also shown what the person said in the conversation, so that a restatement of theirs
+   * is not taken out. Whatever the judge cannot say is kept. Keyed by memory type and line fingerprint.
+   * @param {any} commit @param {any} operations the diff's operations
+   * @returns {Promise<Map<string, { rejected: string, via: "contained" | "judged" }>>}
+   */
+  async #rewordings(commit, operations) {
+    const userId = commit.userId;
+    const root = this.sessions.memoryRoot(userId);
+    /** @type {Map<string, { rejected: string, via: "contained" | "judged" }>} */
+    const found = new Map();
+    /** @type {{ key: string, type: string, text: string, removed: { fingerprint: string, text: string }[] }[]} */
+    const candidates = [];
+    /** @type {Map<string, { fingerprint: string, text: string }[]>} */
+    const removedByType = new Map();
+    for (const list of ["adds", "updates"]) {
+      for (const operation of Array.isArray(operations?.[list]) ? operations[list] : []) {
+        const file = nativeMemoryFile(String(operation?.uri ?? ""), root);
+        if (!file) continue;
+        let removed = removedByType.get(file.type);
+        if (!removed) {
+          removed = (await this.overlay.rejectedLines(userId, file.type)).filter((line) => line.text).map((line) => ({ fingerprint: line.fingerprint, text: /** @type {string} */ (line.text) }));
+          removedByType.set(file.type, removed);
+        }
+        if (!removed.length) continue;
+        const exact = new Set(removed.map((line) => line.fingerprint));
+        const already = new Set(memoryLines(String(operation?.before ?? "")).map(lineFingerprint));
+        for (const line of memoryLines(String(operation?.after ?? ""))) {
+          const print = lineFingerprint(line);
+          // What the write found there is not what it brought.
+          if (list === "updates" && already.has(print)) continue;
+          const key = `${file.type}\u0000${print}`;
+          if (exact.has(print) || found.has(key) || candidates.some((candidate) => candidate.key === key)) continue;
+          // A line the checks take out for what it is made of is not asked about.
+          if (lineRefusal(line, new Set()) !== null) continue;
+          const contained = removed.find((entry) => containsRemoved(line, entry.text));
+          if (contained) { found.set(key, { rejected: contained.fingerprint, via: "contained" }); continue; }
+          const near = nearRemoved(line, removed).map((entry) => ({ fingerprint: entry.fingerprint, text: /** @type {string} */ (entry.text) }));
+          if (near.length) candidates.push({ key, type: file.type, text: line, removed: near });
+        }
+      }
+    }
+    if (!candidates.length) return found;
+    if (!this.rejectionJudge) { recordRejectionLines("judge_failed", candidates.length); return found; }
+    const judged = await this.rejectionJudge.same({
+      userId, projectId: commit.projectId ?? null,
+      candidates: candidates.map((candidate) => ({ text: candidate.text, removed: candidate.removed })),
+      said: await this.#userWords(userId, commit.archiveUri),
+    });
+    for (const [index, rejected] of judged.same) {
+      const candidate = candidates[index];
+      if (!candidate) continue;
+      // The person said it themselves in this conversation: their words win, and the removal it repeats is lifted.
+      if (judged.stated.has(index)) { await this.overlay.unrejectFingerprints(userId, candidate.type, [rejected]); continue; }
+      found.set(candidate.key, { rejected, via: "judged" });
+    }
+    return found;
+  }
+
+  /** What the person wrote in an archive's conversation, a few messages of it, as plain text. @param {string} userId @param {string} archiveUri @returns {Promise<string[]>} */
+  async #userWords(userId, archiveUri) {
+    const raw = await this.sessions.read(userId, `${archiveUri}/messages.jsonl`).catch(() => null);
+    /** @type {string[]} */
+    const said = [];
+    for (const line of String(raw ?? "").split("\n")) {
+      let message;
+      try { message = JSON.parse(line); } catch { continue; }
+      if (message?.role !== "user") continue;
+      const text = typeof message.content === "string" ? message.content
+        : Array.isArray(message.parts) ? message.parts.filter((/** @type {any} */ part) => part?.type === "text").map((/** @type {any} */ part) => String(part.text ?? "")).join("\n") : "";
+      if (text.trim()) said.push(text.trim());
+    }
+    return said.slice(-6);
   }
 
   /**

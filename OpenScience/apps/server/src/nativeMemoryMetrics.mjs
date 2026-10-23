@@ -50,8 +50,12 @@ export const NATIVE_RUNTIME_GATEWAY_PLACES = Object.freeze(["dispatch", "turn_en
  * busy (so that the next dispatch replaces it), replaced at a dispatch between two runs, or left because a turn was running.
  */
 export const NATIVE_RUNTIME_SWITCH_OUTCOMES = Object.freeze(["released", "marked", "adopted", "deferred"]);
-/** What the deterministic after-the-fact checks did, by why. */
-export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line"]);
+/** What the deterministic after-the-fact checks did, by why: `rejected_line` a verbatim repeat of a line the person removed, `rejected_reworded` a line that contains one, `rejected_judged` one a model judged to say the same. */
+export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged"]);
+/** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
+export const NATIVE_REJECTION_JUDGE_OUTCOMES = Object.freeze(["asked", "failed", "over_budget", "unavailable"]);
+/** What became of the lines that were near a removed one: held by containment (code), judged the same or not (the model), or kept because the judge could not say. */
+export const NATIVE_REJECTION_LINE_VERDICTS = Object.freeze(["contained", "judged_same", "judged_kept", "judge_failed"]);
 /** What the worker wrote besides revisions. */
 export const NATIVE_WORKER_WRITES = Object.freeze(["project_tag", "source_label_added", "source_label_removed", "registration"]);
 
@@ -75,6 +79,8 @@ const extractionOutcomes = table(NATIVE_EXTRACTION_OUTCOMES);
 const skippedOperations = table(NATIVE_SKIP_REASONS);
 const runtimeWithoutGateway = table(NATIVE_RUNTIME_GATEWAY_PLACES);
 const runtimeSwitches = table(NATIVE_RUNTIME_SWITCH_OUTCOMES);
+const rejectionJudge = table(NATIVE_REJECTION_JUDGE_OUTCOMES);
+const rejectionLines = table(NATIVE_REJECTION_LINE_VERDICTS);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
@@ -125,6 +131,10 @@ export function recordNativeExtraction(operations, { skipped = 0, skipReasons = 
 export function recordRuntimeWithoutGateway(at) { bump(runtimeWithoutGateway, at); }
 /** What became of a runtime launched for the other engine than its account is on. @param {string} outcome */
 export function recordRuntimeEngineSwitch(outcome) { bump(runtimeSwitches, outcome); }
+/** One call of the rejection judge. @param {string} outcome */
+export function recordRejectionJudge(outcome) { bump(rejectionJudge, outcome); }
+/** Lines that were near a removed one, by what became of them. @param {string} verdict @param {number} [count] */
+export function recordRejectionLines(verdict, count = 1) { bump(rejectionLines, verdict, count); }
 /** A memory the deterministic checks deleted or restored, by why. @param {string} reason */
 export function recordNativeCheck(reason) { bump(checkActions, reason); }
 /** @param {string} what */
@@ -134,7 +144,7 @@ export function recordNativePass(ok) { bump(workerPasses, ok ? "completed" : "fa
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, checkActions, workerWrites, workerPasses]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, runtimeWithoutGateway, runtimeSwitches, rejectionJudge, rejectionLines, checkActions, workerWrites, workerPasses]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -147,7 +157,7 @@ export function nativeMemoryCounters() {
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
-    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    runtimeWithoutGateway: plain(runtimeWithoutGateway), runtimeSwitches: plain(runtimeSwitches), rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
   };
 }
 
@@ -190,6 +200,10 @@ export function nativeMemoryMetricFamilies() {
       help: "Times a native account's turn was found on a runtime launched without the memory gateway's address (at a dispatch, or at the end of a turn the person typed in the kernel's own frame). That conversation has no memory plugin: it reads nothing and learns nothing. Any growth is an account whose engine was switched under a runtime that is still open; the next dispatch between two runs replaces it." },
     { name: "open_science_native_memory_runtime_engine_switch_total", type: "counter", series: series(runtimeSwitches, "outcome"),
       help: "What became of runtimes launched for the other memory engine than their account is on: released while idle, marked while busy, replaced at a dispatch between two runs (adopted), or left because a turn was running (deferred). A running turn is never stopped for it." },
+    { name: "open_science_native_memory_rejection_judge_total", type: "counter", series: series(rejectionJudge, "outcome"),
+      help: "Calls to the model that judges whether a line the engine wrote repeats one the person removed (one call a commit at most): asked, failed (unreachable, or not the one answer shape: the lines are kept), over the account's day, or unavailable." },
+    { name: "open_science_native_memory_rejection_lines_total", type: "counter", series: series(rejectionLines, "verdict"),
+      help: "Lines near one the person removed, by what became of them: contained (a removed line with something added, decided in code), judged the same by the model, judged different, or kept because the judge could not say." },
     { name: "open_science_native_memory_checks_total", type: "counter", series: series(checkActions, "reason"),
       help: "Memories the deterministic after-the-fact checks deleted or restored: an identifier shape, platform-injected text or a platform identifier, or a line the person had removed coming back verbatim." },
     { name: "open_science_native_memory_writes_total", type: "counter", series: series(workerWrites, "what"),

@@ -412,6 +412,7 @@ import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
+import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
@@ -1354,6 +1355,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, researchMemory, sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+    // A line the engine writes that is near one the person removed is put to one model call a commit (`nativeMemoryRejections.mjs`).
+    rejectionJudge: createRejectionJudge({ config, usageLedger }),
     // The runtime manager is composed further down; the worker asks only after boot.
     runtimeManager: { releaseMemoryEngineRuntimes: (/** @type {string | undefined} */ userId) => runtimeManager.releaseMemoryEngineRuntimes(userId) },
     report: (line) => process.stderr.write(`${line}\n`),
