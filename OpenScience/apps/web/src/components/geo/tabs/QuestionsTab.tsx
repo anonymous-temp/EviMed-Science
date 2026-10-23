@@ -1,3 +1,5 @@
+import { AskAi } from "../AskAi";
+import { GeoQuestionWorkbench } from "../GeoQuestionWorkbench";
 import { useGeoPath } from "../useGeoPath";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo } from "react";
@@ -116,9 +118,9 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   if (questions.state.kind === "error") return <TabError message={questions.state.message} onRetry={questions.reload} />;
   const data = questions.state.data;
   const groups = Array.isArray(data?.groups) ? data.groups.filter((group) => group && group.id) : [];
-  if (groups.length === 0) return <StepPending geoId={geoId} project={project} step="questions" />;
+  if (groups.length === 0) return <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} /><StepPending geoId={geoId} project={project} step="questions" /></>;
   return (
-    <QuestionPage
+    <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} /><QuestionPage
       geoId={geoId}
       project={project}
       view={view}
@@ -133,7 +135,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
         questions.reload();
         clusters.reload();
       }}
-    />
+    /></>
   );
 }
 
@@ -282,6 +284,7 @@ function QuestionPage({
                     match={match}
                     selected={drawer.group === group.id}
                     onOpen={() => drawer.open({ group: group.id })}
+                    supplement={<AskAi project={{ geoId, projectId: project.projectId, sessionId: project.sessionId }} label="补充真实问法" draft={`/geo-insight 请为第 ${current ?? "当前"} 版的问题群 ${group.id}（${group.name}）补充真实问法。保留本版原题和客户分类。真实问法必须列出来源链接、采集日期和原文；外部采集不可用时请明确说明，模型生成的问句仅标为典型建议。输出可导入表格，采用后另存新版本，不自动采样。`} />}
                     onActions={go(geoDestinationPath(geoId, { tab: "actions" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
                     onErrors={go(geoDestinationPath(geoId, { tab: "accuracy" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
                   />
@@ -333,6 +336,7 @@ function GroupRow({
   onOpen,
   onActions,
   onErrors,
+  supplement,
 }: {
   group: GeoQuestionGroup;
   row: GeoClusterRow | null;
@@ -341,6 +345,7 @@ function GroupRow({
   onOpen: () => void;
   onActions: () => void;
   onErrors: () => void;
+  supplement?: import("react").ReactNode;
 }) {
   const questions = list(group.questions);
   const measured = questions.filter((question) => question.isMeasured).length;
@@ -375,7 +380,7 @@ function GroupRow({
           {matched && <span className="text-text-2">{`匹配：${matched}`}</span>}
         </span>
       )}
-      trailing={group.isControl ? <Tag title="只监测、不写稿：给它写稿会让它退出对照组">对照组</Tag> : undefined}
+      trailing={<>{group.isControl && <Tag title="只监测、不写稿：给它写稿会让它退出对照组">对照组</Tag>}{supplement}</>}
       columns={columns}
     />
   );

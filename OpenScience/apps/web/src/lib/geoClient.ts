@@ -325,7 +325,8 @@ export interface GeoQuestionGroup {
   questions: GeoQuestion[];
 }
 export interface GeoQuestions extends GeoScopedView {
-  sets: Array<{ version: number; lockedAt: string | null; measuredCount: number | null }>;
+  contract?: import("./geoQuestionWorkbenchClient").GeoMeasurementContract | null;
+  sets: Array<{ version: number; lockedAt: string | null; measuredCount: number | null; contract?: import("./geoQuestionWorkbenchClient").GeoMeasurementContract | null }>;
   version: number | null;
   groups: GeoQuestionGroup[];
 }
