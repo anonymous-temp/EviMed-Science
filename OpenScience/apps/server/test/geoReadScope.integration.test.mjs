@@ -273,3 +273,56 @@ test("raw citation coverage distinguishes question subsets without depending on 
   const detail = await service.source(user, project.id, "source1", { from: "2026-10-01", to: "2026-10-02" });
   assert.notEqual(detail.history[0].coverage, detail.history[1].coverage);
 });
+
+test("legacy metric preservation never substitutes full-round aggregates for a filtered selection", options, async () => {
+  const legacy = await store.createProject({ userId: user.id, projectId: "legacy-scope-project", engines: ["deepseek", "kimi"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,sample_date,finished_at)
+    VALUES ('legacy-scope-round',$1,$2,'baseline','done',1,'2026-10-01','2026-10-01')`, [user.id, legacy.id]);
+  await store.query(`INSERT INTO evimed_geo.metrics (id,user_id,geo_project_id,round_id,scope,engine,metric_id,status,value,denominator)
+    VALUES ('legacy-deepseek',$1,$2,'legacy-scope-round','engine','deepseek','M-01','ok',50,100),
+    ('legacy-kimi',$1,$2,'legacy-scope-round','engine','kimi','M-01','ok',50,100)`, [user.id, legacy.id]);
+  for (const filter of [{}, { round: "legacy-scope-round" }]) {
+    const view = await service.runtimeRead(legacy, "metrics", filter);
+    assert.equal(view.total, 2, "a whole historical round remains available with its unknown method");
+    assert.ok(view.items.every((entry) => entry.cell.value === 50 && entry.cell.methodVersion === null));
+  }
+  for (const filter of [{ engines: ["deepseek"] }, { pools: ["P4"] }, { groupIds: ["missing-group"] }, { clientTags: ["missing-tag"] }]) {
+    const view = await service.runtimeRead(legacy, "metrics", { ...filter, limit: 50 });
+    assert.ok(view.items.every((entry) => entry.cell.value !== 50), "unavailable scoped observations cannot inherit a stored whole-round value");
+    if (filter.engines) assert.ok(view.items.every((entry) => entry.engine == null || entry.engine === "deepseek"));
+    const replayed = await service.runtimeRead(legacy, "metrics", { selectionRef: view.selection.reference, limit: 50 });
+    assert.deepEqual(replayed.items, view.items);
+  }
+});
+
+test("default source context selects its six rounds before enforcing history resource limits", options, async () => {
+  for (const roundCount of [121, 7]) {
+    const historic = await store.createProject({ userId: user.id, projectId: `source-history-${roundCount}`, engines: ["deepseek"], coverageDays: 90 });
+    const sourceId = `source-history-${roundCount}`;
+    await store.query(`INSERT INTO evimed_geo.sources (id,user_id,geo_project_id,domain,name) VALUES ($1,$2,$3,'example.com','Example')`, [sourceId, user.id, historic.id]);
+    await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,sample_date,finished_at)
+      SELECT $1 || n,$2,$3,'weekly','done',date '2026-01-01' + n,date '2026-01-01' + n FROM generate_series(0,$4::integer) n`,
+    [`history-limit-${roundCount}-`, user.id, historic.id, roundCount - 1]);
+    await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,status)
+      SELECT $1 || n,$2,$3,$4,'deepseek','failed' FROM generate_series(1,20001) n`,
+    [`old-history-${roundCount}-`, user.id, historic.id, `history-limit-${roundCount}-0`]);
+    const detail = await service.source(user, historic.id, sourceId);
+    assert.equal(detail.history.length, 6);
+    assert.equal(detail.history.at(-1).roundId, `history-limit-${roundCount}-${roundCount - 1}`);
+    assert.equal(detail.history.some((entry) => entry.roundId === `history-limit-${roundCount}-0`), false);
+    await assert.rejects(service.source(user, historic.id, sourceId, { from: "2026-01-01", to: "2026-12-31" }), (error) => error.status === 422);
+  }
+});
+
+test("view dates use the observation day when a selected round has no sample date", options, async () => {
+  const undated = await store.createProject({ userId: user.id, projectId: "undated-view-project", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,started_at,created_at,finished_at)
+    VALUES ('undated-view-round',$1,$2,'baseline','done','2026-10-01T16:30:00Z','2026-10-01T16:00:00Z','2026-10-01T17:00:00Z')`, [user.id, undated.id]);
+  const scope = { from: "2026-10-02", to: "2026-10-02" };
+  const overview = await service.projectView(user, undated.id, scope);
+  assert.equal(overview.overview.metrics[0].trend[0].date, "2026-10-02");
+  const diagnosis = await service.diagnosis(user, undated.id, scope);
+  assert.equal(diagnosis.round.sampleDate, "2026-10-02");
+  const monitoring = await service.monitoring(user, undated.id, scope);
+  assert.equal(monitoring.series[0].points[0].date, "2026-10-02");
+});
