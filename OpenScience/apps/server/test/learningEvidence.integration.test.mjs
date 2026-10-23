@@ -11,6 +11,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { LearningEvidence, settleKeyFor } from "../src/learningEvidence.mjs";
+import { LearningWorker } from "../src/learningWorker.mjs";
 import { FEEDBACK_EVENT_TRIGGERS, FEEDBACK_SUBJECT_TYPES, PRODUCT_JOB_KINDS, migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { learningEvidenceReport } from "../../../scripts/ops/learning-evidence-report.mjs";
@@ -160,11 +161,15 @@ test("a delivery is settled by the product queue: not before its window closes, 
   const due = await jobs.enqueue(owner, "learning-evidence", { runId: third.id, sessionId: third.sessionId }, { idempotencyKey: settleKeyFor(third.id), projectId: PROJECT, runAfter: new Date(Date.now() + 29 * 60_000) });
   assert.equal(await jobs.claim(["learning-evidence"], `w-${randomUUID()}`), null, "not before its window closes");
   assert.equal(await jobs.bringForward(owner, settleKeyFor(third.id)), true, "the next turn's reaction settles it at once");
-  const claimed = await jobs.claim(["learning-evidence"], `w-${randomUUID()}`);
-  assert.equal(claimed?.id, due.id);
-  const result = await evidence.settle({ job: claimed });
-  assert.deepEqual(result, { settled: "silent", routine: true });
-  await jobs.finish(owner, claimed.id, claimed.leaseToken, result);
+  // The learning worker, over the real queue, claims only this kind (the shared test database holds other tests' lessons).
+  const queue = { claim: (_kinds, workerId, claimOptions) => jobs.claim(["learning-evidence"], workerId, claimOptions),
+    renew: (...args) => jobs.renew(...args), finish: (...args) => jobs.finish(...args), fail: (...args) => jobs.fail(...args) };
+  const worker = new LearningWorker({ jobs: queue, distillation: { async execute() { throw new Error("not a lesson"); } }, consolidation: { async run() { throw new Error("not a pass"); } },
+    evidence, enabled: true, window: "", pollMs: 1000, leaseMs: 60_000, reconcileMs: 60_000 });
+  await worker.tick();
+  const done = await jobs.get(owner, due.id);
+  assert.equal(done?.status, "succeeded", "the worker finishes it: nothing is left running to lapse and be claimed again");
+  assert.deepEqual([done?.result?.settled, done?.result?.routine], ["silent", true]);
   assert.equal(lessons.length, 1);
   assert.deepEqual(lessons[0].payload.peers.map((peer) => [peer.runId, peer.projectId]), [["s_run_a", PROJECT], ["s_run_b", PROJECT]]);
   assert.equal(lessons[0].idempotencyKey, `distill:${third.id}:routine`);
