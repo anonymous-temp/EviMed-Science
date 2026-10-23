@@ -123,10 +123,6 @@ class DocumentRendererTest(unittest.TestCase):
             renderer.verified_assets(self.document, self.root)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TypedSelectedDataTest(unittest.TestCase):
     def test_all_formats_share_typed_constants_and_frozen_basis(self):
         import csv
@@ -159,3 +155,7 @@ class TypedSelectedDataTest(unittest.TestCase):
             self.assertEqual(Document(root / "output/document.docx").tables[0].cell(1, 0).text, "0")
             self.assertIn("known", "".join(page.extract_text() for page in PdfReader(root / "output/document.pdf").pages))
             self.assertIn("no_data", (root / "output/document.html").read_text())
+
+
+if __name__ == "__main__":
+    unittest.main()
