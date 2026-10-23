@@ -789,6 +789,55 @@ test('native plan context binds edited user words and rejects a changed retry', 
   }
 });
 
+test('native plan validation composes with real plugin admission without changing its transaction or leaking receipts', options, async () => {
+  const { GeoPlanContext } = await import('../src/geoPlanContext.mjs');
+  const { ProductDocuments } = await import('../src/productStore.mjs');
+  const { PluginService } = await import('../src/pluginService.mjs');
+  const adapter = new GeoPlanContext({ documents: new ProductDocuments(database), store, service, authorizeSession: async () => {}, runs: async () => [] });
+  const plugins = new PluginService(database);
+  const control = { id: project.projectId, userId: project.userId };
+  const selected = await readGeoSelection(store, project, { round: 'r2', groupIds: ['g1'] });
+  const stage = requestKey => adapter.stage(user, project.id, { requestKey, sessionId: 'admitted-session', mode: 'strategy', selectionRef: selected.selection.reference });
+  const staged = await stage('admitted-context');
+  const request = { requestId: 'admitted-request', sessionId: 'admitted-session', content: [{ type: 'text', text: 'Use the selected input with my edited instructions.' }], geoPlanContext: { referenceId: staged.referenceId } };
+  await adapter.prepare(user, control, request);
+  await plugins.withAdmission(control, async () => {
+    const client = database.transactionScope().client;
+    const before = (await database.query("SELECT txid_current() AS id,current_setting('transaction_isolation') AS isolation")).rows[0];
+    await adapter.bind(user, control, request);
+    assert.equal(database.transactionScope().client, client, 'the admission client remains owned and active');
+    const after = (await database.query("SELECT txid_current() AS id,current_setting('transaction_isolation') AS isolation")).rows[0];
+    assert.deepEqual(after, before);
+    assert.equal(before.isolation, 'read committed');
+    assert.equal((await adapter.resolve(user, project, staged.referenceId)).payload.state, 'bound');
+  }, { prompt: true });
+  assert.equal(await plugins.hasPendingPrompts(control), false);
+  const stale = await stage('admitted-stale-context');
+  const original = (await store.query("SELECT text FROM evimed_geo.questions WHERE id='q1'")).rows[0].text;
+  await store.query("UPDATE evimed_geo.questions SET text=text || ' changed' WHERE id='q1'");
+  try {
+    await assert.rejects(adapter.prepare(user, control, { requestId: 'admitted-stale', sessionId: 'admitted-session', content: [{ type: 'text', text: 'Do not silently refresh my chosen scope.' }], geoPlanContext: { referenceId: stale.referenceId } }), error => error.status === 409 && error.code === 'geo_read_filter_invalid');
+    assert.equal(await plugins.hasPendingPrompts(control), false, 'a definitive pre-forward refusal does not leave an uncertain admission');
+    assert.equal((await adapter.resolve(user, project, stale.referenceId)).payload.state, 'staged');
+  } finally { await store.query("UPDATE evimed_geo.questions SET text=$1 WHERE id='q1'", [original]); }
+  const limited = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 1, databaseConnectionTimeoutMs: 500 });
+  try {
+    const limitedStore = new GeoStore({ database: limited }); await limitedStore.ready();
+    const limitedService = new GeoService({ store: limitedStore, config: { geoEnabled: true, geoAudience: 'all' } });
+    const limitedAdapter = new GeoPlanContext({ documents: new ProductDocuments(limited), store: limitedStore, service: limitedService, authorizeSession: async () => {}, runs: async () => [] });
+    const limitedPlugins = new PluginService(limited);
+    const make = id => ({ requestId: id, sessionId: 'admitted-session', content: [{ type: 'text', text: 'Use my selected input.' }], geoPlanContext: { referenceId: stale.referenceId } });
+    const single = make('single-pool-request');
+    await limitedAdapter.prepare(user, control, single);
+    await limitedPlugins.withAdmission(control, () => limitedAdapter.bind(user, control, single), { prompt: true });
+    assert.equal(await limitedPlugins.hasPendingPrompts(control), false, 'one pool connection is sufficient; admission never waits for another checkout');
+    await assert.rejects(limitedPlugins.withAdmission(control, () => limitedAdapter.bind(user, control, make('unprepared')), { prompt: true }), error => error.status === 409 && error.code === 'geo_plan_context_mismatch');
+    const changed = make('changed-after-preparation'); await limitedAdapter.prepare(user, control, changed); changed.content[0].text += ' changed';
+    await assert.rejects(limitedPlugins.withAdmission(control, () => limitedAdapter.bind(user, control, changed), { prompt: true }), error => error.status === 409 && error.code === 'geo_plan_context_mismatch');
+    assert.equal(await limitedPlugins.hasPendingPrompts(control), false);
+  } finally { await limited.close(); }
+});
+
 test('a plan context cannot mix another plan version or scope into its frozen input', options, async () => {
   const { freezeGeoPlanBasis, geoPlanScopeKey, GeoPlanContext } = await import('../src/geoPlanContext.mjs');
   const { ProductDocuments } = await import('../src/productStore.mjs');

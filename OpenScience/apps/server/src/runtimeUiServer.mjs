@@ -270,13 +270,13 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -346,6 +346,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   // An explicit selection is part of this operation's authority, not an
   // optional supplement. Refuse stale selections without forwarding a prompt
   // that silently loses the user's target. Strip our envelope before DSH.
+  async function prepareNativePlan(user, project, payload) {
+    const request = payload?.args?.request;
+    if (request?.geoPlanContext !== undefined && prepareGeoPlan) await prepareGeoPlan(user, project, request);
+  }
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
     if (!request) return;
@@ -777,6 +781,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
+      const preparing = await resolveFrame(snapshot, null);
+      await prepareNativePlan(preparing.user, preparing.project, promptBody?.payload);
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
@@ -874,6 +880,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             const check = async () => authorizePromptSession(project, payload);
             if (authorizeMutation) await authorizeMutation(check);
             else await check();
+            await prepareNativePlan(currentActor.user, currentActor.project, payload);
           }
         };
         // The mux calls `observe` inside the prompt's admission, right before

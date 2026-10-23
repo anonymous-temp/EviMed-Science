@@ -72,6 +72,7 @@ export async function geoPlanFreshness(store, project, basis, viewingScope = nul
 
 /** Thin durable request input reference over the existing product ledger. */
 export class GeoPlanContext {
+  prepared = new WeakMap();
   constructor({ documents, store, service, authorizeSession, runs, articleResults = null }) {
     this.documents = documents; this.store = store; this.service = service; this.authorizeSession = authorizeSession; this.runs = runs; this.articleResults = articleResults;
   }
@@ -126,17 +127,36 @@ export class GeoPlanContext {
     catch (error) { const row = await this.documents.get(project.userId, "geo-plan-context", id); if (row?.payload.fingerprint === fingerprint) return this.publicOf(row); throw error; }
   }
   publicOf(row) { return { referenceId: row.id, sessionId: row.payload.sessionId, draft: row.payload.draft }; }
+  async prepare(user, controlProject, request) {
+    if (request.geoPlanContext === undefined) return;
+    if (this.store.database.transactionScope?.()) throw fail("geo_plan_context_mismatch", "Prepare the selected input before prompt admission.");
+    const project = await this.store.projectByControlProject(controlProject.userId, controlProject.id);
+    if (!project) throw fail("geo_plan_context_not_found", "The plan project is unavailable.", 404);
+    await this.service.requireProject(user, project.id, "edit");
+    await this.authorizeSession(user, project, request.sessionId);
+    const row = await this.resolve(user, project, request.geoPlanContext?.referenceId);
+    if (row.payload.mode === "strategy" && row.payload.state !== "bound") await readGeoSelection(this.store, project, { selectionRef: row.payload.basis.selection.reference });
+    this.prepared.set(request, { referenceId: row.id, actorId: user.id, projectId: controlProject.id,
+      requestId: request.requestId, sessionId: request.sessionId,
+      requestDigest: geoPlanDigest((request.content ?? []).filter(part => part?.type === "text").map(part => part.text).join("\n")),
+      fingerprint: row.payload.fingerprint, basisDigest: row.payload.basisDigest });
+  }
   async bind(user, controlProject, request) {
     if (request.geoPlanContext === undefined) return null;
     const envelope = request.geoPlanContext;
     if (!envelope || Object.keys(envelope).length !== 1) throw fail("geo_plan_context_invalid", "Refresh the selected plan.", 400);
+    if (!this.prepared.has(request)) await this.prepare(user, controlProject, request);
     const project = await this.store.projectByControlProject(controlProject.userId, controlProject.id);
     if (!project) throw fail("geo_plan_context_not_found", "The plan project is unavailable.", 404);
     await this.service.requireProject(user, project.id, "edit");
     await this.authorizeSession(user, project, request.sessionId);
     let row = await this.resolve(user, project, envelope.referenceId);
+    const prepared = this.prepared.get(request);
+    if (!prepared || prepared.referenceId !== row.id || prepared.actorId !== user.id || prepared.projectId !== controlProject.id
+      || prepared.fingerprint !== row.payload.fingerprint || prepared.basisDigest !== row.payload.basisDigest) throw fail("geo_plan_context_mismatch", "Reopen the selected plan in this conversation.");
     const text = (request.content ?? []).filter(part => part?.type === "text").map(part => part.text).join("\n");
     const requestDigest = geoPlanDigest(text);
+    if (prepared.requestId !== request.requestId || prepared.sessionId !== request.sessionId || prepared.requestDigest !== requestDigest) throw fail("geo_plan_context_mismatch", "The submitted request changed after its input was prepared.");
     if (row.payload.sessionId !== request.sessionId || !request.requestId || !text.trim()) throw fail("geo_plan_context_mismatch", "Reopen the selected plan in this conversation.");
     if (row.payload.state === "bound") {
       if (row.payload.requestId !== request.requestId || row.payload.requestDigest !== requestDigest) throw fail("geo_plan_context_consumed", "This selection belongs to another submitted request.");
@@ -145,7 +165,8 @@ export class GeoPlanContext {
         const article = await this.store.getArticle(project.id, action.work.articleId);
         if (!article || article.currentResultVersionId !== action.work.resultVersionId || article.contentSha256 !== action.work.digest) throw fail("geo_article_head_changed", "Reopen the current article.");
       }
-      if (row.payload.mode === "strategy") await readGeoSelection(this.store, project, { selectionRef: row.payload.basis.selection.reference });
+      // The repeatable-read selection check completed before admission acquired its client.
+      // Binding and its authorization checks remain atomic on the admission's original client.
       const bindingId = `gpcbind_${geoPlanDigest([user.id,controlProject.id,request.requestId])}`;
       const binding = {recordType:"geo-plan-request",geoId:project.id,actorId:user.id,sessionId:request.sessionId,requestId:request.requestId,requestDigest,referenceId:row.id};
       try { await this.documents.put(project.userId,"geo-plan-context",bindingId,binding,{projectId:controlProject.id,expectedRevision:0}); }

@@ -21,7 +21,7 @@ import { HttpError } from "../src/security.mjs";
 const UI_ORIGIN = "https://science.example:8443";
 const sha = value => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t, automatic = null, planning = null) {
+async function fixture(t, automatic = null, planning = null, preparing = null, admission = null) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "result-native-revision-"));
   const config = loadConfig({ dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     publicUrl: "https://science.example", runtimeUiPublicOrigin: UI_ORIGIN });
@@ -68,12 +68,14 @@ async function fixture(t, automatic = null, planning = null) {
   });
   const socketPath = path.join(dataDir, "native.sock"); await new Promise(resolve => upstream.listen(socketPath, resolve));
   const manager = new RuntimeManager(config);
+  if (admission) manager.pluginService = admission;
   manager.start = async () => ({ url: "http://kernel.local", socketPath, cookie: "kernel_auth=fixture" });
   manager.proxy = async (req, res) => {
     received.push(JSON.parse(req.__openScienceProxyBody.toString())); res.writeHead(200, { "Content-Type": "application/json" }); res.end("{}");
   };
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager,
     bindGeoPlan: planning,
+    prepareGeoPlan: preparing,
     bindResultRevision: (actor, current, request) => automatic?.version ? revisions.bindConversation(actor.id, current, request, { versionId: automatic.version.versionId, digest: automatic.version.digest, target: null, expectedHeadVersionId: null }) : revisions.bind(actor.id, current, request) });
   const address = await ui.listen(0, "127.0.0.1"); const origin = `http://127.0.0.1:${address.port}`;
   const reuseRoutes = createResultReuseRoutes({ store, revisions, exporter: null });
@@ -214,4 +216,27 @@ for (const wire of ['http','mux']) test(`native ${wire} strips a GEO context onl
   assert.deepEqual(bound,['selected-plan-request']);
   assert.equal(f.received[0].payload.args.request.geoPlanContext,undefined);
   assert.equal(f.received[0].payload.args.request.content[1].text,'Frozen selected plan input');
+});
+
+for (const wire of ['http', 'mux']) test(`native ${wire} validates the same selected request before admission and binds only inside it`, { timeout: 10000 }, async t => {
+  let admitted = false;
+  const prepared = new WeakSet(); const events = [];
+  const admission = { async withAdmission(_project, operation) { assert.equal(admitted, false); admitted = true; events.push('admit'); try { return await operation(); } finally { admitted = false; } } };
+  const f = await fixture(t, null, async (_user, _project, request) => {
+    assert.equal(admitted, true); assert.ok(prepared.has(request)); events.push('bind');
+  }, async (_user, _project, request) => {
+    assert.equal(admitted, false); events.push('prepare');
+    if (request.requestId === 'stale') throw new HttpError(409, 'geo_read_filter_invalid', 'Stale selection.');
+    prepared.add(request);
+  }, admission);
+  const make = requestId => ({ requestId, sessionId: 'session', content: [{ type: 'text', text: 'Edited words with exact selected input.' }], geoPlanContext: { referenceId: `gpc_${'d'.repeat(64)}` } });
+  const send = async (request, streamId) => {
+    if (wire === 'http') return (await f.sendHttp(request)).status;
+    const client = await f.connect(); client.send({ type: 'open', streamId, endpoint: 'session/prompt', payload: { args: { request } } }); return (await client.next()).type;
+  };
+  assert.equal(await send(make('stale'), 'stale'), wire === 'http' ? 409 : 'error');
+  assert.deepEqual(events, ['prepare']); assert.equal(f.received.length, 0);
+  assert.equal(await send(make('ready'), 'ready'), wire === 'http' ? 200 : 'item');
+  assert.deepEqual(events, ['prepare', 'prepare', 'admit', 'bind']); assert.equal(f.received.length, 1);
+  assert.equal(f.received[0].payload.args.request.geoPlanContext, undefined);
 });

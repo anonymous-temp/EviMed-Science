@@ -8155,6 +8155,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
+    prepareGeoPlan: async (user, project, request) => {
+      if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
+      await geoPlanContexts.prepare(user, project, request);
+    },
     bindGeoPlan: async (user, project, request) => {
       if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
       const planInput = await geoPlanContexts.bind(user, project, request);
