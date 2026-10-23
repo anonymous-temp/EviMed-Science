@@ -4384,6 +4384,9 @@ export class AgentRunStore {
     /** @type {((project: any, run: any) => Promise<unknown>) | null} */
     this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
     this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
+    // A runtime launched for the other memory engine than its account is on now is replaced here, between two runs
+    // (`RuntimeManager.adoptMemoryEngine`). A failure never stops a dispatch.
+    this.adoptRuntimeMemoryEngine = options.adoptRuntimeMemoryEngine ?? (() => {});
     this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
     this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
     // What the independent reviewer found on this run's deliverables, as
@@ -5172,6 +5175,7 @@ export class AgentRunStore {
           effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
+    try { await this.adoptRuntimeMemoryEngine(project); } catch { /* memory never stops a dispatch: the runtime stays as it is */ }
     await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
     // The run is recorded under the identity it ran as. A ledger row whose specialist pin differs from its effective identity is
     // refused by the fold (and the whole project's ledger with it), so a turn of another capability than the conversation's

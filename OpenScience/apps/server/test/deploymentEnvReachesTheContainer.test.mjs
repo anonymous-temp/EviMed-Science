@@ -154,6 +154,12 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS: ["open-science-web"],
+  // The weekly consolidation of a native account's memories (2026-10-23): off until probed; an interval an operator tunes.
+  OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS: ["open-science-web"],
+  // The judge of a reworded repeat of a removed line (2026-10-23): a model call a commit at most, bounded per account per day.
+  OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS: ["open-science-web"],
   // The turn committer (2026-10-14): when the control plane commits a conversation to the engine, and how many commits and waiting
   // conversations it holds. Each commit that finds something pending is one extraction call on the platform's budget.
   OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: ["open-science-web"],

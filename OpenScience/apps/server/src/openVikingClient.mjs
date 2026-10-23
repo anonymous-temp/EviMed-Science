@@ -288,8 +288,13 @@ export class OpenVikingClient {
   /** Write one file, creating parents. `wait` blocks until the semantic and
    *  vector refresh finishes, which materialization wants and a hot path does
    *  not: an unindexed file is invisible to `find`, so a caller that does not
-   *  wait must accept that its write is not yet recallable. */
-  async write(userId, uri, content, { tags = [], wait = false, timeoutSeconds = null } = {}) {
+   *  wait must accept that its write is not yet recallable.
+   *
+   *  The body carries no `timeout`: v0.5.1 removed that field and its request model forbids unknown ones (a body
+   *  that still names it is refused, so every write would fail), and v0.5.0 treats it as optional. How long a
+   *  waiting write may take is the client's own deadline (`timeoutMs`, `request`), which is what bounded it in
+   *  practice — the engine's bound was always set below that deadline. */
+  async write(userId, uri, content, { tags = [], wait = false } = {}) {
     this.#assertConfigured();
     return this.request({
       method: "POST",
@@ -300,7 +305,6 @@ export class OpenVikingClient {
         content: String(content ?? ""),
         mode: "replace",
         wait: Boolean(wait),
-        ...(timeoutSeconds == null ? {} : { timeout: Number(timeoutSeconds) }),
         ...(tags.length ? { tags, tag_mode: "replace" } : {}),
       },
     });

@@ -625,6 +625,12 @@ services:
       OPEN_SCIENCE_MEMORY_GATEWAY_TIMEOUT_MS:
       OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS:
       OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS:
+      # The judge of a reworded repeat of a line the person removed: value-less so the code defaults (on; 40 calls a day per account) apply when unset.
+      # 重读旧记忆 on the native engine: value-less so the code defaults (off; every 7 days) apply when unset.
+      OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED:
+      OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS:
+      OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED:
+      OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS:
       # The turn committer: the control plane commits a conversation's engine session a few
       # seconds after an attended turn (the plugin's own threshold is never reached by an
       # ordinary conversation). Value-less so the code defaults (on; 8 s, 2 s, 4 reads, 2 at

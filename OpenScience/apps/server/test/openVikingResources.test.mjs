@@ -73,30 +73,45 @@ test("the layout: one subtree per project, a library beside them, and nothing ou
   });
 });
 
-test("a document is pushed as <srcId>.md with vectors only and its tags; one that is there already is replaced", async () => {
+test("a document is pushed as <srcId>.md with vectors only and its tags, in one replacing write", async () => {
   const created = await fixture("content-write-create");
-  const exists = await fixture("content-write-create-exists");
-  let first = true;
-  await withEngine(() => {
-    if (first) { first = false; return { body: created }; }
-    return { body: created };
-  }, async ({ resources, seen }) => {
+  await withEngine(() => ({ body: created }), async ({ resources, seen }) => {
     const uri = resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001");
     const pushed = await resources.pushSource(USER, uri, "# Alpha\n\ntext\n", { sourceId: "src_00000000000000000000000000000001", sha: "a".repeat(64), docType: "paper" });
     assert.equal(pushed.bytes, 342);
+    assert.equal(seen.length, 1);
     assert.equal(seen[0].path, provenance["content-write-create"].path);
+    // `replace` creates what is not there from v0.5.1, where `create` is only its alias: one call, never a 409 to fall back from.
     assert.deepEqual(seen[0].body, { uri, content: "# Alpha\n\ntext\n", wait: true, processing_mode: "vectors_only",
-      tags: ["src=src_00000000000000000000000000000001", `sha=${"a".repeat(64)}`, "doctype=paper"], tag_mode: "replace", mode: "create" });
+      tags: ["src=src_00000000000000000000000000000001", `sha=${"a".repeat(64)}`, "doctype=paper"], tag_mode: "replace", mode: "replace" });
     assert.equal(seen[0].headers["x-openviking-user"], openVikingUserId(USER));
     assert.equal(seen[0].headers["x-openviking-account"], "evimed");
     assert.equal(seen[0].headers["x-openviking-role"], undefined);
   });
-  let calls = 0;
-  await withEngine(() => (++calls === 1 ? { status: 409, body: exists } : { body: created }), async ({ resources, seen }) => {
+  await withEngine(() => ({ body: created }), async ({ resources, seen }) => {
     await resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v2", { sourceId: "src_00000000000000000000000000000001", sha: "b".repeat(64) });
-    assert.deepEqual(seen.map((request) => request.body.mode), ["create", "replace"]);
-    assert.equal(seen[1].body.tags[2], "doctype=other");
+    assert.deepEqual(seen.map((request) => request.body.mode), ["replace"]);
+    assert.equal(seen[0].body.tags[2], "doctype=other");
     assert.equal(resources.status().pushes, 1);
+  });
+});
+
+test("an engine that has no file to replace is answered with a create, and any other refusal is a counted failure", async () => {
+  // v0.5.0's answer to `replace` on a missing resource file is not recorded; a 404 falls back to `create`, which it takes.
+  const created = await fixture("content-write-create");
+  const exists = await fixture("content-write-create-exists");
+  let calls = 0;
+  await withEngine(() => (++calls === 1 ? { status: 404, body: { status: "error", result: null, error: { code: "NOT_FOUND", message: "File not found" } } } : { body: created }), async ({ resources, seen }) => {
+    const pushed = await resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v1", { sourceId: "src_00000000000000000000000000000001", sha: "a".repeat(64) });
+    assert.deepEqual(seen.map((request) => request.body.mode), ["replace", "create"]);
+    assert.deepEqual(seen[1].body.tags, seen[0].body.tags);
+    assert.ok(pushed.bytes > 0);
+    assert.equal(resources.status().pushes, 1);
+  });
+  await withEngine(() => ({ status: 409, body: exists }), async ({ resources, seen }) => {
+    await assert.rejects(() => resources.pushSource(USER, resources.sourceUri(USER, PROJECT, "src_00000000000000000000000000000001"), "v3", { sourceId: "src_00000000000000000000000000000001", sha: "c".repeat(64) }), { code: "memory_index_conflict" });
+    assert.equal(seen.length, 1, "a refusal that is not a missing file is not retried as something else");
+    assert.equal(resources.status().failures, 1);
   });
 });
 

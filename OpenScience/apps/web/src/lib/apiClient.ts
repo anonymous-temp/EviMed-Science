@@ -627,6 +627,9 @@ export interface WebStructuredMemory {
     observedAt: string | null;
     weight: number;
     fingerprint: string;
+    /** The project the conversation was held in, when the control plane knows it (a memory of the native engine names the
+     *  conversation it came out of this way; it keeps no quotation, so `quote` is empty there). */
+    projectId?: string | null;
   }>;
   revisions: Array<{
     version: number;

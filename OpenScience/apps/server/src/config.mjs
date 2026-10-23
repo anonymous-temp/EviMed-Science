@@ -2751,6 +2751,19 @@ export function loadConfig(overrides = {}) {
     // given up (the engine never retries one; each replay is one extraction call, backed off from one minute).
     nativeMemoryScanMs: boundedInteger(overrides.nativeMemoryScanMs ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS, 60_000, 5_000, 3_600_000, "OPEN_SCIENCE_NATIVE_MEMORY_SCAN_MS"),
     nativeMemoryReplayAttempts: boundedInteger(overrides.nativeMemoryReplayAttempts ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS, 5, 0, 20, "OPEN_SCIENCE_NATIVE_MEMORY_REPLAY_ATTEMPTS"),
+    // The consolidation of a native account's memories (`nativeMemoryConsolidation.mjs`, 重读旧记忆 on the native engine): OpenViking's own
+    // `compile --skill memory` over the account's memories, at most once an interval (days) per account and only after its files changed.
+    // OFF by default: the engine's output on real memory is unmeasured, and the operator switches it on after a probe on an account's own
+    // files. Each run is model calls of the engine's, through the gateway as `memory-extraction` on the OpenViking module's daily budget
+    // (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`); every change it makes is a revision the memory page can undo.
+    nativeMemoryConsolidationEnabled: overrides.nativeMemoryConsolidationEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED", false),
+    nativeMemoryConsolidationIntervalDays: boundedInteger(overrides.nativeMemoryConsolidationIntervalDays ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS, 7, 1, 90, "OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS"),
+    // The judge of a reworded repeat (`nativeMemoryRejections.mjs`): a line the engine writes that is near one the person removed is put
+    // to one model call a commit (thinking off, memory-extraction, charged to the account), and a line the judge cannot say anything
+    // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
+    // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
+    nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    nativeMemoryRejectionJudgeDailyCalls: boundedInteger(overrides.nativeMemoryRejectionJudgeDailyCalls ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS, 40, 0, 10_000, "OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS"),
     // The turn committer (`nativeTurnCommit.mjs`): the plugin commits a conversation only at a token threshold no ordinary
     // conversation reaches and when its session is disposed (hours away while the runtime lives), so the control plane
     // commits the engine session itself after an attended turn. Each limit protects a resource and has a counter

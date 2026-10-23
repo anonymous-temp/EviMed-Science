@@ -6,7 +6,8 @@
  *
  *  - `native_accounts` — that the engine's admin routes know the account (settings and deletion answer 404 until they
  *    do), and when its session archives were last scanned.
- *  - `native_commits` — the ledger of every commit: which archive, which task, what became of it. Fed by the memory
+ *  - `native_commits` — the ledger of every commit: which archive, which task, what became of it, and what its extraction
+ *    said about itself (`extraction`: skipped operations with the engine's reason codes). Fed by the memory
  *    gateway (a commit it forwarded) and by the scan of `sessions/*\/history/archive_*` (an idle auto-commit never
  *    passes the gateway). A failed commit is never retried upstream, so its replay is counted and scheduled here.
  *  - `native_revisions` — what each commit and each edit changed, before and after, read from the archive's
@@ -15,8 +16,11 @@
  *    loses every tag), whether recall leaves it out, the hash of the body last seen (the page's compare-and-swap; the
  *    engine has none), the body as last ingested, and the source labels currently written into it.
  *  - `native_sources` — the sources a file names (a DOI, a knowledge-base document id), found in its text.
- *  - `native_rejections` — fingerprints of the lines a person removed, so that a line the engine writes back verbatim
- *    is removed again. A fingerprint is a hash: what was forgotten is not kept in order to recognise it.
+ *  - `native_rejections` — the lines a person removed, as a fingerprint (a line the engine writes back verbatim is removed
+ *    again) and, since 2026-10-23, as the line's normalised words: a reworded repeat is recognised by containing them or by a
+ *    model judging it to say the same (`nativeMemoryRejections.mjs`). The words are the account's own, read by nothing else, and
+ *    go when the rejection does (the person's restatement, a reset, the account); the revisions' text of a hard delete is still
+ *    scrubbed from the history.
  *
  * What this does not hold, and the legacy path did (owner-accepted, README §5.4 of the course correction): a line of
  * `profile.md` has no origin, no validity interval, no confidence and no conflict record of its own — those were
@@ -53,6 +57,15 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
   migrated_at timestamptz(3),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+-- The consolidation of an account's memories (nativeMemoryConsolidation.mjs), kept on its account row: when the last one ended and
+-- the shape of the files it left (a consolidation is asked for again only after they changed), when the files were last looked at, the
+-- engine task in flight, and the lease that keeps two workers from submitting one account twice.
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidated_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_checked_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_fingerprint text CHECK (consolidation_fingerprint IS NULL OR consolidation_fingerprint ~ '^[a-f0-9]{64}$');
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_task text CHECK (consolidation_task IS NULL OR consolidation_task ~ '^[A-Za-z0-9_-]{8,128}$');
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_started_at timestamptz(3);
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_lease_until timestamptz(3);
 CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   archive_uri text NOT NULL CHECK (char_length(archive_uri) BETWEEN 1 AND 600),
@@ -68,6 +81,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   replayed_as text CHECK (replayed_as IS NULL OR char_length(replayed_as) <= 600),
   -- What the person asked the page to remember, shown as pending until the engine has written it, then cleared.
   pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000),
+  -- What the extraction did, read from the engine when the commit settled: skipped operations and why (the engine's own reason
+  -- codes), what it extracted per category, the memory types it was allowed. Counts and codes, never a memory's text.
+  extraction jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(extraction) = 'object'),
   created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   ingested_at timestamptz(3),
@@ -75,6 +91,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
+-- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
+-- model proposed nothing, or the engine refused what it proposed).
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS extraction jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(extraction) = 'object');
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);
@@ -138,9 +157,13 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
   memory_type text NOT NULL CHECK (char_length(memory_type) <= 64),
   fingerprint text NOT NULL CHECK (fingerprint ~ '^[a-f0-9]{64}$'),
   uri text NOT NULL CHECK (char_length(uri) <= 600),
+  -- The line's normalised words, so that a reworded repeat can be recognised (a line that contains it, or that a model judges to say
+  -- the same). Null for a rejection made before 2026-10-23, which only an exact repeat meets.
+  text text CHECK (text IS NULL OR char_length(text) <= 400),
   rejected_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, memory_type, fingerprint)
 );
+ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text CHECK (text IS NULL OR char_length(text) <= 400);
 `;
 
 /** @param {any} database */

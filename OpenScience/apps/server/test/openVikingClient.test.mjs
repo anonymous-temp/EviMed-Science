@@ -292,9 +292,26 @@ test("a waiting write that timed out upstream is reported as a timeout, not as a
   const fetchImpl = recordingFetch([{ status: 504, body: upstreamError("DEADLINE_EXCEEDED", "queue processing exceeded 5.0s") }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   await assert.rejects(
-    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 }),
+    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true }),
     (error) => error.code === "memory_index_timeout" && /DEADLINE_EXCEEDED/.test(error.message),
   );
+});
+
+test("a write's body never carries a timeout: v0.5.1 forbids the field, v0.5.0 does not need it", async () => {
+  // Pinned because the break is silent until the engine is upgraded: `WriteContentRequest` forbids unknown fields
+  // there, so a body that still named `timeout` would turn every index write into a refusal. A caller that still
+  // passes the old option gets the same body.
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: {} } }, { status: 200, body: { status: "ok", result: {} } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await client.write("usr_alice", "viking://user/x/memories/y.md", "text", { wait: true, tags: ["a"] });
+  await client.write("usr_alice", "viking://user/x/memories/y.md", "text", { wait: true, timeoutSeconds: 5 });
+  for (const call of fetchImpl.calls) {
+    assert.equal(new URL(call.url).pathname, "/api/v1/content/write");
+    const body = JSON.parse(call.options.body);
+    assert.equal(Object.hasOwn(body, "timeout"), false, JSON.stringify(Object.keys(body)));
+    assert.equal(body.wait, true);
+    assert.equal(body.mode, "replace");
+  }
 });
 
 test("a request that never answers becomes a timeout, not a hung recall", async () => {

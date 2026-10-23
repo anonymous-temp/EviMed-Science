@@ -69,12 +69,15 @@ test("verification looks for each statement whole in what the engine wrote, and 
   assert.deepEqual(checked, { found: ["a"], notFound: ["b"] });
 });
 
-test("the arguments are checked: one account, one engine, and the flags that belong together", () => {
+test("the arguments are checked: one account, one engine, and a move that cannot leave the records behind", () => {
   assert.deepEqual(parseArguments(["--check"]).check, true);
   assert.throws(() => parseArguments(["--to", "native"]), /--user/);
   assert.throws(() => parseArguments(["--user", "u", "--to", "elsewhere"]), /--to native or --to legacy/);
   assert.throws(() => parseArguments(["--user", "u", "--to", "legacy", "--migrate"]), /for --to native/);
-  assert.throws(() => parseArguments(["--user", "u", "--to", "native", "--migrate", "--leave-records"]), /exclude/);
+  // Refused by name, whatever it is combined with: rows left in PostgreSQL are read by nothing once the account is native.
+  assert.throws(() => parseArguments(["--user", "u", "--to", "native", "--leave-records", "--apply"]), /--leave-records was removed.*always carries/);
+  assert.throws(() => parseArguments(["--user", "u", "--to", "native", "--migrate", "--leave-records"]), /--leave-records was removed/);
+  assert.equal(parseArguments(["--user", "u", "--to", "native", "--migrate"]).migrate, true, "--migrate is still accepted on a move");
   assert.throws(() => parseArguments(["--bogus"]), /unknown argument/);
 });
 
@@ -119,20 +122,31 @@ async function fixture(t, { extract = migratingExtract, native = true } = {}) {
   return { userId, stub, sessions, overlay, researchMemory, worker, deps, write, store: new NativeMemoryStore({ sessions, overlay }) };
 }
 
-test("an account with records is not moved without saying what happens to them; the report asks the engine nothing", options, async (t) => {
+test("the report of a move says what will be carried and asks the engine nothing; the account stays where it is", options, async (t) => {
   const { userId, deps, write, stub } = await fixture(t);
   await write({ value: "Replies in Simplified Chinese." });
-  const refused = await switchEngine(deps, { user: userId, to: "native", migrate: false, leaveRecords: false, apply: true });
-  assert.equal(refused.ok, false);
-  assert.match(refused.error, /--migrate/);
-  assert.equal(await deps.researchMemory.memoryEngine(userId), "legacy", "nothing moved");
-  const report = await switchEngine(deps, { user: userId, to: "native", migrate: true, leaveRecords: false, apply: false });
-  assert.equal(report.ok, true);
-  assert.equal(report.applied, false);
-  assert.equal(report.records.carried, 1);
-  assert.equal(report.sessionsToRun, 1);
+  for (const migrate of [false, true]) {
+    const report = await switchEngine(deps, { user: userId, to: "native", migrate, apply: false });
+    assert.equal(report.ok, true);
+    assert.equal(report.applied, false);
+    assert.equal(report.records.carried, 1);
+    assert.equal(report.willMigrate, true, "a move always carries the records, with or without the flag");
+    assert.equal(report.sessionsToRun, 1);
+  }
   assert.equal(stub.requests.length, 0, "a dry run does not touch the engine");
   assert.equal(await deps.researchMemory.memoryEngine(userId), "legacy");
+});
+
+test("a move without --migrate still carries the records over: there is no way to move an account and leave them", options, async (t) => {
+  const { userId, deps, write, researchMemory, overlay, store } = await fixture(t);
+  await write({ value: "Replies in Simplified Chinese." });
+  const moved = await switchEngine(deps, { user: userId, to: "native", migrate: false, apply: true });
+  assert.equal(moved.ok, true, JSON.stringify(moved));
+  assert.equal(moved.changed, true);
+  assert.equal(moved.migration.failed, 0);
+  assert.equal(await researchMemory.memoryEngine(userId), "native");
+  assert.ok((await overlay.account(userId)).migratedAt, "the account is marked migrated");
+  assert.equal((await store.profile(userId)).activeCount, 1, "the engine's file is the page now");
 });
 
 test("--migrate replays the records through the engine, reads the diff back, and moves the account only then; the rows stay", options, async (t) => {
@@ -141,7 +155,7 @@ test("--migrate replays the records through the engine, reads the diff back, and
   await write({ value: "Tables for comparisons.", key: "k.tables" });
   await write({ kind: "project_fact", scope: "project", scopeId: "p_trial", value: "The trial enrolled 240 patients.", key: "k.trial" });
   await write({ value: "Not to be carried", sensitive: true, key: "k.secret" });
-  const result = await switchEngine(deps, { user: userId, to: "native", migrate: true, leaveRecords: false, apply: true });
+  const result = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.changed, true);
   assert.equal(result.migration.failed, 0);
@@ -175,14 +189,14 @@ test("a second run does the groups that are missing and no others; a group that 
   });
   await write({ value: "First kind of thing." });
   await write({ kind: "decision", scope: "project", scopeId: "p1", value: "Second kind of thing.", key: "k.second" });
-  const first = await switchEngine(deps, { user: userId, to: "native", migrate: true, leaveRecords: false, apply: true });
+  const first = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
   assert.equal(first.ok, false);
   assert.match(first.error, /1 group\(s\) did not finish/);
   assert.equal(await researchMemory.memoryEngine(userId), "legacy", "the account stays where it was");
   assert.deepEqual(first.migration.groups.map((group) => group.state).sort(), ["failed", "migrated"]);
   fail = false;
   const commitsBefore = stub.sent("POST", "/api/v1/sessions/").filter((request) => request.path.endsWith("/commit")).length;
-  const second = await switchEngine(deps, { user: userId, to: "native", migrate: true, leaveRecords: false, apply: true });
+  const second = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
   assert.equal(second.ok, true, JSON.stringify(second));
   assert.deepEqual(second.migration.groups.map((group) => group.state).sort(), ["already_done", "migrated"]);
   assert.equal(stub.sent("POST", "/api/v1/sessions/").filter((request) => request.path.endsWith("/commit")).length - commitsBefore, 1, "only the missing group is committed again");
@@ -191,27 +205,87 @@ test("a second run does the groups that are missing and no others; a group that 
 
 test("moving back is the row alone, moving to the engine an account is on changes nothing, and the walk finds nobody on both", options, async (t) => {
   const { userId, deps, researchMemory } = await fixture(t);
-  const empty = await switchEngine(deps, { user: userId, to: "native", migrate: false, leaveRecords: false, apply: true });
+  const empty = await switchEngine(deps, { user: userId, to: "native", migrate: false, apply: true });
   assert.equal(empty.ok, true, "an account with no records moves without a migration");
-  assert.equal((await switchEngine(deps, { user: userId, to: "native", migrate: false, leaveRecords: false, apply: true })).changed, false);
-  const back = await switchEngine(deps, { user: userId, to: "legacy", migrate: false, leaveRecords: false, apply: true });
+  assert.equal((await switchEngine(deps, { user: userId, to: "native", migrate: false, apply: true })).changed, false);
+  const back = await switchEngine(deps, { user: userId, to: "legacy", migrate: false, apply: true });
   assert.equal(back.changed, true);
   assert.equal(await researchMemory.memoryEngine(userId), "legacy");
   const walk = await switchEngine(deps, { check: true });
   assert.equal(walk.ok, true);
   assert.ok(walk.check.examined.legacy + walk.check.examined.native >= 1, "the walk says how many accounts it looked at");
   const off = await fixture(t, { native: false });
-  const refused = await switchEngine(off.deps, { user: off.userId, to: "native", migrate: false, leaveRecords: false, apply: true });
+  const refused = await switchEngine(off.deps, { user: off.userId, to: "native", migrate: false, apply: true });
   assert.equal(refused.ok, false);
   assert.match(refused.error, /does not have/);
   assert.ok(runMigration);
 });
 
-test("--leave-records moves an account that has records and starts its page empty", options, async (t) => {
-  const { userId, deps, write, researchMemory, store } = await fixture(t);
+test("an account that is already native and was moved without its records is completed by --migrate: report first, then apply, and migrated_at is set", options, async (t) => {
+  const { userId, deps, write, researchMemory, overlay, store, stub } = await fixture(t);
   await write({ value: "Replies in Simplified Chinese." });
-  const moved = await switchEngine(deps, { user: userId, to: "native", migrate: false, leaveRecords: true, apply: true });
-  assert.equal(moved.ok, true);
+  await write({ kind: "project_fact", scope: "project", scopeId: "p_trial", value: "The trial enrolled 240 patients.", key: "k.trial" });
+  // How the owner's account was moved on 2026-10-13: the engine row changed, nothing carried over.
+  await researchMemory.setMemoryEngine(userId, "native");
+  assert.equal((await overlay.account(userId)).migratedAt, null);
+  assert.equal((await store.profile(userId)).activeCount, 0, "the records are read by nothing");
+  const asked = stub.requests.length;
+
+  // Without the flag the account is left alone and the left-behind records are named.
+  const plain = await switchEngine(deps, { user: userId, to: "native", migrate: false, apply: true });
+  assert.equal(plain.ok, true);
+  assert.equal(plain.changed, false);
+  assert.equal(plain.recordsLeftBehind.carried, 2);
+  assert.match(plain.recordsLeftBehind.hint, /--migrate/);
+  assert.equal(stub.requests.length, asked, "the engine was not asked");
+  assert.equal((await overlay.account(userId)).migratedAt, null);
+
+  // The report asks the engine nothing.
+  const report = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: false });
+  assert.equal(report.ok, true);
+  assert.equal(report.from, "native");
+  assert.equal(report.records.carried, 2);
+  assert.equal(report.willMigrate, true);
+  assert.equal(report.sessionsToRun, 2);
+  assert.equal(stub.requests.length, asked, "a report does not touch the engine");
+  assert.equal((await overlay.account(userId)).migratedAt, null);
+
+  // The apply carries them over and sets migrated_at; the engine row does not move.
+  const applied = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal(applied.migrated, true);
+  assert.equal(applied.changed, false);
+  assert.equal(applied.migration.failed, 0);
+  assert.equal(applied.migration.groups.length, 2);
+  assert.ok((await overlay.account(userId)).migratedAt, "migrated_at is set");
   assert.equal(await researchMemory.memoryEngine(userId), "native");
-  assert.equal((await store.profile(userId)).activeCount, 0);
+  assert.equal((await store.profile(userId)).activeCount, 2, "the records are on the page now");
+  assert.equal((await researchMemory.listAllRecords(userId)).length, 2, "PostgreSQL's rows are kept");
+
+  // And once it is done there is nothing left to complete.
+  const commitsBefore = stub.sent("POST", "/api/v1/sessions/").filter((request) => request.path.endsWith("/commit")).length;
+  const again = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
+  assert.equal(again.ok, true);
+  assert.match(again.note, /nothing is left behind/);
+  assert.equal(stub.sent("POST", "/api/v1/sessions/").filter((request) => request.path.endsWith("/commit")).length, commitsBefore);
+  const settled = await switchEngine(deps, { user: userId, to: "native", migrate: false, apply: true });
+  assert.equal(settled.recordsLeftBehind, undefined);
+});
+
+test("a native account with no migratable record has nothing to complete, and a failed group leaves migrated_at empty", options, async (t) => {
+  let fail = true;
+  const { userId, deps, write, researchMemory, overlay } = await fixture(t, { extract: (input) => (fail ? "fail" : migratingExtract(input)) });
+  await researchMemory.setMemoryEngine(userId, "native");
+  const empty = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
+  assert.equal(empty.ok, true);
+  assert.match(empty.note, /holds no record/);
+  await write({ value: "Short answers first." });
+  const failed = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
+  assert.equal(failed.ok, false);
+  assert.match(failed.error, /did not finish; the account stays on native/);
+  assert.equal((await overlay.account(userId)).migratedAt, null, "an unfinished migration is not recorded as done");
+  fail = false;
+  const second = await switchEngine(deps, { user: userId, to: "native", migrate: true, apply: true });
+  assert.equal(second.ok, true, JSON.stringify(second));
+  assert.ok((await overlay.account(userId)).migratedAt);
 });

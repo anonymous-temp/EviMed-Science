@@ -413,6 +413,8 @@ import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
+import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, extractionEmptyCause } from "./memoryIntelligence.mjs";
@@ -1350,11 +1352,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
   // The memory page, the map and the account's own operations for an account on that engine, and the worker that reads what
   // the engine did into the overlay, replays what failed and carries a changed source's label into the files that name it.
-  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay });
+  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+    // The conversation a memory came out of is named from the run ledger, which is composed further down.
+    conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, researchMemory, sessions: openVikingSessions, overlay: nativeMemoryOverlay,
+    // A line the engine writes that is near one the person removed is put to one model call a commit (`nativeMemoryRejections.mjs`).
+    rejectionJudge: createRejectionJudge({ config, usageLedger }),
     // The runtime manager is composed further down; the worker asks only after boot.
     runtimeManager: { releaseMemoryEngineRuntimes: (/** @type {string | undefined} */ userId) => runtimeManager.releaseMemoryEngineRuntimes(userId) },
+    report: (line) => process.stderr.write(`${line}\n`),
+  });
+  // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
+  // revisions (`nativeMemoryConsolidation.mjs`). Off unless `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`; the worker's pass asks it.
+  nativeMemoryWorker.consolidation = new NativeMemoryConsolidation({
+    config, researchMemory, sessions: openVikingSessions, resources: openVikingResources, overlay: nativeMemoryOverlay,
+    ingest: (userId, task) => nativeMemoryWorker.ingestConsolidation(userId, task),
     report: (line) => process.stderr.write(`${line}\n`),
   });
   /**
@@ -3420,6 +3433,37 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     for (const session of await researchSessions.list(project).catch(() => [])) if (session?.sessionId) ids.add(String(session.sessionId));
     return [...ids];
   }
+  /**
+   * What the conversations a native memory came out of were about, from the run ledger of the project each was held in: the title
+   * the researcher or the platform gave it, else the question that began it. A conversation the researcher deleted answers `null`
+   * (the memory page drops the link to it); one the ledger does not know, or a project that cannot be read, is simply not named.
+   * @param {string} userId @param {{ projectId: string, sessionId: string }[]} refs @returns {Promise<Record<string, string | null>>}
+   */
+  async function nativeConversationTitles(userId, refs) {
+    /** @type {Record<string, string | null>} */
+    const titles = {};
+    /** @type {Map<string, string[]>} */
+    const byProject = new Map();
+    for (const ref of refs) byProject.set(ref.projectId, [...(byProject.get(ref.projectId) ?? []), ref.sessionId]);
+    const owner = byProject.size ? await store.userById(userId).catch(() => null) : null;
+    if (!owner) return titles;
+    for (const [projectId, sessionIds] of byProject) {
+      try {
+        const project = await store.requireProject(owner, projectId);
+        const index = await agentRuns.conversationIndex(project);
+        for (const sessionId of sessionIds) {
+          const runs = index.get(sessionId) ?? [];
+          if (!runs.length) continue;
+          if (runs.every((run) => run.deleted === true)) { titles[sessionId] = null; continue; }
+          // Newest first: the latest title anyone gave it, else the first question asked.
+          const named = runs.find((run) => typeof run.title === "string" && run.title.trim());
+          const title = String(named?.title ?? runs.at(-1)?.question ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+          if (title) titles[sessionId] = title;
+        }
+      } catch { /* a project that cannot be read names nothing */ }
+    }
+    return titles;
+  }
   /** Actual project-owned native inventory, independent of optional research-session metadata.
    * @param {any} user @param {any} project @param {string} sessionId */
   async function authorizeOwnedNativeSession(user, project, sessionId) {
@@ -3619,6 +3663,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
     // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
     setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
+    // Between two runs a runtime launched for the other memory engine than its account is on now is replaced (an account switched under an open tab).
+    adoptRuntimeMemoryEngine: (project) => runtimeManager.adoptMemoryEngine(project),
     onPlatformSkillExecution: (event) => evolution?.onExecution(event),
     onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
@@ -4970,6 +5016,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeTurnCommit = new NativeTurnCommit({
     config, researchMemory, sessions: openVikingSessions, admission: memoryAdmission,
     conversations: { runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId) },
+    // A native account's turn that ran in a runtime launched without the memory gateway had no plugin: counted, never hidden.
+    runtimeWithoutGateway: (project) => runtimeManager.launchedWithoutMemoryGateway(project),
     commit: memoryGatewayHandler.commitSession,
     report: (line) => process.stderr.write(`${line}\n`),
   });

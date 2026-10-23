@@ -321,8 +321,9 @@ test("rebuild rewrites the capsule subtree, waits for each write and publishes t
     [["fact-b", 1, "method_preference"], ["runtime-note:ff01", 2, "analysis"]].sort());
   assert.equal([...fake.files.values()][0].startsWith("analysis / knowledge\n\n"), true, "the kind and the layer lead the file");
   const writes = fake.calls.filter((call) => call.path === "/api/v1/content/write");
-  assert.ok(writes.every((call) => call.body.wait === true && call.body.timeout > 0),
+  assert.ok(writes.every((call) => call.body.wait === true),
     "a file the server has not embedded yet is invisible to find, so the readback that follows would be a coin toss");
+  assert.ok(writes.every((call) => !Object.hasOwn(call.body, "timeout")), "v0.5.1 refuses a write body that names a timeout");
   assert.equal(fake.calls.filter((call) => call.method === "DELETE").length, 1);
   const insert = published.find(([sql]) => sql.includes("INSERT INTO evimed_product.memory_index_state"));
   assert.ok(insert, "a rebuild that published nothing would be rebuilt forever");

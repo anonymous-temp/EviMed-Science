@@ -32,14 +32,22 @@ export function memoryLines(body) {
 }
 
 /**
- * What identifies one statement whatever it is dressed in: lower-cased, whitespace collapsed, without the trailing
- * `(as of YYYY-MM-DD)` the profile template writes. Exact equality after that and nothing looser — whether two differently
- * worded lines say the same thing is language, and is not decided here.
+ * A statement as it is compared: lower-cased, whitespace collapsed, without the trailing `(as of YYYY-MM-DD)` the profile template
+ * writes. What `lineFingerprint` hashes, and what a rejected line keeps so that a reworded version can be recognised.
+ * @param {unknown} line @returns {string}
+ */
+export function normalisedStatement(line) {
+  return String(line ?? "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * What identifies one statement whatever it is dressed in: `normalisedStatement`, hashed. Exact equality after that and nothing
+ * looser — whether two differently worded lines say the same thing is language, and is decided elsewhere
+ * (`nativeMemoryRejections.mjs`: a containing line in code, a similar one by the model).
  * @param {unknown} line @returns {string} sha256 hex
  */
 export function lineFingerprint(line) {
-  const text = String(line ?? "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
-  return createHash("sha256").update(text).digest("hex");
+  return createHash("sha256").update(normalisedStatement(line)).digest("hex");
 }
 
 const bounded = (/** @type {unknown} */ value, /** @type {number} */ limit) => (value == null ? null : String(value).slice(0, limit));
@@ -60,6 +68,7 @@ function publicCommit(row) {
     projectId: row.project_id ?? null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
     nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
+    extraction: row.extraction && typeof row.extraction === "object" && !Array.isArray(row.extraction) ? row.extraction : {},
     createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at),
   };
 }
@@ -107,6 +116,55 @@ export class NativeMemoryOverlay {
     const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
     const row = result.rows[0];
     return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at), migratedAt: instant(row?.migrated_at) };
+  }
+
+  // ---------------------------------------------------------- consolidation
+
+  /** What the account's consolidation (`nativeMemoryConsolidation.mjs`) has recorded. @param {string} userId */
+  async consolidationState(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
+    const row = result.rows[0];
+    return {
+      consolidatedAt: instant(row?.consolidated_at), checkedAt: instant(row?.consolidation_checked_at), fingerprint: /** @type {string | null} */ (row?.consolidation_fingerprint ?? null),
+      task: /** @type {string | null} */ (row?.consolidation_task ?? null), startedAt: instant(row?.consolidation_started_at),
+    };
+  }
+
+  /**
+   * Take the account's consolidation for `leaseMs`, or learn that another worker holds it. A lease, not a lock: it runs out by itself.
+   * @param {string} userId @param {number} leaseMs @returns {Promise<boolean>}
+   */
+  async claimConsolidation(userId, leaseMs) {
+    const result = await this.#query(`INSERT INTO evimed_memory.native_accounts AS a (user_id, consolidation_lease_until) VALUES ($1, clock_timestamp() + ($2::int * interval '1 millisecond'))
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_lease_until = clock_timestamp() + ($2::int * interval '1 millisecond')
+        WHERE a.consolidation_lease_until IS NULL OR a.consolidation_lease_until < clock_timestamp()
+      RETURNING user_id`, [owner(userId), Math.max(1_000, Math.min(3_600_000, Math.trunc(Number(leaseMs)) || 60_000))]);
+    return result.rows.length === 1;
+  }
+
+  /** The files were looked at at `at` and nothing was asked of the engine; the lease is let go. @param {string} userId @param {Date} at */
+  async noteConsolidationChecked(userId, at) {
+    await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, consolidation_checked_at) VALUES ($1, $2::timestamptz)
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_checked_at=$2::timestamptz, consolidation_lease_until=NULL, updated_at=date_trunc('second', clock_timestamp())`, [owner(userId), at.toISOString()]);
+  }
+
+  /** A consolidation is in the engine's hands: its task, and the lease let go. @param {string} userId @param {string} taskId @param {Date} at */
+  async noteConsolidationSubmitted(userId, taskId, at) {
+    await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, consolidation_task, consolidation_started_at, consolidation_checked_at) VALUES ($1, $2, $3::timestamptz, $3::timestamptz)
+      ON CONFLICT (user_id) DO UPDATE SET consolidation_task=$2, consolidation_started_at=$3::timestamptz, consolidation_checked_at=$3::timestamptz, consolidation_lease_until=NULL,
+        updated_at=date_trunc('second', clock_timestamp())`, [owner(userId), String(taskId), at.toISOString()]);
+  }
+
+  /**
+   * The task is over and its files are read in. `fingerprint` is the shape of what it left (the next consolidation waits for a change
+   * from it); a run that did not succeed records neither it nor a time of completion, and is asked again at the next due time.
+   * @param {string} userId @param {{ fingerprint?: string | null, succeeded: boolean, at: Date }} outcome
+   */
+  async noteConsolidationDone(userId, { fingerprint = null, succeeded, at }) {
+    await this.#query(`UPDATE evimed_memory.native_accounts SET consolidation_task=NULL, consolidation_started_at=NULL, consolidation_lease_until=NULL,
+        consolidation_checked_at=$4::timestamptz, consolidated_at=CASE WHEN $2 THEN $4::timestamptz ELSE consolidated_at END,
+        consolidation_fingerprint=CASE WHEN $2 THEN $3 ELSE consolidation_fingerprint END, updated_at=date_trunc('second', clock_timestamp())
+      WHERE user_id=$1`, [owner(userId), succeeded === true, fingerprint, at.toISOString()]);
   }
 
   /** @param {string} userId @param {"registered_at" | "scanned_at" | "migrated_at"} column */
@@ -182,11 +240,37 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
-  /** @param {string} userId @param {string} archiveUri @param {{ operations?: number }} [outcome] */
-  async completeCommit(userId, archiveUri, { operations = 0 } = {}) {
+  /**
+   * @param {string} userId @param {string} archiveUri
+   * @param {{ operations?: number, extraction?: Record<string, any> | null }} [outcome] `extraction`: what the engine said the
+   *   extraction did (`extractionFacts`), kept as it came; absent, the row keeps what it had
+   */
+  async completeCommit(userId, archiveUri, { operations = 0, extraction = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL, pending_text=NULL,
-      ingested_at=clock_timestamp(), updated_at=clock_timestamp() WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
-    [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0)]);
+      extraction=COALESCE($4::jsonb, extraction), ingested_at=clock_timestamp(), updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
+    [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0), extraction ? JSON.stringify(extraction) : null]);
+  }
+
+  /**
+   * What the extraction of an already settled commit said about itself, filled in after the fact (the operator's report
+   * reading an archive the worker settled before the ledger kept it). A row that has it is left alone.
+   * @param {string} userId @param {string} archiveUri @param {Record<string, any>} extraction @returns {Promise<boolean>} whether a row was filled
+   */
+  async setExtraction(userId, archiveUri, extraction) {
+    const result = await this.#query(`UPDATE evimed_memory.native_commits SET extraction=$3::jsonb, updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri=$2 AND state='completed' AND extraction='{}'::jsonb`, [owner(userId), String(archiveUri), JSON.stringify(extraction ?? {})]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * The commits of one account, newest first: what an operator reads to see what each one did.
+   * @param {string} userId @param {{ limit?: number, since?: Date | string | null }} [options]
+   */
+  async commitsOf(userId, { limit = 50, since = null } = {}) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND ($3::timestamptz IS NULL OR created_at >= $3)
+      ORDER BY created_at DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(500, Math.trunc(Number(limit)) || 50)), since ? new Date(since).toISOString() : null]);
+    return result.rows.map(publicCommit);
   }
 
   /** The extraction failed: a replay is owed at `nextAttemptAt`. @param {string} userId @param {string} archiveUri @param {{ error?: string, nextAttemptAt?: Date | null }} failure */
@@ -250,6 +334,20 @@ export class NativeMemoryOverlay {
   async revisionsOf(userId, uri, { limit = 32 } = {}) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri=$2 ORDER BY id DESC LIMIT $3",
       [owner(userId), String(uri), Math.max(1, Math.min(200, Math.trunc(Number(limit)) || 32))]);
+    return result.rows.map(publicRevision);
+  }
+
+  /**
+   * What the person (or a conversation, at the person's word) forgot and can still take back, newest first: a deleted file whose text was
+   * kept for the undo, and a profile edit that took lines out for the same reason. A hard delete keeps no text and is not here, nor is
+   * what the platform's own checks removed, nor a forget that was already undone.
+   * @param {string} userId @param {{ limit?: number }} [options]
+   */
+  async forgottenRevisions(userId, { limit = 300 } = {}) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
+      WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
+        AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL AND reason LIKE 'forgotten on the memory page%'))
+      ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
     return result.rows.map(publicRevision);
   }
 
@@ -402,6 +500,24 @@ export class NativeMemoryOverlay {
     return result.rows[0]?.project_id ?? null;
   }
 
+  /**
+   * The project each of these engine sessions was held in, as the gateway noted it when the session began, else as the commits of
+   * it recorded. A session with no project (or one the overlay never saw) is absent.
+   * @param {string} userId @param {readonly string[]} engineSessions @returns {Promise<Map<string, string>>}
+   */
+  async sessionProjects(userId, engineSessions) {
+    /** @type {Map<string, string>} */
+    const found = new Map();
+    const names = [...new Set(engineSessions.map(String))].slice(0, 500);
+    if (!names.length) return found;
+    const result = await this.#query(`SELECT DISTINCT ON (engine_session) engine_session, project_id FROM (
+        SELECT engine_session, project_id, 0 AS rank, created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session = ANY($2::text[])
+        UNION ALL SELECT engine_session, project_id, 1, created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session = ANY($2::text[])) rows
+      WHERE project_id IS NOT NULL ORDER BY engine_session, rank, created_at DESC`, [owner(userId), names]);
+    for (const row of result.rows) found.set(String(row.engine_session), String(row.project_id));
+    return found;
+  }
+
   /** The engine sessions of one project, as the gateway and the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */
   async projectSessions(userId, projectId) {
     const result = await this.#query(`SELECT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
@@ -454,13 +570,23 @@ export class NativeMemoryOverlay {
 
   // -------------------------------------------------------------- rejections
 
-  /** The person removed these lines from a memory of this type. @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines */
+  /**
+   * The person removed these lines from a memory of this type. Each is kept as its fingerprint (exact repeats) and as its normalised
+   * text (`normalisedStatement`, at most 400 characters), because recognising a reworded repeat needs the words: a line that contains
+   * it, or that a model judges to say the same, is taken out again. The text is the account's own, read by nothing but that
+   * recognition, and goes with the rejection (a restatement by the person, a reset, the account).
+   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines
+   */
   async reject(userId, memoryType, uri, lines) {
-    const prints = [...new Set(lines.map(lineFingerprint))].slice(0, 500);
+    /** @type {Map<string, string>} */
+    const unique = new Map();
+    for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line).slice(0, 400)); }
+    const prints = [...unique.keys()].slice(0, 500);
     if (!prints.length) return 0;
-    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri)
-      SELECT $1, $2, print, $3 FROM unnest($4::text[]) AS print ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp()`,
-    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints]);
+    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text)
+      SELECT $1, $2, print, $3, text FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
+      ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text)`,
+    [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? "")]);
     return prints.length;
   }
 
@@ -469,6 +595,24 @@ export class NativeMemoryOverlay {
     const prints = [...new Set(lines.map(lineFingerprint))];
     if (!prints.length) return;
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 AND fingerprint = ANY($3::text[])", [owner(userId), String(memoryType), prints]);
+  }
+
+  /** One rejection lifted by its fingerprint: the person said the same again in their own words. @param {string} userId @param {string} memoryType @param {readonly string[]} fingerprints */
+  async unrejectFingerprints(userId, memoryType, fingerprints) {
+    const prints = [...new Set(fingerprints.map(String))].filter((print) => /^[a-f0-9]{64}$/.test(print));
+    if (!prints.length) return;
+    await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 AND fingerprint = ANY($3::text[])", [owner(userId), String(memoryType), prints]);
+  }
+
+  /**
+   * The lines the person removed from memories of this type, with the words each had when there are any (a rejection made before the
+   * words were kept has only its fingerprint and can only be met by an exact repeat). Newest first.
+   * @param {string} userId @param {string} memoryType @param {{ limit?: number }} [options] @returns {Promise<{ fingerprint: string, text: string | null }[]>}
+   */
+  async rejectedLines(userId, memoryType, { limit = 300 } = {}) {
+    const result = await this.#query("SELECT fingerprint, text FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 ORDER BY rejected_at DESC LIMIT $3",
+      [owner(userId), String(memoryType), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
+    return result.rows.map((/** @type {any} */ row) => ({ fingerprint: String(row.fingerprint), text: typeof row.text === "string" && row.text ? row.text : null }));
   }
 
   /** @param {string} userId @param {string} memoryType @returns {Promise<Set<string>>} */

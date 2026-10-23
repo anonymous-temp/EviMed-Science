@@ -15,7 +15,7 @@ import { OPENVIKING_PROJECT_ID, ensureOpenVikingProject, isInternalProject, isRe
 import { createModelGatewayHandler } from "../src/modelGateway.mjs";
 import { openVikingKnowledgeModelKey } from "../src/openVikingLayout.mjs";
 import {
-  OPENVIKING_MODEL_MAX_BODY_BYTES, OPENVIKING_MODEL_PURPOSES, OPENVIKING_USAGE_MODULE, createOpenVikingModelCaller,
+  OPENVIKING_MODEL_MAX_BODY_BYTES, OPENVIKING_MODEL_PURPOSES, OPENVIKING_QUOTA_CODE, OPENVIKING_USAGE_MODULE, createOpenVikingModelCaller,
 } from "../src/openVikingModelCaller.mjs";
 
 const SERVICE_KEY = "test-only-openviking-service-key-0123456789abcdef";
@@ -179,14 +179,18 @@ test("a compile round streams with its tools, larger than the deployment's body 
 
 test("a spent day answers 402 by name before anything is reserved or sent, and the next day's call is admitted", async (t) => {
   // 402 and not 429: the engine retries a 429 or a 5xx sixteen times in thirty seconds for every waiting commit and
-  // still fails; a 4xx ends the attempt at once (lab/memory §E-3).
+  // still fails; a 4xx ends the attempt at once on v0.5.0 (lab/memory §E-3), and on v0.5.1+ a 402 does only with a
+  // body code its classifier knows.
   const events = [];
   const spent = { "memory-extraction": 30, knowledge: 19.9999 };
   const { post, serviceCaller } = await gateway(t, { usageLedger: ledger(events, { spent }), events });
   const refused = await post(SERVICE_KEY, extractionRequest);
   assert.equal(refused.status, 402);
   const body = await refused.json();
-  assert.equal(body.error.code, "openviking_model_budget_exhausted");
+  // The body code is the one the engine's own classifier reads as exhausted quota. From v0.5.1 a 402 with an unknown
+  // code is retried with back-off by every waiting commit; with this one the attempt ends at once (`model_error.py`).
+  assert.equal(body.error.code, "insufficient_quota");
+  assert.equal(OPENVIKING_QUOTA_CODE, "insufficient_quota");
   assert.match(body.error.message, /nothing was sent to the provider/);
   assert.deepEqual(events.map((event) => event.type), ["spend", "spend"], "a refused call reserved or dispatched something");
   // Both purposes are one budget, read from the ledger for the platform's own project over the rolling day.

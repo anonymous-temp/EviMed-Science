@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  OPENVIKING_SKILL_NAMES, libraryResourcesUri, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
+  OPENVIKING_SKILL_NAMES, libraryResourcesUri, nativeMemoryRoot, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
   resourcesRoot, skillUri,
 } from "./openVikingLayout.mjs";
 import { HttpError } from "./security.mjs";
@@ -145,12 +145,18 @@ export class OpenVikingResources {
     const tags = [`src=${sourceId}`, `sha=${sha}`, `doctype=${docType || "other"}`, ...(state ? [`state=${state}`] : [])];
     const body = { uri, content: String(text ?? ""), wait: true, processing_mode: "vectors_only", tags, tag_mode: "replace" };
     try {
+      // `replace` first. From v0.5.1 it creates a file that is not there and `create` is only its alias (no 409 on an existing
+      // file), so the create-then-replace pair this used to be is one call. What v0.5.0 does with `replace` on a missing
+      // resource file is in no recorded fixture (only the memory index's own paths are known to create), so a 404 is
+      // answered with `create`, which v0.5.0 does take. That branch is dead from v0.5.1.1 and goes with the pin.
+      const write = (/** @type {"replace" | "create"} */ mode) => this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode }, timeoutMs: WRITE_TIMEOUT_MS });
+      /** @type {any} */
       let written;
       try {
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "create" }, timeoutMs: WRITE_TIMEOUT_MS });
+        written = await write("replace");
       } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_conflict") throw error;
-        written = await this.client.request({ method: "POST", path: "/api/v1/content/write", userId, body: { ...body, mode: "replace" }, timeoutMs: WRITE_TIMEOUT_MS });
+        if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
+        written = await write("create");
       }
       this.counters.pushes += 1;
       return { uri, bytes: Number(written?.result?.written_bytes) || Buffer.byteLength(body.content) };
@@ -341,6 +347,34 @@ export class OpenVikingResources {
     } catch (error) { this.counters.failures += 1; throw error; }
   }
 
+  /**
+   * Ask the engine to consolidate one account's memories in place (`ov compile --skill memory`, v0.5.0 `docs/en/context-compilation/06-memory-consolidation.md`):
+   * deduplicate, merge, split and compact under each type's own schema, facts preserved, no external source — which is why there is no
+   * `from`, and why the target is the account's own memories root. It runs inside the engine (no VikingBot) and its model calls go
+   * through the model gateway as `memory-extraction`. Answers at once with the task.
+   * @param {string} userId
+   * @param {{ to: string, instruction?: string | null, idempotencyKey: string }} submission `to`: the account's `memories` root or one memory type's directory
+   */
+  async submitMemoryConsolidation(userId, { to, instruction = null, idempotencyKey }) {
+    if (!(String(to ?? "") === nativeMemoryRoot(userId) || String(to ?? "").startsWith(`${nativeMemoryRoot(userId)}/`))) throw new HttpError(500, "knowledge_compile_invalid", "A memory consolidation targets the account's own memories.");
+    if (!idempotencyKey) throw new HttpError(500, "knowledge_compile_invalid", "A compile is always submitted with an idempotency key.");
+    try {
+      const body = await this.client.request({ method: "POST", path: "/api/v1/compile", userId, idempotencyKey, timeoutMs: READ_TIMEOUT_MS,
+        body: { to, skill: "memory", ...(instruction ? { instruction: String(instruction) } : {}) } });
+      this.counters.compiles += 1;
+      return memoryConsolidationTask(body?.result);
+    } catch (error) { this.counters.failures += 1; throw error; }
+  }
+
+  /** A consolidation task as the engine reports it now, or null for one it no longer holds. @param {string} userId @param {string} taskId */
+  async memoryConsolidationTask(userId, taskId) {
+    try { return memoryConsolidationTask((await this.client.request({ path: `/api/v1/tasks/${taskSegment(taskId)}`, userId }))?.result); }
+    catch (error) {
+      if (/** @type {any} */ (error)?.code === "memory_index_not_found") return null;
+      throw error;
+    }
+  }
+
   /** A task as the engine reports it now, or null for one it no longer holds (expired, or never there). @param {string} userId @param {string} taskId */
   async task(userId, taskId) {
     try { return compileTask((await this.client.request({ path: `/api/v1/tasks/${taskSegment(taskId)}`, userId }))?.result); }
@@ -469,6 +503,28 @@ function compileTask(task) {
     usage: usage && typeof usage === "object" ? { inputTokens: Number(usage.input_tokens) || 0, outputTokens: Number(usage.output_tokens) || 0, totalTokens: Number(usage.total_tokens) || 0 } : null,
     result: result ? { pageCount: Number(result.page_count) || 0, linkCount: Number(result.link_count) || 0,
       warnings: Array.isArray(result.warnings) ? result.warnings.map(String).slice(0, 20) : [] } : null,
+  };
+}
+
+/**
+ * A memory-consolidation task: its state, and the files it changed as the engine lists them (URIs only, never content), with what went
+ * wrong in part. A task that changed nothing and says nothing is a completed no-op; `errors` are read whatever the status.
+ * @param {any} task
+ */
+function memoryConsolidationTask(task) {
+  if (!task || typeof task !== "object" || typeof task.task_id !== "string") throw new HttpError(502, "memory_index_response_invalid", "The engine answered without a task.");
+  const result = task.result && typeof task.result === "object" ? task.result : null;
+  const uris = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).filter((uri) => uri.startsWith("viking://")).slice(0, 2_000) : []);
+  return {
+    taskId: task.task_id,
+    status: String(task.status ?? ""),
+    terminal: COMPILE_TERMINAL_STATES.includes(String(task.status ?? "")),
+    error: typeof task.error === "string" && task.error ? task.error.slice(0, 500) : null,
+    result: result ? {
+      adds: uris(result.adds), updates: uris(result.updates), deletes: uris(result.deletes),
+      errors: Array.isArray(result.errors) ? result.errors.map((/** @type {any} */ item) => String(typeof item === "string" ? item : item?.message ?? item?.error ?? "error").slice(0, 300)).slice(0, 20) : [],
+      traceId: typeof result.trace_id === "string" ? result.trace_id.slice(0, 120) : null,
+    } : null,
   };
 }
 
